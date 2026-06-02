@@ -1,0 +1,16 @@
+{
+  "name": "tony-skills",
+  "owner": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "description": "Tony's personal Claude Code skills.",
+  "plugins": [
+    {
+      "name": "sun",
+      "source": "./plugins/sun",
+      "description": "/sunrise bootstraps a new project across every layer and proves it live; /sunset archives one reversibly.",
+      "tags": ["project-lifecycle", "automation"]
+    }
+  ]
+}

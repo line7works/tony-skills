@@ -1,0 +1,10 @@
+{
+  "name": "sun",
+  "description": "Project lifecycle automation. /sunrise stands up a new project across every layer (repo, GitHub, Vercel, database, Notion, vault, memory) and proves it live; /sunset archives an abandoned one reversibly. Bundles the shared sun-cue assets.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

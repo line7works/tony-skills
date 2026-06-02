@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sun</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a14;overflow:hidden}
+  canvas{display:block;width:100vw;height:100vh}
+  #label{position:fixed;left:0;right:0;bottom:8%;text-align:center;
+    font:600 28px/1 -apple-system,system-ui,sans-serif;letter-spacing:.35em;
+    text-transform:uppercase;color:#fff;opacity:0;transition:opacity .6s;
+    text-shadow:0 2px 24px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label"></div>
+<script>
+const RISE = (location.hash || '#set').slice(1).toLowerCase() === 'rise';
+const c = document.getElementById('c'), x = c.getContext('2d');
+let W, H;
+function size(){ W = c.width = innerWidth * devicePixelRatio; H = c.height = innerHeight * devicePixelRatio; }
+size(); addEventListener('resize', size);
+
+// palettes: [topColor, horizonColor] interpolated start -> end across the arc
+const PAL = RISE
+  ? { top:[[18,18,40],[92,170,235]], hor:[[58,32,70],[255,214,150]] }   // dawn -> bright day
+  : { top:[[92,170,235],[14,12,30]], hor:[[255,214,150],[40,18,46]] };  // day -> dusk
+const lerp=(a,b,t)=>a+(b-a)*t;
+const mix=(c1,c2,t)=>`rgb(${c1.map((v,i)=>Math.round(lerp(v,c2[i],t)))})`;
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+const DUR = RISE ? 2300 : 2400;   // arc duration (ms)
+const BURST = RISE ? 850 : 0;     // brightness burst after arc (rise only)
+let t0 = null;
+
+function sunPos(p){               // p in [0,1] across the arc
+  const e = ease(p);
+  if (RISE) return { x: lerp(.12,.50,e), y: lerp(.86,.22,Math.sin(p*Math.PI/2)) };
+  return       { x: lerp(.50,.90,e), y: lerp(.22,.86,Math.sin(p*Math.PI/2)) };
+}
+
+function draw(ts){
+  if (t0===null) t0 = ts;
+  const el = ts - t0;
+  const p = Math.min(1, el / DUR);
+  const tp = ease(p);
+
+  // sky
+  const g = x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, mix(PAL.top[0], PAL.top[1], tp));
+  g.addColorStop(1, mix(PAL.hor[0], PAL.hor[1], tp));
+  x.fillStyle = g; x.fillRect(0,0,W,H);
+
+  const pos = sunPos(p), cx = pos.x*W, cy = pos.y*H, R = Math.min(W,H)*0.075;
+
+  // burst flash (rise only, after the arc completes)
+  let burst = 0;
+  if (RISE && el > DUR){ burst = Math.min(1,(el-DUR)/BURST); }
+
+  // rays
+  const rays = 12, reach = R*(2.2 + burst*2.8);
+  x.save(); x.translate(cx,cy); x.rotate(el/1600);
+  for(let i=0;i<rays;i++){
+    x.rotate(Math.PI*2/rays);
+    const gr = x.createLinearGradient(0,0,0,-reach);
+    gr.addColorStop(0,`rgba(255,236,170,${0.35+0.5*burst})`);
+    gr.addColorStop(1,'rgba(255,236,170,0)');
+    x.fillStyle=gr; x.fillRect(-R*0.12,-reach,R*0.24,reach);
+  }
+  x.restore();
+
+  // glow + sun disc
+  const glow = x.createRadialGradient(cx,cy,R*0.3,cx,cy,R*(3+burst*4));
+  glow.addColorStop(0,`rgba(255,240,190,${0.5+0.5*burst})`);
+  glow.addColorStop(1,'rgba(255,240,190,0)');
+  x.fillStyle=glow; x.beginPath(); x.arc(cx,cy,R*(3+burst*4),0,7); x.fill();
+
+  const disc = x.createRadialGradient(cx-R*0.3,cy-R*0.3,R*0.2,cx,cy,R);
+  disc.addColorStop(0,'#fff7e0'); disc.addColorStop(1,'#ffb43c');
+  x.fillStyle=disc; x.beginPath(); x.arc(cx,cy,R,0,7); x.fill();
+
+  if (burst>0){ x.fillStyle=`rgba(255,255,255,${0.45*(1-burst)})`; x.fillRect(0,0,W,H); }
+
+  const done = el > DUR + BURST + 200;
+  if (!done){ requestAnimationFrame(draw); }
+  else { finish(); }
+}
+
+function finish(){
+  const l = document.getElementById('label');
+  l.textContent = RISE ? 'Sunrise' : 'Sunset';
+  l.style.opacity = 1;
+  setTimeout(()=>{ try{ window.close(); }catch(e){} }, 1400);
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
