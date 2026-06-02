@@ -25,16 +25,34 @@ tony-skills/
         └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
 ```
 
-## Install (on any of Tony's machines)
+There are two ways to install from this repo. Pick by whether you want clean
+managed updates (plugin) or the bare `/sunrise` / `/sunset` commands (user-level).
+
+## Install as a plugin (namespaced, shareable)
 
 ```
 /plugin marketplace add tiny-tunnel-dot/tony-skills
 /plugin install sun@tony-skills
 ```
 
-Restart Claude Code once. The commands then register as `/sun:sunrise` and `/sun:sunset` (plugin skills are namespaced by the plugin name).
+Restart Claude Code once. The commands register as `/sun:sunrise` and `/sun:sunset`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
 
 Because the repo is private, the installing machine needs working git auth (the `gh` login or an SSH key), which Tony's machines already have.
+
+## Install for bare commands (`/sunrise`, `/sunset`)
+
+Prefer typing `/sunrise` and `/sunset`? Install them as user-level skills instead of as a plugin. Copy the two skill folders plus the shared assets into `~/.claude/skills/`:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R ~/Developer/tony-skills/plugins/sun/skills/sunrise ~/.claude/skills/sunrise
+cp -R ~/Developer/tony-skills/plugins/sun/skills/sunset  ~/.claude/skills/sunset
+cp -R ~/Developer/tony-skills/plugins/sun/assets         ~/.claude/skills/sunset/assets
+```
+
+Restart Claude Code once. You get bare `/sunrise` and `/sunset`. The asset paths are dual-mode, so the sun cue still fires in this mode (it falls back to `~/.claude/skills/sunset/assets`).
+
+Trade-off versus the plugin: no `/plugin update`. To pull changes, `git pull` in `~/Developer/tony-skills` and re-run the three `cp` lines.
 
 ## Updating
 
@@ -53,6 +71,11 @@ These skills are personal. They reference Tony's GitHub handle (`tiny-tunnel-dot
 
 To share a skill publicly later, make a genericized copy in a fresh public repo (strip the personal paths and handles) rather than flipping this one public. Git history would otherwise expose those details even after a cleanup commit.
 
-## Assets and the plugin root
+## Assets and the plugin root (dual-mode)
 
-The skills play a cosmetic sound and terminal animation on launch. Inside a plugin those asset paths use `${CLAUDE_PLUGIN_ROOT}/assets/...`, which resolves to the installed plugin location. The cue is best-effort and skips silently if anything is missing, so a path miss never breaks a run. Verify the cue fires after the first install; if it does not, asset path resolution is the thing to check.
+The skills play a cosmetic sound and terminal animation on launch. The asset paths use `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/...`, which resolves both ways:
+
+- **Plugin install:** `$CLAUDE_PLUGIN_ROOT` is set, so it points at the plugin's bundled `assets/`.
+- **User-level install:** `$CLAUDE_PLUGIN_ROOT` is empty, so it falls back to `~/.claude/skills/sunset/assets/` (which the bare-command install populates).
+
+The cue is best-effort and skips silently if anything is missing, so a path miss never breaks a run. Verify the cue fires after the first install in whichever mode you used.
