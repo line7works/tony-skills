@@ -11,6 +11,12 @@
       "source": "./plugins/sun",
       "description": "/sunrise bootstraps a new project across every layer and proves it live; /sunset archives one reversibly.",
       "tags": ["project-lifecycle", "automation"]
+    },
+    {
+      "name": "clerk",
+      "source": "./plugins/clerk",
+      "description": "Clerk: a portable read-only auditor that surveys any files, repos, or notes and returns a prioritized cleanup punch list, changing nothing.",
+      "tags": ["audit", "cleanup", "read-only"]
     }
   ]
 }
