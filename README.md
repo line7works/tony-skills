@@ -45,19 +45,30 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` commands (user-level
 
 Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
 
-`clerk` ships a subagent rather than a slash command, so there is nothing to type. Once installed it shows up as the `clerk-auditor` agent type and triggers on audit-style asks ("audit X", "what's stale", "reconcile", "give me a report on X").
+`clerk` ships a subagent rather than a slash command, so there is nothing to type. Once installed it shows up as the `clerk-auditor` agent type and triggers on audit-style asks ("audit X", "what's stale", "reconcile", "give me a report on X"). Clerk can also run user-level instead of as a plugin, and Tony's machines use that route — see [Clerk: user-level vs plugin](#clerk-user-level-vs-plugin-pick-one-route-per-machine) below. Pick one route per machine; the `clerk@tony-skills` line above is only for the plugin route.
 
 Because the repo is private, the installing machine needs working git auth (the `gh` login or an SSH key), which Tony's machines already have.
 
-### Migrating the laptop's local Clerk
+### Clerk: user-level vs plugin (pick one route per machine)
 
-Clerk started as a laptop-only user-level agent at `~/.claude/agents/clerk-auditor.md`. After installing the `clerk` plugin, remove that file so the same agent name isn't defined twice:
+Clerk is an agent, not a slash command, so it can be consumed two ways. **Pick one route per machine — never both, or the agent name `clerk-auditor` is defined twice and the two definitions collide.**
 
-```bash
-rm ~/.claude/agents/clerk-auditor.md
-```
+- **User-level (the route Tony runs).** Copy the agent file into `~/.claude/agents/`. This matches how `sun` is installed on his machines and needs no `/plugin` commands:
 
-The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local and stays put; each machine keeps its own audit history.
+  ```bash
+  cd ~/Developer/tony-skills && git pull
+  cp plugins/clerk/agents/clerk-auditor.md ~/.claude/agents/clerk-auditor.md
+  ```
+
+  Restart Claude Code once. To pull a later change to Clerk, re-run those two lines. Skip the `/plugin install clerk@tony-skills` step above when using this route.
+
+- **Plugin (managed updates).** Use `/plugin install clerk@tony-skills` (above) and update with `/plugin update clerk@tony-skills`. If that machine was previously on the user-level route, remove the copy first so the two don't collide:
+
+  ```bash
+  rm ~/.claude/agents/clerk-auditor.md
+  ```
+
+The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local on either route and stays put; each machine keeps its own audit history.
 
 ## Install for bare commands (`/sunrise`, `/sunset`)
 

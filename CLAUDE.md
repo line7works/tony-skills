@@ -13,7 +13,7 @@ See `README.md` for install and structure.
 
 The live skill files a Claude Code session actually runs are the user-level copies at `~/.claude/skills/sunrise|sunset/` on each machine. This repo is the canonical, shareable, version-controlled home for them. A change made here reaches a machine only after that machine reinstalls or updates the plugin (`/plugin update sun@tony-skills`). Do not assume editing this repo changes a running machine's behavior until it is reinstalled.
 
-The `clerk-auditor` agent works the same way: the live copy is whatever the installed `clerk` plugin provides (or, before migration, the laptop-local `~/.claude/agents/clerk-auditor.md`). Edit it here, push, then `/plugin update clerk@tony-skills` on each machine. Do not leave both the plugin copy and the user-level `~/.claude/agents/clerk-auditor.md` in place at once — two definitions of the same agent name collide.
+The `clerk-auditor` agent works the same way, but Tony runs it **user-level, not as the plugin** (to match how `sun` is installed on his machines). The live copy is `~/.claude/agents/clerk-auditor.md` on each machine, synced by `git pull` here then copying `plugins/clerk/agents/clerk-auditor.md` over it. The `clerk` plugin (`/plugin install clerk@tony-skills`) is the alternative managed route. Never run both on one machine — two definitions of the agent name `clerk-auditor` collide. Edit the agent at `plugins/clerk/agents/clerk-auditor.md`, push, then re-sync each machine (re-copy for user-level, or `/plugin update clerk@tony-skills` for the plugin route). See `README.md` → "Clerk: user-level vs plugin".
 
 ## Invariants
 
