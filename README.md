@@ -4,25 +4,32 @@ A private Claude Code plugin marketplace holding Tony's personal skills.
 
 ## What's here
 
-One plugin, `sun`, providing two slash commands:
+Two plugins.
+
+**`sun`** provides two slash commands:
 
 - `/sunrise` stands up a new project across every layer (local repo, GitHub, Vercel, database, Notion board, Obsidian vault, CLI memory) and proves it live, then emits a handoff prompt for other LLMs.
 - `/sunset` archives an abandoned project reversibly across every layer (vault, memory, scheduled agents, repo, GitHub, Vercel, database, Notion), then emits a handoff prompt.
 
 They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser animations) bundled in `plugins/sun/assets/`.
 
+**`clerk`** bundles one subagent, `clerk-auditor` (Clerk): a portable, strictly read-only auditor. Point it at any pile of files, repos, or notes ("audit ~/Downloads", "what's stale under ~/Developer", "reconcile my projects") and it surveys the target, changes nothing, and hands back a prioritized cleanup "punch list." It lives in this repo so every machine pulls the same Clerk instead of a laptop-only copy.
+
 ## Layout
 
 ```
 tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists the "sun" plugin)
+├── .claude-plugin/marketplace.json   catalog (lists the "sun" and "clerk" plugins)
 └── plugins/
-    └── sun/
+    ├── sun/
+    │   ├── .claude-plugin/plugin.json
+    │   ├── skills/
+    │   │   ├── sunrise/SKILL.md
+    │   │   └── sunset/SKILL.md
+    │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
+    └── clerk/
         ├── .claude-plugin/plugin.json
-        ├── skills/
-        │   ├── sunrise/SKILL.md
-        │   └── sunset/SKILL.md
-        └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
+        └── agents/clerk-auditor.md
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean
@@ -33,11 +40,24 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` commands (user-level
 ```
 /plugin marketplace add tiny-tunnel-dot/tony-skills
 /plugin install sun@tony-skills
+/plugin install clerk@tony-skills
 ```
 
-Restart Claude Code once. The commands register as `/sun:sunrise` and `/sun:sunset`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
+Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
+
+`clerk` ships a subagent rather than a slash command, so there is nothing to type. Once installed it shows up as the `clerk-auditor` agent type and triggers on audit-style asks ("audit X", "what's stale", "reconcile", "give me a report on X").
 
 Because the repo is private, the installing machine needs working git auth (the `gh` login or an SSH key), which Tony's machines already have.
+
+### Migrating the laptop's local Clerk
+
+Clerk started as a laptop-only user-level agent at `~/.claude/agents/clerk-auditor.md`. After installing the `clerk` plugin, remove that file so the same agent name isn't defined twice:
+
+```bash
+rm ~/.claude/agents/clerk-auditor.md
+```
+
+The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local and stays put; each machine keeps its own audit history.
 
 ## Install for bare commands (`/sunrise`, `/sunset`)
 
@@ -56,11 +76,12 @@ Trade-off versus the plugin: no `/plugin update`. To pull changes, `git pull` in
 
 ## Updating
 
-After editing a skill and pushing:
+After editing a skill or the Clerk agent and pushing:
 
 ```
 /plugin marketplace update tony-skills
 /plugin update sun@tony-skills
+/plugin update clerk@tony-skills
 ```
 
 No version is pinned, so every pushed commit is the latest.
