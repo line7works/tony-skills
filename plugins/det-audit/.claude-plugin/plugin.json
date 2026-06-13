@@ -1,0 +1,10 @@
+{
+  "name": "det-audit",
+  "description": "Determinism audit. /det-audit scans a session or a repo for recurring LLM work that could become deterministic code (scripts, hooks, cron, CI) and returns a ranked punch list classifying each finding PURE SCRIPT / JIG / KEEP LLM. Report only, changes nothing.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

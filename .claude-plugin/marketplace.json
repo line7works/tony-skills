@@ -17,6 +17,12 @@
       "source": "./plugins/clerk",
       "description": "Clerk: a portable read-only auditor that surveys any files, repos, or notes and returns a prioritized cleanup punch list, changing nothing.",
       "tags": ["audit", "cleanup", "read-only"]
+    },
+    {
+      "name": "det-audit",
+      "source": "./plugins/det-audit",
+      "description": "/det-audit scans a session or a repo for recurring LLM work that could become deterministic code, returning a ranked PURE SCRIPT / JIG / KEEP LLM punch list. Report-only.",
+      "tags": ["audit", "determinism", "read-only", "workflow"]
     }
   ]
 }

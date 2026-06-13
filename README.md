@@ -4,7 +4,7 @@ A private Claude Code plugin marketplace holding Tony's personal skills.
 
 ## What's here
 
-Two plugins.
+Three plugins.
 
 **`sun`** provides two slash commands:
 
@@ -14,6 +14,8 @@ Two plugins.
 They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser animations) bundled in `plugins/sun/assets/`.
 
 **`clerk`** bundles one subagent, `clerk-auditor` (Clerk): a portable, strictly read-only auditor. Point it at any pile of files, repos, or notes ("audit ~/Downloads", "what's stale under ~/Developer", "reconcile my projects") and it surveys the target, changes nothing, and hands back a prioritized cleanup "punch list." It lives in this repo so every machine pulls the same Clerk instead of a laptop-only copy.
+
+**`det-audit`** provides one slash command, `/det-audit [session|repo]`: a report-only audit that scans either the work just done in a session or the current repo for recurring LLM work that could be converted to deterministic code (scripts, hooks, cron, CI). It returns a ranked punch list classifying each finding **PURE SCRIPT** (zero tokens), **JIG** (a script gathers, the LLM only finishes the judgment part), or **KEEP LLM** (genuinely fuzzy, leave it). It changes nothing. The principle: spend tokens once to build a deterministic tool, then run it free forever.
 
 ## Layout
 
@@ -27,9 +29,12 @@ tony-skills/
     │   │   ├── sunrise/SKILL.md
     │   │   └── sunset/SKILL.md
     │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
-    └── clerk/
+    ├── clerk/
+    │   ├── .claude-plugin/plugin.json
+    │   └── agents/clerk-auditor.md
+    └── det-audit/
         ├── .claude-plugin/plugin.json
-        └── agents/clerk-auditor.md
+        └── commands/det-audit.md
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean
@@ -41,9 +46,10 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` commands (user-level
 /plugin marketplace add tiny-tunnel-dot/tony-skills
 /plugin install sun@tony-skills
 /plugin install clerk@tony-skills
+/plugin install det-audit@tony-skills
 ```
 
-Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
+Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, and `det-audit` as `/det-audit:det-audit`. Plugin commands and skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
 
 `clerk` ships a subagent rather than a slash command, so there is nothing to type. Once installed it shows up as the `clerk-auditor` agent type and triggers on audit-style asks ("audit X", "what's stale", "reconcile", "give me a report on X"). Clerk can also run user-level instead of as a plugin, and Tony's machines use that route — see [Clerk: user-level vs plugin](#clerk-user-level-vs-plugin-pick-one-route-per-machine) below. Pick one route per machine; the `clerk@tony-skills` line above is only for the plugin route.
 
@@ -70,6 +76,18 @@ Clerk is an agent, not a slash command, so it can be consumed two ways. **Pick o
 
 The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local on either route and stays put; each machine keeps its own audit history.
 
+### det-audit: user-level (the route Tony runs)
+
+`det-audit` is a slash command. Like `sun` and `clerk`, Tony runs it user-level rather than as the plugin. Copy the command file into `~/.claude/commands/`:
+
+```bash
+cd ~/Developer/tony-skills && git pull
+mkdir -p ~/.claude/commands
+cp plugins/det-audit/commands/det-audit.md ~/.claude/commands/det-audit.md
+```
+
+Restart Claude Code once for the bare `/det-audit [session|repo]`. To pull a later change, re-run those lines. The plugin route instead namespaces it as `/det-audit:det-audit`; use one route per machine so the two copies don't drift.
+
 ## Install for bare commands (`/sunrise`, `/sunset`)
 
 Prefer typing `/sunrise` and `/sunset`? Install them as user-level skills instead of as a plugin. Copy the two skill folders plus the shared assets into `~/.claude/skills/`:
@@ -93,6 +111,7 @@ After editing a skill or the Clerk agent and pushing:
 /plugin marketplace update tony-skills
 /plugin update sun@tony-skills
 /plugin update clerk@tony-skills
+/plugin update det-audit@tony-skills
 ```
 
 No version is pinned, so every pushed commit is the latest.
