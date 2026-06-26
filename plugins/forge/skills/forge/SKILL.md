@@ -11,8 +11,8 @@ description: >-
   swappable per job with --model), with a per-run cost cap and an auditable run
   manifest. NOT for pixel-art game sprites (Tony uses PixelLab for those). Drives
   a deterministic Python CLI and never calls Fal directly. Supports gen / batch /
-  compare / edit / style / finish / resume / init / estimate / models plus
-  per-project brand profiles; export and transparent backgrounds arrive in M5.
+  compare / edit / style / finish / resume / init / export / estimate / models,
+  transparent-background cut-outs, and per-project brand profiles.
 ---
 
 # Forge: Claude-driven image generation
@@ -59,6 +59,8 @@ Pass `--json` on any command to read structured results back.
 - Resume an interrupted or partial run: `python3 "$FORGE" resume <run-id> --cap 0.50`
 - Re-render keepers at finish quality: `python3 "$FORGE" finish <run-id> <ids...> --model gpt --quality high --size 2048`
 - Scaffold a project brand profile: `python3 "$FORGE" init` (writes `.forge/brand.json`)
+- Export to size presets (local, free): `python3 "$FORGE" export <image.png> --sizes og,square,icon`
+- Add a transparent cut-out to any render: append `--transparent` (runs a bg-removal pass).
 - Plan without spending: add `--dry-run`.
 
 A shot list is one shot per line (`id: prompt`), or a `.json`/`.csv` with a `prompt`
@@ -93,6 +95,8 @@ background, then poll the manifest. If a run is killed mid-flight, just `resume 
 7. **Finish.** On Tony's pick, run `forge finish <run-id> <ids...> --model gpt --quality high --size 2048`
    to re-render just the keepers at finish quality (higher res, cleaner, usually drops invented text).
    Finish writes a new run linked to the source; the rough drafts stay untouched.
+8. **Deliver.** Add `--transparent` for a cut-out on a transparent background; run
+   `forge export <keeper> --sizes og,square,icon` to emit delivery sizes (local, free).
 
 ## Brand profiles
 
@@ -136,10 +140,16 @@ it into every prompt you write:
   `flux` style needs the paid pro Kontext endpoint and is not wired yet, so use nano or gpt.
 - Both obey project cwd and the brand profile, and write the same manifest + contact sheet as `gen`.
 
-## Not yet implemented
+## Finishing: transparent backgrounds and export
 
-`export` (resize/crop to size presets) and `--transparent` (cut-out backgrounds) are on the M5
-roadmap. Do not call them yet.
+- `--transparent` on any render (gen/edit/style/finish/batch) adds a background-removal pass
+  (birefnet) and writes a `*-transparent.png` cut-out beside the original — for mascots, logos, and
+  icons that need to sit on any background. Costs ~$0.04/image extra and obeys the cap.
+- `forge export <image> --sizes og,square,icon,hero` crops a finished image to named size presets
+  with macOS `sips`. Local and free (no API), and it preserves transparency. Presets: og, twitter,
+  square, hero, icon, apple-touch, favicon, thumb.
+- `resume` does not re-run the transparent pass, and `compare --transparent` is ignored — pass
+  `--transparent` on the command that makes the keeper.
 
 ## Not for pixel art
 

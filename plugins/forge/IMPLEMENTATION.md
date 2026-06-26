@@ -515,6 +515,19 @@ the single-image Kontext path. The engine was refactored so every op submits to 
 legacy-manifest self-heal) were folded in. `forge style` on flux needs the paid pro Kontext multi
 endpoint and is deferred with a clear message.
 
+**M5 shipped 2026-06-26**: `forge export <image> --sizes og,square,icon,...` (local resize/crop to
+named size presets via macOS `sips`, no API, preserves alpha) and a `--transparent` flag on any
+render that runs a Fal background-removal pass (`fal-ai/birefnet/v2`, verified against fal.ai docs)
+to write an alpha cut-out beside the original. Proven live on Commish: `export` produced exact
+og/square/icon/hero crops from a 2048 source with no distortion (free), and `gen --transparent` came
+back as a real alpha PNG (`hasAlpha=yes`, ~$0.12 incl. the bg pass). The transparent pass is
+cap-aware (counts prior spend, skips before crossing the cap) and never raises. A senior review
+confirmed the cap can't be exceeded, the post-pass spend can't be dropped by a later write, and the
+crop hits exact preset dimensions for any aspect ratio; its two findings were fixed — `export` now
+dies cleanly on a non-image file, and `compare --transparent` warns instead of silently no-op'ing.
+The birefnet per-image price ($0.04 in the registry) is a conservative estimate pending a dashboard
+check. This completes the M1-M5 roadmap.
+
 ---
 
 ## 13. Decisions

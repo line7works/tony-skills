@@ -2,6 +2,12 @@
   "schema_version": 1,
   "note": "Prices are conservative per-image estimates checked against each Fal model /api page on 2026-06-25. The estimator rounds up; true spend shows on the Fal dashboard. Edit/style reuse the model's generation pricing as an estimate. Update when Fal pricing changes.",
   "default_model": "nano",
+  "bg_remove": {
+    "id": "fal-ai/birefnet/v2",
+    "image_field": "image_url",
+    "price_usd": 0.04,
+    "extra_input": { "output_format": "png", "refine_foreground": true }
+  },
   "models": {
     "nano": {
       "id": "fal-ai/nano-banana-2",

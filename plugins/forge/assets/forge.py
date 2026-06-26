@@ -27,7 +27,9 @@ import io
 import json
 import os
 import re
+import shutil
 import ssl
+import subprocess
 import sys
 import threading
 import time
@@ -530,9 +532,49 @@ def _save_images(item, result, run_dir):
         item["outputs"].append(str(dest.relative_to(run_dir)))
 
 
-def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, brand, op="gen"):
+def run_transparent_pass(reg, run_dir, manifest, key, cap):
+    """After generation, run a Fal background-removal pass on each completed image
+    to write a transparent cut-out alongside it. Cap-aware (counts prior spend),
+    never raises; a per-image failure is recorded on the item."""
+    bg = reg.get("bg_remove")
+    if not bg:
+        warn("no 'bg_remove' model in the registry; --transparent skipped")
+        return
+    price = float(bg.get("price_usd", 0.05))
+    field = bg.get("image_field", "image_url")
+    spent = manifest.get("spent_usd", 0.0)
+    for it in manifest["items"]:
+        if it.get("status") != "completed" or not it.get("outputs"):
+            continue
+        if cap is not None and spent + price > cap + 1e-9:
+            it["transparent"] = "skipped: cap reached"
+            continue
+        rel = it["outputs"][0]
+        try:
+            uri = _data_uri(run_dir / rel)
+            inp = {field: uri} if field == "image_url" else {field: [uri]}
+            inp.update(bg.get("extra_input", {}))
+            sub = submit_job(bg["id"], inp, key)
+            poll_job(sub.get("status_url"), key)
+            result = fetch_result(sub.get("response_url"), key)
+            img = result.get("image") or (result.get("images") or [{}])[0]
+            url = img.get("url") if isinstance(img, dict) else None
+            if not url:
+                raise RuntimeError("background removal returned no image")
+            dest = run_dir / "raw" / (Path(rel).stem + "-transparent.png")
+            download(url, dest)
+            it.setdefault("transparent_outputs", []).append(str(dest.relative_to(run_dir)))
+            spent += price
+        except Exception as e:
+            it["transparent"] = f"failed: {e}"
+    manifest["spent_usd"] = round(spent, 4)
+
+
+def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, brand,
+              op="gen", transparent=False):
     """Core engine for gen/batch/compare/finish/edit/style. Concurrent, cost-capped,
-    atomic manifest. op selects the endpoint family ('gen' | 'edit' | 'style')."""
+    atomic manifest. op selects the endpoint family ('gen' | 'edit' | 'style');
+    transparent adds a background-removal pass after the images complete."""
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
     ensure_gitignore(Path.cwd())
     manifest_path = run_dir / "manifest.json"
@@ -604,6 +646,9 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
         list(ex.map(worker, jobs))
     persist()
+    if transparent:
+        run_transparent_pass(reg, run_dir, manifest, key, cap)
+        write_atomic(manifest_path, manifest)   # keep transparent outputs + spend
     return manifest, manifest_path
 
 
@@ -613,7 +658,8 @@ def write_contact_sheet(run_dir, manifest):
     items = manifest["items"]
     cells = []
     for it in items:
-        imgs = "".join(f'<img src="{html.escape(o)}" loading="lazy">' for o in it.get("outputs", [])) \
+        outs = it.get("outputs", []) + it.get("transparent_outputs", [])
+        imgs = "".join(f'<img src="{html.escape(o)}" loading="lazy">' for o in outs) \
             or '<div class="ph">no image</div>'
         cells.append(
             f'<figure class="cell {it["status"]}">{imgs}'
@@ -736,7 +782,8 @@ def cmd_gen(args, reg):
         return
     key = require_key()
     run_dir = _out_root(args) / new_run_id(args.prompt)
-    manifest, mpath = run_batch(shots, defaults, reg, run_dir, "gen", args.cap, 1, key, brand)
+    manifest, mpath = run_batch(shots, defaults, reg, run_dir, "gen", args.cap, 1, key, brand,
+                                transparent=args.transparent)
     if args.json:
         it = manifest["items"][0]
         print(json.dumps({"run_id": manifest["run_id"], "model": it["model"], "status": it["status"],
@@ -766,7 +813,8 @@ def cmd_batch(args, reg):
     key = require_key()
     run_dir = _out_root(args) / new_run_id(Path(args.shotlist).stem)
     manifest, mpath = run_batch(shots, defaults, reg, run_dir, "batch", args.cap,
-                                args.concurrency or DEFAULT_CONCURRENCY, key, brand)
+                                args.concurrency or DEFAULT_CONCURRENCY, key, brand,
+                                transparent=args.transparent)
     sheet = write_contact_sheet(run_dir, manifest)
     if args.json:
         print(json.dumps({"run_id": manifest["run_id"], "spent_usd": manifest["spent_usd"],
@@ -788,6 +836,8 @@ def cmd_compare(args, reg):
         for sid, model, per in rows:
             print(f"  [{sid}] ~${per:.3f}")
         return
+    if args.transparent:
+        warn("--transparent is ignored for compare; apply it when you finish the keeper")
     key = require_key()
     run_dir = _out_root(args) / new_run_id("compare-" + slugify(args.prompt, 12))
     manifest, mpath = run_batch(shots, defaults, reg, run_dir, "compare", args.cap,
@@ -831,7 +881,8 @@ def cmd_edit(args, reg):
     defaults = {"model": cfg["alias"], "size": size, "quality": args.quality,
                 "seed": args.seed, "negative": None}
     run_dir = _out_root(args) / new_run_id("edit-" + slugify(args.instruction, 12))
-    manifest, mp = run_batch(shots, defaults, reg, run_dir, "edit", args.cap, 1, key, brand, op="edit")
+    manifest, mp = run_batch(shots, defaults, reg, run_dir, "edit", args.cap, 1, key, brand,
+                             op="edit", transparent=args.transparent)
     sheet = write_contact_sheet(run_dir, manifest)
     if args.json:
         it = manifest["items"][0]
@@ -879,7 +930,8 @@ def cmd_style(args, reg):
     defaults = {"model": cfg["alias"], "size": size, "quality": args.quality,
                 "seed": args.seed, "negative": None}
     run_dir = _out_root(args) / new_run_id("style-" + slugify(args.prompt, 12))
-    manifest, mp = run_batch(shots, defaults, reg, run_dir, "style", args.cap, 1, key, brand, op="style")
+    manifest, mp = run_batch(shots, defaults, reg, run_dir, "style", args.cap, 1, key, brand,
+                             op="style", transparent=args.transparent)
     sheet = write_contact_sheet(run_dir, manifest)
     if args.json:
         it = manifest["items"][0]
@@ -1027,7 +1079,8 @@ def cmd_finish(args, reg):
     key = require_key()
     run_dir = _out_root(args) / new_run_id("finish")
     manifest, mp = run_batch(shots, defaults, reg, run_dir, "finish", args.cap,
-                             args.concurrency or DEFAULT_CONCURRENCY, key, brand)
+                             args.concurrency or DEFAULT_CONCURRENCY, key, brand,
+                             transparent=args.transparent)
     manifest["source_run"] = args.run_id
     write_atomic(mp, manifest)
     sheet = write_contact_sheet(run_dir, manifest)
@@ -1127,6 +1180,91 @@ def cmd_init(args, reg):
     print("  edit name/style/avoid to taste; forge auto-loads this for runs in this project.")
 
 
+# ---------- export (local resize/crop via macOS sips) ----------
+
+EXPORT_PRESETS = {
+    "og": (1200, 630),          # Open Graph / link preview
+    "twitter": (1600, 900),     # large summary card
+    "square": (1080, 1080),     # social square
+    "hero": (1920, 1080),       # wide banner
+    "icon": (512, 512),         # app/store icon
+    "apple-touch": (180, 180),  # iOS home-screen icon
+    "favicon": (64, 64),
+    "thumb": (400, 400),
+}
+
+
+def _have_sips():
+    return shutil.which("sips") is not None
+
+
+def _image_dims(path):
+    out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(path)],
+                         capture_output=True, text=True)
+    w = h = None
+    for line in out.stdout.splitlines():
+        s = line.strip()
+        try:
+            if s.startswith("pixelWidth:"):
+                w = int(s.split(":")[1])
+            elif s.startswith("pixelHeight:"):
+                h = int(s.split(":")[1])
+        except ValueError:
+            pass        # sips prints '<nil>' for a non-image file with an image extension
+    if not w or not h:
+        raise RuntimeError(f"not a readable image: {path}")
+    return w, h
+
+
+def _crop_fill(src, dest, sw, sh, W, H):
+    """Scale to cover the WxH box (preserving aspect, keeping any alpha), then
+    center-crop to exactly WxH. sips -z/-c take HEIGHT then WIDTH."""
+    scale = max(W / sw, H / sh)
+    rw, rh = max(W, round(sw * scale)), max(H, round(sh * scale))
+    subprocess.run(["sips", "-z", str(rh), str(rw), str(src), "--out", str(dest)],
+                   capture_output=True, text=True, check=True)
+    subprocess.run(["sips", "-c", str(H), str(W), str(dest)],
+                   capture_output=True, text=True, check=True)
+
+
+def cmd_export(args, reg):
+    src = Path(args.image)
+    if not src.is_file():
+        die(f"image not found: {args.image}")
+    if not _have_sips():
+        die("forge export needs macOS 'sips', which was not found on PATH.")
+    sizes = [s.strip().lower() for s in (args.sizes or "og,square,icon").split(",") if s.strip()]
+    unknown = [s for s in sizes if s not in EXPORT_PRESETS]
+    if unknown:
+        die(f"unknown size preset(s): {', '.join(unknown)}. Known: {', '.join(EXPORT_PRESETS)}")
+    out_dir = Path(args.out) if args.out else (src.parent / "export")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        sw, sh = _image_dims(src)
+    except RuntimeError as e:
+        die(str(e))
+    made, failed = [], []
+    for name in sizes:
+        W, H = EXPORT_PRESETS[name]
+        dest = out_dir / f"{src.stem}-{name}.png"
+        try:
+            _crop_fill(src, dest, sw, sh, W, H)
+            made.append((name, W, H, dest))
+        except Exception as e:
+            failed.append((name, str(e)))
+    if args.json:
+        print(json.dumps({"command": "export", "source": str(src),
+                          "exports": [{"preset": n, "w": w, "h": h, "path": str(p)}
+                                      for n, w, h, p in made],
+                          "failed": [{"preset": n, "error": e} for n, e in failed]}, indent=2))
+        return
+    for n, w, h, p in made:
+        print(f"  {n}: {w}x{h} -> {p}")
+    for n, e in failed:
+        print(f"  {n}: FAILED ({e})")
+    print(f"exported {len(made)} size(s) to {out_dir}")
+
+
 # ---------- arg parsing ----------
 
 def _add_common(sp):
@@ -1137,7 +1275,9 @@ def _add_common(sp):
     sp.add_argument("-n", "--num", type=int, default=1, help="images per prompt")
     sp.add_argument("--seed", type=int, help="fixed seed (models that support it)")
     sp.add_argument("--negative", help="negative prompt (models that support it)")
-    sp.add_argument("--refs", help="reference image folder (used in later milestones)")
+    sp.add_argument("--refs", help="reference image folder (for style)")
+    sp.add_argument("--transparent", action="store_true",
+                    help="also output a transparent-background cut-out (extra bg-removal pass)")
     sp.add_argument("--brand", help="path to a brand profile (.forge/brand.json)")
     sp.add_argument("--cap", type=float, help="spend ceiling in USD (circuit-breaker)")
     sp.add_argument("--concurrency", type=int, help=f"parallel jobs (default {DEFAULT_CONCURRENCY})")
@@ -1187,6 +1327,12 @@ def build_parser():
     i.add_argument("dir", nargs="?", help="project dir to scaffold (default: current)")
     i.add_argument("--force", action="store_true", help="overwrite an existing profile")
 
+    ex = sub.add_parser("export", help="resize/crop a finished image to size presets (local, no API)")
+    ex.add_argument("image", help="path to the image to export")
+    ex.add_argument("--sizes", help="comma list of presets (default og,square,icon)")
+    ex.add_argument("--out", help="output dir (default <image-dir>/export)")
+    ex.add_argument("--json", action="store_true")
+
     e = sub.add_parser("estimate", help="estimate cost, no API calls")
     e.add_argument("prompt", nargs="?", default="")
     _add_common(e)
@@ -1205,7 +1351,7 @@ def main():
     {"models": cmd_models, "estimate": cmd_estimate, "gen": cmd_gen,
      "batch": cmd_batch, "compare": cmd_compare, "resume": cmd_resume,
      "finish": cmd_finish, "init": cmd_init,
-     "edit": cmd_edit, "style": cmd_style}[args.command](args, reg)
+     "edit": cmd_edit, "style": cmd_style, "export": cmd_export}[args.command](args, reg)
 
 
 if __name__ == "__main__":
