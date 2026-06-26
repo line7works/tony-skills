@@ -501,6 +501,20 @@ DESIGN.md. A focused senior code review found two issues, both fixed: `finish` w
 charge for a non-completed item selected by id, and `init` raised raw tracebacks on three
 filesystem collisions (`.forge` is a file, `brand.json` is a directory, an unwritable target).
 
+**M4 shipped 2026-06-26**: `forge edit <image> "<instruction>"` (natural-language edit, no mask) and
+`forge style "<prompt>" --refs <folder>` (reference-conditioned generation). Local images go to Fal
+inline as base64 data-URIs — no upload step. Endpoints were verified against fal.ai docs before
+coding: nano `.../edit` and gpt `.../edit` take an `image_urls` array (and do multi-ref on the same
+endpoint), while flux uses Kontext (`fal-ai/flux-kontext/dev`) with a single `image_url`. Proven
+live on Commish: a nano edit stripped invented text from the standings icon (~$0.08), a 2-ref nano
+style produced an on-brand whistle icon (~$0.08), and a flux Kontext edit recolored the icon
+orange->blue while preserving everything else (~$0.03) — confirming nano accepts inline data-URIs and
+the single-image Kontext path. The engine was refactored so every op submits to a per-item endpoint
+(`item['fal_id']`), which a senior review confirmed cannot misroute or double-charge; its findings
+(fail-loud endpoint resolution, empty-refs guard, an 8MB inline ceiling, reserve-after-build, and a
+legacy-manifest self-heal) were folded in. `forge style` on flux needs the paid pro Kontext multi
+endpoint and is deferred with a clear message.
+
 ---
 
 ## 13. Decisions

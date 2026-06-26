@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import base64
 import csv
 import html
 import io
@@ -150,6 +151,66 @@ def build_input(cfg, prompt, dims, quality, num, seed, negative, image_urls=None
         inp["negative_prompt"] = negative
     if image_urls:
         inp["image_urls"] = image_urls
+    return inp
+
+
+# ---------- references / local-image upload ----------
+
+MIME_BY_EXT = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+               ".webp": "image/webp", ".gif": "image/gif"}
+REF_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+MAX_INLINE_MB = 8        # ceiling for inline base64; resize larger files first
+
+
+def _data_uri(path):
+    """Encode a local image as an inline base64 data URI (Fal accepts these in
+    image_url / image_urls). Raises RuntimeError so worker threads can fail the
+    item instead of killing the whole run."""
+    p = Path(path)
+    if not p.is_file():
+        raise RuntimeError(f"image not found: {path}")
+    mime = MIME_BY_EXT.get(p.suffix.lower())
+    if not mime:
+        raise RuntimeError(f"unsupported image type '{p.suffix}' ({path}); use png/jpg/webp")
+    mb = p.stat().st_size / (1024 * 1024)
+    if mb > MAX_INLINE_MB:
+        raise RuntimeError(f"{path} is {mb:.0f}MB; too large to send inline "
+                           f"(limit {MAX_INLINE_MB}MB). Resize it first.")
+    return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+
+
+def _load_ref_paths(folder):
+    d = Path(folder)
+    if not d.is_dir():
+        die(f"refs folder not found: {folder}")
+    paths = sorted(p for p in d.iterdir() if p.is_file() and p.suffix.lower() in REF_EXTS)
+    if not paths:
+        die(f"no images ({', '.join(REF_EXTS)}) found in {folder}")
+    return paths
+
+
+def build_op_input(cfg, op, image_uris, prompt, dims, quality, num, seed):
+    """Assemble the Fal input body for an edit/style op. Routes the reference
+    images to the endpoint's image field (single image_url vs an image_urls array)
+    and applies size params only where the op endpoint honors them."""
+    if not image_uris:
+        raise RuntimeError("edit/style needs at least one reference image")
+    field = cfg.get(op + "_image_field", "image_urls")
+    inp = {"prompt": prompt, "num_images": num, "output_format": "png"}
+    if field == "image_url":
+        inp["image_url"] = image_uris[0]
+    else:
+        inp["image_urls"] = image_uris
+    osize = cfg.get("op_size_style", cfg.get("size_style"))
+    if osize == "aspect_resolution":
+        inp["resolution"] = res_bucket(max(dims)) if dims else "1K"
+    elif osize == "image_size":
+        if cfg.get("supports_quality") and quality:
+            inp["quality"] = quality
+        if dims:
+            inp["image_size"] = {"width": dims[0], "height": dims[1]}
+    if cfg.get("supports_seed") and seed is not None:
+        inp["seed"] = seed
     return inp
 
 
@@ -423,13 +484,14 @@ def _new_item(idx, shot, cfg, size, dims, quality, seed, per, negative=None):
     }
 
 
-def process_item(item, cfg, inp, run_dir, key, persist):
-    """Submit -> poll -> download one item, with retry/backoff. Never raises."""
+def process_item(item, inp, run_dir, key, persist):
+    """Submit -> poll -> download one item, with retry/backoff. Never raises.
+    Submits to item['fal_id'] (the gen, edit, or style endpoint)."""
     delay = 2
     for attempt in range(1, MAX_ATTEMPTS + 1):
         item["attempts"] = attempt
         try:
-            sub = submit_job(cfg["id"], inp, key)
+            sub = submit_job(item["fal_id"], inp, key)
             item["request_id"] = sub.get("request_id")
             item["status_url"] = sub.get("status_url")
             item["response_url"] = sub.get("response_url")
@@ -468,8 +530,9 @@ def _save_images(item, result, run_dir):
         item["outputs"].append(str(dest.relative_to(run_dir)))
 
 
-def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, brand):
-    """Core engine for gen/batch/compare. Concurrent, cost-capped, atomic manifest."""
+def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, brand, op="gen"):
+    """Core engine for gen/batch/compare/finish/edit/style. Concurrent, cost-capped,
+    atomic manifest. op selects the endpoint family ('gen' | 'edit' | 'style')."""
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
     ensure_gitignore(Path.cwd())
     manifest_path = run_dir / "manifest.json"
@@ -487,8 +550,18 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
         num = max(1, int(shot.get("num", 1) or 1))
         per = estimate_per_image(cfg, dims, quality) * num          # reserve all N images
         item = _new_item(idx, shot, cfg, size, dims, quality, seed, per, negative)
+        item["op"] = op
+        if op == "gen":
+            item["fal_id"] = cfg["id"]
+        else:
+            endpoint = cfg.get(op)
+            if not endpoint:                       # fail loud, never mis-route to text-to-image
+                die(f"model '{cfg['alias']}' has no {op} endpoint")
+            item["fal_id"] = endpoint
+        if shot.get("sources"):
+            item["sources"] = shot["sources"]
         manifest_items.append(item)
-        jobs.append((item, cfg, dims, quality, seed, negative, per))
+        jobs.append((item, cfg, dims, quality, seed, negative, per, shot.get("images")))
 
     manifest = {
         "schema_version": 1, "run_id": run_dir.name,
@@ -511,15 +584,19 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
             return True
 
     def worker(job):
-        item, cfg, dims, quality, seed, negative, per = job
+        item, cfg, dims, quality, seed, negative, per, images = job
         try:
+            if op == "gen":                        # build first so a build failure never holds a reservation
+                inp = build_input(cfg, item["prompt"], dims, quality, item["num_images"],
+                                  seed, negative)
+            else:
+                inp = build_op_input(cfg, op, images, item["prompt"], dims, quality,
+                                     item["num_images"], seed)
             if not reserve(per):
                 item["status"], item["error"] = "skipped", "cap reached"
                 persist()
                 return
-            inp = build_input(cfg, item["prompt"], dims, quality, item["num_images"],
-                              seed, negative)
-            process_item(item, cfg, inp, run_dir, key, persist)
+            process_item(item, inp, run_dir, key, persist)
         except Exception as e:
             item["status"], item["error"] = "failed", str(e)
             persist()
@@ -724,6 +801,96 @@ def cmd_compare(args, reg):
         _summary(manifest, sheet)
 
 
+def cmd_edit(args, reg):
+    brand = load_brand_profile(args.brand)
+    cfg = resolve_model(args.model or "nano", reg)
+    if not cfg.get("edit"):
+        die(f"model '{cfg['alias']}' has no edit endpoint; try --model nano, gpt, or flux")
+    if not Path(args.image).is_file():
+        die(f"image not found: {args.image}")
+    size = args.size or brand.get("default_size")
+    dims = parse_dims(size)
+    per = estimate_per_image(cfg, dims, args.quality) * args.num
+    if args.cap is not None and per > args.cap:
+        die(f"estimate ${per:.3f} exceeds --cap ${args.cap:.2f}. Raise the cap or lower --num.")
+    if args.dry_run:
+        msg = (f"[dry run] edit '{Path(args.image).name}' on '{cfg['alias']}' x{args.num} "
+               f"~${per:.3f}, no spend.")
+        print(json.dumps({"command": "edit", "dry_run": True, "model": cfg["alias"],
+                          "edit_id": cfg["edit"], "image": args.image,
+                          "instruction": args.instruction,
+                          "estimated_total_usd": round(per, 4)}, indent=2) if args.json else msg)
+        return
+    try:
+        uri = _data_uri(args.image)
+    except RuntimeError as e:
+        die(str(e))
+    key = require_key()
+    shots = [{"id": "edit-01", "prompt": args.instruction, "model": cfg["alias"], "num": args.num,
+              "images": [uri], "sources": [str(Path(args.image).resolve())]}]
+    defaults = {"model": cfg["alias"], "size": size, "quality": args.quality,
+                "seed": args.seed, "negative": None}
+    run_dir = _out_root(args) / new_run_id("edit-" + slugify(args.instruction, 12))
+    manifest, mp = run_batch(shots, defaults, reg, run_dir, "edit", args.cap, 1, key, brand, op="edit")
+    sheet = write_contact_sheet(run_dir, manifest)
+    if args.json:
+        it = manifest["items"][0]
+        print(json.dumps({"run_id": manifest["run_id"], "status": it["status"],
+                          "outputs": [str(run_dir / o) for o in it["outputs"]],
+                          "spent_usd": manifest["spent_usd"], "manifest": str(mp),
+                          "contact_sheet": str(sheet)}, indent=2))
+    else:
+        _summary(manifest, sheet)
+
+
+def cmd_style(args, reg):
+    brand = load_brand_profile(args.brand)
+    cfg = resolve_model(args.model or "nano", reg)
+    if not cfg.get("style"):
+        die(f"model '{cfg['alias']}' has no style/multi-ref endpoint; use --model nano or gpt "
+            f"(flux style needs the pro Kontext endpoint, not wired in v1)")
+    refs = args.refs or brand.get("refs")
+    if not refs:
+        die("style needs --refs <folder> (or a 'refs' path in the brand profile)")
+    paths = _load_ref_paths(refs)
+    maxr = cfg.get("max_refs", 8)
+    if len(paths) > maxr:
+        warn(f"{len(paths)} refs found; '{cfg['alias']}' takes {maxr}, using the first {maxr}")
+        paths = paths[:maxr]
+    size = args.size or brand.get("default_size")
+    dims = parse_dims(size)
+    per = estimate_per_image(cfg, dims, args.quality) * args.num
+    if args.cap is not None and per > args.cap:
+        die(f"estimate ${per:.3f} exceeds --cap ${args.cap:.2f}. Raise the cap or lower --num.")
+    if args.dry_run:
+        msg = (f"[dry run] style on '{cfg['alias']}' with {len(paths)} ref(s) x{args.num} "
+               f"~${per:.3f}, no spend.")
+        print(json.dumps({"command": "style", "dry_run": True, "model": cfg["alias"],
+                          "style_id": cfg["style"], "refs": [str(p) for p in paths],
+                          "estimated_total_usd": round(per, 4)}, indent=2) if args.json else msg)
+        return
+    try:
+        uris = [_data_uri(p) for p in paths]
+    except RuntimeError as e:
+        die(str(e))
+    key = require_key()
+    shots = [{"id": "style-01", "prompt": args.prompt, "model": cfg["alias"], "num": args.num,
+              "images": uris, "sources": [str(p.resolve()) for p in paths]}]
+    defaults = {"model": cfg["alias"], "size": size, "quality": args.quality,
+                "seed": args.seed, "negative": None}
+    run_dir = _out_root(args) / new_run_id("style-" + slugify(args.prompt, 12))
+    manifest, mp = run_batch(shots, defaults, reg, run_dir, "style", args.cap, 1, key, brand, op="style")
+    sheet = write_contact_sheet(run_dir, manifest)
+    if args.json:
+        it = manifest["items"][0]
+        print(json.dumps({"run_id": manifest["run_id"], "status": it["status"],
+                          "outputs": [str(run_dir / o) for o in it["outputs"]],
+                          "spent_usd": manifest["spent_usd"], "manifest": str(mp),
+                          "contact_sheet": str(sheet)}, indent=2))
+    else:
+        _summary(manifest, sheet)
+
+
 def _resume_terminal(err):
     """True when a re-poll error means the prior Fal request is genuinely gone or
     failed, so a fresh (paid) submit is safe. False for transient errors (timeout,
@@ -769,6 +936,8 @@ def cmd_resume(args, reg):
 
     def worker(it):
         cfg = resolve_model(it["model"], reg)
+        op = it.get("op", "gen")
+        it.setdefault("fal_id", cfg["id"])         # heal pre-M4 manifests with no endpoint
         # an already-submitted job: re-poll its result instead of paying again
         if it.get("response_url") and it.get("status_url"):
             try:
@@ -791,9 +960,19 @@ def cmd_resume(args, reg):
             persist()
             return
         dims = parse_dims(it.get("size"))
-        inp = build_input(cfg, it["prompt"], dims, it.get("quality"),
-                          it.get("num_images", 1), it.get("seed"), it.get("negative"))
-        process_item(it, cfg, inp, run_dir, key, persist)
+        try:
+            if op == "gen":
+                inp = build_input(cfg, it["prompt"], dims, it.get("quality"),
+                                  it.get("num_images", 1), it.get("seed"), it.get("negative"))
+            else:
+                images = [_data_uri(s) for s in (it.get("sources") or [])]
+                inp = build_op_input(cfg, op, images, it["prompt"], dims, it.get("quality"),
+                                     it.get("num_images", 1), it.get("seed"))
+        except Exception as e:
+            it["status"], it["error"] = "failed", f"resume could not rebuild input: {e}"
+            persist()
+            return
+        process_item(it, inp, run_dir, key, persist)
 
     with ThreadPoolExecutor(max_workers=args.concurrency or DEFAULT_CONCURRENCY) as ex:
         list(ex.map(worker, todo))
@@ -984,6 +1163,15 @@ def build_parser():
     c.add_argument("--models", help="comma list, e.g. nano,gpt,flux")
     _add_common(c)
 
+    ed = sub.add_parser("edit", help="edit an existing image with a text instruction")
+    ed.add_argument("image", help="path to the image to edit")
+    ed.add_argument("instruction", help="what to change, in natural language")
+    _add_common(ed)
+
+    st = sub.add_parser("style", help="generate conditioned on a folder of reference images")
+    st.add_argument("prompt")
+    _add_common(st)
+
     r = sub.add_parser("resume", help="re-run failed/missing items of a run")
     r.add_argument("run_id")
     r.add_argument("--out", help="output dir the run lives under (default ./generated-assets)")
@@ -1016,7 +1204,8 @@ def main():
     reg = load_registry()
     {"models": cmd_models, "estimate": cmd_estimate, "gen": cmd_gen,
      "batch": cmd_batch, "compare": cmd_compare, "resume": cmd_resume,
-     "finish": cmd_finish, "init": cmd_init}[args.command](args, reg)
+     "finish": cmd_finish, "init": cmd_init,
+     "edit": cmd_edit, "style": cmd_style}[args.command](args, reg)
 
 
 if __name__ == "__main__":

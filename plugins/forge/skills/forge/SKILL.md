@@ -11,8 +11,8 @@ description: >-
   swappable per job with --model), with a per-run cost cap and an auditable run
   manifest. NOT for pixel-art game sprites (Tony uses PixelLab for those). Drives
   a deterministic Python CLI and never calls Fal directly. Supports gen / batch /
-  compare / finish / resume / init / estimate / models plus per-project brand
-  profiles; edit, style refs, export, and transparent backgrounds arrive later.
+  compare / edit / style / finish / resume / init / estimate / models plus
+  per-project brand profiles; export and transparent backgrounds arrive in M5.
 ---
 
 # Forge: Claude-driven image generation
@@ -54,6 +54,8 @@ Pass `--json` on any command to read structured results back.
 - Generate one prompt: `python3 "$FORGE" gen "<prompt>" --model nano --size 1024 -n 2 --cap 0.50`
 - Generate a shot list: `python3 "$FORGE" batch shots.md --model nano --size 1k --cap 3 --concurrency 4`
 - Race models on one prompt: `python3 "$FORGE" compare "<prompt>" --models nano,gpt,flux --cap 0.40`
+- Edit an existing image: `python3 "$FORGE" edit <image.png> "<instruction>" --model nano --cap 0.15`
+- Generate in a reference style: `python3 "$FORGE" style "<prompt>" --refs <folder> --model nano --cap 0.15`
 - Resume an interrupted or partial run: `python3 "$FORGE" resume <run-id> --cap 0.50`
 - Re-render keepers at finish quality: `python3 "$FORGE" finish <run-id> <ids...> --model gpt --quality high --size 2048`
 - Scaffold a project brand profile: `python3 "$FORGE" init` (writes `.forge/brand.json`)
@@ -84,7 +86,9 @@ background, then poll the manifest. If a run is killed mid-flight, just `resume 
    several assets at once, write a shot list and run `batch`. Always pass `--cap`.
 4. **Inspect.** Open each output PNG and judge it: misspelled or garbled text, warped
    objects, wrong count, off-brand color (e.g. orange drifting off the project's brand), artifacts.
-5. **Fix.** Re-prompt the misses (preferred over editing). Regenerate.
+5. **Fix.** Re-prompt the misses (usually best). For a surgical change to an otherwise-good image
+   (strip invented text, swap a color), use `forge edit <image> "<instruction>"`. To hold one style
+   across a set, generate with `forge style --refs <folder>`.
 6. **Present.** Show Tony the survivors and let him pick. He makes the final call, not you.
 7. **Finish.** On Tony's pick, run `forge finish <run-id> <ids...> --model gpt --quality high --size 2048`
    to re-render just the keepers at finish quality (higher res, cleaner, usually drops invented text).
@@ -122,9 +126,20 @@ it into every prompt you write:
 - Unsure which fits? `forge compare "<prompt>" --models nano,gpt,flux` renders all three side by
   side in one contact sheet.
 
+## Editing and references
+
+- `forge edit <image> "<instruction>"` — natural-language edit of one image, no mask. nano and gpt
+  edit through an image array; flux uses Kontext (`fal-ai/flux-kontext/dev`), strong at "change X,
+  keep the rest." Default is nano. Local images are sent inline (base64), so just pass a file path.
+- `forge style "<prompt>" --refs <folder>` — generate a NEW image conditioned on reference images
+  for style/character consistency. Supported on `nano` and `gpt` (they take an image array natively);
+  `flux` style needs the paid pro Kontext endpoint and is not wired yet, so use nano or gpt.
+- Both obey project cwd and the brand profile, and write the same manifest + contact sheet as `gen`.
+
 ## Not yet implemented
 
-`edit`, `style --refs`, `export`, and `--transparent` are on the roadmap (M4-M5). Do not call them yet.
+`export` (resize/crop to size presets) and `--transparent` (cut-out backgrounds) are on the M5
+roadmap. Do not call them yet.
 
 ## Not for pixel art
 
