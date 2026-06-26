@@ -475,6 +475,11 @@ Conventions honored (from the repo CLAUDE.md and README):
 
 Each milestone is independently useful. We can stop after any of them and still have a working tool.
 
+**M1 shipped 2026-06-26** (commit `d58584d`): proven live with a first Commish render (~$0.08).
+The live run caught and fixed two bugs the design review could not see: a macOS Python empty TLS
+trust store (`CERTIFICATE_VERIFY_FAILED`) and Fal's HTTP `202` in-progress status. **M2** (batch /
+compare / cost circuit-breaker / HTML contact sheet / resume) is in progress.
+
 ---
 
 ## 13. Decisions
