@@ -17,6 +17,12 @@
       "source": "./plugins/clerk",
       "description": "Clerk: a portable read-only auditor that surveys any files, repos, or notes and returns a prioritized cleanup punch list, changing nothing.",
       "tags": ["audit", "cleanup", "read-only"]
+    },
+    {
+      "name": "forge",
+      "source": "./plugins/forge",
+      "description": "/forge generates AI images on Fal.ai with Claude as the brain layer: writes the prompts, generates drafts, runs vision QA, and renders finished on-brand images. Model-agnostic (nano-banana / GPT Image 2 / FLUX), with a per-run cost cap and an auditable run manifest.",
+      "tags": ["image-generation", "automation", "fal"]
     }
   ]
 }

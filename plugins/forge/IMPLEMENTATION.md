@@ -1,0 +1,544 @@
+# Forge — Implementation Spec
+
+> **Status:** Draft for review (v0.4) — senior review folded in
+> **Date:** 2026-06-25
+> **Author:** Claude (for Tony)
+> **Home:** `tony-skills` plugin (`plugins/forge/`), runs as `/forge`
+> **What this is:** the blueprint and permit set for `forge`, a Claude-driven,
+> model-agnostic image-generation jig built on Fal.ai. Review and redline before any
+> code gets framed.
+
+---
+
+## 1. Goal
+
+A durable, reusable jig that turns a natural request plus a mood board into finished,
+on-brand images, with Claude acting as the brain layer and **you choosing which model does
+the work**. You say "here's the shot list, mood board is in this folder, go make these," and
+forge writes the prompts, generates drafts cheaply, inspects them, fixes problems, lays out a
+contact sheet for you to pick from, then renders the keepers at finish quality on whichever
+model you want. Every run is logged so it can be repeated or audited later.
+
+This is the general contractor pattern, not a single-shot prompt:
+- **The CLI** is the load-bearing structure. It does the mechanical, deterministic work (call
+  the API, poll the queue, save files, name them, write the manifest, enforce the cost cap).
+  Same inputs produce the same run.
+- **The skill** is the foreman. Claude reads the blueprint (your request plus references),
+  writes the work orders (prompts), walks the site and inspects with vision, issues
+  punch-list fixes, and manages the batch.
+- **Fal** is the supply house. One account, one key, every image crew (Nano Banana, GPT Image,
+  FLUX) available through a single door, swappable per job.
+
+---
+
+## 2. Design principles
+
+1. **Model choice is yours, per run.** Forge is not wired to one model. Nano Banana, GPT Image
+   2, and FLUX are peers behind one Fal key. Pick per job with `--model`, or run `forge compare`
+   to see them side by side and choose empirically. Adding a new model is a one-line registry edit.
+2. **Deterministic spine.** All side effects (API calls, file I/O, naming, cost math) live in
+   the CLI and are logged to a manifest. The LLM only writes prompts and judges images. A run
+   is reproducible from its manifest. This is the jig philosophy: build the deterministic tool
+   once, run it free forever.
+3. **Human holds the final pick.** Vision models, including me, cannot fully judge their own
+   image output. I narrow and flag; you choose the keepers. No auto-publish.
+4. **Cost governor on by default.** Drafts are cheap, finish is not. Batches default to a cheap
+   preset, and `--cap` is a running circuit-breaker: forge tracks actual dollars as each image
+   completes and halts the moment the next one would cross your limit. Estimates use conservative
+   upper bounds, so the cap holds even where exact pricing is unknown until after the call.
+5. **Re-prompt over over-edit.** Image models drift when you nudge one image repeatedly
+   (warping, new junk). Forge favors regenerating from a better prompt and uses localized edits
+   sparingly and deliberately.
+
+---
+
+## 3. Architecture
+
+```
+   You + mood board + shot list
+              |
+              v
+   +-----------------------+   work orders (prompts)
+   |  SKILL  =  Foreman     | ------------------------------+
+   |  (Claude drives)       |                               v
+   |  - writes prompts      |              +----------------------------+
+   |  - inspects (vision)   |              |   CLI = the structure       |
+   |  - re-prompts / fixes  | <------------|   (deterministic spine)     |
+   |  - builds contact sheet|   images +   |   - calls Fal queue          |
+   +-----------------------+    manifest   |   - saves + names files      |
+              |                            |   - writes run manifest      |
+        you pick keepers                   |   - enforces cost cap        |
+              |                            +-------------+--------------+
+              v                                          | one FAL_KEY
+        forge finish                                     v
+                                           +----------------------------+
+                                           |  Fal = supply house         |
+                                           |  swappable crews:           |
+                                           |  nano / nano-pro / gpt /flux|
+                                           +----------------------------+
+```
+
+The skill never talks to Fal directly. It only ever calls the CLI. One throat to choke for
+anything that touches money or files, and the whole thing is testable without an LLM in the loop.
+
+---
+
+## 4. Components
+
+### 4.1 The deterministic CLI (`forge`)
+
+| Command | What it does |
+| --- | --- |
+| `forge gen "<prompt>"` | Generate one or more images from a prompt on the chosen model. |
+| `forge batch <shotlist>` | Read a shot-list file (md / json / csv), generate all of it at the cheap preset. |
+| `forge compare "<prompt>"` | Run one prompt across several models into a single cost-labeled contact sheet. |
+| `forge edit <image> "<instruction>"` | Natural-language edit of an existing image (no mask). |
+| `forge finish <run-id> [ids...]` | Re-render selected keepers at the finish preset / higher res. |
+| `forge export <image>` | Resize and crop a finished image to named size presets (og, icon, square, hero). Local, no API cost. |
+| `forge style --refs <folder>` | Generate conditioned on a reference folder (style + consistency). |
+| `forge estimate ...` | Dry-run. Print projected cost for any command, make zero API calls. |
+| `forge models` | List the model registry: aliases, Fal ids, current price hints. |
+| `forge resume <run-id>` | Re-run only the failed or missing items from a batch that died partway. |
+| `forge init` | Scaffold a starter `.forge/brand.json` brand profile in the current project. |
+
+Common flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--model <alias>` | Pick the model (`nano`, `nano-pro`, `gpt`, `flux`, ...). |
+| `--models a,b,c` | For `compare`: the set to race against each other. |
+| `--size <WxH or preset>` | Output size (`1024`, `1080x1080`, `4k`). |
+| `--quality <low\|med\|high>` | For models that price by quality (GPT Image 2). |
+| `--transparent` | Return a cut-out on a transparent background (runs a Fal bg-removal pass after generation). |
+| `-n, --num <n>` | Images per prompt. |
+| `--concurrency <n>` | How many images run at once against the Fal queue (default 4). |
+| `--negative "<text>"` | Negative prompt for models that support it (FLUX); ignored by those that do not. |
+| `--brand <path>` | Use a specific brand profile instead of the auto-detected `.forge/brand.json`. |
+| `--seed <n>` | Fix the seed for reproducibility. |
+| `--refs <dir>` | Reference images to condition on. |
+| `--preset rough\|finish` | Cost preset. Batches default to `rough`. |
+| `--cap <usd>` | Spend circuit-breaker. Tracks actual cost per image and halts before the next would cross it. |
+| `--out <dir>` | Output folder. Defaults to `./generated-assets/`. |
+| `--dry-run` | Estimate and plan only, no spend. |
+| `--json` | Machine-readable output (how the skill reads results back). |
+
+The CLI is what makes the jig project-aware: run it inside `~/Developer/commish` and the assets
+land there. The skill lives globally; the output is local to wherever you invoke it.
+
+### 4.2 The skill (the foreman)
+
+Invoked as `/forge`. Its job is the judgment work the CLI cannot do:
+
+1. **Interpret.** Read your natural request, the shot list, and the mood board images.
+2. **Write work orders.** Turn each shot into a precise prompt, folding in style cues read from
+   the references.
+3. **Rough-in.** Call `forge batch --preset rough --json` and pull the draft image paths back.
+4. **Inspect (vision QA).** Look at each draft and flag misspelled text, warped anatomy or
+   objects, wrong count, off-brand color, artifacts.
+5. **Fix.** Re-prompt the failures (preferred) or call `forge edit` for a surgical change.
+6. **Contact sheet.** Lay survivors out so you can compare at a glance.
+7. **Finish.** On your pick, call `forge finish` to render the keepers on the model and quality
+   you chose.
+
+The skill writes nothing to Fal and spends no money directly. Every spend goes through a CLI
+command with a visible estimate and cap.
+
+### 4.3 Provider layer (Fal)
+
+- **Auth:** single `FAL_KEY` environment variable. Every Fal client reads it automatically.
+- **Calls:** the queue API. The CLI submits a job, polls status, and fetches the result. To stay
+  dependency-free (see Packaging), it calls Fal's REST queue endpoints directly rather than
+  vendoring an SDK.
+- **One door, many models:** every model is the same call shape with a different model id and
+  input object. Verified ids are in section 6.
+- **Local images go in as data URIs.** For `edit` and `--refs`, the CLI base64-encodes local files
+  inline into the model's `image_urls` array (no separate Fal upload step or file lifecycle to
+  manage). Large files fall back to Fal's REST upload endpoint.
+- **Server-side only:** the CLI runs on your machine, so it uses the key directly. The key must
+  never end up in a browser bundle.
+
+### 4.4 Brand profiles (the per-project finish schedule)
+
+A brand profile is a small file saved in a project, `.forge/brand.json`, that records that
+project's house style once so you stop re-typing it. When you run forge inside a repo that has
+one, the CLI auto-loads it and applies the defaults. It lives in the project, not in the plugin,
+so each project carries its own.
+
+Example (`~/Developer/commish/.forge/brand.json`):
+```json
+{
+  "name": "Commish",
+  "palette": ["#FF8400"],
+  "style": "flat modern vector, soft shadows, friendly, no baked-in text",
+  "refs": "./brand/commish",
+  "default_model": "gpt",
+  "default_size": "1024x1024",
+  "avoid": "photorealism, stock-photo look"
+}
+```
+
+- **Auto-detected.** Run forge anywhere under the repo and it finds `.forge/brand.json`, the way
+  `.gitignore` is found. No flag needed.
+- **Overridable.** Anything you pass on the command line beats the profile for that run.
+- **Scaffolded.** `forge init` writes a starter profile you can edit, so you are not authoring
+  JSON from scratch.
+- **Precedence:** explicit flag > brand profile > forge built-in default.
+
+---
+
+## 5. Core workflows
+
+**Generate on a chosen model**
+```
+forge gen "isometric trophy on an orange podium, soft studio light" --model gpt --quality high --size 1024
+```
+
+**Compare models on one prompt** (the model-changer feature)
+```
+forge compare "a friendly league-commissioner mascot, flat vector, brand orange #FF8400" \
+  --models nano,gpt,flux -n 1
+```
+Returns one contact sheet with each model's output labeled by name and cost, so picking the
+right crew for this look is data, not a guess.
+
+**Batch from a shot list + mood board** (the headline workflow)
+```
+forge batch ./shotlists/commish-landing.md --refs ./brand/commish --preset rough --cap 3
+```
+
+A shot list is one shot per row. The simplest form is a Markdown or text list, one brief per line:
+```
+- standings icon: leaderboard with a trophy on a podium
+- schedule icon: a calendar with a whistle
+- payments icon: a coin stack with a checkmark
+```
+For per-shot control, use CSV or JSON rows with optional `id, model, size, seed` columns. The
+foreman expands each brief into a full prompt (folding in the brand profile) before the CLI runs it.
+
+**Edit** (use sparingly, watch for drift)
+```
+forge edit ./generated-assets/<run>/raw/feature-02.png "warm the orange to #FF8400, keep the rest"
+```
+
+**Style / consistency from a reference folder**
+```
+forge style "the four landing-page feature icons as a matching set" --refs ./brand/commish --model nano -n 4
+```
+Nano Banana 2 accepts up to 14 reference images, which is what makes "generate in this folder's
+style" hold together across a set.
+
+**Finish the keepers**
+```
+forge finish <run-id> feature-01 feature-03 --model gpt --quality high --size 2048
+```
+
+**Transparent cut-out** (an icon or mascot meant to sit on a colored section)
+```
+forge gen "friendly league-commissioner mascot, flat vector" --model gpt --transparent
+```
+
+**Export one master to every size you need** (local, no API cost)
+```
+forge export ./generated-assets/<run>/final/feature-01.png --preset web
+```
+
+### How a real run feels (Commish, the first proving ground)
+
+> **You:** "/forge four feature-section illustrations for the Commish landing page, flat modern
+> vector, brand orange #FF8400, mood board in ./brand/commish, 1024 square."
+>
+> **Me (foreman):** read the brief and the 5 mood images, wrote 4 prompts anchored on #FF8400.
+> Since you like choosing, I first ran `forge compare` on shot 1 across `nano`, `gpt`, and
+> `flux` for about $0.18 so we could see house style. You liked GPT Image 2's look. I ran
+> `forge batch --model gpt --quality med --preset rough --cap 3` on all four, pulled back the
+> drafts (about $0.40), and inspected them. Icon #3 had a lumpy podium, so I re-rolled it. Here
+> is the contact sheet.
+>
+> **You:** take #1, #2, #4.
+>
+> **Me:** ran `forge finish` on those three at GPT Image 2 high quality, 2048, about $0.80.
+> Manifest logged every generation with prompt, model, seed, and a $1.38 run total. Files are in
+> `~/Developer/commish/generated-assets/20260625-141502-landing/final/`. Drop them straight into
+> `commish.pen`; text gets composited there, not baked into the image.
+
+---
+
+## 6. Models: registry, switching, and comparison
+
+Forge keeps a small **model registry** (a JSON file in the plugin) mapping friendly aliases to
+Fal ids plus price and capability hints. Switching models is `--model <alias>`. Adding a model
+is one new entry. `forge models` prints the registry; `forge compare` races a set of them.
+
+Registry shape (illustrative):
+```json
+{
+  "nano":     { "id": "fal-ai/nano-banana-2",   "edit": "fal-ai/nano-banana-2/edit",   "preset": "rough",  "max_refs": 14 },
+  "nano-pro": { "id": "fal-ai/nano-banana-pro",  "edit": "fal-ai/nano-banana-pro/edit", "preset": "finish", "fallback": "gpt" },
+  "gpt":      { "id": "openai/gpt-image-2",       "edit": "openai/gpt-image-2/edit",     "preset": "either", "by_quality": true },
+  "flux":     { "id": "fal-ai/flux-1/dev",        "preset": "rough" }
+}
+```
+
+**Verified catalog (against Fal, 2026-06-25):**
+
+| Alias | Fal id (gen / edit) | Role | Price each | Edit | Multi-ref |
+| --- | --- | --- | --- | --- | --- |
+| `nano` | `fal-ai/nano-banana-2` (+`/edit`) | cheap workhorse, style refs | $0.06 @512, $0.08 @1K | yes | up to 14 imgs |
+| `nano-pro` | `fal-ai/nano-banana-pro` (+`/edit`) | finish-grade, reasoning edits | $0.15, $0.30 @4K | yes | yes |
+| `gpt` | `openai/gpt-image-2` (+`/edit`) | rough to premium by quality | $0.01 (low,1K) to $0.41 (high,4K) | yes | yes |
+| `flux` | `fal-ai/flux-1/dev` | cheapest rough-in | ~$0.025 | i2i variants | no |
+
+Notes:
+- Two finish-grade peers: `nano-pro` and `gpt` at high quality. You are not locked to either.
+- A model may declare a `fallback` alias. If a Preview model (like `nano-pro`) errors or times out,
+  forge retries once on the fallback, applies the fallback's default quality, keeps the same `--cap`,
+  and surfaces the swap (not just logs it) so a `compare` never silently races the wrong model.
+  `nano-pro` is a Preview alias of `gemini-3-pro-image-preview`; the stable id is confirmed in M1.
+- GPT Image 2 prices by quality and size, so its `gen` cost spans rough to premium. Its `edit`
+  endpoint is token-priced (text + image tokens) rather than flat per image; the CLI estimates it
+  from the request and shows the number before spending.
+- `nano-pro` is also reachable as `fal-ai/gemini-3-pro-image-preview`.
+- Exact input parameter names AND prices per model get locked against each model's `/api` page
+  during M1 (a few catalog numbers above are approximate, e.g. nano-banana-2 is ~$0.08 at 1K and
+  GPT low lands near $0.005). The registry `models.json` is the single source the estimator reads.
+
+---
+
+## 7. The cost governor
+
+Forge computes an effective per-image estimate from `model + size + quality`, then guards it.
+
+Presets are convenience starting points over the roster, not a cage:
+
+| Preset | Typical pick | ~Each | Use |
+| --- | --- | --- | --- |
+| `rough` | `flux`, `nano` @1K, or `gpt` low | $0.01 to $0.08 | drafts, exploration, all batches |
+| `finish` | `gpt` high or `nano-pro` | $0.15 to $0.41 | keepers only |
+
+Guardrails:
+- **Batches default to `rough`.** A 50-image batch is roughly 50 x $0.05 = ~$2.50, not $15.
+- **`--cap <usd>` is a circuit-breaker on actuals, not just a start-time guess.** The CLI logs the
+  real cost to the manifest after each image and aborts the rest the moment cumulative spend plus
+  the next item's upper-bound estimate would exceed the cap. A single call whose upper-bound estimate
+  clears a threshold asks for confirmation first. This matters because GPT's edit endpoint is
+  token-priced and not knowable exactly before the call.
+- **`forge estimate` / `--dry-run`** prints a conservative upper-bound projection with zero API calls.
+- **Rough then finish.** You only pay finish-grade on the handful of images that survive
+  selection. Rough plumbing before finish carpentry.
+
+---
+
+## 8. Outputs and the run manifest
+
+Folder layout, rooted wherever you run the command:
+```
+<project>/generated-assets/
+  <run-id>/
+    manifest.json      # the full record of this run
+    raw/               # rough-in drafts
+    final/             # finished keepers
+    refs/              # snapshot of the reference images used
+```
+`run-id` format: `YYYYMMDD-HHMMSS-<slug>`, e.g. `20260625-141502-landing`.
+
+The manifest is the deterministic, auditable record:
+```json
+{
+  "schema_version": 1,
+  "run_id": "20260625-141502-landing",
+  "created_at": "2026-06-25T14:15:02-07:00",
+  "command": "batch",
+  "preset": "rough",
+  "cap_usd": 3.00,
+  "spent_usd": 0.58,
+  "references": ["refs/mood-01.png", "refs/mood-02.png"],
+  "items": [
+    {
+      "id": "feature-03",
+      "status": "completed",
+      "prompt": "flat vector league-standings icon, brand orange #FF8400, soft shadow",
+      "model": "gpt",
+      "fal_id": "openai/gpt-image-2",
+      "size": "1024x1024",
+      "quality": "med",
+      "seed": 81734,
+      "num_images": 1,
+      "request_id": "fal-req-9c1...",
+      "submitted_at": "2026-06-25T14:15:03-07:00",
+      "completed_at": "2026-06-25T14:15:19-07:00",
+      "attempts": 2,
+      "cost_usd": 0.11,
+      "outputs": ["raw/feature-03.png"],
+      "error": null,
+      "qa_notes": "v1 podium was lumpy; re-rolled with explicit geometry"
+    }
+  ]
+}
+```
+Per-item `status` is one of `pending | submitted | completed | failed`. The `status` + `request_id`
+pair is what makes `forge resume <run-id>` safe: it re-polls a `submitted`-but-unfetched job instead
+of re-paying for it, and only re-submits items that never started. The CLI writes the manifest
+**incrementally after each item** and **atomically** (temp file then `os.replace`), so a batch killed
+mid-flight never loses the record of paid work.
+
+---
+
+## 9. Vision-QA loop
+
+What the foreman checks on each draft:
+- Misspelled or garbled text (the most common image-model failure)
+- Warped or extra anatomy and objects
+- Wrong count or wrong composition versus the brief
+- Off-brand color, lighting, or framing versus the references (e.g. orange drifting off #FF8400)
+- General artifacts (smears, melt, doubled elements)
+
+How it fixes:
+- **Default: re-prompt.** Tighten the prompt and regenerate. Cleanest, avoids drift.
+- **Surgical: `forge edit`.** Only when one localized thing is wrong and the rest is good.
+  Flagged in the manifest as an edit so we can see where drift might have crept in.
+
+**The honest caveat:** localized edits on these models are unreliable past a pass or two. The
+loop is biased toward "regenerate from a better prompt," and you, not the model, make the final
+selection.
+
+---
+
+## 10. Fal setup and onboarding (your one task)
+
+You need a billed Fal key before forge can render. Three steps:
+
+1. **Sign up** at fal.ai (GitHub or Google login).
+2. **Add billing.** Dashboard > Billing > add a card. Pay-as-you-go, no subscription or minimum.
+   They usually seed a little free credit. Optionally set a monthly spend limit as a second
+   backstop to the per-run cap.
+3. **Create a key.** Dashboard > API Keys > create. Copy the `FAL_KEY` value once.
+
+**Where to store it:** export it in your shell profile so every project sees it:
+```
+export FAL_KEY="..."   # in ~/.zshrc
+```
+The CLI also reads a local gitignored `.env` if you ever want a per-project key.
+
+**Security:** server-side CLI use means the key is used directly, which is fine. Never commit it
+and never ship it in a browser bundle. The manifest never stores the key.
+
+---
+
+## 11. Packaging in tony-skills
+
+Forge follows the `sun` pattern (a skill plus bundled scripts), distributed through the
+`tony-skills` marketplace.
+
+```
+plugins/forge/
+├── .claude-plugin/plugin.json   name, description, author, homepage, repository
+├── skills/
+│   └── forge/SKILL.md           the foreman; trigger-rich frontmatter, /forge body
+├── assets/
+│   ├── forge.py              the deterministic CLI (single portable script)
+│   └── models.json              the model registry
+└── IMPLEMENTATION.md            this spec
+```
+
+Conventions honored (from the repo CLAUDE.md and README):
+- **Dual-mode asset paths.** The skill invokes the CLI via
+  `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so it resolves both as
+  an installed plugin and as a user-level skill. Never hardcode `~/.claude/...`.
+- **Dependencies, honestly.** The CLI calls Fal's REST queue directly (`POST
+  https://queue.fal.run/<model-id>` with `Authorization: Key $FAL_KEY`, poll, fetch result) using
+  only the Python standard library, so generation, edits, and Fal-side work (including
+  `--transparent` bg-removal) need nothing installed. Two features need raster work the stdlib
+  cannot do: the contact sheet and `forge export` resize/crop. Forge handles these without a Python
+  dependency by rendering the contact sheet as an **HTML page** (which doubles as the clickable
+  picker) and using macOS's built-in **`sips`** for resize/crop. So on your Mac the CLI stays
+  dependency-free; if cross-platform ever matters, swap `sips` for Pillow.
+- **Marketplace entry.** Add a `forge` block to `.claude-plugin/marketplace.json`
+  (name, source `./plugins/forge`, description, tags like `["image-generation", "automation"]`).
+- **Install routes mirror sun.** Plugin route registers `/forge:forge`; user-level route (copy
+  `skills/forge` + `assets` into `~/.claude/skills/`) gives the bare `/forge`. You run user-level,
+  like your other skills.
+- **Branch and PR.** New work goes on a fresh feature branch (`add-forge-plugin`) off `main`, never
+  on `main` directly, merged via the PR UI. (This spec is currently an uncommitted file on your
+  existing branch; I will cut the proper branch when we start M1.)
+
+---
+
+## 12. Build plan (milestones)
+
+| Milestone | Deliverable | Definition of done |
+| --- | --- | --- |
+| **M1 Foundation** | Plugin scaffold (plugin.json, SKILL.md, `assets/forge`, `models.json`), `FAL_KEY` wiring, `forge gen`, `forge estimate`, `forge models` | One real image generated end-to-end (try it on a Commish asset), manifest written, cost logged, model selectable via `--model` |
+| **M2 Batch + governor + compare** | `forge batch` from a shot list, `--cap`, contact sheet, `forge compare` across models, and batch resilience (concurrency, per-item retry, `forge resume`) | A Commish 4-shot batch runs under a cap and produces a contact sheet; `compare` shows nano vs gpt vs flux side by side; a killed batch resumes only the misses |
+| **M3 Foreman QA loop** | Skill wired to the CLI, vision inspection, re-prompt, keeper selection, `forge finish`, and brand-profile auto-load (`forge init`) | A full "request to finished keepers" run with no manual CLI use, with the brand profile applied automatically |
+| **M4 Edit + style refs** | `forge edit`, `forge style --refs`, multi-ref consistency | Reference-folder style holds across a 4-image set; a surgical edit works |
+| **M5 Finishing** | `--transparent` cut-outs (Fal bg-removal), `forge export` to size presets | A keeper exports to OG, icon, and square sizes; a mascot returns with a clean transparent background |
+
+Each milestone is independently useful. We can stop after any of them and still have a working tool.
+
+---
+
+## 13. Decisions
+
+Almost everything is settled. Nothing here needs action from you except an optional override on
+the language. The only real task on your side is the Fal key in section 10, which gates a live
+render (not the build).
+
+| Decision | Status |
+| --- | --- |
+| **Language** | DECIDED: **Python 3**, matching the `sun` plugin's bundled scripts. The CLI is stdlib-only for all Fal work; the contact sheet is HTML and `export` uses macOS `sips`, so no Python packages are required on your Mac. |
+| Name | LOCKED: `forge`. |
+| Home | LOCKED: `tony-skills` plugin, user-level install like your others. |
+| Models | LOCKED: multi-model with easy switching. Roster: `nano`, `nano-pro`, `gpt`, `flux`, easily extended. |
+| First target | LOCKED: Commish (your most active app work right now). |
+| Key storage | DEFAULT: `FAL_KEY` in shell profile, `.env` override available. No action needed. |
+
+---
+
+## 14. Out of scope (v2 and later)
+
+- **Video.** Fal also hosts video models (Veo, Kling, etc.) behind the same key. The same jig
+  shape could drive them later. Not in v1.
+- **Dedicated upscaler chain.** v1 "finish" just re-renders at higher resolution. A real
+  upscale-the-winner pass is a v2 add.
+- **A clickable contact-sheet picker.** v1 contact sheet is a generated image grid plus the
+  manifest. A real picker UI is later.
+- **Per-project automation hooks** (auto OG images on deploy, scheduled social batches). Possible
+  once the jig is proven on Commish.
+
+---
+
+## 15. Senior review dispositions (v0.4)
+
+An independent senior-engineer review signed off **with conditions** on 2026-06-25. Resolutions:
+
+**Blocking (resolved in this spec):**
+- **Dependency claim was false for raster work.** Contact sheet and `export` cannot run on Python
+  stdlib. Resolved: HTML contact sheet (doubles as the v2 picker) + macOS `sips` for resize/crop;
+  CLI stays dependency-free on macOS (sections 11, 13).
+- **`--cap` was not airtight** given token-priced GPT edits. Resolved: cap is a running
+  circuit-breaker on actual spend, with conservative upper-bound gating and a confirm threshold
+  (sections 2, 7).
+- **Local-image upload for edit/refs was unspecified.** Resolved: base64 data-URI inline into the
+  model's `image_urls` array, REST-upload fallback for large files (section 4.3).
+
+**Should-fix (folded in):**
+- Manifest extended with `schema_version`, per-item `status`, `request_id`, timestamps, `attempts`,
+  and `error`, written incrementally and atomically so `resume` never double-spends (section 8).
+  These fields land in M1's manifest writer so M2 does not retrofit the schema.
+- Fallback behavior pinned: one retry, fallback default quality, same cap, surfaced not just logged
+  (section 6).
+- Retry/backoff on 429/5xx, per-item timeout, and a manifest-write lock under `--concurrency` are
+  part of M2's batch resilience (section 12).
+- Model prices/ids reconciled against each `/api` page in M1; `models.json` is the estimator's
+  single source (section 6).
+
+**Hardening (in the M1 build):**
+- `python3` preflight in the skill: a missing or old interpreter fails loudly, unlike sun's
+  best-effort cosmetic scripts.
+- `forge` uses its own `${CLAUDE_PLUGIN_ROOT}` asset path, not sun's shared one.
+- On first run in a project, forge ensures `generated-assets/` and `.env` are gitignored in the host
+  repo, since assets land in arbitrary project dirs.
+
+**Confirmed sound:** the foreman/CLI split, the Fal queue-over-REST approach (submit/poll/fetch
+verified), `FAL_KEY` handling, the dual-mode `${CLAUDE_PLUGIN_ROOT}` invocation, and M1 as the right
+first slice.
