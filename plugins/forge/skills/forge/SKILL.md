@@ -10,9 +10,9 @@ description: >-
   list against a mood board. Model-agnostic (nano-banana, GPT Image 2, FLUX,
   swappable per job with --model), with a per-run cost cap and an auditable run
   manifest. NOT for pixel-art game sprites (Tony uses PixelLab for those). Drives
-  a deterministic Python CLI and never calls Fal directly. Today (M1) it supports
-  gen / estimate / models; batch, compare, edit, finish, export, and brand
-  profiles arrive in later milestones.
+  a deterministic Python CLI and never calls Fal directly. Supports gen / batch /
+  compare / resume / estimate / models; edit, finish, export, transparent
+  backgrounds, and brand profiles arrive in later milestones.
 ---
 
 # Forge: Claude-driven image generation
@@ -47,25 +47,39 @@ Pass `--json` on any command to read structured results back.
 3. Run inside the target project so assets land there, e.g. `cd ~/Developer/commish`
    before generating Commish art.
 
-## Commands available now (M1)
+## Commands available now (M1-M2)
 
 - Roster and prices: `python3 "$FORGE" models`
 - Estimate before spending: `python3 "$FORGE" estimate "<prompt>" --model gpt --size 1024 --quality high`
-- Generate: `python3 "$FORGE" gen "<prompt>" --model nano --size 1024 -n 2 --cap 0.50`
+- Generate one prompt: `python3 "$FORGE" gen "<prompt>" --model nano --size 1024 -n 2 --cap 0.50`
+- Generate a shot list: `python3 "$FORGE" batch shots.md --model nano --size 1k --cap 3 --concurrency 4`
+- Race models on one prompt: `python3 "$FORGE" compare "<prompt>" --models nano,gpt,flux --cap 0.40`
+- Finish an interrupted or partial run: `python3 "$FORGE" resume <run-id> --cap 0.50`
 - Plan without spending: add `--dry-run`.
+
+A shot list is one shot per line (`id: prompt`), or a `.json`/`.csv` with a `prompt`
+plus optional `id`/`model`/`size`/`seed`/`num`/`negative`. `batch` and `compare` also
+write a `contact-sheet.html` you can open to eyeball the whole set at once.
 
 Key flags: `--model` (nano | nano-pro | gpt | flux), `--size` (e.g. `1024`, `1024x768`,
 `1k`/`2k`/`4k`), `--quality` (gpt only), `-n/--num`, `--seed` (flux), `--cap <usd>`,
-`--out <dir>`, `--json`.
+`--concurrency <n>`, `--out <dir>`, `--json`.
 
 Output lands in `./generated-assets/<run-id>/raw/` with a `manifest.json` recording
-the prompt, model, seed, size, cost, and status for every image.
+the prompt, model, seed, size, cost, and status for every image. The manifest is what
+`resume` reads, so never hand-edit it.
+
+IMPORTANT: a live gpt run can take 30-90s; a multi-shot batch longer. If you run forge
+from a shell tool with a timeout, set a generous one (5+ min) or run it in the
+background, then poll the manifest. If a run is killed mid-flight, just `resume <run-id>`
+— it re-polls in-flight jobs without paying twice and re-submits only what truly failed.
 
 ## The foreman loop
 
 1. **Interpret.** Read the request and any references (actually look at the mood-board images).
 2. **Estimate.** Run `estimate` (or `gen --dry-run`) and tell Tony the projected cost.
-3. **Draft cheap.** Generate on a rough model and size first (nano or flux). Always pass `--cap`.
+3. **Draft cheap.** Generate on a rough model and size first (nano for flat-vector work). For
+   several assets at once, write a shot list and run `batch`. Always pass `--cap`.
 4. **Inspect.** Open each output PNG and judge it: misspelled or garbled text, warped
    objects, wrong count, off-brand color (e.g. orange drifting off the project's brand), artifacts.
 5. **Fix.** Re-prompt the misses (preferred over editing). Regenerate.
@@ -75,21 +89,30 @@ the prompt, model, seed, size, cost, and status for every image.
 ## Cost discipline
 
 - Default to cheap models and sizes for drafts; reserve `gpt --quality high` and `nano-pro` for keepers.
-- Always pass `--cap` on multi-image runs. The CLI refuses to start a run whose estimate exceeds the cap.
+- Always pass `--cap`. On `gen` the CLI refuses to start when the estimate exceeds the cap. On
+  `batch`/`compare` the cap is a live circuit breaker: forge runs as many shots as fit under it and
+  marks the rest `skipped` (never charged); `resume` finishes them once you raise the cap.
 - Confirm with Tony before any single run estimated over about $1.
 
 ## Picking a model
 
-- `nano` (nano-banana-2): strong, cheap default; good for illustration and style refs.
-- `gpt` (GPT Image 2): quality scales with `--quality`; Tony likes it for Commish.
-- `flux`: cheapest rough-in; supports `--seed` for reproducibility.
+- `nano` (nano-banana-2): strong, cheap default. Best for flat-vector logos, icons, and mascots —
+  clean linework and on-brand color (proven against Commish's brand). It tends to invent text, so
+  add "no text" to the prompt when you want none.
+- `gpt` (GPT Image 2): quality scales with `--quality`; a clean alternative for character/sticker
+  work, ~2x nano's price.
+- `flux`: cheapest and supports `--seed`, but it is a photo-diffusion model — it produces soft,
+  painterly output and is the WRONG tool for crisp flat-vector brand marks. Use it for textured or
+  photoreal rough-ins, not logos.
 - `nano-pro`: finish-grade, but still Preview, so it can be flaky.
-- Unsure which fits? `forge compare` (a later milestone) races several on one prompt.
+- Unsure which fits? `forge compare "<prompt>" --models nano,gpt,flux` renders all three side by
+  side in one contact sheet.
 
 ## Not yet implemented
 
-`batch`, `compare`, `edit`, `finish`, `export`, `style`, `resume`, and `init` are on the
-roadmap (M2-M5). Do not call them yet. For now, drive `gen` per shot and assemble sets by hand.
+`edit`, `finish`, `export`, `style`, `--transparent`, and `init` are on the roadmap (M3-M5). Do
+not call them yet. Brand-profile auto-detect lands in M3; until then pass `--brand <path>` to a
+`.forge/brand.json` if the project has one.
 
 ## Not for pixel art
 

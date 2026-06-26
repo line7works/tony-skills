@@ -108,7 +108,7 @@ Common flags:
 | `--model <alias>` | Pick the model (`nano`, `nano-pro`, `gpt`, `flux`, ...). |
 | `--models a,b,c` | For `compare`: the set to race against each other. |
 | `--size <WxH or preset>` | Output size (`1024`, `1080x1080`, `4k`). |
-| `--quality <low\|med\|high>` | For models that price by quality (GPT Image 2). |
+| `--quality <auto\|low\|medium\|high>` | For models that price by quality (GPT Image 2). |
 | `--transparent` | Return a cut-out on a transparent background (runs a Fal bg-removal pass after generation). |
 | `-n, --num <n>` | Images per prompt. |
 | `--concurrency <n>` | How many images run at once against the Fal queue (default 4). |
@@ -250,7 +250,7 @@ forge export ./generated-assets/<run>/final/feature-01.png --preset web
 > **Me (foreman):** read the brief and the 5 mood images, wrote 4 prompts anchored on #FF8400.
 > Since you like choosing, I first ran `forge compare` on shot 1 across `nano`, `gpt`, and
 > `flux` for about $0.18 so we could see house style. You liked GPT Image 2's look. I ran
-> `forge batch --model gpt --quality med --preset rough --cap 3` on all four, pulled back the
+> `forge batch --model gpt --quality medium --preset rough --cap 3` on all four, pulled back the
 > drafts (about $0.40), and inspected them. Icon #3 had a lumpy podium, so I re-rolled it. Here
 > is the contact sheet.
 >
@@ -360,7 +360,7 @@ The manifest is the deterministic, auditable record:
       "model": "gpt",
       "fal_id": "openai/gpt-image-2",
       "size": "1024x1024",
-      "quality": "med",
+      "quality": "medium",
       "seed": 81734,
       "num_images": 1,
       "request_id": "fal-req-9c1...",
@@ -477,8 +477,19 @@ Each milestone is independently useful. We can stop after any of them and still 
 
 **M1 shipped 2026-06-26** (commit `d58584d`): proven live with a first Commish render (~$0.08).
 The live run caught and fixed two bugs the design review could not see: a macOS Python empty TLS
-trust store (`CERTIFICATE_VERIFY_FAILED`) and Fal's HTTP `202` in-progress status. **M2** (batch /
-compare / cost circuit-breaker / HTML contact sheet / resume) is in progress.
+trust store (`CERTIFICATE_VERIFY_FAILED`) and Fal's HTTP `202` in-progress status.
+
+**M2 shipped 2026-06-26**: `batch`, `compare`, running cost circuit-breaker, HTML contact sheet,
+concurrency + per-item retry, and `resume` — all proven live on Commish. A 4-shot batch under a
+tight cap exercised every resilience path at once (one shot skipped by the cap, one isolated 403
+failure, two completed); `compare` rendered nano/gpt/flux side by side (nano won for flat-vector
+brand work); and a batch killed mid-flight resumed cleanly, re-polling an in-flight gpt job without
+re-charging it. A senior code review before close found and fixed three money bugs the live happy
+path missed — `resume` double-spend on a transient poll error, an uncapped `resume`, and
+`num_images > 1` reserving the price of one image — plus 5xx retry classification, post-submit 404
+grace, and non-ASCII id collisions. Live spend to date ~$0.62. The live run also surfaced a Fal
+quirk: a burst of concurrent paid submits can trip a spurious "Exhausted balance" 403 on a healthy
+account, so forge now treats that as retryable and the foreman defaults to modest concurrency.
 
 ---
 
