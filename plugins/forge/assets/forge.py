@@ -7,8 +7,8 @@ no pip installs. Talks to Fal's REST queue directly (submit -> poll -> fetch ->
 download), writes an auditable run manifest, guards spend with a running cost
 cap, and renders an HTML contact sheet you can open in a browser.
 
-Commands: gen, batch, compare, resume, estimate, models.
-(edit, style, finish, export, init arrive in later milestones.)
+Commands: gen, batch, compare, edit, style, finish, resume, init, export,
+estimate, models.
 
 Usage:
     python3 forge.py models
@@ -35,6 +35,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -132,7 +133,7 @@ def res_bucket(maxdim):
     return "4K"
 
 
-def build_input(cfg, prompt, dims, quality, num, seed, negative, image_urls=None):
+def build_input(cfg, prompt, dims, quality, num, seed, negative):
     """Assemble the model-specific Fal input body from generic args."""
     inp = {"prompt": prompt, "num_images": num, "output_format": "png"}
     style = cfg.get("size_style")
@@ -151,8 +152,6 @@ def build_input(cfg, prompt, dims, quality, num, seed, negative, image_urls=None
         inp["seed"] = seed
     if cfg.get("supports_negative") and negative:
         inp["negative_prompt"] = negative
-    if image_urls:
-        inp["image_urls"] = image_urls
     return inp
 
 
@@ -309,14 +308,20 @@ def submit_job(model_id, inp, key):
 
 
 def poll_job(status_url, key, timeout=POLL_TIMEOUT):
-    waited, interval, not_found = 0, 2, 0
+    start, interval, not_found = time.monotonic(), 2, 0
     while True:
         code, raw = _request(status_url, "GET", None, auth(key), timeout=60)
         if code in (200, 202):                 # Fal returns 202 while IN_QUEUE / IN_PROGRESS
-            status = json.loads(raw).get("status")
+            body = json.loads(raw)
+            status = body.get("status")
             if status == "COMPLETED":
+                # Fal signals a failed job as an `error` field on a COMPLETED status, not a
+                # FAILED/ERROR status, so surface that before declaring success.
+                err = body.get("error") or body.get("error_type")
+                if err:
+                    raise RuntimeError(f"Fal job failed: {err}")
                 return
-            if status in ("FAILED", "ERROR"):
+            if status in ("FAILED", "ERROR"):  # forward-compat if Fal ever adds these
                 raise RuntimeError(f"Fal job failed: {raw[:300].decode('utf-8', 'replace')}")
             interval, not_found = 2, 0
         elif code == 404 and not_found < 5:    # queue eventual-consistency right after submit
@@ -326,10 +331,9 @@ def poll_job(status_url, key, timeout=POLL_TIMEOUT):
             interval = min(interval * 2, 15)   # back off on throttle / server error
         else:
             raise RuntimeError(f"Fal status error ({code}): {raw[:200].decode('utf-8', 'replace')}")
-        if waited >= timeout:
+        if time.monotonic() - start >= timeout:
             raise RuntimeError(f"timed out after {timeout}s waiting for Fal result")
         time.sleep(interval)
-        waited += interval
 
 
 def fetch_result(response_url, key):
@@ -340,10 +344,59 @@ def fetch_result(response_url, key):
 
 
 def download(url, dest):
-    code, raw = _request(url, "GET", timeout=120)   # CDN URL, no auth needed
-    if code != 200:
-        raise RuntimeError(f"image download failed ({code}) from {url}")
-    dest.write_bytes(raw)
+    """Fetch a CDN image (no auth) and write it atomically. Verifies the byte count against
+    Content-Length when present, so a truncated response never lands as a half-written file."""
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=120, context=ssl_context()) as r:
+            if r.status != 200:
+                raise RuntimeError(f"image download failed ({r.status}) from {url}")
+            raw = r.read()
+            declared = r.headers.get("Content-Length")
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"image download failed ({e.code}) from {url}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"network error downloading {url}: {e.reason}")
+    if not raw:
+        raise RuntimeError(f"image download was empty from {url}")
+    if declared is not None and len(raw) != int(declared):
+        raise RuntimeError(f"image download truncated ({len(raw)}/{declared} bytes) from {url}")
+    tmp = dest.with_name(dest.name + ".part")
+    tmp.write_bytes(raw)
+    os.replace(tmp, dest)
+
+
+def _with_retry(attempt):
+    """Run attempt() under forge's transient-retry/backoff policy. attempt() must be
+    spend-idempotent (re-poll an existing job, never re-submit) so a retry can't double-pay."""
+    delay = 2
+    for n in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return attempt()
+        except Exception as e:
+            if n < MAX_ATTEMPTS and _is_transient(e):
+                time.sleep(delay)
+                delay = min(delay * 2, 15)
+                continue
+            raise
+
+
+def _run_job(endpoint, inp, key, state, on_submit=None):
+    """One attempt at a Fal job: submit (only if `state` has no live status_url yet), poll,
+    then fetch the result JSON. `state` (a manifest item, or a throwaway dict) carries
+    request_id/status_url/response_url so a caller retry re-polls the same job instead of
+    paying for a second submit. `on_submit` fires once, right after a fresh submit."""
+    if not state.get("status_url"):
+        sub = submit_job(endpoint, inp, key)
+        state["request_id"] = sub.get("request_id")
+        state["status_url"] = sub.get("status_url")
+        state["response_url"] = sub.get("response_url")
+        if not state.get("status_url"):
+            raise RuntimeError("Fal submit returned no status_url")
+        if on_submit:
+            on_submit()
+    poll_job(state["status_url"], key)
+    return fetch_result(state["response_url"], key)
 
 
 # ---------- manifest / fs ----------
@@ -361,6 +414,17 @@ def write_atomic(path, data):
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2))
     os.replace(tmp, path)
+
+
+def manifest_spent(items):
+    """Total committed spend for a run: each completed item's generation cost plus any
+    background-removal (transparent) cost. One formula so every manifest writer agrees."""
+    total = 0.0
+    for it in items:
+        if it.get("status") == "completed":
+            total += it.get("cost_usd", 0.0) or 0.0
+        total += it.get("transparent_cost_usd", 0.0) or 0.0
+    return round(total, 4)
 
 
 def find_git_root(start):
@@ -469,6 +533,8 @@ def _is_transient(err):
     s = str(err).lower()
     if "timed out" in s or "network error" in s:
         return True
+    if "download truncated" in s or "download was empty" in s:
+        return True
     if "(403)" in s and ("locked" in s or "exhausted" in s):
         return True
     return any(f"({code})" in s for code in ("429", "500", "502", "503", "504"))
@@ -487,42 +553,38 @@ def _new_item(idx, shot, cfg, size, dims, quality, seed, per, negative=None):
 
 
 def process_item(item, inp, run_dir, key, persist):
-    """Submit -> poll -> download one item, with retry/backoff. Never raises.
+    """Submit -> poll -> download one item, with retry/backoff. Never raises. A retry
+    re-polls the existing job instead of submitting again (see _run_job), so a transient
+    poll/fetch/download blip after a successful submit never pays for a second generation.
     Submits to item['fal_id'] (the gen, edit, or style endpoint)."""
-    delay = 2
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        item["attempts"] = attempt
-        try:
-            sub = submit_job(item["fal_id"], inp, key)
-            item["request_id"] = sub.get("request_id")
-            item["status_url"] = sub.get("status_url")
-            item["response_url"] = sub.get("response_url")
-            item["status"] = "submitted"
-            item["submitted_at"] = datetime.now().isoformat(timespec="seconds")
-            persist()
-            poll_job(item["status_url"], key)
-            result = fetch_result(item["response_url"], key)
-            _save_images(item, result, run_dir)
-            item["status"] = "completed"
-            item["completed_at"] = datetime.now().isoformat(timespec="seconds")
-            item["error"] = None
-            persist()
-            return
-        except Exception as e:
-            item["error"] = str(e)
-            if attempt < MAX_ATTEMPTS and _is_transient(e):
-                time.sleep(delay)
-                delay = min(delay * 2, 15)
-                continue
-            item["status"] = "failed"
-            persist()
-            return
+    def _on_submit():
+        item["status"] = "submitted"
+        item["submitted_at"] = datetime.now().isoformat(timespec="seconds")
+        persist()
+
+    def _attempt():
+        item["attempts"] = item.get("attempts", 0) + 1
+        result = _run_job(item["fal_id"], inp, key, item, on_submit=_on_submit)
+        _save_images(item, result, run_dir)
+
+    try:
+        _with_retry(_attempt)
+    except Exception as e:
+        item["error"] = str(e)
+        item["status"] = "failed"
+        persist()
+        return
+    item["status"] = "completed"
+    item["completed_at"] = datetime.now().isoformat(timespec="seconds")
+    item["error"] = None
+    persist()
 
 
 def _save_images(item, result, run_dir):
     images = result.get("images", [])
     if not images:
-        raise RuntimeError("Fal returned no images")
+        err = result.get("error") or result.get("error_type")
+        raise RuntimeError(f"Fal job failed: {err}" if err else "Fal returned no images")
     raw_dir = run_dir / "raw"
     item["outputs"] = []
     for i, img in enumerate(images, 1):
@@ -532,42 +594,93 @@ def _save_images(item, result, run_dir):
         item["outputs"].append(str(dest.relative_to(run_dir)))
 
 
+def _bg_remove_one(bg, field, src_path, dest, key):
+    """One background-removal job (submit/poll/fetch/download) with retry; a transient blip
+    re-polls the same job rather than re-submitting."""
+    uri = _data_uri(src_path)
+    inp = {field: uri} if field == "image_url" else {field: [uri]}
+    inp.update(bg.get("extra_input", {}))
+    state = {}
+
+    def _attempt():
+        result = _run_job(bg["id"], inp, key, state)
+        img = result.get("image") or (result.get("images") or [{}])[0]
+        url = img.get("url") if isinstance(img, dict) else None
+        if not url:
+            raise RuntimeError("background removal returned no image")
+        download(url, dest)
+
+    _with_retry(_attempt)
+
+
 def run_transparent_pass(reg, run_dir, manifest, key, cap):
-    """After generation, run a Fal background-removal pass on each completed image
-    to write a transparent cut-out alongside it. Cap-aware (counts prior spend),
-    never raises; a per-image failure is recorded on the item."""
+    """After generation, run a Fal background-removal pass on each completed image to write a
+    transparent cut-out alongside it. Cap-aware (counts prior spend via the shared
+    manifest_spent formula), idempotent (skips images already cut out), never raises; a
+    per-image failure is recorded on the item."""
     bg = reg.get("bg_remove")
     if not bg:
         warn("no 'bg_remove' model in the registry; --transparent skipped")
         return
     price = float(bg.get("price_usd", 0.05))
     field = bg.get("image_field", "image_url")
-    spent = manifest.get("spent_usd", 0.0)
+    spent = manifest_spent(manifest["items"])
     for it in manifest["items"]:
         if it.get("status") != "completed" or not it.get("outputs"):
+            continue
+        if it.get("transparent_outputs"):          # already cut out on a prior pass
             continue
         if cap is not None and spent + price > cap + 1e-9:
             it["transparent"] = "skipped: cap reached"
             continue
         rel = it["outputs"][0]
+        dest = run_dir / "raw" / (Path(rel).stem + "-transparent.png")
         try:
-            uri = _data_uri(run_dir / rel)
-            inp = {field: uri} if field == "image_url" else {field: [uri]}
-            inp.update(bg.get("extra_input", {}))
-            sub = submit_job(bg["id"], inp, key)
-            poll_job(sub.get("status_url"), key)
-            result = fetch_result(sub.get("response_url"), key)
-            img = result.get("image") or (result.get("images") or [{}])[0]
-            url = img.get("url") if isinstance(img, dict) else None
-            if not url:
-                raise RuntimeError("background removal returned no image")
-            dest = run_dir / "raw" / (Path(rel).stem + "-transparent.png")
-            download(url, dest)
+            _bg_remove_one(bg, field, run_dir / rel, dest, key)
             it.setdefault("transparent_outputs", []).append(str(dest.relative_to(run_dir)))
+            it["transparent_cost_usd"] = round((it.get("transparent_cost_usd", 0.0) or 0.0) + price, 4)
+            it["transparent"] = "ok"
             spent += price
         except Exception as e:
             it["transparent"] = f"failed: {e}"
-    manifest["spent_usd"] = round(spent, 4)
+    manifest["spent_usd"] = manifest_spent(manifest["items"])
+
+
+_Job = namedtuple("_Job", "item cfg dims quality seed negative per images")
+
+
+class _Ledger:
+    """Per-run cost breaker + atomic manifest writer, shared by the batch engine and resume.
+    reserve() holds budget before a paid submit; release() returns it when the submit never
+    happened; commit() records already-incurred spend (a re-polled in-flight job); persist()
+    recomputes spend via manifest_spent and writes the manifest. All mutations under one lock."""
+
+    def __init__(self, manifest, manifest_path, cap, committed=0.0):
+        self.manifest = manifest
+        self.path = manifest_path
+        self.cap = cap
+        self.committed = committed
+        self.lock = threading.Lock()
+
+    def persist(self):
+        with self.lock:
+            self.manifest["spent_usd"] = manifest_spent(self.manifest["items"])
+            write_atomic(self.path, self.manifest)
+
+    def reserve(self, per):
+        with self.lock:
+            if self.cap is not None and self.committed + per > self.cap + 1e-9:
+                return False
+            self.committed += per
+            return True
+
+    def release(self, per):
+        with self.lock:
+            self.committed = max(0.0, self.committed - per)
+
+    def commit(self, per):
+        with self.lock:
+            self.committed += per
 
 
 def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, brand,
@@ -578,8 +691,6 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
     ensure_gitignore(Path.cwd())
     manifest_path = run_dir / "manifest.json"
-    lock = threading.Lock()
-    committed = {"usd": 0.0}
 
     jobs, manifest_items = [], []
     for idx, shot in enumerate(shots, 1):
@@ -603,7 +714,7 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
         if shot.get("sources"):
             item["sources"] = shot["sources"]
         manifest_items.append(item)
-        jobs.append((item, cfg, dims, quality, seed, negative, per, shot.get("images")))
+        jobs.append(_Job(item, cfg, dims, quality, seed, negative, per, shot.get("images")))
 
     manifest = {
         "schema_version": 1, "run_id": run_dir.name,
@@ -611,41 +722,32 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
         "command": command, "cap_usd": cap, "spent_usd": 0.0, "items": manifest_items,
     }
     write_atomic(manifest_path, manifest)
-
-    def persist():
-        with lock:
-            manifest["spent_usd"] = round(
-                sum(it["cost_usd"] for it in manifest_items if it["status"] == "completed"), 4)
-            write_atomic(manifest_path, manifest)
-
-    def reserve(per):
-        with lock:
-            if cap is not None and committed["usd"] + per > cap + 1e-9:
-                return False
-            committed["usd"] += per
-            return True
+    ledger = _Ledger(manifest, manifest_path, cap)
 
     def worker(job):
-        item, cfg, dims, quality, seed, negative, per, images = job
+        item = job.item
         try:
-            if op == "gen":                        # build first so a build failure never holds a reservation
-                inp = build_input(cfg, item["prompt"], dims, quality, item["num_images"],
-                                  seed, negative)
+            # build the input first so a build failure never holds a reservation
+            if op == "gen":
+                inp = build_input(job.cfg, item["prompt"], job.dims, job.quality,
+                                  item["num_images"], job.seed, job.negative)
             else:
-                inp = build_op_input(cfg, op, images, item["prompt"], dims, quality,
-                                     item["num_images"], seed)
-            if not reserve(per):
+                inp = build_op_input(job.cfg, op, job.images, item["prompt"], job.dims,
+                                     job.quality, item["num_images"], job.seed)
+            if not ledger.reserve(job.per):
                 item["status"], item["error"] = "skipped", "cap reached"
-                persist()
+                ledger.persist()
                 return
-            process_item(item, inp, run_dir, key, persist)
+            process_item(item, inp, run_dir, key, ledger.persist)
+            if item["status"] == "failed" and not item.get("request_id"):
+                ledger.release(job.per)      # submit never landed -> give the budget back
         except Exception as e:
             item["status"], item["error"] = "failed", str(e)
-            persist()
+            ledger.persist()
 
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
         list(ex.map(worker, jobs))
-    persist()
+    ledger.persist()
     if transparent:
         run_transparent_pass(reg, run_dir, manifest, key, cap)
         write_atomic(manifest_path, manifest)   # keep transparent outputs + spend
@@ -944,12 +1046,16 @@ def cmd_style(args, reg):
 
 
 def _resume_terminal(err):
-    """True when a re-poll error means the prior Fal request is genuinely gone or
-    failed, so a fresh (paid) submit is safe. False for transient errors (timeout,
-    network, 5xx, download blip) where the job may still be live and re-submitting
-    would pay twice."""
+    """True when a re-poll error means the prior Fal request is genuinely gone or produced
+    nothing, so a fresh (paid) submit is the only way forward. False for transient errors
+    (timeout, network, 5xx) AND for a CDN download blip on an otherwise-completed job, where
+    re-submitting would pay twice for work Fal already did."""
     s = str(err).lower()
-    return "(404)" in s or "not found" in s or "fal job failed" in s
+    if "image download failed" in s:          # job completed; only the CDN fetch blipped
+        return False
+    return ("status error (404)" in s or "result fetch failed (404)" in s
+            or "not found" in s or "fal job failed" in s
+            or "returned no images" in s)
 
 
 def cmd_resume(args, reg):
@@ -967,24 +1073,11 @@ def cmd_resume(args, reg):
         print("nothing to resume; all items already completed.")
         return
     key = require_key()
-    lock = threading.Lock()
     cap = getattr(args, "cap", None)
     # seed the breaker with money already spent so --cap is a whole-run ceiling
-    committed = {"usd": round(sum(it["cost_usd"] for it in items
-                                  if it["status"] == "completed" and it.get("outputs")), 4)}
-
-    def persist():
-        with lock:
-            manifest["spent_usd"] = round(
-                sum(it["cost_usd"] for it in items if it["status"] == "completed"), 4)
-            write_atomic(manifest_path, manifest)
-
-    def reserve(per):
-        with lock:
-            if cap is not None and committed["usd"] + per > cap + 1e-9:
-                return False
-            committed["usd"] += per
-            return True
+    seed = round(sum(it["cost_usd"] for it in items
+                     if it["status"] == "completed" and it.get("outputs")), 4)
+    ledger = _Ledger(manifest, manifest_path, cap, committed=seed)
 
     def worker(it):
         cfg = resolve_model(it["model"], reg)
@@ -993,23 +1086,24 @@ def cmd_resume(args, reg):
         # an already-submitted job: re-poll its result instead of paying again
         if it.get("response_url") and it.get("status_url"):
             try:
-                poll_job(it["status_url"], key)
-                _save_images(it, fetch_result(it["response_url"], key), run_dir)
+                _save_images(it, _run_job(it["fal_id"], None, key, it), run_dir)
                 it["status"] = "completed"
                 it["completed_at"] = datetime.now().isoformat(timespec="seconds")
                 it["error"] = None
-                persist()
+                ledger.commit(it.get("cost_usd") or 0.0)   # already-paid work counts toward the cap
+                ledger.persist()
                 return
-            except RuntimeError as e:
+            except Exception as e:
                 if not _resume_terminal(e):
                     it["status"] = "submitted"        # may still be in flight; never re-pay
                     it["error"] = f"resume deferred, run again later: {e}"
-                    persist()
+                    ledger.persist()
                     return
-                # else: genuinely gone/failed -> fall through to a fresh, reserved submit
-        if not reserve(it.get("cost_usd") or 0.0):
+                # genuinely gone/failed -> drop the dead job and fall through to a fresh submit
+                it["request_id"] = it["status_url"] = it["response_url"] = None
+        if not ledger.reserve(it.get("cost_usd") or 0.0):
             it["status"], it["error"] = "skipped", "cap reached"
-            persist()
+            ledger.persist()
             return
         dims = parse_dims(it.get("size"))
         try:
@@ -1022,13 +1116,15 @@ def cmd_resume(args, reg):
                                      it.get("num_images", 1), it.get("seed"))
         except Exception as e:
             it["status"], it["error"] = "failed", f"resume could not rebuild input: {e}"
-            persist()
+            ledger.persist()
             return
-        process_item(it, inp, run_dir, key, persist)
+        process_item(it, inp, run_dir, key, ledger.persist)
+        if it["status"] == "failed" and not it.get("request_id"):
+            ledger.release(it.get("cost_usd") or 0.0)
 
-    with ThreadPoolExecutor(max_workers=args.concurrency or DEFAULT_CONCURRENCY) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, args.concurrency or DEFAULT_CONCURRENCY)) as ex:
         list(ex.map(worker, todo))
-    persist()
+    ledger.persist()
     sheet = write_contact_sheet(run_dir, manifest)
     _summary(manifest, sheet)
 
@@ -1267,20 +1363,40 @@ def cmd_export(args, reg):
 
 # ---------- arg parsing ----------
 
+def _positive_int(s):
+    try:
+        v = int(s)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(f"expected a whole number, got '{s}'")
+    if v < 1:
+        raise argparse.ArgumentTypeError(f"must be 1 or more, got {v}")
+    return v
+
+
+def _positive_float(s):
+    try:
+        v = float(s)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(f"expected a number, got '{s}'")
+    if v <= 0:
+        raise argparse.ArgumentTypeError(f"must be greater than 0, got {v}")
+    return v
+
+
 def _add_common(sp):
     sp.add_argument("--model", help="model alias (nano, nano-pro, gpt, flux)")
     sp.add_argument("--size", help="WxH, a number, or a preset (1k/2k/4k)")
     sp.add_argument("--quality", choices=["auto", "low", "medium", "high"],
                     help="for models priced by quality (gpt)")
-    sp.add_argument("-n", "--num", type=int, default=1, help="images per prompt")
-    sp.add_argument("--seed", type=int, help="fixed seed (models that support it)")
+    sp.add_argument("-n", "--num", type=_positive_int, default=1, help="images per prompt")
+    sp.add_argument("--seed", type=int, help="fixed seed (only flux; ignored elsewhere)")
     sp.add_argument("--negative", help="negative prompt (models that support it)")
     sp.add_argument("--refs", help="reference image folder (for style)")
     sp.add_argument("--transparent", action="store_true",
                     help="also output a transparent-background cut-out (extra bg-removal pass)")
     sp.add_argument("--brand", help="path to a brand profile (.forge/brand.json)")
-    sp.add_argument("--cap", type=float, help="spend ceiling in USD (circuit-breaker)")
-    sp.add_argument("--concurrency", type=int, help=f"parallel jobs (default {DEFAULT_CONCURRENCY})")
+    sp.add_argument("--cap", type=_positive_float, help="spend ceiling in USD (circuit-breaker)")
+    sp.add_argument("--concurrency", type=_positive_int, help=f"parallel jobs (default {DEFAULT_CONCURRENCY})")
     sp.add_argument("--out", help="output dir (default ./generated-assets)")
     sp.add_argument("--dry-run", action="store_true", help="plan + estimate only, no spend")
     sp.add_argument("--json", action="store_true", help="machine-readable output")
@@ -1315,8 +1431,8 @@ def build_parser():
     r = sub.add_parser("resume", help="re-run failed/missing items of a run")
     r.add_argument("run_id")
     r.add_argument("--out", help="output dir the run lives under (default ./generated-assets)")
-    r.add_argument("--concurrency", type=int)
-    r.add_argument("--cap", type=float, help="whole-run spend ceiling in USD (counts prior spend)")
+    r.add_argument("--concurrency", type=_positive_int)
+    r.add_argument("--cap", type=_positive_float, help="whole-run spend ceiling in USD (counts prior spend)")
 
     f = sub.add_parser("finish", help="re-render keepers from a run at finish quality")
     f.add_argument("run_id")

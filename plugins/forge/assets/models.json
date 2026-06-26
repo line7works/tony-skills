@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "note": "Prices are conservative per-image estimates checked against each Fal model /api page on 2026-06-25. The estimator rounds up; true spend shows on the Fal dashboard. Edit/style reuse the model's generation pricing as an estimate. Update when Fal pricing changes.",
+  "note": "Prices are conservative per-image estimates checked against each Fal model /api page on 2026-06-25. The estimator rounds up; true spend shows on the Fal dashboard. Edit/style reuse the model's generation pricing as an estimate. The bg_remove (birefnet) price is an unverified conservative placeholder pending a Fal dashboard check. Update when Fal pricing changes.",
   "default_model": "nano",
   "bg_remove": {
     "id": "fal-ai/birefnet/v2",
@@ -34,7 +34,6 @@
       "preset": "finish",
       "size_style": "aspect_resolution",
       "supports_seed": false,
-      "fallback": "gpt",
       "max_refs": 14,
       "price_by": "resolution",
       "price_usd": { "1K": 0.15, "2K": 0.15, "4K": 0.30 },

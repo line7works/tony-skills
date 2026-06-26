@@ -47,7 +47,7 @@ Pass `--json` on any command to read structured results back.
 3. Run inside the target project so assets land there, e.g. `cd ~/Developer/commish`
    before generating Commish art.
 
-## Commands available now (M1-M3)
+## Commands
 
 - Roster and prices: `python3 "$FORGE" models`
 - Estimate before spending: `python3 "$FORGE" estimate "<prompt>" --model gpt --size 1024 --quality high`
@@ -107,7 +107,8 @@ it into every prompt you write:
 - Run `forge init` once per project to scaffold the profile; it auto-detects the palette from design
   files (DESIGN.md, theme.css). Check what it guessed and correct it before relying on it.
 - Append the brand `style` and palette hex(es) to each prompt, e.g. "...flat modern vector, warm
-  orange #FF8400 on white, no text". Treat `avoid` as things to keep out (and as `--negative` for flux).
+  orange #FF8400 on white, no text". Treat `avoid` as things to keep out of the image by folding
+  them into the prompt wording (no model currently takes a separate negative prompt).
 - Precedence: an explicit flag Tony gives beats the profile, which beats forge's built-in default.
 
 - Default to cheap models and sizes for drafts; reserve `gpt --quality high` and `nano-pro` for keepers.
@@ -144,7 +145,7 @@ it into every prompt you write:
 
 - `--transparent` on any render (gen/edit/style/finish/batch) adds a background-removal pass
   (birefnet) and writes a `*-transparent.png` cut-out beside the original — for mascots, logos, and
-  icons that need to sit on any background. Costs ~$0.04/image extra and obeys the cap.
+  icons that need to sit on any background. Costs ~$0.04/image extra (unverified estimate) and obeys the cap.
 - `forge export <image> --sizes og,square,icon,hero` crops a finished image to named size presets
   with macOS `sips`. Local and free (no API), and it preserves transparency. Presets: og, twitter,
   square, hero, icon, apple-touch, favicon, thumb.

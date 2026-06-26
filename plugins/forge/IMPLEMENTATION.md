@@ -1,6 +1,6 @@
 # Forge — Implementation Spec
 
-> **Status:** Draft for review (v0.4) — senior review folded in
+> **Status:** Built (M1-M5), full senior review folded in (v0.5)
 > **Date:** 2026-06-25
 > **Author:** Claude (for Tony)
 > **Home:** `tony-skills` plugin (`plugins/forge/`), runs as `/forge`
@@ -112,11 +112,10 @@ Common flags:
 | `--transparent` | Return a cut-out on a transparent background (runs a Fal bg-removal pass after generation). |
 | `-n, --num <n>` | Images per prompt. |
 | `--concurrency <n>` | How many images run at once against the Fal queue (default 4). |
-| `--negative "<text>"` | Negative prompt for models that support it (FLUX); ignored by those that do not. |
+| `--negative "<text>"` | Reserved negative-prompt flag; no model in the current registry consumes it, so it is silently ignored (kept for a future model that supports it). |
 | `--brand <path>` | Use a specific brand profile instead of the auto-detected `.forge/brand.json`. |
 | `--seed <n>` | Fix the seed for reproducibility. |
-| `--refs <dir>` | Reference images to condition on. |
-| `--preset rough\|finish` | Cost preset. Batches default to `rough`. |
+| `--refs <dir>` | Reference images to condition on (used by `style`). |
 | `--cap <usd>` | Spend circuit-breaker. Tracks actual cost per image and halts before the next would cross it. |
 | `--out <dir>` | Output folder. Defaults to `./generated-assets/`. |
 | `--dry-run` | Estimate and plan only, no spend. |
@@ -132,7 +131,7 @@ Invoked as `/forge`. Its job is the judgment work the CLI cannot do:
 1. **Interpret.** Read your natural request, the shot list, and the mood board images.
 2. **Write work orders.** Turn each shot into a precise prompt, folding in style cues read from
    the references.
-3. **Rough-in.** Call `forge batch --preset rough --json` and pull the draft image paths back.
+3. **Rough-in.** Call `forge batch --model nano --json` and pull the draft image paths back.
 4. **Inspect (vision QA).** Look at each draft and flag misspelled text, warped anatomy or
    objects, wrong count, off-brand color, artifacts.
 5. **Fix.** Re-prompt the failures (preferred) or call `forge edit` for a surgical change.
@@ -153,7 +152,8 @@ command with a visible estimate and cap.
   input object. Verified ids are in section 6.
 - **Local images go in as data URIs.** For `edit` and `--refs`, the CLI base64-encodes local files
   inline into the model's `image_urls` array (no separate Fal upload step or file lifecycle to
-  manage). Large files fall back to Fal's REST upload endpoint.
+  manage). Files above an 8MB inline ceiling are rejected with a clear "resize it first" message; a
+  REST-upload fallback for very large files is deferred to v2.
 - **Server-side only:** the CLI runs on your machine, so it uses the key directly. The key must
   never end up in a browser bundle.
 
@@ -203,7 +203,7 @@ right crew for this look is data, not a guess.
 
 **Batch from a shot list + mood board** (the headline workflow)
 ```
-forge batch ./shotlists/commish-landing.md --refs ./brand/commish --preset rough --cap 3
+forge batch ./shotlists/commish-landing.md --model nano --cap 3
 ```
 
 A shot list is one shot per row. The simplest form is a Markdown or text list, one brief per line:
@@ -239,7 +239,7 @@ forge gen "friendly league-commissioner mascot, flat vector" --model gpt --trans
 
 **Export one master to every size you need** (local, no API cost)
 ```
-forge export ./generated-assets/<run>/final/feature-01.png --preset web
+forge export ./generated-assets/<run>/raw/feature-01.png --sizes og,square,icon,hero
 ```
 
 ### How a real run feels (Commish, the first proving ground)
@@ -250,7 +250,7 @@ forge export ./generated-assets/<run>/final/feature-01.png --preset web
 > **Me (foreman):** read the brief and the 5 mood images, wrote 4 prompts anchored on #FF8400.
 > Since you like choosing, I first ran `forge compare` on shot 1 across `nano`, `gpt`, and
 > `flux` for about $0.18 so we could see house style. You liked GPT Image 2's look. I ran
-> `forge batch --model gpt --quality medium --preset rough --cap 3` on all four, pulled back the
+> `forge batch --model gpt --quality medium --cap 3` on all four, pulled back the
 > drafts (about $0.40), and inspected them. Icon #3 had a lumpy podium, so I re-rolled it. Here
 > is the contact sheet.
 >
@@ -273,7 +273,7 @@ Registry shape (illustrative):
 ```json
 {
   "nano":     { "id": "fal-ai/nano-banana-2",   "edit": "fal-ai/nano-banana-2/edit",   "preset": "rough",  "max_refs": 14 },
-  "nano-pro": { "id": "fal-ai/nano-banana-pro",  "edit": "fal-ai/nano-banana-pro/edit", "preset": "finish", "fallback": "gpt" },
+  "nano-pro": { "id": "fal-ai/nano-banana-pro",  "edit": "fal-ai/nano-banana-pro/edit", "preset": "finish" },
   "gpt":      { "id": "openai/gpt-image-2",       "edit": "openai/gpt-image-2/edit",     "preset": "either", "by_quality": true },
   "flux":     { "id": "fal-ai/flux-1/dev",        "preset": "rough" }
 }
@@ -290,13 +290,12 @@ Registry shape (illustrative):
 
 Notes:
 - Two finish-grade peers: `nano-pro` and `gpt` at high quality. You are not locked to either.
-- A model may declare a `fallback` alias. If a Preview model (like `nano-pro`) errors or times out,
-  forge retries once on the fallback, applies the fallback's default quality, keeps the same `--cap`,
-  and surfaces the swap (not just logs it) so a `compare` never silently races the wrong model.
-  `nano-pro` is a Preview alias of `gemini-3-pro-image-preview`; the stable id is confirmed in M1.
-- GPT Image 2 prices by quality and size, so its `gen` cost spans rough to premium. Its `edit`
-  endpoint is token-priced (text + image tokens) rather than flat per image; the CLI estimates it
-  from the request and shows the number before spending.
+- Auto-fallback between models (retry a flaky Preview model on a peer) was specced but **deferred to
+  v2**: v1 has no `fallback` field and instead surfaces a model error to the foreman, who re-runs on
+  another `--model`. `nano-pro` is a Preview alias of `gemini-3-pro-image-preview`.
+- GPT Image 2 prices by quality and size, so its `gen` cost spans rough to premium. In v1, `edit`
+  and `style` reuse the model's generation price as the estimate (see the `models.json` note);
+  token-accurate edit pricing is deferred.
 - `nano-pro` is also reachable as `fal-ai/gemini-3-pro-image-preview`.
 - Exact input parameter names AND prices per model get locked against each model's `/api` page
   during M1 (a few catalog numbers above are approximate, e.g. nano-banana-2 is ~$0.08 at 1K and
@@ -335,11 +334,13 @@ Folder layout, rooted wherever you run the command:
 <project>/generated-assets/
   <run-id>/
     manifest.json      # the full record of this run
-    raw/               # rough-in drafts
-    final/             # finished keepers
-    refs/              # snapshot of the reference images used
+    raw/               # the images this run produced
+    contact-sheet.html # clickable picker (batch / compare / finish / resume)
 ```
-`run-id` format: `YYYYMMDD-HHMMSS-<slug>`, e.g. `20260625-141502-landing`.
+`run-id` format: `YYYYMMDD-HHMMSS-<slug>`, e.g. `20260625-141502-landing`. `forge finish` does not
+write a `final/` subfolder; it starts a **new run** (its own `raw/`) linked to the source via
+`source_run` in the manifest. `--transparent` writes `*-transparent.png` cut-outs next to the
+originals in `raw/`.
 
 The manifest is the deterministic, auditable record:
 ```json
@@ -348,10 +349,8 @@ The manifest is the deterministic, auditable record:
   "run_id": "20260625-141502-landing",
   "created_at": "2026-06-25T14:15:02-07:00",
   "command": "batch",
-  "preset": "rough",
   "cap_usd": 3.00,
   "spent_usd": 0.58,
-  "references": ["refs/mood-01.png", "refs/mood-02.png"],
   "items": [
     {
       "id": "feature-03",
@@ -368,14 +367,14 @@ The manifest is the deterministic, auditable record:
       "completed_at": "2026-06-25T14:15:19-07:00",
       "attempts": 2,
       "cost_usd": 0.11,
+      "cost_basis": "estimate",
       "outputs": ["raw/feature-03.png"],
-      "error": null,
-      "qa_notes": "v1 podium was lumpy; re-rolled with explicit geometry"
+      "error": null
     }
   ]
 }
 ```
-Per-item `status` is one of `pending | submitted | completed | failed`. The `status` + `request_id`
+Per-item `status` is one of `pending | submitted | completed | failed | skipped`. The `status` + `request_id`
 pair is what makes `forge resume <run-id>` safe: it re-polls a `submitted`-but-unfetched job instead
 of re-paying for it, and only re-submits items that never started. The CLI writes the manifest
 **incrementally after each item** and **atomically** (temp file then `os.replace`), so a batch killed
@@ -527,6 +526,32 @@ crop hits exact preset dimensions for any aspect ratio; its two findings were fi
 dies cleanly on a non-image file, and `compare --transparent` warns instead of silently no-op'ing.
 The birefnet per-image price ($0.04 in the registry) is a conservative estimate pending a dashboard
 check. This completes the M1-M5 roadmap.
+
+**Full senior review folded in 2026-06-26** (post-M5, pre-PR): an independent five-dimension review
+of the whole plugin (money/concurrency, Fal API, error handling, security, code quality). Security
+came back clean (key never leaks, no shell injection, TLS verification stays on, output paths are
+slug-guarded). Fixes applied across P1-P5:
+- **No double-pay (P1).** Retries and `resume` now re-poll an existing job instead of re-submitting,
+  so a transient blip *after* a successful submit can never pay for a second generation; the submit
+  is the only step gated by "no live request yet" (`_run_job`). `_resume_terminal` no longer treats a
+  CDN download blip as a dead job (which had re-charged), and an empty/"no images" result is now
+  terminal so `resume` can't defer it forever.
+- **Cap honesty (P2).** A failed item releases its reservation, so `--cap` gates *spend*, not
+  *attempts*; the transparent pass and `persist` share one `manifest_spent` formula (gen +
+  background-removal), so transparent spend can't be silently dropped; a re-polled in-flight job is
+  committed to the breaker.
+- **Robustness (P2/P3).** `poll_job` detects Fal's error-on-`COMPLETED` and uses a wall-clock
+  timeout; `download` writes atomically and verifies `Content-Length`; `resume`'s re-poll catches all
+  exceptions (not just `RuntimeError`); `--num/--cap/--concurrency` are validated at parse time (the
+  `resume --concurrency` traceback is gone).
+- **Maintainability (P4/P5).** The submit/poll/retry and cost-ledger logic was factored into shared
+  helpers (`_run_job`, `_with_retry`, `_Ledger`, `manifest_spent`); the job tuple became a namedtuple;
+  the dead `fallback` field, the inert `image_urls` param, and stale `--preset` doc references were
+  removed.
+
+Verified by an offline money-safety test harness (no-double-pay, cap enforcement, release-on-failure,
+classifier coverage) plus the no-key CLI paths. The only deliberate non-fix: a `fetch_result` 202
+race window and birefnet's placeholder price, both low-risk and noted.
 
 ---
 
