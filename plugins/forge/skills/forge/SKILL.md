@@ -11,8 +11,8 @@ description: >-
   swappable per job with --model), with a per-run cost cap and an auditable run
   manifest. NOT for pixel-art game sprites (Tony uses PixelLab for those). Drives
   a deterministic Python CLI and never calls Fal directly. Supports gen / batch /
-  compare / resume / estimate / models; edit, finish, export, transparent
-  backgrounds, and brand profiles arrive in later milestones.
+  compare / finish / resume / init / estimate / models plus per-project brand
+  profiles; edit, style refs, export, and transparent backgrounds arrive later.
 ---
 
 # Forge: Claude-driven image generation
@@ -47,14 +47,16 @@ Pass `--json` on any command to read structured results back.
 3. Run inside the target project so assets land there, e.g. `cd ~/Developer/commish`
    before generating Commish art.
 
-## Commands available now (M1-M2)
+## Commands available now (M1-M3)
 
 - Roster and prices: `python3 "$FORGE" models`
 - Estimate before spending: `python3 "$FORGE" estimate "<prompt>" --model gpt --size 1024 --quality high`
 - Generate one prompt: `python3 "$FORGE" gen "<prompt>" --model nano --size 1024 -n 2 --cap 0.50`
 - Generate a shot list: `python3 "$FORGE" batch shots.md --model nano --size 1k --cap 3 --concurrency 4`
 - Race models on one prompt: `python3 "$FORGE" compare "<prompt>" --models nano,gpt,flux --cap 0.40`
-- Finish an interrupted or partial run: `python3 "$FORGE" resume <run-id> --cap 0.50`
+- Resume an interrupted or partial run: `python3 "$FORGE" resume <run-id> --cap 0.50`
+- Re-render keepers at finish quality: `python3 "$FORGE" finish <run-id> <ids...> --model gpt --quality high --size 2048`
+- Scaffold a project brand profile: `python3 "$FORGE" init` (writes `.forge/brand.json`)
 - Plan without spending: add `--dry-run`.
 
 A shot list is one shot per line (`id: prompt`), or a `.json`/`.csv` with a `prompt`
@@ -84,9 +86,21 @@ background, then poll the manifest. If a run is killed mid-flight, just `resume 
    objects, wrong count, off-brand color (e.g. orange drifting off the project's brand), artifacts.
 5. **Fix.** Re-prompt the misses (preferred over editing). Regenerate.
 6. **Present.** Show Tony the survivors and let him pick. He makes the final call, not you.
-7. **Finish.** (Later milestone) re-render the keepers at finish quality.
+7. **Finish.** On Tony's pick, run `forge finish <run-id> <ids...> --model gpt --quality high --size 2048`
+   to re-render just the keepers at finish quality (higher res, cleaner, usually drops invented text).
+   Finish writes a new run linked to the source; the rough drafts stay untouched.
 
-## Cost discipline
+## Brand profiles
+
+If the project has a `.forge/brand.json`, forge auto-loads it for any run inside that project: its
+`default_model`/`default_size` become the defaults. You apply the rest by reading the file and folding
+it into every prompt you write:
+
+- Run `forge init` once per project to scaffold the profile; it auto-detects the palette from design
+  files (DESIGN.md, theme.css). Check what it guessed and correct it before relying on it.
+- Append the brand `style` and palette hex(es) to each prompt, e.g. "...flat modern vector, warm
+  orange #FF8400 on white, no text". Treat `avoid` as things to keep out (and as `--negative` for flux).
+- Precedence: an explicit flag Tony gives beats the profile, which beats forge's built-in default.
 
 - Default to cheap models and sizes for drafts; reserve `gpt --quality high` and `nano-pro` for keepers.
 - Always pass `--cap`. On `gen` the CLI refuses to start when the estimate exceeds the cap. On
@@ -110,9 +124,7 @@ background, then poll the manifest. If a run is killed mid-flight, just `resume 
 
 ## Not yet implemented
 
-`edit`, `finish`, `export`, `style`, `--transparent`, and `init` are on the roadmap (M3-M5). Do
-not call them yet. Brand-profile auto-detect lands in M3; until then pass `--brand <path>` to a
-`.forge/brand.json` if the project has one.
+`edit`, `style --refs`, `export`, and `--transparent` are on the roadmap (M4-M5). Do not call them yet.
 
 ## Not for pixel art
 

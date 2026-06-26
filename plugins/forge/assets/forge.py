@@ -802,6 +802,152 @@ def cmd_resume(args, reg):
     _summary(manifest, sheet)
 
 
+def cmd_finish(args, reg):
+    """Re-render chosen keepers from a prior run at finish quality into a new run."""
+    brand = load_brand_profile(args.brand)
+    src_dir = _out_root(args) / args.run_id
+    mpath = src_dir / "manifest.json"
+    if not mpath.exists():
+        die(f"no manifest at {mpath} (check the run id, and run from the project dir)")
+    src = json.loads(mpath.read_text())
+    by_id = {it["id"]: it for it in src["items"]}
+    if args.ids:
+        missing = [i for i in args.ids if i not in by_id]
+        if missing:
+            die(f"id(s) not in run {args.run_id}: {', '.join(missing)}. Have: {', '.join(by_id)}")
+        not_done = [i for i in args.ids if by_id[i]["status"] != "completed"]
+        if not_done:
+            die(f"can only finish completed keepers; these did not complete: {', '.join(not_done)}")
+        picks = [by_id[i] for i in args.ids]
+    else:
+        picks = [it for it in src["items"] if it["status"] == "completed"]
+    if not picks:
+        die("no keepers to finish (nothing completed, or no ids matched)")
+    model = args.model or brand.get("finish_model") or "gpt"
+    cfg = resolve_model(model, reg)                      # validate the alias up front
+    quality = args.quality or ("high" if cfg.get("supports_quality") else None)
+    size = args.size or brand.get("default_size") or "2048"
+    shots = [{"id": it["id"], "prompt": it["prompt"], "model": model} for it in picks]
+    defaults = {"model": model, "size": size, "quality": quality, "seed": None, "negative": None}
+    total, rows = _estimate_shots(shots, defaults, reg, brand)
+    if args.dry_run:
+        if args.json:
+            print(json.dumps({"command": "finish", "dry_run": True, "source_run": args.run_id,
+                              "model": model, "quality": quality, "size": size,
+                              "ids": [s["id"] for s in shots],
+                              "estimated_total_usd": round(total, 4)}, indent=2))
+        else:
+            print(f"[dry run] finish {len(shots)} keeper(s) on '{model}'"
+                  f"{(' ' + quality) if quality else ''} @ {size}, ~${total:.3f}:")
+            for sid, _m, per in rows:
+                print(f"  [{sid}] ~${per:.3f}")
+        return
+    if args.cap is not None and total > args.cap:
+        warn(f"finish estimate ~${total:.3f} exceeds cap ${args.cap:.2f}; "
+             f"running as many as fit and skipping the rest.")
+    key = require_key()
+    run_dir = _out_root(args) / new_run_id("finish")
+    manifest, mp = run_batch(shots, defaults, reg, run_dir, "finish", args.cap,
+                             args.concurrency or DEFAULT_CONCURRENCY, key, brand)
+    manifest["source_run"] = args.run_id
+    write_atomic(mp, manifest)
+    sheet = write_contact_sheet(run_dir, manifest)
+    if args.json:
+        print(json.dumps({"run_id": manifest["run_id"], "source_run": args.run_id,
+                          "spent_usd": manifest["spent_usd"], "manifest": str(mp),
+                          "contact_sheet": str(sheet), "items": manifest["items"]}, indent=2))
+    else:
+        _summary(manifest, sheet)
+
+
+# ---------- brand profile scaffolding (forge init) ----------
+
+NEUTRAL_TOL = 24
+BRAND_HINT_GLOBS = ("theme.css", "globals.css", "colors.css", "tailwind.config.*")
+
+
+def _is_neutral(hexstr):
+    """True for greys, near-black, and near-white, so brand-color detection skips them."""
+    r, g, b = (int(hexstr[i:i + 2], 16) for i in (1, 3, 5))
+    mx, mn = max(r, g, b), min(r, g, b)
+    return (mx - mn) < NEUTRAL_TOL or mx < NEUTRAL_TOL or mn > (255 - NEUTRAL_TOL)
+
+
+def _expand_hex(h):
+    """Normalize #rgb / #rrggbb / #rrggbbaa to a 6-digit #rrggbb (alpha dropped)."""
+    h = h.lower()
+    if len(h) == 4:                                  # #rgb -> #rrggbb
+        return "#" + "".join(c * 2 for c in h[1:])
+    return "#" + h[1:7]                              # 6- or 8-digit -> first 6
+
+
+def _scan_palette(root):
+    """Best-effort brand colors: most-frequent non-neutral hex codes in the project's
+    design/style files (DESIGN.md, theme.css, globals.css, tailwind config)."""
+    files = []
+    for rel in ("DESIGN.md", "README.md", "brand.md", "STYLE.md"):
+        p = root / rel
+        if p.is_file():
+            files.append(p)
+    for pat in BRAND_HINT_GLOBS:
+        for depth in ("", "*/", "*/*/", "*/*/*/"):
+            if len(files) >= 16:                     # bound the walk on big trees
+                break
+            files += [p for p in root.glob(depth + pat) if p.is_file()]
+    text = ""
+    for p in files[:16]:
+        try:
+            text += "\n" + p.read_text(errors="ignore")[:20000]
+        except Exception:
+            pass
+    counts = {}
+    for raw in re.findall(r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b", text):
+        h = _expand_hex(raw)
+        if not _is_neutral(h):
+            counts[h] = counts.get(h, 0) + 1
+    return [h for h, _ in sorted(counts.items(), key=lambda kv: -kv[1])][:3]
+
+
+def _detect_brand(root, default_model):
+    name = root.resolve().name or "project"
+    return {
+        "name": name[:1].upper() + name[1:],
+        "palette": _scan_palette(root) or ["#000000"],
+        "style": "flat modern vector, clean, friendly, no baked-in text",
+        "avoid": "photorealism, stock-photo look, watermarks, gibberish text",
+        "refs": "./brand",
+        "default_model": default_model,
+        "default_size": "1024x1024",
+    }
+
+
+def cmd_init(args, reg):
+    target = Path(args.dir).resolve() if args.dir else Path.cwd()
+    if not target.is_dir():
+        die(f"not a directory: {target}")
+    forge_dir = target / ".forge"
+    dest = forge_dir / "brand.json"
+    if forge_dir.exists() and not forge_dir.is_dir():
+        die(f"{forge_dir} exists but is not a directory; move it aside first.")
+    if dest.exists():
+        if dest.is_dir():
+            die(f"{dest} is a directory, not a file; remove it first.")
+        if not args.force:
+            die(f"{dest} already exists. Pass --force to overwrite.")
+    profile = _detect_brand(target, reg.get("default_model", "nano"))
+    try:
+        forge_dir.mkdir(parents=True, exist_ok=True)
+        write_atomic(dest, profile)
+    except OSError as e:
+        die(f"cannot write {dest}: {e}")
+    print(f"wrote {dest}")
+    if profile["palette"] != ["#000000"]:
+        print(f"  detected palette: {', '.join(profile['palette'])}")
+    else:
+        print("  no brand colors auto-detected; set 'palette' by hand")
+    print("  edit name/style/avoid to taste; forge auto-loads this for runs in this project.")
+
+
 # ---------- arg parsing ----------
 
 def _add_common(sp):
@@ -844,6 +990,15 @@ def build_parser():
     r.add_argument("--concurrency", type=int)
     r.add_argument("--cap", type=float, help="whole-run spend ceiling in USD (counts prior spend)")
 
+    f = sub.add_parser("finish", help="re-render keepers from a run at finish quality")
+    f.add_argument("run_id")
+    f.add_argument("ids", nargs="*", help="keeper ids to finish (default: all completed)")
+    _add_common(f)
+
+    i = sub.add_parser("init", help="scaffold a .forge/brand.json brand profile")
+    i.add_argument("dir", nargs="?", help="project dir to scaffold (default: current)")
+    i.add_argument("--force", action="store_true", help="overwrite an existing profile")
+
     e = sub.add_parser("estimate", help="estimate cost, no API calls")
     e.add_argument("prompt", nargs="?", default="")
     _add_common(e)
@@ -860,7 +1015,8 @@ def main():
     args = build_parser().parse_args()
     reg = load_registry()
     {"models": cmd_models, "estimate": cmd_estimate, "gen": cmd_gen,
-     "batch": cmd_batch, "compare": cmd_compare, "resume": cmd_resume}[args.command](args, reg)
+     "batch": cmd_batch, "compare": cmd_compare, "resume": cmd_resume,
+     "finish": cmd_finish, "init": cmd_init}[args.command](args, reg)
 
 
 if __name__ == "__main__":

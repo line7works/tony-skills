@@ -491,6 +491,16 @@ grace, and non-ASCII id collisions. Live spend to date ~$0.62. The live run also
 quirk: a burst of concurrent paid submits can trip a spurious "Exhausted balance" 403 on a healthy
 account, so forge now treats that as retryable and the foreman defaults to modest concurrency.
 
+**M3 shipped 2026-06-26**: `forge finish` (re-render chosen keepers at finish quality into a new
+run linked to the source via `source_run`) and `forge init` (scaffold `.forge/brand.json`,
+auto-detecting the brand palette from the project's design files and filtering out neutrals). Brand
+auto-load was already in place from M1; the SKILL now wires the full foreman QA loop with
+brand-prompt folding. Proven live: a nano-drafted Commish standings icon finished on GPT Image 2 at
+high/2048 came back cleaner and text-free (~$0.19), and `init` pulled `#FF8400` out of Commish's
+DESIGN.md. A focused senior code review found two issues, both fixed: `finish` would re-render and
+charge for a non-completed item selected by id, and `init` raised raw tracebacks on three
+filesystem collisions (`.forge` is a file, `brand.json` is a directory, an unwritable target).
+
 ---
 
 ## 13. Decisions
