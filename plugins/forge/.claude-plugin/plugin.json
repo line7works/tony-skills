@@ -1,0 +1,10 @@
+{
+  "name": "forge",
+  "description": "Claude-driven, model-agnostic AI image generation on Fal.ai. /forge writes prompts, generates drafts, runs vision QA, and renders finished on-brand images through a deterministic Python CLI with a per-run cost cap and an auditable run manifest.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}
