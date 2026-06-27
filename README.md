@@ -80,7 +80,7 @@ Clerk is an agent, not a slash command, so it can be consumed two ways. **Pick o
 
 The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local on either route and stays put; each machine keeps its own audit history.
 
-## Install for bare commands (`/sunrise`, `/sunset`)
+## Install for bare commands (`/sunrise`, `/sunset`, `/forge`)
 
 Prefer typing `/sunrise` and `/sunset`? Install them as user-level skills instead of as a plugin. Copy the two skill folders plus the shared assets into `~/.claude/skills/`:
 
@@ -94,6 +94,18 @@ cp -R ~/Developer/tony-skills/plugins/sun/assets         ~/.claude/skills/sunset
 Restart Claude Code once. You get bare `/sunrise` and `/sunset`. The asset paths are dual-mode, so the sun cue still fires in this mode (it falls back to `~/.claude/skills/sunset/assets`).
 
 Trade-off versus the plugin: no `/plugin update`. To pull changes, `git pull` in `~/Developer/tony-skills` and re-run the three `cp` lines.
+
+### forge (user-level, the same pattern)
+
+Copy forge's skill folder plus its `assets/` (the `forge.py` CLI and `models.json` registry) into `~/.claude/skills/forge/`:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R ~/Developer/tony-skills/plugins/forge/skills/forge ~/.claude/skills/forge
+cp -R ~/Developer/tony-skills/plugins/forge/assets       ~/.claude/skills/forge/assets
+```
+
+Restart Claude Code once and you get the bare `/forge`. The skill calls its CLI via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so in user-level mode it resolves to the copy you just placed. Needs `python3` (3.8+) and a `FAL_KEY` in the environment for live renders (`estimate` / `models` / `--dry-run` need no key). To update on any machine: `git pull` in `~/Developer/tony-skills` and re-run the two `cp` lines.
 
 ## Updating
 
