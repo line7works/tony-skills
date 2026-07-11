@@ -4,7 +4,7 @@ A private Claude Code plugin marketplace holding Tony's personal skills.
 
 ## What's here
 
-Three plugins.
+Four plugins.
 
 **`sun`** provides two slash commands:
 
@@ -15,6 +15,8 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 **`clerk`** bundles one subagent, `clerk-auditor` (Clerk): a portable, strictly read-only auditor. Point it at any pile of files, repos, or notes ("audit ~/Downloads", "what's stale under ~/Developer", "reconcile my projects") and it surveys the target, changes nothing, and hands back a prioritized cleanup "punch list." It lives in this repo so every machine pulls the same Clerk instead of a laptop-only copy.
 
+**`forge`** is a Claude-driven, model-agnostic image generator on Fal.ai. The `/forge` skill is the "foreman" (writes prompts, generates drafts, inspects them with vision, fixes misses, renders finished on-brand images); a dependency-free Python CLI (`plugins/forge/assets/forge.py`) does the mechanical work against Fal's REST queue. It is model-agnostic (nano-banana, GPT Image 2, FLUX, swappable per `--model`): single prompts or shot-list batches, a `compare` that races models, `edit` and `style` for existing images, `finish` for higher-quality keepers, `--transparent` cut-outs, and `export` to size presets, all under a running cost cap with an auditable run manifest. It reads `FAL_KEY` from the environment for live renders and auto-loads a per-project `.forge/brand.json`. Not for pixel-art sprites (PixelLab handles those).
+
 **`wargame`** provides one slash command:
 
 - `/wargame <target>` runs an adversarial pre-mortem — plan or stress-test anything assuming the happy path is a lie. It auto-detects the terrain (GREENFIELD new project / EXISTING code / planned CHANGE), ranks failure modes by likelihood × blast radius, and forces every high-ranked one to convert into a verified code check, a named test, or a spike ("anti-theater rule"). Output is one canonical doc (`docs/wargames/<slug>.md` in a repo) plus plain-language decision questions in chat. Hard floor: Opus-class models or better — it refuses to run on smaller models rather than produce a shallow war game.
@@ -23,7 +25,7 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 ```
 tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists the "sun", "clerk", and "wargame" plugins)
+├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, forge, and wargame plugins)
 └── plugins/
     ├── sun/
     │   ├── .claude-plugin/plugin.json
@@ -34,13 +36,18 @@ tony-skills/
     ├── clerk/
     │   ├── .claude-plugin/plugin.json
     │   └── agents/clerk-auditor.md
+    ├── forge/
+    │   ├── .claude-plugin/plugin.json
+    │   ├── skills/forge/SKILL.md
+    │   ├── assets/                    forge.py, models.json
+    │   └── IMPLEMENTATION.md          full spec + per-milestone build log
     └── wargame/
         ├── .claude-plugin/plugin.json
         └── skills/wargame/SKILL.md
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean
-managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/wargame` commands (user-level).
+managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/wargame` commands (user-level).
 
 ## Install as a plugin (namespaced, shareable)
 
@@ -48,12 +55,15 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/wargame` command
 /plugin marketplace add tiny-tunnel-dot/tony-skills
 /plugin install sun@tony-skills
 /plugin install clerk@tony-skills
+/plugin install forge@tony-skills
 /plugin install wargame@tony-skills
 ```
 
 Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, and wargame as `/wargame:wargame`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
 
 `clerk` ships a subagent rather than a slash command, so there is nothing to type. Once installed it shows up as the `clerk-auditor` agent type and triggers on audit-style asks ("audit X", "what's stale", "reconcile", "give me a report on X"). Clerk can also run user-level instead of as a plugin, and Tony's machines use that route — see [Clerk: user-level vs plugin](#clerk-user-level-vs-plugin-pick-one-route-per-machine) below. Pick one route per machine; the `clerk@tony-skills` line above is only for the plugin route.
+
+`forge` registers the `/forge` skill (namespaced `/forge:forge` in plugin mode), which triggers on image-generation asks ("make an image of X", "generate icons for Commish"). It shells out to its bundled `assets/forge.py`, so the only requirement is `python3` (3.8+, standard library only) plus a `FAL_KEY` in the environment for live renders. `estimate`, `models`, and any `--dry-run` work with no key.
 
 Because the repo is private, the installing machine needs working git auth (the `gh` login or an SSH key), which Tony's machines already have.
 
@@ -78,9 +88,9 @@ Clerk is an agent, not a slash command, so it can be consumed two ways. **Pick o
 
 The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local on either route and stays put; each machine keeps its own audit history.
 
-## Install for bare commands (`/sunrise`, `/sunset`, `/wargame`)
+## Install for bare commands (`/sunrise`, `/sunset`, `/forge`, `/wargame`)
 
-Prefer typing `/sunrise`, `/sunset`, and `/wargame`? Install them as user-level skills instead of as a plugin. Copy the skill folders (plus sun's shared assets) into `~/.claude/skills/`:
+Prefer the bare command names? Install them as user-level skills instead of as a plugin. Copy the skill folders (plus sun's shared assets) into `~/.claude/skills/`; forge follows the same pattern in its subsection below:
 
 ```bash
 mkdir -p ~/.claude/skills
@@ -94,6 +104,18 @@ Restart Claude Code once. You get bare `/sunrise`, `/sunset`, and `/wargame`. Th
 
 Trade-off versus the plugin: no `/plugin update`. To pull changes, `git pull` in `~/Developer/tony-skills` and re-run the `cp` lines.
 
+### forge (user-level, the same pattern)
+
+Copy forge's skill folder plus its `assets/` (the `forge.py` CLI and `models.json` registry) into `~/.claude/skills/forge/`:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R ~/Developer/tony-skills/plugins/forge/skills/forge ~/.claude/skills/forge
+cp -R ~/Developer/tony-skills/plugins/forge/assets       ~/.claude/skills/forge/assets
+```
+
+Restart Claude Code once and you get the bare `/forge`. The skill calls its CLI via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so in user-level mode it resolves to the copy you just placed. Needs `python3` (3.8+) and a `FAL_KEY` in the environment for live renders (`estimate` / `models` / `--dry-run` need no key). To update on any machine: `git pull` in `~/Developer/tony-skills` and re-run the two `cp` lines.
+
 ## Updating
 
 After editing a skill or the Clerk agent and pushing:
@@ -102,6 +124,7 @@ After editing a skill or the Clerk agent and pushing:
 /plugin marketplace update tony-skills
 /plugin update sun@tony-skills
 /plugin update clerk@tony-skills
+/plugin update forge@tony-skills
 /plugin update wargame@tony-skills
 ```
 

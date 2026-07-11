@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "note": "Prices are conservative per-image estimates checked against each Fal model /api page on 2026-06-25. The estimator rounds up; true spend shows on the Fal dashboard. Edit/style reuse the model's generation pricing as an estimate. The bg_remove (birefnet) price is an unverified conservative placeholder pending a Fal dashboard check. Update when Fal pricing changes.",
+  "default_model": "nano",
+  "bg_remove": {
+    "id": "fal-ai/birefnet/v2",
+    "image_field": "image_url",
+    "price_usd": 0.04,
+    "extra_input": { "output_format": "png", "refine_foreground": true }
+  },
+  "models": {
+    "nano": {
+      "id": "fal-ai/nano-banana-2",
+      "edit": "fal-ai/nano-banana-2/edit",
+      "edit_image_field": "image_urls",
+      "style": "fal-ai/nano-banana-2/edit",
+      "style_image_field": "image_urls",
+      "op_size_style": "aspect_resolution",
+      "preset": "rough",
+      "size_style": "aspect_resolution",
+      "supports_seed": false,
+      "max_refs": 14,
+      "price_by": "resolution",
+      "price_usd": { "0.5K": 0.05, "1K": 0.08, "2K": 0.12, "4K": 0.16 },
+      "price_default": 0.08
+    },
+    "nano-pro": {
+      "id": "fal-ai/nano-banana-pro",
+      "edit": "fal-ai/nano-banana-pro/edit",
+      "edit_image_field": "image_urls",
+      "style": "fal-ai/nano-banana-pro/edit",
+      "style_image_field": "image_urls",
+      "op_size_style": "aspect_resolution",
+      "preset": "finish",
+      "size_style": "aspect_resolution",
+      "supports_seed": false,
+      "max_refs": 14,
+      "price_by": "resolution",
+      "price_usd": { "1K": 0.15, "2K": 0.15, "4K": 0.30 },
+      "price_default": 0.15
+    },
+    "gpt": {
+      "id": "openai/gpt-image-2",
+      "edit": "openai/gpt-image-2/edit",
+      "edit_image_field": "image_urls",
+      "style": "openai/gpt-image-2/edit",
+      "style_image_field": "image_urls",
+      "op_size_style": "image_size",
+      "preset": "either",
+      "size_style": "image_size",
+      "supports_quality": true,
+      "supports_seed": false,
+      "max_refs": 16,
+      "price_by": "quality",
+      "price_usd": { "low": 0.02, "medium": 0.07, "high": 0.19, "high@4k": 0.41 },
+      "price_default": 0.19
+    },
+    "flux": {
+      "id": "fal-ai/flux-1/dev",
+      "edit": "fal-ai/flux-kontext/dev",
+      "edit_image_field": "image_url",
+      "op_size_style": "none",
+      "preset": "rough",
+      "size_style": "image_size",
+      "supports_seed": true,
+      "price_by": "flat",
+      "price_usd": 0.03,
+      "price_default": 0.03
+    }
+  }
+}
