@@ -17,6 +17,12 @@
       "source": "./plugins/clerk",
       "description": "Clerk: a portable read-only auditor that surveys any files, repos, or notes and returns a prioritized cleanup punch list, changing nothing.",
       "tags": ["audit", "cleanup", "read-only"]
+    },
+    {
+      "name": "wargame",
+      "source": "./plugins/wargame",
+      "description": "/wargame runs an adversarial pre-mortem on any target — new project, existing feature, or planned change — with ranked, verified failure modes and kill criteria. Opus-class models or better.",
+      "tags": ["planning", "pre-mortem", "review"]
     }
   ]
 }

@@ -1,0 +1,10 @@
+{
+  "name": "wargame",
+  "description": "/wargame runs an adversarial pre-mortem on any target — a new project, an existing feature, or a planned change. Ranked, verified failure modes; phased plan with kill criteria; plain-language decision questions. Requires Opus-class models or better.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}
