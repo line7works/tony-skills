@@ -23,6 +23,12 @@
       "source": "./plugins/forge",
       "description": "/forge generates AI images on Fal.ai with Claude as the brain layer: writes the prompts, generates drafts, runs vision QA, and renders finished on-brand images. Model-agnostic (nano-banana / GPT Image 2 / FLUX), with a per-run cost cap and an auditable run manifest.",
       "tags": ["image-generation", "automation", "fal"]
+    },
+    {
+      "name": "wargame",
+      "source": "./plugins/wargame",
+      "description": "/wargame runs an adversarial pre-mortem on any target — new project, existing feature, or planned change — with ranked, verified failure modes and kill criteria. Opus-class models or better.",
+      "tags": ["planning", "pre-mortem", "review"]
     }
   ]
 }
