@@ -50,16 +50,29 @@ Two layers, so it works in stubborn apps without clobbering the clipboard:
 
 1. **Accessibility read (default path).** On mouse-up it reads the real text
    selection via the Accessibility API, checking both the focused element and
-   the element under the mouse and walking up a few parents. The parent walk is
-   what catches WebKit views like Apple Mail, whose message body does not
-   expose its selection through the focused element (which is usually the
-   message list, not the reading pane). No side effects: if there is no
-   selection, nothing is copied.
+   the element under the mouse and walking up a few parents. No side effects:
+   if there is no selection, nothing is copied. This path works in native views
+   (iMessage). It does **not** work in Mail or Chrome — measured 2026-07-16,
+   their web views never expose `AXSelectedText` anywhere in the ancestor
+   chain, so layer 2 is what actually carries those two apps.
 
 2. **Drag-detect `Cmd+C` fallback.** If step 1 can't read a selection but the
-   gesture was a real drag (mouse moved past a small threshold between
-   mouse-down and mouse-up), it sends `Cmd+C`. A plain click never moves far
-   enough to trigger this, so ordinary clicks never touch the clipboard.
+   gesture was a real text drag, it sends `Cmd+C`. This layer earns its keep
+   (it is the only reason Mail and Chrome work) but a stray `Cmd+C` is *not*
+   harmless — it beeps in Mail and pops a "copy this event?" dialog in
+   Fantastical — so it is gated on all of:
+   - the mouse-up position sampled **synchronously**, not in the deferred
+     timer, which samples 20ms late and turns a click-then-move into a phantom
+     30-120px "drag";
+   - the frontmost window being **unmoved and unresized**, which is what
+     separates selecting text from dragging a window by its title bar;
+   - the gesture **staying in one window**, since a text selection never
+     crosses windows.
+
+   Element *role* is deliberately not a gate: `AXStaticText` and `AXTextArea`
+   show up on real selections **and** on window drags, so role does not
+   separate the cases. Before these gates, the fallback fired on **38% of all
+   mouse-ups**.
 
 ## Caveats
 
@@ -67,8 +80,13 @@ Two layers, so it works in stubborn apps without clobbering the clipboard:
   Adding keyboard selection is possible but noisy, so it is intentionally left
   out.
 - **Finder file drags.** Rubber-band drag-selecting *files* (not text) in
-  Finder can trip the fallback and copy those files. Harmless (a copy, never a
-  cut), just expected behavior worth knowing.
+  Finder can trip the fallback and copy those files (the window does not move,
+  so the window gate does not catch it). Harmless (a copy, never a cut), just
+  expected behavior worth knowing.
+- **Click-into-unfocused-window then select, in one motion, does not copy.**
+  The gesture starts in one window and ends in another, which trips the
+  same-window gate. Deliberate: a silent no-copy you can retry beats a beep or
+  a stray dialog. Select again once the window has focus.
 
 ## Optional init niceties
 
@@ -86,3 +104,8 @@ end):start()
 
 Working in iMessage, Chrome, and Apple Mail on macOS (Darwin 25.x),
 Hammerspoon 1.1.1.
+
+Re-verified 2026-07-16 after the fallback gates landed: copy still works in
+Mail, Chrome, and iMessage, and the spurious `Cmd+C` is gone — no beeps when
+switching Mail sidebar mailboxes, and no Fantastical "copy this event?" dialog
+when dragging its window.

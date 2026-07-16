@@ -7,19 +7,50 @@
 --
 -- Two layers:
 --   1. Read the real selection via the Accessibility API (clean, no side
---      effects). Checks the focused element AND the element under the mouse,
---      walking up parents to catch WebKit views (Apple Mail, etc.), whose
---      selection the focused element alone does not expose.
---   2. If AX can't read a selection but the gesture was a real drag, fall back
---      to sending Cmd+C. Plain clicks never trigger the fallback, so an
---      ordinary click never clobbers the clipboard.
+--      effects). Works in native views (iMessage). Measured 2026-07-16: it does
+--      NOT work in Mail or Chrome, whose web views never expose AXSelectedText
+--      anywhere in the ancestor chain, so layer 2 is what actually carries
+--      those apps.
+--   2. If AX comes up empty but the gesture was a real text drag, send Cmd+C.
+--
+-- Layer 2 is gated hard, because a stray Cmd+C is not harmless: it beeps in
+-- Mail and pops a "copy this event?" dialog in Fantastical. Measured before
+-- gating, it fired on 38% of ALL mouse-ups. The gates, and the misfire each
+-- one kills:
+--   * Sample mouse-up position synchronously, not in the deferred timer. The
+--     timer samples 20ms after release, so a click followed by a fast mouse
+--     move read as a 30-120px "drag" -- this was the Mail sidebar ping.
+--   * Require the frontmost window to be unmoved and unresized. Dragging a
+--     window by its title bar is a long, genuine drag over text-ish elements;
+--     the window moving is what distinguishes it. This was the Fantastical and
+--     Mail title-bar ping.
+--   * Require the gesture to stay in one window. Text selection never crosses
+--     windows.
+-- Note element ROLE is deliberately not used as a gate: AXStaticText and
+-- AXTextArea both appear on real selections AND on window drags, so it does
+-- not separate the cases.
 --
 -- Install and dependencies: see README.md (Hammerspoon + Accessibility grant).
 
 local ax = require("hs.axuielement")
 
 local dragThreshold = 4 -- px of movement before a gesture counts as a drag
-local mouseDownPos = nil
+
+local downPos, upPos, downWinId, downFrame = nil, nil, nil, nil
+
+local function frameOf(win)
+  if not win then return nil end
+  local ok, f = pcall(function() return win:frame() end)
+  if not ok or not f then return nil end
+  return { x = f.x, y = f.y, w = f.w, h = f.h }
+end
+
+-- nil frames count as "not the same", so an unreadable window suppresses the
+-- fallback rather than firing it blind.
+local function sameFrame(a, b)
+  if not a or not b then return false end
+  return a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h
+end
 
 -- Walk up from an element looking for a non-empty AXSelectedText.
 local function selectedTextFrom(element, depth)
@@ -48,25 +79,32 @@ local function handleMouseUp()
     return
   end
 
-  -- Fallback: only fire Cmd+C when this was an actual drag gesture.
-  if mouseDownPos then
-    local up = hs.mouse.absolutePosition()
-    local dx, dy = up.x - mouseDownPos.x, up.y - mouseDownPos.y
-    if (dx * dx + dy * dy) >= (dragThreshold * dragThreshold) then
-      hs.eventtap.keyStroke({ "cmd" }, "c")
-    end
-  end
+  if not (downPos and upPos) then return end
+
+  local dx, dy = upPos.x - downPos.x, upPos.y - downPos.y
+  if (dx * dx + dy * dy) < (dragThreshold * dragThreshold) then return end
+
+  local win = hs.window.frontmostWindow()
+  local id = win and win:id() or nil
+  if id == nil or id ~= downWinId then return end
+  if not sameFrame(frameOf(win), downFrame) then return end
+
+  hs.eventtap.keyStroke({ "cmd" }, "c")
 end
 
 -- Kept as globals on purpose: locals would be garbage-collected and the taps
 -- would silently stop firing. Prefixed to avoid clashing with other config.
 copyOnSelectDown = hs.eventtap.new({ hs.eventtap.event.types.leftMouseDown }, function()
-  mouseDownPos = hs.mouse.absolutePosition()
+  downPos = hs.mouse.absolutePosition()
+  local win = hs.window.frontmostWindow()
+  downWinId = win and win:id() or nil
+  downFrame = frameOf(win)
   return false
 end)
 copyOnSelectDown:start()
 
 copyOnSelectUp = hs.eventtap.new({ hs.eventtap.event.types.leftMouseUp }, function()
+  upPos = hs.mouse.absolutePosition() -- sync: the deferred timer would read it late
   hs.timer.doAfter(0.02, handleMouseUp)
   return false
 end)
