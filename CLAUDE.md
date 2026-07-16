@@ -2,12 +2,16 @@
 
 ## What this is
 
-A private Claude Code plugin marketplace holding Tony's personal skills. Four plugins:
+A private repo with two parts: a Claude Code plugin marketplace under `plugins/`, and a `tools/` category of machine-level tools that are not Claude skills.
+
+Four plugins:
 
 - `sun` provides `/sunrise` (bootstrap a project across every layer) and `/sunset` (archive one reversibly).
 - `clerk` bundles the `clerk-auditor` subagent (Clerk), a strictly read-only auditor that returns a cleanup "punch list" and changes nothing.
 - `forge` provides `/forge` (Claude-driven image generation on Fal.ai — the skill writes prompts, runs vision QA, and renders on-brand images through the bundled `assets/forge.py` CLI).
 - `wargame` provides `/wargame` (adversarial pre-mortem of any target — new project, existing feature, or planned change; ranked + verified failure modes, kill criteria, plain-language decision questions).
+
+Tony Tools (`tools/`): machine-level tools and configs (macOS automations, dotfiles, scripts) copied onto a Mac directly, not installed through Claude Code and not listed in `marketplace.json`. Currently `copy-on-select` (Hammerspoon system-wide highlight-to-clipboard). Each tool is a folder with its own `README.md`. See `tools/README.md`.
 
 See `README.md` for install and structure.
 

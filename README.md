@@ -1,8 +1,15 @@
 # tony-skills
 
-A private Claude Code plugin marketplace holding Tony's personal skills.
+A private repo holding Tony's personal Claude Code skills (a plugin
+marketplace) plus a small set of machine-level tools.
 
 ## What's here
+
+Two things: a **plugin marketplace** under `plugins/` (four Claude Code
+plugins) and a **[Tony Tools](tools/)** category under `tools/` (machine-level
+tools and configs that are not Claude Code skills).
+
+### Plugins
 
 Four plugins.
 
@@ -21,29 +28,45 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 - `/wargame <target>` runs an adversarial pre-mortem — plan or stress-test anything assuming the happy path is a lie. It auto-detects the terrain (GREENFIELD new project / EXISTING code / planned CHANGE), ranks failure modes by likelihood × blast radius, and forces every high-ranked one to convert into a verified code check, a named test, or a spike ("anti-theater rule"). Output is one canonical doc (`docs/wargames/<slug>.md` in a repo) plus plain-language decision questions in chat. Hard floor: Opus-class models or better — it refuses to run on smaller models rather than produce a shallow war game.
 
+### Tony Tools
+
+Machine-level tools and configs that are **not** Claude Code skills, so they
+live under `tools/` (not `plugins/`) and are not in the marketplace catalog.
+These are things you copy onto a Mac directly rather than installing through
+Claude Code. See [`tools/README.md`](tools/) for the category. Current tools:
+
+- **[copy-on-select](tools/copy-on-select/)** — system-wide highlight-to-clipboard
+  on macOS via Hammerspoon. Select text with the mouse in almost any app (Mail,
+  Chrome, iMessage, ...) and it is copied automatically, no `Cmd+C`.
+
 ## Layout
 
 ```
 tony-skills/
 ├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, forge, and wargame plugins)
-└── plugins/
-    ├── sun/
-    │   ├── .claude-plugin/plugin.json
-    │   ├── skills/
-    │   │   ├── sunrise/SKILL.md
-    │   │   └── sunset/SKILL.md
-    │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
-    ├── clerk/
-    │   ├── .claude-plugin/plugin.json
-    │   └── agents/clerk-auditor.md
-    ├── forge/
-    │   ├── .claude-plugin/plugin.json
-    │   ├── skills/forge/SKILL.md
-    │   ├── assets/                    forge.py, models.json
-    │   └── IMPLEMENTATION.md          full spec + per-milestone build log
-    └── wargame/
-        ├── .claude-plugin/plugin.json
-        └── skills/wargame/SKILL.md
+├── plugins/                          Claude Code plugins (installed via /plugin)
+│   ├── sun/
+│   │   ├── .claude-plugin/plugin.json
+│   │   ├── skills/
+│   │   │   ├── sunrise/SKILL.md
+│   │   │   └── sunset/SKILL.md
+│   │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
+│   ├── clerk/
+│   │   ├── .claude-plugin/plugin.json
+│   │   └── agents/clerk-auditor.md
+│   ├── forge/
+│   │   ├── .claude-plugin/plugin.json
+│   │   ├── skills/forge/SKILL.md
+│   │   ├── assets/                    forge.py, models.json
+│   │   └── IMPLEMENTATION.md          full spec + per-milestone build log
+│   └── wargame/
+│       ├── .claude-plugin/plugin.json
+│       └── skills/wargame/SKILL.md
+└── tools/                            machine-level tools, not Claude skills
+    ├── README.md
+    └── copy-on-select/
+        ├── copy-on-select.lua
+        └── README.md
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean
