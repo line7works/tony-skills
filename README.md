@@ -1,8 +1,15 @@
 # tony-skills
 
-A private Claude Code plugin marketplace holding Tony's personal skills.
+A private repo holding Tony's personal Claude Code skills (a plugin
+marketplace) plus a small set of machine-level tools.
 
 ## What's here
+
+Two things: a **plugin marketplace** under `plugins/` (three Claude Code
+plugins) and a **[Tony Tools](tools/)** category under `tools/` (machine-level
+tools and configs that are not Claude Code skills).
+
+### Plugins
 
 Three plugins.
 
@@ -17,26 +24,42 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 **`forge`** is a Claude-driven, model-agnostic image generator on Fal.ai. The `/forge` skill is the "foreman" (writes prompts, generates drafts, inspects them with vision, fixes misses, renders finished on-brand images); a dependency-free Python CLI (`plugins/forge/assets/forge.py`) does the mechanical work against Fal's REST queue. It is model-agnostic (nano-banana, GPT Image 2, FLUX, swappable per `--model`): single prompts or shot-list batches, a `compare` that races models, `edit` and `style` for existing images, `finish` for higher-quality keepers, `--transparent` cut-outs, and `export` to size presets, all under a running cost cap with an auditable run manifest. It reads `FAL_KEY` from the environment for live renders and auto-loads a per-project `.forge/brand.json`. Not for pixel-art sprites (PixelLab handles those).
 
+### Tony Tools
+
+Machine-level tools and configs that are **not** Claude Code skills, so they
+live under `tools/` (not `plugins/`) and are not in the marketplace catalog.
+These are things you copy onto a Mac directly rather than installing through
+Claude Code. See [`tools/README.md`](tools/) for the category. Current tools:
+
+- **[copy-on-select](tools/copy-on-select/)** — system-wide highlight-to-clipboard
+  on macOS via Hammerspoon. Select text with the mouse in almost any app (Mail,
+  Chrome, iMessage, ...) and it is copied automatically, no `Cmd+C`.
+
 ## Layout
 
 ```
 tony-skills/
 ├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, and forge plugins)
-└── plugins/
-    ├── sun/
-    │   ├── .claude-plugin/plugin.json
-    │   ├── skills/
-    │   │   ├── sunrise/SKILL.md
-    │   │   └── sunset/SKILL.md
-    │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
-    ├── clerk/
-    │   ├── .claude-plugin/plugin.json
-    │   └── agents/clerk-auditor.md
-    └── forge/
-        ├── .claude-plugin/plugin.json
-        ├── skills/forge/SKILL.md
-        ├── assets/                    forge.py, models.json
-        └── IMPLEMENTATION.md          full spec + per-milestone build log
+├── plugins/                          Claude Code plugins (installed via /plugin)
+│   ├── sun/
+│   │   ├── .claude-plugin/plugin.json
+│   │   ├── skills/
+│   │   │   ├── sunrise/SKILL.md
+│   │   │   └── sunset/SKILL.md
+│   │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
+│   ├── clerk/
+│   │   ├── .claude-plugin/plugin.json
+│   │   └── agents/clerk-auditor.md
+│   └── forge/
+│       ├── .claude-plugin/plugin.json
+│       ├── skills/forge/SKILL.md
+│       ├── assets/                    forge.py, models.json
+│       └── IMPLEMENTATION.md          full spec + per-milestone build log
+└── tools/                            machine-level tools, not Claude skills
+    ├── README.md
+    └── copy-on-select/
+        ├── copy-on-select.lua
+        └── README.md
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean
