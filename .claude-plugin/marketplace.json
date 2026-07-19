@@ -29,6 +29,12 @@
       "source": "./plugins/wargame",
       "description": "/wargame runs an adversarial pre-mortem on any target — new project, existing feature, or planned change — with ranked, verified failure modes and kill criteria. Opus-class models or better.",
       "tags": ["planning", "pre-mortem", "review"]
+    },
+    {
+      "name": "signoff",
+      "source": "./plugins/signoff",
+      "description": "/signoff runs an independent adversarial review of freshly built work and ends in a signed verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list. Reviewers who did not write the code check it against its spec. The back half of /wargame. Opus-class models or better.",
+      "tags": ["review", "quality-gate", "adversarial"]
     }
   ]
 }
