@@ -57,6 +57,8 @@ Each reviewer returns findings as: claim · `file:line` · concrete failure scen
 4. **Unbuilt-by-design is not a defect.** Work the spec deliberately deferred goes in Deferred, not the punch list. Ask or flag; never invent product behavior for undesigned areas.
 5. **Report, don't repair.** Sign-off is an inspection. Fixing is a separate instruction the user gives after seeing the verdict — offer, don't act.
 6. **The signature is real.** Do not sign off to be agreeable. REJECTED on work the user is excited about is the entire value of the skill; a sign-off that never rejects is decoration.
+7. **Declare the method.** The verdict states how the work was actually verified — executed and exercised, tests run, or static analysis only. A review that could not run the thing is weaker than one that could, and that belongs in the verdict where the user reads it, not buried in a footnote. Never let "I read the code carefully" pass as "I checked that it works."
+8. **Do the arithmetic.** Where a criterion involves numbers — rates, clamps, thresholds, geometry, timing windows — compute it rather than eyeballing the code. The dangerous defect is not the obvious bug; it's the right technique applied so it doesn't achieve the stated requirement. That kind only falls out of math, and it is invisible to a diff review because the code looks textbook.
 
 ## Severity → verdict
 
@@ -78,7 +80,7 @@ Report in chat. Compact — this runs after every slice and must stay fast to re
 SIGN-OFF: <slice/phase>
 Verdict: SIGNED OFF | WITH CONDITIONS | REJECTED
 Scope: <what was reviewed>  ·  Spec: <path, or "none — correctness only">
-Depth: LEAN | DEEP
+Depth: LEAN | DEEP  ·  Method: <ran it / tests / static analysis only>
 
 Bottom line: <2-3 sentences. What holds, what doesn't, what to do next.>
 
@@ -99,3 +101,4 @@ Omit empty sections. No artifact file by default — offer to write the verdict 
 - Don't fix anything during the review.
 - Don't pad the punch list to look rigorous. Verified or cut.
 - Don't sign off on work you haven't verified against the actual source.
+- Don't let a review that couldn't execute the code imply that it did.
