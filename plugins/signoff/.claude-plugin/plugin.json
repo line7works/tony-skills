@@ -1,0 +1,10 @@
+{
+  "name": "signoff",
+  "description": "/signoff runs an independent adversarial review of freshly built work and ends in a signed verdict. Fresh reviewers who did not write the code check it against its spec doc with a mandate to reject; returns SIGNED OFF / WITH CONDITIONS / REJECTED plus a punch list. The back half of /wargame. Requires Opus-class models or better.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

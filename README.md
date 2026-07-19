@@ -11,7 +11,7 @@ tools and configs that are not Claude Code skills).
 
 ### Plugins
 
-Four plugins.
+Five plugins.
 
 **`sun`** provides two slash commands:
 
@@ -28,6 +28,10 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 - `/wargame <target>` runs an adversarial pre-mortem — plan or stress-test anything assuming the happy path is a lie. It auto-detects the terrain (GREENFIELD new project / EXISTING code / planned CHANGE), ranks failure modes by likelihood × blast radius, and forces every high-ranked one to convert into a verified code check, a named test, or a spike ("anti-theater rule"). Output is one canonical doc (`docs/wargames/<slug>.md` in a repo) plus plain-language decision questions in chat. Hard floor: Opus-class models or better — it refuses to run on smaller models rather than produce a shallow war game.
 
+**`signoff`** provides one slash command:
+
+- `/signoff` runs an independent adversarial review of freshly built work and ends in a signed verdict. It is the back half of `/wargame`: war game before building, sign-off after. It auto-detects what was built (working diff, branch diff, or a named slice), finds the phase/slice doc and treats it as acceptance criteria, then spawns fresh reviewers who did **not** write the code and never receive the author's rationale — with a mandate to reject rather than bless. Lean by default (three lenses: spec conformance, correctness, seams against shipped code); DEEP adds security and test-quality. Findings need `file:line` plus a concrete failure scenario or they get cut, and blockers are re-verified against source before reporting. Output is a compact chat verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list and a "tried and failed to break" line, so a clean review can't hide behind "looks good." Report-only; it never fixes what it finds. Shares wargame's Opus-class floor.
+
 ### Tony Tools
 
 Machine-level tools and configs that are **not** Claude Code skills, so they
@@ -43,7 +47,7 @@ Claude Code. See [`tools/README.md`](tools/) for the category. Current tools:
 
 ```
 tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, forge, and wargame plugins)
+├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, forge, wargame, and signoff plugins)
 ├── plugins/                          Claude Code plugins (installed via /plugin)
 │   ├── sun/
 │   │   ├── .claude-plugin/plugin.json
@@ -59,9 +63,12 @@ tony-skills/
 │   │   ├── skills/forge/SKILL.md
 │   │   ├── assets/                    forge.py, models.json
 │   │   └── IMPLEMENTATION.md          full spec + per-milestone build log
-│   └── wargame/
+│   ├── wargame/
+│   │   ├── .claude-plugin/plugin.json
+│   │   └── skills/wargame/SKILL.md
+│   └── signoff/
 │       ├── .claude-plugin/plugin.json
-│       └── skills/wargame/SKILL.md
+│       └── skills/signoff/SKILL.md
 └── tools/                            machine-level tools, not Claude skills
     ├── README.md
     └── copy-on-select/
@@ -70,7 +77,7 @@ tony-skills/
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean
-managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/wargame` commands (user-level).
+managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/wargame` / `/signoff` commands (user-level).
 
 ## Install as a plugin (namespaced, shareable)
 
@@ -80,9 +87,10 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/warga
 /plugin install clerk@tony-skills
 /plugin install forge@tony-skills
 /plugin install wargame@tony-skills
+/plugin install signoff@tony-skills
 ```
 
-Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, and wargame as `/wargame:wargame`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
+Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, wargame as `/wargame:wargame`, and signoff as `/signoff:signoff`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
 
 `clerk` ships a subagent rather than a slash command, so there is nothing to type. Once installed it shows up as the `clerk-auditor` agent type and triggers on audit-style asks ("audit X", "what's stale", "reconcile", "give me a report on X"). Clerk can also run user-level instead of as a plugin, and Tony's machines use that route — see [Clerk: user-level vs plugin](#clerk-user-level-vs-plugin-pick-one-route-per-machine) below. Pick one route per machine; the `clerk@tony-skills` line above is only for the plugin route.
 
@@ -111,7 +119,7 @@ Clerk is an agent, not a slash command, so it can be consumed two ways. **Pick o
 
 The agent's memory at `~/.claude/agent-memory/clerk-auditor/` is machine-local on either route and stays put; each machine keeps its own audit history.
 
-## Install for bare commands (`/sunrise`, `/sunset`, `/forge`, `/wargame`)
+## Install for bare commands (`/sunrise`, `/sunset`, `/forge`, `/wargame`, `/signoff`)
 
 Prefer the bare command names? Install them as user-level skills instead of as a plugin. Copy the skill folders (plus sun's shared assets) into `~/.claude/skills/`; forge follows the same pattern in its subsection below:
 
@@ -121,9 +129,10 @@ cp -R ~/Developer/tony-skills/plugins/sun/skills/sunrise      ~/.claude/skills/s
 cp -R ~/Developer/tony-skills/plugins/sun/skills/sunset       ~/.claude/skills/sunset
 cp -R ~/Developer/tony-skills/plugins/sun/assets              ~/.claude/skills/sunset/assets
 cp -R ~/Developer/tony-skills/plugins/wargame/skills/wargame  ~/.claude/skills/wargame
+cp -R ~/Developer/tony-skills/plugins/signoff/skills/signoff  ~/.claude/skills/signoff
 ```
 
-Restart Claude Code once. You get bare `/sunrise`, `/sunset`, and `/wargame`. The asset paths are dual-mode, so the sun cue still fires in this mode (it falls back to `~/.claude/skills/sunset/assets`); wargame has no assets.
+Restart Claude Code once. You get bare `/sunrise`, `/sunset`, `/wargame`, and `/signoff`. The asset paths are dual-mode, so the sun cue still fires in this mode (it falls back to `~/.claude/skills/sunset/assets`); wargame and signoff have no assets.
 
 Trade-off versus the plugin: no `/plugin update`. To pull changes, `git pull` in `~/Developer/tony-skills` and re-run the `cp` lines.
 
@@ -149,6 +158,7 @@ After editing a skill or the Clerk agent and pushing:
 /plugin update clerk@tony-skills
 /plugin update forge@tony-skills
 /plugin update wargame@tony-skills
+/plugin update signoff@tony-skills
 ```
 
 No version is pinned, so every pushed commit is the latest.
@@ -157,7 +167,7 @@ No version is pinned, so every pushed commit is the latest.
 
 These skills are personal. They reference Tony's GitHub handle (`tiny-tunnel-dot`), his `~/Developer` layout, Project Knight, his Obsidian vault structure, and his Notion board pattern. Keep this repo private.
 
-To share a skill publicly later, make a genericized copy in a fresh public repo (strip the personal paths and handles) rather than flipping this one public. Git history would otherwise expose those details even after a cleanup commit. (`wargame` is the exception — it contains no personal paths or handles, so it's the easy candidate to copy out as-is if sharing ever comes up.)
+To share a skill publicly later, make a genericized copy in a fresh public repo (strip the personal paths and handles) rather than flipping this one public. Git history would otherwise expose those details even after a cleanup commit. (`wargame` and `signoff` are the exceptions — they contain no personal paths or handles, so they're the easy candidates to copy out as-is if sharing ever comes up.)
 
 ## Assets and the plugin root (dual-mode)
 
