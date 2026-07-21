@@ -37,11 +37,8 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 Machine-level tools and configs that are **not** Claude Code skills, so they
 live under `tools/` (not `plugins/`) and are not in the marketplace catalog.
 These are things you copy onto a Mac directly rather than installing through
-Claude Code. See [`tools/README.md`](tools/) for the category. Current tools:
-
-- **[copy-on-select](tools/copy-on-select/)** — system-wide highlight-to-clipboard
-  on macOS via Hammerspoon. Select text with the mouse in almost any app (Mail,
-  Chrome, iMessage, ...) and it is copied automatically, no `Cmd+C`.
+Claude Code. See [`tools/README.md`](tools/) for the category. No tools
+currently (copy-on-select was sunset 2026-07-21).
 
 ## Layout
 
@@ -70,10 +67,7 @@ tony-skills/
 │       ├── .claude-plugin/plugin.json
 │       └── skills/signoff/SKILL.md
 └── tools/                            machine-level tools, not Claude skills
-    ├── README.md
-    └── copy-on-select/
-        ├── copy-on-select.lua
-        └── README.md
+    └── README.md                     (no tools currently)
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean

@@ -12,7 +12,7 @@ Five plugins:
 - `wargame` provides `/wargame` (adversarial pre-mortem of any target — new project, existing feature, or planned change; ranked + verified failure modes, kill criteria, plain-language decision questions).
 - `signoff` provides `/signoff` (independent adversarial review of freshly built work against its spec doc, ending in a signed verdict plus punch list). The back half of `/wargame`: war game before building, sign-off after.
 
-Tony Tools (`tools/`): machine-level tools and configs (macOS automations, dotfiles, scripts) copied onto a Mac directly, not installed through Claude Code and not listed in `marketplace.json`. Currently `copy-on-select` (Hammerspoon system-wide highlight-to-clipboard). Each tool is a folder with its own `README.md`. See `tools/README.md`.
+Tony Tools (`tools/`): machine-level tools and configs (macOS automations, dotfiles, scripts) copied onto a Mac directly, not installed through Claude Code and not listed in `marketplace.json`. Currently empty (`copy-on-select` was sunset 2026-07-21). Each tool is a folder with its own `README.md`. See `tools/README.md`.
 
 See `README.md` for install and structure.
 

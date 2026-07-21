@@ -10,9 +10,8 @@ is, its dependencies, and how to install it.
 
 ## Tools
 
-- **[copy-on-select](copy-on-select/)** — system-wide highlight-to-clipboard on
-  macOS via Hammerspoon. Select text with the mouse in almost any app (Mail,
-  Chrome, iMessage, ...) and it is copied automatically, no `Cmd+C`.
+_None currently. (copy-on-select was sunset 2026-07-21 — archived at
+`~/Developer/_archive/copy-on-select/`; still in this repo's git history.)_
 
 ## Conventions
 
