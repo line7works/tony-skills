@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+
+# Belt and braces. Secrets live in ~/.gmail-mcp, never in the repo, but if a
+# credentials file ever lands here by accident it must not be committable.
+credentials.json
+client_secret*.json
+*.token.json
+.env
+.env.*

@@ -15,6 +15,11 @@ README should say plainly that it is a spec and where the real code lives.
 
 ## Tools
 
+- `gmail-mcp/` — multi-account Gmail MCP server. Registers with Claude Code as `gmail` and
+  reaches every authorized inbox at once by alias, which claude.ai's Google connector
+  cannot do (it holds one OAuth grant; a second Gmail replaces the first). Real source,
+  installable; runs from this checkout rather than a copy.
+
 - `mcp-obsidian-worker/` — implementation spec for the Cloudflare Worker serving the
   `Obsidian Vault` MCP server on claude.ai web. Spec only; the Worker source is not here
   and may not exist on disk anywhere.
