@@ -1,13 +1,19 @@
 # tony-skills
 
-A private repo holding Tony's personal Claude Code skills (a plugin
-marketplace) plus a small set of machine-level tools.
+A private repo holding what Tony builds on his workstations and wants to keep —
+Claude Code skills and subagents, plus standalone tools, configs, and specs.
 
 ## What's here
 
-Two things: a **plugin marketplace** under `plugins/` (four Claude Code
-plugins) and a **[Tony Tools](tools/)** category under `tools/` (machine-level
-tools and configs that are not Claude Code skills).
+The test for belonging here is "was this made on one of these Macs and should it
+outlive the machine," not "is it a Claude Code skill." Two parts, split by how a
+thing is consumed rather than what it is:
+
+- a **plugin marketplace** under `plugins/` (five Claude Code plugins) — what
+  Claude Code installs and runs
+- a **[Tony Tools](tools/)** category under `tools/` — everything else: macOS
+  automations, dotfiles, scripts, and implementation specs for code that lives
+  elsewhere
 
 ### Plugins
 
@@ -34,11 +40,16 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 ### Tony Tools
 
-Machine-level tools and configs that are **not** Claude Code skills, so they
-live under `tools/` (not `plugins/`) and are not in the marketplace catalog.
-These are things you copy onto a Mac directly rather than installing through
-Claude Code. See [`tools/README.md`](tools/) for the category. No tools
-currently (copy-on-select was sunset 2026-07-21).
+Everything preserved here that Claude Code does **not** install, so it lives
+under `tools/` (not `plugins/`) and is not in the marketplace catalog. That
+covers things you copy onto a Mac directly (macOS automations, dotfiles,
+scripts) and also implementation specs for code that lives somewhere else. See
+[`tools/README.md`](tools/) for the category.
+
+Currently one: **`mcp-obsidian-worker/`** — the implementation spec for the
+Cloudflare Worker serving the `Obsidian Vault` MCP server on claude.ai web.
+Spec only; the Worker source is not in this repo. (`copy-on-select` was sunset
+2026-07-21 and is still in git history.)
 
 ## Layout
 
@@ -66,8 +77,11 @@ tony-skills/
 │   └── signoff/
 │       ├── .claude-plugin/plugin.json
 │       └── skills/signoff/SKILL.md
-└── tools/                            machine-level tools, not Claude skills
-    └── README.md                     (no tools currently)
+└── tools/                            preserved work Claude Code doesn't install
+    ├── README.md
+    └── mcp-obsidian-worker/          spec for the claude.ai Obsidian MCP Worker
+        ├── README.md
+        └── IMPLEMENTATION.md
 ```
 
 There are two ways to install from this repo. Pick by whether you want clean

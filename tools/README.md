@@ -1,16 +1,25 @@
 # Tony Tools
 
-Machine-level tools and configs that are **not** Claude Code skills, so they
-live outside `plugins/` and are not listed in `.claude-plugin/marketplace.json`.
-These are things like macOS automations, dotfiles, and standalone scripts:
-setup you copy onto a Mac directly, not something Claude Code installs or runs.
+Everything worth preserving that Claude Code does **not** install, so it lives
+outside `plugins/` and is not listed in `.claude-plugin/marketplace.json`.
 
-Each tool is a self-contained folder with its own `README.md` covering what it
-is, its dependencies, and how to install it.
+That covers macOS automations, dotfiles, and standalone scripts you copy onto a
+Mac directly, and also implementation specs and design docs for code that lives
+somewhere else (a deployed service, another repo). If it was built on one of
+Tony's machines and should outlive that machine, it belongs here — a thing does
+not have to be installable to be worth keeping.
+
+Each is a self-contained folder with its own `README.md` covering what it is, its
+dependencies, and how to install or use it. For a spec rather than a tool, the
+README should say plainly that it is a spec and where the real code lives.
 
 ## Tools
 
-_None currently. (copy-on-select was sunset 2026-07-21 — archived at
+- `mcp-obsidian-worker/` — implementation spec for the Cloudflare Worker serving the
+  `Obsidian Vault` MCP server on claude.ai web. Spec only; the Worker source is not here
+  and may not exist on disk anywhere.
+
+_(copy-on-select was sunset 2026-07-21 — archived at
 `~/Developer/_archive/copy-on-select/`; still in this repo's git history.)_
 
 ## Conventions
