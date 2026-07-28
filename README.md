@@ -46,10 +46,19 @@ covers things you copy onto a Mac directly (macOS automations, dotfiles,
 scripts) and also implementation specs for code that lives somewhere else. See
 [`tools/README.md`](tools/) for the category.
 
-Currently one: **`mcp-obsidian-worker/`** — the implementation spec for the
-Cloudflare Worker serving the `Obsidian Vault` MCP server on claude.ai web.
-Spec only; the Worker source is not in this repo. (`copy-on-select` was sunset
-2026-07-21 and is still in git history.)
+Currently two:
+
+- **`gmail-mcp/`** — a multi-account Gmail MCP server, registered with Claude
+  Code as `gmail`. Reaches every authorized inbox at once by alias, which the
+  claude.ai Google connector cannot do: it holds one OAuth grant, so connecting
+  a second Gmail replaces the first. Real source and installable, unlike the
+  spec below. Runs from this checkout rather than a copy, so `git pull` updates
+  it. Secrets live in `~/.gmail-mcp/`, never here.
+- **`mcp-obsidian-worker/`** — the implementation spec for the Cloudflare Worker
+  serving the `Obsidian Vault` MCP server on claude.ai web. Spec only; the
+  Worker source is not in this repo.
+
+(`copy-on-select` was sunset 2026-07-21 and is still in git history.)
 
 ## Layout
 
@@ -79,6 +88,11 @@ tony-skills/
 │       └── skills/signoff/SKILL.md
 └── tools/                            preserved work Claude Code doesn't install
     ├── README.md
+    ├── gmail-mcp/                    multi-account Gmail MCP server (real source)
+    │   ├── README.md
+    │   ├── src/                      store.ts, auth.ts, gmail.ts, server.ts
+    │   ├── package.json
+    │   └── tsconfig.json
     └── mcp-obsidian-worker/          spec for the claude.ai Obsidian MCP Worker
         ├── README.md
         └── IMPLEMENTATION.md

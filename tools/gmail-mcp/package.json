@@ -1,0 +1,25 @@
+{
+  "name": "gmail-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-account Gmail MCP server. Tokens never leave this machine.",
+  "scripts": {
+    "build": "tsc",
+    "auth": "npm run build --silent && node dist/auth.js",
+    "accounts": "npm run build --silent && node dist/auth.js --list",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "googleapis": "^173.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8"
+  }
+}
