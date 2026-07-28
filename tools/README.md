@@ -10,7 +10,11 @@ is, its dependencies, and how to install it.
 
 ## Tools
 
-_None currently. (copy-on-select was sunset 2026-07-21 — archived at
+- `mcp-obsidian-worker/` — implementation spec for the Cloudflare Worker serving the
+  `Obsidian Vault` MCP server on claude.ai web. Spec only; the Worker source is not here
+  and may not exist on disk anywhere.
+
+_(copy-on-select was sunset 2026-07-21 — archived at
 `~/Developer/_archive/copy-on-select/`; still in this repo's git history.)_
 
 ## Conventions
