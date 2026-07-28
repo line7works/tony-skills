@@ -6,9 +6,9 @@ The implementation spec for **the Cloudflare Worker that serves the `Obsidian Va
 server on claude.ai web**. The Worker exposes ~30 MCP tools (read / inspect / discover /
 query / write / modify / destructive / hygiene) wrapping the Obsidian Local REST API.
 
-This folder holds `IMPLEMENTATION.md` **only**. It is a spec, not an installable tool —
-which makes it an imperfect fit for `tools/`, but this repo is the only version-controlled
-home it has.
+This folder holds `IMPLEMENTATION.md` **only**. It is a spec, not an installable tool;
+`tools/` explicitly covers specs for code that lives elsewhere. The real code is the
+deployed Worker on Cloudflare.
 
 ## Why it is here
 

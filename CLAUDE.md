@@ -2,7 +2,14 @@
 
 ## What this is
 
-A private repo with two parts: a Claude Code plugin marketplace under `plugins/`, and a `tools/` category of machine-level tools that are not Claude skills.
+The permanent home for things Tony builds on his workstations and wants to keep. Not just skills: skills, subagents, standalone scripts, machine configs, and implementation specs all belong here. The test is "was this made on one of these Macs and should it survive the machine," not "is it a Claude Code skill."
+
+Two parts, split by how a thing is consumed rather than what it is:
+
+- `plugins/` — a Claude Code plugin marketplace. Things Claude Code installs and runs (skills, subagents), listed in `.claude-plugin/marketplace.json`.
+- `tools/` — everything else. Things a human copies, runs, or reads directly: macOS automations, dotfiles, scripts, and specs for code that lives elsewhere. Not installed through Claude Code, not in `marketplace.json`.
+
+When something does not obviously fit either, it goes in `tools/` — do not conclude it belongs outside the repo.
 
 Five plugins:
 
@@ -12,7 +19,7 @@ Five plugins:
 - `wargame` provides `/wargame` (adversarial pre-mortem of any target — new project, existing feature, or planned change; ranked + verified failure modes, kill criteria, plain-language decision questions).
 - `signoff` provides `/signoff` (independent adversarial review of freshly built work against its spec doc, ending in a signed verdict plus punch list). The back half of `/wargame`: war game before building, sign-off after.
 
-Tony Tools (`tools/`): machine-level tools and configs (macOS automations, dotfiles, scripts) copied onto a Mac directly, not installed through Claude Code and not listed in `marketplace.json`. Each tool is a folder with its own `README.md`. Currently one: `mcp-obsidian-worker/` (spec only — the Worker source is not in this repo and may not exist on disk anywhere). See `tools/README.md`.
+Tony Tools (`tools/`): anything preserved here that Claude Code does not install — macOS automations, dotfiles, scripts, and implementation specs for code that lives elsewhere. Each is a folder with its own `README.md`. Currently one: `mcp-obsidian-worker/` (spec only — the Worker source is not in this repo and may not exist on disk anywhere). See `tools/README.md`.
 
 See `README.md` for install and structure.
 
