@@ -39,9 +39,15 @@ converging on the same answer is signal no single team can produce.
    - **Fable box** — high effort
    - **Opus box** — high effort (same vendor as Fable; counts as half a head
      of extra independence, judge weights cross-vendor agreement highest)
-   - **Gemini box** — pending access (Gemini CLI install + Google login)
-   - **Grok box** — pending access (xAI API key, or OpenRouter key covering
-     both)
+   - **Gemini box** — pending access (Gemini CLI install + Google login).
+     Gemini 3.1 Pro leads abstract-reasoning benchmarks as of Aug 2026 —
+     arguably the best-suited head for a naming/pitching exercise.
+   - **DeepSeek box** — pending access (Tony approved 2026-08-07; DeepSeek
+     API key or OpenRouter). Most training-lineage diversity available:
+     different lab culture and data mix than the US cluster, frontier-class
+     reasoning, cheap API.
+   - **Grok slot reserved** — lower priority than DeepSeek (same US
+     neighborhood as GPT/Claude; paid xAI or OpenRouter key)
    Run with whatever subset exists, minimum three; the doc records which
    models filled boxes on each run.
 4. Each team fills out one box:
