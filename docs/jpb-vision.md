@@ -71,6 +71,15 @@ converging on the same answer is signal no single team can produce.
    them), then the tally, then a recommended front/back/side, then the debate
    card — saved to the current repo's `docs/` folder and summarized in chat.
    **The debate stays human**, like Jon's.
+8. **`/jpb resolve`** — after the human debate, Tony comes back and talks
+   through his calls in plain language ("going with name X, buyer is Y, kill
+   the white-label idea"). The skill appends a dated **Verdicts** section to
+   the same doc recording each call and which box it came from, then marks the
+   doc closed. A closed box doc carries a name, pitch, buyer, settled 3 and 9,
+   and known assumptions — almost exactly the input /blueprint asks for. The
+   pipeline: **jpb → debate → resolve → blueprint → build → signoff.** Without
+   resolve, debate outcomes die in the chat; resolve writes the decisions
+   where the boxes already are.
 
 ## Practical guards
 
@@ -91,13 +100,6 @@ converging on the same answer is signal no single team can produce.
 - Team count adjustable later if wanted; five is the default roster above.
 - Position in the loop: **before /blueprint** — JPB vets the idea while it
   doesn't have a name yet. Not a planning tool; a consensus instrument.
-
-## Proposed, not yet committed
-
-- **`/jpb resolve` step** — after the human debate, a follow-up command that
-  appends Tony's verdicts to the same doc (chosen name, settled 3, settled 9,
-  which dissents were killed), closing it into the input /blueprint wants.
-  Tony wants the mechanics expanded before committing to this.
 
 ## Open items for build time
 
