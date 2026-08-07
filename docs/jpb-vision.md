@@ -144,11 +144,16 @@ converging on the same answer is signal no single team can produce.
 
 ## Open items for build time
 
-- Verify codex MCP tool's model/effort parameters and whether its web access
-  can be disabled for parity.
-- Vendor access Tony would need to set up for boxes 4 and 5: Gemini CLI
-  (free tier, Google login) and/or an xAI key — or one OpenRouter key
-  covering both.
+- ~~Verify codex model control~~ VERIFIED 2026-08-07: the codex MCP tool takes
+  a `model` override and this Mac's Codex cache lists **`gpt-5.6-sol`**
+  (Tony's "sole"). Also confirmed: `base-instructions` replacement (box
+  mandate instead of coding-agent defaults), `sandbox: read-only`, and a
+  `config` override object where reasoning effort lives. Still to verify:
+  disabling its web search for parity.
+- Gemini: NOT installed as of 2026-08-07. One npm install + Google login
+  (free tier); Tony does the sign-in. Grok: no access; needs a paid xAI or
+  OpenRouter key. Realistic launch roster: GPT-5.6-Sol, Fable, Opus,
+  + Gemini once installed; Grok slot reserved.
 - Verify per-agent effort pinning for the Claude boxes actually enforces
   "high" before adding any orchestration machinery for it.
 - Skill home: `~/.claude/skills/jpb/` locally; long-term a `jpb` plugin in
