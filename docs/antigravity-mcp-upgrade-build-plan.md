@@ -111,7 +111,7 @@ Footprint: `tools/antigravity-mcp/src/server.js`, `tools/antigravity-mcp/package
 `tools/antigravity-mcp/test/unit.test.mjs`.
 Not in this slice: any behavior change to spawning, killing, or tools.
 Depends on: nothing
-Status: built
+Status: signed off with conditions
 
 ## Slice A1 — unit tests, process-group kill, child lifecycle
 Goal: Put the never-fired guard paths under stub-backed tests; make timeout kills take
@@ -409,3 +409,14 @@ Status: not started
 ## Deviations
 ## Discovered
 ## Punch list
+
+### 2026-08-07 — review: Slice A0
+
+- MAJOR · `tools/antigravity-mcp/src/server.js:354` · `node .` / `node <tooldir>` (package-main invocation) no longer serves: isEntryPoint compares import.meta.url against realpath(argv[1]), which is the directory, so the guard returns false · an MCP client configured with `node <tooldir>` gets an instant clean exit 0 with zero diagnostics — R2 says direct execution behavior must not change (live ~/.claude.json registration uses the full src/server.js path, so the deployed config is unaffected) · A0 review
+- MINOR · `tools/antigravity-mcp/src/server.js:363` · guard false-negatives exit 0 with nothing on stderr (also fires under `node --preserve-symlinks-main <symlink>`) · a misfire looks like "server started and died clean", undiagnosable from the client side · A0 review
+- MINOR · `tools/antigravity-mcp/src/server.js:123` · composeArgs doc comment claims "Pure: no env reads" but it reads process.cwd() when cwd is omitted · an A1 test calling composeArgs without cwd bakes the runner's ambient cwd into --add-dir; results vary by where the suite runs · A0 review
+- MINOR · `tools/antigravity-mcp/test/unit.test.mjs:4` · placeholder test comment overstates coverage (nothing asserts stdout purity) and its includes() checks pass even if argv order scrambles or defaults are dropped · a guard or composeArgs regression could keep the suite green · A0 review
+- MINOR · `tools/antigravity-mcp/package-lock.json:18` · lockfile root entry still declares node >=18 vs package.json >=22 · next npm install silently rewrites the lock (surprise dirty tree mid-slice); engine-strict tooling reads the stale constraint · A0 review
+- MINOR · `tools/antigravity-mcp/src/server.js:308` · composeArgs returns resolved workdir/timeoutMs but not resolved model/mode; the footer re-derives them with ?? · when Slice C's fallback lands, the footer can name a model that did not answer · A0 review
+- MINOR · `tools/antigravity-mcp/src/server.js:28` · per-spawn resolution: if ~/.local/bin/agy vanishes mid-session, resolveAgyBin silently falls back to bare "agy" on PATH instead of failing loudly on the stale path · a second install (homebrew, older copy) answers with no indication a different binary ran · A0 review
+- MINOR · `tools/antigravity-mcp/README.md:90` · Test section documents only `node test/smoke.mjs`; no slice's footprint owns adding the contractual `npm test` command to the README · doc gap with no scheduled closer · A0 review

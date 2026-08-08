@@ -11,7 +11,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { accessSync, constants, realpathSync } from "node:fs";
+import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -354,7 +354,13 @@ server.registerTool(
 function isEntryPoint() {
   if (!process.argv[1]) return false;
   try {
-    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    let entry = realpathSync(process.argv[1]);
+    // `node .` / `node <dir>`: argv[1] is the package dir; resolve its main.
+    if (statSync(entry).isDirectory()) {
+      const pkg = JSON.parse(readFileSync(join(entry, "package.json"), "utf8"));
+      entry = realpathSync(join(entry, pkg.main ?? "index.js"));
+    }
+    return import.meta.url === pathToFileURL(entry).href;
   } catch {
     return false;
   }
