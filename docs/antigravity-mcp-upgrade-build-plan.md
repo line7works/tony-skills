@@ -111,7 +111,7 @@ Footprint: `tools/antigravity-mcp/src/server.js`, `tools/antigravity-mcp/package
 `tools/antigravity-mcp/test/unit.test.mjs`.
 Not in this slice: any behavior change to spawning, killing, or tools.
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Slice A1 — unit tests, process-group kill, child lifecycle
 Goal: Put the never-fired guard paths under stub-backed tests; make timeout kills take
@@ -420,3 +420,7 @@ Status: not started
 - MINOR · `tools/antigravity-mcp/src/server.js:308` · composeArgs returns resolved workdir/timeoutMs but not resolved model/mode; the footer re-derives them with ?? · when Slice C's fallback lands, the footer can name a model that did not answer · A0 review
 - MINOR · `tools/antigravity-mcp/src/server.js:28` · per-spawn resolution: if ~/.local/bin/agy vanishes mid-session, resolveAgyBin silently falls back to bare "agy" on PATH instead of failing loudly on the stale path · a second install (homebrew, older copy) answers with no indication a different binary ran · A0 review
 - MINOR · `tools/antigravity-mcp/README.md:90` · Test section documents only `node test/smoke.mjs`; no slice's footprint owns adding the contractual `npm test` command to the README · doc gap with no scheduled closer · A0 review
+
+### 2026-08-07 — recheck: Slice A0
+
+- MAJOR · `tools/antigravity-mcp/src/server.js:354` · (`node .` / `node <tooldir>` package-main invocation no longer serves) · fixed — isEntryPoint now resolves a directory argv[1] through its package.json main before comparing; verified live: `node .` and the absolute-dir form both answer an MCP initialize, all prior launch shapes still serve, import remains side-effect free, npm test green. No fix-introduced defects.
