@@ -11,9 +11,10 @@
  */
 
 import { spawn } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -24,8 +25,8 @@ const DEFAULT_MODE = "plan";
 const DEFAULT_TIMEOUT_MS = 600_000;
 
 /** Locate the agy binary: explicit override, then the installer's target, then PATH. */
-function resolveAgyBin() {
-  if (process.env.AGY_BIN) return process.env.AGY_BIN;
+export function resolveAgyBin(env = process.env) {
+  if (env.AGY_BIN) return env.AGY_BIN;
   const installed = join(homedir(), ".local", "bin", "agy");
   try {
     accessSync(installed, constants.X_OK);
@@ -35,20 +36,19 @@ function resolveAgyBin() {
   }
 }
 
-const AGY_BIN = resolveAgyBin();
-
 /**
  * Run agy headlessly and resolve with its parsed JSON envelope.
  *
  * The child's stdio is fully detached from ours: this process's stdin/stdout is
  * the MCP transport, and a single stray byte from the child would corrupt it.
  */
-function runAgy(args, { cwd, timeoutMs }) {
+export function runAgy(args, { cwd, timeoutMs, env = process.env }) {
+  const agyBin = resolveAgyBin(env);
   return new Promise((resolve, reject) => {
-    const child = spawn(AGY_BIN, args, {
+    const child = spawn(agyBin, args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
+      env,
     });
 
     let stdout = "";
@@ -68,7 +68,7 @@ function runAgy(args, { cwd, timeoutMs }) {
       if (err.code === "ENOENT") {
         reject(
           new Error(
-            `Could not find the agy binary at "${AGY_BIN}". Install it with ` +
+            `Could not find the agy binary at "${agyBin}". Install it with ` +
               `curl -fsSL https://antigravity.google/cli/install.sh | bash, ` +
               `or set AGY_BIN to its path.`,
           ),
@@ -106,7 +106,7 @@ function runAgy(args, { cwd, timeoutMs }) {
  * both streams. They are noise, not failures. Pull the JSON envelope out by
  * taking the last line that parses as an object.
  */
-function extractEnvelope(stdout) {
+export function extractEnvelope(stdout) {
   const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i--) {
     if (!lines[i].startsWith("{")) continue;
@@ -117,6 +117,53 @@ function extractEnvelope(stdout) {
     }
   }
   return null;
+}
+
+/**
+ * Compose the agy argv for an ask_gemini-shaped call. Pure: no spawning, no
+ * env reads beyond the arguments given. Returns the argv plus the resolved
+ * workdir and timeout so the caller spawns with exactly what was composed.
+ */
+export function composeArgs({
+  prompt,
+  model,
+  mode,
+  effort,
+  cwd,
+  add_dirs,
+  conversation_id,
+  timeout_ms,
+  skip_permissions,
+}) {
+  const timeoutMs = timeout_ms ?? DEFAULT_TIMEOUT_MS;
+  const workdir = cwd ?? process.cwd();
+
+  const args = [
+    "--print",
+    prompt,
+    "--model",
+    model ?? DEFAULT_MODEL,
+    "--mode",
+    mode ?? DEFAULT_MODE,
+    "--output-format",
+    "json",
+    // Keep agy's own deadline just inside ours so it gets the chance to fail
+    // cleanly with an envelope rather than being SIGKILLed mid-write.
+    "--print-timeout",
+    `${Math.max(1, Math.floor((timeoutMs / 1000) * 0.9))}s`,
+    // agy does NOT treat its spawn cwd as the agent's workspace. Without an
+    // explicit --add-dir it reports "you did not have an active workspace",
+    // fails to read the project, and returns an empty response anyway.
+    "--add-dir",
+    workdir,
+  ];
+
+  if (effort) args.push("--effort", effort);
+  if (skip_permissions) args.push("--dangerously-skip-permissions");
+  if (conversation_id) args.push("--conversation", conversation_id);
+  for (const dir of add_dirs ?? []) args.push("--add-dir", dir);
+
+  return { args, workdir, timeoutMs };
 }
 
 const server = new McpServer({
@@ -188,44 +235,9 @@ server.registerTool(
         ),
     },
   },
-  async ({
-    prompt,
-    model,
-    mode,
-    effort,
-    cwd,
-    add_dirs,
-    conversation_id,
-    timeout_ms,
-    skip_permissions,
-  }) => {
-    const timeoutMs = timeout_ms ?? DEFAULT_TIMEOUT_MS;
-    const workdir = cwd ?? process.cwd();
-
-    const args = [
-      "--print",
-      prompt,
-      "--model",
-      model ?? DEFAULT_MODEL,
-      "--mode",
-      mode ?? DEFAULT_MODE,
-      "--output-format",
-      "json",
-      // Keep agy's own deadline just inside ours so it gets the chance to fail
-      // cleanly with an envelope rather than being SIGKILLed mid-write.
-      "--print-timeout",
-      `${Math.max(1, Math.floor((timeoutMs / 1000) * 0.9))}s`,
-      // agy does NOT treat its spawn cwd as the agent's workspace. Without an
-      // explicit --add-dir it reports "you did not have an active workspace",
-      // fails to read the project, and returns an empty response anyway.
-      "--add-dir",
-      workdir,
-    ];
-
-    if (effort) args.push("--effort", effort);
-    if (skip_permissions) args.push("--dangerously-skip-permissions");
-    if (conversation_id) args.push("--conversation", conversation_id);
-    for (const dir of add_dirs ?? []) args.push("--add-dir", dir);
+  async (params) => {
+    const { model, mode } = params;
+    const { args, workdir, timeoutMs } = composeArgs(params);
 
     let result;
     try {
@@ -334,5 +346,21 @@ server.registerTool(
   },
 );
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+/**
+ * Start the transport only when this file is the executed entry point, never
+ * on import: a test importing this module must not have the server attach to
+ * the test runner's own stdin/stdout. realpath handles the bin symlink case.
+ */
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

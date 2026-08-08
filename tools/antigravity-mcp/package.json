@@ -9,7 +9,10 @@
     "antigravity-mcp": "src/server.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/unit.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

@@ -111,7 +111,7 @@ Footprint: `tools/antigravity-mcp/src/server.js`, `tools/antigravity-mcp/package
 `tools/antigravity-mcp/test/unit.test.mjs`.
 Not in this slice: any behavior change to spawning, killing, or tools.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice A1 — unit tests, process-group kill, child lifecycle
 Goal: Put the never-fired guard paths under stub-backed tests; make timeout kills take
@@ -399,6 +399,13 @@ Depends on: Slice E (outcome: mechanism exists), Slice F
 Status: not started
 
 ## Build assumptions
+
+2026-08-07 · Slice A0:
+- R1 seam chosen: exported `runAgy`, `extractEnvelope`, `resolveAgyBin`, and an extracted pure `composeArgs()` returning `{args, workdir, timeoutMs}` · builder call
+- R3 mechanism: `resolveAgyBin(env)` takes an env argument and `runAgy` gained an optional `env` option (default `process.env`, used for both bin resolution and child env) — resolution now happens per spawn, behavior unchanged when the option is omitted · builder call
+- R2 guard compares `import.meta.url` to `pathToFileURL(realpathSync(argv[1]))` so the package `bin` symlink still starts the transport · builder call
+- R5's placeholder test imports and exercises the R1/R3 exports, since no AC in the slice checks them directly · builder call
+
 ## Deviations
 ## Discovered
 ## Punch list
