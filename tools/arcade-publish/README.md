@@ -56,15 +56,21 @@ Then create the config, which is **not** in this repo and never should be:
 ```sh
 mkdir -p ~/.config/line7
 cat > ~/.config/line7/arcade.json <<'JSON'
-{ "password": "<the live /admin password>", "base": "https://line7.works" }
+{ "password": "<the live /admin password>", "base": "https://www.line7.works" }
 JSON
 chmod 600 ~/.config/line7/arcade.json
 ```
 
-`base` must be `https://` — the admin password is sent on every request. The
-script refuses redirects for the same reason: a cross-origin hop would drop the
-session cookie, and a redirected login would re-send the password body to
-wherever it pointed.
+Two things about `base`, both of which bit us on day one:
+
+- It must be the canonical **`www`** host. The apex `line7.works` 307-redirects
+  to `www`, and this script refuses redirects on purpose — a cross-origin hop
+  would silently drop the session cookie, and a redirected login would re-send
+  the password body to wherever it pointed.
+- It must be `https://`. The admin password rides on every request.
+
+Note that the session cookie effectively *is* the admin password (server design,
+predates this tool). Rotating the password is the only way to revoke it.
 
 ## How it behaves when things go wrong
 
