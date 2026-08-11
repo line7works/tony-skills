@@ -20,6 +20,11 @@ README should say plainly that it is a spec and where the real code lives.
   cannot do (it holds one OAuth grant; a second Gmail replaces the first). Real source,
   installable; runs from this checkout rather than a copy.
 
+- `antigravity-mcp/` — MCP server wrapping Google Antigravity's `agy` CLI, so a Claude
+  Code session can consult Gemini Pro the way it consults Codex. Needed because `agy`
+  consumes MCP servers but does not serve as one, so there is no built-in bridge. Real
+  source, installable; runs from this checkout. Registers as `antigravity`.
+
 - `mcp-obsidian-worker/` — implementation spec for the Cloudflare Worker serving the
   `Obsidian Vault` MCP server on claude.ai web. Spec only; the Worker source is not here
   and may not exist on disk anywhere.

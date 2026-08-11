@@ -19,7 +19,7 @@ Five plugins:
 - `wargame` provides `/wargame` (adversarial pre-mortem of any target — new project, existing feature, or planned change; ranked + verified failure modes, kill criteria, plain-language decision questions).
 - `signoff` provides `/signoff` (independent adversarial review of freshly built work against its spec doc, ending in a signed verdict plus punch list). The back half of `/wargame`: war game before building, sign-off after.
 
-Tony Tools (`tools/`): anything preserved here that Claude Code does not install — macOS automations, dotfiles, scripts, and implementation specs for code that lives elsewhere. Each is a folder with its own `README.md`. Currently two: `gmail-mcp/` (a multi-account Gmail MCP server; real source, installable) and `mcp-obsidian-worker/` (spec only — the Worker source is not in this repo and may not exist on disk anywhere). See `tools/README.md`.
+Tony Tools (`tools/`): anything preserved here that Claude Code does not install — macOS automations, dotfiles, scripts, and implementation specs for code that lives elsewhere. Each is a folder with its own `README.md`. Currently three: `gmail-mcp/` (a multi-account Gmail MCP server; real source, installable), `antigravity-mcp/` (an MCP server wrapping Google Antigravity's `agy` CLI so Claude Code can consult Gemini Pro; real source, installable), and `mcp-obsidian-worker/` (spec only — the Worker source is not in this repo and may not exist on disk anywhere). See `tools/README.md`.
 
 See `README.md` for install and structure.
 
@@ -42,6 +42,7 @@ The `clerk-auditor` agent works the same way, but Tony runs it **user-level, not
 - Its scope ceiling is deliberate: `gmail.modify`, never `https://mail.google.com/`. That makes permanent deletion structurally impossible — worst case is Trash, recoverable for 30 days. Do not widen it to add a delete tool.
 - The `account` alias is optional only when exactly one account is authorized; with several it is required, so mail cannot go out from the wrong inbox by default. Do not add a "default account" fallback. `send_message` requiring `confirm: true` exists for the same reason.
 - The Google Cloud OAuth consent screen must stay on **In production**. On "Testing" Google revokes every refresh token after 7 days, on every machine.
+- `tools/antigravity-mcp/` carries three deliberate workarounds for `agy` behaviour, each verified against v1.1.11. Do not "simplify" them away: it always passes `--add-dir <cwd>` because `agy` does not treat its spawn cwd as the workspace and will otherwise answer from nothing; it treats an empty `response` as an error because a fully-denied headless run still reports `status: SUCCESS` after burning the tokens; and it never spawns the child with inherited stdio, because this process's stdin/stdout is the MCP transport. `--mode plan` is not a write guard (tested: it wrote a file), so `skip_permissions` must stay `false` by default — that is the only real guard.
 - The `brace-expansion` `overrides` pin clears a high-severity advisory reachable through the `googleapis` tree. Keep it when bumping dependencies; re-check with `npm audit`.
 
 ## Workflow
