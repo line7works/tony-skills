@@ -100,8 +100,13 @@ Requirements:
   Tony 2026-08-11; folded into this PR by Tony 2026-08-12).
 Acceptance criteria:
 - AC1: `arcade-publish list` run from a random directory prints the current
-  gallery — verify: manual: run it, confirm seeds print and the symlink target
-  is the plugin path (`readlink ~/.local/bin/arcade-publish`).
+  gallery, and the installed command resolves the CLI in the repo — verify:
+  manual: run it, confirm seeds print, and confirm the command reaches
+  `plugins/arcade/assets/arcade-publish`. (Amended 2026-08-12 after the Slice A
+  recheck: this criterion originally required `readlink ~/.local/bin/arcade-publish`
+  to print the plugin path. The fix for the branch-dependent-symlink finding
+  replaced that symlink with a launcher script, so `readlink` now correctly
+  returns nothing and the original wording would grade the fix as a regression.)
 - AC2: Exactly one copy of the executable exists in the repo — verify: manual:
   `git ls-files | grep arcade-publish` shows the executable only under
   `plugins/arcade/assets/`.
@@ -113,7 +118,7 @@ Acceptance criteria:
 Footprint: `plugins/arcade/.claude-plugin/plugin.json`,
 `plugins/arcade/assets/arcade-publish`, `plugins/arcade/assets/README.md`,
 `tools/arcade-publish/README.md` (new pointer), `tools/README.md`,
-`.gitignore`, `~/.local/bin/arcade-publish` (symlink, outside the repo).
+`.gitignore`, `~/.local/bin/arcade-publish` (launcher script, outside the repo).
 Not in this slice: any change to the CLI's code; SKILL.md; marketplace entry.
 Depends on: nothing
 Status: signed off with conditions

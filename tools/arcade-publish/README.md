@@ -1,13 +1,16 @@
 # arcade-publish — findings ledger
 
 **The code moved.** `arcade-publish` and its documentation now live at
-`plugins/arcade/assets/` in this repo, bundled as the `arcade` plugin's asset so
-the `/arcade` skill and the terminal command share one copy. Read
-`plugins/arcade/assets/README.md` for what the tool is, how to install it, and
-how it behaves.
+`plugins/arcade/assets/` in this repo, bundled as the `arcade` plugin's asset.
+Read `plugins/arcade/assets/README.md` for what the tool is, how to install it,
+and how it behaves.
 
-`~/.local/bin/arcade-publish` symlinks to the new location. The command itself is
-unchanged.
+`~/.local/bin/arcade-publish` is a **launcher script**, not a symlink: it probes
+`plugins/arcade/assets/arcade-publish` first and `tools/arcade-publish/arcade-publish`
+second, so the command keeps working on branches cut before the move instead of
+dangling. `readlink` on it returns nothing — that is correct, not a broken
+install. Do not "repair" it with `ln -s`; that reintroduces the dangling-symlink
+failure the launcher exists to prevent. The CLI itself is unchanged.
 
 ## Why this folder still exists
 
