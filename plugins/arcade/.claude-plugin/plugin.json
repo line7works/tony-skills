@@ -1,0 +1,10 @@
+{
+  "name": "arcade",
+  "description": "Publish, update, reorder, and take down pages on the Line 7 Arcade (arcade.line7.works) from any repo. /arcade drives the bundled arcade-publish CLI against line7-site's admin API — no browser, no admin UI. Writes to live production; delete is gated behind an explicit confirmation.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

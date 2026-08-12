@@ -25,10 +25,10 @@ README should say plainly that it is a spec and where the real code lives.
   consumes MCP servers but does not serve as one, so there is no built-in bridge. Real
   source, installable; runs from this checkout. Registers as `antigravity`.
 
-- `arcade-publish/` — one-file Node CLI that publishes, updates, and deletes pages on the
-  Line 7 Arcade (`arcade.line7.works`) from the terminal, driving the same `/api/admin`
-  endpoints as the admin UI. Real source, installable; `~/.local/bin/arcade-publish` is a
-  symlink to the copy here. Writes to live production — no staging, no undo.
+- `arcade-publish/` — the findings ledger (`punch-list.md`) for the arcade-publish CLI,
+  and nothing else. The code moved to `plugins/arcade/assets/` on 2026-08-12 so the
+  `/arcade` skill and the terminal command share one copy; the ledger deliberately stayed
+  behind as the single consolidated list. See `plugins/arcade/assets/README.md`.
 
 - `mcp-obsidian-worker/` — implementation spec for the Cloudflare Worker serving the
   `Obsidian Vault` MCP server on claude.ai web. Spec only; the Worker source is not here
