@@ -11,15 +11,19 @@ Two parts, split by how a thing is consumed rather than what it is:
 
 When something does not obviously fit either, it goes in `tools/` — do not conclude it belongs outside the repo.
 
-Five plugins:
+Seven plugin folders. The first five are catalogued in
+`.claude-plugin/marketplace.json` and installable with `/plugin`; the last two
+are in the tree but not catalogued:
 
 - `sun` provides `/sunrise` (bootstrap a project across every layer) and `/sunset` (archive one reversibly).
 - `clerk` bundles the `clerk-auditor` subagent (Clerk), a strictly read-only auditor that returns a cleanup "punch list" and changes nothing.
 - `forge` provides `/forge` (Claude-driven image generation on Fal.ai — the skill writes prompts, runs vision QA, and renders on-brand images through the bundled `assets/forge.py` CLI).
 - `wargame` provides `/wargame` (adversarial pre-mortem of any target — new project, existing feature, or planned change; ranked + verified failure modes, kill criteria, plain-language decision questions).
 - `signoff` provides `/signoff` (independent adversarial review of freshly built work against its spec doc, ending in a signed verdict plus punch list). The back half of `/wargame`: war game before building, sign-off after.
+- `shutdown` provides `/shutdown` (settle up before a Terminal restart or account switch: read-only git report, a self-contained handoff in `~/Documents/handoffs/`, and a memory pointer; `/shutdown all` sweeps this machine's other sessions). Not in `marketplace.json`, and it carries no `.claude-plugin/plugin.json` — only `skills/shutdown/SKILL.md`.
+- `arcade` bundles the `arcade-publish` CLI in `plugins/arcade/assets/` — publish, update, and delete pages on the Line 7 Arcade from the terminal. The `/arcade` skill that drives it is not built yet (`docs/arcade-skill-build-plan.md`); until it lands the plugin stays out of `marketplace.json`. Writes to live production.
 
-Tony Tools (`tools/`): anything preserved here that Claude Code does not install — macOS automations, dotfiles, scripts, and implementation specs for code that lives elsewhere. Each is a folder with its own `README.md`. Currently three: `gmail-mcp/` (a multi-account Gmail MCP server; real source, installable), `antigravity-mcp/` (an MCP server wrapping Google Antigravity's `agy` CLI so Claude Code can consult Gemini Pro; real source, installable), and `mcp-obsidian-worker/` (spec only — the Worker source is not in this repo and may not exist on disk anywhere). See `tools/README.md`.
+Tony Tools (`tools/`): anything preserved here that Claude Code does not install — macOS automations, dotfiles, scripts, and implementation specs for code that lives elsewhere. Each is a folder with its own `README.md`. Currently four: `gmail-mcp/` (a multi-account Gmail MCP server; real source, installable), `antigravity-mcp/` (an MCP server wrapping Google Antigravity's `agy` CLI so Claude Code can consult Gemini Pro; real source, installable), `mcp-obsidian-worker/` (spec only — the Worker source is not in this repo and may not exist on disk anywhere), and `arcade-publish/` (the findings ledger and a pointer README; its code moved to `plugins/arcade/assets/` on 2026-08-12 and the ledger deliberately stayed — the one entry here that is documentation rather than a runnable thing). See `tools/README.md`.
 
 See `README.md` for install and structure.
 

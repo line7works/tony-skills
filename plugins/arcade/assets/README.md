@@ -43,15 +43,36 @@ slugs cannot be renamed, because the stable URL is the feature.
 
 ## Install
 
-The canonical copy is this file, bundled as the `arcade` plugin's asset.
-`~/.local/bin/arcade-publish` is a **symlink** to it, so editing the repo copy
-changes the installed command immediately. The `/arcade` skill drives this same
-file through `${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish` — one copy, two front
-doors.
+This file is the source of truth. There are two front doors to it, and they do
+**not** stay in sync automatically:
+
+- **The terminal command.** `~/.local/bin/arcade-publish` is a small launcher
+  that resolves this file in the checkout at run time, so editing the repo copy
+  changes the command immediately. It probes the plugin path first and the old
+  `tools/arcade-publish/` path second, so it keeps working on branches cut
+  before the 2026-08-12 move instead of dangling.
+- **The `/arcade` skill** (from Slice D onward) reaches its own installed copy
+  via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}/assets/arcade-publish`.
+  Installing a skill — user-level by copying, or through the plugin
+  marketplace — **produces a real copy**, not a link. That copy goes stale the
+  moment this file changes.
+
+So after editing this file, reinstall the skill (`/plugin update arcade@tony-skills`,
+or re-copy for a user-level install) or the skill and the terminal will run
+different versions against live production. This is the same reinstall rule
+CLAUDE.md states for every skill in this repo; bundling the CLI does not exempt
+it.
 
 ```sh
-ln -s ~/Developer/tony-skills/plugins/arcade/assets/arcade-publish ~/.local/bin/arcade-publish
-chmod +x ~/Developer/tony-skills/plugins/arcade/assets/arcade-publish
+install -m 0755 /dev/stdin ~/.local/bin/arcade-publish <<'SH'
+#!/bin/sh
+REPO="$HOME/Developer/tony-skills"
+for c in "$REPO/plugins/arcade/assets/arcade-publish" \
+         "$REPO/tools/arcade-publish/arcade-publish"; do
+  [ -f "$c" ] && exec node "$c" "$@"
+done
+echo "arcade-publish: cannot find the CLI in $REPO" >&2; exit 127
+SH
 ```
 
 Then create the config, which is **not** in this repo and never should be:

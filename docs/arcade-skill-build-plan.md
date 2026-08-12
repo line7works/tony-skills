@@ -19,10 +19,16 @@ Constraints:
   resolves both as an installed plugin and as a user-level skill.
 - Marketplace: new plugins register in `.claude-plugin/marketplace.json`.
 - The CLI is plain Node (single file, no dependencies). Keep it that way.
-- Single copy of the CLI. Tony chose: the real copy moves into the plugin at
-  `plugins/arcade/assets/arcade-publish`; `~/.local/bin/arcade-publish` is
-  repointed there; `tools/arcade-publish/` keeps only `punch-list.md` and a
-  pointer README. No second copy anywhere.
+- One source of truth for the CLI. Tony chose: the real copy moves into the
+  plugin at `plugins/arcade/assets/arcade-publish`; the terminal command
+  resolves that path at run time; `tools/arcade-publish/` keeps only
+  `punch-list.md` and a pointer README. No second copy **in the repo**.
+  (Corrected 2026-08-12 after Slice A review: the original wording promised no
+  second copy anywhere, which is unachievable — installing a skill user-level
+  or through the marketplace produces a real copy by design, so an installed
+  `/arcade` necessarily has its own. The repo holds one canonical file; the
+  installed copy is derived and refreshed by reinstalling. Slice D must
+  document that reinstall step rather than claim parity.)
 - The punch list stays the single consolidated ledger at
   `tools/arcade-publish/punch-list.md` (deliberate; it was split once and the
   same bug got re-reported as new). It does not move with the code.

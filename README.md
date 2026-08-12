@@ -9,15 +9,18 @@ The test for belonging here is "was this made on one of these Macs and should it
 outlive the machine," not "is it a Claude Code skill." Two parts, split by how a
 thing is consumed rather than what it is:
 
-- a **plugin marketplace** under `plugins/` (five Claude Code plugins) — what
-  Claude Code installs and runs
+- a **plugin marketplace** under `plugins/` (seven Claude Code plugin folders,
+  five of them catalogued in `marketplace.json`) — what Claude Code installs
+  and runs
 - a **[Tony Tools](tools/)** category under `tools/` — everything else: macOS
   automations, dotfiles, scripts, and implementation specs for code that lives
   elsewhere
 
 ### Plugins
 
-Five plugins.
+Seven plugin folders. Five are catalogued in `.claude-plugin/marketplace.json`
+and installable with `/plugin`; `shutdown` and `arcade` are in the tree but not
+yet catalogued.
 
 **`sun`** provides two slash commands:
 
@@ -38,6 +41,19 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 - `/signoff` runs an independent adversarial review of freshly built work and ends in a signed verdict. It is the back half of `/wargame`: war game before building, sign-off after. It auto-detects what was built (working diff, branch diff, or a named slice), finds the phase/slice doc and treats it as acceptance criteria, then spawns fresh reviewers who did **not** write the code and never receive the author's rationale — with a mandate to reject rather than bless. Lean by default (three lenses: spec conformance, correctness, seams against shipped code); DEEP adds security and test-quality. Findings need `file:line` plus a concrete failure scenario or they get cut, and blockers are re-verified against source before reporting. Output is a compact chat verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list and a "tried and failed to break" line, so a clean review can't hide behind "looks good." Report-only; it never fixes what it finds. Shares wargame's Opus-class floor.
 
+**`shutdown`** provides `/shutdown` — settle up before restarting Terminal or
+switching accounts: verify and report git state read-only, write a self-contained
+handoff to `~/Documents/handoffs/`, and save a memory pointer so the next session
+finds it. `/shutdown all` sweeps every open terminal session on the same machine.
+Not catalogued in `marketplace.json`, and unlike the others it carries no
+`.claude-plugin/plugin.json` — only `skills/shutdown/SKILL.md`.
+
+**`arcade`** bundles the `arcade-publish` CLI (`plugins/arcade/assets/`), which
+publishes, updates, reorders, and takes down pages on the Line 7 Arcade
+(`arcade.line7.works`) from the terminal. The `/arcade` skill that drives it is
+not built yet — see `docs/arcade-skill-build-plan.md`. Not catalogued in
+`marketplace.json` until that skill lands. Writes to live production.
+
 ### Tony Tools
 
 Everything preserved here that Claude Code does **not** install, so it lives
@@ -46,7 +62,7 @@ covers things you copy onto a Mac directly (macOS automations, dotfiles,
 scripts) and also implementation specs for code that lives somewhere else. See
 [`tools/README.md`](tools/) for the category.
 
-Currently two:
+Currently four:
 
 - **`gmail-mcp/`** — a multi-account Gmail MCP server, registered with Claude
   Code as `gmail`. Reaches every authorized inbox at once by alias, which the
@@ -54,9 +70,18 @@ Currently two:
   a second Gmail replaces the first. Real source and installable, unlike the
   spec below. Runs from this checkout rather than a copy, so `git pull` updates
   it. Secrets live in `~/.gmail-mcp/`, never here.
+- **`antigravity-mcp/`** — an MCP server wrapping Google Antigravity's `agy`
+  CLI, so a Claude Code session can consult Gemini Pro the way it consults
+  Codex. Needed because `agy` consumes MCP servers but does not serve as one.
+  Real source, installable; registers as `antigravity`.
 - **`mcp-obsidian-worker/`** — the implementation spec for the Cloudflare Worker
   serving the `Obsidian Vault` MCP server on claude.ai web. Spec only; the
   Worker source is not in this repo.
+- **`arcade-publish/`** — the findings ledger (`punch-list.md`) for the
+  arcade-publish CLI, and a pointer README. The code moved to
+  `plugins/arcade/assets/` on 2026-08-12; the ledger deliberately stayed behind
+  as the single consolidated list. The one entry here that is documentation
+  rather than a runnable thing.
 
 (`copy-on-select` was sunset 2026-07-21 and is still in git history.)
 
@@ -64,7 +89,8 @@ Currently two:
 
 ```
 tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, forge, wargame, and signoff plugins)
+├── .claude-plugin/marketplace.json   catalog (lists sun, clerk, forge, wargame, signoff — not shutdown or arcade)
+├── docs/                             build plans and their punch lists
 ├── plugins/                          Claude Code plugins (installed via /plugin)
 │   ├── sun/
 │   │   ├── .claude-plugin/plugin.json
@@ -83,9 +109,14 @@ tony-skills/
 │   ├── wargame/
 │   │   ├── .claude-plugin/plugin.json
 │   │   └── skills/wargame/SKILL.md
-│   └── signoff/
+│   ├── signoff/
+│   │   ├── .claude-plugin/plugin.json
+│   │   └── skills/signoff/SKILL.md
+│   ├── shutdown/                     not in the catalog; no plugin.json
+│   │   └── skills/shutdown/SKILL.md
+│   └── arcade/                       not in the catalog until /arcade lands
 │       ├── .claude-plugin/plugin.json
-│       └── skills/signoff/SKILL.md
+│       └── assets/                   arcade-publish (CLI), README.md
 └── tools/                            preserved work Claude Code doesn't install
     ├── README.md
     ├── gmail-mcp/                    multi-account Gmail MCP server (real source)
@@ -93,6 +124,10 @@ tony-skills/
     │   ├── src/                      store.ts, auth.ts, gmail.ts, server.ts
     │   ├── package.json
     │   └── tsconfig.json
+    ├── antigravity-mcp/              MCP bridge to Google Antigravity's agy CLI
+    ├── arcade-publish/               findings ledger + pointer (code lives in plugins/arcade/)
+    │   ├── README.md
+    │   └── punch-list.md
     └── mcp-obsidian-worker/          spec for the claude.ai Obsidian MCP Worker
         ├── README.md
         └── IMPLEMENTATION.md
