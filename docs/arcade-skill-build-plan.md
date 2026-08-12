@@ -110,7 +110,7 @@ Footprint: `plugins/arcade/.claude-plugin/plugin.json`,
 `.gitignore`, `~/.local/bin/arcade-publish` (symlink, outside the repo).
 Not in this slice: any change to the CLI's code; SKILL.md; marketplace entry.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice B — rewire onto per-resource endpoints, gate the delete
 
@@ -260,8 +260,32 @@ Status: not started
 
 ## Build assumptions
 
+### Slice A · 2026-08-12
+- AC1's verification ran `list` against live production `line7.works`; reading the
+  gallery is non-destructive and the localhost exception does not exist until
+  Slice B · builder call
+- `plugins/arcade/assets/README.md`'s stale pointer to a findings ledger at
+  `~/Developer/line7-site/docs/punch-list.md` was corrected to
+  `tools/arcade-publish/punch-list.md` while rewriting that file's location
+  sections; leaving a contradictory ledger pointer would have fought R3 · builder call
+
 ## Deviations
 
+### Slice A · 2026-08-12
+- AC3 as written expects "the three PR #17 commits" to appear under
+  `git log --follow`; PR #17 was squash-merged, so the pre-move history is a
+  single commit `9756cd2`. Criterion's intent (history survives the move) is met
+  and verified; the literal count cannot be · builder call
+
 ## Discovered
+
+### Slice A · 2026-08-12
+- `CLAUDE.md` says Tony Tools is "Currently three" and lists them; there are now
+  four folders under `tools/`, and `arcade-publish/` changed character in this
+  slice from real source to ledger-plus-pointer. Pre-existing staleness from PR
+  #17, worsened here. Not in any slice's footprint — logged, not built
+- `plugins/arcade/assets/README.md` still documents the whole-blob
+  `PUT /api/admin` behavior under "How it behaves when things go wrong"; Slice B
+  removes that code path and must revise those paragraphs
 
 ## Punch list
