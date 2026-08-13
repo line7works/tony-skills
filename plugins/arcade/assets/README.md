@@ -5,11 +5,12 @@ the admin UI or a browser. One Node script, no dependencies.
 
 The arcade itself is the public HTML host at `arcade.line7.works`, served by the
 `line7-site` repo. This tool drives the same `/api/admin` endpoints the Arcade
-tab in `/admin` uses: session login → multipart upload → rewrite the `seeds`
-array.
+tab in `/admin` uses: session login → multipart upload → a per-seed write on
+`/api/admin/seeds`.
 
 **This writes to live production.** There is no staging arcade and no undo.
-`delete` removes a live page and its uploaded file immediately.
+`delete` removes a live page and its uploaded file — but never without printing
+what it is about to remove and getting a yes first.
 
 ## Commands
 
@@ -17,11 +18,18 @@ array.
 arcade-publish list
 arcade-publish publish <file.html> --name "Name" [--slug my-page] [--featured]
 arcade-publish update <slug> <file.html> [--name "New Name"] [--featured|--no-featured]
-arcade-publish delete <slug>
+arcade-publish delete <slug> [--yes]
 ```
 
+- `list` prints the gallery in the site's own menu order — featured pages first,
+  then each block by its `order` value, both of which are shown.
 - `publish` refuses a slug that already exists — it never silently overwrites.
-  Use `update` to replace a page's contents.
+  Use `update` to replace a page's contents. The server is the judge: a slug
+  that gets taken mid-upload comes back as a clean error, and the orphaned
+  upload is cleaned up rather than left behind.
+- `delete` shows the target's slug, name, and URL, then asks. On a terminal it
+  waits for `y`; with no terminal it refuses outright unless `--yes` is passed.
+  It never proceeds on silence.
 - `update` keeps the slug and public URL stable, which is the point: a page can
   be revised in place and anyone holding the link still lands on it. It can also
   rename the page or toggle its featured flag in the same call.
@@ -91,7 +99,11 @@ Two things about `base`, both of which bit us on day one:
   to `www`, and this script refuses redirects on purpose — a cross-origin hop
   would silently drop the session cookie, and a redirected login would re-send
   the password body to wherever it pointed.
-- It must be `https://`. The admin password rides on every request.
+- It must be `https://`. The admin password rides on every request. The one
+  exception is a dev server on this machine — `http://localhost[:port]` or
+  `http://127.0.0.1[:port]` — where the password never leaves the loopback
+  interface. Nothing else in `http://` is accepted, and the check runs before
+  any network call.
 
 Note that the session cookie effectively *is* the admin password (server design,
 predates this tool). Rotating the password is the only way to revoke it.
@@ -100,12 +112,20 @@ predates this tool). Rotating the password is the only way to revoke it.
 
 Worth knowing before trusting it in a script:
 
-- The seed list is one array replaced wholesale by `PUT /api/admin`, so it is
-  last-write-wins. Every destructive command re-reads the list immediately
-  before writing to keep that window as small as one round trip. It is narrowed,
-  not closed — don't drive this while editing the same page in the admin UI.
+- `list`, `publish`, and `delete` each touch a single seed through
+  `/api/admin/seeds`, so they cannot clobber a concurrent admin edit to any
+  other page — the whole-document write those commands used to do is gone.
+- `update` is the exception, and still writes the whole document via
+  `PUT /api/admin`: no per-seed endpoint can change an existing seed's `url`,
+  so there is nowhere else to point it at a freshly uploaded file. That one
+  command remains last-write-wins. It re-reads immediately before writing to
+  keep the window to one round trip — narrowed, not closed. Don't run `update`
+  while editing the same page in the admin UI.
 - `update` uploads the new file *before* touching the registry. If registration
   fails, the new upload is rolled back and the existing page is untouched.
+- `publish` cleans up after itself: if the seed cannot be registered — slug
+  taken, bad name, anything — the upload it just made is deleted. If that
+  cleanup also fails, the error says so and names the orphaned file.
 - `delete` unregisters the seed first and removes the file second, so a failure
   between the two leaves an orphaned file (harmless) rather than a live page
   pointing at nothing.
@@ -115,13 +135,15 @@ Worth knowing before trusting it in a script:
 
 ## Caveats
 
-- Deleting a page while the admin UI is open in a browser can resurrect it: that
-  tab holds a stale copy of the seed list in memory and any save there re-sends
-  it. The page comes back in the gallery pointing at a file that no longer
-  exists. Reload the admin tab after using this tool.
-- The success URLs print `arcade.line7.works` hardcoded, while the canonical
-  host is env-derived server-side (`lib/arcadeHost.ts`). If that host ever
-  changes, the printed link goes stale before the tool does.
+- Running `update` while the admin UI is open in a browser can still resurrect a
+  page deleted from that tab, because `update` sends the whole document. The
+  other commands no longer can. Reload the admin tab after using `update`.
+- Page URLs follow `base`, so a run against a local dev server prints local
+  links rather than production ones — which is what makes the `delete` preview
+  trustworthy. The `Gallery:` line printed by `publish` is still hardcoded to
+  `line7.works`, as is the fallback arcade host, while the canonical host is
+  env-derived server-side (`lib/arcadeHost.ts`). If that host ever changes,
+  those printed links go stale before the tool does.
 
 ## History
 
