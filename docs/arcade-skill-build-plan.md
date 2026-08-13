@@ -280,6 +280,15 @@ Status: not started
   `tools/arcade-publish/punch-list.md` while rewriting that file's location
   sections; leaving a contradictory ledger pointer would have fought R3 · builder call
 
+### Slice B · 2026-08-13
+- Verification runs against a throwaway `git worktree` of line7-site at `main`
+  (commit `ebceeaa`, the PR #23 merge) under the session scratchpad, not against
+  `~/Developer/line7-site` itself: that checkout sits on `feat/arcade-drag-reorder`,
+  8 commits ahead of `main` with unmerged changes to both seeds routes, and its
+  `data/site.json` and `public/uploads/` are tracked files a fixture would dirty.
+  The worktree tests the contract the plan pins (PR #23) and leaves that repo's
+  working tree untouched · builder call
+
 ## Deviations
 
 ### Slice A · 2026-08-12
@@ -298,6 +307,25 @@ Status: not started
 - `plugins/arcade/assets/README.md` still documents the whole-blob
   `PUT /api/admin` behavior under "How it behaves when things go wrong"; Slice B
   removes that code path and must revise those paragraphs
+
+### Slice B · 2026-08-13 — build STOPPED before any code was written
+- R3 cannot be built against the final API. It requires
+  `PATCH /api/admin/seeds/<id>` "with the new url/name/featured", but the shipped
+  PATCH (line7-site `main`, `app/api/admin/seeds/[id]/route.ts:20-31`) builds its
+  patch from `name | slug | featured | order` only and drops `url` — matching this
+  plan's own Constraints line, which also omits `url`. Verified live against the
+  dev server: `PATCH {url}` alone → 400 `nothing to update`; `PATCH {url, name}` →
+  **200 OK with the seed still pointing at the old blob**. The CLI would read that
+  200 as success and then run its existing old-blob cleanup, leaving the seed
+  pointing at a deleted file — a live page that 404s. `uploadedAt` is likewise
+  unrefreshable
+- Confirming it is a real gap, not a misreading: the shipped admin UI has no
+  replace-the-file operation either (`sections/admin/Arcade.tsx` on `main` does
+  upload+POST, PATCH name/featured, reorder, delete — nothing that changes an
+  existing seed's `url`). File replacement is a CLI-only capability the
+  per-resource API never gained
+- R5 is entangled: `update` is the last `PUT /api/admin` caller, so AC3 cannot
+  pass while R3 is unresolved. R1, R2, R4, R6, R7 are unaffected and buildable
 
 ## Punch list
 
