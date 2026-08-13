@@ -288,8 +288,36 @@ Status: not started
   `data/site.json` and `public/uploads/` are tracked files a fixture would dirty.
   The worktree tests the contract the plan pins (PR #23) and leaves that repo's
   working tree untouched · builder call
+- The CLI reads its config from `~/.config/line7/arcade.json` with no override,
+  so verification ran every command under a sandboxed `HOME` in the scratchpad
+  holding a localhost-pointed config. Tony's real config was never read or
+  written, and no run could have reached production even by mistake · builder call
+- Declining the delete prompt exits 1, not 0. The spec fixes the exit code for
+  the non-TTY refusal ("exits non-zero") but is silent on the interactive `n`.
+  Both mean the same thing to a caller — the delete did not happen — so they
+  report the same way · builder call
+- `pageUrl()` derives printed page links from `base` instead of the hardcoded
+  `arcade.line7.works`. Traceable to R4, which requires delete's preview to name
+  the target's "live URL": against a dev server the hardcoded host names a
+  different page, which would defeat the gate. Applied to `list` and `publish`
+  output too, for one consistent answer to "which page is this". This overlaps
+  an open ledger MINOR (`arcade-publish:83`, `:269`) the plan's Out of scope
+  leaves on the ledger — flagged rather than claimed as a fix, and the
+  `Gallery:` line is still hardcoded · builder call
 
 ## Deviations
+
+### Slice B · 2026-08-13
+- R3 and R5 NOT BUILT. R3 is unbuildable against the final API (see `## Discovered`);
+  R5 is entangled because `update` is the last `PUT /api/admin` caller. `update`
+  was left exactly as Slice A left it rather than half-rewired. AC3 fails by
+  design: two `/api/admin` call sites remain, both inside the update path.
+  Descoped and reported, not absorbed — resolving it is Tony's call · builder call
+- R2's "map 400 to a clear error" is implemented and executed, but the only way
+  to reach a server 400 is a whitespace-only `--name` with an explicit `--slug`:
+  the server's slug rules (`isUsableSlug`) are byte-identical to the CLI's own
+  client-side checks, so every slug the server would reject is already refused
+  before upload · builder call
 
 ### Slice A · 2026-08-12
 - AC3 as written expects "the three PR #17 commits" to appear under
@@ -326,6 +354,17 @@ Status: not started
   per-resource API never gained
 - R5 is entangled: `update` is the last `PUT /api/admin` caller, so AC3 cannot
   pass while R3 is unresolved. R1, R2, R4, R6, R7 are unaffected and buildable
+- Resolved after the stop: R1, R2, R4, R6, R7 were built and verified; R3 and R5
+  remain open pending a decision between (A) `update` becomes delete-then-recreate,
+  which makes it internally destructive and contradicts what Slice D R4 wants the
+  skill to say, or (B) add `url` to the server's PATCH allow-list, which the plan's
+  Out of scope currently forbids. No third option exists: the upload endpoint mints
+  its own id, so a blob cannot be overwritten in place either
+- Incidental, not built: with `publish` now going through the server, a
+  whitespace-only `--name` fails loudly with a 400 instead of storing a blank
+  gallery label. That is the open ledger MINOR at `~/.local/bin/arcade-publish:247`
+  going away as a side effect of the server owning validation — noted so a later
+  recheck does not read it as an unexplained disappearance
 
 ## Punch list
 
