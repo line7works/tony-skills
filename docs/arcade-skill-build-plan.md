@@ -121,7 +121,7 @@ Footprint: `plugins/arcade/.claude-plugin/plugin.json`,
 `.gitignore`, `~/.local/bin/arcade-publish` (launcher script, outside the repo).
 Not in this slice: any change to the CLI's code; SKILL.md; marketplace entry.
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Slice B — rewire onto per-resource endpoints, gate the delete
 
@@ -328,3 +328,7 @@ Status: not started
 - MAJOR · `~/.claude/projects/-Users-tonycoon-Developer-jpb/memory/arcade-publish-location.md:11-17` · (the note documenting this hazard gives the old path as the recovery route) · fixed — both offending statements replaced, and the copy-into-`tools/` recovery is now explicitly prohibited
 - MAJOR · `tools/arcade-publish/README.md:9` · broke: still states "`~/.local/bin/arcade-publish` symlinks to the new location" after the symlink was replaced by a launcher — a session diagnosing a publish failure follows this pointer, runs `readlink`, gets nothing, and "repairs" it with `ln -sf`, reinstating the exact dangling-symlink defect the first item fixed; contradicts three other documents that all say launcher · Slice A fix pass
 - MAJOR · `docs/arcade-skill-build-plan.md:103-104,116` · broke: Slice A's AC1 verify line still requires `readlink ~/.local/bin/arcade-publish` to show the plugin path, and the Footprint still labels that file "(symlink, outside the repo)" — `readlink` now exits non-zero on a regular file, so a re-verification pass running AC1 verbatim grades the slice as regressed when the launcher is the fix · Slice A fix pass
+
+### 2026-08-12 — recheck: Slice A (second pass)
+- MAJOR · `tools/arcade-publish/README.md:9` · (still describes the installed command as a symlink after it became a launcher, leading a reader to reinstate it with `ln -s`) · fixed — the file now names the launcher, states that `readlink` returning nothing is correct rather than a broken install, and explicitly forbids the `ln -s` "repair"; verified against reality (`file` reports a POSIX shell script, `readlink` exits 1) and cross-checked as consistent with `tools/README.md` and `plugins/arcade/assets/README.md` (post-fix text at `tools/arcade-publish/README.md:8-13`)
+- MAJOR · `docs/arcade-skill-build-plan.md:103-104,116` · (AC1 requires `readlink` to succeed and the Footprint labels the file a symlink, so the criterion cannot pass against its own fix) · fixed — AC1 executed verbatim as amended and both halves passed: `arcade-publish list` from an unrelated directory exited 0 printing 7 seeds, and `sh -x` on the launcher showed it exec'ing `plugins/arcade/assets/arcade-publish`. Reviewer specifically checked whether the criterion had been weakened to pass and found it retains the reachability assertion `readlink` existed to prove; only the copy-pasteable one-liner was lost (post-fix text at `docs/arcade-skill-build-plan.md:102-109,121`)
