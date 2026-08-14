@@ -187,7 +187,7 @@ Footprint: `plugins/arcade/assets/arcade-publish`,
 `plugins/arcade/assets/README.md` (usage updates).
 Not in this slice: reorder/feature commands; SKILL.md.
 Depends on: Slice A
-Status: signed off with conditions
+Status: signed off
 
 ## Slice C — reorder and feature commands
 
@@ -522,3 +522,13 @@ Fix-introduced defects: none found (retry reassignment, not-found path, and env-
 - MINOR · `plugins/arcade/assets/arcade-publish:396-428` · duplicate or contradictory flags silently last-win (`--featured … --no-featured` lands unfeatured with no complaint) · contradicts the parser's own strictness rationale · Slice B review (correctness)
 - MINOR · `plugins/arcade/assets/arcade-publish:245,343` · `update`/`delete` slugify the lookup argument, so a stored slug the slugifier cannot produce (e.g. the known trailing-hyphen case) is unaddressable — the seed becomes CLI-immortal, admin UI only · Slice B review (correctness)
 - MINOR · line7-site `lib/arcadeSeeds.ts:103-105` + `app/api/admin/route.ts:27-28` · server comments still justify the raw-writable `seeds` key "for the arcade-publish CLI", which no longer uses it, and no owning-plan record notes the consumer is gone · editing line7-site is out of scope under this plan — record-keeping only · Slice B review (seams)
+
+### 2026-08-14 — recheck: Slice B
+Fixes in ceb2269 verified by a fresh independent reviewer; EOF and stale-200
+scenarios executed (pty against a line7-site worktree at 0659cb7 on port 3215,
+and a stub server for the stale-PATCH mode), docs read and cross-checked
+against the server doc. No fix-introduced defects (double-resolve, rollback
+honesty, and the absent-previousUrl path examined and cleared).
+- MAJOR · `plugins/arcade/assets/arcade-publish:324-338` · (EOF at the delete prompt exits 0 with no message and no delete) · fixed — `rl.on("close")` with an answered flag resolves no; executed `\004` on a pty → `Aborted` + exit 1, seed intact; `n` and `y` regressions both correct (post-fix code at `arcade-publish:339-361`)
+- MAJOR · `plugins/arcade/assets/arcade-publish:303-316` · (update trusts a PATCH 200 without checking the seed repointed) · fixed — `body.seed.url !== upBody.url` → rollback + fail; executed against a stale-mode stub: exit 1, clear message, stub logged the rollback DELETE of the new upload; happy mode still exits 0 and cleans up `previousUrl` (post-fix code at `arcade-publish:309-321`)
+- MAJOR · `plugins/arcade/assets/README.md:118-119` and `arcade-publish:16` · (uncaveated "id, slug, and order all survive" claim) · fixed — both now carry the featured-toggle order-restamp caveat, verified accurate against line7-site `docs/arcade/README.md:90-92`; no uncaveated survival claim remains
