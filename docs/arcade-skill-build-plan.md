@@ -187,7 +187,7 @@ Footprint: `plugins/arcade/assets/arcade-publish`,
 `plugins/arcade/assets/README.md` (usage updates).
 Not in this slice: reorder/feature commands; SKILL.md.
 Depends on: Slice A
-Status: not started
+Status: built
 
 ## Slice C — reorder and feature commands
 
@@ -311,6 +311,23 @@ Status: not started
   an open ledger MINOR (`arcade-publish:83`, `:269`) the plan's Out of scope
   leaves on the ledger — flagged rather than claimed as a fix, and the
   `Gallery:` line is still hardcoded · builder call
+
+### Slice B · 2026-08-14 (R3/R5 completion build)
+- `update`'s success line prints via `pageUrl()` instead of the hardcoded
+  `arcade.line7.works` host — extends the prior build's recorded `pageUrl()`
+  decision to the last command output still hardcoding it (the `Gallery:` line
+  stays hardcoded, unchanged) · builder call
+- `update`'s upload-response guard now requires only `url`, no longer `id`: the
+  upload's id never reaches the seed under PATCH, so demanding it would fail
+  runs the server considers valid · builder call
+- R3's rollback-on-failure-after-upload (deleteUpload then fail, on PATCH
+  404/409/400/other) is implemented but was not live-exercised: no AC names it,
+  and forcing a PATCH failure mid-run means racing the server. The path mirrors
+  publish's rollback, which the prior build exercised live · builder call
+- AC2's interactive-`n` leg ran under a pty from `script(1)`; the first attempt
+  delivered EOF before the prompt attached and reported exit 0 with no delete —
+  a harness artifact. With stdin held open the CLI printed Aborted and exited 1,
+  seed present · builder call
 
 ## Deviations
 
