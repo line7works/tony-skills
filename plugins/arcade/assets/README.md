@@ -112,18 +112,15 @@ predates this tool). Rotating the password is the only way to revoke it.
 
 Worth knowing before trusting it in a script:
 
-- `list`, `publish`, and `delete` each touch a single seed through
-  `/api/admin/seeds`, so they cannot clobber a concurrent admin edit to any
-  other page — the whole-document write those commands used to do is gone.
-- `update` is the exception, and still writes the whole document via
-  `PUT /api/admin`. That is no longer forced — since 2026-08-14 the server's
-  per-seed PATCH accepts `url` — but this CLI has not been rewired onto it yet
-  (Slice B R3/R5 of the arcade-skill build plan). Until then that one
-  command remains last-write-wins. It re-reads immediately before writing to
-  keep the window to one round trip — narrowed, not closed. Don't run `update`
-  while editing the same page in the admin UI.
-- `update` uploads the new file *before* touching the registry. If registration
-  fails, the new upload is rolled back and the existing page is untouched.
+- All four commands touch a single seed through `/api/admin/seeds`, so none of
+  them can clobber a concurrent admin edit to any other page — the
+  whole-document write this tool used to do is gone entirely.
+- `update` uploads the new file, then `PATCH`es the existing seed's `url`. The
+  seed's id, slug, and `order` all survive, and the server stamps `uploadedAt`
+  itself (only when the url actually changes). If the PATCH fails — seed
+  deleted mid-upload, url owned by another seed, anything — the new upload is
+  rolled back and the existing page is untouched. On success the server names
+  the old file (`previousUrl`) and the CLI deletes it.
 - `publish` cleans up after itself: if the seed cannot be registered — slug
   taken, bad name, anything — the upload it just made is deleted. If that
   cleanup also fails, the error says so and names the orphaned file.
@@ -136,9 +133,10 @@ Worth knowing before trusting it in a script:
 
 ## Caveats
 
-- Running `update` while the admin UI is open in a browser can still resurrect a
-  page deleted from that tab, because `update` sends the whole document. The
-  other commands no longer can. Reload the admin tab after using `update`.
+- Replacing the file on a *legacy* seed — one stored before the `order` field
+  existed — moves it to the end of its block, because the server restamps
+  `uploadedAt` and that is the legacy block's tiebreak. Deliberate server
+  behavior, and the caller cannot opt out; don't compensate by sending `order`.
 - Page URLs follow `base`, so a run against a local dev server prints local
   links rather than production ones — which is what makes the `delete` preview
   trustworthy. The `Gallery:` line printed by `publish` is still hardcoded to

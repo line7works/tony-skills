@@ -10,16 +10,12 @@
  *
  * Config: ~/.config/line7/arcade.json  →  { "password": "...", "base": "https://line7.works" }
  *
- * list, publish, and delete run on the per-resource /api/admin/seeds endpoints:
- * each one touches a single seed, so a concurrent admin edit can no longer be
- * clobbered by a whole-document write. delete never fires without printing its
+ * All four commands run on the per-resource /api/admin/seeds endpoints: each
+ * one touches a single seed, so a concurrent admin edit can no longer be
+ * clobbered by a whole-document write. update uploads the new file, then
+ * PATCHes the existing seed's url — id, slug, and order all survive, and the
+ * server stamps uploadedAt itself. delete never fires without printing its
  * target first and getting a yes — interactively, or via --yes.
- *
- * update still uses the legacy whole-document PUT /api/admin — with all its
- * hazards (last-write-wins, whole-document GET, can resurrect a page deleted
- * from an open admin tab). Since 2026-08-14 the server's per-resource PATCH
- * DOES accept `url`, so this is no longer forced; rewiring update onto it is
- * Slice B R3/R5 of docs/arcade-skill-build-plan.md, not yet built.
  *
  * `base` must be https, except for a local dev server on localhost/127.0.0.1.
  */
@@ -124,27 +120,6 @@ async function listSeeds(cfg, cookie) {
     fail("the gallery response had no seed list — refusing to continue");
   }
   return data.seeds;
-}
-
-// Whole-document read, kept for `update` alone: it is the last caller of the
-// legacy PUT /api/admin. The server's PATCH accepts `url` as of 2026-08-14, so
-// this path is legacy by inertia, not necessity — rewiring is Slice B R3/R5.
-// Everything else reads through listSeeds() above.
-async function getSeeds(cfg, cookie) {
-  const res = await send(cfg.base + "/api/admin", { headers: { Cookie: cookie } });
-  if (!res.ok) fail(`reading site data failed (${res.status})`);
-  const data = await res.json().catch(() => null);
-  // Guard the destructive PUT below: only trust an empty list if the response
-  // is recognizably the site document, not some other 200 body.
-  if (data === null || typeof data !== "object") {
-    fail("site data response was not JSON — refusing to touch the seed list");
-  }
-  if (!Array.isArray(data.seeds)) {
-    if (data.seeds !== undefined || !("adminPassword" in data || "passcode" in data || "projects" in data)) {
-      fail("site data response has no usable seed list — refusing to touch the seed list");
-    }
-  }
-  return { data, seeds: Array.isArray(data.seeds) ? data.seeds : [] };
 }
 
 async function cmdList() {
@@ -271,7 +246,7 @@ async function cmdUpdate(args) {
 
   const cfg = loadConfig();
   const cookie = await login(cfg);
-  const { seeds } = await getSeeds(cfg, cookie);
+  const seeds = await listSeeds(cfg, cookie);
   const existing = seeds.find((s) => s.slug === slug);
   if (!existing) {
     fail(`no seed with slug "${slug}" — use publish to create it, or list to see what exists`);
@@ -286,47 +261,61 @@ async function cmdUpdate(args) {
   });
   const upBody = await upRes.json().catch(() => ({}));
   if (!upRes.ok) fail(`upload failed (${upRes.status}): ${upBody.error || "unknown error"}`);
-  if (!upBody.id || !upBody.url) {
-    fail("upload returned no id/url — refusing to register a broken seed");
+  if (!upBody.url) {
+    fail("upload returned no url — refusing to repoint the seed at nothing");
   }
 
-  // Re-read just before writing; the PUT replaces the whole array.
-  const fresh = await getSeeds(cfg, cookie);
-  const current = fresh.seeds.find((s) => s.slug === slug);
-  if (!current) {
-    await deleteUpload(cfg, cookie, upBody.url);
-    fail(`"${slug}" was deleted while uploading — nothing was changed`);
-  }
-  const oldUrl = current.url;
-  const updated = {
-    ...current,
-    id: upBody.id,
-    url: upBody.url,
-    uploadedAt: new Date().toISOString(),
-  };
-  if (args.name) updated.name = args.name.trim();
-  if (args.featured !== undefined) updated.featured = args.featured;
+  // One seed, one call: PATCH repoints the existing seed at the new file,
+  // keeping its id, slug, and order. The server stamps uploadedAt itself
+  // (only when the url actually changes) — never send one.
+  const patch = { url: upBody.url };
+  if (args.name) patch.name = args.name.trim();
+  if (args.featured !== undefined) patch.featured = args.featured;
 
-  const putRes = await send(cfg.base + "/api/admin", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ seeds: fresh.seeds.map((s) => (s.slug === slug ? updated : s)) }),
-  });
-  if (!putRes.ok) {
-    await deleteUpload(cfg, cookie, upBody.url);
-    fail(`registering the update failed (${putRes.status}) — the old page is untouched`);
+  const patchRes = await send(
+    `${cfg.base}/api/admin/seeds/${encodeURIComponent(existing.id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!patchRes.ok) {
+    const errBody = await patchRes.json().catch(() => ({}));
+    // The upload only exists to back an update that did not land. Roll it
+    // back, but report honestly if the cleanup itself did not land.
+    const cleaned = await deleteUpload(cfg, cookie, upBody.url);
+    const orphan =
+      cleaned && cleaned.ok
+        ? "the uploaded file was removed"
+        : `the uploaded file is orphaned (${upBody.url})`;
+    if (patchRes.status === 404) {
+      fail(`"${slug}" was deleted while uploading — nothing was changed (${orphan})`);
+    }
+    if (patchRes.status === 409) {
+      fail(`the server refused the update: ${errBody.error || "url or slug already taken"} (${orphan})`);
+    }
+    if (patchRes.status === 400) {
+      fail(`the server rejected the update: ${errBody.error || "unusable url"} (${orphan})`);
+    }
+    fail(`registering the update failed (${patchRes.status}) — the old page is untouched (${orphan})`);
+  }
+  const body = await patchRes.json().catch(() => ({}));
+  if (!body.seed || !body.seed.slug) {
+    fail("the update landed but the server returned no seed object — run list to check what happened");
   }
 
-  // Old file is only garbage once the seed points at the new one; a failure
-  // here just leaves an orphaned upload, which is harmless.
-  if (oldUrl && oldUrl !== upBody.url) {
-    const delRes = await deleteUpload(cfg, cookie, oldUrl);
+  // previousUrl names the now-orphaned old file, and is present only when the
+  // url actually changed — absent means nothing to clean up. A failure here
+  // just leaves an orphaned upload, which is harmless.
+  if (body.previousUrl) {
+    const delRes = await deleteUpload(cfg, cookie, body.previousUrl);
     if (!delRes || !delRes.ok) {
-      console.error(`note: old upload was not deleted (${oldUrl}) — orphaned but harmless`);
+      console.error(`note: old upload was not deleted (${body.previousUrl}) — orphaned but harmless`);
     }
   }
 
-  console.log(`Updated: https://arcade.line7.works/arcade/${slug}`);
+  console.log(`Updated: ${pageUrl(cfg, slug)}`);
 }
 
 // The confirmation gate. Prompts on stderr so a piped stdout stays clean, and
