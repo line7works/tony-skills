@@ -82,11 +82,40 @@ task board (Phase 5) is archetype-independent and on by default; `--no-notion` s
 - **Get to green.** Don't hand back a half-wired skeleton. End on a verified push + a **200 on the clean `<project>.vercel.app` alias** + a populated `.env.local`.
 - **Wire the cross-links from birth.** The repo `CLAUDE.md`, the vault `_index.md`, and the memory note all point at each other on day one, so the boot path works immediately.
 - **Resumable.** If a run dies partway and is re-invoked, detect what already exists (Phase 0 collision check) and continue rather than double-create.
-- **Operate on the vault via the local filesystem** (`~/ObsidianVault` is on this Mac). Obsidian picks up external changes on its own.
+- **Operate on the vault via the local filesystem.** Canonical is `~/ObsidianVault` **on the Mac Studio** — not the laptop, whose copy is retired. Obsidian picks up external changes on its own. Never proceed without passing the vault gate in Phase 0.
 
 ---
 
 ## Phase 0 — Resolve and preflight (always, even on --dry-run)
+
+### Vault gate — run this FIRST, before the cue, before anything else
+
+Canonical is `~/ObsidianVault` **on the Mac Studio** (moved there 2026-07-27). The laptop's
+copy is retired to `~/ObsidianVault-RETIRED-2026-07-27` and `~/ObsidianVault` does not
+exist there. Phase 6 runs `mkdir -p ~/ObsidianVault/03-projects/<slug>`, which on a machine
+without canonical **silently creates a phantom second vault** holding exactly one project —
+no error, nothing to notice. That is the split-brain that took a full session to unwind in
+July 2026. `mkdir -p` cannot tell you the vault is missing; this gate is the only thing
+that can.
+
+Run this and STOP unless it prints `VAULT OK`:
+
+```bash
+V="$HOME/ObsidianVault"
+RP="$(cd "$V" 2>/dev/null && pwd -P)"
+if   [ -z "$RP" ];                      then echo "STOP: no vault at $V"
+elif [ ! -f "$V/AGENTS.md" ];           then echo "STOP: $V has no AGENTS.md — stub, not canonical"
+elif [ ! -d "$V/03-projects" ];         then echo "STOP: $V has no 03-projects/ — incomplete"
+elif [ "${RP#*/Documents/}" != "$RP" ]; then echo "STOP: vault is inside Documents/iCloud: $RP"
+else echo "VAULT OK — $RP — $(find "$V" -name '*.md' -not -path '*/.obsidian/*' | wc -l | tr -d ' ') notes"
+fi
+```
+
+If it prints anything other than `VAULT OK`, **abort the whole skill.** Do not `mkdir` the
+vault or anything beneath it, and do not continue to any later phase — a partial sunrise
+that scaffolds a repo but writes its vault docs into a phantom vault is worse than no
+sunrise at all. Tell Tony which machine he appears to be on and that canonical lives on
+the Mac Studio.
 
 0. **Play the sunrise cue** (cosmetic, non-blocking, best-effort): the FIRST thing the skill does. The moment a sunrise begins, fire the sound and a compact one-line terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
    - `afplay ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/rise.wav >/dev/null 2>&1 &`
@@ -134,7 +163,7 @@ task board (Phase 5) is archetype-independent and on by default; `--no-notion` s
    Notion   create page "<project>" + Task Tracker & Roadmap DBs
             (mirror Project Knight); record DB IDs in _index.md
    Vault    create 03-projects/<slug>/_index.md (seed, status: active)
-            add to root _index.md "Active projects" + AGENTS.md "Known projects"
+            add to root _index.md "Active projects"
    Memory   create project_<slug_>.md + MEMORY.md line
    Verify   first deploy -> live URL, expect 200
    Output   handoff prompt to paste into a browser/app LLM
@@ -187,8 +216,9 @@ provider through the same flow — provider-agnostic.
 
 1. **Provision + connect + pull in ONE command:** `npx vercel integration add supabase -m region=sfo1`. This installs the integration, provisions the resource (e.g. `supabase-gray-umbrella`), connects it to the linked project, AND auto-runs `env pull` (writes `.env.local`, development env) — unless you pass `--no-env-pull` / `--no-connect`. So for a **single app there is NO separate `vercel env pull` step.** (`-m region=…` sets the region; `sfo1` = SF.)
 2. **First-time terms gate — one-time per TEAM, not per project.** With an agent detected the command runs `--non-interactive`; if Tony hasn't accepted the integration's terms yet it returns **exit 0** with a clean JSON `action_required` payload — a `verification_uri` to click plus a `next[]` retry command. Print the URL, ask Tony to accept, then run the retry (fully idempotent). This fires only the FIRST time Supabase is added on the team; later sunrises skip it entirely. Do NOT report it as a failure. **While Tony accepts, don't idle** — proceed with the deploy check (Phase 8 step 1; a default build is green with no DB env) and the DB-independent phases (Notion, vault, memory), then finish the DB on the retry.
-3. **Monorepo / Electron only:** the auto-pull lands at the repo root, so re-pull to the app-scoped path: `npx vercel env pull apps/<app>/.env.local` (Project Knight uses `apps/desktop/.env.local`).
-4. Confirm `.env.local` is non-empty (~17 keys incl. `POSTGRES_URL` / `DATABASE_URL`) and gitignored. If the pull is empty or the resource didn't connect, STOP and tell Tony rather than continuing with a dead DB.
+3. **Database name MUST match the project: `<slug>-db`.** The Marketplace auto-generates a junk name (`supabase-gray-umbrella` style) that later reads as cruft — RJ-Hauler's DB sat unidentifiable as `supabase-yellow-island` until 2026-08-14. If the provisioning command accepts a resource name, pass `<slug>-db` up front; otherwise, immediately after provisioning, rename the project to `<slug>-db` (Supabase dashboard → Project Settings → General — the Supabase MCP has no rename tool, so if no API path works, hand Tony the exact click path and treat the phase as incomplete until he confirms). Never leave an auto-generated name in place.
+4. **Monorepo / Electron only:** the auto-pull lands at the repo root, so re-pull to the app-scoped path: `npx vercel env pull apps/<app>/.env.local` (Project Knight uses `apps/desktop/.env.local`).
+5. Confirm `.env.local` is non-empty (~17 keys incl. `POSTGRES_URL` / `DATABASE_URL`) and gitignored. If the pull is empty or the resource didn't connect, STOP and tell Tony rather than continuing with a dead DB.
 
 ## Phase 5 — Notion task board (mirror of Project Knight)  [skip if --no-notion]
 
@@ -224,11 +254,16 @@ after creation).
 1. `mkdir -p ~/ObsidianVault/03-projects/<slug>`
 2. Write `03-projects/<slug>/_index.md` (seed template at the bottom): standard frontmatter (`created`, `source: claude-code`, `type: project-index`, `project: <slug>`, `status: active`, `tags`) + sections What this is / Tech stack / Repo (GitHub URL + local path + branch) / Notion / Status. Fill in the real URLs and IDs from Phases 2-5 (including the Notion DB IDs).
 3. Edit root `~/ObsidianVault/_index.md`: add ONLY the new project under "## Active projects" linking to `03-projects/<slug>/_index`. Do NOT auto-repair other stale entries — adding `[[…/_index]]` links to folders you haven't verified creates broken wikilinks. Only repair another entry after confirming its folder exists (`ls ~/ObsidianVault/03-projects/<name>`); otherwise leave it.
-4. Edit `~/ObsidianVault/AGENTS.md`: add `<slug>` to the "Known projects" line.
+
+Note (contract since 2026-08-09): the vault folder is a home for durable project
+knowledge (research, decisions, specs), not a state mirror. The `_index.md` seed is
+a pointer — repo location, what it is, what's in the folder. Current status lives in
+the repo and auto-memory; there is no obligation to keep `_index.md` current, and
+there is no "Known projects" line in the vault's AGENTS.md to update.
 
 ## Phase 7 — CLI / Claude Code memory
 
-1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + canonical-detail pointers to the repo `CLAUDE.md` and the vault `_index.md`. Mirror the shape of `project_knight.md`.
+1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + pointers to the repo `CLAUDE.md` (canonical detail) and the vault folder (durable notes). Mirror the shape of `project_knight.md`.
 2. Add a one-line entry to that store's `MEMORY.md` under the active list: `- [<Project>](project_<slug_>.md) — <hook>`.
 3. **The project's own per-directory memory store** auto-creates the first time Claude Code runs in `~/Developer/<Name>` — nothing to pre-create. (This is the inverse of sunset archiving that store.)
 
@@ -248,7 +283,7 @@ after creation).
      Memory   -> project_<slug_>.md created + indexed
 
    To start building: open ~/Developer/<Name> and say "continue on <project>".
-   CLAUDE.md will auto-load and point at the vault _index for deeper state.
+   CLAUDE.md will auto-load; durable notes live in the vault project folder.
    ```
 
 3. **Generate the browser/app LLM handoff prompt.** Sunrising in Claude Code does not inform Tony's other LLM surfaces (claude.ai web, the desktop app, ChatGPT, Codex). Fill in the variables and print this in a fenced block for Tony to copy-paste (template at the bottom).
@@ -271,8 +306,12 @@ status: active
 tags: [project-index, <slug>]
 ---
 
-# <Project Name> — Current State
+# <Project Name>
 Created: <today>
+
+> Pointer + durable notes, not a state mirror. Current status lives in the repo
+> and auto-memory. Add research, decisions, and specs to this folder as they earn
+> a place.
 
 ## What this is
 <Tony's one-line description.>
@@ -293,9 +332,8 @@ Created: <today>
 - **Roadmap DB:** <roadmapDbId>
 - Done↔Status automations: <set up / pending> (see ADR 009 pattern)
 
-## Status
-Just scaffolded via /sunrise on <today>. Green baseline: pushed + deploying.
-Next: <first real step>.
+## Notes in this folder
+None yet — scaffolded via /sunrise on <today>. Add durable docs here and list them.
 ```
 
 ### Repo `CLAUDE.md` (boot doc)
@@ -310,11 +348,10 @@ Next: <first real step>.
 <archetype + scaffolded stack>
 
 ## Current state
-Scaffolded <today> via /sunrise. Green baseline. See the Obsidian _index for
-always-current state: ~/ObsidianVault/03-projects/<slug>/_index.md
+Scaffolded <today> via /sunrise. Green baseline.
 
 ## Where to look
-- Always-current state: vault `03-projects/<slug>/_index.md`
+- Durable notes (research, decisions, specs): vault `~/ObsidianVault/03-projects/<slug>/`
 - Architecture decisions: `docs/decisions/` (add ADRs as the design shifts)
 
 ## Workflow
@@ -324,9 +361,9 @@ always-current state: ~/ObsidianVault/03-projects/<slug>/_index.md
 - Env: `vercel env pull` writes .env.local (gitignored).
 
 ## End-of-session protocol
-If something significant happened, write a session wrap to the vault
-`99-inbox/` as `session-wrap-<date>-<slug>-<topic>.md`. Do not auto-update
-the project `_index.md`.
+Nothing automatic — no session wraps or build logs (vault contract, 2026-08-09).
+If a session produced something durable (a decision, research, a spec) and Tony
+wants it kept, write it as a reference note in the vault project folder.
 ```
 
 ### Repo `AGENTS.md` (stub)
@@ -352,7 +389,7 @@ metadata:
 
 Canonical detail (read before substantive work):
 - Repo `CLAUDE.md` (boot doc + invariants).
-- Vault `03-projects/<slug>/_index.md` (always-current state).
+- Vault `03-projects/<slug>/` (durable notes: research, decisions, specs).
 ```
 
 ### Browser/app LLM handoff prompt
@@ -371,8 +408,9 @@ It is now set up across all my systems:
 
 Going forward, treat "<Project Name>" as an active project: you can suggest work
 on it and include it in active-project lists. If you can reach my Obsidian vault,
-its canonical state lives at 03-projects/<slug>/_index.md. If you keep saved
-Projects or spaces, add one for it. Acknowledge and update accordingly.
+its durable notes live under 03-projects/<slug>/ (current status lives in the
+repo, not the vault). If you keep saved Projects or spaces, add one for it.
+Acknowledge and update accordingly.
 ```
 
 ### Notion board schema (mirror of Project Knight)
