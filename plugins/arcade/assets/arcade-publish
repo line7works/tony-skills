@@ -15,10 +15,11 @@
  * clobbered by a whole-document write. delete never fires without printing its
  * target first and getting a yes — interactively, or via --yes.
  *
- * update still uses the legacy whole-document PUT /api/admin. The per-resource
- * PATCH cannot change a seed's `url`, so there is no endpoint that repoints an
- * existing seed at a freshly uploaded file; see the Slice B entry under
- * `## Discovered` in docs/arcade-skill-build-plan.md.
+ * update still uses the legacy whole-document PUT /api/admin — with all its
+ * hazards (last-write-wins, whole-document GET, can resurrect a page deleted
+ * from an open admin tab). Since 2026-08-14 the server's per-resource PATCH
+ * DOES accept `url`, so this is no longer forced; rewiring update onto it is
+ * Slice B R3/R5 of docs/arcade-skill-build-plan.md, not yet built.
  *
  * `base` must be https, except for a local dev server on localhost/127.0.0.1.
  */
@@ -126,8 +127,9 @@ async function listSeeds(cfg, cookie) {
 }
 
 // Whole-document read, kept for `update` alone: it is the last caller of the
-// legacy PUT /api/admin, because no per-resource endpoint can change a seed's
-// `url`. Everything else reads through listSeeds() above.
+// legacy PUT /api/admin. The server's PATCH accepts `url` as of 2026-08-14, so
+// this path is legacy by inertia, not necessity — rewiring is Slice B R3/R5.
+// Everything else reads through listSeeds() above.
 async function getSeeds(cfg, cookie) {
   const res = await send(cfg.base + "/api/admin", { headers: { Cookie: cookie } });
   if (!res.ok) fail(`reading site data failed (${res.status})`);

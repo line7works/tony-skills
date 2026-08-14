@@ -116,8 +116,9 @@ Worth knowing before trusting it in a script:
   `/api/admin/seeds`, so they cannot clobber a concurrent admin edit to any
   other page — the whole-document write those commands used to do is gone.
 - `update` is the exception, and still writes the whole document via
-  `PUT /api/admin`: no per-seed endpoint can change an existing seed's `url`,
-  so there is nowhere else to point it at a freshly uploaded file. That one
+  `PUT /api/admin`. That is no longer forced — since 2026-08-14 the server's
+  per-seed PATCH accepts `url` — but this CLI has not been rewired onto it yet
+  (Slice B R3/R5 of the arcade-skill build plan). Until then that one
   command remains last-write-wins. It re-reads immediately before writing to
   keep the window to one round trip — narrowed, not closed. Don't run `update`
   while editing the same page in the admin UI.

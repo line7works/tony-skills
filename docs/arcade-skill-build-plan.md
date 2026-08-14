@@ -40,8 +40,11 @@ Constraints:
   - `POST /api/admin/seeds` `{ name, url, slug?, featured? }` → 201 `{ seed }`;
     400 missing name/url or unusable slug; 409 slug taken. Server assigns
     `order` = max existing + 1.
-  - `PATCH /api/admin/seeds/<id>` `{ name? | slug? | featured? | order? }` →
-    `{ seed }`; 404 unknown id; 409 slug taken.
+  - `PATCH /api/admin/seeds/<id>` `{ name? | slug? | featured? | order? | url? }`
+    → `{ seed }`; 404 unknown id; 409 slug taken; 400 unusable url.
+    (Amended 2026-08-14 — `url` was added to the server's PATCH allow-list to
+    unblock Slice B R3; see the Slice B entry under `## Discovered`. The server
+    restamps `uploadedAt` whenever `url` changes, so the CLI must not send one.)
   - `DELETE /api/admin/seeds/<id>` → `{ ok: true }`; 404.
   - `PATCH /api/admin/seeds/reorder` `{ ids: [every seed id, in order] }` →
     `{ seeds }`; 400 unless the list covers every seed exactly once.
@@ -61,6 +64,10 @@ Constraints:
 
 Out of scope:
 - Any change to line7-site — its work shipped in PR #23 and is done.
+  (Amended 2026-08-14, Tony's call: ONE exception, the `url` addition to the
+  seeds PATCH allow-list described above. It is the option-B resolution of the
+  Slice B R3 stop and it is the whole exception — no other line7-site change
+  rides along under this plan.)
 - Migrating the CLI's legacy whole-blob PUT path for *other* site sections; the
   CLI only ever touched `seeds`, and after the rewire it uses no whole-blob
   writes at all.
@@ -360,6 +367,33 @@ Status: not started
   skill to say, or (B) add `url` to the server's PATCH allow-list, which the plan's
   Out of scope currently forbids. No third option exists: the upload endpoint mints
   its own id, so a blob cannot be overwritten in place either
+
+### Slice B · 2026-08-14 — the R3 stop is resolved, option B
+- Tony chose (B). Built in line7-site on branch `Main`, uncommitted at time of
+  writing, three files: `lib/arcadeSeeds.ts` (new exported `SeedPatch` type
+  widening `patchSeedList` to carry `url` + `uploadedAt`),
+  `app/api/admin/seeds/[id]/route.ts` (PATCH accepts `url`, validates it through
+  the same `isSafeSeedUrl` + `ARCADE_SEED_URL_HOSTS` allowlist POST uses, and
+  server-stamps `uploadedAt` when `url` changes), and one added case in
+  `lib/seedMutations.test.ts`. Docs: `docs/arcade/README.md` seeds-API block
+- `uploadedAt` is stamped by the server, never taken from the body — POST stamps
+  it the same way, and a caller-chosen value could forge list position because
+  `sortSeeds` tiebreaks order-less legacy seeds on `uploadedAt`. Consequence
+  worth knowing before Slice D writes the skill's copy: replacing the file on a
+  legacy seed with no `order` moves it to the end of its block
+- Verified live against a local dev server with `DATABASE_URL` unset (local
+  `data/site.json` fallback, restored from backup afterward; nothing touched
+  production). Eight probes: `PATCH {url}` alone → 200 and repointed, where it
+  was 400 `nothing to update` before; `PATCH {url, name}` → 200 and the seed now
+  actually points at the new blob, which is the exact case that previously
+  returned 200 while silently keeping the old one; id, slug and `order` all
+  survive; metadata-service, loopback, plain-http and `..`-traversal urls each
+  400 `unusable url`; a non-string url 400s; an empty body still 400s `nothing
+  to update`; a cookie-less PATCH still 401s. `npx tsc --noEmit` clean and
+  `npx vitest run` 41/41 green
+- R3 and R5 are now buildable and remain NOT BUILT — this entry unblocks them,
+  it does not build them. Slice B's AC3 still fails until `update` is rewired
+  off `PUT /api/admin`
 - Incidental, not built: with `publish` now going through the server, a
   whitespace-only `--name` fails loudly with a 400 instead of storing a blank
   gallery label. That is the open ledger MINOR at `~/.local/bin/arcade-publish:247`
@@ -399,3 +433,63 @@ Status: not started
 ### 2026-08-12 — recheck: Slice A (second pass)
 - MAJOR · `tools/arcade-publish/README.md:9` · (still describes the installed command as a symlink after it became a launcher, leading a reader to reinstate it with `ln -s`) · fixed — the file now names the launcher, states that `readlink` returning nothing is correct rather than a broken install, and explicitly forbids the `ln -s` "repair"; verified against reality (`file` reports a POSIX shell script, `readlink` exits 1) and cross-checked as consistent with `tools/README.md` and `plugins/arcade/assets/README.md` (post-fix text at `tools/arcade-publish/README.md:8-13`)
 - MAJOR · `docs/arcade-skill-build-plan.md:103-104,116` · (AC1 requires `readlink` to succeed and the Footprint labels the file a symlink, so the criterion cannot pass against its own fix) · fixed — AC1 executed verbatim as amended and both halves passed: `arcade-publish list` from an unrelated directory exited 0 printing 7 seeds, and `sh -x` on the launcher showed it exec'ing `plugins/arcade/assets/arcade-publish`. Reviewer specifically checked whether the criterion had been weakened to pass and found it retains the reachability assertion `readlink` existed to prove; only the copy-pasteable one-liner was lost (post-fix text at `docs/arcade-skill-build-plan.md:102-109,121`)
+
+### 2026-08-14 — review: the R3 unblock (line7-site seeds PATCH `url`)
+Reviewed work is the line7-site carve-out, not a slice of this plan; no slice card
+is flipped. All citations are line7-site paths unless prefixed.
+
+Fix pass 2026-08-14 (same day, Tony's "go"): all 8 MAJORs addressed, pending
+/recheck. Open question resolved by Tony: a file replacement does NOT preserve a
+legacy seed's list position — simplest option, no `order` stamping, Slice A's
+no-migration rule holds; MAJOR #3 became a doc-only fix (README now says the
+caller cannot opt out, and why). #1: `lib/seedsPatchRoute.test.ts` added on the
+staleWrite pattern; all seven planted mutations verified red against it. #2:
+`uploadedAt` stamp now applies inside the mutator only when the url actually
+differs. #4: README paragraph rewritten (order caveat, forgery rationale
+corrected, `{ seed, seeds }` response documented). #5: CLI header + getSeeds
+comments and assets/README.md updated to the true state. #6: duplicate-url →
+`UrlTakenError` → 409. #7: `patchSeedList` strips `undefined` values before
+spreading. #8: line7-site `docs/content-api-build-plan.md` gained a Deviations
+entry and an amendment note on the Slice B PATCH requirement. MINORs fixed on
+Tony's word (same day): the triplicated `ARCADE_SEED_URL_HOSTS` derivation is
+now one `seedUrlAllowedHosts()` in `lib/arcadeStore.ts` used by all three
+routes, and PATCH returns `previousUrl` when a repoint orphans the old blob —
+both tested in `lib/seedsPatchRoute.test.ts`. The stale test comment was fixed
+in passing. Remaining MINORs (bare `/uploads/` dir 500, silent name drop, 400
+vs 404 ordering, plan-wording overstatement, accepted content-swap note) are
+left open deliberately — Tony's call, not worth tackling.
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:46-48` · the new url guard has zero automated coverage and its removal is invisible to both CI gates · seven planted mutations — delete `isSafeSeedUrl` entirely, honor a caller-supplied `uploadedAt`, never stamp, drop `patch.url`, stamp epoch, allow any `http*`, return 200 instead of 400 — each survived `npx vitest run` 41/41 green with `npx tsc --noEmit` clean. Deleting lines 46-48 makes `PATCH {"url":"https://169.254.169.254/latest/meta-data/"}` a 200 that turns the public arcade page into a metadata-service reader, and nothing goes red. Route-handler tests are an established pattern in this repo (`lib/staleWrite.test.ts:62-98`, with the `@/*` alias added for exactly this in `vitest.config.ts:6`), so infeasibility is not a defense; a probe file on that pattern turned all seven mutations red · convergent across all five lenses (spec, correctness, seams, security, tests)
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:37,54` · the `uploadedAt` restamp fires on any PATCH carrying a `url` key, not on the url actually changing · `PATCH legacyA {url: <the url legacyA already has>}` → 200, `uploadedAt 2020-01-01 → now`, and the public list order goes `legacyA legacyB` → `legacyB legacyA`. A no-op request mutates state, bumps the store version (invalidating an in-flight legacy PUT token), and moves a live page; PATCH is non-idempotent, so a client retrying a timed-out request does real damage on the retry. The stamp is computed outside the mutator (correctly, so `updateSeeds` retries stay pure) but the stored url is only readable inside it — the fix is to apply it conditionally inside · convergent (correctness, seams, security, spec)
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:54` · replacing a legacy seed's file drops the page to the bottom of the public arcade with no way for the caller to opt out · verified against the real handler: `legacyA(2020) legacyB(2021) legacyC(2022)`, none with `order` → `PATCH legacyA {url}` → 200 → list becomes `legacyB legacyC legacyA`, because `sortSeeds` (`lib/arcadeSeeds.ts:89`) tiebreaks the no-`order` block on `uploadedAt` ascending. Passing `order` alongside `url` does not restore position, it relocates the seed into the ordered block ahead of every remaining legacy seed — a different wrong answer. `docs/arcade/README.md` discloses the consequence; disclosure is not a fix, and the doc does not say the caller cannot opt out · correctness lens
+- MAJOR · `docs/arcade/README.md:89-97` · the added paragraph makes three claims the system does not honor · (a) "keeping the seed's id, slug and order" is false for the exact call R3 mandates: `{url, name, featured:true}` on a seed whose stored `featured` is false stamps `order: topOfFeaturedOrder(list)` at `route.ts:66-69`, so a seed at `order 7` lands at `-1`; (b) the `uploadedAt`-forgery rationale does not hold — `validateSeedList` (`lib/arcadeSeeds.ts:122-125`) only typechecks `uploadedAt` as a non-empty string, so the legacy `PUT /api/admin` still accepts a caller-chosen value and the CLI sets one client-side today (`tony-skills plugins/arcade/assets/arcade-publish:303`); an authenticated caller can also forge position more directly by sending `order`; (c) the fence at `:81` still documents the response as `{ seed }` when the route returns `{ seed, seeds }` (`route.ts:79`) — the field that would tell a client where a moved seed landed is the undocumented one. Slice D writes user-facing skill copy from this paragraph · convergent (spec, seams, security)
+- MAJOR · `tony-skills plugins/arcade/assets/arcade-publish:19,129` and `plugins/arcade/assets/README.md:118-119` · the primary client's own contract is now false in three places and nothing in the change flags it · both source comments state that no per-resource endpoint can change a seed's `url`, which is why `update` stays on `PUT /api/admin` — the endpoint whose README:138-140 documents it resurrecting a page deleted from an open admin tab, and which forces `GET /api/admin`, flagged in line7-site CLAUDE.md as returning the whole document including secrets. The change removes the reason those hazards exist and leaves both the hazards and the claim in place · seams lens
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:49` · PATCH lets two seeds point at one url, and every delete path assumes exclusive blob ownership · no duplicate-url guard exists in `patchSeedList`, the route, or `validateSeedList` (which checks duplicate slug and id only). `PATCH A {url: <seed B's url>}` → 200; removing A in the admin UI then runs `DELETE /api/admin/upload {url: seed.url}` (`sections/admin/Arcade.tsx:435`) → B's blob is deleted → B's live gallery entry 404s with no error surfaced anywhere. Reachable through the whole-blob PUT before, but this puts it on the per-resource path the docs tell people to prefer · seams lens
+- MAJOR · `lib/arcadeSeeds.ts:178-180` · `SeedPatch` moves the two fields that 500 the public page into a pure function that validates neither · `tsconfig.json` sets `strict` but not `exactOptionalPropertyTypes`, so `const patch: SeedPatch = { url: undefined, uploadedAt: undefined }` typechecks and the spread at `:196` writes `undefined` into the stored seed; `app/arcade/[slug]/route.ts:44` then does `seed.url.replace(...)` → TypeError → 500 on the page, and `sortSeeds` at `:89` does `a.uploadedAt.localeCompare(...)` → 500 on the whole gallery. `lib/seedGuards.test.ts:28` names `uploadedAt` verbatim as "the field that 500s the public page", and the codebase's own convention is to guard in the library — `validateSeedList` calls `isSafeSeedUrl` inside the pure layer for the other write path. Latent: today's route is the only caller and always stamps a valid ISO string · convergent (tests, seams, security, correctness)
+- MAJOR · `docs/content-api-build-plan.md:76,107` · the line7-site plan that owns these routes has no record that its API contract moved · `:76` still specifies "PATCH (partial update: name, slug, featured, order)" and its Slice B stands `Status: signed off`; the change adds no `## Deviations`, `## Discovered`, or punch-list entry in that document. The carve-out authorizing the work lives in tony-skills, a different repo. That plan's own history graded this failure mode BLOCKER twice (`:353`, `:391` — the latter stayed "not fixed" precisely because the fix pass appended nothing to `## Deviations`). A future line7-site builder reads `:76` as governing and either reverts `url` as an unsanctioned drive-by or re-reports it as new · spec lens
+- MINOR · `lib/arcadeSeeds.ts:64` reached from `route.ts:46` · PATCH can convert a live working page into an unhandled 500 · `isSafeSeedUrl` accepts any `/uploads/…` string without `..`, including a bare directory. Verified end to end: `PATCH a {url:"/uploads/"}` → 200 stored → `GET /arcade/a` throws `EISDIR: illegal operation on a directory, read` at `app/arcade/[slug]/route.ts:54` (`readFileSync`, no try/catch) → 500 on the public page, not a 404. Same for `/uploads/.` and `/uploads//`. The permissive check is pre-existing and shared with POST, but POST only creates a new broken page where PATCH breaks an existing working one · correctness lens
+- MINOR · `app/api/admin/seeds/[id]/route.ts:42-45` · third verbatim copy of the `ARCADE_SEED_URL_HOSTS` split/trim/filter block (`app/api/admin/route.ts:30`, `app/api/admin/seeds/route.ts:33`) · the doc claims PATCH is "validated by the same allowlist POST uses" — the validator is shared, the host-list derivation is not. A future fix landing in one or two of three (e.g. lowercasing entries, or the dot-boundary fix below) means a custom-blob-domain deployment accepts a url at create and 400s the same url at repoint · convergent (spec, seams, security, correctness)
+- MINOR · `app/api/admin/seeds/[id]/route.ts:49,79` · repointing orphans the old blob and the response gives no safe way to find it · the reply carries only the new url, so a caller must GET-then-PATCH, which is racy by construction. This is a regression against both existing cleanup paths: the admin UI deletes the blob after the seed delete (`sections/admin/Arcade.tsx:411-441`) and the CLI's current PUT-based `update` captures `oldUrl` and deletes it (`arcade-publish:298,320`). Returning `previousUrl` would make caller-side cleanup correct · convergent (correctness, seams, security)
+- MINOR · `app/api/admin/seeds/[id]/route.ts:27,56` · an invalid `name` is now silently dropped when a valid `url` is present · `{name:"   ", url:<valid>}` → 200, name unchanged, no signal. Before this change the same request hit the `nothing to update` 400 and told the caller something was wrong; the url branch masks it. Exactly the class of thing the `Object.keys(patch).length === 0` guard existed to catch · correctness lens
+- MINOR · `app/api/admin/seeds/[id]/route.ts:49` · no verification that the new url resolves, and no rollback · a typo'd but allowlist-passing blob URL (right host, wrong filename) is accepted with a 200 and immediately takes the live page down (`app/arcade/[slug]/route.ts:42` returns `notFound()` on `!res.ok`). The API response is indistinguishable from success; delete-then-recreate at least fails loudly at the upload step · correctness lens
+- MINOR · `lib/seedMutations.test.ts:53-55` · the added test's comment describes client behavior that does not exist · it says the CLI's `update` "uploads a new blob and repoints the existing seed at it" and that losing the id is what makes the operation delete-then-recreate in disguise; `cmdUpdate` sets `id: upBody.id` today, so it does replace the seed's id, and it does so via PUT rather than PATCH. The test asserts an invariant the current client violates, framed as though it protects it · seams lens
+- MINOR · `docs/arcade-skill-build-plan.md:368-369` · "No third option exists" overstates the design space it was used to justify amending `Out of scope` · `lib/blobStore.ts:47` already passes `allowOverwrite: true` with the comment "allow overwriting if the same id is re-uploaded", and the local fallback writes `public/uploads/<id>.html` by the same rule. The only thing preventing in-place replacement is `app/api/admin/upload/route.ts:16` hardcoding `const id = Date.now().toString()` and ignoring any caller-supplied id — a third option at roughly one line. Option B is arguably still the better call; the claim as written is what overstates · spec lens
+- MINOR · `app/api/admin/seeds/[id]/route.ts:46` · a bad url against an unknown id returns 400, not 404 · validation runs before the existence check, so `PATCH nonexistent {url:"https://evil.example.com/x"}` → `400 unusable url` while a good url on the same id → `404 seed not found`; the caller cannot distinguish "you sent garbage" from "that seed is gone". Consistent with POST's ordering, just imprecise · correctness lens
+- MINOR · `app/api/admin/seeds/[id]/route.ts:37-55` · one-call silent content swap under an established slug · before, replacing a live page meant DELETE+POST — two calls, a new id, visible downtime; now one PATCH repoints a bookmarked slug at different HTML while keeping id, slug and order, and `docs/arcade/README.md:120-129` records that pages on the arcade host are served with no sandbox CSP when `ARCADE_HOST` is set. Post-authentication only and the same reach the admin already had, so this is stealth and persistence, not new capability · security lens, downgraded from MAJOR on that basis
+
+### 2026-08-14 — recheck: the R3 unblock (line7-site seeds PATCH `url`)
+Closed-checklist re-inspection of the 8 MAJORs plus the two user-named MINORs
+(triplicated host derivation; orphaned-blob previousUrl). Fresh independent
+reviewer, current working trees; mutation checks executed and files restored
+byte-identical (49/49 green, tsc clean after). No slice card exists for this
+work (plan amendment, not a slice) so no Status line moves.
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:46-48` · (zero automated coverage on the url guard) · fixed — `lib/seedsPatchRoute.test.ts` exercises the real handler; mutations a/b/d/g planted and each turned the suite red, c/e/f pinned by freshness-window and http assertions
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:37,54` · (uploadedAt restamped on any url-carrying PATCH) · fixed — stamp applies only when the url differs from the stored one; pinned by the no-restamp test
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:54` · (legacy seed drops position with no opt-out) · fixed — doc-only per Tony's 2026-08-14 call (no position preservation); README states the consequence and the no-opt-out; no position-preserving code added
+- MAJOR · `docs/arcade/README.md:89-97` · (three claims the system does not honor) · fixed — order-restamp caveat admitted, forgery rationale corrected, fence documents { seed, seeds, previousUrl? }
+- MAJOR · `tony-skills plugins/arcade/assets/arcade-publish:19,129` + `assets/README.md:118-119` · (CLI contract false in three places) · fixed — all three now state PATCH accepts url since 2026-08-14 and the CLI rewire is Slice B R3/R5, unbuilt
+- MAJOR · `app/api/admin/seeds/[id]/route.ts:49` · (two seeds can share one url; deletes assume exclusive blob ownership) · fixed — UrlTakenError in patchSeedList, 409 at the route, tested at both layers
+- MAJOR · `lib/arcadeSeeds.ts:178-180` · (undefined patch values spread into the stored seed) · fixed — patchSeedList strips undefined before spreading, tested
+- MAJOR · `docs/content-api-build-plan.md:76,107` · (owning plan has no record of the contract change) · fixed — requirement line amended, dated Deviations entry added
+- MINOR · `app/api/admin/seeds/[id]/route.ts:42-45` · (third verbatim copy of the host-list derivation) · fixed — single seedUrlAllowedHosts() in lib/arcadeStore.ts used by all three routes; env flow through PATCH tested
+- MINOR · `app/api/admin/seeds/[id]/route.ts:49,79` · (repoint orphans the old blob with no safe way to find it) · fixed — previousUrl returned iff the url changed, tested both ways, documented
+Fix-introduced defects: none found (retry reassignment, not-found path, and env-test leak examined and cleared).
