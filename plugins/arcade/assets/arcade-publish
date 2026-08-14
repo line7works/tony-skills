@@ -13,9 +13,11 @@
  * All four commands run on the per-resource /api/admin/seeds endpoints: each
  * one touches a single seed, so a concurrent admin edit can no longer be
  * clobbered by a whole-document write. update uploads the new file, then
- * PATCHes the existing seed's url — id, slug, and order all survive, and the
- * server stamps uploadedAt itself. delete never fires without printing its
- * target first and getting a yes — interactively, or via --yes.
+ * PATCHes the existing seed's url — id and slug always survive, and order
+ * does too unless the same call toggles --featured on, which restamps the
+ * top-of-featured order (server behavior). The server stamps uploadedAt
+ * itself. delete never fires without printing its target first and getting
+ * a yes — interactively, or via --yes.
  *
  * `base` must be https, except for a local dev server on localhost/127.0.0.1.
  */
@@ -304,6 +306,19 @@ async function cmdUpdate(args) {
   if (!body.seed || !body.seed.slug) {
     fail("the update landed but the server returned no seed object — run list to check what happened");
   }
+  // A 200 whose seed still carries the old url means the server dropped the
+  // `url` field — a deployment predating PATCH url support (2026-08-14).
+  // Without this check that reads as success while the live page is unchanged.
+  if (body.seed.url !== upBody.url) {
+    const cleaned = await deleteUpload(cfg, cookie, upBody.url);
+    const orphan =
+      cleaned && cleaned.ok
+        ? "the uploaded file was removed"
+        : `the uploaded file is orphaned (${upBody.url})`;
+    fail(
+      `the server accepted the update but did not repoint the seed — it likely predates PATCH url support; the old page is untouched (${orphan})`
+    );
+  }
 
   // previousUrl names the now-orphaned old file, and is present only when the
   // url actually changed — absent means nothing to clean up. A failure here
@@ -330,7 +345,15 @@ function confirmDelete() {
       );
     }
     const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+    // EOF (Ctrl-D, or stdin closing under a wrapper) never fires the question
+    // callback — without this handler the promise dangles and Node exits 0,
+    // which a caller reads as a completed delete. No answer means no.
+    let answered = false;
+    rl.on("close", () => {
+      if (!answered) resolve(false);
+    });
     rl.question("Delete it? [y/N] ", (answer) => {
+      answered = true;
       rl.close();
       resolve(/^y(es)?$/i.test(answer.trim()));
     });

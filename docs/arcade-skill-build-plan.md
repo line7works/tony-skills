@@ -187,7 +187,7 @@ Footprint: `plugins/arcade/assets/arcade-publish`,
 `plugins/arcade/assets/README.md` (usage updates).
 Not in this slice: reorder/feature commands; SKILL.md.
 Depends on: Slice A
-Status: built
+Status: signed off with conditions
 
 ## Slice C — reorder and feature commands
 
@@ -510,3 +510,15 @@ work (plan amendment, not a slice) so no Status line moves.
 - MINOR · `app/api/admin/seeds/[id]/route.ts:42-45` · (third verbatim copy of the host-list derivation) · fixed — single seedUrlAllowedHosts() in lib/arcadeStore.ts used by all three routes; env flow through PATCH tested
 - MINOR · `app/api/admin/seeds/[id]/route.ts:49,79` · (repoint orphans the old blob with no safe way to find it) · fixed — previousUrl returned iff the url changed, tested both ways, documented
 Fix-introduced defects: none found (retry reassignment, not-found path, and env-test leak examined and cleared).
+
+### 2026-08-14 — review: Slice B
+- MAJOR · `plugins/arcade/assets/arcade-publish:324-338` · EOF (Ctrl-D / closed stdin) at the delete prompt exits 0 with no message and no delete · a wrapper running `delete` on a pty whose stdin closes early records the delete as done while the page is still live — `rl.question`'s callback never fires on EOF, the promise never resolves, the event loop drains, Node exits 0; reproduced deterministically under a pty. The build ledger's "harness artifact" entry was this bug · Slice B review (correctness, live)
+- MAJOR · `plugins/arcade/assets/arcade-publish:303-316` · `update` trusts a PATCH 200 without checking the seed actually repointed (`body.seed.url` vs `upBody.url`) · against a server whose PATCH drops `url` (pre-PR-#25 deploy or rollback) the request returns 200 with the old url — CLI prints `Updated:` exit 0, upload orphaned, page unchanged, no signal; demonstrated live via fault-injection proxy. R5 keeps per-endpoint response guards; this one is missing · Slice B review (correctness)
+- MAJOR · `plugins/arcade/assets/README.md:118-119` and `arcade-publish:16` · "id, slug, and order all survive" is uncaveated and false for `update --featured` on a non-featured seed · the server stamps top-of-featured `order` on that call (a seed at order 7 lands at -1); the identical uncaveated claim was graded MAJOR in the R3-unblock review and fixed server-side — reintroduced client-side, and Slice D writes the skill's copy from this README · Slice B review (seams)
+- MINOR · `docs/arcade-skill-build-plan.md:335-339,411-413` · the 2026-08-13/14 ledger entries still state "R3 and R5 NOT BUILT" / "AC3 still fails" with no dated closure note · a future reader takes the Deviations entry as current state and re-reports R3/R5 as descoped · Slice B review (spec + seams, convergent)
+- MINOR · `plugins/arcade/assets/arcade-publish:272` · whitespace-only `--name` silently drops the rename while the file replace succeeds · `update <slug> <f> --name "  "` → PATCH carries `name: ""`, server drops it (its own open MINOR), CLI prints `Updated:` exit 0 with the name unchanged; `--name ""` is swallowed client-side the same way · Slice B review (spec + seams + correctness, convergent; observed live)
+- MINOR · `plugins/arcade/assets/arcade-publish:283-301` · the PATCH-409 rollback deletes a blob that at that moment belongs to another seed · reachable only via a same-millisecond upload-id collision (server mints `Date.now()` ids, blob store allows overwrite); the rollback assumes exclusive ownership of a url the 409 just declared shared · Slice B review (spec + seams, convergent)
+- MINOR · `plugins/arcade/assets/arcade-publish:2-21` · R7's "version-bump" has no version identifier to bump — the header prose was rewritten and is accurate, but the literal criterion is unverifiable as written · Slice B review (spec + correctness, convergent)
+- MINOR · `plugins/arcade/assets/arcade-publish:396-428` · duplicate or contradictory flags silently last-win (`--featured … --no-featured` lands unfeatured with no complaint) · contradicts the parser's own strictness rationale · Slice B review (correctness)
+- MINOR · `plugins/arcade/assets/arcade-publish:245,343` · `update`/`delete` slugify the lookup argument, so a stored slug the slugifier cannot produce (e.g. the known trailing-hyphen case) is unaddressable — the seed becomes CLI-immortal, admin UI only · Slice B review (correctness)
+- MINOR · line7-site `lib/arcadeSeeds.ts:103-105` + `app/api/admin/route.ts:27-28` · server comments still justify the raw-writable `seeds` key "for the arcade-publish CLI", which no longer uses it, and no owning-plan record notes the consumer is gone · editing line7-site is out of scope under this plan — record-keeping only · Slice B review (seams)

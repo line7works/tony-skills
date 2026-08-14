@@ -116,11 +116,13 @@ Worth knowing before trusting it in a script:
   them can clobber a concurrent admin edit to any other page — the
   whole-document write this tool used to do is gone entirely.
 - `update` uploads the new file, then `PATCH`es the existing seed's `url`. The
-  seed's id, slug, and `order` all survive, and the server stamps `uploadedAt`
-  itself (only when the url actually changes). If the PATCH fails — seed
-  deleted mid-upload, url owned by another seed, anything — the new upload is
-  rolled back and the existing page is untouched. On success the server names
-  the old file (`previousUrl`) and the CLI deletes it.
+  seed's id and slug always survive, and its `order` does too — **unless** the
+  same call toggles `--featured` on, which stamps the top-of-featured order,
+  same as any featured toggle (server behavior, no opt-out). The server stamps
+  `uploadedAt` itself (only when the url actually changes). If the PATCH
+  fails — seed deleted mid-upload, url owned by another seed, anything — the
+  new upload is rolled back and the existing page is untouched. On success the
+  server names the old file (`previousUrl`) and the CLI deletes it.
 - `publish` cleans up after itself: if the seed cannot be registered — slug
   taken, bad name, anything — the upload it just made is deleted. If that
   cleanup also fails, the error says so and names the orphaned file.
