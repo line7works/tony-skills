@@ -433,8 +433,12 @@ function parseArgs(argv, cmd) {
       if (kind === "value") {
         const v = argv[++i];
         if (v === undefined || v.startsWith("--")) fail(`${a} needs a value`);
-        if (a === "--name") args.name = v;
-        else args.slug = v;
+        if (a === "--name") {
+          // The server silently drops an empty name from a PATCH that also
+          // carries a url, so a blank rename would "succeed" without renaming.
+          if (!v.trim()) fail("--name cannot be empty or whitespace-only");
+          args.name = v;
+        } else args.slug = v;
       } else if (a === "--yes") {
         args.yes = true;
       } else {
