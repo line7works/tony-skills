@@ -483,7 +483,9 @@ async function cmdSetFeatured(args, featured) {
   // Already in the requested state: say so and send nothing. Featuring an
   // already-featured seed is not a no-op server-side (the featured transition
   // is what stamps top-of-featured order), so the safe skip is client-side.
-  if (Boolean(target.featured) === featured) {
+  // Strict equality on purpose: a seed whose entry lacks the flag entirely is
+  // not "already unfeatured" — it gets the PATCH, never a silent skip.
+  if (target.featured === featured) {
     console.log(`"${slug}" is already ${featured ? "featured" : "not featured"} — nothing to do`);
     return;
   }
@@ -502,7 +504,10 @@ async function cmdSetFeatured(args, featured) {
     fail(`${verb} failed (${res.status}): ${errBody.error || "unknown error"} — nothing was changed`);
   }
   const body = await res.json().catch(() => ({}));
-  if (!body.seed || Boolean(body.seed.featured) !== featured) {
+  // The flag must come back as a real boolean in the requested state — a 200
+  // whose seed omits `featured` would otherwise read as a successful unfeature
+  // (Boolean(undefined) === false), the lying-200 class this guard exists for.
+  if (!body.seed || typeof body.seed.featured !== "boolean" || body.seed.featured !== featured) {
     fail(`the server accepted the ${verb} but the seed did not flip — run list to check what happened`);
   }
   console.log(`${featured ? "Featured" : "Unfeatured"} "${slug}" (${target.name})`);

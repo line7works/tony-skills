@@ -221,7 +221,7 @@ Footprint: `plugins/arcade/assets/arcade-publish`,
 `plugins/arcade/assets/README.md`.
 Not in this slice: SKILL.md; any change to how featured sorts (server-owned).
 Depends on: Slice B
-Status: built
+Status: signed off with conditions
 
 ## Slice D — the /arcade skill and marketplace entry
 
@@ -567,3 +567,15 @@ honesty, and the absent-previousUrl path examined and cleared).
 
 ### 2026-08-15 — fix: Slice B MINOR (per user)
 - MINOR · `plugins/arcade/assets/arcade-publish:272` · (whitespace-only `--name` silently drops the rename) · fixed — the parser now rejects `--name` that trims empty, before any file read or network call, covering both `update` and `publish`; verified: both invocations fail exit 1 with `--name cannot be empty or whitespace-only`
+
+### 2026-08-15 — review: Slice C
+- MAJOR · `plugins/arcade/assets/arcade-publish:505` · unfeature accepts a lying 200 whose seed omits `featured`, and the :486 skip shares the coercion · server returns 200 `{"seed":{}}` while the seed stays featured → `Boolean(undefined)===false===featured` passes, CLI prints "Unfeatured" exit 0 with the site unchanged; a featured seed whose GET entry lacks the field gets "already not featured — nothing to do" with no request sent. `feature` catches the identical response — the lying-200 guard mandated by the Slice B review works in only one direction · Slice C review (correctness, live repro)
+- MINOR · `docs/arcade-skill-build-plan.md:215-217` and `arcade-publish:420-446` · AC2's "the server receives no call" cannot pass verbatim — slug→id resolution requires login + GET before the pre-check can run; no write is ever sent (stub request logs) · a future re-verification watching the dev-server log grades AC2 failed; same criterion-can't-pass-verbatim class as Slice A's readlink AC · Slice C review (spec + seams, convergent)
+- MINOR · `plugins/arcade/assets/arcade-publish:15-16` · the header comment still claims every command "touches a single seed", false for reorder, which rewrites every seed's `order` via the reorder endpoint; the README states it correctly · a reader of the header alone concludes reorder cannot collide with a concurrent admin edit; Slice D writes skill copy from these docs · Slice C review (seams)
+- MINOR · `plugins/arcade/assets/arcade-publish:418` · a stored slugifier-unproducible slug (trailing-hyphen class) bricks `reorder` for the entire gallery — the slug can never be supplied, so every reorder fails the completeness pre-check · wider blast radius than the same known ledger MINOR on update/delete, where one seed is unreachable; no such slug exists today · Slice C review (spec + seams, convergent)
+- MINOR · `plugins/arcade/assets/arcade-publish:486-489` · the already-in-state skip narrows R2 (an already-featured seed never PATCHes) and decides on a read that can go stale between GET and decision · disclosed as builder call in the ledger with sound rationale (a redundant featured:true restamps top-of-featured order server-side); logged for the record · Slice C review (spec + correctness)
+- MINOR · `plugins/arcade/assets/arcade-publish:434,439` · an argument that slugifies to the empty string prints `unknown: ` naming nothing · `reorder "" a b c` fails safe, exit 1, nothing sent — cosmetic · Slice C review (seams + correctness, convergent)
+- MINOR · `plugins/arcade/assets/arcade-publish:422-453` · reorder's slug→id resolution races a concurrent create: the id list goes incomplete and the server's bare 400 fires instead of the actionable client message · safe (nothing changed), degraded UX only · Slice C review (correctness)
+- MINOR · `plugins/arcade/assets/arcade-publish:423` · two server-side seeds sharing a slug (corrupted store only) make the slug Map last-win and silently drop an id from the reorder list · client check claims completeness, server 400s · Slice C review (correctness)
+- MINOR · `CLAUDE.md:24` (tony-skills) · the repo orientation doc still describes the CLI as "publish, update, and delete" — reorder and feature are missing · the doc sessions load automatically contradicts the command set; same drift pattern Slice A graded MAJOR · Slice C review (seams)
+- MINOR · `docs/arcade-skill-build-plan.md:239-243` (Slice D surface) · Slice D's before/after reorder preview requirement does not warn that the requested order is not the resulting order whenever featured seeds are not listed first (server sort) · a skill previewing the raw requested list as "after" shows an order production will not display · Slice C review (seams)
