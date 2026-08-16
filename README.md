@@ -217,13 +217,18 @@ Copy arcade's skill folder plus its `assets/` (the `arcade-publish` CLI) into
 
 ```bash
 mkdir -p ~/.claude/skills
+rm -rf ~/.claude/skills/arcade
 cp -R ~/Developer/tony-skills/plugins/arcade/skills/arcade ~/.claude/skills/arcade
 cp -R ~/Developer/tony-skills/plugins/arcade/assets        ~/.claude/skills/arcade/assets
 ```
 
+The `rm -rf` matters on re-runs: without it, `cp -R` into the existing folder
+nests copies inside it (`arcade/arcade/`) while the stale CLI keeps running.
+
 Restart Claude Code once and you get the bare `/arcade`. Needs Node 18+ and the
 config at `~/.config/line7/arcade.json`. The copy is real, not a link — after
-editing the repo, re-run the two `cp` lines (see Updating below).
+editing the repo, re-run the block above, `rm -rf` included (see Updating
+below).
 
 ## Updating
 
