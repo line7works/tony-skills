@@ -1,3 +1,6 @@
 .DS_Store
 __pycache__/
 *.pyc
+
+# /forge run output — images and manifests, not repo content
+generated-assets/

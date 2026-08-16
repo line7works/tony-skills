@@ -20,6 +20,14 @@ text is the durable join key. Entries before 2026-08-10 cite the script as
 `arcade-publish:<line>` when it lived at `~/.local/bin/arcade-publish`; it is
 now this folder's `arcade-publish`, reached by symlink from that path.
 
+**Location update, 2026-08-12** — the sentence above is now historical, kept
+because this ledger is additive-only. The script left this folder: it lives at
+`plugins/arcade/assets/arcade-publish` in this repo, and
+`~/.local/bin/arcade-publish` is a launcher that resolves it rather than a
+symlink. Every `arcade-publish:<line>` and `~/.local/bin/arcade-publish:<line>`
+citation below resolves against that file. This folder keeps only the ledger —
+deliberately, so there is one list and not two.
+
 ### 2026-08-09 — review: arcade-publish CLI
 
 - MAJOR · arcade-publish:68 · a 200 GET whose body lacks a `seeds` array is coerced to `[]` and the follow-up PUT replaces the whole registry · anomalous-but-OK response (proxy/maintenance JSON, API shape drift) → publish "succeeds" and every existing seed is erased from the gallery · correctness lens (reproduced against mock)

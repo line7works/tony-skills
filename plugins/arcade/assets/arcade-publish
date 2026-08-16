@@ -1,0 +1,588 @@
+#!/usr/bin/env node
+/**
+ * arcade-publish — post an HTML page to the Line 7 Arcade from the terminal.
+ *
+ * Usage:
+ *   arcade-publish list
+ *   arcade-publish publish <file.html> --name "My Game" [--slug my-game] [--featured]
+ *   arcade-publish update <slug> <file.html> [--name "New Name"] [--featured|--no-featured]
+ *   arcade-publish delete <slug> [--yes]
+ *   arcade-publish reorder <slug> <slug> ...   (the complete gallery, in order)
+ *   arcade-publish feature <slug> | unfeature <slug>
+ *
+ * Config: ~/.config/line7/arcade.json  →  { "password": "...", "base": "https://www.line7.works" }
+ *
+ * All commands run on the per-resource /api/admin/seeds endpoints: each
+ * one touches a single seed, so a concurrent admin edit can no longer be
+ * clobbered by a whole-document write. update uploads the new file, then
+ * PATCHes the existing seed's url — id and slug always survive, and order
+ * does too unless the same call toggles --featured on, which restamps the
+ * top-of-featured order (server behavior). The server stamps uploadedAt
+ * itself. delete never fires without printing its target first and getting
+ * a yes — interactively, or via --yes. reorder takes the whole gallery in the
+ * desired order (list prints slugs in menu order, ready to rearrange) and
+ * refuses before any write if the slugs don't cover every seed exactly once.
+ * feature/unfeature flip the featured pin without a file upload.
+ *
+ * `base` must be https, except for a local dev server on localhost/127.0.0.1.
+ */
+
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const readline = require("readline");
+
+const CONFIG_PATH = path.join(os.homedir(), ".config", "line7", "arcade.json");
+const RESERVED_SLUGS = new Set(["admin", "api", "new", "edit", "index"]);
+
+// The one http:// exception: a dev server on this machine, where the password
+// never leaves the loopback interface. Anchored and port-optional so it cannot
+// be widened by a lookalike host — "http://localhost.evil.com" does not match.
+const LOCAL_BASE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+function slugify(input) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function fail(msg) {
+  console.error("arcade-publish: " + msg);
+  process.exit(1);
+}
+
+function loadConfig() {
+  let raw;
+  try {
+    raw = fs.readFileSync(CONFIG_PATH, "utf8");
+  } catch {
+    fail(
+      `no config at ${CONFIG_PATH}\n` +
+        `Create it with:\n` +
+        `  { "password": "<admin password>", "base": "https://www.line7.works" }`
+    );
+  }
+  const cfg = JSON.parse(raw);
+  if (!cfg.password) fail(`config ${CONFIG_PATH} has no "password"`);
+  cfg.base = (cfg.base || "https://www.line7.works").replace(/\/+$/, "");
+  if (!cfg.base.startsWith("https://") && !LOCAL_BASE.test(cfg.base)) {
+    fail(
+      `"base" must start with https:// — the admin password travels on every request\n` +
+        `(the only exception is a local dev server: http://localhost[:port] or http://127.0.0.1[:port])`
+    );
+  }
+  return cfg;
+}
+
+// The page a slug resolves to. Against a local dev server the production URL
+// would name a different page entirely, which matters most in delete's
+// confirmation gate: the preview has to name the page actually about to go.
+function pageUrl(cfg, slug) {
+  return LOCAL_BASE.test(cfg.base)
+    ? `${cfg.base}/arcade/${slug}`
+    : `https://arcade.line7.works/arcade/${slug}`;
+}
+
+// All requests refuse redirects: a cross-origin hop silently drops the session
+// cookie (and a redirected login re-sends the password body elsewhere).
+async function send(url, opts) {
+  let res;
+  try {
+    res = await fetch(url, { ...opts, redirect: "manual" });
+  } catch (e) {
+    fail(`request to ${url} failed: ${e.message}`);
+  }
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get("location") || "(no location)";
+    fail(
+      `${url} redirects to ${loc} — set "base" in ${CONFIG_PATH} to the canonical host instead`
+    );
+  }
+  return res;
+}
+
+async function login(cfg) {
+  const res = await send(cfg.base + "/api/admin/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: cfg.password }),
+  });
+  if (!res.ok) fail(`login failed (${res.status}) — check the password in ${CONFIG_PATH}`);
+  const setCookie = res.headers.get("set-cookie") || "";
+  const match = setCookie.match(/line7_admin_session=[^;]+/);
+  if (!match) fail("login succeeded but no session cookie came back");
+  return match[0];
+}
+
+// The gallery in menu order (featured first, then `order`), straight from the
+// server — no client-side re-sorting, so what prints is what the site shows.
+async function listSeeds(cfg, cookie) {
+  const res = await send(cfg.base + "/api/admin/seeds", { headers: { Cookie: cookie } });
+  if (!res.ok) fail(`reading the gallery failed (${res.status})`);
+  const data = await res.json().catch(() => null);
+  if (data === null || typeof data !== "object" || !Array.isArray(data.seeds)) {
+    fail("the gallery response had no seed list — refusing to continue");
+  }
+  return data.seeds;
+}
+
+async function cmdList() {
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  if (seeds.length === 0) {
+    console.log("The arcade is empty.");
+    return;
+  }
+  // Printed in the server's menu order, not re-sorted here: the server owns the
+  // sort (featured first, then `order`), and a second opinion would only drift.
+  for (const s of seeds) {
+    const flag = s.featured ? " ★" : "";
+    const order = typeof s.order === "number" ? `order ${s.order}` : "no order";
+    const when = typeof s.uploadedAt === "string" ? s.uploadedAt.slice(0, 10) : "date unknown";
+    console.log(`${s.slug}${flag}  —  ${s.name}  (${order}, ${when})`);
+    console.log(`  ${pageUrl(cfg, s.slug)}`);
+  }
+}
+
+async function cmdPublish(args) {
+  const file = args._[0];
+  if (!file) fail("usage: arcade-publish publish <file.html> --name \"Name\" [--slug x] [--featured]");
+  if (!file.endsWith(".html")) fail("the file must end in .html");
+  let html;
+  try {
+    html = fs.readFileSync(file);
+  } catch {
+    fail(`cannot read ${file}`);
+  }
+
+  const name = args.name || path.basename(file, ".html");
+  const slug = slugify(args.slug || name);
+  if (!slug) fail(`"${name}" produces an empty slug — pass --slug`);
+  if (RESERVED_SLUGS.has(slug)) fail(`"${slug}" is a reserved slug`);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+
+  // No client-side duplicate pre-check: it read a list that was already stale
+  // by the time the write went out. The server's 409 is authoritative.
+  const form = new FormData();
+  form.append("file", new Blob([html], { type: "text/html" }), path.basename(file));
+  const upRes = await send(cfg.base + "/api/admin/upload", {
+    method: "POST",
+    headers: { Cookie: cookie },
+    body: form,
+  });
+  const upBody = await upRes.json().catch(() => ({}));
+  if (!upRes.ok) fail(`upload failed (${upRes.status}): ${upBody.error || "unknown error"}`);
+  if (!upBody.id || !upBody.url) {
+    fail("upload returned no id/url — refusing to register a broken seed");
+  }
+
+  // One seed, one call. The server assigns `order` and is the only judge of
+  // whether the slug is free.
+  const createRes = await send(cfg.base + "/api/admin/seeds", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({
+      name: name.trim(),
+      url: upBody.url,
+      slug,
+      featured: Boolean(args.featured),
+    }),
+  });
+  if (!createRes.ok) {
+    const errBody = await createRes.json().catch(() => ({}));
+    // The upload only exists to back a seed that now will not exist. Clean it
+    // up, but report honestly if the cleanup itself did not land.
+    const cleaned = await deleteUpload(cfg, cookie, upBody.url);
+    const orphan =
+      cleaned && cleaned.ok
+        ? "the uploaded file was removed"
+        : `the uploaded file is orphaned (${upBody.url})`;
+    if (createRes.status === 409) {
+      fail(`"${slug}" is already taken — pick another slug, or use update to replace that page (${orphan})`);
+    }
+    if (createRes.status === 400) {
+      fail(`the server rejected the seed: ${errBody.error || "missing name/url or unusable slug"} (${orphan})`);
+    }
+    fail(`upload stored but registering the seed failed (${createRes.status}) — ${orphan}; re-run to retry`);
+  }
+  const created = await createRes.json().catch(() => ({}));
+  if (!created.seed || !created.seed.slug) {
+    fail("the seed was registered but the server returned no seed object — run list to check what landed");
+  }
+
+  console.log(`Live: ${pageUrl(cfg, created.seed.slug)}`);
+  console.log(`Gallery: https://line7.works/arcade`);
+}
+
+// Cleanup/rollback path: must never kill the process, or the caller's real
+// message (success or the actual error) is lost behind a generic
+// "request failed". Returns the response, or null on network error/redirect.
+async function deleteUpload(cfg, cookie, url) {
+  try {
+    const res = await fetch(cfg.base + "/api/admin/upload", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ url }),
+      redirect: "manual",
+    });
+    return res.status >= 300 && res.status < 400 ? null : res;
+  } catch {
+    return null;
+  }
+}
+
+async function cmdUpdate(args) {
+  const [slugArg, file] = args._;
+  if (!slugArg || !file) {
+    fail('usage: arcade-publish update <slug> <file.html> [--name "Name"] [--featured|--no-featured]');
+  }
+  if (!file.endsWith(".html")) fail("the file must end in .html");
+  let html;
+  try {
+    html = fs.readFileSync(file);
+  } catch {
+    fail(`cannot read ${file}`);
+  }
+  const slug = slugify(slugArg);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  const existing = seeds.find((s) => s.slug === slug);
+  if (!existing) {
+    fail(`no seed with slug "${slug}" — use publish to create it, or list to see what exists`);
+  }
+
+  const form = new FormData();
+  form.append("file", new Blob([html], { type: "text/html" }), path.basename(file));
+  const upRes = await send(cfg.base + "/api/admin/upload", {
+    method: "POST",
+    headers: { Cookie: cookie },
+    body: form,
+  });
+  const upBody = await upRes.json().catch(() => ({}));
+  if (!upRes.ok) fail(`upload failed (${upRes.status}): ${upBody.error || "unknown error"}`);
+  if (!upBody.url) {
+    fail("upload returned no url — refusing to repoint the seed at nothing");
+  }
+
+  // One seed, one call: PATCH repoints the existing seed at the new file,
+  // keeping its id, slug, and order. The server stamps uploadedAt itself
+  // (only when the url actually changes) — never send one.
+  const patch = { url: upBody.url };
+  if (args.name) patch.name = args.name.trim();
+  if (args.featured !== undefined) patch.featured = args.featured;
+
+  const patchRes = await send(
+    `${cfg.base}/api/admin/seeds/${encodeURIComponent(existing.id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!patchRes.ok) {
+    const errBody = await patchRes.json().catch(() => ({}));
+    // The upload only exists to back an update that did not land. Roll it
+    // back, but report honestly if the cleanup itself did not land.
+    const cleaned = await deleteUpload(cfg, cookie, upBody.url);
+    const orphan =
+      cleaned && cleaned.ok
+        ? "the uploaded file was removed"
+        : `the uploaded file is orphaned (${upBody.url})`;
+    if (patchRes.status === 404) {
+      fail(`"${slug}" was deleted while uploading — nothing was changed (${orphan})`);
+    }
+    if (patchRes.status === 409) {
+      fail(`the server refused the update: ${errBody.error || "url or slug already taken"} (${orphan})`);
+    }
+    if (patchRes.status === 400) {
+      fail(`the server rejected the update: ${errBody.error || "unusable url"} (${orphan})`);
+    }
+    fail(`registering the update failed (${patchRes.status}) — the old page is untouched (${orphan})`);
+  }
+  const body = await patchRes.json().catch(() => ({}));
+  if (!body.seed || !body.seed.slug) {
+    fail("the update landed but the server returned no seed object — run list to check what happened");
+  }
+  // A 200 whose seed still carries the old url means the server dropped the
+  // `url` field — a deployment predating PATCH url support (2026-08-14).
+  // Without this check that reads as success while the live page is unchanged.
+  if (body.seed.url !== upBody.url) {
+    const cleaned = await deleteUpload(cfg, cookie, upBody.url);
+    const orphan =
+      cleaned && cleaned.ok
+        ? "the uploaded file was removed"
+        : `the uploaded file is orphaned (${upBody.url})`;
+    fail(
+      `the server accepted the update but did not repoint the seed — it likely predates PATCH url support; the old page is untouched (${orphan})`
+    );
+  }
+
+  // previousUrl names the now-orphaned old file, and is present only when the
+  // url actually changed — absent means nothing to clean up. A failure here
+  // just leaves an orphaned upload, which is harmless.
+  if (body.previousUrl) {
+    const delRes = await deleteUpload(cfg, cookie, body.previousUrl);
+    if (!delRes || !delRes.ok) {
+      console.error(`note: old upload was not deleted (${body.previousUrl}) — orphaned but harmless`);
+    }
+  }
+
+  console.log(`Updated: ${pageUrl(cfg, slug)}`);
+}
+
+// The confirmation gate. Prompts on stderr so a piped stdout stays clean, and
+// refuses outright rather than defaulting either way when there is no terminal
+// to answer on — an unattended `delete` must never proceed on silence.
+function confirmDelete() {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      fail(
+        "delete needs confirmation and stdin is not a terminal — " +
+          "re-run it interactively, or pass --yes if you already know what goes"
+      );
+    }
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+    // EOF (Ctrl-D, or stdin closing under a wrapper) never fires the question
+    // callback — without this handler the promise dangles and Node exits 0,
+    // which a caller reads as a completed delete. No answer means no.
+    let answered = false;
+    rl.on("close", () => {
+      if (!answered) resolve(false);
+    });
+    rl.question("Delete it? [y/N] ", (answer) => {
+      answered = true;
+      rl.close();
+      resolve(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+async function cmdDelete(args) {
+  const slugArg = args._[0];
+  if (!slugArg) fail("usage: arcade-publish delete <slug> [--yes]");
+  const slug = slugify(slugArg);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  const target = seeds.find((s) => s.slug === slug);
+  if (!target) {
+    fail(`no seed with slug "${slug}" — run list to see what exists`);
+  }
+
+  // Say what is about to go before anything destructive happens. Deleting a
+  // page is not undoable, and this used to fire on a fat-fingered slug with no
+  // preview at all — the seed's name only printed after it was already gone.
+  console.error("About to delete:");
+  console.error(`  slug: ${target.slug}`);
+  console.error(`  name: ${target.name}`);
+  console.error(`  url:  ${pageUrl(cfg, target.slug)}`);
+  if (!args.yes && !(await confirmDelete())) {
+    console.error(`Aborted — "${target.slug}" is still there.`);
+    process.exit(1);
+  }
+
+  // Unregister first, delete the file second: a failure between the two leaves
+  // an orphaned upload (harmless) rather than a live page pointing at nothing.
+  const delSeedRes = await send(
+    `${cfg.base}/api/admin/seeds/${encodeURIComponent(target.id)}`,
+    { method: "DELETE", headers: { Cookie: cookie } }
+  );
+  if (!delSeedRes.ok) {
+    if (delSeedRes.status === 404) fail(`"${slug}" is already gone — nothing to do`);
+    fail(`removing the seed failed (${delSeedRes.status}) — nothing was changed`);
+  }
+
+  if (target.url) {
+    const delRes = await deleteUpload(cfg, cookie, target.url);
+    if (!delRes || !delRes.ok) {
+      console.error(`note: uploaded file was not deleted (${target.url}) — orphaned but harmless`);
+    }
+  }
+
+  console.log(`Deleted "${slug}" (${target.name})`);
+}
+
+async function cmdReorder(args) {
+  if (args._.length === 0) {
+    fail("usage: arcade-publish reorder <slug> <slug> ...  (the complete gallery, in the desired order)");
+  }
+  const slugs = args._.map(slugify);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  const bySlug = new Map(seeds.map((s) => [s.slug, s]));
+
+  // Mirror of the server's own 400 rule (the id list must cover every seed
+  // exactly once), checked here first so the failure names the actual slugs
+  // instead of a bare 400 — and so nothing is sent when the list is wrong.
+  const seen = new Set();
+  const duplicated = [];
+  const unknown = [];
+  for (const s of slugs) {
+    if (seen.has(s) && !duplicated.includes(s)) duplicated.push(s);
+    seen.add(s);
+    if (!bySlug.has(s) && !unknown.includes(s)) unknown.push(s);
+  }
+  const missing = seeds.map((s) => s.slug).filter((s) => !seen.has(s));
+  if (unknown.length || missing.length || duplicated.length) {
+    const parts = [];
+    if (unknown.length) parts.push(`unknown: ${unknown.join(", ")}`);
+    if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
+    if (duplicated.length) parts.push(`listed more than once: ${duplicated.join(", ")}`);
+    fail(
+      `reorder needs every seed exactly once — ${parts.join("; ")}\n` +
+        `(run list for the current gallery; nothing was changed)`
+    );
+  }
+
+  const ids = slugs.map((s) => bySlug.get(s).id);
+  const res = await send(cfg.base + "/api/admin/seeds/reorder", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    fail(`reorder failed (${res.status}): ${errBody.error || "unknown error"} — nothing was changed`);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!Array.isArray(body.seeds)) {
+    fail("the reorder landed but the server returned no seed list — run list to check the result");
+  }
+  // The server's answer is the menu order (featured pages still sort to the
+  // top regardless of the requested order — server-owned rule).
+  console.log("New menu order:");
+  for (const s of body.seeds) {
+    console.log(`  ${s.slug}${s.featured ? " ★" : ""}  —  ${s.name}`);
+  }
+}
+
+async function cmdSetFeatured(args, featured) {
+  const verb = featured ? "feature" : "unfeature";
+  const slugArg = args._[0];
+  if (!slugArg) fail(`usage: arcade-publish ${verb} <slug>`);
+  const slug = slugify(slugArg);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  const target = seeds.find((s) => s.slug === slug);
+  if (!target) {
+    fail(`no seed with slug "${slug}" — run list to see what exists`);
+  }
+  // Already in the requested state: say so and send nothing. Featuring an
+  // already-featured seed is not a no-op server-side (the featured transition
+  // is what stamps top-of-featured order), so the safe skip is client-side.
+  // Strict equality on purpose: a seed whose entry lacks the flag entirely is
+  // not "already unfeatured" — it gets the PATCH, never a silent skip.
+  if (target.featured === featured) {
+    console.log(`"${slug}" is already ${featured ? "featured" : "not featured"} — nothing to do`);
+    return;
+  }
+
+  const res = await send(
+    `${cfg.base}/api/admin/seeds/${encodeURIComponent(target.id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ featured }),
+    }
+  );
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 404) fail(`"${slug}" was deleted while ${verb}ing — nothing was changed`);
+    fail(`${verb} failed (${res.status}): ${errBody.error || "unknown error"} — nothing was changed`);
+  }
+  const body = await res.json().catch(() => ({}));
+  // The flag must come back as a real boolean in the requested state — a 200
+  // whose seed omits `featured` would otherwise read as a successful unfeature
+  // (Boolean(undefined) === false), the lying-200 class this guard exists for.
+  if (!body.seed || typeof body.seed.featured !== "boolean" || body.seed.featured !== featured) {
+    fail(`the server accepted the ${verb} but the seed did not flip — run list to check what happened`);
+  }
+  console.log(`${featured ? "Featured" : "Unfeatured"} "${slug}" (${target.name})`);
+}
+
+// Per-command grammar. Anything not listed is a hard error: for a tool with a
+// destructive command, silently ignoring a typo'd flag or a stray positional
+// is how the wrong page gets touched.
+const COMMANDS = {
+  list: { flags: {}, positionals: 0 },
+  publish: { flags: { "--name": "value", "--slug": "value", "--featured": "bool", "--no-featured": "bool" }, positionals: 1 },
+  update: { flags: { "--name": "value", "--featured": "bool", "--no-featured": "bool" }, positionals: 2 },
+  delete: { flags: { "--yes": "bool" }, positionals: 1 },
+  reorder: { flags: {}, positionals: Infinity },
+  feature: { flags: {}, positionals: 1 },
+  unfeature: { flags: {}, positionals: 1 },
+};
+
+function parseArgs(argv, cmd) {
+  const grammar = COMMANDS[cmd];
+  const args = { _: [] };
+  if (!grammar) return args;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("--")) {
+      const kind = grammar.flags[a];
+      if (!kind) {
+        if (cmd === "update" && a === "--slug") {
+          fail("slugs can't be renamed — update keeps the slug; to move a page, delete the old slug and publish the new one");
+        }
+        fail(`unknown flag ${a} for "${cmd}"`);
+      }
+      if (kind === "value") {
+        const v = argv[++i];
+        if (v === undefined || v.startsWith("--")) fail(`${a} needs a value`);
+        if (a === "--name") {
+          // The server silently drops an empty name from a PATCH that also
+          // carries a url, so a blank rename would "succeed" without renaming.
+          if (!v.trim()) fail("--name cannot be empty or whitespace-only");
+          args.name = v;
+        } else args.slug = v;
+      } else if (a === "--yes") {
+        args.yes = true;
+      } else {
+        args.featured = a === "--featured";
+      }
+    } else {
+      args._.push(a);
+    }
+  }
+  if (args._.length > grammar.positionals) {
+    fail(`unexpected argument "${args._[grammar.positionals]}"`);
+  }
+  return args;
+}
+
+(async () => {
+  const [cmd, ...rest] = process.argv.slice(2);
+  const args = parseArgs(rest, cmd);
+  if (cmd === "list") await cmdList();
+  else if (cmd === "publish") await cmdPublish(args);
+  else if (cmd === "update") await cmdUpdate(args);
+  else if (cmd === "delete") await cmdDelete(args);
+  else if (cmd === "reorder") await cmdReorder(args);
+  else if (cmd === "feature") await cmdSetFeatured(args, true);
+  else if (cmd === "unfeature") await cmdSetFeatured(args, false);
+  else {
+    console.log(
+      "usage: arcade-publish list\n" +
+        '       arcade-publish publish <file.html> --name "Name" [--slug x] [--featured]\n' +
+        '       arcade-publish update <slug> <file.html> [--name "Name"] [--featured|--no-featured]\n' +
+        "       arcade-publish delete <slug> [--yes]\n" +
+        "       arcade-publish reorder <slug> <slug> ...\n" +
+        "       arcade-publish feature <slug> | unfeature <slug>"
+    );
+    process.exit(cmd ? 1 : 0);
+  }
+})().catch((e) => fail(e.message));

@@ -9,15 +9,17 @@ The test for belonging here is "was this made on one of these Macs and should it
 outlive the machine," not "is it a Claude Code skill." Two parts, split by how a
 thing is consumed rather than what it is:
 
-- a **plugin marketplace** under `plugins/` (five Claude Code plugins) — what
-  Claude Code installs and runs
+- a **plugin marketplace** under `plugins/` (seven Claude Code plugin folders,
+  six of them catalogued in `marketplace.json`) — what Claude Code installs
+  and runs
 - a **[Tony Tools](tools/)** category under `tools/` — everything else: macOS
   automations, dotfiles, scripts, and implementation specs for code that lives
   elsewhere
 
 ### Plugins
 
-Five plugins.
+Seven plugin folders. Six are catalogued in `.claude-plugin/marketplace.json`
+and installable with `/plugin`; `shutdown` is in the tree but not catalogued.
 
 **`sun`** provides two slash commands:
 
@@ -38,6 +40,20 @@ They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser 
 
 - `/signoff` runs an independent adversarial review of freshly built work and ends in a signed verdict. It is the back half of `/wargame`: war game before building, sign-off after. It auto-detects what was built (working diff, branch diff, or a named slice), finds the phase/slice doc and treats it as acceptance criteria, then spawns fresh reviewers who did **not** write the code and never receive the author's rationale — with a mandate to reject rather than bless. Lean by default (three lenses: spec conformance, correctness, seams against shipped code); DEEP adds security and test-quality. Findings need `file:line` plus a concrete failure scenario or they get cut, and blockers are re-verified against source before reporting. Output is a compact chat verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list and a "tried and failed to break" line, so a clean review can't hide behind "looks good." Report-only; it never fixes what it finds. Shares wargame's Opus-class floor.
 
+**`shutdown`** provides `/shutdown` — settle up before restarting Terminal or
+switching accounts: verify and report git state read-only, write a self-contained
+handoff to `~/Documents/handoffs/`, and save a memory pointer so the next session
+finds it. `/shutdown all` sweeps every open terminal session on the same machine.
+Not catalogued in `marketplace.json`, and unlike the others it carries no
+`.claude-plugin/plugin.json` — only `skills/shutdown/SKILL.md`.
+
+**`arcade`** provides `/arcade` — publish, update, list, reorder, feature, and
+take down pages on the Line 7 Arcade (`arcade.line7.works`) from any repo, by
+driving the bundled `arcade-publish` CLI (`plugins/arcade/assets/`), which also
+works standalone from the terminal. Build history in
+`docs/arcade-skill-build-plan.md`. Writes to live production; delete is gated
+behind an explicit conversational yes.
+
 ### Tony Tools
 
 Everything preserved here that Claude Code does **not** install, so it lives
@@ -46,7 +62,7 @@ covers things you copy onto a Mac directly (macOS automations, dotfiles,
 scripts) and also implementation specs for code that lives somewhere else. See
 [`tools/README.md`](tools/) for the category.
 
-Currently two:
+Currently four:
 
 - **`gmail-mcp/`** — a multi-account Gmail MCP server, registered with Claude
   Code as `gmail`. Reaches every authorized inbox at once by alias, which the
@@ -54,9 +70,18 @@ Currently two:
   a second Gmail replaces the first. Real source and installable, unlike the
   spec below. Runs from this checkout rather than a copy, so `git pull` updates
   it. Secrets live in `~/.gmail-mcp/`, never here.
+- **`antigravity-mcp/`** — an MCP server wrapping Google Antigravity's `agy`
+  CLI, so a Claude Code session can consult Gemini Pro the way it consults
+  Codex. Needed because `agy` consumes MCP servers but does not serve as one.
+  Real source, installable; registers as `antigravity`.
 - **`mcp-obsidian-worker/`** — the implementation spec for the Cloudflare Worker
   serving the `Obsidian Vault` MCP server on claude.ai web. Spec only; the
   Worker source is not in this repo.
+- **`arcade-publish/`** — the findings ledger (`punch-list.md`) for the
+  arcade-publish CLI, and a pointer README. The code moved to
+  `plugins/arcade/assets/` on 2026-08-12; the ledger deliberately stayed behind
+  as the single consolidated list. The one entry here that is documentation
+  rather than a runnable thing.
 
 (`copy-on-select` was sunset 2026-07-21 and is still in git history.)
 
@@ -64,7 +89,8 @@ Currently two:
 
 ```
 tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists the sun, clerk, forge, wargame, and signoff plugins)
+├── .claude-plugin/marketplace.json   catalog (lists sun, clerk, forge, wargame, signoff, arcade — not shutdown)
+├── docs/                             build plans and their punch lists
 ├── plugins/                          Claude Code plugins (installed via /plugin)
 │   ├── sun/
 │   │   ├── .claude-plugin/plugin.json
@@ -83,9 +109,15 @@ tony-skills/
 │   ├── wargame/
 │   │   ├── .claude-plugin/plugin.json
 │   │   └── skills/wargame/SKILL.md
-│   └── signoff/
+│   ├── signoff/
+│   │   ├── .claude-plugin/plugin.json
+│   │   └── skills/signoff/SKILL.md
+│   ├── shutdown/                     not in the catalog; no plugin.json
+│   │   └── skills/shutdown/SKILL.md
+│   └── arcade/
 │       ├── .claude-plugin/plugin.json
-│       └── skills/signoff/SKILL.md
+│       ├── skills/arcade/SKILL.md
+│       └── assets/                   arcade-publish (CLI), README.md
 └── tools/                            preserved work Claude Code doesn't install
     ├── README.md
     ├── gmail-mcp/                    multi-account Gmail MCP server (real source)
@@ -93,6 +125,10 @@ tony-skills/
     │   ├── src/                      store.ts, auth.ts, gmail.ts, server.ts
     │   ├── package.json
     │   └── tsconfig.json
+    ├── antigravity-mcp/              MCP bridge to Google Antigravity's agy CLI
+    ├── arcade-publish/               findings ledger + pointer (code lives in plugins/arcade/)
+    │   ├── README.md
+    │   └── punch-list.md
     └── mcp-obsidian-worker/          spec for the claude.ai Obsidian MCP Worker
         ├── README.md
         └── IMPLEMENTATION.md
@@ -110,6 +146,7 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/warga
 /plugin install forge@tony-skills
 /plugin install wargame@tony-skills
 /plugin install signoff@tony-skills
+/plugin install arcade@tony-skills
 ```
 
 Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, wargame as `/wargame:wargame`, and signoff as `/signoff:signoff`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
@@ -170,6 +207,29 @@ cp -R ~/Developer/tony-skills/plugins/forge/assets       ~/.claude/skills/forge/
 
 Restart Claude Code once and you get the bare `/forge`. The skill calls its CLI via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so in user-level mode it resolves to the copy you just placed. Needs `python3` (3.8+) and a `FAL_KEY` in the environment for live renders (`estimate` / `models` / `--dry-run` need no key). To update on any machine: `git pull` in `~/Developer/tony-skills` and re-run the two `cp` lines.
 
+### arcade (user-level, the same pattern)
+
+Copy arcade's skill folder plus its `assets/` (the `arcade-publish` CLI) into
+`~/.claude/skills/arcade/` — the flattened layout, SKILL.md at the root with
+`assets/` beside it, is what the skill's
+`${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}` fallback resolves; copying
+`skills/arcade/` alone leaves no CLI and every command fails:
+
+```bash
+mkdir -p ~/.claude/skills
+rm -rf ~/.claude/skills/arcade
+cp -R ~/Developer/tony-skills/plugins/arcade/skills/arcade ~/.claude/skills/arcade
+cp -R ~/Developer/tony-skills/plugins/arcade/assets        ~/.claude/skills/arcade/assets
+```
+
+The `rm -rf` matters on re-runs: without it, `cp -R` into the existing folder
+nests copies inside it (`arcade/arcade/`) while the stale CLI keeps running.
+
+Restart Claude Code once and you get the bare `/arcade`. Needs Node 18+ and the
+config at `~/.config/line7/arcade.json`. The copy is real, not a link — after
+editing the repo, re-run the block above, `rm -rf` included (see Updating
+below).
+
 ## Updating
 
 After editing a skill or the Clerk agent and pushing:
@@ -181,7 +241,14 @@ After editing a skill or the Clerk agent and pushing:
 /plugin update forge@tony-skills
 /plugin update wargame@tony-skills
 /plugin update signoff@tony-skills
+/plugin update arcade@tony-skills
 ```
+
+`arcade` matters most here: its installed copy is a real copy of the
+`arcade-publish` CLI, not a link to this repo, and it writes to live
+production — a stale copy and the terminal command can run different code
+against the live arcade. After any change to `plugins/arcade/`, update the
+plugin (or re-copy the user-level install) on every machine that has it.
 
 No version is pinned, so every pushed commit is the latest.
 
