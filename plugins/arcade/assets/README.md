@@ -19,6 +19,9 @@ arcade-publish list
 arcade-publish publish <file.html> --name "Name" [--slug my-page] [--featured]
 arcade-publish update <slug> <file.html> [--name "New Name"] [--featured|--no-featured]
 arcade-publish delete <slug> [--yes]
+arcade-publish reorder <slug> <slug> ...
+arcade-publish feature <slug>
+arcade-publish unfeature <slug>
 ```
 
 - `list` prints the gallery in the site's own menu order — featured pages first,
@@ -33,6 +36,16 @@ arcade-publish delete <slug> [--yes]
 - `update` keeps the slug and public URL stable, which is the point: a page can
   be revised in place and anyone holding the link still lands on it. It can also
   rename the page or toggle its featured flag in the same call.
+- `reorder` takes the **complete** gallery as slugs in the desired order — the
+  slugs `list` prints, rearranged. If the arguments miss a seed, name an
+  unknown one, or repeat one, it refuses before sending anything and says which
+  slugs are wrong. On success it prints the new menu order as the server
+  answers it — featured pages still sort to the top regardless of the
+  requested order (server rule).
+- `feature` / `unfeature` flip a page's featured pin without re-uploading its
+  file. Featuring stamps a top-of-featured `order` (server behavior, same as
+  the admin UI's toggle). Flipping a seed that is already in the requested
+  state sends nothing and says so.
 - Slug rules mirror the admin UI's `slugify` byte for byte: lowercased,
   non-alphanumerics collapsed to `-`, trimmed to 60 chars. `admin`, `api`,
   `new`, `edit`, and `index` are reserved.
@@ -112,9 +125,11 @@ predates this tool). Rotating the password is the only way to revoke it.
 
 Worth knowing before trusting it in a script:
 
-- All four commands touch a single seed through `/api/admin/seeds`, so none of
-  them can clobber a concurrent admin edit to any other page — the
-  whole-document write this tool used to do is gone entirely.
+- Every command runs on the per-resource `/api/admin/seeds` endpoints — the
+  whole-document write this tool used to do is gone entirely. All of them
+  touch a single seed except `reorder`, which uses the server's dedicated
+  reorder endpoint (it rejects any id list that does not cover every seed
+  exactly once, so a stale gallery view cannot silently drop a page).
 - `update` uploads the new file, then `PATCH`es the existing seed's `url`. The
   seed's id and slug always survive, and its `order` does too — **unless** the
   same call toggles `--featured` on, which stamps the top-of-featured order,

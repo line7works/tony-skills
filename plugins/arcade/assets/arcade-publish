@@ -7,17 +7,22 @@
  *   arcade-publish publish <file.html> --name "My Game" [--slug my-game] [--featured]
  *   arcade-publish update <slug> <file.html> [--name "New Name"] [--featured|--no-featured]
  *   arcade-publish delete <slug> [--yes]
+ *   arcade-publish reorder <slug> <slug> ...   (the complete gallery, in order)
+ *   arcade-publish feature <slug> | unfeature <slug>
  *
  * Config: ~/.config/line7/arcade.json  →  { "password": "...", "base": "https://line7.works" }
  *
- * All four commands run on the per-resource /api/admin/seeds endpoints: each
+ * All commands run on the per-resource /api/admin/seeds endpoints: each
  * one touches a single seed, so a concurrent admin edit can no longer be
  * clobbered by a whole-document write. update uploads the new file, then
  * PATCHes the existing seed's url — id and slug always survive, and order
  * does too unless the same call toggles --featured on, which restamps the
  * top-of-featured order (server behavior). The server stamps uploadedAt
  * itself. delete never fires without printing its target first and getting
- * a yes — interactively, or via --yes.
+ * a yes — interactively, or via --yes. reorder takes the whole gallery in the
+ * desired order (list prints slugs in menu order, ready to rearrange) and
+ * refuses before any write if the slugs don't cover every seed exactly once.
+ * feature/unfeature flip the featured pin without a file upload.
  *
  * `base` must be https, except for a local dev server on localhost/127.0.0.1.
  */
@@ -406,6 +411,103 @@ async function cmdDelete(args) {
   console.log(`Deleted "${slug}" (${target.name})`);
 }
 
+async function cmdReorder(args) {
+  if (args._.length === 0) {
+    fail("usage: arcade-publish reorder <slug> <slug> ...  (the complete gallery, in the desired order)");
+  }
+  const slugs = args._.map(slugify);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  const bySlug = new Map(seeds.map((s) => [s.slug, s]));
+
+  // Mirror of the server's own 400 rule (the id list must cover every seed
+  // exactly once), checked here first so the failure names the actual slugs
+  // instead of a bare 400 — and so nothing is sent when the list is wrong.
+  const seen = new Set();
+  const duplicated = [];
+  const unknown = [];
+  for (const s of slugs) {
+    if (seen.has(s) && !duplicated.includes(s)) duplicated.push(s);
+    seen.add(s);
+    if (!bySlug.has(s) && !unknown.includes(s)) unknown.push(s);
+  }
+  const missing = seeds.map((s) => s.slug).filter((s) => !seen.has(s));
+  if (unknown.length || missing.length || duplicated.length) {
+    const parts = [];
+    if (unknown.length) parts.push(`unknown: ${unknown.join(", ")}`);
+    if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
+    if (duplicated.length) parts.push(`listed more than once: ${duplicated.join(", ")}`);
+    fail(
+      `reorder needs every seed exactly once — ${parts.join("; ")}\n` +
+        `(run list for the current gallery; nothing was changed)`
+    );
+  }
+
+  const ids = slugs.map((s) => bySlug.get(s).id);
+  const res = await send(cfg.base + "/api/admin/seeds/reorder", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    fail(`reorder failed (${res.status}): ${errBody.error || "unknown error"} — nothing was changed`);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!Array.isArray(body.seeds)) {
+    fail("the reorder landed but the server returned no seed list — run list to check the result");
+  }
+  // The server's answer is the menu order (featured pages still sort to the
+  // top regardless of the requested order — server-owned rule).
+  console.log("New menu order:");
+  for (const s of body.seeds) {
+    console.log(`  ${s.slug}${s.featured ? " ★" : ""}  —  ${s.name}`);
+  }
+}
+
+async function cmdSetFeatured(args, featured) {
+  const verb = featured ? "feature" : "unfeature";
+  const slugArg = args._[0];
+  if (!slugArg) fail(`usage: arcade-publish ${verb} <slug>`);
+  const slug = slugify(slugArg);
+
+  const cfg = loadConfig();
+  const cookie = await login(cfg);
+  const seeds = await listSeeds(cfg, cookie);
+  const target = seeds.find((s) => s.slug === slug);
+  if (!target) {
+    fail(`no seed with slug "${slug}" — run list to see what exists`);
+  }
+  // Already in the requested state: say so and send nothing. Featuring an
+  // already-featured seed is not a no-op server-side (the featured transition
+  // is what stamps top-of-featured order), so the safe skip is client-side.
+  if (Boolean(target.featured) === featured) {
+    console.log(`"${slug}" is already ${featured ? "featured" : "not featured"} — nothing to do`);
+    return;
+  }
+
+  const res = await send(
+    `${cfg.base}/api/admin/seeds/${encodeURIComponent(target.id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ featured }),
+    }
+  );
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 404) fail(`"${slug}" was deleted while ${verb}ing — nothing was changed`);
+    fail(`${verb} failed (${res.status}): ${errBody.error || "unknown error"} — nothing was changed`);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!body.seed || Boolean(body.seed.featured) !== featured) {
+    fail(`the server accepted the ${verb} but the seed did not flip — run list to check what happened`);
+  }
+  console.log(`${featured ? "Featured" : "Unfeatured"} "${slug}" (${target.name})`);
+}
+
 // Per-command grammar. Anything not listed is a hard error: for a tool with a
 // destructive command, silently ignoring a typo'd flag or a stray positional
 // is how the wrong page gets touched.
@@ -414,6 +516,9 @@ const COMMANDS = {
   publish: { flags: { "--name": "value", "--slug": "value", "--featured": "bool", "--no-featured": "bool" }, positionals: 1 },
   update: { flags: { "--name": "value", "--featured": "bool", "--no-featured": "bool" }, positionals: 2 },
   delete: { flags: { "--yes": "bool" }, positionals: 1 },
+  reorder: { flags: {}, positionals: Infinity },
+  feature: { flags: {}, positionals: 1 },
+  unfeature: { flags: {}, positionals: 1 },
 };
 
 function parseArgs(argv, cmd) {
@@ -461,12 +566,17 @@ function parseArgs(argv, cmd) {
   else if (cmd === "publish") await cmdPublish(args);
   else if (cmd === "update") await cmdUpdate(args);
   else if (cmd === "delete") await cmdDelete(args);
+  else if (cmd === "reorder") await cmdReorder(args);
+  else if (cmd === "feature") await cmdSetFeatured(args, true);
+  else if (cmd === "unfeature") await cmdSetFeatured(args, false);
   else {
     console.log(
       "usage: arcade-publish list\n" +
         '       arcade-publish publish <file.html> --name "Name" [--slug x] [--featured]\n' +
         '       arcade-publish update <slug> <file.html> [--name "Name"] [--featured|--no-featured]\n' +
-        "       arcade-publish delete <slug> [--yes]"
+        "       arcade-publish delete <slug> [--yes]\n" +
+        "       arcade-publish reorder <slug> <slug> ...\n" +
+        "       arcade-publish feature <slug> | unfeature <slug>"
     );
     process.exit(cmd ? 1 : 0);
   }
