@@ -58,11 +58,37 @@ Names differ per layer (vault `project-knight`, repo `Project-Knight`, memory
 - **Capture knowledge before it strands.** The project's own CLI memory store gets orphaned when the repo moves; archive it first.
 - **Protect the data.** The repo is in git; the database is not. Always back the database up before idling it.
 - **Protect the code.** Never move or archive a repo with uncommitted or unpushed work without surfacing it first.
-- **Operate on the vault via the local filesystem** (`~/ObsidianVault` is on this Mac). Obsidian picks up external changes on its own.
+- **Operate on the vault via the local filesystem.** Canonical is `~/ObsidianVault` **on the Mac Studio** — not the laptop, whose copy is retired. Obsidian picks up external changes on its own. Never proceed without passing the vault gate in Phase 0.
 
 ---
 
 ## Phase 0 — Resolve and preflight (always, even on --dry-run)
+
+### Vault gate — run this FIRST, before the cue, before anything else
+
+Canonical is `~/ObsidianVault` **on the Mac Studio** (moved there 2026-07-27). The laptop's
+copy is retired to `~/ObsidianVault-RETIRED-2026-07-27` and `~/ObsidianVault` does not
+exist there. Every vault path in this skill assumes canonical is present on the machine
+you are running on. If it is not, the steps below do not fail — `mkdir -p` and `mv` will
+happily build a **phantom second vault**, which is the exact split-brain that took a full
+session to unwind in July 2026.
+
+Run this and STOP unless it prints `VAULT OK`:
+
+```bash
+V="$HOME/ObsidianVault"
+RP="$(cd "$V" 2>/dev/null && pwd -P)"
+if   [ -z "$RP" ];                      then echo "STOP: no vault at $V"
+elif [ ! -f "$V/AGENTS.md" ];           then echo "STOP: $V has no AGENTS.md — stub, not canonical"
+elif [ ! -d "$V/03-projects" ];         then echo "STOP: $V has no 03-projects/ — incomplete"
+elif [ "${RP#*/Documents/}" != "$RP" ]; then echo "STOP: vault is inside Documents/iCloud: $RP"
+else echo "VAULT OK — $RP — $(find "$V" -name '*.md' -not -path '*/.obsidian/*' | wc -l | tr -d ' ') notes"
+fi
+```
+
+If it prints anything other than `VAULT OK`, **abort the whole skill.** Do not `mkdir` the
+vault, do not create anything beneath it, do not continue to any later phase. Tell Tony
+which machine he appears to be on and that canonical lives on the Mac Studio.
 
 0. **Play the sunset cue** (cosmetic, non-blocking, best-effort): the moment a sunset begins, fire the sound and a compact terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
    - `afplay ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/set.wav >/dev/null 2>&1 &`
@@ -95,7 +121,7 @@ Names differ per layer (vault `project-knight`, repo `Project-Knight`, memory
    SUNSET PREVIEW — <project>      reason: "<Tony's reason>"
    ─────────────────────────────────────────────────────────
    Vault     move  03-projects/<slug>/  ->  90-archive/<slug>/      (N files)
-             flip  _index.md  status -> archived; tombstone; fix index + AGENTS.md
+             flip  _index.md  status -> archived; tombstone; fix root index
    Memory    flip  home note project_<slug>.md  status: archived + de-index
              archive  project store (M notes)  ->  _archive/<Name>/.claude-memory/
    Schedules cancel  <list of routines/crons tied to the project>   (none = skip)
@@ -121,8 +147,7 @@ Names differ per layer (vault `project-knight`, repo `Project-Knight`, memory
 2. In the moved `90-archive/<slug>/_index.md`, set frontmatter `status: archived` and add `archived: <today>`.
 3. Write the tombstone `90-archive/<slug>/_sunset.md` (template at the bottom).
 4. Edit the root `~/ObsidianVault/_index.md`: remove the project from "Active projects" and add it under an "## Archived" heading (create it if missing), linking to `90-archive/<slug>/_index`.
-5. Edit `~/ObsidianVault/AGENTS.md`: remove the slug from the "Known projects" line.
-6. Check for links the move broke: `grep -rn "03-projects/<slug>" ~/ObsidianVault --include='*.md'` and repoint any survivors to `90-archive/<slug>`.
+5. Check for links the move broke: `grep -rn "03-projects/<slug>" ~/ObsidianVault --include='*.md'` and repoint any survivors to `90-archive/<slug>`.
 
 ## Phase 2 — CLI / Claude Code memory (two stores)
 
