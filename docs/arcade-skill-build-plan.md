@@ -274,7 +274,7 @@ Footprint: `plugins/arcade/skills/arcade/SKILL.md`,
 `.claude-plugin/marketplace.json`.
 Not in this slice: CLI code changes.
 Depends on: Slice C
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 
@@ -625,3 +625,15 @@ a live session, neither of which the reviewer was permitted to create).
 - MAJOR · `docs/arcade-skill-build-plan.md:29-31` vs `plugins/arcade/skills/arcade/SKILL.md` · (installed-copy staleness/reinstall step documented by no Slice D artifact) · fixed — SKILL.md now states the installed copy is real not a link, goes stale when the repo changes, and names the reinstall route (`/plugin update arcade@tony-skills` or re-copy), consistent with the assets README (post-fix text at `SKILL.md:31-38`)
 - MAJOR · `docs/arcade-skill-build-plan.md:277,364-372` · (AC1/AC2 live-session legs unexercised) · not fixed — nothing installed or live-run since the review; remains open for Tony's manual run (AC1 from another repo, AC2 declined-delete against a localhost base)
 - MINOR · `README.md:143-149,180,217-220` · broke: arcade is catalogued and installable but absent from the README's install and update command lists — a fresh-machine follower installs the five older plugins and never arcade, and the Updating block omits `/plugin update arcade@tony-skills`, leaving installed copies stale · Slice D fix pass
+
+### 2026-08-15 — recheck: Slice D (second pass)
+The remaining MAJOR was closed by executing it, not waiving it. The skill was
+installed user-level (flattened `~/.claude/skills/arcade/`: SKILL.md +
+assets/) — it registered in the live session's skill roster on install — and a
+fresh session-agent working in `~/Developer/quarters` exercised both criteria
+against a scratchpad clone of line7-site at `7e5d87a` on `localhost:3357`
+(throwaway store, sandboxed-HOME config; production, Tony's real config, and
+the real line7-site checkout untouched — checkout verified clean after, rig
+deleted). The marketplace-cache install route was not exercised; the
+user-level front door was.
+- MAJOR · `docs/arcade-skill-build-plan.md:277,364-372` · (AC1/AC2 live-session legs unexercised) · fixed — AC1: "put this page on the arcade" followed the installed skill, resolved the CLI at `$HOME/.claude/skills/arcade/assets/arcade-publish` (no bare invocation anywhere), published quarters exit 0 with the live URL printed, and `list` showed it; AC2: the take-down request produced the slug/name/URL preview and a confirmation question, the declined answer ran no delete command in any form, and the final `list` showed the seed alive
