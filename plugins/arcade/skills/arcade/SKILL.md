@@ -24,6 +24,14 @@ ARCADE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}/assets/arcade-publish
 node "$ARCADE" <command> [args]
 ```
 
+**The installed copy goes stale.** Installing this skill — through the plugin
+marketplace or as a user-level copy — produces a real copy of the CLI, not a
+link to the repo. Editing `~/Developer/tony-skills` updates the terminal
+command immediately (its launcher resolves the repo at run time) but not this
+skill's copy: reinstall (`/plugin update arcade@tony-skills`, or re-copy for a
+user-level install) or the skill and the terminal run different versions
+against live production.
+
 ## Before anything else
 
 **Every write hits live production.** Pages go up at

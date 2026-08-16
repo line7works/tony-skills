@@ -274,7 +274,7 @@ Footprint: `plugins/arcade/skills/arcade/SKILL.md`,
 `.claude-plugin/marketplace.json`.
 Not in this slice: CLI code changes.
 Depends on: Slice C
-Status: built
+Status: signed off with conditions
 
 ## Build assumptions
 
@@ -608,3 +608,11 @@ executed against a hostile stub server under a sandboxed HOME (lying 200
 `{"seed":{}}`, missing-`featured` GET entry), plus happy-path and skip
 regressions. No fix-introduced defects.
 - MAJOR · `plugins/arcade/assets/arcade-publish:505` · (unfeature accepts a lying 200 whose seed omits `featured`; the :486 skip shares the coercion) · fixed — the response guard now demands a real boolean equal to the requested state (post-fix code at `arcade-publish:510`): lying 200 → exit 1 "the seed did not flip", no success line; the skip is strict equality (post-fix `arcade-publish:488`): a seed lacking the flag gets the PATCH, never a silent skip. Regressions green: honest feature/unfeature exit 0, already-featured skip sends no PATCH
+
+### 2026-08-15 — review: Slice D
+- MAJOR · `CLAUDE.md:14,24` and `README.md:13,21,51-55,92,117` (tony-skills) · registering arcade in marketplace.json falsifies both orientation docs — "five catalogued", "/arcade is not built yet ... stays out of marketplace.json" — with no ledger record · a fresh session loads CLAUDE.md, concludes /arcade does not exist, and rebuilds it or strips the marketplace entry as unauthorized drift; re-breaks the doc-accuracy class the Slice A recheck cleared · Slice D review (seams + correctness + spec, convergent)
+- MAJOR · `docs/arcade-skill-build-plan.md:29-31` vs `plugins/arcade/skills/arcade/SKILL.md` · the Constraints amendment assigns Slice D to document the installed-copy staleness and reinstall step; no Slice D artifact does — the rule lives only in the Slice A-era assets README · Tony edits the repo CLI, the terminal launcher updates instantly, the installed /arcade silently drives a stale copy against live production and the skill itself says nothing · Slice D review (spec)
+- MAJOR · `docs/arcade-skill-build-plan.md:277,364-372` · AC1 and AC2's live-session legs are unexercised (disclosed builder call) — the skill has never been installed or triggered anywhere · the description's trigger phrasing or the plugin-root path fails under a real marketplace install and surfaces only when a live-production write is attempted; needs Tony's manual live-session run against another repo (AC2 against a localhost base) · Slice D review (seams + spec, convergent; rule-4 cap)
+- MINOR · `plugins/arcade/skills/arcade/SKILL.md:105` · "a seed already in the requested state is skipped with no request sent" omits the strict-equality nuance — a legacy seed lacking the `featured` field gets the PATCH on unfeature, never a skip · skill predicts no request; CLI sends one · Slice D review (spec + seams + correctness, convergent)
+- MINOR · `plugins/arcade/skills/arcade/SKILL.md:33` · "publish and update are slug-idempotent" — publish actually refuses a taken slug, as the file itself states 20 lines later; wording inherited from R4 · a session retries publish on the same slug expecting idempotence and gets a 409 · Slice D review (correctness)
+- MINOR · `plugins/arcade/skills/arcade/SKILL.md:23` · the `$HOME/.claude/skills/arcade` fallback dangles under a naive copy of `plugins/arcade/skills/arcade/` alone — the real user-level convention is the flattened SKILL.md + assets/ layout forge uses, documented nowhere for arcade · a hand-installed skill resolves no CLI and every command 127s · Slice D review (correctness + seams, low confidence)

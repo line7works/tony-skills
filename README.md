@@ -10,7 +10,7 @@ outlive the machine," not "is it a Claude Code skill." Two parts, split by how a
 thing is consumed rather than what it is:
 
 - a **plugin marketplace** under `plugins/` (seven Claude Code plugin folders,
-  five of them catalogued in `marketplace.json`) — what Claude Code installs
+  six of them catalogued in `marketplace.json`) — what Claude Code installs
   and runs
 - a **[Tony Tools](tools/)** category under `tools/` — everything else: macOS
   automations, dotfiles, scripts, and implementation specs for code that lives
@@ -18,9 +18,8 @@ thing is consumed rather than what it is:
 
 ### Plugins
 
-Seven plugin folders. Five are catalogued in `.claude-plugin/marketplace.json`
-and installable with `/plugin`; `shutdown` and `arcade` are in the tree but not
-yet catalogued.
+Seven plugin folders. Six are catalogued in `.claude-plugin/marketplace.json`
+and installable with `/plugin`; `shutdown` is in the tree but not catalogued.
 
 **`sun`** provides two slash commands:
 
@@ -48,11 +47,12 @@ finds it. `/shutdown all` sweeps every open terminal session on the same machine
 Not catalogued in `marketplace.json`, and unlike the others it carries no
 `.claude-plugin/plugin.json` — only `skills/shutdown/SKILL.md`.
 
-**`arcade`** bundles the `arcade-publish` CLI (`plugins/arcade/assets/`), which
-publishes, updates, reorders, and takes down pages on the Line 7 Arcade
-(`arcade.line7.works`) from the terminal. The `/arcade` skill that drives it is
-not built yet — see `docs/arcade-skill-build-plan.md`. Not catalogued in
-`marketplace.json` until that skill lands. Writes to live production.
+**`arcade`** provides `/arcade` — publish, update, list, reorder, feature, and
+take down pages on the Line 7 Arcade (`arcade.line7.works`) from any repo, by
+driving the bundled `arcade-publish` CLI (`plugins/arcade/assets/`), which also
+works standalone from the terminal. Build history in
+`docs/arcade-skill-build-plan.md`. Writes to live production; delete is gated
+behind an explicit conversational yes.
 
 ### Tony Tools
 
@@ -89,7 +89,7 @@ Currently four:
 
 ```
 tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists sun, clerk, forge, wargame, signoff — not shutdown or arcade)
+├── .claude-plugin/marketplace.json   catalog (lists sun, clerk, forge, wargame, signoff, arcade — not shutdown)
 ├── docs/                             build plans and their punch lists
 ├── plugins/                          Claude Code plugins (installed via /plugin)
 │   ├── sun/
@@ -114,8 +114,9 @@ tony-skills/
 │   │   └── skills/signoff/SKILL.md
 │   ├── shutdown/                     not in the catalog; no plugin.json
 │   │   └── skills/shutdown/SKILL.md
-│   └── arcade/                       not in the catalog until /arcade lands
+│   └── arcade/
 │       ├── .claude-plugin/plugin.json
+│       ├── skills/arcade/SKILL.md
 │       └── assets/                   arcade-publish (CLI), README.md
 └── tools/                            preserved work Claude Code doesn't install
     ├── README.md
