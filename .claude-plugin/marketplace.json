@@ -35,6 +35,12 @@
       "source": "./plugins/signoff",
       "description": "/signoff runs an independent adversarial review of freshly built work and ends in a signed verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list. Reviewers who did not write the code check it against its spec. The back half of /wargame. Opus-class models or better.",
       "tags": ["review", "quality-gate", "adversarial"]
+    },
+    {
+      "name": "arcade",
+      "source": "./plugins/arcade",
+      "description": "/arcade publishes and manages pages on the Line 7 Arcade (arcade.line7.works) from any repo — publish, update, list, reorder, feature, and delete via the bundled arcade-publish CLI. Writes to live production; delete is gated behind an explicit conversational yes.",
+      "tags": ["publishing", "line7", "arcade"]
     }
   ]
 }

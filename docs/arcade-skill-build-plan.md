@@ -274,7 +274,7 @@ Footprint: `plugins/arcade/skills/arcade/SKILL.md`,
 `.claude-plugin/marketplace.json`.
 Not in this slice: CLI code changes.
 Depends on: Slice C
-Status: not started
+Status: built
 
 ## Build assumptions
 
@@ -360,6 +360,28 @@ Status: not started
   manual grammar probes (stray flag, extra positional, misapplied `--yes`,
   missing positional — all hard errors); R4 by feeding `list`'s printed slugs
   back into `reorder` inside AC1 · builder call
+
+### Slice D · 2026-08-15
+- AC1 and AC2's live-session legs were NOT exercised: both require the skill
+  installed and an interactive session in another repo, and AC1's publish leg
+  writes to live production. Left for Tony as the plan's own verify lines
+  state ("manual: live session test"). The mechanical halves ran: the
+  plugin-root invocation was executed with `CLAUDE_PLUGIN_ROOT` set and the
+  CLI ran from the plugin copy (usage printed, exit 1 on a bogus command);
+  AC3 via `python3 -m json.tool` on both JSONs plus `claude plugin validate`
+  (passed; no-version warnings are pre-existing across all plugins); AC4 grep
+  shows only the plugin-root invocation and prose mentions, no bare command · builder call
+- The skill's reorder preview step states the featured-first server-sort
+  caveat, closing the Slice C review MINOR aimed at Slice D's surface
+  (plan:581): the raw requested list is flagged as differing from the
+  resulting order when featured seeds are not listed first · builder call
+- The skill invokes the CLI as `node "$ARCADE"` rather than executing the
+  file, matching the launcher script and forge's interpreter-explicit
+  pattern; R1's path requirement is about resolution, not exec style · builder call
+- R2's update coverage carries the two caveats prior reviews forced into the
+  CLI README (featured toggle restamps `order`; legacy-seed file replace
+  moves it to the end of its block) so Slice D's skill copy does not
+  reintroduce the uncaveated survival claim graded MAJOR twice · builder call
 
 ## Deviations
 
