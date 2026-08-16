@@ -221,7 +221,7 @@ Footprint: `plugins/arcade/assets/arcade-publish`,
 `plugins/arcade/assets/README.md`.
 Not in this slice: SKILL.md; any change to how featured sorts (server-owned).
 Depends on: Slice B
-Status: signed off with conditions
+Status: signed off
 
 ## Slice D — the /arcade skill and marketplace entry
 
@@ -579,3 +579,10 @@ honesty, and the absent-previousUrl path examined and cleared).
 - MINOR · `plugins/arcade/assets/arcade-publish:423` · two server-side seeds sharing a slug (corrupted store only) make the slug Map last-win and silently drop an id from the reorder list · client check claims completeness, server 400s · Slice C review (correctness)
 - MINOR · `CLAUDE.md:24` (tony-skills) · the repo orientation doc still describes the CLI as "publish, update, and delete" — reorder and feature are missing · the doc sessions load automatically contradicts the command set; same drift pattern Slice A graded MAJOR · Slice C review (seams)
 - MINOR · `docs/arcade-skill-build-plan.md:239-243` (Slice D surface) · Slice D's before/after reorder preview requirement does not warn that the requested order is not the resulting order whenever featured seeds are not listed first (server sort) · a skill previewing the raw requested list as "after" shows an order production will not display · Slice C review (seams)
+
+### 2026-08-15 — recheck: Slice C
+Fix in a81ab7a verified by a fresh independent reviewer; both scenario legs
+executed against a hostile stub server under a sandboxed HOME (lying 200
+`{"seed":{}}`, missing-`featured` GET entry), plus happy-path and skip
+regressions. No fix-introduced defects.
+- MAJOR · `plugins/arcade/assets/arcade-publish:505` · (unfeature accepts a lying 200 whose seed omits `featured`; the :486 skip shares the coercion) · fixed — the response guard now demands a real boolean equal to the requested state (post-fix code at `arcade-publish:510`): lying 200 → exit 1 "the seed did not flip", no success line; the skip is strict equality (post-fix `arcade-publish:488`): a seed lacking the flag gets the PATCH, never a silent skip. Regressions green: honest feature/unfeature exit 0, already-featured skip sends no PATCH
