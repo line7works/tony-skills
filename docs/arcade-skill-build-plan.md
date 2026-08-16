@@ -221,7 +221,7 @@ Footprint: `plugins/arcade/assets/arcade-publish`,
 `plugins/arcade/assets/README.md`.
 Not in this slice: SKILL.md; any change to how featured sorts (server-owned).
 Depends on: Slice B
-Status: not started
+Status: built
 
 ## Slice D — the /arcade skill and marketplace entry
 
@@ -328,6 +328,38 @@ Status: not started
   delivered EOF before the prompt attached and reported exit 0 with no delete —
   a harness artifact. With stdin held open the CLI printed Aborted and exited 1,
   seed present · builder call
+
+### Slice C · 2026-08-15
+- Verification ran against `~/Developer/line7-site` itself (per the invocation)
+  on `Main` at `7e5d87a` — one merge (PR #26, mobile-polish) ahead of the
+  `0659cb7` the invocation named; tree clean, seeds routes untouched by that
+  merge, `data/site.json` backed up first and restored byte-identical (diff
+  verified), `git status` clean after. `DATABASE_URL` never set; CLI ran under
+  a sandboxed `HOME` with a localhost-pointed config, as in Slice B · builder call
+- `reorder` and `feature`/`unfeature` slugify their slug arguments before
+  lookup, matching `update`/`delete`; the known trailing-hyphen unaddressability
+  MINOR therefore extends to them — consistency chosen over a one-command fix
+  the plan's Out of scope defers · builder call
+- R1's "missing or unknown" pre-check also rejects a slug listed twice: the
+  server's rule is "every seed exactly once", and a duplicate both shadows a
+  missing seed and would send a duplicate id. Reported as its own category in
+  the error · builder call
+- `feature`/`unfeature` on a seed already in the requested state prints
+  "nothing to do" and sends no PATCH, exit 0: the featured transition is what
+  stamps top-of-featured `order` server-side, so a redundant `featured: true`
+  is not guaranteed a no-op; the safe skip is client-side · builder call
+- Both new write paths carry the same response-shape guards as Slice B's
+  (reorder demands `seeds` back; feature demands the flag actually flipped),
+  mirroring the stale-200 guard the Slice B review mandated for `update` · builder call
+- AC3's "unfeature a returns it": the seed returns to the non-featured block,
+  but not to its exact prior list position — featuring restamps `order`
+  (observed live: `c a b` → feature a → `a★ c b` → unfeature a → `a c b`).
+  Server-owned behavior this slice's Not-in-this-slice line excludes; the
+  criterion's block-membership intent is met · builder call
+- R3 and R4 have no acceptance criterion of their own. R3 was verified by four
+  manual grammar probes (stray flag, extra positional, misapplied `--yes`,
+  missing positional — all hard errors); R4 by feeding `list`'s printed slugs
+  back into `reorder` inside AC1 · builder call
 
 ## Deviations
 
