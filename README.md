@@ -146,6 +146,7 @@ managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/warga
 /plugin install forge@tony-skills
 /plugin install wargame@tony-skills
 /plugin install signoff@tony-skills
+/plugin install arcade@tony-skills
 ```
 
 Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, wargame as `/wargame:wargame`, and signoff as `/signoff:signoff`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
@@ -206,6 +207,24 @@ cp -R ~/Developer/tony-skills/plugins/forge/assets       ~/.claude/skills/forge/
 
 Restart Claude Code once and you get the bare `/forge`. The skill calls its CLI via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so in user-level mode it resolves to the copy you just placed. Needs `python3` (3.8+) and a `FAL_KEY` in the environment for live renders (`estimate` / `models` / `--dry-run` need no key). To update on any machine: `git pull` in `~/Developer/tony-skills` and re-run the two `cp` lines.
 
+### arcade (user-level, the same pattern)
+
+Copy arcade's skill folder plus its `assets/` (the `arcade-publish` CLI) into
+`~/.claude/skills/arcade/` — the flattened layout, SKILL.md at the root with
+`assets/` beside it, is what the skill's
+`${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}` fallback resolves; copying
+`skills/arcade/` alone leaves no CLI and every command fails:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R ~/Developer/tony-skills/plugins/arcade/skills/arcade ~/.claude/skills/arcade
+cp -R ~/Developer/tony-skills/plugins/arcade/assets        ~/.claude/skills/arcade/assets
+```
+
+Restart Claude Code once and you get the bare `/arcade`. Needs Node 18+ and the
+config at `~/.config/line7/arcade.json`. The copy is real, not a link — after
+editing the repo, re-run the two `cp` lines (see Updating below).
+
 ## Updating
 
 After editing a skill or the Clerk agent and pushing:
@@ -217,7 +236,14 @@ After editing a skill or the Clerk agent and pushing:
 /plugin update forge@tony-skills
 /plugin update wargame@tony-skills
 /plugin update signoff@tony-skills
+/plugin update arcade@tony-skills
 ```
+
+`arcade` matters most here: its installed copy is a real copy of the
+`arcade-publish` CLI, not a link to this repo, and it writes to live
+production — a stale copy and the terminal command can run different code
+against the live arcade. After any change to `plugins/arcade/`, update the
+plugin (or re-copy the user-level install) on every machine that has it.
 
 No version is pinned, so every pushed commit is the latest.
 

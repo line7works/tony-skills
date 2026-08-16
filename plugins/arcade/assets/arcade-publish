@@ -10,7 +10,7 @@
  *   arcade-publish reorder <slug> <slug> ...   (the complete gallery, in order)
  *   arcade-publish feature <slug> | unfeature <slug>
  *
- * Config: ~/.config/line7/arcade.json  →  { "password": "...", "base": "https://line7.works" }
+ * Config: ~/.config/line7/arcade.json  →  { "password": "...", "base": "https://www.line7.works" }
  *
  * All commands run on the per-resource /api/admin/seeds endpoints: each
  * one touches a single seed, so a concurrent admin edit can no longer be
@@ -62,7 +62,7 @@ function loadConfig() {
     fail(
       `no config at ${CONFIG_PATH}\n` +
         `Create it with:\n` +
-        `  { "password": "<admin password>", "base": "https://line7.works" }`
+        `  { "password": "<admin password>", "base": "https://www.line7.works" }`
     );
   }
   const cfg = JSON.parse(raw);
