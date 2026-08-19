@@ -50,6 +50,13 @@ Troubleshooting).
 
 ## Authoring a page for the arcade
 
+> **Pending deploy (2026-08-18):** the `.html` link fallback and the friendly
+> 10 MB / 413 size error below ship with line7-site branch
+> `arcade-field-report-fixes`, not yet merged to Main. Until it deploys, the
+> live arcade 404s sibling `.html` links (bake absolute `/arcade/<slug>` paths)
+> and oversize uploads fail with a raw storage error. Delete this note once
+> that branch is live.
+
 When you're building (not just shipping) the HTML, these constraints apply:
 
 - **One self-contained file per page.** Inline everything — CSS, JS, images
