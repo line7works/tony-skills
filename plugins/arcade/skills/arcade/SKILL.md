@@ -2,9 +2,13 @@
 name: arcade
 description: >-
   Manage the Line 7 Arcade (arcade.line7.works) from any repo by driving the
-  bundled arcade-publish CLI. Use when Tony wants to publish, put, or post a
-  page "on the arcade" ("put that on the arcade", "post this to the arcade",
-  "arcade this"), update or replace an arcade page, take down / remove / delete
+  bundled arcade-publish CLI. The arcade is Tony's own public site — it is NOT
+  claude.ai Artifacts, and an Artifact link is never an arcade link; any
+  request to get a page "on the arcade" or "to /arcade" means this skill. Use
+  when Tony wants to publish, put, post, upload, or load a page "on the
+  arcade" ("put that on the arcade", "post this to the arcade", "upload to
+  /arcade", "arcade this"), update or replace an arcade page, take down /
+  remove / delete
   a page from the arcade, reorder the arcade wall ("move X to the top"),
   feature or unfeature a page, or asks "what's on the arcade" / to list the
   gallery. Writes to LIVE production — there is no staging arcade — so delete
@@ -43,6 +47,26 @@ nothing brings them back.
 
 Requires Node 18+ and the config at `~/.config/line7/arcade.json` (see
 Troubleshooting).
+
+## Authoring a page for the arcade
+
+When you're building (not just shipping) the HTML, these constraints apply:
+
+- **One self-contained file per page.** Inline everything — CSS, JS, images
+  and fonts as data URIs. There is no sibling-asset hosting.
+- **Size: 10 MB max per page**, enforced by the upload endpoint (413) — and
+  inlined photos are where the weight goes. Recompress images before
+  publishing; a page over a few MB is usually unoptimized photos.
+- **Multi-page sets: pick slugs before you build.** Cross-page links must
+  target `/arcade/<slug>` paths. The viewer forgives `href="party.html"` by
+  retrying the lookup with `.html` stripped, but that only works if the page
+  was published under slug `party` — so when pages link to each other, decide
+  each slug up front, bake the links in, and pass `--slug` explicitly instead
+  of letting it auto-derive.
+- **Sandboxed serving (no ARCADE_HOST):** `localStorage` AND `sessionStorage`
+  throw in the opaque origin — wrap access in try/catch or a React page can
+  blank entirely. Cookies and same-origin fetch are also unavailable. The
+  live arcade host serves unsandboxed, but write pages that degrade anyway.
 
 ## The five jobs
 
