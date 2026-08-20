@@ -62,7 +62,10 @@ When you're building (not just shipping) the HTML, these constraints apply:
   retrying the lookup with `.html` stripped, but that only works if the page
   was published under slug `party` — so when pages link to each other, decide
   each slug up front, bake the links in, and pass `--slug` explicitly instead
-  of letting it auto-derive.
+  of letting it auto-derive — the convention is **slug = filename minus
+  `.html`** (`party.html` → slug `party`), same as the site README states.
+  One exception: `index` is reserved, so a hub page can never be
+  `index.html` — name it `home.html` and link accordingly.
 - **Sandboxed serving (no ARCADE_HOST):** `localStorage` AND `sessionStorage`
   throw in the opaque origin — wrap access in try/catch or a React page can
   blank entirely. Cookies and same-origin fetch are also unavailable. The
