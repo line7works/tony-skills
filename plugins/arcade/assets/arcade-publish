@@ -35,6 +35,20 @@ const readline = require("readline");
 const CONFIG_PATH = path.join(os.homedir(), ".config", "line7", "arcade.json");
 const RESERVED_SLUGS = new Set(["admin", "api", "new", "edit", "index"]);
 
+// Keep in sync with line7-site: app/api/admin/upload/route.ts and
+// sections/admin/Arcade.tsx. Checked here so an oversize page fails
+// instantly with a plain message instead of after a multi-MB round trip.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+function checkSize(html, file) {
+  if (html.length > MAX_UPLOAD_BYTES) {
+    fail(
+      `${file} is ${(Math.ceil((html.length / 1024 / 1024) * 10) / 10).toFixed(1)} MB — the arcade limit is ` +
+      `${MAX_UPLOAD_BYTES / 1024 / 1024} MB. Compress embedded images and retry.`
+    );
+  }
+}
+
 // The one http:// exception: a dev server on this machine, where the password
 // never leaves the loopback interface. Anchored and port-optional so it cannot
 // be widened by a lookalike host — "http://localhost.evil.com" does not match.
@@ -158,6 +172,7 @@ async function cmdPublish(args) {
   } catch {
     fail(`cannot read ${file}`);
   }
+  checkSize(html, file);
 
   const name = args.name || path.basename(file, ".html");
   const slug = slugify(args.slug || name);
@@ -249,6 +264,7 @@ async function cmdUpdate(args) {
   } catch {
     fail(`cannot read ${file}`);
   }
+  checkSize(html, file);
   const slug = slugify(slugArg);
 
   const cfg = loadConfig();
