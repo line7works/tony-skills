@@ -93,6 +93,32 @@ export function extractBody(message: gmail_v1.Schema$Message): string {
   return message.snippet ?? "";
 }
 
+export interface AttachmentRef {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  attachmentId: string;
+}
+
+/** Walks the MIME tree and returns every part that carries a real attachment. */
+export function listAttachments(message: gmail_v1.Schema$Message): AttachmentRef[] {
+  const found: AttachmentRef[] = [];
+  const walk = (part: gmail_v1.Schema$MessagePart | undefined): void => {
+    if (!part) return;
+    if (part.body?.attachmentId) {
+      found.push({
+        filename: part.filename || "unnamed",
+        mimeType: part.mimeType ?? "application/octet-stream",
+        sizeBytes: part.body.size ?? 0,
+        attachmentId: part.body.attachmentId,
+      });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  };
+  walk(message.payload);
+  return found;
+}
+
 /** RFC 2047 encoding, so non-ASCII subjects and names survive the trip. */
 function encodeHeaderValue(value: string): string {
   // eslint-disable-next-line no-control-regex

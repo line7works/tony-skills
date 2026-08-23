@@ -3,7 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { buildRawMessage, describeError, extractBody, getClient, header } from "./gmail.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
+
+import { buildRawMessage, describeError, extractBody, getClient, header, listAttachments } from "./gmail.js";
 import { listAccounts } from "./store.js";
 
 const server = new McpServer({ name: "gmail-mcp", version: "0.1.0" });
@@ -145,6 +149,74 @@ server.registerTool(
         return parts.join("\n");
       });
       return text(`Thread ${threadId} in ${email}\n\n${rendered.join("\n\n")}`);
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.registerTool(
+  "save_attachments",
+  {
+    title: "Save a message's attachments to disk",
+    description:
+      "Downloads a message's attachments (images, PDFs, any file) to a local directory and returns the saved " +
+      "paths, so the files can be opened or read. Pass a filename to fetch just one attachment; omit it to " +
+      "save them all. With list set to true, only lists what is attached without downloading anything. " +
+      "Attachments hang off messages, not threads — get the message id from read_thread.",
+    inputSchema: {
+      account: accountArg,
+      messageId: z.string().describe("Message id, as shown by read_thread (not a thread id)."),
+      filename: z.string().optional().describe("Save only the attachment with this exact filename."),
+      outDir: z
+        .string()
+        .optional()
+        .describe("Directory to save into. Defaults to ~/Downloads/gmail-attachments/<messageId>/."),
+      list: z.boolean().optional().describe("If true, list the attachments without downloading."),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ account, messageId, filename, outDir, list }) => {
+    try {
+      const { gmail, email } = await getClient(await resolveAlias(account));
+      const msg = await gmail.users.messages.get({ userId: "me", id: messageId, format: "full" });
+      let attachments = listAttachments(msg.data);
+      if (!attachments.length) return text(`Message ${messageId} in ${email} has no attachments.`);
+      if (filename) {
+        attachments = attachments.filter((a) => a.filename === filename);
+        if (!attachments.length) {
+          throw new Error(
+            `No attachment named "${filename}" on ${messageId}. Attached: ${listAttachments(msg.data)
+              .map((a) => a.filename)
+              .join(", ")}`,
+          );
+        }
+      }
+
+      if (list) {
+        const rows = attachments.map((a) => `${a.filename}\t${a.mimeType}\t${a.sizeBytes} bytes`);
+        return text(`${rows.length} attachment(s) on ${messageId} in ${email}\n\n${rows.join("\n")}`);
+      }
+
+      const dir = outDir ?? path.join(homedir(), "Downloads", "gmail-attachments", messageId);
+      await mkdir(dir, { recursive: true });
+
+      const saved = await Promise.all(
+        attachments.map(async (a) => {
+          const res = await gmail.users.messages.attachments.get({
+            userId: "me",
+            messageId,
+            id: a.attachmentId,
+          });
+          if (!res.data.data) throw new Error(`Gmail returned no data for attachment "${a.filename}".`);
+          // Strip path separators so a hostile filename can't escape the target directory.
+          const safeName = path.basename(a.filename.replace(/[/\\]/g, "_")) || "unnamed";
+          const dest = path.join(dir, safeName);
+          await writeFile(dest, Buffer.from(res.data.data, "base64url"));
+          return `${dest}\t${a.mimeType}\t${a.sizeBytes} bytes`;
+        }),
+      );
+      return text(`Saved ${saved.length} attachment(s) from ${messageId} in ${email}\n\n${saved.join("\n")}`);
     } catch (err) {
       return fail(err);
     }
