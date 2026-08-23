@@ -3,11 +3,20 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { buildRawMessage, describeError, extractBody, getClient, header, listAttachments } from "./gmail.js";
+import {
+  buildRawMessage,
+  describeError,
+  extractBody,
+  getClient,
+  guessMimeType,
+  header,
+  listAttachments,
+  type OutgoingAttachment,
+} from "./gmail.js";
 import { listAccounts } from "./store.js";
 
 const server = new McpServer({ name: "gmail-mcp", version: "0.1.0" });
@@ -36,6 +45,34 @@ async function resolveAlias(alias?: string): Promise<string> {
     `Several accounts are authorized (${accounts.map((a) => a.alias).join(", ")}). ` +
       `Pass "account" to say which one to use.`,
   );
+}
+
+// Gmail rejects messages over 25 MB; the base64 overhead means the real file budget is lower.
+const MAX_ATTACHMENT_TOTAL_BYTES = 18 * 1024 * 1024;
+
+const attachmentsArg = z
+  .array(z.string())
+  .optional()
+  .describe("Local file paths to attach. ~ expands to the home directory. 18 MB total limit.");
+
+/** Reads outgoing attachment files off disk, guessing each MIME type from its extension. */
+async function loadOutgoingAttachments(paths?: string[]): Promise<OutgoingAttachment[] | undefined> {
+  if (!paths?.length) return undefined;
+  const loaded = await Promise.all(
+    paths.map(async (p) => {
+      const resolved = p.startsWith("~/") ? path.join(homedir(), p.slice(2)) : p;
+      const content = await readFile(resolved);
+      return { filename: path.basename(resolved), mimeType: guessMimeType(resolved), content };
+    }),
+  );
+  const total = loaded.reduce((sum, a) => sum + a.content.length, 0);
+  if (total > MAX_ATTACHMENT_TOTAL_BYTES) {
+    throw new Error(
+      `Attachments total ${(total / 1024 / 1024).toFixed(1)} MB; Gmail's limit means ` +
+        `${MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024} MB is the most this server will send.`,
+    );
+  }
+  return loaded;
 }
 
 server.registerTool(
@@ -73,13 +110,17 @@ server.registerTool(
       account: accountArg,
       query: z.string().describe('Gmail search query, e.g. "from:vendor@x.com newer_than:30d is:unread".'),
       maxResults: z.number().int().min(1).max(50).default(15).describe("How many threads to return, 1-50."),
+      pageToken: z
+        .string()
+        .optional()
+        .describe("Continue an earlier search from the page token it returned."),
     },
     annotations: { readOnlyHint: true },
   },
-  async ({ account, query, maxResults }) => {
+  async ({ account, query, maxResults, pageToken }) => {
     try {
       const { gmail, email } = await getClient(await resolveAlias(account));
-      const list = await gmail.users.threads.list({ userId: "me", q: query, maxResults });
+      const list = await gmail.users.threads.list({ userId: "me", q: query, maxResults, pageToken });
       const threads = list.data.threads ?? [];
       if (!threads.length) return text(`No threads in ${email} matched: ${query}`);
 
@@ -105,7 +146,10 @@ server.registerTool(
           ].join("\n");
         }),
       );
-      return text(`${rows.length} thread(s) in ${email}\n\n${rows.join("\n\n")}`);
+      const more = list.data.nextPageToken
+        ? `\n\nMore results exist. Pass pageToken: "${list.data.nextPageToken}" to continue.`
+        : "";
+      return text(`${rows.length} thread(s) in ${email}\n\n${rows.join("\n\n")}${more}`);
     } catch (err) {
       return fail(err);
     }
@@ -238,17 +282,22 @@ server.registerTool(
       cc: z.array(z.string()).optional(),
       bcc: z.array(z.string()).optional(),
       threadId: z.string().optional().describe("Attach the draft to an existing thread, making it a reply."),
+      attachments: attachmentsArg,
     },
   },
-  async ({ account, to, subject, body, cc, bcc, threadId }) => {
+  async ({ account, to, subject, body, cc, bcc, threadId, attachments }) => {
     try {
       const { gmail, email } = await getClient(await resolveAlias(account));
-      const raw = buildRawMessage({ from: email, to, cc, bcc, subject, body });
+      const files = await loadOutgoingAttachments(attachments);
+      const raw = buildRawMessage({ from: email, to, cc, bcc, subject, body, attachments: files });
       const res = await gmail.users.drafts.create({
         userId: "me",
         requestBody: { message: { raw, ...(threadId ? { threadId } : {}) } },
       });
-      return text(`Draft saved in ${email}.\ndraft id: ${res.data.id}\nsubject: ${subject}\nto: ${to.join(", ")}`);
+      const attached = files?.length ? `\nattached: ${files.map((f) => f.filename).join(", ")}` : "";
+      return text(
+        `Draft saved in ${email}.\ndraft id: ${res.data.id}\nsubject: ${subject}\nto: ${to.join(", ")}${attached}`,
+      );
     } catch (err) {
       return fail(err);
     }
@@ -261,7 +310,8 @@ server.registerTool(
     title: "Send a message",
     description:
       "Sends an email immediately. This cannot be undone. Before calling this you MUST show the user the " +
-      "exact sending account, recipients, subject and body, and get their explicit go-ahead in that turn. " +
+      "exact sending account, recipients, subject, body and any attachments, and get their explicit go-ahead " +
+      "in that turn. " +
       "If you have not done that, call create_draft instead. Set confirm to true only after the user has agreed.",
     inputSchema: {
       account: accountArg,
@@ -272,24 +322,27 @@ server.registerTool(
       bcc: z.array(z.string()).optional(),
       threadId: z.string().optional().describe("Send as a reply within this thread."),
       inReplyTo: z.string().optional().describe("Message-ID header of the message being replied to."),
+      attachments: attachmentsArg,
       confirm: z
         .literal(true)
         .describe("Must be true, and only after the user has seen the message and approved sending it."),
     },
     annotations: { destructiveHint: true, openWorldHint: true, idempotentHint: false },
   },
-  async ({ account, to, subject, body, cc, bcc, threadId, inReplyTo, confirm }) => {
+  async ({ account, to, subject, body, cc, bcc, threadId, inReplyTo, attachments, confirm }) => {
     try {
       if (confirm !== true) throw new Error("send_message requires confirm: true after the user approves the message.");
       const { gmail, email } = await getClient(await resolveAlias(account));
-      const raw = buildRawMessage({ from: email, to, cc, bcc, subject, body, inReplyTo });
+      const files = await loadOutgoingAttachments(attachments);
+      const raw = buildRawMessage({ from: email, to, cc, bcc, subject, body, inReplyTo, attachments: files });
       const res = await gmail.users.messages.send({
         userId: "me",
         requestBody: { raw, ...(threadId ? { threadId } : {}) },
       });
+      const attached = files?.length ? `\nattached: ${files.map((f) => f.filename).join(", ")}` : "";
       return text(
         `Sent from ${email}.\nmessage id: ${res.data.id}\nthread id: ${res.data.threadId}\n` +
-          `to: ${to.join(", ")}\nsubject: ${subject}`,
+          `to: ${to.join(", ")}\nsubject: ${subject}${attached}`,
       );
     } catch (err) {
       return fail(err);
@@ -322,24 +375,38 @@ server.registerTool(
   {
     title: "Add or remove labels",
     description:
-      "Adds or removes labels on a message. Common moves: archive by removing INBOX, mark read by removing UNREAD, " +
-      "star by adding STARRED. Use list_labels for custom label ids.",
+      "Adds or removes labels on a message, or on every message in a thread at once. Common moves: archive by " +
+      "removing INBOX, mark read by removing UNREAD, star by adding STARRED. Pass threadId to act on the whole " +
+      "thread (the natural unit for archive/mark-read). Use list_labels for custom label ids.",
     inputSchema: {
       account: accountArg,
-      messageId: z.string().describe("Message id, not thread id."),
+      messageId: z.string().optional().describe("Act on this one message. Pass exactly one of messageId or threadId."),
+      threadId: z.string().optional().describe("Act on every message in this thread."),
       addLabelIds: z.array(z.string()).optional(),
       removeLabelIds: z.array(z.string()).optional(),
     },
   },
-  async ({ account, messageId, addLabelIds, removeLabelIds }) => {
+  async ({ account, messageId, threadId, addLabelIds, removeLabelIds }) => {
     try {
       if (!addLabelIds?.length && !removeLabelIds?.length) {
         throw new Error("Pass at least one of addLabelIds or removeLabelIds.");
       }
+      if (!messageId === !threadId) {
+        throw new Error("Pass exactly one of messageId or threadId.");
+      }
       const { gmail, email } = await getClient(await resolveAlias(account));
+      if (threadId) {
+        const res = await gmail.users.threads.modify({
+          userId: "me",
+          id: threadId,
+          requestBody: { addLabelIds, removeLabelIds },
+        });
+        const count = res.data.messages?.length ?? 0;
+        return text(`Updated thread ${threadId} in ${email} (${count} message(s)).`);
+      }
       const res = await gmail.users.messages.modify({
         userId: "me",
-        id: messageId,
+        id: messageId!,
         requestBody: { addLabelIds, removeLabelIds },
       });
       return text(`Updated ${messageId} in ${email}.\nlabels now: ${(res.data.labelIds ?? []).join(", ") || "-"}`);
