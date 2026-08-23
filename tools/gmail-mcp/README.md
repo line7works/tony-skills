@@ -152,6 +152,28 @@ real gate, add a Claude Code permission rule:
   through the `googleapis` tree. Keep the override when bumping deps; re-check with
   `npm audit`.
 
+## Backlog — agreed 2026-08-23, build later
+
+Deferred until the Caelan pipeline (build step 5) is authorized; items 1–3 are the ones
+that unblock her triage loop, 4–6 are conveniences. Decided with Tony on 2026-08-23.
+
+1. **`send_draft` + `list_drafts`** — drafts are currently a dead end: the server can
+   create one but not see or send it. Needed for the approval loop (she drafts, Tony
+   says send, it goes out by draft id).
+2. **`check_new` via the History API** — "what changed since historyId X" in one cheap
+   call, the right primitive for the heartbeat cron instead of re-searching the inbox.
+3. **`untrash_message`** — the undo verb for `trash_message`.
+4. **Label management** — create/rename/delete labels, so she can make her own triage
+   labels (e.g. `caelan/studying`, `caelan/killed`) without manual setup.
+5. **`forward_message`** — forward carrying the original MIME parts, so attachments
+   don't need a download-and-rebuild round trip.
+6. **`get_profile`** — message counts and current historyId; pairs with item 2.
+
+Considered and rejected: Gmail filters/vacation settings (extra OAuth scope; triage
+logic belongs in her code, not Gmail settings), Pub/Sub push notifications (real
+infrastructure to replace a polling design deliberately chosen), permanent delete
+(needs full-access scope; violates the nothing-is-truly-gone posture).
+
 ## Troubleshooting
 
 | Symptom | Cause |

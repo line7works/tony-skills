@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { gmail_v1, google } from "googleapis";
 
 import { loadAccount, loadOAuthClientConfig, saveAccount } from "./store.js";
@@ -93,12 +95,44 @@ export function extractBody(message: gmail_v1.Schema$Message): string {
   return message.snippet ?? "";
 }
 
+export interface AttachmentRef {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  attachmentId: string;
+}
+
+/** Walks the MIME tree and returns every part that carries a real attachment. */
+export function listAttachments(message: gmail_v1.Schema$Message): AttachmentRef[] {
+  const found: AttachmentRef[] = [];
+  const walk = (part: gmail_v1.Schema$MessagePart | undefined): void => {
+    if (!part) return;
+    if (part.body?.attachmentId) {
+      found.push({
+        filename: part.filename || "unnamed",
+        mimeType: part.mimeType ?? "application/octet-stream",
+        sizeBytes: part.body.size ?? 0,
+        attachmentId: part.body.attachmentId,
+      });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  };
+  walk(message.payload);
+  return found;
+}
+
 /** RFC 2047 encoding, so non-ASCII subjects and names survive the trip. */
 function encodeHeaderValue(value: string): string {
   // eslint-disable-next-line no-control-regex
   return /^[\x00-\x7F]*$/.test(value)
     ? value
     : `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
+export interface OutgoingAttachment {
+  filename: string;
+  mimeType: string;
+  content: Buffer;
 }
 
 export interface OutgoingMessage {
@@ -110,11 +144,43 @@ export interface OutgoingMessage {
   body: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: OutgoingAttachment[];
+}
+
+const EXTENSION_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".heic": "image/heic",
+  ".svg": "image/svg+xml",
+  ".pdf": "application/pdf",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".csv": "text/csv",
+  ".html": "text/html",
+  ".json": "application/json",
+  ".zip": "application/zip",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+export function guessMimeType(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot === -1 ? "" : filename.slice(dot).toLowerCase();
+  return EXTENSION_MIME[ext] ?? "application/octet-stream";
 }
 
 /** Assembles an RFC 5322 message and returns it base64url encoded for the API. */
 export function buildRawMessage(msg: OutgoingMessage): string {
-  const lines = [
+  const headers = [
     `From: ${msg.from}`,
     `To: ${msg.to.join(", ")}`,
     ...(msg.cc?.length ? [`Cc: ${msg.cc.join(", ")}`] : []),
@@ -122,11 +188,43 @@ export function buildRawMessage(msg: OutgoingMessage): string {
     `Subject: ${encodeHeaderValue(msg.subject)}`,
     ...(msg.inReplyTo ? [`In-Reply-To: ${msg.inReplyTo}`, `References: ${msg.references ?? msg.inReplyTo}`] : []),
     "MIME-Version: 1.0",
+  ];
+
+  if (!msg.attachments?.length) {
+    const lines = [
+      ...headers,
+      'Content-Type: text/plain; charset="UTF-8"',
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      msg.body,
+    ];
+    return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
+  }
+
+  const boundary = `gmail-mcp-${randomBytes(12).toString("hex")}`;
+  const lines = [
+    ...headers,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: 8bit",
     "",
     msg.body,
   ];
+  for (const a of msg.attachments) {
+    const name = encodeHeaderValue(a.filename);
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: ${a.mimeType}; name="${name}"`,
+      `Content-Disposition: attachment; filename="${name}"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      // RFC 2045 caps encoded lines at 76 characters.
+      a.content.toString("base64").replace(/(.{76})/g, "$1\r\n"),
+    );
+  }
+  lines.push(`--${boundary}--`);
   return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
 }
 
