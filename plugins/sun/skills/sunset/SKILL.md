@@ -41,6 +41,7 @@ If no project name is given, ask which one.
 | CLI memory (project's own store) | `~/.claude/projects/*<Name>*/memory/` | archive contents into `_archive/<Name>/.claude-memory/` |
 | Scheduled agents / crons | `/schedule` routines, `crontab -l`, `~/Library/LaunchAgents` | cancel/disable anything tied to the project |
 | Local repo | `~/Developer/<Name>` | move to `~/Developer/_archive/<Name>` |
+| Terminal shortcut | `alias` line in `~/.config/zsh/project-shortcuts.zsh` | remove the line (repo move leaves it dangling) |
 | GitHub repo | remote of the local repo | archive (read-only) |
 | Vercel project | linked via `<repo>/.vercel/project.json`, or matched by name | pause (production blocked, reversible) |
 | Database | connection string in the repo env (Neon / Supabase / other) | back up, then idle/pause. NEVER drop. |
@@ -101,6 +102,7 @@ which machine he appears to be on and that canonical lives on the Mac Studio.
    - CLI memory (project's own store): `ls -d ~/.claude/projects/*<Name>*/memory/ 2>/dev/null` and count its `.md` files. This per-directory store is what gets stranded on the repo move.
    - Scheduled agents / crons: enumerate `/schedule` routines (CronList), `crontab -l 2>/dev/null`, and `ls ~/Library/LaunchAgents`. Flag any whose prompt/command/path references `<Name>`, `<slug>`, or the repo path.
    - Local repo: `ls -d ~/Developer/*<Name>*/`
+   - Terminal shortcut: `grep -n "cd ~/Developer/<Name>\"" ~/.config/zsh/project-shortcuts.zsh` — match on the `cd` target, not the shortcut name, since the shortcut rarely resembles the repo name (`haul` → `RJ-Hauler`). More than one line can point at the same repo (`pourguys` and `pour` both point at `Pour-Guys`); take them all. No file or no match means skip.
    - GitHub remote: `git -C <repo> remote get-url origin` (parse to `owner/repo`).
    - Vercel: read `<repo>/.vercel/project.json` for `projectId` + `orgId` (teamId); else match the name via the Vercel MCP `list_projects`. No match means not on Vercel; skip.
    - Database: grep the repo env (`.env`, `.env.local`, `.vercel/.env*`, or `vercel env pull`) for `DATABASE_URL` / `POSTGRES_URL` / `NEON_*` / `SUPABASE_*`. Identify the provider from the host (`*.neon.tech` = Neon, `*.supabase.co` / `*.pooler.supabase.com` = Supabase, else note the host and ask). **Capture the connection string now** for the backup step. None found means skip.
@@ -126,6 +128,7 @@ which machine he appears to be on and that canonical lives on the Mac Studio.
              archive  project store (M notes)  ->  _archive/<Name>/.claude-memory/
    Schedules cancel  <list of routines/crons tied to the project>   (none = skip)
    Repo      move  ~/Developer/<Name>  ->  ~/Developer/_archive/<Name>   (git clean + pushed: yes)
+   Shortcut  remove  alias <shortcut>  from ~/.config/zsh/project-shortcuts.zsh
    GitHub    archive  <owner>/<repo>  (read-only)
    Vercel    pause    <project>  (production blocked; reversible)
    Database  backup   <provider> -> _archive/<Name>/db-backup-<date>.sql, then idle (never drop)
@@ -174,6 +177,18 @@ Only after the Phase 0 git safety check passed, and after Phase 2 copied the pro
 1. `mkdir -p ~/Developer/_archive`
 2. `mv ~/Developer/<Name> ~/Developer/_archive/<Name>`
 
+### Terminal shortcut
+
+The repo move leaves the shortcut pointing at nothing, and a dead shortcut is
+invisible until Tony types it months later. Two of them (`helix`, `guess`)
+survived past sunsets that way and were only found during the 2026-08-16
+migration — which is why this step exists.
+
+3. Record the exact line(s) from Phase 0 in the tombstone **before** removing them, so a revive can restore them verbatim.
+4. Remove each matched line from `~/.config/zsh/project-shortcuts.zsh`. Never touch `~/.zshrc` — it holds PATH exports and a live API key.
+5. Verify: `zsh -ic 'type -a <shortcut>'` comes back empty in a fresh shell. It will still work in any shell Tony already has open until he reloads; that is expected, and harmless since it now points at a moved directory.
+6. If the file does not exist, you are on an unmigrated machine — note it and skip, do not create the file.
+
 ## Phase 5 — GitHub (skip if --keep-github)
 
 Order matters: push everything BEFORE archiving, because an archived repo is read-only and rejects pushes.
@@ -219,6 +234,7 @@ If the project has a Notion board or pages, archive them automatically (no need 
      Memory    -> home note archived + de-indexed; project store -> _archive/<Name>/.claude-memory/
      Schedules -> cancelled: <list, or none>
      Repo      -> ~/Developer/_archive/<Name>
+     Shortcut  -> `<shortcut>` removed (line saved in the tombstone)
      GitHub    -> archived (read-only)
      Vercel    -> paused (production blocked)
      Database  -> backed up to _archive/<Name>/db-backup-<date>.sql; idled (not dropped)
@@ -277,6 +293,7 @@ tags: [meta, archived]
 - CLI memory (project store): copied to `_archive/<Name>/.claude-memory/` (M notes, from `<source path>`)
 - Scheduled agents/crons: cancelled -> <list, or none>
 - Local repo: `~/Developer/_archive/<Name>`
+- Terminal shortcut: removed from `~/.config/zsh/project-shortcuts.zsh` — restore with `<the exact alias line(s), verbatim>`
 - GitHub: `<owner>/<repo>` archived (read-only)
 - Vercel: `<project>` paused (production blocked)
 - Database: `<provider>` backed up to `_archive/<Name>/db-backup-<date>.sql`; idled (not dropped)
@@ -288,7 +305,8 @@ tags: [meta, archived]
 
 ## To revive
 Move the vault folder back to `03-projects/`, flip both status fields to
-`active`, move the repo back to `~/Developer/`, `gh repo unarchive <owner>/<repo>`,
+`active`, move the repo back to `~/Developer/`, re-add the alias line above to
+`~/.config/zsh/project-shortcuts.zsh`, `gh repo unarchive <owner>/<repo>`,
 unpause Vercel, restore/unsuspend the database, restore the Notion board, and
 recreate the cancelled schedules.
 ```

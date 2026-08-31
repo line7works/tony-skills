@@ -145,6 +145,15 @@ Status: not started
 
 ## Handoffs
 
+### 2026-08-31 — handoff
+- Next: /ship A docs/skills-migration-build-plan.md · all six slices `not started` · Slice A first per Depends chain
+- Repo: main · 1 ahead of origin/main (92928d5, handoff checkpoint committing this plan + the scope doc; Slice A R5's commit need is thereby pre-satisfied — note it as a Deviations line if graded) · clean apart from pre-existing untracked tools/shopify-mcp/
+- Suite: none recorded — repo has no test suite; ACs are shell checks per Constraints
+- Ledger state: two same-day inspect blocks (REJECTED 5·10·10, then REJECTED 3·7·16); all findings amended on Tony's "fix them all as recommended" + "fix, no third round"; two dated WAIVED lines stand — the bullets-vs-template edge, and the third /inspect round itself. The plan meets /build on Tony's word without an APPROVED stamp; the second stamp is the last inspection record.
+- Pending Tony's word, in order: the transfer (Slice A R1, live word at execution) · PR/merge of A and B before Slice C · per-finding scrub rulings between D and E · PR/merge of E before F · laptop trigger, then the flip word (Slice F)
+- Seam notes: print-tune is a SYMLINK into ~/Developer/print-tune (own repo, ahead 1 of its origin) — copy from the symlink target, remove only the link, never -r through it · asset-layout ruling in Constraints: new plugins nest assets, arcade/forge/sun keep plugin root · authorizations + laptop confirmation land as ISO-timestamped lines in docs/evidence/skills-migration/authorizations.md (never a punch-list AUTHORIZED line — the code book forbids it) · the scrub audit report lives OUTSIDE the repo (~/Documents/tony-skills-scrub/), never committed · docs/feedback.md is a mandatory exposure item in the Slice D audit
+
+
 ## Punch list
 
 ### 2026-08-31 — inspect: plan

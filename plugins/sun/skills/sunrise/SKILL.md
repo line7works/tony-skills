@@ -125,10 +125,11 @@ the Mac Studio.
 1. **Gather the inputs.**
    - **Name** (required). **Archetype** (the 6 above; default web app, single). **One-line "what is this."** **Visibility** (default private). **Database?** (archetype default; `--db`/`--no-db` override). **Promote an existing dir?** (`--promote <path>`).
 
-2. **Derive the three name variants and show them for confirmation.** Tony's local-dir casing is inconsistent (`Helix`, `PGL`, `belgariad-codex`), so always confirm.
+2. **Derive the four name variants and show them for confirmation.** Tony's local-dir casing is inconsistent (`Helix`, `PGL`, `belgariad-codex`), so always confirm.
    - `<Name>` — repo + local dir under `~/Developer/` (spaces → hyphens; keep his casing).
    - `<slug>` — kebab-case, lowercase (vault folder + frontmatter `name` + handoff).
    - `<slug_>` — the slug with hyphens → underscores (memory filename only, matching existing `project_pour_guys.md` / `project_belgariad_codex.md`).
+   - `<shortcut>` — the terminal shortcut he'll type to `cd` into the repo. **Propose a default, don't ask open-endedly:** the shortest unambiguous token from the name, 2–5 characters, lowercase, matching the existing set (`pk`, `haul`, `inky`, `pour`, `jpb`, `robo`, `smart`). Show it with the other three and let him override. If he wants none, accept that and skip the shortcut everywhere below.
 
 3. **Collision check across all layers (never clobber).** Each must be clear, unless `--promote` points at it:
    - Local: `ls -d ~/Developer/*<Name>* 2>/dev/null`
@@ -136,6 +137,7 @@ the Mac Studio.
    - Vault: `ls -d ~/ObsidianVault/03-projects/<slug> 2>/dev/null`
    - Memory: `ls ~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md 2>/dev/null`
    - Vercel: Vercel MCP `list_projects` (or `npx vercel project ls`) — name must be free.
+   - **Shortcut: `zsh -ic 'type -a <shortcut>' 2>/dev/null` must come back empty.** This is the one collision that bites silently — a token like `pr`, `gs`, or `ts` shadows a real binary and the breakage surfaces weeks later in an unrelated command. An existing alias, function, builtin, or anything on `PATH` all disqualify it. If taken, say what it collides with and propose the next candidate; never ship a shadowing shortcut.
    - Notion (low priority — page titles aren't unique): optionally `notion-search` the project name to avoid a duplicate parent page.
    - If any exists, STOP and tell Tony exactly what is already there. Offer to adopt it (treat as `--promote`) or pick a different name. Do not overwrite.
 
@@ -152,7 +154,7 @@ the Mac Studio.
    ```
    SUNRISE PREVIEW — <project>     "<Tony's one-line>"
    archetype: <archetype>   visibility: private   db: supabase (via Vercel)
-   names: dir/repo <Name>  ·  slug <slug>  ·  memory project_<slug_>.md
+   names: dir/repo <Name>  ·  slug <slug>  ·  memory project_<slug_>.md  ·  shortcut <shortcut>
    ──────────────────────────────────────────────────────────────────────
    Repo     mkdir ~/Developer/<Name>; scaffold <scaffolder>; git init
             seed README.md, CLAUDE.md, AGENTS.md, .gitignore, .env.example
@@ -165,6 +167,8 @@ the Mac Studio.
    Vault    create 03-projects/<slug>/_index.md (seed, status: active)
             add to root _index.md "Active projects"
    Memory   create project_<slug_>.md + MEMORY.md line
+   Shortcut append alias <shortcut> -> ~/Developer/<Name>
+            to ~/.config/zsh/project-shortcuts.zsh (name is free)
    Verify   first deploy -> live URL, expect 200
    Output   handoff prompt to paste into a browser/app LLM
    ──────────────────────────────────────────────────────────────────────
@@ -261,7 +265,22 @@ a pointer — repo location, what it is, what's in the folder. Current status li
 the repo and auto-memory; there is no obligation to keep `_index.md` current, and
 there is no "Known projects" line in the vault's AGENTS.md to update.
 
-## Phase 7 — CLI / Claude Code memory
+## Phase 7 — CLI / Claude Code memory + terminal shortcut
+
+### 7a — Terminal shortcut
+
+The shortcut file is `~/.config/zsh/project-shortcuts.zsh`, sourced from `~/.zshrc`.
+**Never edit `~/.zshrc` itself** — it holds PATH exports and a live API key, and blind
+appends land below them. Sunrise owns only the sourced file.
+
+1. Confirm the file is wired up: `grep -q project-shortcuts ~/.zshrc && test -f ~/.config/zsh/project-shortcuts.zsh`. If either is missing you are on a machine that hasn't been migrated (the laptop, most likely) — say so and skip 7a rather than recreating the file blind.
+2. Append exactly one line, in this shape and no other — sunset matches on the `cd` target:
+   ```bash
+   printf 'alias %s="cd ~/Developer/%s"\n' "<shortcut>" "<Name>" >> ~/.config/zsh/project-shortcuts.zsh
+   ```
+3. **Verify it loads in a fresh shell, not this one:** `zsh -ic 'alias <shortcut>'` must print the new line. The alias is dead in the running shell until Tony reloads — that's expected, and Phase 8 tells him.
+
+### 7b — Memory
 
 1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + pointers to the repo `CLAUDE.md` (canonical detail) and the vault folder (durable notes). Mirror the shape of `project_knight.md`.
 2. Add a one-line entry to that store's `MEMORY.md` under the active list: `- [<Project>](project_<slug_>.md) — <hook>`.
@@ -281,10 +300,16 @@ there is no "Known projects" line in the vault's AGENTS.md to update.
      Notion   -> Task Tracker + Roadmap board (mirror of Knight); IDs in _index
      Vault    -> 03-projects/<slug>/ (status: active), on the index
      Memory   -> project_<slug_>.md created + indexed
+     Shortcut -> `<shortcut>` -> ~/Developer/<Name>
 
-   To start building: open ~/Developer/<Name> and say "continue on <project>".
-   CLAUDE.md will auto-load; durable notes live in the vault project folder.
+   To start building: run `source ~/.zshrc` (or open a new terminal tab), then
+   type `<shortcut>` and say "continue on <project>". CLAUDE.md will auto-load;
+   durable notes live in the vault project folder.
    ```
+
+   The `source ~/.zshrc` line is not optional boilerplate — the new alias does
+   not exist in any shell that was already open, so without it the shortcut
+   looks broken on first use.
 
 3. **Generate the browser/app LLM handoff prompt.** Sunrising in Claude Code does not inform Tony's other LLM surfaces (claude.ai web, the desktop app, ChatGPT, Codex). Fill in the variables and print this in a fenced block for Tony to copy-paste (template at the bottom).
 
@@ -322,6 +347,7 @@ Created: <today>
 ## Repo
 - **GitHub:** github.com/tiny-tunnel-dot/<repo>
 - **Local path:** ~/Developer/<Name>
+- **Terminal shortcut:** `<shortcut>`
 - **Branch:** main
 - **Vercel:** <project url, or "env-plane only" / "none">
 - **Database:** <provider> via Vercel Marketplace (or "none")
@@ -357,7 +383,7 @@ Scaffolded <today> via /sunrise. Green baseline.
 ## Workflow
 - Feature branches + PRs. Never push to `main`.
 - Merge via the GitHub PR web UI or terminal, never GitHub Desktop.
-- Local: ~/Developer/<Name>   Run: <dev command>
+- Local: ~/Developer/<Name> (terminal shortcut: `<shortcut>`)   Run: <dev command>
 - Env: `vercel env pull` writes .env.local (gitignored).
 
 ## End-of-session protocol
@@ -385,7 +411,8 @@ metadata:
   type: project
 ---
 
-<Tony's one-line description.> <archetype + stack>. Repo at `~/Developer/<Name>`.
+<Tony's one-line description.> <archetype + stack>. Repo at `~/Developer/<Name>`,
+terminal shortcut `<shortcut>`.
 
 Canonical detail (read before substantive work):
 - Repo `CLAUDE.md` (boot doc + invariants).

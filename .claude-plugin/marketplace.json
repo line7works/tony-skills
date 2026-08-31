@@ -65,6 +65,15 @@
         "adversarial",
         "quality-gate"
       ]
+    },
+    {
+      "name": "shutdown",
+      "source": "./plugins/shutdown",
+      "description": "Settle up before Tony restarts Terminal or switches Anthropic accounts — verify and report git state (read-only, never committing anything), write a self-contained handoff to ~/Documents/handoffs/, and save a memory pointer so the next session finds it.",
+      "tags": [
+        "session-lifecycle",
+        "handoff"
+      ]
     }
   ]
 }

@@ -39,7 +39,7 @@ The session that wrote the code cannot review it. It knows what the code *meant*
 
 So: reviewers are always fresh subagents. They receive the scope, the spec path, and the mandate. They do **not** receive your reasoning, your justifications, or your account of what you built and why. They read the source themselves and form their own view.
 
-The build doc doubles as the loop's ledger, so the mandate draws the line: its `## Build assumptions`, `## Deviations`, `## Discovered`, and `## Punch list` sections and its `Status:` lines are the builder's and inspector's working records — not spec, not evidence, never requirements. Blueprint's `Out of scope:` and `Not in this slice:` lines *are* spec. You still read the ledger yourself for rule 4's adjudication — that split already exists.
+The build doc doubles as the loop's ledger, so the mandate draws the line: its `## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`, and `## Punch list` sections and its `Status:` lines are the builder's and inspector's working records — not spec, not evidence, never requirements. Blueprint's `Out of scope:` and `Not in this slice:` lines *are* spec. You still read the ledger yourself for rule 4's adjudication — that split already exists.
 
 Never *form the initial verdict* yourself — reviewers originate the findings. Your job is scope, execution, verification, and adjudication (the rules below). Reviewing the diff solo and labeling it a sign-off is the one unforgivable move.
 
