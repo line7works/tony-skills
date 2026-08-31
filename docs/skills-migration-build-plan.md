@@ -48,7 +48,7 @@ Acceptance criteria:
 Footprint: GitHub repo settings (transfer); `.git/config` (remote); `plugins/{signoff,sun}/skills/**` (SKILL.md syncs); `plugins/shutdown/.claude-plugin/plugin.json` (new); `.claude-plugin/marketplace.json`; `docs/skills-migration-scope.md` + this doc (first commit); `docs/evidence/skills-migration/authorizations.md` (new); this doc's Slice A `Status:` line.
 Not in this slice: the 12 new plugins, doc moves, installs, scrub, publishing.
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Slice B — Migrate the twelve and consolidate the docs
 Goal: All 20 skills exist as registered plugins in the repo, every plugin-file reference resolves from an installed location, and the skill-lab paperwork lives in `docs/`.
@@ -254,3 +254,6 @@ Status: not started
 - MINOR · docs/evidence/skills-migration/authorizations.md:1 · AUTHORIZED line is self-attested, written ~11 min after the word · record is checkable for existence/format, not truth · Slice A review
 - MINOR · docs/evidence/skills-migration/authorizations.md:1 · timestamp convention carries no timezone · Slice F AC-F3's same-day cross-machine ordering may be unprovable · Slice A review
 - MINOR · .claude-plugin/marketplace.json (shutdown entry) · tag values invented within granted latitude · none concrete; ratify or adjust at leisure · Slice A review
+
+### 2026-08-31 — recheck: Slice A
+- MAJOR · GitHub line7works/tony-skills PR #4 (add-det-audit-plugin) · (transfer carried an open PR adding an 8th, off-roster det-audit plugin — unenumerated state) · fixed — PR CLOSED not merged per Tony's "dead, delete it" word, branch deleted (404), no open PRs remain, main holds 7 plugins with no det-audit
