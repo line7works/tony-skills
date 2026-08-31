@@ -163,6 +163,15 @@ Status: not started
 - Seam notes: print-tune is a SYMLINK into ~/Developer/print-tune (own repo, ahead 1 of its origin) — copy from the symlink target, remove only the link, never -r through it · asset-layout ruling in Constraints: new plugins nest assets, arcade/forge/sun keep plugin root · authorizations + laptop confirmation land as ISO-timestamped lines in docs/evidence/skills-migration/authorizations.md (never a punch-list AUTHORIZED line — the code book forbids it) · the scrub audit report lives OUTSIDE the repo (~/Documents/tony-skills-scrub/), never committed · docs/feedback.md is a mandatory exposure item in the Slice D audit
 
 
+### 2026-08-31 — handoff (after Slice A)
+- Next: /ship B docs/skills-migration-build-plan.md · run from ~/Developer/tony-skills · Slice A signed off, B next per Depends chain (/build B by hand is the alternative)
+- Repo: feat/slice-a-transfer-reconcile · 4 ahead of local main (92928d5), 5 ahead of origin/main · clean apart from pre-existing untracked tools/shopify-mcp/ · nothing pushed
+- Suite: none — repo has no test suite; ACs are shell checks (Slice A's all passed on independent re-runs, per the review/recheck blocks)
+- Gate answers this session: transfer word "yes go" (recorded as the AUTHORIZED line in docs/evidence/skills-migration/authorizations.md) · PR #4 ruling "dead, delete it" (recorded in the recheck block — closed unmerged, branch deleted)
+- Pending Tony's word: PR/merge of this branch (A's work; needed with B's before Slice C installs) · per-finding scrub rulings between D and E · PR/merge of E before F · laptop trigger, then the flip word (Slice F)
+- Seam notes for B: repo now line7works/tony-skills, origin repointed, marketplace count 7 · classifier denials hit outward/gated commands this session (transfer API call, the AUTHORIZED-line write, git remote set-url) — Tony ran each via the ! prefix; expect the same for B's gated writes if any · print-tune copies from ~/Developer/print-tune/skills/print-tune (symlink target), never through the link
+- Open MINORs worth B's attention: seven plugin manifests carry tiny-tunnel-dot URLs and no slice owns updating them before the public flip — worth Tony's word by Slice F; new-plugin manifests in B repeat the sibling-matching call unless ruled otherwise
+
 ## Punch list
 
 ### 2026-08-31 — inspect: plan
