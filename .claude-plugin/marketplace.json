@@ -10,31 +10,61 @@
       "name": "sun",
       "source": "./plugins/sun",
       "description": "/sunrise bootstraps a new project across every layer and proves it live; /sunset archives one reversibly.",
-      "tags": ["project-lifecycle", "automation"]
+      "tags": [
+        "project-lifecycle",
+        "automation"
+      ]
     },
     {
       "name": "forge",
       "source": "./plugins/forge",
       "description": "/forge generates AI images on Fal.ai with Claude as the brain layer: writes the prompts, generates drafts, runs vision QA, and renders finished on-brand images. Model-agnostic (nano-banana / GPT Image 2 / FLUX), with a per-run cost cap and an auditable run manifest.",
-      "tags": ["image-generation", "automation", "fal"]
+      "tags": [
+        "image-generation",
+        "automation",
+        "fal"
+      ]
     },
     {
       "name": "wargame",
       "source": "./plugins/wargame",
       "description": "/wargame runs an adversarial pre-mortem on any target — new project, existing feature, or planned change — with ranked, verified failure modes and kill criteria. Opus-class models or better.",
-      "tags": ["planning", "pre-mortem", "review"]
+      "tags": [
+        "planning",
+        "pre-mortem",
+        "review"
+      ]
     },
     {
       "name": "signoff",
       "source": "./plugins/signoff",
       "description": "/signoff runs an independent adversarial review of freshly built work and ends in a signed verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list. Reviewers who did not write the code check it against its spec. The back half of /wargame. Opus-class models or better.",
-      "tags": ["review", "quality-gate", "adversarial"]
+      "tags": [
+        "review",
+        "quality-gate",
+        "adversarial"
+      ]
     },
     {
       "name": "arcade",
       "source": "./plugins/arcade",
       "description": "/arcade publishes and manages pages on the Line 7 Arcade (arcade.line7.works) from any repo — publish, update, list, reorder, feature, and delete via the bundled arcade-publish CLI. Writes to live production; delete is gated behind an explicit conversational yes.",
-      "tags": ["publishing", "line7", "arcade"]
+      "tags": [
+        "publishing",
+        "line7",
+        "arcade"
+      ]
+    },
+    {
+      "name": "inspect",
+      "source": "./plugins/inspect",
+      "description": "/inspect plan-checks a /blueprint build doc BEFORE /build runs it — traceability, code-book, and repo-reality lenses, inspector chosen per run (Claude / GPT / Gemini / DeepSeek / local Qwen), verdict APPROVED / WITH CONDITIONS / REJECTED stamped with the inspector's model id. The building department of the loop.",
+      "tags": [
+        "review",
+        "plan-check",
+        "adversarial",
+        "quality-gate"
+      ]
     }
   ]
 }
