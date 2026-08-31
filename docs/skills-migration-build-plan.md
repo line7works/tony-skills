@@ -48,7 +48,7 @@ Acceptance criteria:
 Footprint: GitHub repo settings (transfer); `.git/config` (remote); `plugins/{signoff,sun}/skills/**` (SKILL.md syncs); `plugins/shutdown/.claude-plugin/plugin.json` (new); `.claude-plugin/marketplace.json`; `docs/skills-migration-scope.md` + this doc (first commit); `docs/evidence/skills-migration/authorizations.md` (new); this doc's Slice A `Status:` line.
 Not in this slice: the 12 new plugins, doc moves, installs, scrub, publishing.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice B — Migrate the twelve and consolidate the docs
 Goal: All 20 skills exist as registered plugins in the repo, every plugin-file reference resolves from an installed location, and the skill-lab paperwork lives in `docs/`.
@@ -139,7 +139,16 @@ Status: not started
 
 ## Build assumptions
 
+### 2026-08-31 — build: Slice A
+- shutdown plugin.json homepage/repository kept at the tiny-tunnel-dot URL matching all six sibling manifests (GitHub redirects post-transfer; updating sibling URLs is no slice's scope) · builder call
+- shutdown marketplace tags chosen as ["session-lifecycle","handoff"] — the spec fixes field shape and description, not tag values · builder call
+- shutdown descriptions (plugin.json and marketplace entry) are the SKILL.md frontmatter description truncated at the first sentence boundary, per the constraints' verbatim rule · builder call
+
 ## Deviations
+
+### 2026-08-31 — build: Slice A
+- R5's commit was pre-satisfied by handoff checkpoint 92928d5 (scope doc + plan already tracked on main before this slice) · per user
+- The transfer API call, the AUTHORIZED-line write, and the origin remote-set-url ran from Tony's own shell (the permission classifier denied the builder each one); commands were the builder's verbatim, execution and outputs are on this session's record · per user
 
 ## Discovered
 
