@@ -90,6 +90,9 @@ Status: signed off
 - /inspect has no cross-run rule for findings that converge with already-open ledger entries, and back-to-back same-day runs duplicate closure lines O(n) — skill-design gap found live
 - The Claude run found a defect in /inspect's own mechanism: a `Plan: inspected` stamp inside the Out of scope parse range (corroborates the open Slice A MINOR about stamp-adjacent spec lines)
 
+## Handoffs
+
+
 ## Punch list
 
 ### 2026-08-30 — review: Slice A
