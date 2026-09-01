@@ -108,6 +108,7 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
 - 2026-08-30 · pour guys build · vertical · "SKILL NOTE: the station is written for built code; applied here to the blueprint itself at your request. "What got built" = the plan at fbdc93e; spec = scope doc + proposal + the blueprint's own rules; no slice Status: was changed (none was reviewed); reviewer count and models set by your invocation (two, not three lenses); the review block landed under the plan's ## Punch list headed review: blueprint."
 - 2026-08-30 · pour guys build · recheck · "SKILL NOTE: MINORs joined this checklist because your "fix the doc, then /recheck" named the set I had just listed; recorded, never gating. No card exists for a plan document, so the block is recorded and no Status: moves."
 - 2026-08-30 · atlas build · recheck · "SKILL NOTE: the Result line counts fix-introduced defects as open, but MINORs never gate; I reported both facts rather than let a MINOR read as a failed recheck."
+- 2026-09-01 · fb plugin cutover · build · "SKILL NOTE (build): Slice C cutover working-check test note — verifying the installed fb plugin routes loop-skill notes to the new pointer path."
 
 ## Dispositions
 
