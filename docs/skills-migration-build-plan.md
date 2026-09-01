@@ -103,7 +103,7 @@ Acceptance criteria:
 Footprint: `~/Documents/tony-skills-scrub/` (new, outside repo); this doc's Slice D `Status:` line.
 Not in this slice: applying any ruling (Slice E), publishing, the laptop.
 Depends on: Slice C
-Status: signed off with conditions
+Status: signed off
 
 ## Slice E — Remediate and prep the public face
 Goal: Every scrub ruling is applied and verified, the public-era README and license exist, and it is all merged on GitHub.
@@ -345,3 +345,10 @@ Status: not started
 ### 2026-09-01 — build: Slice D (appended post-review)
 - Discovered: AC-E1's "spot-check two re-checks" is unsatisfiable as written — Slice D produced exactly one redact/parameterize ruling; needs Tony's word or a plan-level note before E is graded · Slice D review
 - Discovered: applying finding 2's parameterize edits the "Invariants" (do-not-drift) section of the spec-only tools/mcp-obsidian-worker docs — E should preserve the real gate value somewhere local when it edits · Slice D review
+
+### 2026-09-01 — recheck: Slice D
+- MAJOR · ~/Documents/tony-skills-scrub/scrub-audit-2026-09-01.md (rulings, findings 5/6/8/14/16) · (bulk quote couldn't derive the recorded rulings) · fixed — dated Amendment acknowledges the derivation defect, re-presents 2/5/6/8/16 individually with Tony's explicit "Confirm all five as recorded" word; 14 voided and re-routed through new finding 18
+- MAJOR · report Coverage/Negative results vs tools/shopify-mcp/shopify.app.toml:3 · (scope narrowed past a real OAuth client_id; unqualified negative claim false) · fixed — scope qualifier on the record; new finding 17 (verified accurate) ruled accept-as-untracked with standing never-commit warning
+- MAJOR · local tag jpb-setup-backup-2026-08-10 · (48 unpushed commits never inventoried; finding 14's public-reachability premise false) · fixed — premise corrected and old ruling voided on the record; finding 18 inventories the tag with independently re-verified reachability facts and carries Tony's bundle-then-delete ruling (execution: Slice E)
+- MAJOR · report finding 2 · (history-residue of the ALLOWED_EMAILS line undisclosed to the ruling) · fixed — disclosure on the record (residue verified at 83923f1); parameterize re-confirmed by Tony with it known
+- MAJOR · report finding 9 · ("already routed" asserted a routing no spec line enforces) · fixed — wording corrected; exposure-accept explicitly separated from the still-open cross-plugin-paths MINOR, which stays on its own track
