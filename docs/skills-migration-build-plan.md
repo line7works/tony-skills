@@ -118,7 +118,7 @@ Acceptance criteria:
 Footprint: `README.md` (rewritten); `LICENSE` (new); any files edited by scrub rulings; the audit report file (rulings/applied lines); this doc's Slice E `Status:` line.
 Not in this slice: the flip (Slice F), the laptop.
 Depends on: Slice D, with every audit finding carrying Tony's ruling
-Status: built
+Status: signed off with conditions
 
 ## Slice F — Laptop hand-off and the public flip
 Goal: The laptop runs the skills from the marketplace, and only then does the repo go public — the scope's decided order.
@@ -360,3 +360,13 @@ Status: not started
 - MAJOR · local tag jpb-setup-backup-2026-08-10 · (48 unpushed commits never inventoried; finding 14's public-reachability premise false) · fixed — premise corrected and old ruling voided on the record; finding 18 inventories the tag with independently re-verified reachability facts and carries Tony's bundle-then-delete ruling (execution: Slice E)
 - MAJOR · report finding 2 · (history-residue of the ALLOWED_EMAILS line undisclosed to the ruling) · fixed — disclosure on the record (residue verified at 83923f1); parameterize re-confirmed by Tony with it known
 - MAJOR · report finding 9 · ("already routed" asserted a routing no spec line enforces) · fixed — wording corrected; exposure-accept explicitly separated from the still-open cross-plugin-paths MINOR, which stays on its own track
+
+### 2026-09-01 — review: Slice E
+- MAJOR · README.md:25-27 · the "self-contained ... travel well" list includes inspect (core code-book lens is a run-time read of ~/Developer/tony-skills/plugins/blueprint/..., SKILL.md:47, no fallback; outside lanes likewise :52,:56) and fb (loop-note branch hard-wired to ~/Developer/tony-skills/docs/feedback.md, stalls for strangers); precon shades the same way (suggest-only prose) · a third party installs on the README's warranty and the skill breaks on first use — a false public claim created by E's rewrite · Slice E review (converged, all lenses)
+- MAJOR · feat/slice-e-close c0fcfc0 (local-only) vs origin/main build doc (Slice E line) · E's completion record and the recorded "PR it and merge" authorization exist only in one unpushed local commit while origin main says E "not started"; no spec line schedules the closing merge F's AC-F4 needs · a main-reading consumer (laptop post-F, fresh session) stalls F's Depends check or re-runs E; losing the Studio loses the authorization record · Slice E review
+- MINOR · docs/skills-migration-build-plan.md (Slice E ledger, spot-check line) · "AC-E1's spot-check two is unsatisfiable" is false as written — both applied re-checks are independently runnable and reviewers ran both · Slice E review
+- MINOR · tools/mcp-obsidian-worker/IMPLEMENTATION.md:69 · placeholder sits under a "These stay byte-identical" heading — the section's contract now self-contradicts; and placeholder + the public owner.email reconstructs the gate value in one step (exposure separately accepted) · Slice E review
+- MINOR · README.md:80-81 · "the source lives elsewhere" overstates vs tools/README's "may not exist on disk anywhere" · Slice E review
+- MINOR · scrub report finding 2 (line ~43) · applied:/re-check line lives under the amendment's re-presented ruling, not appended to the original finding line — top-down grader reads an apparently unapplied ruling for 150 lines · Slice E review
+- MINOR · scrub report finding 18 re-check · "176→128" is time-pinned with no note the metric moves with normal commits (131 at review time, arithmetic consistent) · Slice E review
+- MINOR · repo CLAUDE.md · still describes six plugins/five catalogued and live copies in ~/.claude/skills — pre-existing unowned MINOR, now beside a public README saying 19; recurring · Slice E review
