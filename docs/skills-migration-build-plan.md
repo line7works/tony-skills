@@ -172,6 +172,11 @@ Status: not started
 - R3 executed on Tony's live word "PR it and merge": push, PR #28, merge — recorded here as the gating word (no outward-action AUTHORIZED line is spec'd for R3) · per user
 - E's closing records (this ledger + Status) ride on branch feat/slice-e-close, to merge with Slice F's records — R3's merge predates this commit by necessity · builder call
 
+### 2026-09-01 — build: Slice F (R1 only — R2-R4 await the laptop and Tony's words)
+- Relay file written: ~/Documents/claude-relay/to-laptop/2026-09-01-skills-marketplace-cutover.md, checked against the CLAUDE.md hand-off checklist · builder call
+- The file enumerates both laptop-clone cases (exists → remote update + /fb check; absent → known non-resolving cross-references, report-not-stop) so neither is unenumerated state · builder call
+- Negative test chosen: diff of two different installed plugins must be non-empty, proving the install-guard isn't vacuous · builder call
+
 ## Deviations
 
 ### 2026-08-31 — build: Slice A
