@@ -1,240 +1,102 @@
 # tony-skills
 
-A private repo holding what Tony builds on his workstations and wants to keep —
-Claude Code skills and subagents, plus standalone tools, configs, and specs.
+A Claude Code plugin marketplace: the skills Tony Coon builds and runs on his
+own machines, published so anyone can install them. Nineteen plugins covering
+twenty skills — a full build loop (blueprint → build → signoff → recheck, with
+/ship to run a whole lap), project lifecycle bootstrapping, image generation,
+adversarial reviews, and a handful of workshop utilities — plus a `tools/`
+shelf of non-plugin tools and specs.
 
-## What's here
+## Install
 
-The test for belonging here is "was this made on one of these Macs and should it
-outlive the machine," not "is it a Claude Code skill." Two parts, split by how a
-thing is consumed rather than what it is:
+Add the marketplace, then install any plugin from it:
 
-- a **plugin marketplace** under `plugins/` (six Claude Code plugin folders,
-  five of them catalogued in `marketplace.json`) — what Claude Code installs
-  and runs
-- a **[Tony Tools](tools/)** category under `tools/` — everything else: macOS
-  automations, dotfiles, scripts, and implementation specs for code that lives
-  elsewhere
+```
+/plugin marketplace add line7works/tony-skills
+/plugin install huh@tony-skills
+```
 
-### Plugins
+Swap `huh` for any plugin below. Update later with
+`/plugin update <name>@tony-skills`.
 
-Six plugin folders. Five are catalogued in `.claude-plugin/marketplace.json`
-and installable with `/plugin`; `shutdown` is in the tree but not catalogued.
+**Fair warning:** these are personal, working skills, shared as-is. Several are
+wired to Tony's own setup — absolute paths under `~/Developer`, machine names,
+a two-Mac relay protocol, live production endpoints for his sites. The
+self-contained ones (`huh`, `wargame`, `signoff`, `recheck`, `blueprint`,
+`build`, `ship`, `precon`, `inspect`, `digest`, `fb`) travel well; the rest are
+best read as reference implementations you adapt rather than run unmodified.
 
-**`sun`** provides two slash commands:
+## The plugins
 
-- `/sunrise` stands up a new project across every layer (local repo, GitHub, Vercel, database, Notion board, Obsidian vault, CLI memory) and proves it live, then emits a handoff prompt for other LLMs.
-- `/sunset` archives an abandoned project reversibly across every layer (vault, memory, scheduled agents, repo, GitHub, Vercel, database, Notion), then emits a handoff prompt.
+**The build loop** — a paper-trail-driven construction loop for shipping
+features in verified slices. Each station is a skill, composed by name:
 
-They share a set of cosmetic "sun cue" assets (sounds plus terminal and browser animations) bundled in `plugins/sun/assets/`.
+- `precon` — harvest a free-flowing idea discussion into a fixed-format scope doc
+- `jpb` — Jon's Product Box: 3–6 independent frontier-model "box teams" vet an idea before it has a name
+- `blueprint` — draft a build doc in dependency-ordered, verifiable slices
+- `inspect` — adversarial review of a build doc *before* anything is built
+- `build` — execute one slice inside strict boundaries; honest stops over fake completeness
+- `signoff` — independent adversarial review of the built slice by reviewers who didn't write it
+- `recheck` — closed-checklist re-inspection that verifies named fixes and flips the card
+- `ship` — one command that runs a slice through the whole loop with a hard lap limit
+- `vertical` — the whole-build capstone review once every slice is signed off
+- `handoff` — end-of-slice thread prep: record rulings, write the handoff block, hand over the kickoff line
+- `fb` / `digest` — capture feedback notes verbatim / compile them into a current-state notes board
+- `huh` — re-explain the pending question in plain language, ending with a recommendation
 
-Clerk graduated to a full entity on 2026-08-23 and lives at `~/Developer/clerk` (`tiny-tunnel-dot/clerk`, private).
+**Project lifecycle:**
 
-**`forge`** is a Claude-driven, model-agnostic image generator on Fal.ai. The `/forge` skill is the "foreman" (writes prompts, generates drafts, inspects them with vision, fixes misses, renders finished on-brand images); a dependency-free Python CLI (`plugins/forge/assets/forge.py`) does the mechanical work against Fal's REST queue. It is model-agnostic (nano-banana, GPT Image 2, FLUX, swappable per `--model`): single prompts or shot-list batches, a `compare` that races models, `edit` and `style` for existing images, `finish` for higher-quality keepers, `--transparent` cut-outs, and `export` to size presets, all under a running cost cap with an auditable run manifest. It reads `FAL_KEY` from the environment for live renders and auto-loads a per-project `.forge/brand.json`. Not for pixel-art sprites (PixelLab handles those).
+- `sun` — `/sunrise` bootstraps a new project across every layer (repo, GitHub,
+  Vercel, database, Notion, Obsidian, memory) and proves it live; `/sunset`
+  archives one reversibly. One plugin, shared assets.
+- `shutdown` — settle up before a terminal restart or account switch: git
+  report, self-contained handoff file, memory pointer.
 
-**`wargame`** provides one slash command:
+**Making things:**
 
-- `/wargame <target>` runs an adversarial pre-mortem — plan or stress-test anything assuming the happy path is a lie. It auto-detects the terrain (GREENFIELD new project / EXISTING code / planned CHANGE), ranks failure modes by likelihood × blast radius, and forces every high-ranked one to convert into a verified code check, a named test, or a spike ("anti-theater rule"). Output is one canonical doc (`docs/wargames/<slug>.md` in a repo) plus plain-language decision questions in chat. Hard floor: Opus-class models or better — it refuses to run on smaller models rather than produce a shallow war game.
+- `forge` — Claude-driven image generation on Fal.ai: the skill writes prompts,
+  runs vision QA, and renders on-brand images through a bundled
+  dependency-free Python CLI. Model-agnostic, cost-capped, manifest-audited.
+- `wargame` — adversarial pre-mortem of any target; ranked, verified failure
+  modes with an anti-theater rule (high-ranked failures must convert to real
+  checks). Opus-class model floor.
+- `print-tune` — collaborative per-setting print tuning for the Bambu H2C,
+  driven by a sourced setting playbook.
+- `arcade` — publish, update, reorder, and take down pages on the Line 7
+  Arcade (Tony's live site) via the bundled `arcade-publish` CLI.
 
-**`signoff`** provides one slash command:
+## Tony Tools (`tools/`)
 
-- `/signoff` runs an independent adversarial review of freshly built work and ends in a signed verdict. It is the back half of `/wargame`: war game before building, sign-off after. It auto-detects what was built (working diff, branch diff, or a named slice), finds the phase/slice doc and treats it as acceptance criteria, then spawns fresh reviewers who did **not** write the code and never receive the author's rationale — with a mandate to reject rather than bless. Lean by default (three lenses: spec conformance, correctness, seams against shipped code); DEEP adds security and test-quality. Findings need `file:line` plus a concrete failure scenario or they get cut, and blockers are re-verified against source before reporting. Output is a compact chat verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list and a "tried and failed to break" line, so a clean review can't hide behind "looks good." Report-only; it never fixes what it finds. Shares wargame's Opus-class floor.
+Things a human copies, runs, or reads directly — not installed through Claude
+Code:
 
-**`shutdown`** provides `/shutdown` — settle up before restarting Terminal or
-switching accounts: verify and report git state read-only, write a self-contained
-handoff to `~/Documents/handoffs/`, and save a memory pointer so the next session
-finds it. `/shutdown all` sweeps every open terminal session on the same machine.
-Not catalogued in `marketplace.json`, and unlike the others it carries no
-`.claude-plugin/plugin.json` — only `skills/shutdown/SKILL.md`.
-
-**`arcade`** provides `/arcade` — publish, update, list, reorder, feature, and
-take down pages on the Line 7 Arcade (`arcade.line7.works`) from any repo, by
-driving the bundled `arcade-publish` CLI (`plugins/arcade/assets/`), which also
-works standalone from the terminal. Build history in
-`docs/arcade-skill-build-plan.md`. Writes to live production; delete is gated
-behind an explicit conversational yes.
-
-### Tony Tools
-
-Everything preserved here that Claude Code does **not** install, so it lives
-under `tools/` (not `plugins/`) and is not in the marketplace catalog. That
-covers things you copy onto a Mac directly (macOS automations, dotfiles,
-scripts) and also implementation specs for code that lives somewhere else. See
-[`tools/README.md`](tools/) for the category.
-
-Currently four:
-
-- **`gmail-mcp/`** — a multi-account Gmail MCP server, registered with Claude
-  Code as `gmail`. Reaches every authorized inbox at once by alias, which the
-  claude.ai Google connector cannot do: it holds one OAuth grant, so connecting
-  a second Gmail replaces the first. Real source and installable, unlike the
-  spec below. Runs from this checkout rather than a copy, so `git pull` updates
-  it. Secrets live in `~/.gmail-mcp/`, never here.
+- **`gmail-mcp/`** — a multi-account Gmail MCP server (real, installable).
+  Deliberate ceilings: `gmail.modify` scope only (no permanent delete),
+  required account aliases, confirm-gated sends. Credentials live outside the
+  repo, always.
 - **`antigravity-mcp/`** — an MCP server wrapping Google Antigravity's `agy`
-  CLI, so a Claude Code session can consult Gemini Pro the way it consults
-  Codex. Needed because `agy` consumes MCP servers but does not serve as one.
-  Real source, installable; registers as `antigravity`.
-- **`mcp-obsidian-worker/`** — the implementation spec for the Cloudflare Worker
-  serving the `Obsidian Vault` MCP server on claude.ai web. Spec only; the
-  Worker source is not in this repo.
-- **`arcade-publish/`** — the findings ledger (`punch-list.md`) for the
-  arcade-publish CLI, and a pointer README. The code moved to
-  `plugins/arcade/assets/` on 2026-08-12; the ledger deliberately stayed behind
-  as the single consolidated list. The one entry here that is documentation
-  rather than a runnable thing.
-
-(`copy-on-select` was sunset 2026-07-21 and is still in git history.)
+  CLI so Claude Code can consult Gemini (real, installable), with documented
+  workarounds for verified `agy` behaviors.
+- **`mcp-obsidian-worker/`** — implementation spec for a Cloudflare Worker
+  exposing an Obsidian vault over MCP (spec only; the source lives elsewhere).
+- **`arcade-publish/`** — the findings ledger from the arcade CLI's build; the
+  CLI itself ships inside `plugins/arcade/assets/`.
 
 ## Layout
 
 ```
-tony-skills/
-├── .claude-plugin/marketplace.json   catalog (lists sun, forge, wargame, signoff, arcade — not shutdown)
-├── docs/                             build plans and their punch lists
-├── plugins/                          Claude Code plugins (installed via /plugin)
-│   ├── sun/
-│   │   ├── .claude-plugin/plugin.json
-│   │   ├── skills/
-│   │   │   ├── sunrise/SKILL.md
-│   │   │   └── sunset/SKILL.md
-│   │   └── assets/                    rise.wav, set.wav, sun_bar.py, sun.html, ...
-│   ├── forge/
-│   │   ├── .claude-plugin/plugin.json
-│   │   ├── skills/forge/SKILL.md
-│   │   ├── assets/                    forge.py, models.json
-│   │   └── IMPLEMENTATION.md          full spec + per-milestone build log
-│   ├── wargame/
-│   │   ├── .claude-plugin/plugin.json
-│   │   └── skills/wargame/SKILL.md
-│   ├── signoff/
-│   │   ├── .claude-plugin/plugin.json
-│   │   └── skills/signoff/SKILL.md
-│   ├── shutdown/                     not in the catalog; no plugin.json
-│   │   └── skills/shutdown/SKILL.md
-│   └── arcade/
-│       ├── .claude-plugin/plugin.json
-│       ├── skills/arcade/SKILL.md
-│       └── assets/                   arcade-publish (CLI), README.md
-└── tools/                            preserved work Claude Code doesn't install
-    ├── README.md
-    ├── gmail-mcp/                    multi-account Gmail MCP server (real source)
-    │   ├── README.md
-    │   ├── src/                      store.ts, auth.ts, gmail.ts, server.ts
-    │   ├── package.json
-    │   └── tsconfig.json
-    ├── antigravity-mcp/              MCP bridge to Google Antigravity's agy CLI
-    ├── arcade-publish/               findings ledger + pointer (code lives in plugins/arcade/)
-    │   ├── README.md
-    │   └── punch-list.md
-    └── mcp-obsidian-worker/          spec for the claude.ai Obsidian MCP Worker
-        ├── README.md
-        └── IMPLEMENTATION.md
+.claude-plugin/marketplace.json   the catalog — 19 entries
+plugins/<name>/                   one plugin per skill (sun bundles sunrise+sunset)
+  .claude-plugin/plugin.json
+  skills/<skill>/SKILL.md         (+ assets/, nested or at plugin root)
+docs/                             build plans, reviews, and the loop's paper trail
+tools/                            the non-plugin shelf
 ```
 
-There are two ways to install from this repo. Pick by whether you want clean
-managed updates (plugin) or the bare `/sunrise` / `/sunset` / `/forge` / `/wargame` / `/signoff` commands (user-level).
+The `docs/` folder is the workshop's real paper trail — build plans, scope
+docs, adversarial reviews, evidence files. It ships in the repo on purpose:
+the loop skills above produced it, so it doubles as their worked example.
 
-## Install as a plugin (namespaced, shareable)
+## License
 
-```
-/plugin marketplace add tiny-tunnel-dot/tony-skills
-/plugin install sun@tony-skills
-/plugin install forge@tony-skills
-/plugin install wargame@tony-skills
-/plugin install signoff@tony-skills
-/plugin install arcade@tony-skills
-```
-
-Restart Claude Code once. The `sun` commands register as `/sun:sunrise` and `/sun:sunset`, wargame as `/wargame:wargame`, and signoff as `/signoff:signoff`. Plugin skills are always namespaced by the plugin name, so there is no bare form in this mode. This is the mode to use when sharing with someone else.
-
-`forge` registers the `/forge` skill (namespaced `/forge:forge` in plugin mode), which triggers on image-generation asks ("make an image of X", "generate icons for Commish"). It shells out to its bundled `assets/forge.py`, so the only requirement is `python3` (3.8+, standard library only) plus a `FAL_KEY` in the environment for live renders. `estimate`, `models`, and any `--dry-run` work with no key.
-
-Because the repo is private, the installing machine needs working git auth (the `gh` login or an SSH key), which Tony's machines already have.
-
-## Install for bare commands (`/sunrise`, `/sunset`, `/forge`, `/wargame`, `/signoff`)
-
-Prefer the bare command names? Install them as user-level skills instead of as a plugin. Copy the skill folders (plus sun's shared assets) into `~/.claude/skills/`; forge follows the same pattern in its subsection below:
-
-```bash
-mkdir -p ~/.claude/skills
-cp -R ~/Developer/tony-skills/plugins/sun/skills/sunrise      ~/.claude/skills/sunrise
-cp -R ~/Developer/tony-skills/plugins/sun/skills/sunset       ~/.claude/skills/sunset
-cp -R ~/Developer/tony-skills/plugins/sun/assets              ~/.claude/skills/sunset/assets
-cp -R ~/Developer/tony-skills/plugins/wargame/skills/wargame  ~/.claude/skills/wargame
-cp -R ~/Developer/tony-skills/plugins/signoff/skills/signoff  ~/.claude/skills/signoff
-```
-
-Restart Claude Code once. You get bare `/sunrise`, `/sunset`, `/wargame`, and `/signoff`. The asset paths are dual-mode, so the sun cue still fires in this mode (it falls back to `~/.claude/skills/sunset/assets`); wargame and signoff have no assets.
-
-Trade-off versus the plugin: no `/plugin update`. To pull changes, `git pull` in `~/Developer/tony-skills` and re-run the `cp` lines.
-
-### forge (user-level, the same pattern)
-
-Copy forge's skill folder plus its `assets/` (the `forge.py` CLI and `models.json` registry) into `~/.claude/skills/forge/`:
-
-```bash
-mkdir -p ~/.claude/skills
-cp -R ~/Developer/tony-skills/plugins/forge/skills/forge ~/.claude/skills/forge
-cp -R ~/Developer/tony-skills/plugins/forge/assets       ~/.claude/skills/forge/assets
-```
-
-Restart Claude Code once and you get the bare `/forge`. The skill calls its CLI via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so in user-level mode it resolves to the copy you just placed. Needs `python3` (3.8+) and a `FAL_KEY` in the environment for live renders (`estimate` / `models` / `--dry-run` need no key). To update on any machine: `git pull` in `~/Developer/tony-skills` and re-run the two `cp` lines.
-
-### arcade (user-level, the same pattern)
-
-Copy arcade's skill folder plus its `assets/` (the `arcade-publish` CLI) into
-`~/.claude/skills/arcade/` — the flattened layout, SKILL.md at the root with
-`assets/` beside it, is what the skill's
-`${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}` fallback resolves; copying
-`skills/arcade/` alone leaves no CLI and every command fails:
-
-```bash
-mkdir -p ~/.claude/skills
-rm -rf ~/.claude/skills/arcade
-cp -R ~/Developer/tony-skills/plugins/arcade/skills/arcade ~/.claude/skills/arcade
-cp -R ~/Developer/tony-skills/plugins/arcade/assets        ~/.claude/skills/arcade/assets
-```
-
-The `rm -rf` matters on re-runs: without it, `cp -R` into the existing folder
-nests copies inside it (`arcade/arcade/`) while the stale CLI keeps running.
-
-Restart Claude Code once and you get the bare `/arcade`. Needs Node 18+ and the
-config at `~/.config/line7/arcade.json`. The copy is real, not a link — after
-editing the repo, re-run the block above, `rm -rf` included (see Updating
-below).
-
-## Updating
-
-After editing a skill and pushing:
-
-```
-/plugin marketplace update tony-skills
-/plugin update sun@tony-skills
-/plugin update forge@tony-skills
-/plugin update wargame@tony-skills
-/plugin update signoff@tony-skills
-/plugin update arcade@tony-skills
-```
-
-`arcade` matters most here: its installed copy is a real copy of the
-`arcade-publish` CLI, not a link to this repo, and it writes to live
-production — a stale copy and the terminal command can run different code
-against the live arcade. After any change to `plugins/arcade/`, update the
-plugin (or re-copy the user-level install) on every machine that has it.
-
-No version is pinned, so every pushed commit is the latest.
-
-## A note on sharing
-
-These skills are personal. They reference Tony's GitHub handle (`tiny-tunnel-dot`), his `~/Developer` layout, Project Knight, his Obsidian vault structure, and his Notion board pattern. Keep this repo private.
-
-To share a skill publicly later, make a genericized copy in a fresh public repo (strip the personal paths and handles) rather than flipping this one public. Git history would otherwise expose those details even after a cleanup commit. (`wargame` and `signoff` are the exceptions — they contain no personal paths or handles, so they're the easy candidates to copy out as-is if sharing ever comes up.)
-
-## Assets and the plugin root (dual-mode)
-
-The skills play a cosmetic sound and terminal animation on launch. The asset paths use `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/...`, which resolves both ways:
-
-- **Plugin install:** `$CLAUDE_PLUGIN_ROOT` is set, so it points at the plugin's bundled `assets/`.
-- **User-level install:** `$CLAUDE_PLUGIN_ROOT` is empty, so it falls back to `~/.claude/skills/sunset/assets/` (which the bare-command install populates).
-
-The cue is best-effort and skips silently if anything is missing, so a path miss never breaks a run. Verify the cue fires after the first install in whichever mode you used.
+MIT — see [LICENSE](LICENSE).

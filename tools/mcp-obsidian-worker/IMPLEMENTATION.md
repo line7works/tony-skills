@@ -66,7 +66,7 @@ by the user but written by an LLM acting on the user's chat instructions.
 These stay byte-identical:
 
 - `import` block at the top of `src/index.ts`
-- `ALLOWED_EMAILS` constant (`new Set(["tonycoon@gmail.com"])`)
+- `ALLOWED_EMAILS` constant (`new Set(["<owner-email>"])` — the vault owner's Google account email)
 - `OBSIDIAN_API_BASE` constant (`https://mcp.line7.works`)
 - `MyMCP extends McpAgent<Env, Record<string, never>, Props>`
 - `server = new McpServer({ name: "Obsidian Vault", version: "1.0.0" })`

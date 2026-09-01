@@ -1,0 +1,190 @@
+# Slice C diff-guard — 2026-09-01T03:07:18Z
+# Repo at merged main commit: 83923f155bf1c0bf82ce4442e17fde04602f8626
+#
+# Exclusion note (builder call, logged in build assumptions): every installed
+# copy carries a single extra file '.in_use' written by the Claude Code plugin
+# installer at install time (tooling metadata, not repo content). A first run
+# without exclusions showed .in_use as the ONLY difference in all 19 plugins;
+# Part 1 below re-runs with --exclude=.in_use.
+
+## Part 1 — installed plugin vs repo (19 plugins, diff -r --exclude=.in_use)
+sun: CLEAN
+forge: CLEAN
+wargame: CLEAN
+signoff: CLEAN
+arcade: CLEAN
+inspect: CLEAN
+shutdown: CLEAN
+blueprint: CLEAN
+build: CLEAN
+digest: CLEAN
+fb: CLEAN
+handoff: CLEAN
+huh: CLEAN
+jpb: CLEAN
+precon: CLEAN
+print-tune: CLEAN
+recheck: CLEAN
+ship: CLEAN
+vertical: CLEAN
+
+## Part 2 — hand copy vs repo (20 skills, diff -r; print-tune via symlink target)
+arcade: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/arcade/SKILL.md plugins/arcade/skills/arcade/SKILL.md
+27c27
+< ARCADE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}/assets/arcade-publish"
+---
+> ARCADE="${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish"
+Only in /Users/tonycoon/.claude/skills/arcade: assets
+blueprint: CLEAN
+build: CLEAN
+digest: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/digest/SKILL.md plugins/digest/skills/digest/SKILL.md
+26c26
+<    `~/Documents/skill-lab/skill-feedback.md` — is ever touched, and a
+---
+>    `~/Developer/tony-skills/docs/feedback.md` — is ever touched, and a
+fb: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/fb/SKILL.md plugins/fb/skills/fb/SKILL.md
+3c3
+< description: Append a feedback note verbatim to the right inbox and confirm the path — capture only, never analysis. Use when the user says "fb", "log this feedback", "note this", or drops a mid-thread note to record. Loop-skill notes (blueprint/build/signoff/recheck, SKILL NOTE lines) go to the skill-lab feedback doc; anything else goes to the current repo's docs/feedback.md.
+---
+> description: Append a feedback note verbatim to the right inbox and confirm the path — capture only, never analysis. Use when the user says "fb", "log this feedback", "note this", or drops a mid-thread note to record. Loop-skill notes (blueprint/build/signoff/recheck, SKILL NOTE lines) go to the loop feedback doc `~/Developer/tony-skills/docs/feedback.md`; anything else goes to the current repo's docs/feedback.md.
+10c10
+< session. Never write to ~/.claude/skills/ or any `## Dispositions` section.
+---
+> session. Never write to installed skill files or any `## Dispositions` section.
+15c15
+<    blueprint/build/signoff/recheck → `~/Documents/skill-lab/skill-feedback.md`,
+---
+>    blueprint/build/signoff/recheck → `~/Developer/tony-skills/docs/feedback.md`,
+forge: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/forge/SKILL.md plugins/forge/skills/forge/SKILL.md
+33c33
+< FORGE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py"
+---
+> FORGE="${CLAUDE_PLUGIN_ROOT}/assets/forge.py"
+Only in /Users/tonycoon/.claude/skills/forge: assets
+handoff: CLEAN
+huh: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/huh/punch-list.md plugins/huh/skills/huh/punch-list.md
+4,5c4,5
+< from a session spec), and ~/.claude/skills/huh/ is not inside a repo, so the
+< ledger lives here instead of docs/punch-list.md.
+---
+> from a session spec), so the ledger lives here, inside the plugin's own
+> folder, instead of a repo-level docs/punch-list.md.
+inspect: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/inspect/SKILL.md plugins/inspect/skills/inspect/SKILL.md
+47c47
+< - **Code book** — the doc graded against /blueprint's live SKILL.md (`~/.claude/skills/blueprint/SKILL.md`), read at run time and cited as the code, never paraphrased from memory: checkable criteria (would a grader know pass from fail), self-containedness (the builder-who-wasn't-in-the-room test), slice integrity (dependency order, ends wired in, independently verifiable, ceremony scaled), and the exact load-bearing forms downstream stations key on (section names, `Status:` labels, the ledger scaffold, ·-separated fields).
+---
+> - **Code book** — the doc graded against /blueprint's live SKILL.md (`~/Developer/tony-skills/plugins/blueprint/skills/blueprint/SKILL.md`), read at run time and cited as the code, never paraphrased from memory: checkable criteria (would a grader know pass from fail), self-containedness (the builder-who-wasn't-in-the-room test), slice integrity (dependency order, ends wired in, independently verifiable, ceremony scaled), and the exact load-bearing forms downstream stations key on (section names, `Status:` labels, the ledger scaffold, ·-separated fields).
+52c52
+< **Outside lanes (GPT, Gemini, DeepSeek, local Qwen).** The chosen outside model runs the two paper lenses via `assets/inspect-mandate.md`; the repo-reality subagent still runs locally and its findings merge into the same verdict and block. **The packet, one rule for every lane:** create a FRESH scratch directory for this lane's run and write `packet.md` into it — the mandate with its placeholders filled verbatim (`[CODE_BOOK]` = /blueprint's live SKILL.md, `[BUILD_DOC]` = the build doc, `[SCOPE_DOC_OR_NO_RECORD]` = the scope doc or the literal line `NO RECORD — no scope doc exists for this feature.`), each filled document with line numbers prefixed (`N: `) so the inspector's `<doc>:<line>` citations have ground truth. The directory holds `packet.md` and nothing else, one directory per lane per run — never shared, never reused (a shared dir let one lane's response land where another could read it, bitten live 2026-08-30). Size check before any send: `wc -c packet.md`, and bytes/3.5 is the token estimate — over a lane's window (qwen: 64k tokens ≈ 220KB), report too-big and re-ask, never silently truncate. Never in the packet: repo code, chat context, session summaries, prior inspection output, another reviewer's output — cold means cold; the inversion vs the siblings, stated so nobody "fixes" it back: jpb starves its boxes of everything, /vertical feeds them the whole repo, **/inspect feeds them only the doc packet**. Transports reuse jpb's recorded recipes (`~/.claude/skills/jpb/assets/box-runners.md`) with `packet.md` as the payload:
+---
+> **Outside lanes (GPT, Gemini, DeepSeek, local Qwen).** The chosen outside model runs the two paper lenses via `assets/inspect-mandate.md`; the repo-reality subagent still runs locally and its findings merge into the same verdict and block. **The packet, one rule for every lane:** create a FRESH scratch directory for this lane's run and write `packet.md` into it — the mandate with its placeholders filled verbatim (`[CODE_BOOK]` = /blueprint's live SKILL.md, `[BUILD_DOC]` = the build doc, `[SCOPE_DOC_OR_NO_RECORD]` = the scope doc or the literal line `NO RECORD — no scope doc exists for this feature.`), each filled document with line numbers prefixed (`N: `) so the inspector's `<doc>:<line>` citations have ground truth. The directory holds `packet.md` and nothing else, one directory per lane per run — never shared, never reused (a shared dir let one lane's response land where another could read it, bitten live 2026-08-30). Size check before any send: `wc -c packet.md`, and bytes/3.5 is the token estimate — over a lane's window (qwen: 64k tokens ≈ 220KB), report too-big and re-ask, never silently truncate. Never in the packet: repo code, chat context, session summaries, prior inspection output, another reviewer's output — cold means cold; the inversion vs the siblings, stated so nobody "fixes" it back: jpb starves its boxes of everything, /vertical feeds them the whole repo, **/inspect feeds them only the doc packet**. Transports reuse jpb's recorded recipes (`~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/box-runners.md`) with `packet.md` as the payload:
+56c56
+< - **DeepSeek** — `~/.claude/skills/jpb/assets/openrouter-box.sh deepseek/deepseek-v4-pro <packet dir>/packet.md <packet dir>/out.md`. `OPENROUTER_API_KEY` from the environment under the never-print rule; the script's own guard (HTTP 200, no top-level error, `finish_reason == "stop"`, non-empty content, exit 1 on FAILED) is the failure signal; parity line: `no :online suffix`. **Known limit, verified live 2026-08-30:** the script hardcodes `max_tokens` 8000 and DeepSeek reasons before writing — on an inspection-size packet the budget dies in thinking and the guard fails with `finish_reason=length`. Until jpb's script grows a budget parameter (its file, not this skill's), this lane completes only on small plans; the ask's roster line carries this caveat so Tony picks it knowingly.
+---
+> - **DeepSeek** — `~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/openrouter-box.sh deepseek/deepseek-v4-pro <packet dir>/packet.md <packet dir>/out.md`. `OPENROUTER_API_KEY` from the environment under the never-print rule; the script's own guard (HTTP 200, no top-level error, `finish_reason == "stop"`, non-empty content, exit 1 on FAILED) is the failure signal; parity line: `no :online suffix`. **Known limit, verified live 2026-08-30:** the script hardcodes `max_tokens` 8000 and DeepSeek reasons before writing — on an inspection-size packet the budget dies in thinking and the guard fails with `finish_reason=length`. Until jpb's script grows a budget parameter (its file, not this skill's), this lane completes only on small plans; the ask's roster line carries this caveat so Tony picks it knowingly.
+jpb: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/jpb/SKILL.md plugins/jpb/skills/jpb/SKILL.md
+29,31c29,31
+< Asset paths below use the repo's plugin convention and resolve both as an
+< installed plugin and as a user-level skill:
+< `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/jpb}/assets/` — referred to as
+---
+> Asset paths below resolve at the plugin's install location (this plugin
+> nests its assets beside this SKILL.md):
+> `${CLAUDE_PLUGIN_ROOT}/skills/jpb/assets/` — referred to as
+precon: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/precon/SKILL.md plugins/precon/skills/precon/SKILL.md
+57c57
+< **Suggest only, never act.** When the idea deserves an outside panel, the skill may say "this smells like a /jpb" (Tony's multi-model product-box consensus skill, `~/.claude/skills/jpb/`) in one line. When a question needs something concrete to react to, it may say "this would be easier with a throwaway to look at." That is the ceiling: it never invokes a skill, never builds a prototype (or anything else), never queues anything. The suggestion is one line; acting on it is Tony's.
+---
+> **Suggest only, never act.** When the idea deserves an outside panel, the skill may say "this smells like a /jpb" (Tony's multi-model product-box consensus skill, `~/Developer/tony-skills/plugins/jpb/`) in one line. When a question needs something concrete to react to, it may say "this would be easier with a throwaway to look at." That is the ceiling: it never invokes a skill, never builds a prototype (or anything else), never queues anything. The suggestion is one line; acting on it is Tony's.
+80c80
+< 2. **GPT via the codex MCP** — `gpt-5.6-sol` pinned, or another GPT model on Tony's pick. This is external: it sends only on Tony's explicit word in this run, never by default. The call carries `config: {web_search: disabled}` — a reader that can search answers its own questions instead of reporting them, and the cold read is contaminated. Transport only is borrowed from jpb (`mcp__codex__codex`; the pinned id and its refresh procedure live in `~/.claude/skills/jpb/SKILL.md`) — none of jpb's box mandate or verdict machinery comes with it.
+---
+> 2. **GPT via the codex MCP** — `gpt-5.6-sol` pinned, or another GPT model on Tony's pick. This is external: it sends only on Tony's explicit word in this run, never by default. The call carries `config: {web_search: disabled}` — a reader that can search answers its own questions instead of reporting them, and the cold read is contaminated. Transport only is borrowed from jpb (`mcp__codex__codex`; the pinned id and its refresh procedure live in `~/Developer/tony-skills/plugins/jpb/skills/jpb/SKILL.md`) — none of jpb's box mandate or verdict machinery comes with it.
+print-tune: DIFFERENCES:
+diff -r /Users/tonycoon/Developer/print-tune/skills/print-tune/SKILL.md plugins/print-tune/skills/print-tune/SKILL.md
+177c177
+< anywhere (it is symlinked into `~/.claude/skills/`), so use absolute paths
+---
+> anywhere (it runs from a plugin install), so use absolute paths
+recheck: CLEAN
+ship: CLEAN
+shutdown: CLEAN
+signoff: CLEAN
+sunrise: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/sunrise/SKILL.md plugins/sun/skills/sunrise/SKILL.md
+121,123c121,123
+<    - `afplay ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/rise.wav >/dev/null 2>&1 &`
+<    - `python3 ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun_bar.py rise`
+<    - Keep it to the **ONE-LINE** `sun_bar.py rise` output (gold→blue half-block bar, sun on the left, "☀ S U N R I S E"). Claude Code collapses taller output behind a "+N lines" fold and captures in-place ANSI animation as raw escape codes, so one line is the only reliable in-flow cue — do not attempt terminal motion. A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun.html#rise"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (Assets are shared with `sunset`; do not rebuild them. The `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets` form resolves both ways: the plugin's bundled `assets/` when installed as a plugin, or `~/.claude/skills/sunset/assets/` when copied in as a user-level skill.)
+---
+>    - `afplay ${CLAUDE_PLUGIN_ROOT}/assets/rise.wav >/dev/null 2>&1 &`
+>    - `python3 ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py rise`
+>    - Keep it to the **ONE-LINE** `sun_bar.py rise` output (gold→blue half-block bar, sun on the left, "☀ S U N R I S E"). Claude Code collapses taller output behind a "+N lines" fold and captures in-place ANSI animation as raw escape codes, so one line is the only reliable in-flow cue — do not attempt terminal motion. A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#rise"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (Assets are shared with `sunset`; do not rebuild them. The `${CLAUDE_PLUGIN_ROOT}/assets` form resolves to the plugin's bundled `assets/` at its install location.)
+sunset: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/sunset/SKILL.md plugins/sun/skills/sunset/SKILL.md
+95,97c95,97
+<    - `afplay ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/set.wav >/dev/null 2>&1 &`
+<    - `python3 ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun_bar.py set`
+<    - Use the 3-line `sun_bar.py` stamp so it renders above Claude Code's output fold (taller scenes get collapsed; in-place animation gets captured as raw escape codes). A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun.html#set"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (The matching `rise` cue belongs to the sunrise/revive skill.)
+---
+>    - `afplay ${CLAUDE_PLUGIN_ROOT}/assets/set.wav >/dev/null 2>&1 &`
+>    - `python3 ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py set`
+>    - Use the 3-line `sun_bar.py` stamp so it renders above Claude Code's output fold (taller scenes get collapsed; in-place animation gets captured as raw escape codes). A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#set"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (The matching `rise` cue belongs to the sunrise/revive skill.)
+Only in /Users/tonycoon/.claude/skills/sunset: assets
+vertical: DIFFERENCES:
+diff -r /Users/tonycoon/.claude/skills/vertical/SKILL.md plugins/vertical/skills/vertical/SKILL.md
+53c53
+< **Outside, on Tony's word from Step 2.** Transports reuse /jpb's recorded recipes (`~/.claude/skills/jpb/assets/box-runners.md`) with **one deliberate inversion, stated here so nobody "fixes" it back: jpb starves its boxes of repo access (neutral empty cwd — parity for a product-box); /vertical feeds the repo to them — the export directory IS the workspace, because reading the code is the assignment.** Web access stays OFF in both skills.
+---
+> **Outside, on Tony's word from Step 2.** Transports reuse /jpb's recorded recipes (`~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/box-runners.md`) with **one deliberate inversion, stated here so nobody "fixes" it back: jpb starves its boxes of repo access (neutral empty cwd — parity for a product-box); /vertical feeds the repo to them — the export directory IS the workspace, because reading the code is the assignment.** Web access stays OFF in both skills.
+wargame: CLEAN
+
+## Rulings
+- arcade "Only in hand copy: assets" · resolved: sanctioned plugin-root asset layout (repo/installed keep assets at plugins/arcade/assets, byte-identical to live), not drift (per user)
+- forge "Only in hand copy: assets" · resolved: sanctioned plugin-root asset layout, not drift (per user)
+- sunset "Only in hand copy: assets" · resolved: sanctioned plugin-root asset layout (sun plugin root), not drift (per user)
+- All other non-clean lines are within Slice B's declared edits (the 10 cross-reference SKILL.md files, digest's and fb's pointer/frontmatter edits, huh's punch-list.md) — verified line-by-line against the Slice B footprint.
+
+## R4 working check — 2026-09-01, BEFORE removal
+Mechanism (builder call, logged in build assumptions): the 20 hand-copy entries were
+moved reversibly to a session scratchpad backup before the check, so the fresh
+sessions could only resolve skills from the marketplace installs; permanent removal
+(R5) happens only after these results, from that backup.
+- Listing: fresh headless session (`claude -p`) reported all 20 roster skills from
+  the installed plugins (sun:sunrise, sun:sunset, forge, wargame, signoff, arcade,
+  inspect, shutdown, blueprint, build, digest, fb, handoff, huh, jpb, precon,
+  print-tune, recheck, ship, vertical) — COUNT: 20. PASS
+- /huh: fresh session invoked it; skill loaded and answered per its own contract
+  ("Nothing is pending here — this is a fresh session…"). PASS
+- /fb: fresh session (cwd $HOME) logged a loop-note; reply "Logged to
+  ~/Developer/tony-skills/docs/feedback.md (Inbox: 25)" and the note verified
+  present at docs/feedback.md:111 — the new pointer proven from an install. PASS
+- Cross-reference skill /precon: fresh session invoked it; skill loaded and opened
+  per its own contract. PASS
+
+## Correction — 2026-09-01 (Slice C review MAJOR, on the record)
+The arcade ruling above misstates its rationale. As written it claims the repo's
+plugin-root assets were "byte-identical to live" at guard time — false: Slice B
+edited plugins/arcade/assets/README.md (the ${CLAUDE_PLUGIN_ROOT:-...} fallback
+line), so the live hand copy's assets/README.md differed from the repo by exactly
+that declared edit. Further, the three "Only in hand copy: assets" lines (arcade,
+forge, sunset) masked those subtrees from diff -r: Part 2 never content-compared
+them against their plugin-root counterparts before removal, and the hand copies
+are now gone, so a direct re-check is impossible.
+What the record does support, verified 2026-09-01:
+- The one known in-tree difference (arcade assets/README.md) is a Slice B
+  declared edit — expected under R3's own standard, not drift.
+- forge and sun asset trees were not touched by Slice B (git diff 8b87cb7^ main
+  --name-only over those paths is empty) and were verified byte-identical to
+  live by Slice A's AC-A3 diffs on 2026-08-31, the day before removal.
+- The installed plugin-root assets diff clean against merged main today (Part 1).
+The rulings' conclusion (sanctioned layout, not drift) stands on that basis; the
+"byte-identical to live" phrase is retracted as the justification.
