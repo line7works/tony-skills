@@ -23,8 +23,12 @@ Swap `huh` for any plugin below. Update later with
 wired to Tony's own setup — absolute paths under `~/Developer`, machine names,
 a two-Mac relay protocol, live production endpoints for his sites. The
 self-contained ones (`huh`, `wargame`, `signoff`, `recheck`, `blueprint`,
-`build`, `ship`, `precon`, `inspect`, `digest`, `fb`) travel well; the rest are
-best read as reference implementations you adapt rather than run unmodified.
+`build`, `ship`, `digest`) travel well. Others carry hard-wired paths into
+Tony's clone of this repo — `inspect` reads its code book from
+`~/Developer/tony-skills/...` at run time, `fb` routes loop notes to a file
+there, `precon` points at jpb by the same path — so they, like the
+machine-wired rest, are best read as reference implementations you adapt
+rather than run unmodified.
 
 ## The plugins
 
