@@ -34,7 +34,7 @@ Claude **Desktop** uses neither — its MCP config points at a local `uvx mcp-ob
 
 ## Invariants the spec declares (do not drift from these)
 
-- `ALLOWED_EMAILS = new Set(["tonycoon@gmail.com"])` — single-user email gate
+- `ALLOWED_EMAILS = new Set(["<owner-email>"])` — single-user email gate (set to the vault owner's Google account email)
 - `OBSIDIAN_API_BASE = https://mcp.line7.works`
 - `McpServer({ name: "Obsidian Vault", version: "1.0.0" })`
 - `export default new OAuthProvider({...})` and its config
