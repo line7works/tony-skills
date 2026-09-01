@@ -103,7 +103,7 @@ Acceptance criteria:
 Footprint: `~/Documents/tony-skills-scrub/` (new, outside repo); this doc's Slice D `Status:` line.
 Not in this slice: applying any ruling (Slice E), publishing, the laptop.
 Depends on: Slice C
-Status: not started
+Status: built
 
 ## Slice E — Remediate and prep the public face
 Goal: Every scrub ruling is applied and verified, the public-era README and license exist, and it is all merged on GitHub.
@@ -158,6 +158,11 @@ Status: not started
 - R4 mechanism: the 20 hand-copy entries were moved reversibly to a session scratchpad backup before the fresh-session checks, so the checks could only resolve the installed set; R5's permanent deletion ran from that backup after the checks passed (print-tune's symlink moved and removed as a link throughout) · builder call
 - /precon chosen as R4's cross-reference skill (loads its edited SKILL.md; safe to invoke headless with no side effects) · builder call
 - R4's /fb test note remains committed in docs/feedback.md (the spec requires the note land there; removing it would falsify the check) · builder call
+
+### 2026-09-01 — build: Slice D
+- Built on stacked branch `feat/slice-d-scrub-audit` off the unmerged Slice C branch (B's recorded precedent) · builder call
+- Untracked pre-existing `tools/shopify-mcp/` excluded from the working-tree audit scope (not this project's work, untracked, cannot ship at the flip); exclusion stated in the report's Coverage section · builder call
+- Tony's rulings taken in bulk ("Adopt all recommendations") and recorded per-finding in the report with that quote; finding 2 rules parameterize, all others accept · per user
 
 ## Deviations
 
