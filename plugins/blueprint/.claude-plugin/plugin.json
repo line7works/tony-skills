@@ -1,0 +1,10 @@
+{
+  "name": "blueprint",
+  "description": "Draft a build document in dependency-ordered, verifiable slices from a feature discussion \u2014 produces the doc that /build executes slice by slice and /signoff grades against. Use when the user says \"draft a build doc\", \"blueprint this\", \"slice this up\", \"write the build plan\", or finishes discussing a feature and wants it scoped into slices.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "shutdown",
+  "description": "Settle up before Tony restarts Terminal or switches Anthropic accounts — verify and report git state (read-only, never committing anything), write a self-contained handoff to ~/Documents/handoffs/, and save a memory pointer so the next session finds it.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

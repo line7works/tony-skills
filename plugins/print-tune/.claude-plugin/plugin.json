@@ -1,0 +1,10 @@
+{
+  "name": "print-tune",
+  "description": "Collaborative per-setting tuning of one specific model Tony is about to print on the Bambu H2C, driven by the sourced setting playbook. Use when Tony hands over a .3mf/STL to prep, says \"tune this print\", \"prep this for the H2C\", \"let's set up this print\", or wants to walk settings for a model. NOT an automation pipeline \u2014 every decision is discussed.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

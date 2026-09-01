@@ -1,0 +1,10 @@
+{
+  "name": "digest",
+  "description": "Compile a repo's raw /fb feedback log into a current-state docs/notes.md \u2014 the compile half of the capture system (/fb captures, /digest compiles). Use when the user says \"/digest\", \"digest my notes\", \"compile the feedback log\", or wants the notes board refreshed. Runs only on the current repo's docs/feedback.md unless the user explicitly names another file.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

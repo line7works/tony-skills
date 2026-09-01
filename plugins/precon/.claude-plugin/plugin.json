@@ -1,0 +1,10 @@
+{
+  "name": "precon",
+  "description": "The pre-construction meeting \u2014 harvest a free-flowing idea discussion into a fixed-format scope doc that /blueprint can later consume. STRICTLY user-invoked, only when Tony types /precon; never auto-invoke, suggest-invoke, or trigger from conversation shape, no matter how idea-like the discussion looks.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

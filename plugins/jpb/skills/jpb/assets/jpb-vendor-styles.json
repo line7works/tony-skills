@@ -1,0 +1,60 @@
+{
+  "_comment": "Preset per-vendor identity for the JPB arcade page (dark theme). One shared section skeleton for every box; each vendor gets exactly these touches, defined here once and never invented per run. Accent drives the section's left border, tab underline, and badge; tint is the badge/heading background. Values are tuned for the dark page ground.",
+  "vendors": {
+    "GPT": {
+      "accent": "#17bd93",
+      "tint": "#12332b",
+      "badge": "GPT"
+    },
+    "Fable": {
+      "accent": "#e08862",
+      "tint": "#3a2a22",
+      "badge": "FABLE"
+    },
+    "Opus": {
+      "accent": "#dd8455",
+      "tint": "#362619",
+      "badge": "OPUS"
+    },
+    "Gemini": {
+      "accent": "#6ba3f8",
+      "tint": "#1e2c44",
+      "badge": "GEMINI"
+    },
+    "DeepSeek": {
+      "accent": "#7b90ff",
+      "tint": "#232946",
+      "badge": "DEEPSEEK"
+    },
+    "Grok": {
+      "accent": "#d1d1d6",
+      "tint": "#33333a",
+      "badge": "GROK"
+    }
+  },
+  "dropped": {
+    "accent": "#a5a5ab",
+    "tint": "#2c2c2e",
+    "badge": "DROPPED"
+  },
+  "judges": {
+    "accent": "#a48fef",
+    "tint": "#2b2347",
+    "badge": "JUDGES"
+  },
+  "summary": {
+    "accent": "#b8b8bd",
+    "tint": "#2e2e30",
+    "badge": "SUMMARY"
+  },
+  "verdicts": {
+    "accent": "#66bb6a",
+    "tint": "#1e3320",
+    "badge": "VERDICTS"
+  },
+  "brief": {
+    "accent": "#b08d57",
+    "tint": "#31281c",
+    "badge": "BRIEF"
+  }
+}

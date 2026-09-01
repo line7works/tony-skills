@@ -1,0 +1,10 @@
+{
+  "name": "fb",
+  "description": "Append a feedback note verbatim to the right inbox and confirm the path \u2014 capture only, never analysis. Use when the user says \"fb\", \"log this feedback\", \"note this\", or drops a mid-thread note to record. Loop-skill notes (blueprint/build/signoff/recheck, SKILL NOTE lines) go to the loop feedback doc `~/Developer/tony-skills/docs/feedback.md`; anything else goes to the current repo's docs/feedback.md.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

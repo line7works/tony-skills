@@ -1,0 +1,10 @@
+{
+  "name": "huh",
+  "description": "Re-explain the pending question, finding, or decision in plain language as a simple list, ending with a recommendation. Use when the user invokes /huh, says \"explain what you're asking\", \"I don't understand the question\", \"say that simply\", or pastes back a confusing finding they need to weigh in on. A bare \"huh\" as a casual reaction (\"huh, ok do it\") is not a trigger; only confusion about a pending question is.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

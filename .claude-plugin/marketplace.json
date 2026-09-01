@@ -28,7 +28,7 @@
     {
       "name": "wargame",
       "source": "./plugins/wargame",
-      "description": "/wargame runs an adversarial pre-mortem on any target — new project, existing feature, or planned change — with ranked, verified failure modes and kill criteria. Opus-class models or better.",
+      "description": "/wargame runs an adversarial pre-mortem on any target \u2014 new project, existing feature, or planned change \u2014 with ranked, verified failure modes and kill criteria. Opus-class models or better.",
       "tags": [
         "planning",
         "pre-mortem",
@@ -38,7 +38,7 @@
     {
       "name": "signoff",
       "source": "./plugins/signoff",
-      "description": "/signoff runs an independent adversarial review of freshly built work and ends in a signed verdict — SIGNED OFF / WITH CONDITIONS / REJECTED — plus a punch list. Reviewers who did not write the code check it against its spec. The back half of /wargame. Opus-class models or better.",
+      "description": "/signoff runs an independent adversarial review of freshly built work and ends in a signed verdict \u2014 SIGNED OFF / WITH CONDITIONS / REJECTED \u2014 plus a punch list. Reviewers who did not write the code check it against its spec. The back half of /wargame. Opus-class models or better.",
       "tags": [
         "review",
         "quality-gate",
@@ -48,7 +48,7 @@
     {
       "name": "arcade",
       "source": "./plugins/arcade",
-      "description": "/arcade publishes and manages pages on the Line 7 Arcade (arcade.line7.works) from any repo — publish, update, list, reorder, feature, and delete via the bundled arcade-publish CLI. Writes to live production; delete is gated behind an explicit conversational yes.",
+      "description": "/arcade publishes and manages pages on the Line 7 Arcade (arcade.line7.works) from any repo \u2014 publish, update, list, reorder, feature, and delete via the bundled arcade-publish CLI. Writes to live production; delete is gated behind an explicit conversational yes.",
       "tags": [
         "publishing",
         "line7",
@@ -58,12 +58,129 @@
     {
       "name": "inspect",
       "source": "./plugins/inspect",
-      "description": "/inspect plan-checks a /blueprint build doc BEFORE /build runs it — traceability, code-book, and repo-reality lenses, inspector chosen per run (Claude / GPT / Gemini / DeepSeek / local Qwen), verdict APPROVED / WITH CONDITIONS / REJECTED stamped with the inspector's model id. The building department of the loop.",
+      "description": "/inspect plan-checks a /blueprint build doc BEFORE /build runs it \u2014 traceability, code-book, and repo-reality lenses, inspector chosen per run (Claude / GPT / Gemini / DeepSeek / local Qwen), verdict APPROVED / WITH CONDITIONS / REJECTED stamped with the inspector's model id. The building department of the loop.",
       "tags": [
         "review",
         "plan-check",
         "adversarial",
         "quality-gate"
+      ]
+    },
+    {
+      "name": "shutdown",
+      "source": "./plugins/shutdown",
+      "description": "Settle up before Tony restarts Terminal or switches Anthropic accounts \u2014 verify and report git state (read-only, never committing anything), write a self-contained handoff to ~/Documents/handoffs/, and save a memory pointer so the next session finds it.",
+      "tags": [
+        "session-lifecycle",
+        "handoff"
+      ]
+    },
+    {
+      "name": "blueprint",
+      "source": "./plugins/blueprint",
+      "description": "Draft a build document in dependency-ordered, verifiable slices from a feature discussion \u2014 produces the doc that /build executes slice by slice and /signoff grades against. Use when the user says \"draft a build doc\", \"blueprint this\", \"slice this up\", \"write the build plan\", or finishes discussing a feature and wants it scoped into slices.",
+      "tags": [
+        "build-loop",
+        "planning"
+      ]
+    },
+    {
+      "name": "build",
+      "source": "./plugins/build",
+      "description": "Execute one slice of a build document inside strict boundaries \u2014 the spec is the only source of requirements, reuse before writing, no stubs, honest stops. Use when the user says \"build slice X\", \"build the next slice\", \"execute the plan for X\", or hands over a build/phase doc and names a slice to implement.",
+      "tags": [
+        "build-loop",
+        "execution"
+      ]
+    },
+    {
+      "name": "digest",
+      "source": "./plugins/digest",
+      "description": "Compile a repo's raw /fb feedback log into a current-state docs/notes.md \u2014 the compile half of the capture system (/fb captures, /digest compiles). Use when the user says \"/digest\", \"digest my notes\", \"compile the feedback log\", or wants the notes board refreshed. Runs only on the current repo's docs/feedback.md unless the user explicitly names another file.",
+      "tags": [
+        "feedback",
+        "docs"
+      ]
+    },
+    {
+      "name": "fb",
+      "source": "./plugins/fb",
+      "description": "Append a feedback note verbatim to the right inbox and confirm the path \u2014 capture only, never analysis. Use when the user says \"fb\", \"log this feedback\", \"note this\", or drops a mid-thread note to record. Loop-skill notes (blueprint/build/signoff/recheck, SKILL NOTE lines) go to the loop feedback doc `~/Developer/tony-skills/docs/feedback.md`; anything else goes to the current repo's docs/feedback.md.",
+      "tags": [
+        "feedback",
+        "capture"
+      ]
+    },
+    {
+      "name": "handoff",
+      "source": "./plugins/handoff",
+      "description": "End-of-slice thread prep for the build loop \u2014 pauses on unanswered questions, records rulings, writes a dated handoff block into the build doc and a superseding memory pointer, then hands over the exact kickoff line for the fresh session. STRICTLY user-invoked, only when Tony summons it (\"/handoff\", \"prep for the next slice\", \"prep the repo for slice X\", \"clear the thread and prep\", \"get ready for slice X\", \"get ready for the next slice\"); never auto-invoke, suggest-invoke, or trigger from conversation shape. NOT for machine or terminal settle-up or account switches (that's /shutdown), and NOT for cross-machine hand-offs (\"tell the laptop / tell the studio\" \u2014 the claude-relay protocol in CLAUDE.md).",
+      "tags": [
+        "build-loop",
+        "session-lifecycle"
+      ]
+    },
+    {
+      "name": "huh",
+      "source": "./plugins/huh",
+      "description": "Re-explain the pending question, finding, or decision in plain language as a simple list, ending with a recommendation. Use when the user invokes /huh, says \"explain what you're asking\", \"I don't understand the question\", \"say that simply\", or pastes back a confusing finding they need to weigh in on. A bare \"huh\" as a casual reaction (\"huh, ok do it\") is not a trigger; only confusion about a pending question is.",
+      "tags": [
+        "explain",
+        "helper"
+      ]
+    },
+    {
+      "name": "jpb",
+      "source": "./plugins/jpb",
+      "description": "Jon's Product Box \u2014 a consensus instrument that vets an idea before it has a name. Three to six independent frontier-model \"box teams\" (GPT, Fable, Opus, Gemini, DeepSeek, Grok) each receive the same scrubbed brief with an identical mandate and fill a strict product-box template; the run produces one output doc holding the scrubbed brief and every box verbatim. Use when Tony says \"/jpb <idea or path>\", \"run the product box on this\", \"box this idea\", or wants independent-model consensus on a product concept before /blueprint. Also \"/jpb resolve\" to record Tony's calls into an open run doc and close it.",
+      "tags": [
+        "product",
+        "consensus"
+      ]
+    },
+    {
+      "name": "precon",
+      "source": "./plugins/precon",
+      "description": "The pre-construction meeting \u2014 harvest a free-flowing idea discussion into a fixed-format scope doc that /blueprint can later consume. STRICTLY user-invoked, only when Tony types /precon; never auto-invoke, suggest-invoke, or trigger from conversation shape, no matter how idea-like the discussion looks.",
+      "tags": [
+        "build-loop",
+        "scoping"
+      ]
+    },
+    {
+      "name": "print-tune",
+      "source": "./plugins/print-tune",
+      "description": "Collaborative per-setting tuning of one specific model Tony is about to print on the Bambu H2C, driven by the sourced setting playbook. Use when Tony hands over a .3mf/STL to prep, says \"tune this print\", \"prep this for the H2C\", \"let's set up this print\", or wants to walk settings for a model. NOT an automation pipeline \u2014 every decision is discussed.",
+      "tags": [
+        "3d-printing",
+        "bambu"
+      ]
+    },
+    {
+      "name": "recheck",
+      "source": "./plugins/recheck",
+      "description": "Closed-checklist re-inspection after a /signoff verdict \u2014 verifies each named BLOCKER/MAJOR fix actually landed and flips the slice's status card. Use when the user says \"recheck\", \"recheck slice A\", \"recheck the fixes\", or has just fixed signoff findings and wants the card flipped. Not a fresh review \u2014 the checklist is closed; open-ended hunting belongs to /signoff.",
+      "tags": [
+        "build-loop",
+        "review"
+      ]
+    },
+    {
+      "name": "ship",
+      "source": "./plugins/ship",
+      "description": "Run one whole slice loop with a single command \u2014 find the build doc, /build the named slice, /signoff, fix every BLOCKER and MAJOR, /recheck, at most one extra fix-and-recheck lap, then report. Use when the user says \"/ship A\", \"ship slice B of docs/plan.md\", or wants the full build\u2192signoff\u2192fix\u2192recheck loop run on one slice without typing the chain by hand.",
+      "tags": [
+        "build-loop",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "vertical",
+      "source": "./plugins/vertical",
+      "description": "The whole-build adversarial signoff \u2014 the capstone of the loop. Runs only after ALL slices of a build doc are signed off and rechecked; reviews the entire vertical against its base with Claude at full scope plus optional outside frontier models (ChatGPT, Gemini) under a reject-it mandate, and writes one verified verdict doc. Use when Tony says \"/vertical\", \"vertical review\", \"run the vertical\", or \"whole-build signoff\" on a completed build. Stops at the verdict; never fixes.",
+      "tags": [
+        "build-loop",
+        "review"
       ]
     }
   ]

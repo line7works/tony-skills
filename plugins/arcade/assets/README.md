@@ -73,7 +73,7 @@ This file is the source of truth. There are two front doors to it, and they do
   `tools/arcade-publish/` path second, so it keeps working on branches cut
   before the 2026-08-12 move instead of dangling.
 - **The `/arcade` skill** (from Slice D onward) reaches its own installed copy
-  via `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}/assets/arcade-publish`.
+  via `${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish`.
   Installing a skill — user-level by copying, or through the plugin
   marketplace — **produces a real copy**, not a link. That copy goes stale the
   moment this file changes.

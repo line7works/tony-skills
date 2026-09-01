@@ -24,7 +24,7 @@ which is the exact bug this skill exists to bury. Always resolve the bundled
 copy:
 
 ```bash
-ARCADE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/arcade}/assets/arcade-publish"
+ARCADE="${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish"
 node "$ARCADE" <command> [args]
 ```
 

@@ -1,0 +1,10 @@
+{
+  "name": "ship",
+  "description": "Run one whole slice loop with a single command \u2014 find the build doc, /build the named slice, /signoff, fix every BLOCKER and MAJOR, /recheck, at most one extra fix-and-recheck lap, then report. Use when the user says \"/ship A\", \"ship slice B of docs/plan.md\", or wants the full build\u2192signoff\u2192fix\u2192recheck loop run on one slice without typing the chain by hand.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

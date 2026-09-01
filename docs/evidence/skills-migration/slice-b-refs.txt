@@ -1,0 +1,31 @@
+# Slice B — R5/R6 replacement references (evidence for AC-B5)
+# Each line: source file · reference written · resolved target · existence check
+# ${CLAUDE_PLUGIN_ROOT} resolves to the plugin's own root at install time; checked here against the repo plugin root, which the marketplace serves verbatim.
+
+plugins/sun/skills/sunrise/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/rise.wav · plugins/sun/assets/rise.wav · EXISTS
+plugins/sun/skills/sunrise/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py · plugins/sun/assets/sun_bar.py · EXISTS
+plugins/sun/skills/sunrise/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/sun.html · plugins/sun/assets/sun.html · EXISTS
+plugins/sun/skills/sunset/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/set.wav · plugins/sun/assets/set.wav · EXISTS
+plugins/sun/skills/sunset/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py · plugins/sun/assets/sun_bar.py · EXISTS
+plugins/sun/skills/sunset/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/sun.html · plugins/sun/assets/sun.html · EXISTS
+plugins/arcade/skills/arcade/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish · plugins/arcade/assets/arcade-publish · EXISTS
+plugins/arcade/assets/README.md · ${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish · plugins/arcade/assets/arcade-publish · EXISTS
+plugins/forge/skills/forge/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/forge.py · plugins/forge/assets/forge.py · EXISTS
+plugins/forge/IMPLEMENTATION.md · ${CLAUDE_PLUGIN_ROOT}/assets/forge.py · plugins/forge/assets/forge.py · EXISTS
+plugins/jpb/skills/jpb/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/skills/jpb/assets/ · plugins/jpb/skills/jpb/assets · EXISTS
+# (corrected 2026-08-31 post-review: the original line recorded ${CLAUDE_PLUGIN_ROOT}/assets/ as resolving to the nested dir — false; the reference itself was fixed to the nested form and re-checked)
+plugins/inspect/skills/inspect/SKILL.md · ~/Developer/tony-skills/plugins/blueprint/skills/blueprint/SKILL.md · plugins/blueprint/skills/blueprint/SKILL.md · EXISTS
+plugins/inspect/skills/inspect/SKILL.md · ~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/box-runners.md · plugins/jpb/skills/jpb/assets/box-runners.md · EXISTS
+plugins/inspect/skills/inspect/SKILL.md · ~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/openrouter-box.sh · plugins/jpb/skills/jpb/assets/openrouter-box.sh · EXISTS
+plugins/vertical/skills/vertical/SKILL.md · ~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/box-runners.md · plugins/jpb/skills/jpb/assets/box-runners.md · EXISTS
+plugins/precon/skills/precon/SKILL.md · ~/Developer/tony-skills/plugins/jpb/ · plugins/jpb · EXISTS
+plugins/precon/skills/precon/SKILL.md · ~/Developer/tony-skills/plugins/jpb/skills/jpb/SKILL.md · plugins/jpb/skills/jpb/SKILL.md · EXISTS
+plugins/fb/skills/fb/SKILL.md (frontmatter description, R5) · ~/Developer/tony-skills/docs/feedback.md · docs/feedback.md · EXISTS
+plugins/fb/skills/fb/SKILL.md (route step 1, R5) · ~/Developer/tony-skills/docs/feedback.md · docs/feedback.md · EXISTS
+plugins/digest/skills/digest/SKILL.md (R5) · ~/Developer/tony-skills/docs/feedback.md · docs/feedback.md · EXISTS
+plugins/huh/skills/huh/punch-list.md · reworded in place — no path reference remains · (no target to resolve) · N/A
+plugins/print-tune/skills/print-tune/SKILL.md · reworded in place — no path reference remains ('runs from a plugin install') · (no target to resolve) · N/A
+plugins/forge/IMPLEMENTATION.md (install-route note) · /plugin install forge@tony-skills — reworded to the marketplace form; no path · (no target to resolve) · N/A
+plugins/fb/skills/fb/SKILL.md:10 · reworded 'Never write to installed skill files' — no path · (no target to resolve) · N/A
+
+All checks passing: YES (2026-08-31)
