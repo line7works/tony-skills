@@ -103,7 +103,7 @@ Acceptance criteria:
 Footprint: `~/Documents/tony-skills-scrub/` (new, outside repo); this doc's Slice D `Status:` line.
 Not in this slice: applying any ruling (Slice E), publishing, the laptop.
 Depends on: Slice C
-Status: built
+Status: signed off with conditions
 
 ## Slice E — Remediate and prep the public face
 Goal: Every scrub ruling is applied and verified, the public-era README and license exist, and it is all merged on GitHub.
@@ -326,3 +326,22 @@ Status: not started
 
 ### 2026-09-01 — recheck: Slice C
 - MAJOR · docs/evidence/skills-migration/slice-c-diff-guard.txt:151 · (arcade ruling asserted "byte-identical to live" falsely; masked asset trees never content-compared) · fixed — dated on-the-record Correction section appended (commit 32b6d94): original text preserved, false justification explicitly retracted, and the conclusion re-grounded on independently verified facts (the one in-tree difference is B's declared README edit; forge/sun assets untouched by B and Slice A-verified; installed plugin-root assets diff clean against merged main). No fix-introduced defects.
+
+### 2026-09-01 — review: Slice D
+- MAJOR · ~/Documents/tony-skills-scrub/scrub-audit-2026-09-01.md (rulings, findings 5/6/8/14/16) · rulings recorded against the quote "Adopt all recommendations" where the recommendations were disjunctions ("Tony's call — accept or redact") or a precondition ("Tony reads it once") — the quote cannot derive the recorded accepts · Slices E/F trust a ruling record whose words don't express the rulings · Slice D review (converged)
+- MAJOR · report Coverage + Negative results vs tools/shopify-mcp/shopify.app.toml:3 · working-tree audit scope narrowed past an untracked dir holding a real OAuth client_id, leaving "no OAuth client IDs" false as an unqualified working-tree claim · a future git add ships the client_id under a clean scrub report · Slice D review
+- MAJOR · local tag jpb-setup-backup-2026-08-10 (48 commits, no branch/remote reaches them) · never inventoried; report finding 14's "permanently readable in history" premise false — the fermentation doc was never on any remote; one git push --tags after the flip publishes all 48 commits · Slice D review
+- MAJOR · report finding 2 · parameterize ruling recorded without disclosing the identical line stays in origin-reachable history at merged main (83923f1); the tree-only reach of the remediation was withheld from the ruling · Slice D review
+- MAJOR · report finding 9 · "already routed to Tony before Slice F" asserts a routing no spec line enforces (it lives only in ledger seam notes); reads as closure of the still-open cross-plugin-paths MINOR · Slice D review
+- MINOR · report finding 16 · absolute path cited at docs/feedback.md:111; actual line 102, which also names the Pour-Guys project · Slice D review
+- MINOR · report Coverage · "15 history-only paths reviewed" — actual count 24 (the groups listed do cover all 24) · Slice D review
+- MINOR · report section A · noreply@anthropic.com (151 occurrences, commit trailers) omitted from the email inventory · Slice D review
+- MINOR · git history (all branches) · 142 Claude-Session URLs in commit messages — personal session identifiers going public at the flip, no ruling taken · Slice D review
+- MINOR · docs/precon-skill-build-plan.md:3 · claude.ai artifact URL (Grill Marks dossier) — personal link, no ruling taken · Slice D review
+- MINOR · report Coverage · origin's refs/pull/*/head carry 2 commits absent from the local clone, outside git log --all's reach (review fetched and swept both: benign) — the "every commit" claim doesn't cover the artifact that goes public · Slice D review
+- MINOR · report shape · R1's "one finding per line with path/commit" met loosely — multi-line blocks, aggregated files, commits on some lines only · Slice D review
+- MINOR · docs/skills-migration-build-plan.md (Slice D ledger) · ledger append exceeds AC-D2's "Status line only" letter — recurring house convention vs AC wording · Slice D review
+
+### 2026-09-01 — build: Slice D (appended post-review)
+- Discovered: AC-E1's "spot-check two re-checks" is unsatisfiable as written — Slice D produced exactly one redact/parameterize ruling; needs Tony's word or a plan-level note before E is graded · Slice D review
+- Discovered: applying finding 2's parameterize edits the "Invariants" (do-not-drift) section of the spec-only tools/mcp-obsidian-worker docs — E should preserve the real gate value somewhere local when it edits · Slice D review
