@@ -169,3 +169,22 @@ sessions could only resolve skills from the marketplace installs; permanent remo
   present at docs/feedback.md:111 — the new pointer proven from an install. PASS
 - Cross-reference skill /precon: fresh session invoked it; skill loaded and opened
   per its own contract. PASS
+
+## Correction — 2026-09-01 (Slice C review MAJOR, on the record)
+The arcade ruling above misstates its rationale. As written it claims the repo's
+plugin-root assets were "byte-identical to live" at guard time — false: Slice B
+edited plugins/arcade/assets/README.md (the ${CLAUDE_PLUGIN_ROOT:-...} fallback
+line), so the live hand copy's assets/README.md differed from the repo by exactly
+that declared edit. Further, the three "Only in hand copy: assets" lines (arcade,
+forge, sunset) masked those subtrees from diff -r: Part 2 never content-compared
+them against their plugin-root counterparts before removal, and the hand copies
+are now gone, so a direct re-check is impossible.
+What the record does support, verified 2026-09-01:
+- The one known in-tree difference (arcade assets/README.md) is a Slice B
+  declared edit — expected under R3's own standard, not drift.
+- forge and sun asset trees were not touched by Slice B (git diff 8b87cb7^ main
+  --name-only over those paths is empty) and were verified byte-identical to
+  live by Slice A's AC-A3 diffs on 2026-08-31, the day before removal.
+- The installed plugin-root assets diff clean against merged main today (Part 1).
+The rulings' conclusion (sanctioned layout, not drift) stands on that basis; the
+"byte-identical to live" phrase is retracted as the justification.

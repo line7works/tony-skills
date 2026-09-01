@@ -90,7 +90,7 @@ Acceptance criteria:
 Footprint: `~/.claude/plugins/**` (installs); `~/.claude/skills/` (19 directories + 1 symlink removed); `docs/evidence/skills-migration/slice-c-diff-guard.txt` (new, committed); this doc's Slice C `Status:` line.
 Not in this slice: the laptop (Slice F), scrub, publishing.
 Depends on: Slice B, and Slices A+B merged to origin main on Tony's PR/merge words
-Status: built
+Status: signed off
 
 ## Slice D — Scrub audit
 Goal: A complete report-only audit of the repo's working tree and full history sits in front of Tony for per-finding rulings; nothing is edited.
@@ -310,3 +310,14 @@ Status: not started
 - BLOCKER · plugins/jpb/skills/jpb/SKILL.md:31 · (definitional asset root doesn't resolve from a marketplace install) · fixed — line now names ${CLAUDE_PLUGIN_ROOT}/skills/jpb/assets/, which expands to the existing nested dir; false "resolves both ways" prose gone
 - MAJOR · docs/evidence/skills-migration/slice-b-refs.txt:15 · (evidence line recorded a false resolution; "All checks passing: YES" untrue for the row) · fixed — line now records the corrected reference whose expansion equals the checked target, with a dated correction note, not a silent rewrite
 - MAJOR · docs/skills-migration-build-plan.md (Slice B ledger) · (open /fb breakage window unrecorded) · fixed — dated Discovered entry names the window and its stall-not-loss failure mode; factual claims verified against the live fb SKILL.md and skill-lab contents
+
+### 2026-09-01 — review: Slice C
+- MAJOR · docs/evidence/skills-migration/slice-c-diff-guard.txt:151 · arcade ruling asserts repo plugin-root assets "byte-identical to live" — false at guard time (Slice B edited plugins/arcade/assets/README.md) and the three "Only in hand copy: assets" trees (arcade/forge/sunset) were masked from diff -r, never content-compared before deletion · unrecorded drift inside those trees would have been deleted unexamined under a "not drift (per user)" ruling; hand copies now gone, unrecheckable — evidence wording must be corrected on the record · Slice C review
+- MINOR · ~/.claude/settings.json · plugin CLI wrote enabledPlugins/extraKnownMarketplaces entries at install, vs the constraints' "never overwritten" protected-path line — spec self-contradiction with R2's user-scope install, unrecorded · Slice C review
+- MINOR · docs/skills-migration-build-plan.md:90 · docs/feedback.md changed (R4's required test note) but Slice C's Footprint never names it · Slice C review
+- MINOR · docs/evidence/skills-migration/slice-c-diff-guard.txt (R4 section) · verify-then-remove ordering provable only at commit granularity; R4 lines carry a date, no times · Slice C review
+- MINOR · docs/evidence/skills-migration/slice-c-diff-guard.txt (Part 2) · hand-copy side unverifiable forever for the 12 new plugins (no pre-edit blobs exist) — inherent to the design, on the record · Slice C review
+- MINOR · docs/evidence/skills-migration/slice-c-diff-guard.txt:4 · .in_use described as a "marker file"; it is a directory (lock/pid entries); --exclude behavior identical · Slice C review
+
+### 2026-09-01 — recheck: Slice C
+- MAJOR · docs/evidence/skills-migration/slice-c-diff-guard.txt:151 · (arcade ruling asserted "byte-identical to live" falsely; masked asset trees never content-compared) · fixed — dated on-the-record Correction section appended (commit 32b6d94): original text preserved, false justification explicitly retracted, and the conclusion re-grounded on independently verified facts (the one in-tree difference is B's declared README edit; forge/sun assets untouched by B and Slice A-verified; installed plugin-root assets diff clean against merged main). No fix-introduced defects.
