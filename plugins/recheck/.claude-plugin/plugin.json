@@ -1,0 +1,10 @@
+{
+  "name": "recheck",
+  "description": "Closed-checklist re-inspection after a /signoff verdict \u2014 verifies each named BLOCKER/MAJOR fix actually landed and flips the slice's status card. Use when the user says \"recheck\", \"recheck slice A\", \"recheck the fixes\", or has just fixed signoff findings and wants the card flipped. Not a fresh review \u2014 the checklist is closed; open-ended hunting belongs to /signoff.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

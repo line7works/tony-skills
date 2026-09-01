@@ -441,7 +441,7 @@ plugins/forge/
 
 Conventions honored (from the repo CLAUDE.md and README):
 - **Dual-mode asset paths.** The skill invokes the CLI via
-  `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py`, so it resolves both as
+  `${CLAUDE_PLUGIN_ROOT}/assets/forge.py`, so it resolves both as
   an installed plugin and as a user-level skill. Never hardcode `~/.claude/...`.
 - **Dependencies, honestly.** The CLI calls Fal's REST queue directly (`POST
   https://queue.fal.run/<model-id>` with `Authorization: Key $FAL_KEY`, poll, fetch result) using
@@ -453,8 +453,8 @@ Conventions honored (from the repo CLAUDE.md and README):
   dependency-free; if cross-platform ever matters, swap `sips` for Pillow.
 - **Marketplace entry.** Add a `forge` block to `.claude-plugin/marketplace.json`
   (name, source `./plugins/forge`, description, tags like `["image-generation", "automation"]`).
-- **Install routes mirror sun.** Plugin route registers `/forge:forge`; user-level route (copy
-  `skills/forge` + `assets` into `~/.claude/skills/`) gives the bare `/forge`. You run user-level,
+- **Install routes mirror sun.** Plugin route registers `/forge:forge`; the marketplace install
+  (`/plugin install forge@tony-skills`) gives the bare `/forge`. You run marketplace installs,
   like your other skills.
 - **Branch and PR.** New work goes on a fresh feature branch (`add-forge-plugin`) off `main`, never
   on `main` directly, merged via the PR UI. (This spec is currently an uncommitted file on your

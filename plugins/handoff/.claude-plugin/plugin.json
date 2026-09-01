@@ -1,0 +1,10 @@
+{
+  "name": "handoff",
+  "description": "End-of-slice thread prep for the build loop \u2014 pauses on unanswered questions, records rulings, writes a dated handoff block into the build doc and a superseding memory pointer, then hands over the exact kickoff line for the fresh session. STRICTLY user-invoked, only when Tony summons it (\"/handoff\", \"prep for the next slice\", \"prep the repo for slice X\", \"clear the thread and prep\", \"get ready for slice X\", \"get ready for the next slice\"); never auto-invoke, suggest-invoke, or trigger from conversation shape. NOT for machine or terminal settle-up or account switches (that's /shutdown), and NOT for cross-machine hand-offs (\"tell the laptop / tell the studio\" \u2014 the claude-relay protocol in CLAUDE.md).",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

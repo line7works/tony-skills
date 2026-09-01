@@ -71,7 +71,7 @@ Acceptance criteria:
 Footprint: `plugins/<12 new>/**`; `.claude-plugin/marketplace.json`; `docs/` (19 files arriving); `~/Documents/skill-lab/` (emptied to a pointer); fb, digest, the 10 cross-reference SKILL.md files, `plugins/arcade/assets/README.md`, `plugins/forge/IMPLEMENTATION.md`, huh's `punch-list.md` (reference lines only); `docs/evidence/skills-migration/slice-b-refs.txt` (new); this doc's Slice B `Status:` line.
 Not in this slice: installing anything, removing hand copies, scrub, publishing.
 Depends on: Slice A
-Status: not started
+Status: built
 
 ## Slice C — Studio cutover to marketplace installs
 Goal: The Studio runs all 20 skills from marketplace installs, verified working, and only then are the hand copies gone.
@@ -143,6 +143,15 @@ Status: not started
 - shutdown plugin.json homepage/repository kept at the tiny-tunnel-dot URL matching all six sibling manifests (GitHub redirects post-transfer; updating sibling URLs is no slice's scope) · builder call
 - shutdown marketplace tags chosen as ["session-lifecycle","handoff"] — the spec fixes field shape and description, not tag values · builder call
 - shutdown descriptions (plugin.json and marketplace entry) are the SKILL.md frontmatter description truncated at the first sentence boundary, per the constraints' verbatim rule · builder call
+
+### 2026-08-31 — build: Slice B
+- New-plugin manifests carry tiny-tunnel-dot homepage/repository URLs matching all seven siblings (Slice A's recorded precedent; no slice owns updating them) · builder call
+- Marketplace tags for the 12 new entries invented within the shape-only latitude, as Slice A did for shutdown · builder call
+- plugin.json descriptions are each SKILL.md frontmatter description verbatim in full (the constraints' verbatim rule fixes marketplace entries; manifests follow it too) · builder call
+- R6 replacement form (left to the builder by the spec): same-plugin file references become `${CLAUDE_PLUGIN_ROOT}/...`; cross-plugin references become absolute `~/Developer/tony-skills/plugins/...` paths (same resolves-on-both-Macs rationale the spec gives for R5); pure prose mentions of the old location reworded with no path · builder call
+- sunrise's explanatory sentence describing the removed `:-$HOME/.claude/skills` fallback reworded to match the new form (the sentence documented the old idiom) · builder call
+- The skill-lab pointer file is named `README-MOVED.md` · builder call
+- Built on stacked branch `feat/slice-b-migrate-twelve` off the unmerged Slice A branch · builder call
 
 ## Deviations
 

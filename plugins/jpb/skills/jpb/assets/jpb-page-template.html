@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}} — JPB</title>
+<style>
+  /* JPB arcade page — self-contained; no external requests. Dark theme.
+     Vendor accents come from jpb-vendor-styles.json at render time as
+     --accent/--tint custom properties on each section; the skeleton below
+     is identical for every box. */
+  :root {
+    --ink: #e8e5e0; --paper: #1a1917; --panel: #242220; --line: #38352f;
+    --muted: #a09a90; --kraft: #b08d57;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font: 16px/1.6 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--paper);
+  }
+  header.masthead { padding: 40px 24px 16px; text-align: center; }
+  header.masthead img.wordmark {
+    max-width: 220px; height: auto;
+    filter: drop-shadow(0 0 28px rgba(176,141,87,.28));
+  }
+  header.masthead h1 { font-size: 1.5rem; margin-top: 12px; }
+  header.masthead p.rundate { color: var(--muted); font-size: .9rem; }
+  nav.tabs {
+    position: sticky; top: 0; z-index: 10; background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+    padding: 10px 12px;
+  }
+  nav.tabs a {
+    text-decoration: none; color: #1a1917; font-size: .9rem;
+    font-weight: 700; padding: 8px 14px; border-radius: 8px;
+    background: var(--tab-accent, var(--panel));
+  }
+  nav.tabs a:hover { filter: brightness(1.15); }
+  nav.tabs a.active { outline: 2px solid var(--ink); filter: brightness(1.1); }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px; }
+  section.panel {
+    background: var(--tint, var(--panel)); border: 1px solid var(--line);
+    border-radius: 10px; margin: 28px 0; padding: 24px 28px;
+    scroll-margin-top: 120px;
+  }
+  section.panel .badge {
+    display: inline-block; font-size: .7rem; font-weight: 700;
+    letter-spacing: .08em; color: #1a1917;
+    background: var(--accent); border-radius: 4px; padding: 3px 8px;
+    margin-bottom: 10px;
+  }
+  section.panel h2 { font-size: 1.25rem; margin-bottom: 4px; }
+  section.panel h3 { font-size: 1.05rem; margin: 20px 0 6px; color: var(--accent); }
+  section.panel h4 { font-size: 1rem; margin: 18px 0 4px; }
+  section.panel p.modelid { color: var(--muted); font-size: .85rem; margin-bottom: 12px; }
+  section.panel ol, section.panel ul { padding-left: 1.4em; }
+  section.panel li { margin: 5px 0; padding-left: .2em; }
+  section.panel li em, section.panel li small { color: var(--muted); }
+  section.panel.dropped { opacity: .75; }
+  section.panel.dropped .dropreason { font-style: italic; color: var(--muted); }
+  details.cluster { margin: 10px 0; border-left: 2px solid var(--line); padding-left: 12px; }
+  details.cluster summary {
+    cursor: pointer; font-weight: 700; font-size: 1rem; padding: 4px 0;
+    list-style-position: outside;
+  }
+  details.cluster summary:hover { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; margin: 12px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--tint, var(--panel)); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+  td.ct { white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+  footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 32px 0 48px; }
+</style>
+</head>
+<body>
+<header class="masthead">
+  {{WORDMARK_IMG}}
+  <h1>{{TITLE}}</h1>
+  <p class="rundate">JPB run · {{RUN_DATE}}{{STATUS_LINE}}</p>
+</header>
+<nav class="tabs">
+  {{TABS}}
+</nav>
+<main>
+  {{SECTIONS}}
+</main>
+<footer>JPB — Jon's Product Box · consensus by independence · the markdown doc is the record; this page is its projection</footer>
+<script>
+  // Scrollspy: highlight the tab whose section is in view. Self-contained.
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll("nav.tabs a"));
+    var byId = {};
+    tabs.forEach(function (t) { byId[t.getAttribute("href").slice(1)] = t; });
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          tabs.forEach(function (t) { t.classList.remove("active"); });
+          var t = byId[e.target.id];
+          if (t) t.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    document.querySelectorAll("section.panel[id]").forEach(function (s) { obs.observe(s); });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "vertical",
+  "description": "The whole-build adversarial signoff \u2014 the capstone of the loop. Runs only after ALL slices of a build doc are signed off and rechecked; reviews the entire vertical against its base with Claude at full scope plus optional outside frontier models (ChatGPT, Gemini) under a reject-it mandate, and writes one verified verdict doc. Use when Tony says \"/vertical\", \"vertical review\", \"run the vertical\", or \"whole-build signoff\" on a completed build. Stops at the verdict; never fixes.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

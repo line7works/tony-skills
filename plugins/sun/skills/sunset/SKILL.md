@@ -92,9 +92,9 @@ vault, do not create anything beneath it, do not continue to any later phase. Te
 which machine he appears to be on and that canonical lives on the Mac Studio.
 
 0. **Play the sunset cue** (cosmetic, non-blocking, best-effort): the moment a sunset begins, fire the sound and a compact terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
-   - `afplay ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/set.wav >/dev/null 2>&1 &`
-   - `python3 ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun_bar.py set`
-   - Use the 3-line `sun_bar.py` stamp so it renders above Claude Code's output fold (taller scenes get collapsed; in-place animation gets captured as raw escape codes). A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun.html#set"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (The matching `rise` cue belongs to the sunrise/revive skill.)
+   - `afplay ${CLAUDE_PLUGIN_ROOT}/assets/set.wav >/dev/null 2>&1 &`
+   - `python3 ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py set`
+   - Use the 3-line `sun_bar.py` stamp so it renders above Claude Code's output fold (taller scenes get collapsed; in-place animation gets captured as raw escape codes). A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#set"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (The matching `rise` cue belongs to the sunrise/revive skill.)
 
 1. **Resolve the project across all layers.** Match case/hyphen/underscore variants.
    - Vault: `ls -d ~/ObsidianVault/03-projects/*<slug>*/`

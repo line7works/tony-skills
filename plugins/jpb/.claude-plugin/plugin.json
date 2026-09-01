@@ -1,0 +1,10 @@
+{
+  "name": "jpb",
+  "description": "Jon's Product Box \u2014 a consensus instrument that vets an idea before it has a name. Three to six independent frontier-model \"box teams\" (GPT, Fable, Opus, Gemini, DeepSeek, Grok) each receive the same scrubbed brief with an identical mandate and fill a strict product-box template; the run produces one output doc holding the scrubbed brief and every box verbatim. Use when Tony says \"/jpb <idea or path>\", \"run the product box on this\", \"box this idea\", or wants independent-model consensus on a product concept before /blueprint. Also \"/jpb resolve\" to record Tony's calls into an open run doc and close it.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}

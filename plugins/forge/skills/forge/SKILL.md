@@ -30,7 +30,7 @@ It lives next to this skill. Always invoke it by this path so it resolves both a
 an installed plugin and as a user-level skill:
 
 ```bash
-FORGE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/forge}/assets/forge.py"
+FORGE="${CLAUDE_PLUGIN_ROOT}/assets/forge.py"
 python3 "$FORGE" <command> [args]
 ```
 

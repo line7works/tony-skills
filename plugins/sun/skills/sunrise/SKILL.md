@@ -118,9 +118,9 @@ sunrise at all. Tell Tony which machine he appears to be on and that canonical l
 the Mac Studio.
 
 0. **Play the sunrise cue** (cosmetic, non-blocking, best-effort): the FIRST thing the skill does. The moment a sunrise begins, fire the sound and a compact one-line terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
-   - `afplay ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/rise.wav >/dev/null 2>&1 &`
-   - `python3 ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun_bar.py rise`
-   - Keep it to the **ONE-LINE** `sun_bar.py rise` output (gold→blue half-block bar, sun on the left, "☀ S U N R I S E"). Claude Code collapses taller output behind a "+N lines" fold and captures in-place ANSI animation as raw escape codes, so one line is the only reliable in-flow cue — do not attempt terminal motion. A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets/sun.html#rise"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (Assets are shared with `sunset`; do not rebuild them. The `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/skills/sunset}/assets` form resolves both ways: the plugin's bundled `assets/` when installed as a plugin, or `~/.claude/skills/sunset/assets/` when copied in as a user-level skill.)
+   - `afplay ${CLAUDE_PLUGIN_ROOT}/assets/rise.wav >/dev/null 2>&1 &`
+   - `python3 ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py rise`
+   - Keep it to the **ONE-LINE** `sun_bar.py rise` output (gold→blue half-block bar, sun on the left, "☀ S U N R I S E"). Claude Code collapses taller output behind a "+N lines" fold and captures in-place ANSI animation as raw escape codes, so one line is the only reliable in-flow cue — do not attempt terminal motion. A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#rise"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (Assets are shared with `sunset`; do not rebuild them. The `${CLAUDE_PLUGIN_ROOT}/assets` form resolves to the plugin's bundled `assets/` at its install location.)
 
 1. **Gather the inputs.**
    - **Name** (required). **Archetype** (the 6 above; default web app, single). **One-line "what is this."** **Visibility** (default private). **Database?** (archetype default; `--db`/`--no-db` override). **Promote an existing dir?** (`--promote <path>`).

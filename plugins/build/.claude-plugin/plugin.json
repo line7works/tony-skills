@@ -1,0 +1,10 @@
+{
+  "name": "build",
+  "description": "Execute one slice of a build document inside strict boundaries \u2014 the spec is the only source of requirements, reuse before writing, no stubs, honest stops. Use when the user says \"build slice X\", \"build the next slice\", \"execute the plan for X\", or hands over a build/phase doc and names a slice to implement.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
+  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+}
