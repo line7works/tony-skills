@@ -90,7 +90,7 @@ Acceptance criteria:
 Footprint: `~/.claude/plugins/**` (installs); `~/.claude/skills/` (19 directories + 1 symlink removed); `docs/evidence/skills-migration/slice-c-diff-guard.txt` (new, committed); this doc's Slice C `Status:` line.
 Not in this slice: the laptop (Slice F), scrub, publishing.
 Depends on: Slice B, and Slices A+B merged to origin main on Tony's PR/merge words
-Status: not started
+Status: built
 
 ## Slice D — Scrub audit
 Goal: A complete report-only audit of the repo's working tree and full history sits in front of Tony for per-finding rulings; nothing is edited.
@@ -152,6 +152,12 @@ Status: not started
 - sunrise's explanatory sentence describing the removed `:-$HOME/.claude/skills` fallback reworded to match the new form (the sentence documented the old idiom) · builder call
 - The skill-lab pointer file is named `README-MOVED.md` · builder call
 - Built on stacked branch `feat/slice-b-migrate-twelve` off the unmerged Slice A branch · builder call
+
+### 2026-09-01 — build: Slice C
+- Diff-guard Part 1 excludes the installer's `.in_use` marker file (present in all 19 installed copies, tooling metadata not repo content; a first unexcluded run showing it as the only difference is noted in the evidence file) · builder call
+- R4 mechanism: the 20 hand-copy entries were moved reversibly to a session scratchpad backup before the fresh-session checks, so the checks could only resolve the installed set; R5's permanent deletion ran from that backup after the checks passed (print-tune's symlink moved and removed as a link throughout) · builder call
+- /precon chosen as R4's cross-reference skill (loads its edited SKILL.md; safe to invoke headless with no side effects) · builder call
+- R4's /fb test note remains committed in docs/feedback.md (the spec requires the note land there; removing it would falsify the check) · builder call
 
 ## Deviations
 
