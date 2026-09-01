@@ -26,9 +26,9 @@ plus `/jpb resolve` (the Resolve section below) to record Tony's calls and
 close a run doc, and the arcade page (Step 11) — a styled HTML projection
 of the finished doc posted to the Line 7 Arcade, re-posted at resolve.
 
-Asset paths below use the repo's plugin convention and resolve both as an
-installed plugin and as a user-level skill:
-`${CLAUDE_PLUGIN_ROOT}/assets/` — referred to as
+Asset paths below resolve at the plugin's install location (this plugin
+nests its assets beside this SKILL.md):
+`${CLAUDE_PLUGIN_ROOT}/skills/jpb/assets/` — referred to as
 `assets/`.
 
 ## Step 1 — Intake

@@ -71,7 +71,7 @@ Acceptance criteria:
 Footprint: `plugins/<12 new>/**`; `.claude-plugin/marketplace.json`; `docs/` (19 files arriving); `~/Documents/skill-lab/` (emptied to a pointer); fb, digest, the 10 cross-reference SKILL.md files, `plugins/arcade/assets/README.md`, `plugins/forge/IMPLEMENTATION.md`, huh's `punch-list.md` (reference lines only); `docs/evidence/skills-migration/slice-b-refs.txt` (new); this doc's Slice B `Status:` line.
 Not in this slice: installing anything, removing hand copies, scrub, publishing.
 Depends on: Slice A
-Status: built
+Status: rejected
 
 ## Slice C — Studio cutover to marketplace installs
 Goal: The Studio runs all 20 skills from marketplace installs, verified working, and only then are the hand copies gone.
@@ -160,6 +160,9 @@ Status: not started
 - The transfer API call, the AUTHORIZED-line write, and the origin remote-set-url ran from Tony's own shell (the permission classifier denied the builder each one); commands were the builder's verbatim, execution and outputs are on this session's record · per user
 
 ## Discovered
+
+### 2026-08-31 — build: Slice B (appended post-review)
+- Open /fb breakage window: R3 moved the live loop-note inbox (~/Documents/skill-lab/skill-feedback.md → docs/feedback.md) while the live fb hand copy still routes to the old path until Slice C's cutover — a live /fb loop note in the window hits fb's own "stop and report, never recreate" rule and stalls; no capture is lost silently. Plan-inherent (R3 now, cutover later); recorded so the window is on the books.
 
 ## Handoffs
 
@@ -275,3 +278,15 @@ Status: not started
 
 ### 2026-08-31 — recheck: Slice A
 - MAJOR · GitHub line7works/tony-skills PR #4 (add-det-audit-plugin) · (transfer carried an open PR adding an 8th, off-roster det-audit plugin — unenumerated state) · fixed — PR CLOSED not merged per Tony's "dead, delete it" word, branch deleted (404), no open PRs remain, main holds 7 plugins with no det-audit
+
+### 2026-08-31 — review: Slice B
+- BLOCKER · plugins/jpb/skills/jpb/SKILL.md:31 · definitional asset root `${CLAUDE_PLUGIN_ROOT}/assets/` doesn't resolve from a marketplace install (assets nested at skills/jpb/assets/; plugins/jpb/assets/ doesn't exist — R6 unmet) · installed /jpb dereferences a missing directory for every asset after Slice C removes the hand copy · Slice B review
+- MAJOR · docs/evidence/skills-migration/slice-b-refs.txt:15 · the jpb line records the nested dir as the reference's resolution, contradicting the file's own header semantics — "All checks passing: YES" false for this row · AC-B5 passed on false evidence · Slice B review
+- MAJOR · docs/skills-migration-build-plan.md (Slice B ledger) · the live /fb loop-note inbox moved away while the live fb hand copy still routes to it, and no ledger line records the open breakage window · live /fb loop captures stall ("stop and report") from this commit until Slice C's cutover · Slice B review
+- MINOR · plugins/jpb/skills/jpb/SKILL.md:28 + plugins/forge/skills/forge/SKILL.md:29 + plugins/forge/IMPLEMENTATION.md:444 · "resolves both ways" prose survived the fallback removal — now false · a reader restores the fallback or trusts a dead property · Slice B review
+- MINOR · .claude-plugin/marketplace.json · re-serialization escaped em dashes to — in the 7 pre-existing entries · cosmetic diff noise in future reviews · Slice B review
+- MINOR · plugins/inspect/skills/inspect/SKILL.md:47 (+vertical:53, precon:57/80, fb, digest) · cross-plugin absolute ~/Developer/tony-skills/... paths assume a clone on every install machine; dangle for third parties post-public · laptop unverified until F; public installs hit dead paths · Slice B review
+- MINOR · docs/skills-migration-build-plan.md:81 · Slice C's diff-guard declaration doesn't cover the arcade/forge/sunset asset-layout difference (live nested vs repo plugin-root) · guard demands a mid-C ruling on sanctioned layout, not drift · Slice B review
+- MINOR · CLAUDE.md (Source of truth section) · describes the dead topology (live copies in ~/.claude/skills, five catalogued plugins); no slice owns updating it · a future session reasons from dead topology · Slice B review
+- MINOR · docs/evidence/skills-migration/slice-b-refs.txt · omits fb's derived plugin.json/marketplace description references · greppable occurrences outnumber listed ones · Slice B review
+- MINOR · plugins/inspect/skills/inspect/SKILL.md:47 · "live SKILL.md" now names the repo working-tree copy, not the running install · /inspect can grade against an unshipped draft code book · Slice B review

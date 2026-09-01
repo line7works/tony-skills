@@ -12,7 +12,8 @@ plugins/arcade/skills/arcade/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/arcade-pub
 plugins/arcade/assets/README.md · ${CLAUDE_PLUGIN_ROOT}/assets/arcade-publish · plugins/arcade/assets/arcade-publish · EXISTS
 plugins/forge/skills/forge/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/forge.py · plugins/forge/assets/forge.py · EXISTS
 plugins/forge/IMPLEMENTATION.md · ${CLAUDE_PLUGIN_ROOT}/assets/forge.py · plugins/forge/assets/forge.py · EXISTS
-plugins/jpb/skills/jpb/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/assets/ · plugins/jpb/skills/jpb/assets · EXISTS
+plugins/jpb/skills/jpb/SKILL.md · ${CLAUDE_PLUGIN_ROOT}/skills/jpb/assets/ · plugins/jpb/skills/jpb/assets · EXISTS
+# (corrected 2026-08-31 post-review: the original line recorded ${CLAUDE_PLUGIN_ROOT}/assets/ as resolving to the nested dir — false; the reference itself was fixed to the nested form and re-checked)
 plugins/inspect/skills/inspect/SKILL.md · ~/Developer/tony-skills/plugins/blueprint/skills/blueprint/SKILL.md · plugins/blueprint/skills/blueprint/SKILL.md · EXISTS
 plugins/inspect/skills/inspect/SKILL.md · ~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/box-runners.md · plugins/jpb/skills/jpb/assets/box-runners.md · EXISTS
 plugins/inspect/skills/inspect/SKILL.md · ~/Developer/tony-skills/plugins/jpb/skills/jpb/assets/openrouter-box.sh · plugins/jpb/skills/jpb/assets/openrouter-box.sh · EXISTS
