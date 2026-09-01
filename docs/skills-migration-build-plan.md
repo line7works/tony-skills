@@ -71,7 +71,7 @@ Acceptance criteria:
 Footprint: `plugins/<12 new>/**`; `.claude-plugin/marketplace.json`; `docs/` (19 files arriving); `~/Documents/skill-lab/` (emptied to a pointer); fb, digest, the 10 cross-reference SKILL.md files, `plugins/arcade/assets/README.md`, `plugins/forge/IMPLEMENTATION.md`, huh's `punch-list.md` (reference lines only); `docs/evidence/skills-migration/slice-b-refs.txt` (new); this doc's Slice B `Status:` line.
 Not in this slice: installing anything, removing hand copies, scrub, publishing.
 Depends on: Slice A
-Status: rejected
+Status: signed off
 
 ## Slice C — Studio cutover to marketplace installs
 Goal: The Studio runs all 20 skills from marketplace installs, verified working, and only then are the hand copies gone.
@@ -290,3 +290,8 @@ Status: not started
 - MINOR · CLAUDE.md (Source of truth section) · describes the dead topology (live copies in ~/.claude/skills, five catalogued plugins); no slice owns updating it · a future session reasons from dead topology · Slice B review
 - MINOR · docs/evidence/skills-migration/slice-b-refs.txt · omits fb's derived plugin.json/marketplace description references · greppable occurrences outnumber listed ones · Slice B review
 - MINOR · plugins/inspect/skills/inspect/SKILL.md:47 · "live SKILL.md" now names the repo working-tree copy, not the running install · /inspect can grade against an unshipped draft code book · Slice B review
+
+### 2026-08-31 — recheck: Slice B
+- BLOCKER · plugins/jpb/skills/jpb/SKILL.md:31 · (definitional asset root doesn't resolve from a marketplace install) · fixed — line now names ${CLAUDE_PLUGIN_ROOT}/skills/jpb/assets/, which expands to the existing nested dir; false "resolves both ways" prose gone
+- MAJOR · docs/evidence/skills-migration/slice-b-refs.txt:15 · (evidence line recorded a false resolution; "All checks passing: YES" untrue for the row) · fixed — line now records the corrected reference whose expansion equals the checked target, with a dated correction note, not a silent rewrite
+- MAJOR · docs/skills-migration-build-plan.md (Slice B ledger) · (open /fb breakage window unrecorded) · fixed — dated Discovered entry names the window and its stall-not-loss failure mode; factual claims verified against the live fb SKILL.md and skill-lab contents
