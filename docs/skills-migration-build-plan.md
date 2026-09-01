@@ -184,6 +184,15 @@ Status: not started
 - Seam notes for B: repo now line7works/tony-skills, origin repointed, marketplace count 7 · classifier denials hit outward/gated commands this session (transfer API call, the AUTHORIZED-line write, git remote set-url) — Tony ran each via the ! prefix; expect the same for B's gated writes if any · print-tune copies from ~/Developer/print-tune/skills/print-tune (symlink target), never through the link
 - Open MINORs worth B's attention: seven plugin manifests carry tiny-tunnel-dot URLs and no slice owns updating them before the public flip — worth Tony's word by Slice F; new-plugin manifests in B repeat the sibling-matching call unless ruled otherwise
 
+### 2026-08-31 — handoff (after Slice B)
+- Next: /ship C docs/skills-migration-build-plan.md · run from ~/Developer/tony-skills · A and B both signed off — but Slice C's Depends line requires A+B merged to origin main on Tony's PR/merge words FIRST; C's preflight will stop without it (/build C by hand is the alternative)
+- Repo: feat/slice-b-migrate-twelve (stacked on feat/slice-a-transfer-reconcile) · 9 ahead of local main (92928d5) · 10 ahead of origin/main · clean apart from pre-existing untracked tools/shopify-mcp/ · nothing pushed
+- Suite: none — repo has no test suite; ACs are shell checks (Slice B's all re-run and passed by independent reviewers, per the review/recheck blocks)
+- Slice B arc this session: /ship B ran build → signoff REJECTED (1 BLOCKER: jpb asset root; 2 MAJOR: false evidence row, unrecorded /fb window) → fixed in 00bc0b0 → recheck ALL CLEAR (9b4ecb9) → card signed off · laps: 1
+- Pending Tony's word, in order: PR/merge of A+B (this branch carries both; Slice C's prerequisite) · per-finding scrub rulings between D and E · PR/merge of E before F · laptop trigger, then the flip word (Slice F)
+- Seam notes for C: the diff-guard MINOR — arcade/forge/sunset live hand copies carry assets/ INSIDE the skill dir while the repo keeps them at plugin root; Slice B's declared-edit set does not cover that layout difference, so expect the guard to surface it and route it to Tony as a resolved: ruling, it is sanctioned layout, not drift · live /fb loop-note capture stalls until C's cutover (recorded in ## Discovered) — a loop note before cutover hits fb's stop-and-report rule · marketplace.json now carries — escapes in the 7 pre-existing entries (cosmetic, recorded MINOR) · classifier denials expected on gated commands, Tony runs them via the ! prefix
+- Open MINORs worth attention before E/F: cross-plugin absolute ~/Developer/tony-skills/... paths dangle for third-party installs post-public (Tony's eyes before the flip) · seven+twelve manifests carry tiny-tunnel-dot URLs · CLAUDE.md's Source-of-truth section describes the dead topology and no slice owns it
+
 ## Punch list
 
 ### 2026-08-31 — inspect: plan
