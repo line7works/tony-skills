@@ -118,7 +118,7 @@ Acceptance criteria:
 Footprint: `README.md` (rewritten); `LICENSE` (new); any files edited by scrub rulings; the audit report file (rulings/applied lines); this doc's Slice E `Status:` line.
 Not in this slice: the flip (Slice F), the laptop.
 Depends on: Slice D, with every audit finding carrying Tony's ruling
-Status: signed off with conditions
+Status: signed off
 
 ## Slice F — Laptop hand-off and the public flip
 Goal: The laptop runs the skills from the marketplace, and only then does the repo go public — the scope's decided order.
@@ -370,3 +370,7 @@ Status: not started
 - MINOR · scrub report finding 2 (line ~43) · applied:/re-check line lives under the amendment's re-presented ruling, not appended to the original finding line — top-down grader reads an apparently unapplied ruling for 150 lines · Slice E review
 - MINOR · scrub report finding 18 re-check · "176→128" is time-pinned with no note the metric moves with normal commits (131 at review time, arithmetic consistent) · Slice E review
 - MINOR · repo CLAUDE.md · still describes six plugins/five catalogued and live copies in ~/.claude/skills — pre-existing unowned MINOR, now beside a public README saying 19; recurring · Slice E review
+
+### 2026-09-01 — recheck: Slice E
+- MAJOR · README.md:25-27 · (travel-well list warranted hard-wired skills as self-contained) · fixed — origin/main's README drops inspect/fb/precon from the warranty and states their hard-wired paths truthfully (each claim verified against the plugin files); AC-E2 literals intact; the eight retained names re-swept clean (digest's and ship's hits are guards/exclusions, not dependencies)
+- MAJOR · feat/slice-e-close c0fcfc0 (local-only) vs origin/main build doc · (E's completion + authorization record unpushed; main misstated E) · fixed — PR #29 merged (d1539b6): origin/main carries E's ledger block with the R3 authorization line verbatim and a truthful Status line; local main == origin/main. Residual, unchanged and on the record: no spec line schedules Slice F's own final closing merge (AC-F4's sync) — F's builder must get Tony's word for it, as E's did
