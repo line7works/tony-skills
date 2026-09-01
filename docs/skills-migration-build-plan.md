@@ -118,7 +118,7 @@ Acceptance criteria:
 Footprint: `README.md` (rewritten); `LICENSE` (new); any files edited by scrub rulings; the audit report file (rulings/applied lines); this doc's Slice E `Status:` line.
 Not in this slice: the flip (Slice F), the laptop.
 Depends on: Slice D, with every audit finding carrying Tony's ruling
-Status: not started
+Status: built
 
 ## Slice F — Laptop hand-off and the public flip
 Goal: The laptop runs the skills from the marketplace, and only then does the repo go public — the scope's decided order.
@@ -163,6 +163,14 @@ Status: not started
 - Built on stacked branch `feat/slice-d-scrub-audit` off the unmerged Slice C branch (B's recorded precedent) · builder call
 - Untracked pre-existing `tools/shopify-mcp/` excluded from the working-tree audit scope (not this project's work, untracked, cannot ship at the flip); exclusion stated in the report's Coverage section · builder call
 - Tony's rulings taken in bulk ("Adopt all recommendations") and recorded per-finding in the report with that quote; finding 2 rules parameterize, all others accept · per user
+
+### 2026-09-01 — build: Slice E
+- Parameterize placeholder chosen as `<owner-email>` with a one-clause pointer to its meaning; the real gate value is preserved in the out-of-repo audit report (the Discovered note's ask) · builder call
+- Finding 18 executed as its ruling specifies: lineage bundled to ~/Documents/tony-skills-scrub/jpb-setup-backup-2026-08-10.bundle (verify: complete history), then the local tag deleted — repo-state action, no repo commit; applied/re-check lines recorded in the report · per user
+- README rewritten from scratch for the public era (the old text was structurally private-era throughout; history keeps it, per R2); content kept factual to the current 19-entry catalog, with an explicit as-is/personal-paths warning · builder call
+- AC-E1's "spot-check two re-checks" is unsatisfiable as flagged in Discovered (exactly one redact/parameterize ruling exists); the grader can spot-check one · builder call
+- R3 executed on Tony's live word "PR it and merge": push, PR #28, merge — recorded here as the gating word (no outward-action AUTHORIZED line is spec'd for R3) · per user
+- E's closing records (this ledger + Status) ride on branch feat/slice-e-close, to merge with Slice F's records — R3's merge predates this commit by necessity · builder call
 
 ## Deviations
 
