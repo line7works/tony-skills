@@ -52,7 +52,7 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` and `plugins/architect/.claude-plugin/plugin.json` (new files, new directory); one new entry in `.claude-plugin/marketplace.json`; one roster line + count sentence in `README.md`; count sentence in `CLAUDE.md`; `docs/evidence/architect/slice-a-requirement-map.md` (new).
 Not in this slice: any live run; any edit to any other skill; any change to the scope doc; merging or installing the plugin from the marketplace.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice B — live smoke test
 Goal: one real /architect run end to end with Tony on a genuine project, from the branch copy; every mechanism the run's path reaches observably fires; fixes fold back into the SKILL.md.
@@ -77,12 +77,22 @@ Depends on: Slice A
 Status: not started
 
 ## Build assumptions
+### 2026-09-02 — build: Slice A
+- A1 verified · `claude --plugin-dir plugins/architect -p` from the repo root listed `architect:architect` with the branch file's description (AC2) · builder call
+- R13 slot mapping: the fixed reviewer instruction goes in `base-instructions`, the scope doc text in `prompt` — the plan names both payloads but not their codex slots; mirrors Judge G's mandate/brief split · builder call
+- R11 marker wording: an outside-checking unknown is written as a `NEEDS CHECK: <what>` line — the plan says "marked line" without a form · builder call
+- R6 candidate count: the interview asks for candidates from Claude, not Tony; SKILL.md :43 has Claude put them on the table — the plan's "forces into the open" read that way · builder call
 - A1 · `claude --plugin-dir plugins/architect` surfaces /architect in that session's skill listing and a fresh session started the same way runs the current branch copy of SKILL.md · verified at Slice A start (AC2); if false, Slice B's B-R2 loop needs a different local-load path and this plan stops for Tony's ruling · 2026-09-02
 - A2 · a docless run's architecture doc goes to `~/Documents/` unless the gate discussion names a repo · the scope doc rules only the with-scope-doc case · 2026-09-02
 
 ## Deviations
+### 2026-09-02 — build: Slice A
+- none
 
 ## Discovered
+### 2026-09-02 — build: Slice A
+- The 19 older `plugin.json` manifests still carry the pre-transfer `tiny-tunnel-dot` URL; only architect's points at `line7works` (Constraints acknowledge this; not in this slice's footprint) · logged, not built
+- `timeout` is not on this Mac's PATH (zsh: command not found); AC2 ran without it · logged
 
 ## Handoffs
 
