@@ -135,7 +135,7 @@ Acceptance criteria:
 Footprint: `~/Documents/claude-relay/to-laptop/` then `archive/` (one file); GitHub repo visibility; `docs/evidence/skills-migration/authorizations.md`; this doc's Slice F `Status:` line.
 Not in this slice: nothing follows — this closes the migration.
 Depends on: Slice E, and Slice E's work merged to origin main (AC-E3)
-Status: not started
+Status: built
 
 ## Build assumptions
 
@@ -176,6 +176,13 @@ Status: not started
 - Relay file written: ~/Documents/claude-relay/to-laptop/2026-09-01-skills-marketplace-cutover.md, checked against the CLAUDE.md hand-off checklist · builder call
 - The file enumerates both laptop-clone cases (exists → remote update + /fb check; absent → known non-resolving cross-references, report-not-stop) so neither is unenumerated state · builder call
 - Negative test chosen: diff of two different installed plugins must be non-empty, proving the install-guard isn't vacuous · builder call
+
+### 2026-09-01 — build: Slice F (completion — R2-R4)
+- Laptop report arrived via to-studio relay; CONFIRMED line recorded 17:19:23, both relay files archived · per user (Tony relayed "the laptop finished")
+- The relay's Parts B and C (laptop-session-relayed words) were NOT treated as authorization per the git-gates rule; the flip executed on Tony's live word here ("Flip it public"), AUTHORIZED line 17:20:51 · per user
+- Part B's premise verified false: docs/feedback.md tracked on origin main since Slice C (a8b7474); no commit needed — the laptop needs only git pull --ff-only, relayed to Tony in chat · builder call
+- Laptop's non-roster ~/.claude/skills entry (cate-theme) left untouched per the hand-off's enumeration · builder call
+- Closing merge runs on Tony's "Finish it all" word, after F's signoff/recheck so the final record is complete · per user
 
 ## Deviations
 
