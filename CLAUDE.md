@@ -11,15 +11,17 @@ Two parts, split by how a thing is consumed rather than what it is:
 
 When something does not obviously fit either, it goes in `tools/` — do not conclude it belongs outside the repo.
 
-Six plugin folders. Five are catalogued in
-`.claude-plugin/marketplace.json` and installable with `/plugin`; `shutdown`
-is in the tree but not catalogued:
+Nineteen plugin folders covering twenty skills, all catalogued in
+`.claude-plugin/marketplace.json` and installable with `/plugin` (one plugin
+per skill; `sun` bundles sunrise + sunset). The full roster and descriptions
+live in `README.md` and the marketplace catalog; the six below predate the
+2026-09-01 skills migration and keep their fuller notes here:
 
 - `sun` provides `/sunrise` (bootstrap a project across every layer) and `/sunset` (archive one reversibly).
 - `forge` provides `/forge` (Claude-driven image generation on Fal.ai — the skill writes prompts, runs vision QA, and renders on-brand images through the bundled `assets/forge.py` CLI).
 - `wargame` provides `/wargame` (adversarial pre-mortem of any target — new project, existing feature, or planned change; ranked + verified failure modes, kill criteria, plain-language decision questions).
 - `signoff` provides `/signoff` (independent adversarial review of freshly built work against its spec doc, ending in a signed verdict plus punch list). The back half of `/wargame`: war game before building, sign-off after.
-- `shutdown` provides `/shutdown` (settle up before a Terminal restart or account switch: read-only git report, a self-contained handoff in `~/Documents/handoffs/`, and a memory pointer; `/shutdown all` sweeps this machine's other sessions). Not in `marketplace.json`, and it carries no `.claude-plugin/plugin.json` — only `skills/shutdown/SKILL.md`.
+- `shutdown` provides `/shutdown` (settle up before a Terminal restart or account switch: read-only git report, a self-contained handoff in `~/Documents/handoffs/`, and a memory pointer; `/shutdown all` sweeps this machine's other sessions).
 - `arcade` provides `/arcade` (publish, update, list, reorder, feature, and take down pages on the Line 7 Arcade from any repo) and bundles the `arcade-publish` CLI it drives in `plugins/arcade/assets/` (build history: `docs/arcade-skill-build-plan.md`). Writes to live production; delete is gated behind an explicit conversational yes.
 
 Clerk graduated to a full entity on 2026-08-23 and lives at `~/Developer/clerk` (`tiny-tunnel-dot/clerk`, private).
@@ -30,11 +32,11 @@ See `README.md` for install and structure.
 
 ## Source of truth
 
-The live skill files a Claude Code session actually runs are the user-level copies at `~/.claude/skills/sunrise|sunset|forge|wargame|signoff/` on each machine. This repo is the canonical, shareable, version-controlled home for them. A change made here reaches a machine only after that machine reinstalls or updates the plugin (`/plugin update sun@tony-skills`). Do not assume editing this repo changes a running machine's behavior until it is reinstalled.
+Since the 2026-09-01 skills migration, the skill files a Claude Code session actually runs are the marketplace-installed copies under `~/.claude/plugins/cache/tony-skills/` on each machine — the old hand copies in `~/.claude/skills/` are gone. This repo is the canonical source; a change made here reaches a running machine only after it lands on `main` AND that machine updates the plugin (`/plugin update <name>@tony-skills`). Do not assume editing this repo changes a running machine's behavior until both happen.
 
 ## Invariants
 
-- Keep private. The skills contain Tony-specific paths, handles, and project names.
+- The repo is PUBLIC (flipped 2026-09-01 after a full scrub audit; record: `docs/evidence/skills-migration/`). Everything committed ships to strangers: no secrets, no credentials, and any new Tony-specific exposure gets a deliberate call, not a default-in.
 - Asset references in the SKILL.md files use `${CLAUDE_PLUGIN_ROOT}/assets/...`. Do not revert them to absolute `~/.claude/...` paths, which break once the plugin is installed to its cache dir.
 - The `sun` plugin bundles both skills because they share the `assets/` folder. Keep them together.
 - The `wargame` skill's Opus-or-greater model floor (Step 0) is deliberate — do not remove or soften it, and never let it pin subagents below `opus`. Its anti-theater rule (HIGH-ranked failures must convert to a verified check, named test, or spike) is the skill's whole point; edits that let failures stay as unranked table rows defeat it.
