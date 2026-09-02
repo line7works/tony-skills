@@ -52,7 +52,7 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` and `plugins/architect/.claude-plugin/plugin.json` (new files, new directory); one new entry in `.claude-plugin/marketplace.json`; one roster line + count sentence in `README.md`; count sentence in `CLAUDE.md`; `docs/evidence/architect/slice-a-requirement-map.md` (new).
 Not in this slice: any live run; any edit to any other skill; any change to the scope doc; merging or installing the plugin from the marketplace.
 Depends on: nothing
-Status: not started
+Status: signed off
 
 ## Slice B — live smoke test
 Goal: one real /architect run end to end with Tony on a genuine project, from the branch copy; every mechanism the run's path reaches observably fires; fixes fold back into the SKILL.md.
@@ -74,15 +74,35 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` (fixes); `docs/evidence/architect/slice-a-requirement-map.md` (refreshed); one architecture doc + its HTML; one artifact; possibly one review file (and `~/Documents/architect-reviews/` and one scratch cwd if created); `docs/evidence/architect/smoke-run-<date>.md`.
 Not in this slice: acting on the tested idea itself; building anything the architecture doc describes; re-run mechanics beyond what one sitting exercises (the run log must still be written for run 1); marketplace install or merge.
 Depends on: Slice A
-Status: not started
+Status: signed off
 
 ## Build assumptions
+### 2026-09-02 — build: Slice B
+- The live run happened in a separate terminal session ("test") started with `claude --plugin-dir plugins/architect`, since this session was not started that way; its ARCHITECT block, tool list, and quoted exchanges were supplied by that session on request after the run, verbatim, and are the evidence note's source alongside the files · builder call
+- The subject (Pour Guys bar-builder) was already built through Slice H1, so run 1 was as-built drawings rather than a pre-construction drawing; still a scope-doc run on the repo-owned home, which is what B-R1 asks for · per user ("find me one, from a repo")
+- Outputs were committed in Pour-Guys (slice-f1, 6a61a54) on Tony's word to that session; the commit is outside this repo's footprint and is recorded, not graded · per user
+### 2026-09-02 — build: Slice A
+- A1 verified · `claude --plugin-dir plugins/architect -p` from the repo root listed `architect:architect` with the branch file's description (AC2) · builder call
+- R13 slot mapping: the fixed reviewer instruction goes in `base-instructions`, the scope doc text in `prompt` — the plan names both payloads but not their codex slots; mirrors Judge G's mandate/brief split · builder call
+- R11 marker wording: an outside-checking unknown is written as a `NEEDS CHECK: <what>` line — the plan says "marked line" without a form · builder call
+- R6 candidate count: the interview asks for candidates from Claude, not Tony; SKILL.md :43 has Claude put them on the table — the plan's "forces into the open" read that way · builder call
 - A1 · `claude --plugin-dir plugins/architect` surfaces /architect in that session's skill listing and a fresh session started the same way runs the current branch copy of SKILL.md · verified at Slice A start (AC2); if false, Slice B's B-R2 loop needs a different local-load path and this plan stops for Tony's ruling · 2026-09-02
 - A2 · a docless run's architecture doc goes to `~/Documents/` unless the gate discussion names a repo · the scope doc rules only the with-scope-doc case · 2026-09-02
 
 ## Deviations
+### 2026-09-02 — build: Slice B
+- B-R2 re-run-through done only for the exit-ramp/silence change (headless `--plugin-dir` session, first question only, recorded in the evidence note); the template lines (:60, :82), the report-timing rule (:129), the codex backgrounding/unescape guard (:108), and the cwd-home note (:107) were not re-run because they are observable only on a full run with a blind review — their first exercise is the next real /architect run · builder call
+### 2026-09-02 — build: Slice A
+- none
 
 ## Discovered
+### 2026-09-02 — build: Slice B
+- A first run on an already-built target has no guidance in the skill ("as-built drawings"); the session improvised a timing note and a SKILL NOTE · logged, not built
+- The session verified each reviewer claim against the repo before presenting disagreements, so Tony ruled only real differences; the scope doc says every disagreement is presented · logged, not built — Tony's call whether to write it in
+- The codex call exceeded the harness's 120 s foreground limit and was backgrounded; the task notification HTML-escapes the response · both now covered in SKILL.md's guard text
+### 2026-09-02 — build: Slice A
+- The 19 older `plugin.json` manifests still carry the pre-transfer `tiny-tunnel-dot` URL; only architect's points at `line7works` (Constraints acknowledge this; not in this slice's footprint) · logged, not built
+- `timeout` is not on this Mac's PATH (zsh: command not found); AC2 ran without it · logged
 
 ## Handoffs
 
@@ -487,3 +507,79 @@ FIXED · docs/architect-skill-build-plan.md:40 · R13 reviewer instruction writt
 FIXED · docs/architect-skill-build-plan.md:61,74 · Slice B refreshes the requirement map after the last fix
 FIXED · docs/architect-skill-build-plan.md:43,51 · README.md:92 numeral count named; AC7 grep catches "N entries"; roster group and CLAUDE.md six-list clarified
 FIXED · docs/architect-skill-build-plan.md:49 · AC5 grep is `grep -nE`
+
+### 2026-09-02 — review: Slice A
+MAJOR · plugins/architect/skills/architect/SKILL.md:21 · a scope doc the glob cannot see, or a bare invocation naming no project, falls into the docless gate with no "ask for the path first" step · Tony runs /architect from ~ for a repo-owned project → docless run, doc in ~/Documents, no review offer · Slice A review
+MAJOR · plugins/architect/skills/architect/SKILL.md:91 · republish never says to pass the recorded URL to the Artifact tool · a fresh session republishes with only the file path → second artifact, stale Artifact line · Slice A review
+MAJOR · plugins/architect/skills/architect/SKILL.md:103 · no failure path for the codex call; an empty or errored response is saved verbatim and reported "done at <path>"; Review field has no failed value · empty codex response → empty review file, comparison walks nothing · Slice A review
+MAJOR · plugins/architect/skills/architect/SKILL.md:104 · the call config omits `model:` though :103 says pinned · session sends on the codex default model · Slice A review
+MAJOR · plugins/architect/skills/architect/SKILL.md:76 · run-log template labels the interview Step 1/2/3 while headings say 3.1/3.2/3.3; no exit-ramp form · an exit-ramp run must fill "candidates" for an interview that never had them; B-AC2 reads the branch from this log · Slice A review
+MAJOR · plugins/architect/skills/architect/SKILL.md:39 · "the first human who is not Tony" narrows R4 / scope :15 ("a named real person"); Deviations says none · a personal tool where Tony is the first real user stalls step 3.1 · Slice A review
+MAJOR · plugins/architect/.claude-plugin/plugin.json:3 · present-tense "/sunrise provisions from and /blueprint slices from" the doc in plugin.json, the marketplace entry, and README.md:40; neither skill reads it today · a marketplace stranger expects pickup that does not happen · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:89 · HTML source beside the doc lands in a public repo's docs/ when the project is public, beside "never publish anywhere public" · Tony's call whether "private" means the Artifact only · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:21 · matches by Intent line where R2 says "matched by title" · unrecorded wording change · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:25 · "no research documents" added to R11's property line · a scope doc's own Research: file could be refused · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:103 · pin reference is an absolute repo path, not the installed copy or ${CLAUDE_PLUGIN_ROOT} · dangles on a machine without the clone · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:8 · AC5 descriptive hits (:8, :10, :53, :134) are neither prohibitions nor the R13 passage · a strict grader could refuse AC5(a) · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:47 · guardrail matches the plan's paraphrase, not the scope's text word for word · R4 says verbatim · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:89 · visual renders before Step 6 rulings change the doc; no re-render instruction · artifact ends the run stale · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:76 · run numbering rule unstated; review-ruled edits after the run log is written have no logging instruction · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:89 · nothing says to omit the favicon on republish · run 2 in a fresh session changes the icon · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:31 · exit-ramp run still gets the full blind-review instruction and comparison walk against a three-line doc · no short-circuit · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:51 · slug from a non-conforming scope-doc filename passed by path has no rule · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:47 · "the sorted scope" is precon vocabulary, undefined here · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:14 · :14 says never invokes any skill; rule 7 (:117) says no loop skill; :89 carves out artifact-design · a literal session refuses the preflight on :14 · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:8 · precon's Next: lines route straight to /blueprint and never name /architect; the file does not acknowledge it · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:23 · precon's napkin (no scope doc) and the exit ramp (static page) are different smallness tests, neither names the other · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:25 · NEEDS CHECK vs precon's `parked: needs research` — two vocabularies for one concept · Slice A review
+MINOR · README.md:40 · roster line is four clauses where neighbours are one · style drift · Slice A review
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:1 · "slice" in a docs/ filename could match a tier-2 slice-doc hunt when a build plan is absent · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:45 · sunrise already keeps docs/decisions/ (ADRs) for architecture decisions; poured concrete is a second home with no cross-reference · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:104 · cwd says absolute and empty but names no location; sessions will pick different places · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:59 · Artifact: header line has a placeholder on run 1 before a URL exists; `|` either-or on :58 has no drop rule · Slice A review
+MINOR · plugins/architect/skills/architect/SKILL.md:91 · no instruction for a recorded URL that no longer resolves · Slice A review
+
+### 2026-09-02 — recheck: Slice A
+MAJOR · plugins/architect/skills/architect/SKILL.md:21 · (a scope doc the glob cannot see, or a bare invocation naming no project, falls into the docless gate with no "ask for the path first" step) · fixed — :21 asks for a path on zero matches, lists all on a bare invocation
+MAJOR · plugins/architect/skills/architect/SKILL.md:91 · (republish never says to pass the recorded URL to the Artifact tool) · fixed — now :92, url parameter named
+MAJOR · plugins/architect/skills/architect/SKILL.md:103 · (no failure path for the codex call; empty or errored response saved and reported done) · fixed — now :106 FAILED review rule, :135 Review: failed value
+MAJOR · plugins/architect/skills/architect/SKILL.md:104 · (the call config omits model:) · fixed — now :105
+MAJOR · plugins/architect/skills/architect/SKILL.md:76 · (run-log template labels Step 1/2/3 vs headings 3.1/3.2/3.3; no exit-ramp form) · fixed — now :77-80
+MAJOR · plugins/architect/skills/architect/SKILL.md:39 · ("the first human who is not Tony" narrows R4) · fixed
+MAJOR · plugins/architect/.claude-plugin/plugin.json:3 · (present-tense downstream pickup claim in plugin.json, marketplace entry, README.md:40) · fixed — all three hedge "hand-pointed until the reworks land"
+
+### 2026-09-02 — review: Slice B
+MAJOR · plugins/architect/skills/architect/SKILL.md:35 · "an item his answer does not mention is accepted at its recommendation" applies to the exit ramp and the candidate pick · Tony answers only the date; the session records the chosen candidate and a "system" exit-ramp on its own recommendation — the nod the skill forbids · Slice B review
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:18 · B-AC2 graded pass though the exit ramp was batched with step 3.1 and never answered by Tony · a no-system idea would have had 3.1 asked before the ramp resolved · Slice B review
+MAJOR · docs/architect-skill-build-plan.md:93 · B-R2's re-run-through of a materially changed step not done; Deviations says none · the silence rule, report timing, and template lines ship untested in a --plugin-dir session · Slice B review
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:28 · "nothing else changed" and "each marked with its ruling number" are false against the architecture doc (walkthrough :17 and storage :57 also changed; deferred :69–70 unmarked) · the note misreports the run · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:58 · template header order (Scope/Artifact/Blind review) and run-log label (Rulings:) differ from the only existing doc (Scope/Blind review/Artifact; "Blind review:" plus seven lines) · a re-run must rewrite run-1 lines or carry two vocabularies · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:60 · "Blind review: ... | none yet" has no declined / failed / docless form · a declined run reads as pending forever · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:108 · backgrounded-call rule does not say the empty/errored guard applies to the response that arrives; no wait bound · a completed-but-empty notification can pass as a review · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:108 · unescape covers &amp; &lt; &gt; only and cannot tell whether the harness escaped at all · a take containing literal entities is corrupted; &quot; is half-handled · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:129 · report waits on Tony's answer to the offer; if he never answers no block prints · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:88 · re-run instruction omits the new Rulings line · a run-2 block lacks the line the template requires · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:60 · two more `|` either-or template lines with no drop rule (Slice A MINOR :58 now has three instances) · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:92 · visual renders before Step 6 rulings and the report now carries rulings-inclusive counts beside a pre-rulings artifact; no re-render instruction · Slice B review
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:19 · R13 row carries a duplicated phrase · hand-patched regeneration · Slice B review
+MINOR · docs/architect-skill-build-plan.md:80 · Slice B ledger blocks inserted above Slice A's under each heading; house order is chronological · Slice B review
+MINOR · docs/evidence/architect/smoke-run-2026-09-02.md:53 · the five fixes are described without SKILL.md line numbers · a recheck has nothing to open to · Slice B review
+MINOR · docs/evidence/architect/smoke-run-2026-09-02.md:20 · B-AC3 asks the note to quote the transitions; it paraphrases · Slice B review
+MINOR · docs/evidence/architect/smoke-run-2026-09-02.md:3 · run quotes are second-hand (relayed by the running session after the run); spec accepts self-report at B-AC8 only · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.md:7 · free-text timing note inside the "exact" format · a downstream parser meets an unlisted section · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.md:85 · "agreed on the spine" under-lists what the reviewer and the repo already settle (code-owned layout, stable venue ids, repeatable migrations, API boundary) and names two items the doc never records · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.html:123 · projection says "no documented path found yet" where the doc poses an open question · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.html:2 · Google Fonts link, three typefaces, palette, dark-mode block — past "keep the first version plain" · Slice B review
+MINOR · ~/Developer/Pour-Guys · commit 6a61a54 rides the pre-existing slice-f1 branch with ten unrelated commits; the drawings reach main only when that branch merges · Slice B review
+
+### 2026-09-02 — recheck: Slice B
+MAJOR · plugins/architect/skills/architect/SKILL.md:35 · (silence-accepted rule applies to the exit ramp and the candidate pick) · fixed — :29 ramp asked alone, :35 exemption, :43 pick in words; exercised live in a headless --plugin-dir run
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:18 · (B-AC2 graded pass though the ramp was batched and unanswered) · fixed — note states it plainly and points at the fix
+MAJOR · docs/architect-skill-build-plan.md:93 · (B-R2 re-run-through not done; Deviations "none") · fixed — re-run-through recorded in the note; Deviation with builder-call label
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:28 · ("nothing else changed" / "each marked" false against the doc) · fixed — all five changed places described and verified
+MINOR · docs/architect-skill-build-plan.md:94 · broke: Deviation inventory incomplete — names three un-rerun fixes, omits the codex guard (:108) and cwd (:107) edits — a reader concludes everything else was exercised · Slice B fix
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · broke: map not regenerated after the last fix (9d13e36) — line refs still resolve but the R3/R4/R6 prose omits the new asked-alone / in-his-own-words mechanisms; B-R2's letter · Slice B fix
+
+### 2026-09-02 — recheck: Slice B
+MINOR · docs/architect-skill-build-plan.md:94 · (Deviation inventory incomplete) · fixed — all five un-rerun items named with builder-call label
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · (map not regenerated after the last fix) · fixed — header names 9d13e36; R3/R4/R6 prose current; R13 duplicate gone; every R1–R15 cite lands
