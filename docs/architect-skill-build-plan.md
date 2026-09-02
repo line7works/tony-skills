@@ -74,7 +74,7 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` (fixes); `docs/evidence/architect/slice-a-requirement-map.md` (refreshed); one architecture doc + its HTML; one artifact; possibly one review file (and `~/Documents/architect-reviews/` and one scratch cwd if created); `docs/evidence/architect/smoke-run-<date>.md`.
 Not in this slice: acting on the tested idea itself; building anything the architecture doc describes; re-run mechanics beyond what one sitting exercises (the run log must still be written for run 1); marketplace install or merge.
 Depends on: Slice A
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 ### 2026-09-02 — build: Slice B
@@ -571,3 +571,11 @@ MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.md:85 · "agreed on
 MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.html:123 · projection says "no documented path found yet" where the doc poses an open question · Slice B review
 MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.html:2 · Google Fonts link, three typefaces, palette, dark-mode block — past "keep the first version plain" · Slice B review
 MINOR · ~/Developer/Pour-Guys · commit 6a61a54 rides the pre-existing slice-f1 branch with ten unrelated commits; the drawings reach main only when that branch merges · Slice B review
+
+### 2026-09-02 — recheck: Slice B
+MAJOR · plugins/architect/skills/architect/SKILL.md:35 · (silence-accepted rule applies to the exit ramp and the candidate pick) · fixed — :29 ramp asked alone, :35 exemption, :43 pick in words; exercised live in a headless --plugin-dir run
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:18 · (B-AC2 graded pass though the ramp was batched and unanswered) · fixed — note states it plainly and points at the fix
+MAJOR · docs/architect-skill-build-plan.md:93 · (B-R2 re-run-through not done; Deviations "none") · fixed — re-run-through recorded in the note; Deviation with builder-call label
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:28 · ("nothing else changed" / "each marked" false against the doc) · fixed — all five changed places described and verified
+MINOR · docs/architect-skill-build-plan.md:94 · broke: Deviation inventory incomplete — names three un-rerun fixes, omits the codex guard (:108) and cwd (:107) edits — a reader concludes everything else was exercised · Slice B fix
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · broke: map not regenerated after the last fix (9d13e36) — line refs still resolve but the R3/R4/R6 prose omits the new asked-alone / in-his-own-words mechanisms; B-R2's letter · Slice B fix
