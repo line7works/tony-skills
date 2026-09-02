@@ -37,7 +37,7 @@ features in verified slices. Each station is a skill, composed by name:
 
 - `precon` — harvest a free-flowing idea discussion into a fixed-format scope doc
 - `jpb` — Jon's Product Box: 3–6 independent frontier-model "box teams" vet an idea before it has a name
-- `architect` — the drawings step: name the first user's walkthrough, force distinct candidate structures, settle the one-way doors, write the architecture doc /sunrise and /blueprint consume
+- `architect` — the drawings step: settle the first user's walkthrough and the one-way doors in one architecture doc (hand-pointed downstream for now)
 - `blueprint` — draft a build doc in dependency-ordered, verifiable slices
 - `inspect` — adversarial review of a build doc *before* anything is built
 - `build` — execute one slice inside strict boundaries; honest stops over fake completeness

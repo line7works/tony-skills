@@ -18,7 +18,7 @@ This skill runs only when Tony types /architect. It writes a doc and a visual; i
 The input is a /precon scope doc. Find it in this order:
 
 1. The path given in the invocation.
-2. Otherwise, a glob over precon's two homes: `<repo>/docs/*-scope.md` when invoked inside a repo, plus `~/Documents/*-scope.md`. Match candidates to the project by their `Intent:` lines against the project Tony is talking about. More than one plausible match is listed and asked as a plain-text numbered question, never silently picked. The glob is best-effort — a repo-owned scope doc is only visible from inside that repo or by path.
+2. Otherwise, a glob over precon's two homes: `<repo>/docs/*-scope.md` when invoked inside a repo, plus `~/Documents/*-scope.md`. Match candidates to the project by their `Intent:` lines against the project Tony is talking about. More than one plausible match is listed and asked as a plain-text numbered question, never silently picked; a bare invocation that names no project lists every candidate and asks. The glob is best-effort — a repo-owned scope doc is only visible from inside that repo or by path — so zero matches is not yet docless: ask Tony once, in plain text, whether a scope doc exists somewhere the glob cannot see, and take the path he gives. Only his "none" opens the docless gate.
 
 **Docless.** Invoked with no scope doc found, the skill stops and opens a discussion on why it is being run without a precon doc — a conversation gate, not a silent refusal. The run proceeds only when that discussion lands on a reason; the reason is recorded in the header of the architecture doc. A docless run takes the current discussion as its input, and its `<slug>` is the project's working name, settled in that same discussion.
 
@@ -36,7 +36,7 @@ Three steps, in this order, run as one negotiation. Questions are plain-text, nu
 
 **Step 3.1 — the walkthrough target (delivery pass).** Three things, all concrete:
 
-- A named real person. Never "users". The first human who is not Tony to touch the built thing.
+- A named real person. Never "users". The first real person to touch the built thing — Tony himself, when he genuinely is.
 - The date of the walkthrough — the dated session where that person actually uses it.
 - What that person must be able to do in that session, as a short list.
 
@@ -74,21 +74,22 @@ Diagram: <one simple diagram — ASCII or a mermaid block>
 
 ## Run log
 ### Run <N> — <date> — trigger: <first run | idea blossomed | new precon | changed direction | ...>
-Step 1 (walkthrough target): <what was settled>
-Step 2 (candidates): <the 2–3 candidates in one line each; chosen: <which>; rejected: <candidate> — <one-line why>>
-Step 3 (one-way doors): <what was settled>
+Exit ramp: <the answer to "is there a system here at all?" — "system" and the interview continued, or "no system" and it ended here>
+Step 3.1 (walkthrough target): <what was settled | n/a — exit ramp>
+Step 3.2 (candidates): <the 2–3 candidates in one line each; chosen: <which>; rejected: <candidate> — <one-line why> | n/a — exit ramp>
+Step 3.3 (one-way doors): <what was settled | n/a — exit ramp>
 Changed this run: <what changed vs the prior run, or "first run">
 ```
 
 Four required parts, always present: the walkthrough target, the v0 drawing (component list + plain-prose data flow + one simple diagram), the poured-concrete list (the one-way decisions — one list, two names), and the deferred list (banked decisions plus deliberately-not-built items, each with a line confirming its door stays open). The exit-ramp form is the same skeleton with a few lines in it.
 
-**Re-runs.** When the idea blossoms or changes — possibly after a fresh /precon — a new run continues the same doc: a new `### Run <N>` block in the run log with the date, the trigger, what changed, and the three steps in the order taken; superseded decisions elsewhere in the doc are struck through (`~~like this~~`), never deleted. The trail is the point: it ran once, and now it runs again because something changed.
+**Re-runs.** When the idea blossoms or changes — possibly after a fresh /precon — a new run continues the same doc: a new `### Run <N>` block in the run log (N = one more than the highest existing block) with the date, the trigger, what changed, and the three steps in the order taken; superseded decisions elsewhere in the doc are struck through (`~~like this~~`), never deleted. The trail is the point: it ran once, and now it runs again because something changed.
 
 ## Step 5 — The visual
 
 Every run ends by rendering what was decided — the systems chosen and what each does or provides for the project — as an HTML page written beside the doc as `<slug>-architecture.html`, and published as a **private** Claude Artifact via the Artifact tool. The page follows that tool's contract: a page body only (no doctype, html, head, or body wrapper), a `<title>` at the top, and a favicon on the first publish. The Artifact tool requires loading the `artifact-design` skill before writing the page; that harness preflight is not a skill invocation in this file's sense.
 
-Same URL across runs: the first publish records the artifact URL in the doc's `Artifact:` line; a re-run reads that artifact (the tool's read action, by URL) before republishing to it; a re-run that finds no recorded URL publishes fresh and records the new one. The visual is a projection re-rendered from the doc each run — the markdown stays the record.
+Same URL across runs: the first publish records the artifact URL in the doc's `Artifact:` line; a re-run reads that artifact (the tool's read action, by URL) and then republishes with that URL passed as the tool's `url` parameter — omitting it creates a second artifact, which is the failure this rule exists to prevent; a re-run that finds no recorded URL publishes fresh and records the new one. The visual is a projection re-rendered from the doc each run — the markdown stays the record.
 
 The visual's design is deliberately unspecified and gets established over time, run by run. Keep the first version plain. Do not build a design system, and never publish it anywhere public — not the arcade, not any other host.
 
@@ -101,8 +102,9 @@ On his word in this run, and only then:
 - The external model receives the precon scope doc ONLY. Never Claude's architecture doc, never chat context, never this session's reasoning. It gets the brief fresh, exactly as Tony ruled: "the model reviewing it doesn't get the Claude input."
 - The instruction it receives is fixed, verbatim: **"You are the architect. Read the attached precon scope doc and return your own full architecture-and-delivery take for it: the walkthrough target, a v0 drawing (component list, plain-prose data flow, one simple diagram), the poured-concrete list of one-way decisions, and the deferred list. You have no other input; do not ask for any."**
 - Transport is the codex MCP (`mcp__codex__codex`) with the model pinned by reference to jpb's preflight in `~/Developer/tony-skills/plugins/jpb/skills/jpb/SKILL.md` (`gpt-5.6-sol` at time of writing; if that pin moves, the reference wins). A different model on Tony's pick for this run substitutes for the pinned one — it never adds a second reviewer. There is no panel.
-- The transport guards are jpb Judge G's, plus the payload rule above: `base-instructions` = the fixed instruction, `prompt` = the scope doc text, `sandbox: "read-only"`, `config: {"web_search": "disabled"}`, and `cwd` = an absolute, empty directory created fresh for this run.
-- The take is saved verbatim, before any triage, to `~/Documents/architect-reviews/<slug>-review-<YYYY-MM-DD>.md`. Creating `~/Documents/architect-reviews/` on the first blind review, and creating the run's empty cwd, are the only two directory creations this skill ever makes.
+- The transport guards are jpb Judge G's, plus the payload rule above: `model: "gpt-5.6-sol"` (or the substitute Tony named for this run), `base-instructions` = the fixed instruction, `prompt` = the scope doc text, `sandbox: "read-only"`, `config: {"web_search": "disabled"}`, and `cwd` = an absolute, empty directory created fresh for this run.
+- jpb's guard carries over: an empty, null, or errored response — the MCP down, the model not found, a fully-denied run that still reports success — is a FAILED review. Nothing is saved, no comparison runs, and the report says `Review: failed — <reason>`; a retry happens only on Tony's word, and a failed review never masquerades as a declined one.
+- A non-empty take is saved verbatim, before any triage, to `~/Documents/architect-reviews/<slug>-review-<YYYY-MM-DD>.md`. Creating `~/Documents/architect-reviews/` on the first blind review, and creating the run's empty cwd, are the only two directory creations this skill ever makes.
 
 Then the comparison: walk Tony through every disagreement between the two takes — at minimum components built vs cut, structure, one-way-door calls, and deferrals — one at a time, and he rules each in discussion. The architecture doc changes only where he rules. Nothing merges silently, and the review file itself is never edited.
 
@@ -130,7 +132,7 @@ Doc: <path>
 Artifact: <private URL>
 Run: <N>
 Counts: components in v0 N · poured-concrete decisions N · deferred items N
-Review: declined | not offered — docless | done at <review file path>
+Review: declined | not offered — docless | failed — <reason> | done at <review file path>
 Next: point /sunrise at the doc to provision exactly what it lists, and /blueprint at it to slice with the user-touchable slice up front (hand-pointed until those reworks land).
 SKILL NOTE: <only when a rule was worked around, reinterpreted, or excepted — what and why; omit otherwise>
 ```
