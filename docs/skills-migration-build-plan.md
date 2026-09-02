@@ -135,7 +135,7 @@ Acceptance criteria:
 Footprint: `~/Documents/claude-relay/to-laptop/` then `archive/` (one file); GitHub repo visibility; `docs/evidence/skills-migration/authorizations.md`; this doc's Slice F `Status:` line.
 Not in this slice: nothing follows — this closes the migration.
 Depends on: Slice E, and Slice E's work merged to origin main (AC-E3)
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 
@@ -396,3 +396,9 @@ Status: signed off with conditions
 - MINOR · archive/2026-09-01-skills-marketplace-cutover.md (Step 5) · the /fb check carried no explicit failure=stop clause — the one check without a stop is the one that failed (archived artifact; corrective file must carry the stop language) · Slice F review
 - MINOR · docs/evidence/skills-migration/authorizations.md · no durable slot records the /fb flag's eventual resolution · Slice F review
 - MINOR · git branches · stale local branches (feat/slice-e-recheck, merged slice branches) worth pruning at close · Slice F review
+
+### 2026-09-01 — recheck: Slice F
+- MAJOR · ~/Documents/claude-relay/to-laptop/ (absent file) · (laptop /fb repair unscheduled, chat-only) · fixed — relay file 2026-09-01-fb-repair-and-recheck.md written per the checklist, with explicit per-step stops including on the /fb check itself; its checkable claims independently verified true
+- MAJOR · archive/2026-09-01-skills-marketplace-cutover.md Step 4 · (third working check omitted) · fixed — the corrective relay file's Step 3 schedules /precon (a cross-reference skill) with expected result and stop clause
+- MAJOR · feat/slice-f-flip local-only · (AC-F4 unmet; flip's authorization record on no origin ref) · fixed — PR #30 merged (109d183); origin main carries the CONFIRMED and AUTHORIZED lines, F's ledger and punch list; main in sync, tree clean apart from tools/shopify-mcp/
+- MAJOR · CLAUDE.md (public main) · (dead topology + "Keep private" beside the public README) · fixed — public CLAUDE.md now states 19 plugins/20 skills, marketplace install reality, and the PUBLIC invariant; only accurately-historical ~/.claude/skills mention survives; raw fetch serves the update
