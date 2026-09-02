@@ -91,7 +91,7 @@ Status: signed off with conditions
 
 ## Deviations
 ### 2026-09-02 — build: Slice B
-- none
+- B-R2 re-run-through done only for the exit-ramp/silence change (headless `--plugin-dir` session, first question only, recorded in the evidence note); the template lines and report-timing rule were not re-run because they are observable only on a full run — their first exercise is the next real /architect run · builder call
 ### 2026-09-02 — build: Slice A
 - none
 

@@ -26,13 +26,13 @@ The input is a /precon scope doc. Find it in this order:
 
 ## Step 2 — The exit ramp
 
-The first question of every interview: **is there a system here at all?**
+The first question of every interview, asked alone and answered before anything from Step 3 is put on the table: **is there a system here at all?** Tony's answer to it is never inferred from silence or from the recommendation.
 
 A single static page is not a system. When the answer is that small — no server, no data, nothing remembered — the interview ends after this one question. The run still writes a tiny architecture doc (a few lines: static page, no system, nothing to provision beyond a repo, which this skill still does not create), still renders the visual, and still makes the blind-review offer when a scope doc exists. "No doc" stays reserved for ideas that never saw /architect.
 
 ## Step 3 — The interview
 
-Three steps, in this order, run as one negotiation. Questions are plain-text, numbered, each with a ➡️ recommendation, so Tony can answer by number. An item his answer does not mention is accepted at its recommendation, and the session says so in the next message. Facts the property can answer are looked up, never asked.
+Three steps, in this order, run as one negotiation. Questions are plain-text, numbered, each with a ➡️ recommendation, so Tony can answer by number. A recommended item his answer does not mention is accepted at its recommendation, and the session says so in the next message — except the two answers that must be his in words: the exit ramp (Step 2) and the candidate pick (Step 3.2). Those are re-asked until he answers; a pick made by silence is the nod. Facts the property can answer are looked up, never asked.
 
 **Step 3.1 — the walkthrough target (delivery pass).** Three things, all concrete:
 
@@ -40,7 +40,7 @@ Three steps, in this order, run as one negotiation. Questions are plain-text, nu
 - The date of the walkthrough — the dated session where that person actually uses it.
 - What that person must be able to do in that session, as a short list.
 
-**Step 3.2 — candidate structures (architecture pass).** Put 2–3 genuinely distinct candidate structures on the table before any is chosen. Distinct means differing in at least one one-way-door category — platform, storage, repo shape, language, data shape, or any other one-way-door category the project surfaces — never variations of one shape. For each candidate: what it assumes, and what it makes expensive later. Then grill every candidate against the walkthrough target with the razor: **every component must point at a walkthrough requirement or it is cut from v0.** No server unless something needs a server; no database unless something must be remembered. Tony picks. The pick and each rejected candidate's one-line why go in the run log.
+**Step 3.2 — candidate structures (architecture pass).** Put 2–3 genuinely distinct candidate structures on the table before any is chosen. Distinct means differing in at least one one-way-door category — platform, storage, repo shape, language, data shape, or any other one-way-door category the project surfaces — never variations of one shape. For each candidate: what it assumes, and what it makes expensive later. Then grill every candidate against the walkthrough target with the razor: **every component must point at a walkthrough requirement or it is cut from v0.** No server unless something needs a server; no database unless something must be remembered. Tony picks, in his own words — never by silence on the recommendation. The pick and each rejected candidate's one-line why go in the run log.
 
 **Step 3.3 — the one-way-door check (architecture pass).** Bring the full vision in, for one purpose only: verify that nothing in v0 blocks it. Walk the checklist — language, database kind (storage), repo shape, data shapes, platform — as the floor, not a cap; add any other door the project has. One-way decisions are made at full-vision quality now. Everything else stays two-way and undecided. Banked decisions are recorded, not provisioned: "becomes Postgres when scores go remote" is a line in the doc, not a database.
 
