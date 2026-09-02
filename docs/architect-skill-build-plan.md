@@ -52,7 +52,7 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` and `plugins/architect/.claude-plugin/plugin.json` (new files, new directory); one new entry in `.claude-plugin/marketplace.json`; one roster line + count sentence in `README.md`; count sentence in `CLAUDE.md`; `docs/evidence/architect/slice-a-requirement-map.md` (new).
 Not in this slice: any live run; any edit to any other skill; any change to the scope doc; merging or installing the plugin from the marketplace.
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Slice B — live smoke test
 Goal: one real /architect run end to end with Tony on a genuine project, from the branch copy; every mechanism the run's path reaches observably fires; fixes fold back into the SKILL.md.
@@ -528,3 +528,12 @@ MINOR · plugins/architect/skills/architect/SKILL.md:45 · sunrise already keeps
 MINOR · plugins/architect/skills/architect/SKILL.md:104 · cwd says absolute and empty but names no location; sessions will pick different places · Slice A review
 MINOR · plugins/architect/skills/architect/SKILL.md:59 · Artifact: header line has a placeholder on run 1 before a URL exists; `|` either-or on :58 has no drop rule · Slice A review
 MINOR · plugins/architect/skills/architect/SKILL.md:91 · no instruction for a recorded URL that no longer resolves · Slice A review
+
+### 2026-09-02 — recheck: Slice A
+MAJOR · plugins/architect/skills/architect/SKILL.md:21 · (a scope doc the glob cannot see, or a bare invocation naming no project, falls into the docless gate with no "ask for the path first" step) · fixed — :21 asks for a path on zero matches, lists all on a bare invocation
+MAJOR · plugins/architect/skills/architect/SKILL.md:91 · (republish never says to pass the recorded URL to the Artifact tool) · fixed — now :92, url parameter named
+MAJOR · plugins/architect/skills/architect/SKILL.md:103 · (no failure path for the codex call; empty or errored response saved and reported done) · fixed — now :106 FAILED review rule, :135 Review: failed value
+MAJOR · plugins/architect/skills/architect/SKILL.md:104 · (the call config omits model:) · fixed — now :105
+MAJOR · plugins/architect/skills/architect/SKILL.md:76 · (run-log template labels Step 1/2/3 vs headings 3.1/3.2/3.3; no exit-ramp form) · fixed — now :77-80
+MAJOR · plugins/architect/skills/architect/SKILL.md:39 · ("the first human who is not Tony" narrows R4) · fixed
+MAJOR · plugins/architect/.claude-plugin/plugin.json:3 · (present-tense downstream pickup claim in plugin.json, marketplace entry, README.md:40) · fixed — all three hedge "hand-pointed until the reworks land"
