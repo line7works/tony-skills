@@ -135,7 +135,7 @@ Acceptance criteria:
 Footprint: `~/Documents/claude-relay/to-laptop/` then `archive/` (one file); GitHub repo visibility; `docs/evidence/skills-migration/authorizations.md`; this doc's Slice F `Status:` line.
 Not in this slice: nothing follows — this closes the migration.
 Depends on: Slice E, and Slice E's work merged to origin main (AC-E3)
-Status: built
+Status: signed off with conditions
 
 ## Build assumptions
 
@@ -386,3 +386,13 @@ Status: built
 ### 2026-09-01 — recheck: Slice E
 - MAJOR · README.md:25-27 · (travel-well list warranted hard-wired skills as self-contained) · fixed — origin/main's README drops inspect/fb/precon from the warranty and states their hard-wired paths truthfully (each claim verified against the plugin files); AC-E2 literals intact; the eight retained names re-swept clean (digest's and ship's hits are guards/exclusions, not dependencies)
 - MAJOR · feat/slice-e-close c0fcfc0 (local-only) vs origin/main build doc · (E's completion + authorization record unpushed; main misstated E) · fixed — PR #29 merged (d1539b6): origin/main carries E's ledger block with the R3 authorization line verbatim and a truthful Status line; local main == origin/main. Residual, unchanged and on the record: no spec line schedules Slice F's own final closing merge (AC-F4's sync) — F's builder must get Tony's word for it, as E's did
+
+### 2026-09-01 — review: Slice F
+- MAJOR · ~/Documents/claude-relay/to-laptop/ (absent file) · the laptop's /fb repair (git pull --ff-only + /fb re-run) and report-back exist only as a chat remark — the relay protocol forbids chat-only instructions and nothing polls · /fb stays silently broken on the laptop while the record says the migration closed; flip itself was authorized with the failure disclosed (per user) · Slice F review (converged)
+- MAJOR · archive/2026-09-01-skills-marketplace-cutover.md (Step 4) · the hand-off omitted Slice C R4's third working check (one of the 10 cross-reference skills) · laptop verification ran listing + /huh only, thinner than the spec's incorporated check set · Slice F review
+- MAJOR · feat/slice-f-flip (local-only branch) · AC-F4 unmet at review — closing records incl. the flip's AUTHORIZED line are on no origin ref while the repo they authorize is public · losing the Studio loses the only proof the flip followed the CONFIRMED line · Slice F review
+- MAJOR · CLAUDE.md (public main), Source of truth section · the thrice-recorded dead-topology MINOR is now a published contradiction beside the 19-entry README, in the file fresh sessions obey · a public clone's Claude session reasons from a topology dead since Slice C · Slice F review (severity elevated by the flip; no slice owns it — routed to Tony)
+- MINOR · docs/evidence/skills-migration/authorizations.md:2 · CONFIRMED line paraphrases inside quotation marks, embedding the Studio's corrected diagnosis as the laptop's words; archived report preserves the verbatim source · Slice F review (converged)
+- MINOR · archive/2026-09-01-skills-marketplace-cutover.md (Step 5) · the /fb check carried no explicit failure=stop clause — the one check without a stop is the one that failed (archived artifact; corrective file must carry the stop language) · Slice F review
+- MINOR · docs/evidence/skills-migration/authorizations.md · no durable slot records the /fb flag's eventual resolution · Slice F review
+- MINOR · git branches · stale local branches (feat/slice-e-recheck, merged slice branches) worth pruning at close · Slice F review
