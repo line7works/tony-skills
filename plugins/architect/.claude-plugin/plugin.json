@@ -1,0 +1,10 @@
+{
+  "name": "architect",
+  "description": "/architect is the drawings step of the build loop: one interview after /precon that settles the walkthrough target (a named first user, a date, what they must do), forces 2-3 genuinely distinct candidate structures into the open, grills them with Occam's razor, and settles the one-way doors for the full vision while construction stays MVP-sized. Produces one living architecture doc that /sunrise provisions from and /blueprint slices from, plus a private visual artifact and an optional blind outside-model review. Doc only, never provisions. Strictly user-invoked.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills"
+}

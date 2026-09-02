@@ -76,6 +76,16 @@
       ]
     },
     {
+      "name": "architect",
+      "source": "./plugins/architect",
+      "description": "/architect is the drawings step between /precon and /blueprint \u2014 one interview that names the first real user's walkthrough, forces 2\u20133 genuinely distinct candidate structures, cuts every component that no walkthrough requirement needs, and settles the one-way doors for the full vision. Writes one living architecture doc plus a private visual; never provisions. Strictly user-invoked.",
+      "tags": [
+        "build-loop",
+        "architecture",
+        "planning"
+      ]
+    },
+    {
       "name": "blueprint",
       "source": "./plugins/blueprint",
       "description": "Draft a build document in dependency-ordered, verifiable slices from a feature discussion \u2014 produces the doc that /build executes slice by slice and /signoff grades against. Use when the user says \"draft a build doc\", \"blueprint this\", \"slice this up\", \"write the build plan\", or finishes discussing a feature and wants it scoped into slices.",

@@ -1,8 +1,8 @@
 # tony-skills
 
 A Claude Code plugin marketplace: the skills Tony Coon builds and runs on his
-own machines, published so anyone can install them. Nineteen plugins covering
-twenty skills — a full build loop (blueprint → build → signoff → recheck, with
+own machines, published so anyone can install them. Twenty plugins covering
+twenty-one skills — a full build loop (blueprint → build → signoff → recheck, with
 /ship to run a whole lap), project lifecycle bootstrapping, image generation,
 adversarial reviews, and a handful of workshop utilities — plus a `tools/`
 shelf of non-plugin tools and specs.
@@ -37,6 +37,7 @@ features in verified slices. Each station is a skill, composed by name:
 
 - `precon` — harvest a free-flowing idea discussion into a fixed-format scope doc
 - `jpb` — Jon's Product Box: 3–6 independent frontier-model "box teams" vet an idea before it has a name
+- `architect` — the drawings step: name the first user's walkthrough, force distinct candidate structures, settle the one-way doors, write the architecture doc /sunrise and /blueprint consume
 - `blueprint` — draft a build doc in dependency-ordered, verifiable slices
 - `inspect` — adversarial review of a build doc *before* anything is built
 - `build` — execute one slice inside strict boundaries; honest stops over fake completeness
@@ -89,7 +90,7 @@ Code:
 ## Layout
 
 ```
-.claude-plugin/marketplace.json   the catalog — 19 entries
+.claude-plugin/marketplace.json   the catalog — 20 entries
 plugins/<name>/                   one plugin per skill (sun bundles sunrise+sunset)
   .claude-plugin/plugin.json
   skills/<skill>/SKILL.md         (+ assets/, nested or at plugin root)

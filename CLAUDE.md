@@ -11,7 +11,7 @@ Two parts, split by how a thing is consumed rather than what it is:
 
 When something does not obviously fit either, it goes in `tools/` — do not conclude it belongs outside the repo.
 
-Nineteen plugin folders covering twenty skills, all catalogued in
+Twenty plugin folders covering twenty-one skills, all catalogued in
 `.claude-plugin/marketplace.json` and installable with `/plugin` (one plugin
 per skill; `sun` bundles sunrise + sunset). The full roster and descriptions
 live in `README.md` and the marketplace catalog; the six below predate the
