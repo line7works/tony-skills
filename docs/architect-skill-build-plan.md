@@ -91,7 +91,7 @@ Status: signed off
 
 ## Deviations
 ### 2026-09-02 — build: Slice B
-- B-R2 re-run-through done only for the exit-ramp/silence change (headless `--plugin-dir` session, first question only, recorded in the evidence note); the template lines and report-timing rule were not re-run because they are observable only on a full run — their first exercise is the next real /architect run · builder call
+- B-R2 re-run-through done only for the exit-ramp/silence change (headless `--plugin-dir` session, first question only, recorded in the evidence note); the template lines (:60, :82), the report-timing rule (:129), the codex backgrounding/unescape guard (:108), and the cwd-home note (:107) were not re-run because they are observable only on a full run with a blind review — their first exercise is the next real /architect run · builder call
 ### 2026-09-02 — build: Slice A
 - none
 

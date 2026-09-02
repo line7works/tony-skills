@@ -109,6 +109,7 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
 - 2026-08-30 · pour guys build · recheck · "SKILL NOTE: MINORs joined this checklist because your "fix the doc, then /recheck" named the set I had just listed; recorded, never gating. No card exists for a plan document, so the block is recorded and no Status: moves."
 - 2026-08-30 · atlas build · recheck · "SKILL NOTE: the Result line counts fix-introduced defects as open, but MINORs never gate; I reported both facts rather than let a MINOR read as a failed recheck."
 - 2026-09-01 · fb plugin cutover · build · "SKILL NOTE (build): Slice C cutover working-check test note — verifying the installed fb plugin routes loop-skill notes to the new pointer path."
+- 2026-09-01 · pour guys build · vertical · "SKILL NOTE: the composed mandate (146 KB, build doc included) was placed byte-identical at the export root as VERTICAL-MANDATE.md, with the mandate's rules inline in base-instructions/prompt and a pointer to that file for the spec and boundary, rather than pasting the full 146 KB into the tool parameters. Reason: a verbatim paste of that size through generated parameters risks transcription drift; the file cannot. Gemini also wrote its report to its own brain directory outside the workspace; the export was verified unmodified."
 
 ## Dispositions
 
