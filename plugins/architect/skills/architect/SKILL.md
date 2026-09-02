@@ -32,7 +32,7 @@ A single static page is not a system. When the answer is that small — no serve
 
 ## Step 3 — The interview
 
-Three steps, in this order, run as one negotiation. Questions are plain-text, numbered, each with a ➡️ recommendation, so Tony can answer by number. Facts the property can answer are looked up, never asked.
+Three steps, in this order, run as one negotiation. Questions are plain-text, numbered, each with a ➡️ recommendation, so Tony can answer by number. An item his answer does not mention is accepted at its recommendation, and the session says so in the next message. Facts the property can answer are looked up, never asked.
 
 **Step 3.1 — the walkthrough target (delivery pass).** Three things, all concrete:
 
@@ -57,6 +57,7 @@ The format is load-bearing — /sunrise will provision exactly what the poured-c
 
 Scope doc: <path> | Docless: <the reason the gate discussion landed on>
 Artifact: <private artifact URL, recorded after the first publish>
+Blind review: <review file path (model, date)> | none yet
 
 ## Walkthrough target
 Who: <named real person>  ·  When: <date>  ·  Must be able to: <short list>
@@ -78,6 +79,7 @@ Exit ramp: <the answer to "is there a system here at all?" — "system" and the 
 Step 3.1 (walkthrough target): <what was settled | n/a — exit ramp>
 Step 3.2 (candidates): <the 2–3 candidates in one line each; chosen: <which>; rejected: <candidate> — <one-line why> | n/a — exit ramp>
 Step 3.3 (one-way doors): <what was settled | n/a — exit ramp>
+Rulings: <blind review: agreed on <spine>; N disagreements, each numbered with Tony's ruling | declined | not offered — docless | failed — <reason>>
 Changed this run: <what changed vs the prior run, or "first run">
 ```
 
@@ -102,8 +104,8 @@ On his word in this run, and only then:
 - The external model receives the precon scope doc ONLY. Never Claude's architecture doc, never chat context, never this session's reasoning. It gets the brief fresh, exactly as Tony ruled: "the model reviewing it doesn't get the Claude input."
 - The instruction it receives is fixed, verbatim: **"You are the architect. Read the attached precon scope doc and return your own full architecture-and-delivery take for it: the walkthrough target, a v0 drawing (component list, plain-prose data flow, one simple diagram), the poured-concrete list of one-way decisions, and the deferred list. You have no other input; do not ask for any."**
 - Transport is the codex MCP (`mcp__codex__codex`) with the model pinned by reference to jpb's preflight in `~/Developer/tony-skills/plugins/jpb/skills/jpb/SKILL.md` (`gpt-5.6-sol` at time of writing; if that pin moves, the reference wins). A different model on Tony's pick for this run substitutes for the pinned one — it never adds a second reviewer. There is no panel.
-- The transport guards are jpb Judge G's, plus the payload rule above: `model: "gpt-5.6-sol"` (or the substitute Tony named for this run), `base-instructions` = the fixed instruction, `prompt` = the scope doc text, `sandbox: "read-only"`, `config: {"web_search": "disabled"}`, and `cwd` = an absolute, empty directory created fresh for this run.
-- jpb's guard carries over: an empty, null, or errored response — the MCP down, the model not found, a fully-denied run that still reports success — is a FAILED review. Nothing is saved, no comparison runs, and the report says `Review: failed — <reason>`; a retry happens only on Tony's word, and a failed review never masquerades as a declined one.
+- The transport guards are jpb Judge G's, plus the payload rule above: `model: "gpt-5.6-sol"` (or the substitute Tony named for this run), `base-instructions` = the fixed instruction, `prompt` = the scope doc text, `sandbox: "read-only"`, `config: {"web_search": "disabled"}`, and `cwd` = an absolute, empty directory created fresh for this run (the session scratchpad is its natural home).
+- jpb's guard carries over: an empty, null, or errored response — the MCP down, the model not found, a fully-denied run that still reports success — is a FAILED review. Nothing is saved, no comparison runs, and the report says `Review: failed — <reason>`; a retry happens only on Tony's word, and a failed review never masquerades as a declined one. A call the harness backgrounds past its foreground limit is not a failure: wait for its task notification and judge the response that arrives. A response the harness delivers with HTML entities (`&amp;`, `&lt;`, `&gt;`) is unescaped before the verbatim save, and that is the only transformation the file ever gets.
 - A non-empty take is saved verbatim, before any triage, to `~/Documents/architect-reviews/<slug>-review-<YYYY-MM-DD>.md`. Creating `~/Documents/architect-reviews/` on the first blind review, and creating the run's empty cwd, are the only two directory creations this skill ever makes.
 
 Then the comparison: walk Tony through every disagreement between the two takes — at minimum components built vs cut, structure, one-way-door calls, and deferrals — one at a time, and he rules each in discussion. The architecture doc changes only where he rules. Nothing merges silently, and the review file itself is never edited.
@@ -124,7 +126,7 @@ Then the comparison: walk Tony through every disagreement between the two takes 
 
 ## Output
 
-Report in chat when the run ends:
+Report in chat once, when the run ends — after the blind-review comparison when one ran, so the counts include Tony's rulings:
 
 ```
 ARCHITECT: <project>

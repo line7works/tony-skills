@@ -74,9 +74,13 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` (fixes); `docs/evidence/architect/slice-a-requirement-map.md` (refreshed); one architecture doc + its HTML; one artifact; possibly one review file (and `~/Documents/architect-reviews/` and one scratch cwd if created); `docs/evidence/architect/smoke-run-<date>.md`.
 Not in this slice: acting on the tested idea itself; building anything the architecture doc describes; re-run mechanics beyond what one sitting exercises (the run log must still be written for run 1); marketplace install or merge.
 Depends on: Slice A
-Status: not started
+Status: built
 
 ## Build assumptions
+### 2026-09-02 — build: Slice B
+- The live run happened in a separate terminal session ("test") started with `claude --plugin-dir plugins/architect`, since this session was not started that way; its ARCHITECT block, tool list, and quoted exchanges were supplied by that session on request after the run, verbatim, and are the evidence note's source alongside the files · builder call
+- The subject (Pour Guys bar-builder) was already built through Slice H1, so run 1 was as-built drawings rather than a pre-construction drawing; still a scope-doc run on the repo-owned home, which is what B-R1 asks for · per user ("find me one, from a repo")
+- Outputs were committed in Pour-Guys (slice-f1, 6a61a54) on Tony's word to that session; the commit is outside this repo's footprint and is recorded, not graded · per user
 ### 2026-09-02 — build: Slice A
 - A1 verified · `claude --plugin-dir plugins/architect -p` from the repo root listed `architect:architect` with the branch file's description (AC2) · builder call
 - R13 slot mapping: the fixed reviewer instruction goes in `base-instructions`, the scope doc text in `prompt` — the plan names both payloads but not their codex slots; mirrors Judge G's mandate/brief split · builder call
@@ -86,10 +90,16 @@ Status: not started
 - A2 · a docless run's architecture doc goes to `~/Documents/` unless the gate discussion names a repo · the scope doc rules only the with-scope-doc case · 2026-09-02
 
 ## Deviations
+### 2026-09-02 — build: Slice B
+- none
 ### 2026-09-02 — build: Slice A
 - none
 
 ## Discovered
+### 2026-09-02 — build: Slice B
+- A first run on an already-built target has no guidance in the skill ("as-built drawings"); the session improvised a timing note and a SKILL NOTE · logged, not built
+- The session verified each reviewer claim against the repo before presenting disagreements, so Tony ruled only real differences; the scope doc says every disagreement is presented · logged, not built — Tony's call whether to write it in
+- The codex call exceeded the harness's 120 s foreground limit and was backgrounded; the task notification HTML-escapes the response · both now covered in SKILL.md's guard text
 ### 2026-09-02 — build: Slice A
 - The 19 older `plugin.json` manifests still carry the pre-transfer `tiny-tunnel-dot` URL; only architect's points at `line7works` (Constraints acknowledge this; not in this slice's footprint) · logged, not built
 - `timeout` is not on this Mac's PATH (zsh: command not found); AC2 ran without it · logged
