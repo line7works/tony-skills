@@ -579,3 +579,7 @@ MAJOR · docs/architect-skill-build-plan.md:93 · (B-R2 re-run-through not done;
 MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:28 · ("nothing else changed" / "each marked" false against the doc) · fixed — all five changed places described and verified
 MINOR · docs/architect-skill-build-plan.md:94 · broke: Deviation inventory incomplete — names three un-rerun fixes, omits the codex guard (:108) and cwd (:107) edits — a reader concludes everything else was exercised · Slice B fix
 MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · broke: map not regenerated after the last fix (9d13e36) — line refs still resolve but the R3/R4/R6 prose omits the new asked-alone / in-his-own-words mechanisms; B-R2's letter · Slice B fix
+
+### 2026-09-02 — recheck: Slice B
+MINOR · docs/architect-skill-build-plan.md:94 · (Deviation inventory incomplete) · fixed — all five un-rerun items named with builder-call label
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · (map not regenerated after the last fix) · fixed — header names 9d13e36; R3/R4/R6 prose current; R13 duplicate gone; every R1–R15 cite lands
