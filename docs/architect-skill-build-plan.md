@@ -17,6 +17,7 @@ Plan: inspected 2026-08-30 by claude-fable-5 · 0 BLOCKER · 4 MAJOR · 4 MINOR 
 Plan: inspected 2026-08-30 by gpt-5.6-sol · 0 BLOCKER · 2 MAJOR · 0 MINOR
 Plan: inspected 2026-09-01 by claude-fable-5-1 · 1 BLOCKER · 7 MAJOR · 11 MINOR
 Plan: inspected 2026-09-01 by gpt-5.6-sol · 2 BLOCKER · 15 MAJOR · 8 MINOR
+Plan: inspected 2026-09-01 by gemini-3.1-pro-high · 2 BLOCKER · 7 MAJOR · 14 MINOR
 
 ## Slice A — the SKILL.md
 Goal: write the complete /architect skill file implementing every decided mechanism from the scope doc, in house style.
@@ -270,4 +271,70 @@ Status: not started
 - MINOR · architect-skill-build-plan.md:15 · (a `Plan: inspected` stamp sits inside the Out of scope parse range) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:35 · (R13's transport guards exceed the cited precon convention) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:43 · (AC5 enforces the invented guard set) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:3 · (Intent embellishes Tony's profile beyond the record) · not fixed — doc unchanged since the prior run
+
+### 2026-09-01 — inspect: plan
+- BLOCKER · architect-skill-build-plan.md:53 · B-R2 reaches the running copy via `/plugin update architect@tony-skills` — the marketplace clone is on `main` (24 commits behind origin, HEAD 83923f1) and installs pin a `main` sha · every "re-run of the affected step" tests the stale installed copy; same mechanic sinks Slice A AC1's install half (:38); the plan names no local-dev path such as `claude --plugin-dir plugins/architect` (converged: third lane to confirm) · claude-fable-5-1
+- BLOCKER · architect-skill-build-plan.md:25 · R4 softens the record's "~three answers + sorted scope" guardrail (scope :32) to "depth scales with the system's size" · builder writes an unbounded interview for a large system against the recorded limit (verifier's note: PLAUSIBLE at this severity — the scope line is `assumed`; Claude and GPT lanes rated it MINOR/MAJOR) · gemini-3.1-pro-high
+- MAJOR · architect-skill-build-plan.md:31 · R10/R15/B AC8 forbid skill invocations while R12/B AC6 publish a Claude Artifact, whose contract in this environment requires loading the `artifact-design` skill first (a session built-in, not on disk) · AC6 and AC8 cannot both pass; the SKILL.md needs a carve-out or AC8 rewording · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:3 · decision provenance and Out of scope items 1–2 (:8, :9) cite `~/Documents/handoffs/2026-08-21-architecture-skill-sunrise-sunset-findings.md`, which does not exist on this machine; scope :62 and blueprint-review-experiment-2026-08-21.md:5 cite the same dead path · the paper trail the plan leans on does not exist · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:23 · R2 "found beside the project" and R8 (:29) `~/Documents/` ignore precon SKILL.md:59 (`<repo>/docs/` by default, `~/Documents/` only when no repo owns the idea; repo-owned scope docs are the live norm — 3 here, 9 more under `~/Developer/*/docs/`) and scope :26's "beside the precon scope doc" · for a repo-owned scope doc the architecture doc lands in the wrong place; the hunt has no defined search path or candidate set · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:34 · R13's read-only sandbox and "neutral empty cwd" exceed precon SKILL.md:80 (the transport scope :36 says to copy); codex `cwd` must exist, so the empty dir is a second mkdir the same sentence forbids · "same as /precon's exit test" and R13 disagree on what the transport is · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:43 · Footprint's "roster line in `README.md` and `CLAUDE.md`": CLAUDE.md:14-18 carries no per-skill roster since the migration (it defers to README and the catalog); what must change is the count sentence at CLAUDE.md:14 and README.md:4-5 ("Nineteen … twenty"), neither listed · builder adds a roster line against CLAUDE.md's stated convention while both counts go stale (Gemini's BLOCKER at :43 — "edit not in the record" — refuted: README/CLAUDE.md registration is repo convention; its residue merges here) · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:39 · Slice A AC2 ("read-through mapping") and AC4 (:41, "adversarial read") rely on reader judgment rather than a measurable end state · /signoff cannot objectively pass or fail the slice · gemini-3.1-pro-high
+- MAJOR · architect-skill-build-plan.md:56 · Slice B AC1 ("or the docless discussion runs") and AC7 (:62, "declining counts as a pass") carry or-branches a single run cannot both exercise · the slice is marked verified with branches never proven · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:15 · `Plan: inspected` stamps sit inside the Out of scope block · parsers ingest stamps as deferred items (inspect's own placement rule; carried) · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:23 · R2's list-and-ask fallback for multiple scope docs is imported from the code book, not established by the record · builder implements a disambiguation flow Tony never scoped · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:29 · R8's docless slug rule is invented · an extra mechanical requirement on the gate discussion · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:34 · R13's sandbox and cwd flags are not in the cited precon convention (verifier's correction: `web_search: disabled` IS at precon SKILL.md:80; the other two are jpb's) · builder hardcodes parameters the record never provided · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:35 · R14's counts and run number have no scope source · metric tracking built for an output block never asked for · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:33 · R12's publish-fresh-when-no-URL mechanism is invented · state-recovery logic never specified · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:27 · R6 routes the pick and rejected whys to the run log without a scope ruling · unapproved structure locked in · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:34 · R13's disagreement taxonomy is not in the record · hardcoded agenda may miss other disagreements · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:3 · Intent embellishes Tony's profile beyond the record · faux persona steers tone · gemini-3.1-pro-high
+- MINOR · architect-skill-build-plan.md:5 · "that machine runs `/plugin update architect@tony-skills`": `installed_plugins.json` has no such plugin and the marketplace clone is 24 commits behind, so first delivery is `/plugin marketplace update tony-skills` then `/plugin install` · a session following line 5 verbatim on a fresh machine gets nothing · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:5 · `plugin.json` "shaped like /inspect's" bakes in the pre-transfer `tiny-tunnel-dot` URL (all 19 manifests; remote is `line7works`) · stale URL on a public repo · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:54 · evidence note at `docs/evidence/architect-smoke-run.md` breaks the one-folder-per-plan layout (`docs/evidence/<plan>/<slice>-<name>`, skills-migration-build-plan.md:11) · not fatal · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:33 · R12 "self-contained HTML … same URL across re-runs": the Artifact contract publishes a body fragment (no doctype/html/head/body), needs a `favicon` on first publish, and refuses a republish by `url` from another conversation unless the artifact is read first · a re-run that only passes `url` is refused; the SKILL.md must state read-then-publish · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:32 · R11 claims "property line as /precon's" but precon SKILL.md:24/:95 confine lookups to repo + project docs and park unknowns as `needs research` ledger lines; R11 adds Claude's own knowledge and marked lines — scope :55 rules it that way, so the defect is the "as /precon's" wording · builder copies precon's mechanism instead of the ruled one · claude-fable-5-1
+- BLOCKER · architect-skill-build-plan.md:53 · (B-R2 reinstalls via `/plugin update`; marketplace is GitHub-sourced from main) · not fixed — doc unchanged since the prior run
+- BLOCKER · architect-skill-build-plan.md:24 · (docless runs vs mandatory blind-review offer vs scope-doc-only payload) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:38 · (AC1's install-and-list clause unrunnable pre-merge) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:3 · (the 2026-08-21 findings doc cited as provenance does not exist) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:31 · (R10 "invokes no other skill" unsourced and collides with the Artifact contract) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:5 · (Artifact publish every run is an external send the "only sanctioned send" ruling forbids) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:23 · (R2 "found beside the project" undefined; discovery contract invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:23 · (R2 docless input = current discussion invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:29 · (R8 "pre-repo" ambiguous; docless slug invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:27 · (R6 run-log location invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:25 · (R4 guardrail softened) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:33 · (R12 missing-URL mechanics invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:34 · (R13 sandbox + cwd guards unsourced) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:35 · (R14 fields invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:39 · (Slice A AC2 sole check on eleven requirements, leaves no artifact) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:62 · (AC7 lets Slice B pass without exercising the review) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:57 · (AC2 both branches, one run) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:63 · (AC8 evidence note cannot prove negatives) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:54 · (evidence path undated and off-convention; re-run overwrites run 1) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:151 · (the 2026-09-01 adjudication block is in a form no station owns) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (assumed ledger lines rendered as decided; Build assumptions empty) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:24 · (R3's classification test unsourced) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · (R13 never says what mandate text accompanies the scope doc) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:43 · (roster line has no criterion; "Nineteen/twenty" count goes stale) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (plugin.json "shaped like /inspect's" propagates the stale repository URL) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:51 · (prose sentence under the `Requirements:` heading) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:27 · (R6 vs R7 category vocabulary mismatch) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:33 · (R12 HTML source has no filename) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · ("substantive disagreement" is judgment) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:56 · (Slice B ACs trust the builder's note; doc traces unnamed) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:38 · (AC1 checks skip plugin.json; grep too loose) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · (neutral cwd needs a second mkdir) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:33 · (artifact-design load never instructed) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:24 · (precon's two locations unnamed) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · (R13 disagreement taxonomy is elaboration beyond scope :34) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:41 · (AC4 universal negative with no stopping rule) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (no runnable check; rule-6 smell not recorded as flagged and accepted) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:56 · (AC numbering restarts per slice while requirements got B-R prefixes) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:15 · (a `Plan: inspected` stamp sits inside the Out of scope parse range) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:42 · (AC5 enforces the invented guard set) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:3 · (Intent embellishes Tony's profile beyond the record) · not fixed — doc unchanged since the prior run
