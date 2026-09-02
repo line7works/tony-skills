@@ -74,7 +74,7 @@ Acceptance criteria:
 Footprint: `plugins/architect/skills/architect/SKILL.md` (fixes); `docs/evidence/architect/slice-a-requirement-map.md` (refreshed); one architecture doc + its HTML; one artifact; possibly one review file (and `~/Documents/architect-reviews/` and one scratch cwd if created); `docs/evidence/architect/smoke-run-<date>.md`.
 Not in this slice: acting on the tested idea itself; building anything the architecture doc describes; re-run mechanics beyond what one sitting exercises (the run log must still be written for run 1); marketplace install or merge.
 Depends on: Slice A
-Status: built
+Status: signed off with conditions
 
 ## Build assumptions
 ### 2026-09-02 — build: Slice B
@@ -547,3 +547,27 @@ MAJOR · plugins/architect/skills/architect/SKILL.md:104 · (the call config omi
 MAJOR · plugins/architect/skills/architect/SKILL.md:76 · (run-log template labels Step 1/2/3 vs headings 3.1/3.2/3.3; no exit-ramp form) · fixed — now :77-80
 MAJOR · plugins/architect/skills/architect/SKILL.md:39 · ("the first human who is not Tony" narrows R4) · fixed
 MAJOR · plugins/architect/.claude-plugin/plugin.json:3 · (present-tense downstream pickup claim in plugin.json, marketplace entry, README.md:40) · fixed — all three hedge "hand-pointed until the reworks land"
+
+### 2026-09-02 — review: Slice B
+MAJOR · plugins/architect/skills/architect/SKILL.md:35 · "an item his answer does not mention is accepted at its recommendation" applies to the exit ramp and the candidate pick · Tony answers only the date; the session records the chosen candidate and a "system" exit-ramp on its own recommendation — the nod the skill forbids · Slice B review
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:18 · B-AC2 graded pass though the exit ramp was batched with step 3.1 and never answered by Tony · a no-system idea would have had 3.1 asked before the ramp resolved · Slice B review
+MAJOR · docs/architect-skill-build-plan.md:93 · B-R2's re-run-through of a materially changed step not done; Deviations says none · the silence rule, report timing, and template lines ship untested in a --plugin-dir session · Slice B review
+MAJOR · docs/evidence/architect/smoke-run-2026-09-02.md:28 · "nothing else changed" and "each marked with its ruling number" are false against the architecture doc (walkthrough :17 and storage :57 also changed; deferred :69–70 unmarked) · the note misreports the run · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:58 · template header order (Scope/Artifact/Blind review) and run-log label (Rulings:) differ from the only existing doc (Scope/Blind review/Artifact; "Blind review:" plus seven lines) · a re-run must rewrite run-1 lines or carry two vocabularies · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:60 · "Blind review: ... | none yet" has no declined / failed / docless form · a declined run reads as pending forever · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:108 · backgrounded-call rule does not say the empty/errored guard applies to the response that arrives; no wait bound · a completed-but-empty notification can pass as a review · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:108 · unescape covers &amp; &lt; &gt; only and cannot tell whether the harness escaped at all · a take containing literal entities is corrupted; &quot; is half-handled · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:129 · report waits on Tony's answer to the offer; if he never answers no block prints · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:88 · re-run instruction omits the new Rulings line · a run-2 block lacks the line the template requires · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:60 · two more `|` either-or template lines with no drop rule (Slice A MINOR :58 now has three instances) · Slice B review
+MINOR · plugins/architect/skills/architect/SKILL.md:92 · visual renders before Step 6 rulings and the report now carries rulings-inclusive counts beside a pre-rulings artifact; no re-render instruction · Slice B review
+MINOR · docs/evidence/architect/slice-a-requirement-map.md:19 · R13 row carries a duplicated phrase · hand-patched regeneration · Slice B review
+MINOR · docs/architect-skill-build-plan.md:80 · Slice B ledger blocks inserted above Slice A's under each heading; house order is chronological · Slice B review
+MINOR · docs/evidence/architect/smoke-run-2026-09-02.md:53 · the five fixes are described without SKILL.md line numbers · a recheck has nothing to open to · Slice B review
+MINOR · docs/evidence/architect/smoke-run-2026-09-02.md:20 · B-AC3 asks the note to quote the transitions; it paraphrases · Slice B review
+MINOR · docs/evidence/architect/smoke-run-2026-09-02.md:3 · run quotes are second-hand (relayed by the running session after the run); spec accepts self-report at B-AC8 only · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.md:7 · free-text timing note inside the "exact" format · a downstream parser meets an unlisted section · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.md:85 · "agreed on the spine" under-lists what the reviewer and the repo already settle (code-owned layout, stable venue ids, repeatable migrations, API boundary) and names two items the doc never records · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.html:123 · projection says "no documented path found yet" where the doc poses an open question · Slice B review
+MINOR · ~/Developer/Pour-Guys/docs/bar-builder-architecture.html:2 · Google Fonts link, three typefaces, palette, dark-mode block — past "keep the first version plain" · Slice B review
+MINOR · ~/Developer/Pour-Guys · commit 6a61a54 rides the pre-existing slice-f1 branch with ten unrelated commits; the drawings reach main only when that branch merges · Slice B review
