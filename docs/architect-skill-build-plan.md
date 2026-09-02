@@ -18,6 +18,7 @@ Plan: inspected 2026-08-30 by gpt-5.6-sol · 0 BLOCKER · 2 MAJOR · 0 MINOR
 Plan: inspected 2026-09-01 by claude-fable-5-1 · 1 BLOCKER · 7 MAJOR · 11 MINOR
 Plan: inspected 2026-09-01 by gpt-5.6-sol · 2 BLOCKER · 15 MAJOR · 8 MINOR
 Plan: inspected 2026-09-01 by gemini-3.1-pro-high · 2 BLOCKER · 7 MAJOR · 14 MINOR
+Plan: inspected 2026-09-01 by deepseek/deepseek-v4-pro · 1 BLOCKER · 13 MAJOR · 11 MINOR · 1 QUESTION
 
 ## Slice A — the SKILL.md
 Goal: write the complete /architect skill file implementing every decided mechanism from the scope doc, in house style.
@@ -333,6 +334,75 @@ Status: not started
 - MINOR · architect-skill-build-plan.md:24 · (precon's two locations unnamed) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:34 · (R13 disagreement taxonomy is elaboration beyond scope :34) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:41 · (AC4 universal negative with no stopping rule) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (no runnable check; rule-6 smell not recorded as flagged and accepted) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:56 · (AC numbering restarts per slice while requirements got B-R prefixes) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:15 · (a `Plan: inspected` stamp sits inside the Out of scope parse range) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:42 · (AC5 enforces the invented guard set) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:3 · (Intent embellishes Tony's profile beyond the record) · not fixed — doc unchanged since the prior run
+
+### 2026-09-01 — inspect: plan
+- BLOCKER · architect-skill-build-plan.md:34 · R13's transport guards are not established by the record — scope :36 says only "same as /precon's exit test — GPT via the codex MCP" · builder implements guard mechanics the scope never attached; AC5 grades against them (verifier's correction: `web_search: disabled` IS at precon SKILL.md:80, so only read-only sandbox and neutral cwd are unsourced; PLAUSIBLE at this severity — the guards are stricter than the record, not looser, and the other three lanes rated it MINOR/MAJOR) · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:57 · Slice B AC2 requires both exit-ramp branches verified but one run reaches one · /signoff cannot check the untaken branch and fails an impossible criterion · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:41 · AC4 proves a universal negative with no bounded check · two graders reading the same file return different verdicts; signoff becomes reader stamina · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:39 · AC2 "point to the line(s) implementing each R" needs judgment at boundaries (partial, distributed, implied-by-structure) · grading becomes taste; signoff stalls · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:27 · R6's enumerated five categories read as a closed list while R7 (:28) and scope :39 say floor-not-cap; B AC4 grades "per R6" (inspector cited :25; real site :27) · a candidate differing in a sixth one-way category is failed by AC4 against the record's intent · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:5 · "No runnable test suite applies" with no record that the rule-6 smell was flagged and accepted · builder and owner argue whether manual-only was an accepted exception or an oversight · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:35 · R14's counts and run number are elaboration; the record (scope :21) enumerates output parts, not report fields · builder omits a count the skill never defined, or includes one no two inspectors agree on · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:33 · R12's republish-if-missing procedure is not in the record (scope :52 says only same URL kept) · a re-run with the URL line lost publishes fresh and /signoff disputes the new URL (inspector confidence: low) · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:42 · AC5 enforces the guard set from :34 · a passage written per the record without sandbox/cwd language fails AC5 (coupled to the :34 finding; same correction applies) · deepseek/deepseek-v4-pro
+- MAJOR · architect-skill-build-plan.md:5 · "that machine runs `/plugin update architect@tony-skills`" — `installed_plugins.json` has no `architect`, installs key to the marketplace clone's commit (83923f1, PR #27) while `origin/main` is at fb594ef (PR #32) · AC1's install (:38) fails "plugin not found" until `/plugin marketplace update tony-skills` runs, and B-R2's re-install (:53) silently reuses the stale cache · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:3 · the findings doc cited at :3, :8, :9 does not exist on this machine; only other citation is blueprint-review-experiment-2026-08-21.md:5, itself a pointer · the "why" behind three Out of scope lines is unrecoverable · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:33 · R12 publishes an Artifact while R10/AC4/B AC8 (:31, :41, :63) demand zero skill invocations; the Artifact contract mandates loading the `artifact-design` built-in first · a literal build of R10 breaches the tool contract or fails AC8; carve out harness-mandated built-ins · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:29 · R8's `~/Documents/` home vs scope :26's "beside the precon scope doc": precon puts repo-owned scope docs in `<repo>/docs/` and 12 of 19 scope docs on disk are repo-owned, so B-R1's real subject is most likely repo-owned · R8 gives no rule for that case, R2 (:23) names neither precon home, and B AC5 (:60) grades `~/Documents/` regardless · claude-fable-5-1
+- MAJOR · architect-skill-build-plan.md:43 · Footprint's "roster line in `README.md` and `CLAUDE.md`": CLAUDE.md:14-18 has no roster slot (defers to README and the catalog); the "Nineteen … twenty" counts in both files are what go stale · builder adds a line with no home and leaves both counts wrong · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:34 · R13's disagreement taxonomy is not in the record (scope :34) · a platform disagreement fits no named bucket and is skipped · deepseek/deepseek-v4-pro
+- MINOR · architect-skill-build-plan.md:3 · Intent adds "cannot yet evaluate architecture proposals" beyond scope :7 · builder infers capability boundaries the record never set · deepseek/deepseek-v4-pro
+- MINOR · architect-skill-build-plan.md:15 · three `Plan: inspected` stamps sit inside the Out of scope parse range · a descope harvest ingests stamps as deferred items (inspect's own placement rule; carried) · deepseek/deepseek-v4-pro
+- MINOR · architect-skill-build-plan.md:51 · a prose sentence follows the exact `Requirements:` heading before the first bullet · a strict parser rejects the block or reads the sentence as a requirement · deepseek/deepseek-v4-pro
+- MINOR · architect-skill-build-plan.md:38 · AC numbering restarts per slice (AC1–AC5, AC1–AC9) · /recheck's flat checklist carries two "AC1"s · deepseek/deepseek-v4-pro
+- MINOR · architect-skill-build-plan.md:5 · `plugin.json` "shaped like /inspect's" ships the pre-transfer `tiny-tunnel-dot` URL (all 19 manifests) into a public repo's 20th manifest · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:34 · the four-guard set is jpb Judge G's (jpb SKILL.md:191-194), not precon's (:80, `web_search` only); the plan cites neither · a builder matching precon's voice copies two guards and fails AC5; point at jpb:191-194 · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:34 · "neutral empty cwd" is a second mkdir the same sentence forbids, and a relative `cwd` resolves against the codex server process's cwd (the ChatGPT app bundle) — must be absolute · a literal builder refuses the mkdir or lands the sandbox under the app bundle · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:33 · a republish by `url` from a new conversation is refused unless the artifact is read first; R12 never states read-before-republish · a re-run that jumps to publish is rejected · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:54 · `docs/evidence/architect-smoke-run.md` matches neither the per-plan subfolder convention (skills-migration-build-plan.md:11) nor the dated flat smoke notes in `docs/` · /signoff hunting by convention may miss it · claude-fable-5-1
+- MINOR · architect-skill-build-plan.md:5 · "moved … in the 2026-09-01 skills migration" — `~/Documents/skill-lab/README-MOVED.md` says moved 2026-08-31 · date off by a day · claude-fable-5-1
+- QUESTION · architect-skill-build-plan.md:29 · where does the architecture doc live when the precon scope doc is repo-owned (scope :26 says both `~/Documents/` and "beside the precon scope doc")? — needs Tony's ruling (inspector's premise that architect's own scope doc is repo-owned is wrong; the question stands for Slice B's subject) · deepseek/deepseek-v4-pro
+- BLOCKER · architect-skill-build-plan.md:53 · (B-R2 reinstalls via `/plugin update`; marketplace is GitHub-sourced from main) · not fixed — doc unchanged since the prior run
+- BLOCKER · architect-skill-build-plan.md:24 · (docless runs vs mandatory blind-review offer vs scope-doc-only payload) · not fixed — doc unchanged since the prior run
+- BLOCKER · architect-skill-build-plan.md:25 · (R4 guardrail softened (Gemini-rated BLOCKER)) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:38 · (AC1's install-and-list clause unrunnable pre-merge) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:3 · (the 2026-08-21 findings doc cited as provenance does not exist) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:31 · (R10 "invokes no other skill" unsourced and collides with the Artifact contract) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:5 · (Artifact publish every run is an external send the "only sanctioned send" ruling forbids) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:23 · (R2 "found beside the project" undefined; discovery contract invented; precon homes unnamed) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:23 · (R2 docless input = current discussion invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:29 · (R8 "pre-repo" ambiguous; docless slug invented; repo-owned case unruled) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:27 · (R6 run-log location invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:33 · (R12 missing-URL mechanics invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:34 · (R13 sandbox + cwd guards unsourced; second mkdir) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:35 · (R14 fields invented) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:39 · (Slice A AC2 sole check on eleven requirements; judgment call) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:41 · (AC4 universal negative (MAJOR-rated by Gemini)) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:62 · (AC7 lets Slice B pass without exercising the review) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:57 · (AC2 both branches, one run) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:63 · (AC8 evidence note cannot prove negatives) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:54 · (evidence path undated and off-convention; re-run overwrites run 1) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:43 · (Footprint roster line has no CLAUDE.md slot; counts go stale) · not fixed — doc unchanged since the prior run
+- MAJOR · architect-skill-build-plan.md:151 · (the 2026-09-01 adjudication block is in a form no station owns) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (assumed ledger lines rendered as decided; Build assumptions empty) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:24 · (R3's classification test unsourced) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · (R13 never says what mandate text accompanies the scope doc) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (plugin.json "shaped like /inspect's" propagates the stale repository URL) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:5 · (marketplace clone stale; plugin never installed; line 5 update command does nothing on a fresh machine) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:51 · (prose sentence under the `Requirements:` heading) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:27 · (R6 vs R7 category vocabulary mismatch) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:33 · (R12 HTML source has no filename) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:33 · (Artifact contract: body fragment, favicon, read-before-republish unstated) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:32 · (R11 "as /precon's" misdescribes the ruled mechanism) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · ("substantive disagreement" is judgment) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:56 · (Slice B ACs trust the builder's note; doc traces unnamed) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:38 · (AC1 checks skip plugin.json; grep too loose) · not fixed — doc unchanged since the prior run
+- MINOR · architect-skill-build-plan.md:34 · (R13 disagreement taxonomy is elaboration beyond scope :34) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:5 · (no runnable check; rule-6 smell not recorded as flagged and accepted) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:56 · (AC numbering restarts per slice while requirements got B-R prefixes) · not fixed — doc unchanged since the prior run
 - MINOR · architect-skill-build-plan.md:15 · (a `Plan: inspected` stamp sits inside the Out of scope parse range) · not fixed — doc unchanged since the prior run
