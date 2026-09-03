@@ -56,7 +56,7 @@ The format is load-bearing — /sunrise will provision exactly what the poured-c
 # <Project> — architecture (<date of first run>)
 
 Scope doc: <path> | Docless: <the reason the gate discussion landed on>
-Blind review: <review file path (model, date)> | declined <date> | failed <date> — <reason> | none — docless | none yet
+Blind review: <review file path (model, date)>, one per reviewer, comma-separated | declined <date> | failed <date> — <reason> | none — docless | none yet
 Artifact: <private artifact URL, recorded after the first publish>
 
 ## Walkthrough target
@@ -99,18 +99,21 @@ The visual's design is deliberately unspecified and gets established over time, 
 
 ## Step 6 — The blind review
 
-Only when the run had a precon scope doc: after the doc and visual are done, ask Tony once, as one plain-text question, whether he wants an outside-model review. A docless run gets no offer — there is no brief to send — and the report says so.
+Only when the run had a precon scope doc: after the doc and visual are done, ask Tony once, as one plain-text question, whether he wants an outside-model review and from whom: the pinned GPT alone is the default, and he may name several reviewers — GPT, Gemini, Claude — in his answer. A docless run gets no offer — there is no brief to send — and the report says so.
 
 On his word in this run, and only then:
 
-- The external model receives the precon scope doc ONLY. Never Claude's architecture doc, never chat context, never this session's reasoning. It gets the brief fresh, exactly as Tony ruled: "the model reviewing it doesn't get the Claude input."
+- Every reviewer receives the precon scope doc ONLY. Never Claude's architecture doc, never chat context, never this session's reasoning. It gets the brief fresh, exactly as Tony ruled: "the model reviewing it doesn't get the Claude input."
 - The instruction it receives is fixed, verbatim: **"You are the architect. Read the attached precon scope doc and return your own full architecture-and-delivery take for it: the walkthrough target, a v0 drawing (component list, plain-prose data flow, one simple diagram), the poured-concrete list of one-way decisions, and the deferred list. You have no other input; do not ask for any."**
-- Transport is the codex MCP (`mcp__codex__codex`) with the model pinned by reference to jpb's preflight in the installed jpb plugin's SKILL.md (`~/.claude/plugins/cache/tony-skills/jpb/*/skills/jpb/SKILL.md`, the newest version dir; the repo copy at `plugins/jpb/skills/jpb/SKILL.md` on a machine with the clone) (`gpt-5.6-sol` at time of writing; if that pin moves, the reference wins). A different model on Tony's pick for this run substitutes for the pinned one — it never adds a second reviewer. There is no panel.
+- Transport is the codex MCP (`mcp__codex__codex`) with the model pinned by reference to jpb's preflight in the installed jpb plugin's SKILL.md (`~/.claude/plugins/cache/tony-skills/jpb/*/skills/jpb/SKILL.md`, the newest version dir; the repo copy at `plugins/jpb/skills/jpb/SKILL.md` on a machine with the clone) (`gpt-5.6-sol` at time of writing; if that pin moves, the reference wins). Tony's answer sets the roster for this run and nothing else does: one reviewer by default; several only when he names them, each running as its own cold take, never a merged consensus. The lanes:
+  - **GPT** — the codex call below.
+  - **Gemini** — `mcp__antigravity__ask_gemini` with `model: "gemini-3.1-pro-high"` (the `-high` suffix is the effort setting; never also pass `effort`), `prompt` = the fixed instruction followed by the scope doc text, `cwd` = the run's empty directory, `skip_permissions` omitted. Content decides over the status flag: an empty response is FAILED even under a success status.
+  - **Claude** — one fresh `general-purpose` subagent that receives the fixed instruction and the scope doc text and nothing else — not this conversation, not the architecture doc, not the repo path — told to read no files and use no tools. Its blindness is by instruction only, and the review file's first line says so.
 - The transport guards are jpb Judge G's, plus the payload rule above: `model: "gpt-5.6-sol"` (or the substitute Tony named for this run), `base-instructions` = the fixed instruction, `prompt` = the scope doc text, `sandbox: "read-only"`, `config: {"web_search": "disabled"}`, and `cwd` = an absolute, empty directory created fresh for this run (the session scratchpad is its natural home).
 - jpb's guard carries over: an empty, null, or errored response — the MCP down, the model not found, a fully-denied run that still reports success — is a FAILED review. Nothing is saved, no comparison runs, and the report says `Review: failed — <reason>`; a retry happens only on Tony's word, and a failed review never masquerades as a declined one. A call the harness backgrounds past its foreground limit is not a failure: wait for its task notification and judge the response that arrives. A response the harness delivers with HTML entities (`&amp;`, `&lt;`, `&gt;`) is unescaped before the verbatim save, and that is the only transformation the file ever gets.
-- A non-empty take is saved verbatim, before any triage, to `~/Documents/architect-reviews/<slug>-review-<YYYY-MM-DD>.md`. Creating `~/Documents/architect-reviews/` on the first blind review, and creating the run's empty cwd, are the only two directory creations this skill ever makes.
+- A non-empty take is saved verbatim, before any triage, to `~/Documents/architect-reviews/<slug>-review-<YYYY-MM-DD>-<lane>.md` (`gpt` | `gemini` | `claude`), one file per reviewer. A lane that fails is reported as failed on its own line and the others still run; the review counts as done when at least one take was saved. Creating `~/Documents/architect-reviews/` on the first blind review, and creating the run's empty cwd, are the only two directory creations this skill ever makes.
 
-Then the comparison: walk Tony through every disagreement between the two takes — at minimum components built vs cut, structure, one-way-door calls, and deferrals — one at a time, and he rules each in discussion. The architecture doc changes only where he rules. Nothing merges silently, and the review file itself is never edited.
+Then the comparison: walk Tony through every disagreement between his architecture doc and the takes — where several reviewers agree with each other against the doc, that is one disagreement carrying their names; where they split, the split is shown as one item with each side named — at minimum components built vs cut, structure, one-way-door calls, and deferrals — one at a time, and he rules each in discussion. The architecture doc changes only where he rules. Nothing merges silently, and the review file itself is never edited.
 
 ## The rules
 
@@ -123,7 +126,7 @@ Then the comparison: walk Tony through every disagreement between the two takes 
 7. **Doc and visual only.** No repos, databases, hosting, or accounts; nothing installed; no other loop skill invoked. Execution belongs to /sunrise.
 8. **The property line is absolute.** Repo, project docs, and Claude's own knowledge. Outside unknowns become `NEEDS CHECK` lines for Tony.
 9. **One living doc.** Re-runs continue it with a run-log block and strikethroughs. Never a fork, never a rewrite of history.
-10. **Blind means blind.** The reviewer gets the scope doc only, on Tony's word in this run only, and every disagreement is Tony's to rule.
+10. **Blind means blind.** Every reviewer gets the scope doc only, on Tony's word in this run only, the roster is his answer and nothing else, and every disagreement is Tony's to rule.
 11. **Keep it short.** About three answers plus the sorted scope. Ceremony that delays the MVP is the failure mode.
 
 ## Output
@@ -136,7 +139,7 @@ Doc: <path>
 Artifact: <private URL>
 Run: <N>
 Counts: components in v0 N · poured-concrete decisions N · deferred items N
-Review: declined | not offered — docless | failed — <reason> | done at <review file path>
+Review: declined | not offered — docless | failed — <reason> | done at <review file path(s)>, with `<lane> failed — <reason>` after any lane that did not return
 Next: point /sunrise at the doc to provision exactly what it lists, and /blueprint at it to slice with the user-touchable slice up front (hand-pointed until those reworks land).
 SKILL NOTE: <only when a rule was worked around, reinterpreted, or excepted — what and why; omit otherwise>
 ```
@@ -150,7 +153,7 @@ When executing this skill required working around, reinterpreting, or excepting 
 - Don't provision anything — no repos, databases, hosting, accounts, or installs — and don't invoke any loop skill (/sunrise, /blueprint, /precon, /jpb, or any other).
 - Don't leave the property — no web, no research subagents, no research documents. Mark the unknown for Tony instead.
 - Don't send anything to another model without Tony's explicit word in that run.
-- Don't show the external reviewer Claude's work — the scope doc only, cold.
+- Don't show any reviewer Claude's work — the scope doc only, cold — and don't add a reviewer Tony didn't name.
 - Don't merge review differences silently — Tony rules each one, and the doc changes only where he ruled.
 - Don't skip the candidates and present one proposal for Tony to nod at.
 - Don't fork a second architecture doc — re-runs continue the one living doc.
