@@ -583,3 +583,11 @@ MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · broke: map not 
 ### 2026-09-02 — recheck: Slice B
 MINOR · docs/architect-skill-build-plan.md:94 · (Deviation inventory incomplete) · fixed — all five un-rerun items named with builder-call label
 MINOR · docs/evidence/architect/slice-a-requirement-map.md:9 · (map not regenerated after the last fix) · fixed — header names 9d13e36; R3/R4/R6 prose current; R13 duplicate gone; every R1–R15 cite lands
+
+### 2026-09-02 — recheck: named MINORs (Slice A + Slice B, per user; fixed in 7549a44)
+MINOR · plugins/architect/skills/architect/SKILL.md:14 · (:14 says never invokes any skill; rule 7 says no loop skill; :89 carves out artifact-design) · fixed — :14 now says "loop skill" and names the artifact-design preflight as the one exception; :94, :123, :150 agree
+MINOR · plugins/architect/skills/architect/SKILL.md:89 · (visual renders before Step 6 rulings change the doc; no re-render instruction) · fixed — :96 re-renders and republishes to the same URL after the rulings, report prints after that
+MINOR · plugins/architect/skills/architect/SKILL.md:58 · (template header order differs from the only existing doc) · fixed — template now Scope doc / Blind review / Artifact (:56-60), :86 forbids reshuffling; Pour-Guys header :3-5 already matches
+MINOR · plugins/architect/skills/architect/SKILL.md:60 · ("Blind review: ... | none yet" has no declined / failed / docless form) · fixed — :59 carries declined / failed / none — docless forms, :86 says the line leaves "none yet" when the run ends
+MINOR · plugins/architect/skills/architect/SKILL.md:103 · (pin reference is an absolute repo path) · fixed — :108 points at the installed jpb copy (newest version dir), repo path secondary
+MINOR · plugins/architect/skills/architect/SKILL.md:108 · broke: two back-to-back parentheticals in the pin sentence — readability only, no rule conflict · this batch

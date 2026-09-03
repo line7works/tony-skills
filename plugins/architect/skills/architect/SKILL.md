@@ -11,7 +11,7 @@ The station between `/precon` and everything downstream. /precon settles what an
 
 **The one unforgivable move is the nod:** Claude proposes one structure and Tony agrees. Step 2 forces genuinely distinct candidates into the open with what each assumes and what each makes expensive later, every run, or the interview did not happen.
 
-This skill runs only when Tony types /architect. It writes a doc and a visual; it never provisions anything, and it never invokes another skill.
+This skill runs only when Tony types /architect. It writes a doc and a visual; it never provisions anything, and it never invokes another loop skill (the one sanctioned exception is the `artifact-design` preflight the Artifact tool requires, Step 5).
 
 ## Step 1 — The input gate
 
@@ -56,8 +56,8 @@ The format is load-bearing — /sunrise will provision exactly what the poured-c
 # <Project> — architecture (<date of first run>)
 
 Scope doc: <path> | Docless: <the reason the gate discussion landed on>
+Blind review: <review file path (model, date)> | declined <date> | failed <date> — <reason> | none — docless | none yet
 Artifact: <private artifact URL, recorded after the first publish>
-Blind review: <review file path (model, date)> | none yet
 
 ## Walkthrough target
 Who: <named real person>  ·  When: <date>  ·  Must be able to: <short list>
@@ -83,6 +83,8 @@ Rulings: <blind review: agreed on <spine>; N disagreements, each numbered with T
 Changed this run: <what changed vs the prior run, or "first run">
 ```
 
+Header lines keep that order (Scope doc, Blind review, Artifact) so a re-run never reshuffles them; each `|` is an either-or and the unchosen forms are dropped, never left as placeholders. The `Blind review:` line moves off `none yet` when the run ends: the file path when a review ran, `declined <date>` when Tony said no, `failed <date> — <reason>` when the call failed, `none — docless` when there was no offer.
+
 Four required parts, always present: the walkthrough target, the v0 drawing (component list + plain-prose data flow + one simple diagram), the poured-concrete list (the one-way decisions — one list, two names), and the deferred list (banked decisions plus deliberately-not-built items, each with a line confirming its door stays open). The exit-ramp form is the same skeleton with a few lines in it.
 
 **Re-runs.** When the idea blossoms or changes — possibly after a fresh /precon — a new run continues the same doc: a new `### Run <N>` block in the run log (N = one more than the highest existing block) with the date, the trigger, what changed, and the three steps in the order taken; superseded decisions elsewhere in the doc are struck through (`~~like this~~`), never deleted. The trail is the point: it ran once, and now it runs again because something changed.
@@ -91,7 +93,7 @@ Four required parts, always present: the walkthrough target, the v0 drawing (com
 
 Every run ends by rendering what was decided — the systems chosen and what each does or provides for the project — as an HTML page written beside the doc as `<slug>-architecture.html`, and published as a **private** Claude Artifact via the Artifact tool. The page follows that tool's contract: a page body only (no doctype, html, head, or body wrapper), a `<title>` at the top, and a favicon on the first publish. The Artifact tool requires loading the `artifact-design` skill before writing the page; that harness preflight is not a skill invocation in this file's sense.
 
-Same URL across runs: the first publish records the artifact URL in the doc's `Artifact:` line; a re-run reads that artifact (the tool's read action, by URL) and then republishes with that URL passed as the tool's `url` parameter — omitting it creates a second artifact, which is the failure this rule exists to prevent; a re-run that finds no recorded URL publishes fresh and records the new one. The visual is a projection re-rendered from the doc each run — the markdown stays the record.
+Same URL across runs: the first publish records the artifact URL in the doc's `Artifact:` line; a re-run reads that artifact (the tool's read action, by URL) and then republishes with that URL passed as the tool's `url` parameter — omitting it creates a second artifact, which is the failure this rule exists to prevent; a re-run that finds no recorded URL publishes fresh and records the new one. The visual is a projection re-rendered from the doc each run — the markdown stays the record. When the blind review (Step 6) changes the doc, the visual is re-rendered and republished to the same URL after the rulings, so the run never ends with a picture that lags the doc; the report block prints after that republish.
 
 The visual's design is deliberately unspecified and gets established over time, run by run. Keep the first version plain. Do not build a design system, and never publish it anywhere public — not the arcade, not any other host.
 
@@ -103,7 +105,7 @@ On his word in this run, and only then:
 
 - The external model receives the precon scope doc ONLY. Never Claude's architecture doc, never chat context, never this session's reasoning. It gets the brief fresh, exactly as Tony ruled: "the model reviewing it doesn't get the Claude input."
 - The instruction it receives is fixed, verbatim: **"You are the architect. Read the attached precon scope doc and return your own full architecture-and-delivery take for it: the walkthrough target, a v0 drawing (component list, plain-prose data flow, one simple diagram), the poured-concrete list of one-way decisions, and the deferred list. You have no other input; do not ask for any."**
-- Transport is the codex MCP (`mcp__codex__codex`) with the model pinned by reference to jpb's preflight in `~/Developer/tony-skills/plugins/jpb/skills/jpb/SKILL.md` (`gpt-5.6-sol` at time of writing; if that pin moves, the reference wins). A different model on Tony's pick for this run substitutes for the pinned one — it never adds a second reviewer. There is no panel.
+- Transport is the codex MCP (`mcp__codex__codex`) with the model pinned by reference to jpb's preflight in the installed jpb plugin's SKILL.md (`~/.claude/plugins/cache/tony-skills/jpb/*/skills/jpb/SKILL.md`, the newest version dir; the repo copy at `plugins/jpb/skills/jpb/SKILL.md` on a machine with the clone) (`gpt-5.6-sol` at time of writing; if that pin moves, the reference wins). A different model on Tony's pick for this run substitutes for the pinned one — it never adds a second reviewer. There is no panel.
 - The transport guards are jpb Judge G's, plus the payload rule above: `model: "gpt-5.6-sol"` (or the substitute Tony named for this run), `base-instructions` = the fixed instruction, `prompt` = the scope doc text, `sandbox: "read-only"`, `config: {"web_search": "disabled"}`, and `cwd` = an absolute, empty directory created fresh for this run (the session scratchpad is its natural home).
 - jpb's guard carries over: an empty, null, or errored response — the MCP down, the model not found, a fully-denied run that still reports success — is a FAILED review. Nothing is saved, no comparison runs, and the report says `Review: failed — <reason>`; a retry happens only on Tony's word, and a failed review never masquerades as a declined one. A call the harness backgrounds past its foreground limit is not a failure: wait for its task notification and judge the response that arrives. A response the harness delivers with HTML entities (`&amp;`, `&lt;`, `&gt;`) is unescaped before the verbatim save, and that is the only transformation the file ever gets.
 - A non-empty take is saved verbatim, before any triage, to `~/Documents/architect-reviews/<slug>-review-<YYYY-MM-DD>.md`. Creating `~/Documents/architect-reviews/` on the first blind review, and creating the run's empty cwd, are the only two directory creations this skill ever makes.
