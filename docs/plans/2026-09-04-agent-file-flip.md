@@ -120,6 +120,9 @@ Status: not started
 - Ship's hunt delegates to /build's tiers (its line 20) and names no path, so it was not edited · builder call
 - AC3 was run with `claude --plugin-dir plugins/build`, which loads the branch copy alongside the installed copy rather than instead of it; the criterion was judged on what the session said about the branch copy · builder call
 ## Deviations
+
+### 2026-09-04 — build: Slice A (post-recheck)
+- R2's same-day `-2` rule for architect blind-review takes was added after the recheck (the skill had none to keep; the build assumption above recorded the no-op) — applies to `docs/reviews/` and `~/Documents/architect-reviews/` alike, matching inspect's raw-output rule · per user (Tony's ruling of 2026-09-04, relayed by the orchestrating session tonycoon-66, not heard in this session)
 ## Discovered
 
 ### 2026-09-04 — build: Slice A
