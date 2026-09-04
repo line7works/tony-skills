@@ -90,7 +90,7 @@ Acceptance criteria:
 Footprint: `plugins/signoff/skills/signoff/SKILL.md` (Step 1 at line 20–35, the verdict format at 103–131, the rules list, What NOT to do); `plugins/recheck/skills/recheck/SKILL.md` (Step 1 at 18–28, Output at 64–82); `plugins/vertical/skills/vertical/SKILL.md` (Step 1 at 16, Step 6 at 68–74); `docs/evidence/agent-file-flip/slice-c-requirement-map.md`.
 Not in this slice: a per-archetype toggle table beyond the inference rule in R3 (the kit gives examples, not a table; a table is later work if inference proves wrong); a live `/signoff` run in a scratch repo (offered in Slice D on Tony's word).
 Depends on: Slice A (the verdict doc in `docs/reviews/` that R5 reads)
-Status: not started
+Status: built
 
 ## Slice D — Close-out
 Goal: The repo describes what the skills now do, the sunset re-read is on record, and the three gated non-PR steps are listed for Tony's word.
@@ -130,6 +130,16 @@ Status: not started
 - Phase 7b's memory-note pointer (old line 285, "repo `CLAUDE.md` (canonical detail)") was rewritten to `AGENTS.md` though R3's passage list omits it: Constraint 13 says a role changed in one place changes everywhere the file states it, and the line is in the footprint file · builder call
 - Phase 1's old step 4 (init + commit in one step) was split into steps 4 and 6 so R5's adoption step could sit "after git init and before the first commit" as written · builder call
 - AC4 was run with `claude --plugin-dir plugins/sun`, same caveat as Slice A's AC3 · builder call
+### 2026-09-04 — build: Slice C
+- `REVIEW.md`'s `## Passes` map onto signoff's lenses: `correctness` and `security` are the existing lenses of those names; `accessibility` and `data-safety` are lenses of their own with a one-line scope each; a pass marked `on` runs at every depth (fused into the single reviewer under LIGHT); `spec` and `seams` are the loop's own and are not passes. R2 said only that `off` is skipped · builder call
+- R3's inference signals were concretised (a `package.json` naming react/next/vue/svelte or a components/app tree of them, a Godot or SwiftUI scene tree; a migrations folder or `DATABASE_URL`/`SUPABASE_*`/`POSTGRES_*`/`NEON_*` in `.env.example`); R3 named the categories only · builder call
+- The template is carried with the kit's own example toggle values and `YYYY-MM-DD` placeholder, byte-identical to the note; the first run renders a copy with the inferred toggles and each pass line's parenthetical stating what the inference found (the kit's parentheticals are examples of that) · builder call
+- Wording in the invocation that orders the `REVIEW.md` write counts as Tony's word, matching the other gates the skill lets an invocation collapse; nothing else does · builder call
+- R5 with no `REVIEW.md` on disk (Tony declined the first-run write): the recurrence is named in the verdict's Bottom line and nothing is written, since R6 allows the file to be created only by R3's gate. Correctness-only runs compare against their own verdict file and `docs/punch-list.md` · builder call
+- What recheck reads (R2 says "governs" for all three): the Severity bar grades fix-introduced defects, a defect in an `off` pass is named as skipped rather than entered, and the Repo-specific checks never grow the closed checklist (recheck rule 1); the verifier receives the file with the checklist · builder call
+- Vertical's outside reviewers see `REVIEW.md` through the tracked-files export as any tracked file; the cold packet stays exactly three things and `assets/vertical-mandate.md` is untouched · builder call
+- The reviewer mandates in signoff (Step 2, rule 10) and recheck (Step 2) now hand the fresh subagents `REVIEW.md` when present, since R2's checks have to reach the reviewers who originate findings; the file is the repo's standing sheet, not the author's rationale · builder call
+- AC3 and AC4 were run with `claude --plugin-dir plugins/<name>`, same caveat as Slices A and B (the branch copy loads alongside the installed copy; the prompt named the branch file) · builder call
 ## Deviations
 
 ### 2026-09-04 — build: Slice A (post-recheck)
@@ -144,6 +154,9 @@ Status: not started
 - precon's What-NOT line ("relocation is Tony's", Slice A's discovery above) still contradicts sunrise's new adoption step; precon is outside Slice B's footprint, so not changed here. Same for the Slice A MINOR at `plugins/precon/skills/precon/SKILL.md:130`
 - `~/Documents` currently holds seven staged scope docs, four architect reviews, and sixteen cold reads for ideas that were never sunrised or were sunrised before this step existed; the new step adopts only on a fresh sunrise, so those stay where they are until Tony moves them
 - The seeded `README.md` template does not exist in the skill (step 3 says "name, one-liner, dev commands, links" and no template follows); untouched, not Slice B's
+### 2026-09-04 — build: Slice C
+- `plugins/vertical/skills/vertical/assets/vertical-mandate.md` (the outside reviewers' prompt) says nothing about `REVIEW.md`; outside models therefore honour the repo's sheet only if they read it from the export. Outside the footprint, not changed
+- The kit note's `REVIEW.md` section says "a repo with hosted migrations makes a missing backup a blocker" as a toggle example, but the template's Severity bar line already carries "a migration without a backup" unconditionally; the inference rule sets only the four pass toggles and leaves the bar verbatim, so a CLI repo's rendered sheet names a migration blocker it can never hit. Template fidelity (R4, AC2) wins here; a per-archetype bar is the "later work" Slice C's Not-in-this-slice line names
 ## Handoffs
 ## Punch list
 

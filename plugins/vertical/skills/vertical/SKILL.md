@@ -13,6 +13,8 @@ The final inspection before a build is called done. `/signoff` inspects one slic
 
 ## Step 1 — Gate
 
+**The repo's inspection sheet, first.** Read `<repo>/REVIEW.md` before the doc hunt and the gate. Present, it governs the local review exactly as it governs /signoff (whose Step 1 states the rule): a pass under `## Passes` marked `off` is skipped and the verdict doc names the skip with the reason on that line; the `## Severity bar` is the severity mapping for every finding this run grades, outside findings included, overriding /signoff's table where they differ; and each `## Repo-specific checks` line is an item the local reviewers must try to break, listed by name in the verdict doc's section 1 as held or as the finding it became. Absent, the run uses /signoff's defaults and the chat block's `REVIEW.md:` line says `absent — defaults`. Outside reviewers see the file the way they see any tracked file — it is in the export — and the packet adds nothing for it. /vertical never writes `REVIEW.md` (rule 7).
+
 The invocation names a build doc, or the skill hunts the current repo per /build's Step 1 doc tiers (`docs/plans/*.md` — the repo doc kit's folder — then the older flat `docs/<feature>-build-plan.md`, both read before choosing: a candidate matches the invocation by filename, the `<topic>` of a `YYYY-MM-DD-<topic>.md` name or the `<feature>` of a flat name; an `Intent:` line is consulted only when no filename in either matches; a filename match beats an Intent-line match; when both match by filename `docs/plans/` wins and the verdict says which it took; several plausible matches are listed and asked; then any phase/slice doc under `docs/` or `plan/`) or takes the plan established in this session — /ship's two-source narrowing: nowhere else, no wider hunt; unresolvable means ask Tony.
 
 Read every `## Slice` heading's `Status:` line in the build doc. A doc with zero `## Slice` headings, or a slice heading missing its `Status:` line, is malformed input: report it and STOP — the gate never passes vacuously. The gate passes only when **every slice stands `signed off`** — the loop's terminal clean state. Anything less — `built`, `signed off with conditions`, `rejected`, `not started` — fails the gate: report exactly which slices are short and in what state, and STOP. (A `built` card's remedy is a fresh /signoff, never /recheck — say so when naming it.)
@@ -71,7 +73,7 @@ One file per build: `docs/reviews/<YYYY-MM-DD>-vertical-<feature>.md` in the rev
 
 Structure, top to bottom:
 
-1. **THE VERDICT** — the merged verified findings only. /signoff's severity → verdict mapping names the outcome; findings appear in /signoff's punch-list line format (severity · `file:line` · claim · scenario · which reviewer(s) found it); `Refuted: N`; the repeats/misses prose from Step 5. (The verdict doc is its own record — /recheck's checklist reads the build doc's ledger, not this file; routing fixes from a vertical verdict is Tony's instruction after reading it.)
+1. **THE VERDICT** — the merged verified findings only. /signoff's severity → verdict mapping names the outcome (its `## Severity bar` when `REVIEW.md` is present); findings appear in /signoff's punch-list line format (severity · `file:line` · claim · scenario · which reviewer(s) found it); `Refuted: N`; the repeats/misses prose from Step 5; the `REVIEW.md` lines — each pass it skipped with its reason, and each repo-specific check by name, held or found — or one line saying the file was absent and defaults applied. (The verdict doc is its own record — /recheck's checklist reads the build doc's ledger, not this file; routing fixes from a vertical verdict is Tony's instruction after reading it.)
 2. **Method line** — what ran and what didn't: base commit, reviewers used and dropped (with reasons), parity line per outside reviewer, how the local review verified (per /signoff's declare-the-method rule), and any collapsed gate.
 3. **Unverified appendix** — one section per reviewer, raw output VERBATIM, under this banner: *"Raw reviewer output — unverified. Findings here that are absent from the verdict above were refuted or could not be verified. Nothing in this appendix has standing."*
 
@@ -89,7 +91,7 @@ Report the verdict in chat and stop. Offer fixes; never start them. Fixing is To
 4. **Cold means cold.** No prior verdicts, no chat context, no cross-reviewer leakage in any packet.
 5. **Nothing unverified lands in the verdict.** Every outside finding is verified or it stays in the appendix. `Refuted: N` is always reported.
 6. **Survivors continue.** A dropped reviewer is recorded, never papered over; the local review always runs.
-7. **One write.** The verdict doc, dated, never overwriting. The build plan and its cards belong to the other stations.
+7. **One write.** The verdict doc, dated, never overwriting. The build plan, its cards, and `REVIEW.md` belong to the other stations.
 8. **Stops at the verdict.** No fixes, ever, from this skill.
 9. **/signoff is the law of review mechanics.** Where this file is silent, its SKILL.md governs; nothing here restates it to drift.
 10. **Interactive only.** /vertical runs with Tony present to answer the gate, the ask, and the base — never headless, never from a script or cron.
@@ -101,6 +103,7 @@ VERTICAL: <build doc> @ <base>..<head>
 Verdict: <SIGNED OFF | SIGNED OFF WITH CONDITIONS | REJECTED>  ·  per /signoff's mapping
 Reviewers: local + <list | none>  ·  Dropped: <who — why | none>  ·  Refuted: N
 Doc: <path to the verdict doc>
+REVIEW.md: read — passes skipped: <name (reason)> | none skipped · <N> repo-specific checks tried | absent — defaults
 
 Bottom line: <2-3 sentences — the build's state and what to do next.>
 SKILL NOTE: <only when a rule was worked around, reinterpreted, or excepted — what and why; omit otherwise>
@@ -117,5 +120,5 @@ When executing this skill required working around, reinterpreting, or excepting 
 - Don't let an unverified outside finding into the verdict section — appendix only.
 - Don't change a pinned model id without Tony's word, and never mid-run.
 - Don't treat an empty agy response as success — it is the failure signal.
-- Don't fix anything, don't touch the build plan or its cards, don't write a second file.
+- Don't fix anything, don't touch the build plan or its cards, don't write `REVIEW.md`, don't write a second file.
 - Don't push, open a PR, or merge — the git gates are Tony's, always.
