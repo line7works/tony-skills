@@ -48,7 +48,7 @@ Acceptance criteria:
 Footprint: `plugins/precon/skills/precon/SKILL.md` (lines 19, 59, 85 and the rules/What-NOT lists that restate them); `plugins/architect/skills/architect/SKILL.md` (21, 51, 114); `plugins/blueprint/skills/blueprint/SKILL.md` (20, 36); `plugins/inspect/skills/inspect/SKILL.md` (18, 20, 60); `plugins/signoff/skills/signoff/SKILL.md` (28, 126, 130); `plugins/recheck/skills/recheck/SKILL.md` (20, 53, 68); `plugins/vertical/skills/vertical/SKILL.md` (16, 70); `plugins/ship/skills/ship/SKILL.md` (line 20 delegates to /build's tiers; it changes only if it names a path); `plugins/handoff/skills/handoff/SKILL.md` (16, 57); `plugins/build/skills/build/SKILL.md` (16); the two `git mv` moves; `docs/evidence/agent-file-flip/slice-a-requirement-map.md`. Line numbers are from the checkout on 2026-09-04 and are pointers, not contracts.
 Not in this slice: sunrise's adoption of staged docs (Slice B); reading or creating `REVIEW.md` (Slice C); README wording about `docs/` (Slice D); moving any doc other than this program's two.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice B — Sunrise seeds the kit and adopts staged docs
 Goal: A sunrised repo is born with `AGENTS.md` as the body, `CLAUDE.md` as the `@AGENTS.md` stub, the kit's Tier 0, the kit's verification in its green-baseline check, and any pre-repo scope and architecture docs moved in from `~/Documents`.
@@ -111,7 +111,19 @@ Depends on: Slice C
 Status: not started
 
 ## Build assumptions
+
+### 2026-09-04 — build: Slice A
+- R2 says architect's same-day `-2` rule for per-lane takes is kept; the skill had no such rule, so none was added and one file per reviewer per run stands · builder call
+- The SIGN-OFF and RECHECK chat blocks gained a `Verdict doc:` field so the R7/R8 file writes are visible in the report; the field is the only change to those blocks · builder call
+- `docs/scope/`, `docs/plans/`, `docs/reviews/`, `docs/architecture/` are created by the first skill that writes there ("create on first use" in each write rule); sunrise's `docs/.gitkeep` is Slice B · builder call
+- The moved scope doc carries a one-line "moved from the flat path" note under its title, per the kit's supersede-at-the-top convention; its ledger content is unchanged · builder call
+- Ship's hunt delegates to /build's tiers (its line 20) and names no path, so it was not edited · builder call
+- AC3 was run with `claude --plugin-dir plugins/build`, which loads the branch copy alongside the installed copy rather than instead of it; the criterion was judged on what the session said about the branch copy · builder call
 ## Deviations
 ## Discovered
+
+### 2026-09-04 — build: Slice A
+- precon's "What NOT to do" line "Don't auto-file the scope doc into `~/Developer/_ideas/` or move it into a repo — relocation is Tony's" now sits beside sunrise's adoption step; Slice B should make that line say relocation is Tony's or sunrise's, so the two skills agree. Not changed here (precon's rule list is outside Slice A's requirements)
+- `~/Documents/precon-cold-reads/agent-file-flip-cold-read-2026-09-04.md` (this program's own cold read, written before Slice A) is now a staged file with a repo-owned scope doc; moving it into `docs/reviews/` is Tony's call, not this slice's
 ## Handoffs
 ## Punch list
