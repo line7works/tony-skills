@@ -17,7 +17,7 @@ Mine what already exists before asking anything:
 
 - **The discussion:** decisions made, options rejected (record these — they are descope evidence), constraints stated, names used.
 - **The repo:** the test command, existing components and conventions the slices should reuse, real file paths. Slices reference reality, not guesses.
-- **Prior docs:** a `docs/<idea>-scope.md` scope doc for this feature if one exists (what /precon writes — harvest it first: its Decisions are settled ground, its Out of scope lines are descope evidence; match the doc to the named feature, and when more than one could match, list them and ask — never silently pick); a /wargame doc if one exists (its verified failure modes become constraints and acceptance criteria); an existing build doc for this feature (extend it — never fork a second plan).
+- **Prior docs:** a scope doc for this feature if one exists — under `docs/scope/*.md` first (the repo doc kit's folder), the older flat `docs/<idea>-scope.md` second (what /precon writes — harvest it first: its Decisions are settled ground, its Out of scope lines are descope evidence; match the doc to the named feature, and when more than one could match, list them and ask — never silently pick); a /wargame doc if one exists (its verified failure modes become constraints and acceptance criteria); an existing build doc for this feature (extend it — never fork a second plan).
 
 ## Step 2 — Interview
 
@@ -33,7 +33,7 @@ Ask about load-bearing gaps only — choices that shape architecture, data, user
 
 ## Step 4 — Write the doc
 
-Save to `docs/<feature>-build-plan.md` in the repo (inside /build's hunt path). The format is load-bearing — /build's contract and ledger, /signoff's punch list and sweep (which also writes recheck-headed clearing blocks), and /recheck's checklist assembly and its in-place `Status:` edits all key off it — so keep the load-bearing forms exact: the section names, the `Status:` label, the block headings, and the ·-separated line fields:
+Before saving, hunt an existing build doc for this feature — `docs/plans/*.md` matched by its `<topic>`, then the older flat `docs/<feature>-build-plan.md` — and when one exists, extend it in place where it lies (rule 7: one living doc, never a fork; a flat doc is not moved). Only when none exists, save the new doc to `docs/plans/<YYYY-MM-DD>-<feature>.md` in the repo (the repo doc kit's folder for build docs and the first tier of /build's hunt; the older flat path is the second tier, so existing repos keep working; create `docs/plans/` on first use). The format is load-bearing — /build's contract and ledger, /signoff's punch list and sweep (which also writes recheck-headed clearing blocks), and /recheck's checklist assembly and its in-place `Status:` edits all key off it — so keep the load-bearing forms exact: the section names, the `Status:` label, the block headings, and the ·-separated line fields:
 
 ```
 # <Feature> — build plan (<date>)

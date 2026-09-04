@@ -1,0 +1,58 @@
+# agent-file-flip — scope doc (2026-09-04)
+
+Moved 2026-09-04 by Slice A of the build plan from the flat path `docs/agent-file-flip-scope.md` to this folder; the content is unchanged.
+
+Intent: Phase 2 of the agent-file flip program: change the tony-skills loop skills so (a) sunrise seeds new repos with AGENTS.md as the body and CLAUDE.md as a one-line `@AGENTS.md` stub per the vault's repo doc kit, (b) every loop skill writes its paperwork into the repo's fixed `docs/` subfolders instead of `~/Documents`, and (c) signoff/recheck/vertical read a per-repo `REVIEW.md` (signoff creates it on first run). For Tony, so every repo carries its own instruction body that Claude Code, Codex, Cursor, and Copilot all read, and so the idea-to-verdict chain is version-controlled in the repo. Program phases per the handoff §6: 1 vault (done), 2 tony-skills (this build), 3 migration checklist, 4 Pour-Guys, 5 remaining repos, 6 close-out. Phases 3 to 6 are downstream of this and not scoped here.
+
+Decisions:
+- AGENTS.md is the body; CLAUDE.md is one line `@AGENTS.md` plus any Claude-only lines under it (skills, hooks, plan mode, `.claude/`); a real file, never a symlink — decided (handoff §4.1)
+- Program order: vault (done 2026-09-03) → sunrise → sunset → Pour-Guys → remaining repos one at a time — decided (§4.2)
+- Git gate, no blanket: one PR per repo; Tony says "PR" and "merge" each time; local commits fine; never push to main — decided (§4.3)
+- Skip RJ-Hauler (sunset) and torvane (renamed to network); worktrees inherit their parent; commons-agent picks the change up by pull — decided (§4.4)
+- The repo doc kit is the vault note `01-domain/repo-doc-kit.md` and sunrise seeds Tier 0 from it — decided (§4.5)
+- Loop artifacts live in the repo: `docs/scope/` (precon), `docs/architecture/` (architect), `docs/plans/` (blueprint), `docs/reviews/` (signoff, recheck, vertical, inspect); never `~/Documents` — decided (§4.6)
+- File names inside those folders are `YYYY-MM-DD-<topic>.md`; a superseding doc names the file it supersedes at the top — decided (kit note, which §4.10 makes the standard; overrides the handoff §7 table's slug-only names)
+- `REVIEW.md` per repo: created by /signoff on its first run from the kit template with passes toggled by archetype; read by signoff/recheck/vertical when present, defaults otherwise; second-failure rule keeps it current; sunrise never seeds it — decided (§4.7)
+- DESIGN.md backfill for Pour-Guys, line7-site, Atlas, PGL, Robotics happens in the per-repo phase, not in this build — decided (§4.8; repo-phase work)
+- Skill changes go through the loop: precon → blueprint → ship; /architect skipped, a template swap has no drawings — decided (§4.9)
+- Per-repo migration runs from a punch-list checklist in `~/Documents/handoffs/`, the kit note as the standard, one terminal per repo, orchestrator verifies by git and the headless canary — decided (§4.10, Tony's "Understood")
+- Companion note is `claude-code-companion.md`; friend's write-up copied to `02-research` with credit — decided (§4.11, done)
+- Relocating loop outputs is one blueprint slice, not a hand PR: eight skills hunt `docs/<feature>-build-plan.md` and three glob the scope-doc path — decided (§7 correction, accepted by kickoff)
+- This scope doc lands at the flat path `docs/agent-file-flip-scope.md` and the build plan at `docs/agent-file-flip-build-plan.md`; both move into the new subfolders when the relocation slice ships, as its acceptance test — decided (§7 and the /precon invocation)
+- Hunt order after relocation: new subfolder first, flat `docs/` second, so existing repos keep working — assumed (the §7 slice A recommendation; backward compatibility has no plausible alternative)
+- Sunrise flip scope per §7 slice B (plus the staged-doc adoption step from Round 4 Q3): frontmatter description, Phase 1 step 3, the two bottom templates swapped and reshaped to the spec sheet's sections (commands, conventions, footguns, where to look, gates), CLAUDE.md template = `@AGENTS.md` + `## Claude Code specific`, the passing "CLAUDE.md is canonical" references, `docs/.gitkeep` in Tier 0, the kit's verification lines in the green-baseline check, seed set pointed at the kit note and content rules at `agents-md-best-practices.md`; framework `nextjs-agent-rules` block preserved at the top — decided (§4.1, §4.5, §7 slice B)
+- Sunset gets no edit: it never reads or writes a repo's instruction files, and loop artifacts under `docs/` travel with the repo into `_archive`; slice D verifies by re-read only — decided (§8 finding; Round 1 Q5 "agreed")
+- Plugin reinstall after merge is required before the running skills change; running copies live in `~/.claude/plugins/cache/tony-skills/` — decided (§7 step 4; repo CLAUDE.md source-of-truth rule)
+- Proposed slices A (relocate outputs), B (sunrise flip), C (REVIEW.md in signoff/recheck/vertical), D (close-out: sunset verified, vault sunrise note updated on Tony's word, memory note updated) are the recommendation handed to /blueprint; blueprint decides the final cut — assumed (§7 says so explicitly; slicing is blueprint's altitude)
+- One PR per slice (A, B, C, D) inside tony-skills — decided (Round 1 Q1 "agreed")
+- Plugin reinstall after merge on the Studio only; the laptop picks it up at its next marketplace update — decided (Round 1 Q2 "agreed")
+- Precon cold reads, architect blind reviews, and inspect raw output all move from `~/Documents` to `docs/reviews/` under the kit's date-topic naming; no loop skill writes to `~/Documents` after this build — decided (Round 1 Q4 "got it", confirmed as "into the repos themselves")
+- Signoff writes a dated verdict doc to `docs/reviews/` on every run and keeps the punch-list block in the build doc — decided (Round 1 Q6 "agreed")
+- Review docs are never cleaned up: signoff writes one file per slice (a recheck appends to that file), vertical one per build; git history is the only archive — decided (Round 2 Q7 recommendation, Round 3 "got it. never clean up")
+- Pre-repo staging: when no repo owns the idea, precon and architect (and their cold-read and blind-review files) keep writing to `~/Documents`; sunrise gains a step that finds the staged docs for the project it creates, moves them into `docs/scope/`, `docs/architecture/`, and `docs/reviews/` under the kit's date-topic names, and reports what it adopted. Stated exception to the "never `~/Documents`" rule: it holds loop paperwork only until sunrise runs — decided (Round 4 Q3 "yes"; order precon → architect → sunrise → blueprint is set by the architect skill)
+- Loop skills in scope and their writes: precon (scope doc, cold read); architect (architecture doc, blind reviews); blueprint (build plan); inspect (raw output, stamp block in the build doc); signoff (verdict doc, punch-list block); recheck (appends); vertical (verdict doc); build, ship, handoff hunt only (handoff's build-doc section and memory pointer unchanged). /fb and /digest are not loop paperwork and are untouched — decided (handoff §7 table; cold read C8, G2)
+- The hunters: build, signoff, recheck, inspect, vertical, ship, handoff hunt the build plan and blueprint writes it; architect, blueprint, inspect glob the scope doc. Every hard-coded `~/Documents` path in these skills is slice A's to change — decided (§7; cold read C9, G1)
+- The framework `nextjs-agent-rules` block sits at the top of `AGENTS.md`, inside its markers, Next.js archetype only — decided (§9.2, §12; cold read C5, G7)
+- The second-failure rule: a finding that recurs across two signoffs becomes a `## Repo-specific checks` line in `REVIEW.md`, written by the signoff that sees the recurrence — decided (§4.7; kit note; cold read C3, G20)
+- The kit's four verification lines (AGENTS.md tracked exact case, stub's first line is `@AGENTS.md`, stub is not a symlink, headless canary quote-back) are what sunrise's green-baseline check gains; the headless canary is the `claude -p` quote-back, nothing this build creates — decided (kit note "Verifying a repo against the kit"; cold read C16, C20, G29)
+- Precedence when sources disagree: this scope doc over the handoff; the live kit note over both for layout and naming; the spec sheet for body content — assumed (§4.5 and §4.10 make the kit the standard; the live note is the one Tony edits)
+- `CLAUDE.md` is literally one line when a repo has no Claude-only lines; the `## Claude Code specific` heading appears only when lines follow it; sunrise's seed carries the heading only if its seeded stub has such lines — assumed (spec sheet "The stub, exactly"; no plausible alternative)
+- A superseding doc's marker is a prose line at the top; hunts never parse it — assumed (kit wording; cold read C10, G15)
+- Hunt collisions: subfolder wins over flat `docs/` and the skill says which it took; the artifact type is given by its folder, not a filename suffix; picking among several dated matches is blueprint's to specify — assumed (cold read C11, G16)
+- The two flat docs for this program move by `git mv` inside slice A's PR; later slices read the moved paths — assumed (cold read C12, G17)
+- All runs on one slice (signoff reruns and rechecks) append to that slice's verdict file, named by the first run's date; vertical reruns append to the build's file — assumed (extends Round 3 "one file per slice"; cold read C13, G22, G23)
+- The build doc's punch-list block is the working state; the verdict doc in `docs/reviews/` is the record — assumed (cold read C14)
+- Sunrise seeds `docs/.gitkeep` only; each subfolder is created by the first skill that writes there — assumed (cold read C15, G11)
+- Staged-doc adoption in sunrise: match by the idea slug against the new project's name; no match reports "nothing staged" and continues; several matches ask Tony; files move rather than copy and keep their own dates — assumed (blueprint refines; cold read C17, G12-14)
+- Whether a repo "owns" an idea stays the skill's judgment call, as precon's text already says — assumed (already the rule in precon's SKILL.md; cold read C18, G3)
+- `REVIEW.md` is created at the start of the first signoff and used in that same run; archetypes are sunrise's (web app, monorepo, static, Electron, library, script); which passes toggle per archetype is blueprint's to specify from the kit's examples — assumed (kit note; cold read C2, G18, G21)
+- Slice D's vault edit is outside any PR and waits for Tony's word; plugin reinstall is a manual step after each slice merges, not part of a PR — decided (§4.10 vault rule, §7 step 4; cold read C21, C24, G27, G28)
+- One PR per slice binds whatever slices blueprint finally cuts — assumed (cold read C23, G25, G26)
+- Program-level rulings carried here for context only (repo skips, worktrees, companion note, migration checklist as Tony's working paper): nothing in this build acts on them — assumed (they are §4 rulings for later phases; cold read C7, C19, C22, G31)
+Out of scope:
+- Per-repo flips, Pour-Guys body draft, DESIGN.md backfills, the migration checklist file, program close-out — phases 3 to 6 of the program, run from the handoff, not from this build (§6)
+- /architect for this build — template swap has no drawings (§4.9)
+- Any edit to sunset's behaviour — §8 verified it touches no instruction files
+Research: cold reads (local Claude + gpt-5.6-sol, 57 items, all absorbed or left downstream, none surfaced): ~/Documents/precon-cold-reads/agent-file-flip-cold-read-2026-09-04.md; ~/Documents/handoffs/2026-09-03-agent-file-flip-handoff.md (decisions §4, write-location table §7, sunset finding §8); ~/ObsidianVault/01-domain/repo-doc-kit.md; ~/ObsidianVault/01-domain/agents-md-best-practices.md
+Open: none
+Next: /blueprint when ready.
