@@ -69,7 +69,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (frontmatter, lines 80–83, 160, 178, 182–198, 204, 247, 289–320, 365–420); `docs/evidence/agent-file-flip/slice-b-requirement-map.md`. `plugins/sun/skills/sunset/SKILL.md` is not touched.
 Not in this slice: a live `/sunrise` run (offered in Slice D on Tony's word); the vault note `01-domain/claude-skills/sunrise.md` (Slice D, Tony's word); marketplace or README wording (Slice D).
 Depends on: Slice A (the subfolder names and the `docs/reviews/` naming it adopts into)
-Status: built
+Status: signed off with conditions
 
 ## Slice C — Signoff, recheck, and vertical read `REVIEW.md`; signoff creates it
 Goal: A repo's own inspection sheet steers the three review stations, and signoff writes it on its first run in a repo from the kit template after Tony confirms the inferred toggles.
@@ -184,3 +184,26 @@ Status: not started
 
 ### 2026-09-04 — recheck: Slice A (architect same-day rule, per Tony via orchestrator)
 - MINOR · `plugins/architect/skills/architect/SKILL.md:114` · (same-day, same-lane, same-slug blind-review takes overwrite each other) · fixed — `-2`, `-3` suffix on both paths, never overwriting; verifier walked the scenario to `…-foo-gpt-2.md` and `foo-review-2026-09-04-gpt-2.md`, and confirmed the rule matches inspect's; no new defect
+
+### 2026-09-04 — review: Slice B
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:320` · canary rule expects the framework block's opening comment marker as the quoted line · a Next.js render with the block on line 1 returned the block's prose line, not the marker; :320 calls that a failed baseline with nothing to fix and the web-app archetype can never print SUNRISE COMPLETE · Slice B review
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:208` (with :184, :326) · the staged-doc lookup checks only `~/Documents`, never the destination · a run re-invoked after step 5 moved a doc previews, adopts, and summarises "nothing staged" while the doc sits in `docs/scope/` · Slice B review
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:202` (with :201, :320) · no merge rule for a `CLAUDE.md` with real content (pre-flip repos under `--promote`, a scaffolder that ships one) · body stays in `CLAUDE.md`, kit line 2 fails, and :320's "fix the file (stub content)" is a clobber of a file :80 says never to overwrite; nothing lifts the body into `AGENTS.md` first · Slice B review
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:415` · the template's `vercel env pull` line has no `<...>` placeholder, so :400 keeps it in every render · library, script, static, and `--no-vercel` sunrises seed a command the repo is not linked to; monorepo/Electron get the wrong path · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:211` · the `-2` rule cites "precon's own naming", which precon does not have; the real same-day pair is infix-named · which file gets `-2` is inference · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:212` · lane-less architect review renders a trailing hyphen; staged lane tags differ from architect's `gpt|gemini|claude` · two naming schemes in `docs/reviews/` · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:208` · slug-exact match misses `clerk-entity`, `torvane-entity`, `ship` staging · "nothing staged" printed while the docs exist; spec-compliant, see the verdict's Questions · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:214` · moved docs keep `~/Documents` pointers and get no "moved from" line · prose dangles · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:309` (with :320) · the kit check is a continuation of a step that ends "If `--no-vercel`, skip" · a library sunrise may print `kit check 4/4` unrun · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:400` (with :417–423) · placeholder rule contradicts itself for the Conventions/Footguns lines · two sessions render two files · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:428` (with :429) · vault path and Notion URL kept while the local path was cut for the same spec-sheet reason · inconsistent; Tony-specific exposure on `--public` · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:429` (with :265) · Notion URL unfillable at seed; Phase 5 re-adds it after the push with no commit step · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:432` · the git gates carry no reason or "do instead" · spec sheet "Writing the file" · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:208` (with :214) · fixed filenames for scope/architecture, then a "two scope docs" branch a fixed path can never reach · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:311` (with :221, :325) · kit check runs after the push; a fix is never re-committed or re-pushed; summary says pushed + 4/4 · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:320` · canary quotes `@AGENTS.md` then line 1; "the answer" is undefined when two lines are quoted · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:214` · "the doc's own header" undefined for review files; the `agent-world-scope.md` tombstone would be adopted · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:164` (with :214) · multi-candidate sets are asked twice, preview then step 5 · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:201` (with :202) · no rule for `@AGENTS.md` plus further lines, or a title above the framework block · Slice B review
+- MINOR · `docs/evidence/agent-file-flip/slice-b-requirement-map.md:50` · AC4 evidence is a paraphrase citing a log outside the repo · not reproducible from the checkout · Slice B review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:214` · every architect-reviewed idea pauses at adoption (one file per lane is architect's normal output) · Slice B review

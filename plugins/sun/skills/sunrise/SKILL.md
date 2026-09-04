@@ -181,9 +181,10 @@ the Mac Studio.
    Nothing existing is touched. Reply "go" to execute, or tell me what to change.
    ```
 
-   The `Docs` line comes from running Phase 1 step 5's staged-doc lookup read-only here
-   (list the matches, move nothing), so the seed set and every adoption are visible
-   before anything is written. If `--dry-run`, stop here. Otherwise wait for an
+   The `Docs` line comes from running Phase 1 step 5's lookup read-only here, both
+   halves (already-adopted docs in the repo's `docs/` subfolders, then staged matches;
+   list them, move nothing), so the seed set and every adoption are visible before
+   anything is written, and a resumed run shows what an earlier run already moved. If `--dry-run`, stop here. Otherwise wait for an
    explicit "go" before Phase 1.
 
 ---
@@ -199,19 +200,19 @@ up), so the repo comes first.
    - **They pre-seed agent files.** `create-next-app` now ships its own `CLAUDE.md` (just `@AGENTS.md`) and `AGENTS.md` (with a `<!-- BEGIN:nextjs-agent-rules -->` block: "this is NOT the Next.js you know… read `node_modules/next/dist/docs/` before writing code"). Astro/Turbo may do the same. Do NOT blind-overwrite these — the "never clobber" rule applies.
 3. **Seed Tier 0 of the repo doc kit** (templates at the bottom), MERGING with anything the scaffolder already wrote. The seed set is the kit's Tier 0 table in `~/ObsidianVault/01-domain/repo-doc-kit.md`; what goes in the instruction body follows `~/ObsidianVault/01-domain/agents-md-best-practices.md` (the spec sheet). Six files, nothing more: a file that does not earn its keep is rent paid every session, and `REVIEW.md` in particular is never seeded (`/signoff` creates it on its first run in the repo).
    - `AGENTS.md` — the instruction body, the one file every host reads (Claude Code, Codex, Cursor, Copilot). Shaped to the spec sheet's sections: commands, conventions, footguns, where to look, gates. If the scaffolder left an `AGENTS.md`, merge rather than overwrite: a framework block (`<!-- BEGIN:nextjs-agent-rules -->` … `<!-- END:nextjs-agent-rules -->`, or equivalent) stays at the top inside its markers, untouched, and the body goes below it so a future upgrade re-injects cleanly. It is real and load-bearing.
-   - `CLAUDE.md` — the stub: the line `@AGENTS.md`, then a `## Claude Code specific` section only when Claude-only lines follow it (skills, hooks, plan-mode requests, `.claude/`, `@DESIGN.md`). Sunrise seeds none, so the seeded file is literally one line. A real file, never a symlink. A scaffolder's `CLAUDE.md` that is already `@AGENTS.md` is kept as is.
+   - `CLAUDE.md` — the stub: the line `@AGENTS.md`, then a `## Claude Code specific` section only when Claude-only lines follow it (skills, hooks, plan-mode requests, `.claude/`, `@DESIGN.md`). Sunrise seeds none, so the seeded file is literally one line. A real file, never a symlink. A scaffolder's `CLAUDE.md` that is already `@AGENTS.md` is kept as is. A `CLAUDE.md` that carries real content (a `--promote`d dir sunrised before the flip, with its body in `CLAUDE.md` and a "read CLAUDE.md" stub in `AGENTS.md`; a scaffolder that ships one) is merged, never clobbered and never left as a second body: lift its content into `AGENTS.md` below any framework block, folding it into the template's sections where a line fits and keeping the rest verbatim under its own heading; drop the old `AGENTS.md` stub text; then rewrite `CLAUDE.md` to the one-line stub (plus a `## Claude Code specific` section for any line that was Claude-only). Show the merged `AGENTS.md` before writing it; nothing from the old body is lost, only moved.
    - `README.md` — name, one-liner, dev commands, links.
    - `.gitignore` — archetype-appropriate. **Then append `!.env.example`** so the example env is actually tracked: scaffolder `.gitignore`s use `.env*`, which silently swallows `.env.example`. Verify after the commit: `.env.example` tracked, `.env.local` still ignored.
    - `.env.example` — committed, keys present with no values.
    - `docs/.gitkeep` — an empty file so git tracks the empty `docs/` folder; the loop's paperwork lands in subfolders of `docs/` (`scope/`, `architecture/`, `plans/`, `reviews/`), each created by the first skill that writes there (or by step 5 below).
 4. **Idempotent git init.** The scaffolder may have already `git init`'d (and committed), so: init only if not already a repo; ensure the default branch is `main`. Never assume a clean slate.
-5. **Adopt staged docs.** Loop paperwork written before a repo existed sits in `~/Documents` (precon's and architect's pre-repo staging). Look for exactly these, matched by the project's `<slug>`:
+5. **Adopt staged docs.** Loop paperwork written before a repo existed sits in `~/Documents` (precon's and architect's pre-repo staging). First check the destinations for a doc a previous, interrupted run already adopted (`docs/scope/*-<slug>.md`, `docs/architecture/*-<slug>.md`, `docs/reviews/*-precon-cold-read-<slug>*.md`, `docs/reviews/*-architect-review-<slug>-*.md`): each hit is reported as `already adopted: <path>`, counts in the Phase 8 summary, and its staged source is not looked for again. Then look for exactly these, matched by the project's `<slug>`:
    - `~/Documents/<slug>-scope.md` → `docs/scope/<YYYY-MM-DD>-<slug>.md`
    - `~/Documents/<slug>-architecture.md` → `docs/architecture/<YYYY-MM-DD>-<slug>.md`
    - `~/Documents/precon-cold-reads/<slug>-cold-read-*.md` → `docs/reviews/<YYYY-MM-DD>-precon-cold-read-<slug>.md` (a same-day second file keeps a `-2`, `-3` suffix, matching precon's own naming)
    - `~/Documents/architect-reviews/<slug>-review-*.md` → `docs/reviews/<YYYY-MM-DD>-architect-review-<slug>-<lane>.md` (`<lane>` is the model tag the staged filename carries after the date, if any; a same-day repeat keeps its `-2`, `-3` suffix)
 
-   The date is taken from the doc's own header (precon writes `# <idea> — scope doc (YYYY-MM-DD)`, architect writes the date in its title line); when the header carries none, the date in the staged filename; when neither has one, ask Tony. No match at all: print `nothing staged` and continue. More than one candidate for one role (two scope docs, two architecture docs; or a set of cold reads or reviews): list every candidate with its proposed destination and ask Tony which move — never pick. Matches **move** (`mv`, not copy: staging holds loop paperwork only until sunrise runs), creating the destination subfolder on first use. Record what moved; the Phase 8 summary names it.
+   The date is taken from the doc's own header (precon writes `# <idea> — scope doc (YYYY-MM-DD)`, architect writes the date in its title line); when the header carries none, the date in the staged filename; when neither has one, ask Tony. No match at all (and nothing already adopted): print `nothing staged` and continue. More than one candidate for one role (two scope docs, two architecture docs; or a set of cold reads or reviews): list every candidate with its proposed destination and ask Tony which move — never pick. Matches **move** (`mv`, not copy: staging holds loop paperwork only until sunrise runs), creating the destination subfolder on first use. Record what moved; the Phase 8 summary names it.
 6. **First commit.** Stage everything (Tier 0, the scaffold, the adopted docs); commit. If there's nothing to commit because the scaffold already committed and nothing was adopted, that's fine — don't fail.
 
 ## Phase 2 — GitHub (the permit)  [skip if --no-github]
@@ -317,13 +318,14 @@ appends land below them. Sunrise owns only the sourced file.
    claude -p "Quote verbatim the first line of the project instructions you were given"
    ```
 
-   The first three are yes/no. The fourth is the canary: its answer must match line 1 of `AGENTS.md` (or the framework block's first line, `<!-- BEGIN:nextjs-agent-rules -->`, where the scaffolder left one). A model saying "yes, I have it" is not evidence; only the quoted line is. Any line that fails is a failed baseline: report it exactly like a failed deploy, fix the file (case in the git index, stub content, symlink), rerun, and do not print `SUNRISE COMPLETE` until all four pass.
+   The first three are yes/no. The fourth is the canary: the line it quotes from `AGENTS.md` must be the file's first line of content, which is line 1 of `AGENTS.md`, or, where the scaffolder left a framework block on line 1, the block's first prose line (the HTML comment marker `<!-- BEGIN:nextjs-agent-rules -->` is not content and a model will not quote it; verified 2026-09-04: a Next.js render answered "This is NOT the Next.js you know…"). The answer may also quote the stub's own `@AGENTS.md` line first; that is the mechanism, not a mismatch. A model saying "yes, I have it" is not evidence; only the quoted line is. Any line that fails is a failed baseline: report it exactly like a failed deploy, fix the file (case in the git index; a stub that is not `@AGENTS.md` goes through step 3's merge rule, never a bare overwrite; a symlink becomes a real file), rerun, and do not print `SUNRISE COMPLETE` until all four pass.
 2. **Print the summary + revisit recipe:**
 
    ```
    SUNRISE COMPLETE — <project>     "<Tony's one-line>"
      Repo     -> ~/Developer/<Name> (git init, pushed); kit check 4/4
-     Docs     -> adopted: <each moved doc's new path, or "nothing staged">
+     Docs     -> adopted: <each moved doc's new path; "already adopted" for docs an
+                 earlier run moved; or "nothing staged">
      GitHub   -> tiny-tunnel-dot/<repo> (private)
      Vercel   -> linked, auto-deploys on; live: <url> (200)
      Database -> <provider> via Vercel Marketplace; .env.local pulled
@@ -412,7 +414,10 @@ via /sunrise; green baseline.
 - Run: `<dev command>`
 - Build: `<build command>` · Typecheck: `<typecheck command>`
 - Test one file: `<single-test command>` (not the whole suite)
-- Env: `vercel env pull` writes `.env.local` (gitignored); `.env.example` lists the keys
+- Env: <`vercel env pull` writes `.env.local` (gitignored) when Vercel is linked, with the
+  app-scoped path for a monorepo or Electron app (Phase 4 step 4); with no Vercel layer,
+  "copy `.env.example` to `.env.local` and fill it"; the run picks one>; `.env.example`
+  lists the keys
 
 ## Conventions that differ from defaults
 - <a scaffolder convention an agent's default would get wrong, or leave this one line
