@@ -165,3 +165,6 @@ Status: not started
 
 ### 2026-09-04 — recheck: Slice A (lap 2)
 - MINOR · `plugins/build/skills/build/SKILL.md:16` (signoff :28, recheck :20, handoff :16) · (stop-and-ask clause fused with the later hunt tiers) · fixed — comma became "— then" in all four; verifier read each sentence in full and diffed against the pre-fix text; no new defect
+
+### 2026-09-04 — recheck: Slice A (architect same-day rule, per Tony via orchestrator)
+- MINOR · `plugins/architect/skills/architect/SKILL.md:114` · (same-day, same-lane, same-slug blind-review takes overwrite each other) · fixed — `-2`, `-3` suffix on both paths, never overwriting; verifier walked the scenario to `…-foo-gpt-2.md` and `foo-review-2026-09-04-gpt-2.md`, and confirmed the rule matches inspect's; no new defect
