@@ -13,7 +13,7 @@ The final inspection before a build is called done. `/signoff` inspects one slic
 
 ## Step 1 — Gate
 
-The invocation names a build doc, or the skill hunts the current repo per /build's Step 1 doc tiers (`docs/plans/*.md` — the repo doc kit's folder, a candidate matched to the invocation by the `<topic>` in its `YYYY-MM-DD-<topic>.md` name or its `Intent:` line, several plausible matches listed and asked; then the older flat `docs/<feature>-build-plan.md`, `docs/plans/` winning when both match and the verdict saying which it took; then any phase/slice doc under `docs/` or `plan/`) or takes the plan established in this session — /ship's two-source narrowing: nowhere else, no wider hunt; unresolvable means ask Tony.
+The invocation names a build doc, or the skill hunts the current repo per /build's Step 1 doc tiers (`docs/plans/*.md` — the repo doc kit's folder — then the older flat `docs/<feature>-build-plan.md`, both read before choosing: a candidate matches the invocation by filename, the `<topic>` of a `YYYY-MM-DD-<topic>.md` name or the `<feature>` of a flat name; an `Intent:` line is consulted only when no filename in either matches; a filename match beats an Intent-line match; when both match by filename `docs/plans/` wins and the verdict says which it took; several plausible matches are listed and asked; then any phase/slice doc under `docs/` or `plan/`) or takes the plan established in this session — /ship's two-source narrowing: nowhere else, no wider hunt; unresolvable means ask Tony.
 
 Read every `## Slice` heading's `Status:` line in the build doc. A doc with zero `## Slice` headings, or a slice heading missing its `Status:` line, is malformed input: report it and STOP — the gate never passes vacuously. The gate passes only when **every slice stands `signed off`** — the loop's terminal clean state. Anything less — `built`, `signed off with conditions`, `rejected`, `not started` — fails the gate: report exactly which slices are short and in what state, and STOP. (A `built` card's remedy is a fresh /signoff, never /recheck — say so when naming it.)
 
@@ -39,10 +39,10 @@ Determine the base — the build's starting commit — by this precedence: (1) a
 When outside reviewers are on, compose the cold packet. Each outside reviewer receives exactly three things:
 
 1. The build doc, verbatim — the spec they grade against.
-2. The full tracked code, via a **tracked-files-only export**: `git archive` the reviewed state into a fresh directory under the session scratchpad. Never point an outside tool at the live working tree. This is a hard rule with a reason: untracked files, gitignored files, `.env`, and credential files must be *physically absent* from what outside models can read, not merely unmentioned.
+2. The full tracked code, via a **tracked-files-only export**: `git archive` the reviewed state into a fresh directory under the session scratchpad, with `docs/reviews/` excluded from the export (`git archive <ref> . ':!docs/reviews'`) — that folder holds the per-slice signoff verdicts and this skill's own earlier verdicts, and the next rule keeps them out of the packet. Never point an outside tool at the live working tree. This is a hard rule with a reason: untracked files, gitignored files, `.env`, and credential files must be *physically absent* from what outside models can read, not merely unmentioned.
 3. The change boundary: the base commit id and the list of files the vertical touched (`git diff --name-status <base>..HEAD`), so they know new construction from the existing house.
 
-Never in the packet: per-slice signoff verdicts, punch-list history, chat context, or another reviewer's output. The reviewers go in cold on findings — that is the point of paying for outside eyes.
+Never in the packet: per-slice signoff verdicts (the `docs/reviews/` folder, excluded from the export above), punch-list history, chat context, or another reviewer's output. The reviewers go in cold on findings — that is the point of paying for outside eyes.
 
 The prompt is composed from `assets/vertical-mandate.md`: fill its placeholders with the build doc and the boundary; the code is the workspace the transport points at.
 
@@ -67,7 +67,7 @@ Pinned model ids change only on Tony's word, never mid-run (jpb's standing rule)
 
 ## Step 6 — The verdict doc
 
-One file per build: `docs/reviews/<YYYY-MM-DD>-vertical-<feature>.md` in the reviewed repo (`<feature>` is the doc's identity: the `<topic>` of a `docs/plans/<YYYY-MM-DD>-<topic>.md` name, else the filename minus `-build-plan.md`; the date is the first run's). A rerun for the same build appends a dated block to that same file — never a second file, never overwriting an earlier block; the file is never cleaned up (git history is the only archive). Create `docs/reviews/` on first use. This is the skill's ONLY write: never code, never the build plan, never a `Status:` card.
+One file per build: `docs/reviews/<YYYY-MM-DD>-vertical-<feature>.md` in the reviewed repo (`<feature>` is the doc's identity: the `<topic>` of a `docs/plans/<YYYY-MM-DD>-<topic>.md` name, else the filename minus `-build-plan.md`; the date is the first run's). Before writing, glob `docs/reviews/*-vertical-<feature>.md`: a hit is the build's file and this run appends to it; no hit means this is the first run and the file is created with today's date. A rerun for the same build appends a dated block to that same file — never a second file, never overwriting an earlier block; the file is never cleaned up (git history is the only archive). Create `docs/reviews/` on first use. This is the skill's ONLY write: never code, never the build plan, never a `Status:` card.
 
 Structure, top to bottom:
 

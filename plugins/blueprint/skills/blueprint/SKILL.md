@@ -33,7 +33,7 @@ Ask about load-bearing gaps only — choices that shape architecture, data, user
 
 ## Step 4 — Write the doc
 
-Save to `docs/plans/<YYYY-MM-DD>-<feature>.md` in the repo (the repo doc kit's folder for build docs and the first tier of /build's hunt; the older flat `docs/<feature>-build-plan.md` is the second tier, so existing repos keep working; create `docs/plans/` on first use). The format is load-bearing — /build's contract and ledger, /signoff's punch list and sweep (which also writes recheck-headed clearing blocks), and /recheck's checklist assembly and its in-place `Status:` edits all key off it — so keep the load-bearing forms exact: the section names, the `Status:` label, the block headings, and the ·-separated line fields:
+Before saving, hunt an existing build doc for this feature — `docs/plans/*.md` matched by its `<topic>`, then the older flat `docs/<feature>-build-plan.md` — and when one exists, extend it in place where it lies (rule 7: one living doc, never a fork; a flat doc is not moved). Only when none exists, save the new doc to `docs/plans/<YYYY-MM-DD>-<feature>.md` in the repo (the repo doc kit's folder for build docs and the first tier of /build's hunt; the older flat path is the second tier, so existing repos keep working; create `docs/plans/` on first use). The format is load-bearing — /build's contract and ledger, /signoff's punch list and sweep (which also writes recheck-headed clearing blocks), and /recheck's checklist assembly and its in-place `Status:` edits all key off it — so keep the load-bearing forms exact: the section names, the `Status:` label, the block headings, and the ·-separated line fields:
 
 ```
 # <Feature> — build plan (<date>)
