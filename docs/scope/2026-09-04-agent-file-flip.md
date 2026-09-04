@@ -1,5 +1,7 @@
 # agent-file-flip — scope doc (2026-09-04)
 
+Moved 2026-09-04 by Slice A of the build plan from the flat path `docs/agent-file-flip-scope.md` to this folder; the content is unchanged.
+
 Intent: Phase 2 of the agent-file flip program: change the tony-skills loop skills so (a) sunrise seeds new repos with AGENTS.md as the body and CLAUDE.md as a one-line `@AGENTS.md` stub per the vault's repo doc kit, (b) every loop skill writes its paperwork into the repo's fixed `docs/` subfolders instead of `~/Documents`, and (c) signoff/recheck/vertical read a per-repo `REVIEW.md` (signoff creates it on first run). For Tony, so every repo carries its own instruction body that Claude Code, Codex, Cursor, and Copilot all read, and so the idea-to-verdict chain is version-controlled in the repo. Program phases per the handoff §6: 1 vault (done), 2 tony-skills (this build), 3 migration checklist, 4 Pour-Guys, 5 remaining repos, 6 close-out. Phases 3 to 6 are downstream of this and not scoped here.
 
 Decisions:

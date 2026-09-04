@@ -13,7 +13,7 @@ The final inspection before a build is called done. `/signoff` inspects one slic
 
 ## Step 1 — Gate
 
-The invocation names a build doc, or the skill hunts the current repo per /build's Step 1 doc tiers (`docs/<feature>-build-plan.md`, then any phase/slice doc under `docs/` or `plan/`) or takes the plan established in this session — /ship's two-source narrowing: nowhere else, no wider hunt; unresolvable means ask Tony.
+The invocation names a build doc, or the skill hunts the current repo per /build's Step 1 doc tiers (`docs/plans/*.md` — the repo doc kit's folder, a candidate matched to the invocation by the `<topic>` in its `YYYY-MM-DD-<topic>.md` name or its `Intent:` line, several plausible matches listed and asked; then the older flat `docs/<feature>-build-plan.md`, `docs/plans/` winning when both match and the verdict saying which it took; then any phase/slice doc under `docs/` or `plan/`) or takes the plan established in this session — /ship's two-source narrowing: nowhere else, no wider hunt; unresolvable means ask Tony.
 
 Read every `## Slice` heading's `Status:` line in the build doc. A doc with zero `## Slice` headings, or a slice heading missing its `Status:` line, is malformed input: report it and STOP — the gate never passes vacuously. The gate passes only when **every slice stands `signed off`** — the loop's terminal clean state. Anything less — `built`, `signed off with conditions`, `rejected`, `not started` — fails the gate: report exactly which slices are short and in what state, and STOP. (A `built` card's remedy is a fresh /signoff, never /recheck — say so when naming it.)
 
@@ -67,7 +67,7 @@ Pinned model ids change only on Tony's word, never mid-run (jpb's standing rule)
 
 ## Step 6 — The verdict doc
 
-One file per run: `docs/vertical-signoff-<date>.md` in the reviewed repo, `<date>` in YYYY-MM-DD. A second run the same day writes `-2`, a third `-3`, and so on — never overwrite a prior run's doc. This is the skill's ONLY write: never code, never the build plan, never a `Status:` card.
+One file per build: `docs/reviews/<YYYY-MM-DD>-vertical-<feature>.md` in the reviewed repo (`<feature>` is the doc's identity: the `<topic>` of a `docs/plans/<YYYY-MM-DD>-<topic>.md` name, else the filename minus `-build-plan.md`; the date is the first run's). A rerun for the same build appends a dated block to that same file — never a second file, never overwriting an earlier block; the file is never cleaned up (git history is the only archive). Create `docs/reviews/` on first use. This is the skill's ONLY write: never code, never the build plan, never a `Status:` card.
 
 Structure, top to bottom:
 

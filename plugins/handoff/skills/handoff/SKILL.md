@@ -13,7 +13,7 @@ The end-of-phase walkthrough. `/blueprint` draws the plans, `/build` frames a sl
 
 ## Step 1 — Find the doc
 
-The siblings' hunt, same tiers, same priority: `docs/<feature>-build-plan.md`, any phase/slice doc under `docs/` or `plan/`, the vault project folder, or the plan established in this session — the first tier that yields a doc wins, and two candidates inside one tier is a stop-and-ask, never a silent pick.
+The siblings' hunt, same tiers, same priority: `docs/plans/*.md` (what `/blueprint` writes — the repo doc kit's folder; a candidate is matched to the invocation by the `<topic>` in its `YYYY-MM-DD-<topic>.md` name or its `Intent:` line, and several plausible matches are listed and asked, never silently picked), then the older flat `docs/<feature>-build-plan.md` (when both tiers match, `docs/plans/` wins and the report says which doc it took), any phase/slice doc under `docs/` or `plan/`, the vault project folder, or the plan established in this session — the first tier that yields a doc wins, and two candidates inside one tier is a stop-and-ask, never a silent pick.
 
 ## Step 2 — Read the record
 
@@ -54,7 +54,7 @@ Verified against git and the filesystem now, never trusted from session memory:
 
 **The doc write.** Exactly one dated block per run, headed `### <YYYY-MM-DD> — handoff`, appended at the tail of the `## Handoffs` section — created before `## Punch list` when missing. Contents: the next move, the repo photograph, the perishables — dated heading, one line per item, ·-separated fields where fields exist. Additive-only: earlier blocks are never edited, nothing verdict-shaped is ever written, and punch-list history stays untouched beyond Step 4's sanctioned lines.
 
-**The memory pointer.** One auto-memory file per feature, `handoff-<feature>` (type: project), overwritten each run — never a second dated file — pointing at the doc path, the block's date, and the kickoff line. `<feature>` is the doc's identity, derived one way per doc, every run: the `<feature>` from a `docs/<feature>-build-plan.md` filename, else a slug of the doc's own top-line title; when neither yields one, ask Tony to name it — never guess, and never let two runs name the same doc differently. The MEMORY.md index line is added or updated, worded as the build loop's kickoff pointer for the named build doc — wording no session can mistake for a /shutdown session handoff — and earlier handoff pointers for the same feature are superseded, never seconded.
+**The memory pointer.** One auto-memory file per feature, `handoff-<feature>` (type: project), overwritten each run — never a second dated file — pointing at the doc path, the block's date, and the kickoff line. `<feature>` is the doc's identity, derived one way per doc, every run: the `<topic>` of a `docs/plans/<YYYY-MM-DD>-<topic>.md` filename, else the `<feature>` from an older flat `docs/<feature>-build-plan.md` filename, else a slug of the doc's own top-line title; when neither yields one, ask Tony to name it — never guess, and never let two runs name the same doc differently. The MEMORY.md index line is added or updated, worded as the build loop's kickoff pointer for the named build doc — wording no session can mistake for a /shutdown session handoff — and earlier handoff pointers for the same feature are superseded, never seconded.
 
 ## Step 8 — Report and stop
 
