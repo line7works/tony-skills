@@ -90,7 +90,7 @@ Acceptance criteria:
 Footprint: `plugins/signoff/skills/signoff/SKILL.md` (Step 1 at line 20–35, the verdict format at 103–131, the rules list, What NOT to do); `plugins/recheck/skills/recheck/SKILL.md` (Step 1 at 18–28, Output at 64–82); `plugins/vertical/skills/vertical/SKILL.md` (Step 1 at 16, Step 6 at 68–74); `docs/evidence/agent-file-flip/slice-c-requirement-map.md`.
 Not in this slice: a per-archetype toggle table beyond the inference rule in R3 (the kit gives examples, not a table; a table is later work if inference proves wrong); a live `/signoff` run in a scratch repo (offered in Slice D on Tony's word).
 Depends on: Slice A (the verdict doc in `docs/reviews/` that R5 reads)
-Status: built
+Status: signed off with conditions
 
 ## Slice D — Close-out
 Goal: The repo describes what the skills now do, the sunset re-read is on record, and the three gated non-PR steps are listed for Tony's word.
@@ -232,3 +232,31 @@ Status: not started
 ### 2026-09-04 — recheck: Slice B (lap 2)
 - MINOR · `plugins/sun/skills/sunrise/SKILL.md:321` · ("step 3's merge rule" unqualified inside Phase 8) · fixed — now :322 reads "Phase 1 step 3's merge rule"; verifier resolved it from inside Phase 8 and confirmed the target holds the merge rule
 - MINOR · `plugins/sun/skills/sunrise/SKILL.md:136` · (preview example two-way while the rule adds "already adopted") · fixed — now :164–167 carries all three forms; verifier compared against the governing paragraph, Phase 1 step 5, and the Phase 8 summary; no new defect
+
+### 2026-09-04 — review: Slice C
+- MAJOR · `plugins/signoff/skills/signoff/SKILL.md:103` (with :87, :157–159; recheck :20; vertical :16) · the bar's catch-all MINOR line displaces rule 4's spec-unmet BLOCKER · a repo with the default sheet has a criterion silently unbuilt, no BLOCKER/MAJOR bar line names it, "everything else" places it MINOR, verdict reads SIGNED OFF · Slice C review
+- MAJOR · `plugins/signoff/skills/signoff/SKILL.md:24` (with :28, :92) · the first-run write lands before the union is detected and rule 9 still forbids working-tree edits · Tony says yes, the untracked sheet sits in the reviewed union and the spec lens charges scope creep; a literal rule-9 reader refuses the write · Slice C review
+- MAJOR · `plugins/signoff/skills/signoff/SKILL.md:22` (with :24, :62; recheck :20; vertical :16) · no rule for a present-but-malformed or foreign `REVIEW.md` · a human PR-review guide named `REVIEW.md` "governs" with no passes, no bar, and the kit sheet is never proposed; an unknown pass, a pass with no on/off, or `correctness: off` has no defined outcome · Slice C review
+- MAJOR · `plugins/signoff/skills/signoff/SKILL.md:140` (with :38) · "recurs" is undefined against still-open items and this run's own just-appended block · an unfixed MAJOR seen by two signoffs (or by the sweep's block) is appended as a repo-specific check and the stamp rewritten · Slice C review
+- MAJOR · `plugins/signoff/skills/signoff/SKILL.md:24` · the first-run ask does not say whether the turn ends and waits; "nothing means continue" reads as proceed-in-turn · one session pauses, another spawns reviewers on defaults in the same turn and a later yes has no rule · Slice C review
+- MAJOR · `plugins/vertical/skills/vertical/SKILL.md:16` (with :47, :91; `assets/vertical-mandate.md:21`) · `REVIEW.md`'s repo-specific checks carry prior-verdict claims and dates into the cold packet · after a committed R5 append, GPT and Gemini receive a distilled prior-verdict list under a mandate saying they have none · Slice C review
+- MAJOR · `plugins/recheck/skills/recheck/SKILL.md:20` (with signoff :38) · an `off`-pass fix-introduced defect is named-not-entered by /recheck but entered and flip-blocking by /signoff's sweep; the suppression is not in R2 · `accessibility: off`, a fix breaks focus order, /recheck flips the card while the sweep would have blocked · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:162` (with :22, :121, :130; vertical :16) · the template's placeholder line is a "check" by the letter; no rule says the first append replaces it · reviewers get the placeholder as an item, chat says "1 repo-specific checks tried" · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:52` (with :58, :62) · LEAN "three reviewers" and DEEP "add security" not updated for "on runs at every depth"; `security: on` forces a fourth reviewer into every LEAN run of a sheet repo · builder call beyond R2, see the verdict's Questions · Slice C review
+- MINOR · `plugins/recheck/skills/recheck/SKILL.md:45` · "same table as /signoff" contradicts :20's bar override · a Step 3 reader grades from the generic table · Slice C review
+- MINOR · `plugins/recheck/skills/recheck/SKILL.md:20` · R2's repo-specific checks excluded from the closed list · requirement narrowed by builder call, see Questions · Slice C review
+- MINOR · `plugins/vertical/skills/vertical/SKILL.md:16` (with :76, :102–110) · no Tried-and-failed section in vertical; checks listed in section 1 · reinterpretation of R2 · Slice C review
+- MINOR · `plugins/vertical/skills/vertical/SKILL.md:16` (with :25, :44) · "it is in the export" asserted, not checked; an uncommitted sheet differs between the local leg and the export; mandate silent on passes so an outside off-kind finding has no rule · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:121` · `created this run` cannot name a skipped pass; the R5 append has no chat-line state · a created sheet with `accessibility: off` never reports the skip · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:22` (with :24) · plain `absent — defaults` is unreachable when :24 is followed · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:24` · a declined proposal is re-asked every run; an amended yes is undefined; invocation wording collapses the show step · Slice C review
+- MINOR · `docs/evidence/agent-file-flip/slice-c-requirement-map.md:25` · AC1 evidence says "signoff 20 hits"; `grep -n` returns 16 lines · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:142` (with :165, :167) · the new H2 swallows the SKILL NOTE sentence and the punch-list ledger paragraph, which :167 still calls "the Output section" · Slice C review
+- MINOR · `plugins/recheck/skills/recheck/SKILL.md:94` · "never its toggles" while the toggles are the on/off values it reads · Slice C review
+- MINOR · `plugins/vertical/skills/vertical/SKILL.md:16` (with :96) · restates signoff's rule in different words against rule 9 · chat verdict vs verdict doc; "outside findings included" · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · stamp rewritten on append while the kit stamps on pass re-check; passes never re-inferred; recurrence per slice not per repo · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:62` · `security: off` on an auth slice honoured with no named conflict, unlike LIGHT · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:24` · "a hosted database" undetectable beyond env keys; "a `components/` or `app/` tree of them" unparseable · Slice C review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:24` (with :30) · sheet written, then empty detection stops the run with no verdict block; creation unreported · Slice C review
+- MINOR · `plugins/recheck/skills/recheck/SKILL.md:34` · the verifier is handed the checks list it must not hunt from · Slice C review
+- MINOR · `~/ObsidianVault/01-domain/repo-doc-kit.md:61` (with :63; `plugins/sun/skills/sunrise/SKILL.md:202`) · kit and sunrise say the sheet is created on the first run with no word gate; stamp semantics differ · outside the footprint · Slice C review
