@@ -159,3 +159,6 @@ Status: not started
 - MAJOR · `plugins/build/skills/build/SKILL.md:16` · (tier-1 Intent match plus first-tier-wins captures an invocation meant for a flat doc) · fixed in all six hunters — filename match beats Intent match, both tiers read before choosing; verifier walked "/recheck vertical" through each and every one takes docs/vertical-build-plan.md
 - MAJOR · `plugins/vertical/skills/vertical/SKILL.md:42` · (git archive packet includes docs/reviews/) · fixed — `':!docs/reviews'` pathspec, :45 agrees; verifier executed the pathspec form against this repo
 - MINOR · `plugins/build/skills/build/SKILL.md:16` (same shape at signoff :28, recheck :20, handoff :16) · broke: the new "never the lone doc on disk" clause fuses with the tier list that follows, so tiers 3–5 read either as forbidden fallbacks or as later tiers — a named invocation with no doc in docs/plans/ or flat docs/ may refuse to fall through to plan/ or the vault folder · fix-introduced by the Slice A fix pass
+
+### 2026-09-04 — recheck: Slice A (lap 2)
+- MINOR · `plugins/build/skills/build/SKILL.md:16` (signoff :28, recheck :20, handoff :16) · (stop-and-ask clause fused with the later hunt tiers) · fixed — comma became "— then" in all four; verifier read each sentence in full and diffed against the pre-fix text; no new defect
