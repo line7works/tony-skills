@@ -163,7 +163,8 @@ the Mac Studio.
             .env.example, docs/.gitkeep
    Docs     adopt staged: ~/Documents/<slug>-scope.md -> docs/scope/<YYYY-MM-DD>-<slug>.md
             (one line per staged doc found by the Phase 1 lookup, with its
-            destination; or the single line "nothing staged")
+            destination; "already adopted: <path>" for a doc an earlier run
+            moved; or the single line "nothing staged")
    GitHub   create tiny-tunnel-dot/<repo> (private); push main
    Vercel   link project <Name> (auto-connects GitHub repo; auto-deploys on)
    Database vercel integration add supabase (auto-connect + auto-pull)
@@ -318,7 +319,7 @@ appends land below them. Sunrise owns only the sourced file.
    claude -p "Quote verbatim the first line of the project instructions you were given"
    ```
 
-   The first three are yes/no. The fourth is the canary: the line it quotes from `AGENTS.md` must be the file's first line of content, which is line 1 of `AGENTS.md`, or, where the scaffolder left a framework block on line 1, the block's first prose line (the HTML comment marker `<!-- BEGIN:nextjs-agent-rules -->` is not content and a model will not quote it; verified 2026-09-04: a Next.js render answered "This is NOT the Next.js you know…"). The answer may also quote the stub's own `@AGENTS.md` line first; that is the mechanism, not a mismatch. A model saying "yes, I have it" is not evidence; only the quoted line is. Any line that fails is a failed baseline: report it exactly like a failed deploy, fix the file (case in the git index; a stub that is not `@AGENTS.md` goes through step 3's merge rule, never a bare overwrite; a symlink becomes a real file), rerun, and do not print `SUNRISE COMPLETE` until all four pass.
+   The first three are yes/no. The fourth is the canary: the line it quotes from `AGENTS.md` must be the file's first line of content, which is line 1 of `AGENTS.md`, or, where the scaffolder left a framework block on line 1, the block's first prose line (the HTML comment marker `<!-- BEGIN:nextjs-agent-rules -->` is not content and a model will not quote it; verified 2026-09-04: a Next.js render answered "This is NOT the Next.js you know…"). The answer may also quote the stub's own `@AGENTS.md` line first; that is the mechanism, not a mismatch. A model saying "yes, I have it" is not evidence; only the quoted line is. Any line that fails is a failed baseline: report it exactly like a failed deploy, fix the file (case in the git index; a stub that is not `@AGENTS.md` goes through Phase 1 step 3's merge rule, never a bare overwrite; a symlink becomes a real file), rerun, and do not print `SUNRISE COMPLETE` until all four pass.
 2. **Print the summary + revisit recipe:**
 
    ```

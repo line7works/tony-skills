@@ -69,7 +69,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (frontmatter, lines 80–83, 160, 178, 182–198, 204, 247, 289–320, 365–420); `docs/evidence/agent-file-flip/slice-b-requirement-map.md`. `plugins/sun/skills/sunset/SKILL.md` is not touched.
 Not in this slice: a live `/sunrise` run (offered in Slice D on Tony's word); the vault note `01-domain/claude-skills/sunrise.md` (Slice D, Tony's word); marketplace or README wording (Slice D).
 Depends on: Slice A (the subfolder names and the `docs/reviews/` naming it adopts into)
-Status: signed off with conditions
+Status: signed off
 
 ## Slice C — Signoff, recheck, and vertical read `REVIEW.md`; signoff creates it
 Goal: A repo's own inspection sheet steers the three review stations, and signoff writes it on its first run in a repo from the kit template after Tony confirms the inferred toggles.
@@ -207,3 +207,11 @@ Status: not started
 - MINOR · `plugins/sun/skills/sunrise/SKILL.md:201` (with :202) · no rule for `@AGENTS.md` plus further lines, or a title above the framework block · Slice B review
 - MINOR · `docs/evidence/agent-file-flip/slice-b-requirement-map.md:50` · AC4 evidence is a paraphrase citing a log outside the repo · not reproducible from the checkout · Slice B review
 - MINOR · `plugins/sun/skills/sunrise/SKILL.md:214` · every architect-reviewed idea pauses at adoption (one file per lane is architect's normal output) · Slice B review
+
+### 2026-09-04 — recheck: Slice B
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:320` · (canary rule expects the framework block's comment marker as the quoted line) · fixed — now :321; the rule names the block's first prose line and the stub's own `@AGENTS.md` quote; verifier rendered the framework fixture and ran the canary: "This is NOT the Next.js you know…" passes under the current text
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:208` · (lookup checks only `~/Documents`, never the destination) · fixed — now :209/:215, preview :155–158, summary :327–328; verifier walked the re-invoked run: destination globs first, `already adopted: <path>` in all three places, `nothing staged` only when nothing was adopted
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:202` · (no merge rule for a `CLAUDE.md` with real content) · fixed — now :203; body lifted into `AGENTS.md` below any framework block, old stub text dropped, `CLAUDE.md` rewritten to the stub, merged file shown first; Phase 8 :321 routes a non-stub through that rule, no bare overwrite remains
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:415` · (`vercel env pull` line has no placeholder) · fixed — now :417–420; the Env clause is one `<...>` placeholder with linked / app-scoped / no-Vercel branches; verifier walked library and monorepo renders
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:321` · broke: "step 3's merge rule" is unqualified inside Phase 8, whose own step 3 is the handoff prompt — a literal reader resolves it to the wrong step · fix-introduced by the Slice B fix pass
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:136` · broke: the preview example still describes the Docs line as two-way (staged lines or "nothing staged") while the rule below adds `already adopted` · illustration not updated with the rule · fix-introduced by the Slice B fix pass

@@ -53,3 +53,11 @@ Questions
 - Machine facts in `AGENTS.md` (MINOR 7): keep the vault path and Notion URL in the repo file, or move both to the memory note and vault `_index.md` like the local path?
 
 Next: fix the four MAJORs, then /recheck flips the card.
+
+### 2026-09-04 — recheck: Slice B
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:320` · (canary rule expects the framework block's comment marker as the quoted line) · fixed — now :321; the rule names the block's first prose line and the stub's own `@AGENTS.md` quote; verifier rendered the framework fixture and ran the canary: "This is NOT the Next.js you know…" passes under the current text
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:208` · (lookup checks only `~/Documents`, never the destination) · fixed — now :209/:215, preview :155–158, summary :327–328; verifier walked the re-invoked run: destination globs first, `already adopted: <path>` in all three places, `nothing staged` only when nothing was adopted
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:202` · (no merge rule for a `CLAUDE.md` with real content) · fixed — now :203; body lifted into `AGENTS.md` below any framework block, old stub text dropped, `CLAUDE.md` rewritten to the stub, merged file shown first; Phase 8 :321 routes a non-stub through that rule, no bare overwrite remains
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:415` · (`vercel env pull` line has no placeholder) · fixed — now :417–420; the Env clause is one `<...>` placeholder with linked / app-scoped / no-Vercel branches; verifier walked library and monorepo renders
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:321` · broke: "step 3's merge rule" is unqualified inside Phase 8, whose own step 3 is the handoff prompt — a literal reader resolves it to the wrong step · fix-introduced by the Slice B fix pass
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:136` · broke: the preview example still describes the Docs line as two-way (staged lines or "nothing staged") while the rule below adds `already adopted` · illustration not updated with the rule · fix-introduced by the Slice B fix pass
