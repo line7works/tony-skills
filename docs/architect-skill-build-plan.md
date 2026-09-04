@@ -106,6 +106,21 @@ Status: signed off
 
 ## Handoffs
 
+### 2026-09-03 — handoff
+- Next move · loop complete · both slices `signed off`; no slice left to build; no kickoff line — the next move is Tony's (a new /blueprint, or nothing)
+- Repo · main at e3a59f3 · 0 ahead · clean apart from the pre-existing untracked `tools/shopify-mcp/` · this block committed on `chore/architect-handoff-2026-09-03`, not pushed
+- Suite · none recorded · the plan's Constraints say no runnable suite applies; every criterion was exercised by hand or by fresh reviewers (Slice A/B review and recheck blocks)
+- Shipped · PR #35 (Slices A+B) · PR #36 (five run-biting MINORs, recheck ALL CLEAR) · PR #37 (blind review takes a Tony-named reviewer roster: GPT default, Gemini, Claude lanes, per-lane review files)
+- Installed · Studio: `architect@tony-skills` at e3a59f3 · laptop: not yet — needs `/plugin marketplace update tony-skills` then `/plugin update architect@tony-skills`
+- Pending Tony's word · Spine map: architect added to the shelf and seeded into Heavy build, committed locally in `~/Developer/Spine` (76b48e2); the artifact republish to `0a7cb0d6…` was blocked by the permission classifier — live map is still the old version
+- Pending Tony's ruling · SKILL.md:98 · whether the visual's HTML source belongs in a public repo's `docs/` (Slice A review MINOR; skill says "never publish anywhere public" but the repo may be public)
+- Pending Tony's ruling · SKILL.md:113 · whether the skill should verify reviewer claims against the repo before the disagreement walk (the Pour-Guys run did it unasked and it worked; scope doc says every disagreement is presented)
+- Seam · SKILL.md:108/:109 · the pin reference says "if that pin moves, the reference wins" while the transport line hard-codes `model: "gpt-5.6-sol"` — pre-existing, noticed by the 2026-09-02 recheck verifier, not on the ledger
+- Seam · the reviewer-roster change (PR #37) has not been exercised live; the first multi-reviewer run is its first test, and the Gemini and Claude lanes carry recipes borrowed from /inspect
+- Open MINORs · ~55 on the ledger, all cosmetic to the plan doc, evidence notes, or the skill's wording; none gating a run
+- Scope doc · `~/Documents/architect-scope.md` :44 struck and superseded 2026-09-02 (reviewer roster); backup `architect-scope.md.bak-2026-09-02b`
+- Pour-Guys · the smoke run's architecture doc and HTML ride branch `slice-f1` (6a61a54) and reach Pour-Guys main only when that branch merges
+
 ## Punch list
 
 ### 2026-08-30 — inspect: plan
