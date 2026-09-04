@@ -69,7 +69,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (frontmatter, lines 80–83, 160, 178, 182–198, 204, 247, 289–320, 365–420); `docs/evidence/agent-file-flip/slice-b-requirement-map.md`. `plugins/sun/skills/sunset/SKILL.md` is not touched.
 Not in this slice: a live `/sunrise` run (offered in Slice D on Tony's word); the vault note `01-domain/claude-skills/sunrise.md` (Slice D, Tony's word); marketplace or README wording (Slice D).
 Depends on: Slice A (the subfolder names and the `docs/reviews/` naming it adopts into)
-Status: not started
+Status: built
 
 ## Slice C — Signoff, recheck, and vertical read `REVIEW.md`; signoff creates it
 Goal: A repo's own inspection sheet steers the three review stations, and signoff writes it on its first run in a repo from the kit template after Tony confirms the inferred toggles.
@@ -119,6 +119,17 @@ Status: not started
 - The moved scope doc carries a one-line "moved from the flat path" note under its title, per the kit's supersede-at-the-top convention; its ledger content is unchanged · builder call
 - Ship's hunt delegates to /build's tiers (its line 20) and names no path, so it was not edited · builder call
 - AC3 was run with `claude --plugin-dir plugins/build`, which loads the branch copy alongside the installed copy rather than instead of it; the criterion was judged on what the session said about the branch copy · builder call
+
+### 2026-09-04 — build: Slice B
+- The old template's `Local: ~/Developer/<Name> (terminal shortcut)` line was not carried into `AGENTS.md`: R1 enumerates what carries over (the one-liner, the git gates, env pull, end-of-session) and the spec sheet excludes machine-specific facts from the repo file; the memory note and the vault `_index.md` already hold the path and shortcut · builder call
+- `Where to look` points at the kit's four `docs/` subfolders and the vault folder; the old `docs/decisions/` line was dropped (no loop skill writes there; the Slice A MINOR at the old line 381 flagged it as an empty-folder pointer) · builder call
+- Empty spec-sheet sections (Conventions, Footguns) are seeded as one placeholder line each rather than omitted, so the body keeps the spec sheet's shape; the placeholder says to leave it until the second failure · builder call
+- R5's "more than one candidate for one role": for the two one-file roles (scope, architecture) any second match is an ask; for cold reads and blind reviews, where several files per slug are the normal case, every match is listed with its destination and Tony confirms the set in one question — still list-and-ask, never a pick · builder call
+- Adoption date when the header carries none: the staged filename's date, then ask; R5 names only the header · builder call
+- Phase 0's preview runs the same lookup read-only (list, move nothing) so R6's preview line is real rather than guessed · builder call
+- Phase 7b's memory-note pointer (old line 285, "repo `CLAUDE.md` (canonical detail)") was rewritten to `AGENTS.md` though R3's passage list omits it: Constraint 13 says a role changed in one place changes everywhere the file states it, and the line is in the footprint file · builder call
+- Phase 1's old step 4 (init + commit in one step) was split into steps 4 and 6 so R5's adoption step could sit "after git init and before the first commit" as written · builder call
+- AC4 was run with `claude --plugin-dir plugins/sun`, same caveat as Slice A's AC3 · builder call
 ## Deviations
 
 ### 2026-09-04 — build: Slice A (post-recheck)
@@ -128,6 +139,11 @@ Status: not started
 ### 2026-09-04 — build: Slice A
 - precon's "What NOT to do" line "Don't auto-file the scope doc into `~/Developer/_ideas/` or move it into a repo — relocation is Tony's" now sits beside sunrise's adoption step; Slice B should make that line say relocation is Tony's or sunrise's, so the two skills agree. Not changed here (precon's rule list is outside Slice A's requirements)
 - `~/Documents/precon-cold-reads/agent-file-flip-cold-read-2026-09-04.md` (this program's own cold read, written before Slice A) is now a staged file with a repo-owned scope doc; moving it into `docs/reviews/` is Tony's call, not this slice's
+
+### 2026-09-04 — build: Slice B
+- precon's What-NOT line ("relocation is Tony's", Slice A's discovery above) still contradicts sunrise's new adoption step; precon is outside Slice B's footprint, so not changed here. Same for the Slice A MINOR at `plugins/precon/skills/precon/SKILL.md:130`
+- `~/Documents` currently holds seven staged scope docs, four architect reviews, and sixteen cold reads for ideas that were never sunrised or were sunrised before this step existed; the new step adopts only on a fresh sunrise, so those stay where they are until Tony moves them
+- The seeded `README.md` template does not exist in the skill (step 3 says "name, one-liner, dev commands, links" and no template follows); untouched, not Slice B's
 ## Handoffs
 ## Punch list
 

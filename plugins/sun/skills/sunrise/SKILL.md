@@ -3,8 +3,10 @@ name: sunrise
 description: >-
   Bootstrap ("sunrise") a new project Tony is ready to make real, across every
   layer at once: scaffold a local repo in ~/Developer by archetype (web app /
-  monorepo / static / Electron / library / script), seed its boot docs (README,
-  CLAUDE.md, AGENTS.md, .gitignore, .env), create + push a private GitHub repo,
+  monorepo / static / Electron / library / script), seed the repo doc kit's Tier 0
+  (README, AGENTS.md as the instruction body, CLAUDE.md as a one-line `@AGENTS.md`
+  stub, .gitignore, .env.example, docs/), adopt any scope or architecture docs
+  staged in ~/Documents before the repo existed, create + push a private GitHub repo,
   link Vercel with auto-deploys, provision a Supabase (or Neon) database through
   the Vercel Marketplace and wire its env, create the Obsidian project folder +
   index, create the CLI/Claude-Code memory note, and provision a per-project
@@ -77,10 +79,10 @@ task board (Phase 5) is archetype-independent and on by default; `--no-notion` s
 
 - **Never clobber.** If anything already exists at any layer in Phase 0, STOP and surface it. Offer to adopt it (`--promote`), never overwrite. This is the mirror of sunset's "never delete."
 - **Preview before executing.** Always show the full "what will be created and where" table and wait for an explicit "go."
-- **Ask what it is.** Always prompt Tony for a one-line "what is this / what are you building" and use his words in `_index.md`, `CLAUDE.md`, the memory note, and the handoff prompt. (Mirror of sunset's "ask the reason.")
+- **Ask what it is.** Always prompt Tony for a one-line "what is this / what are you building" and use his words in `_index.md`, `AGENTS.md`, the memory note, and the handoff prompt. (Mirror of sunset's "ask the reason.")
 - **Layers are conditional on the archetype.** Don't run a gas line to a tool shed. Gate Vercel and the database per the matrix.
 - **Get to green.** Don't hand back a half-wired skeleton. End on a verified push + a **200 on the clean `<project>.vercel.app` alias** + a populated `.env.local`.
-- **Wire the cross-links from birth.** The repo `CLAUDE.md`, the vault `_index.md`, and the memory note all point at each other on day one, so the boot path works immediately.
+- **Wire the cross-links from birth.** The repo `AGENTS.md` (the instruction body every host reads; `CLAUDE.md` is its one-line `@AGENTS.md` stub), the vault `_index.md`, and the memory note all point at each other on day one, so the boot path works immediately.
 - **Resumable.** If a run dies partway and is re-invoked, detect what already exists (Phase 0 collision check) and continue rather than double-create.
 - **Operate on the vault via the local filesystem.** Canonical is `~/ObsidianVault` **on the Mac Studio** — not the laptop, whose copy is retired. Obsidian picks up external changes on its own. Never proceed without passing the vault gate in Phase 0.
 
@@ -157,7 +159,11 @@ the Mac Studio.
    names: dir/repo <Name>  ·  slug <slug>  ·  memory project_<slug_>.md  ·  shortcut <shortcut>
    ──────────────────────────────────────────────────────────────────────
    Repo     mkdir ~/Developer/<Name>; scaffold <scaffolder>; git init
-            seed README.md, CLAUDE.md, AGENTS.md, .gitignore, .env.example
+            seed Tier 0: README.md, AGENTS.md, CLAUDE.md, .gitignore,
+            .env.example, docs/.gitkeep
+   Docs     adopt staged: ~/Documents/<slug>-scope.md -> docs/scope/<YYYY-MM-DD>-<slug>.md
+            (one line per staged doc found by the Phase 1 lookup, with its
+            destination; or the single line "nothing staged")
    GitHub   create tiny-tunnel-dot/<repo> (private); push main
    Vercel   link project <Name> (auto-connects GitHub repo; auto-deploys on)
    Database vercel integration add supabase (auto-connect + auto-pull)
@@ -175,7 +181,10 @@ the Mac Studio.
    Nothing existing is touched. Reply "go" to execute, or tell me what to change.
    ```
 
-   If `--dry-run`, stop here. Otherwise wait for an explicit "go" before Phase 1.
+   The `Docs` line comes from running Phase 1 step 5's staged-doc lookup read-only here
+   (list the matches, move nothing), so the seed set and every adoption are visible
+   before anything is written. If `--dry-run`, stop here. Otherwise wait for an
+   explicit "go" before Phase 1.
 
 ---
 
@@ -188,20 +197,29 @@ up), so the repo comes first.
 2. **Scaffold per archetype** using the matrix's default scaffolder (or Tony's override), non-interactively where possible. Two things current scaffolders do that you must expect:
    - **They init git themselves.** `create-next-app` ignores `--no-git` (use `--disable-git`, or just let it init) and prints "Initialized a git repository." So the dir may already be a git repo — possibly with a scaffold commit — before step 4.
    - **They pre-seed agent files.** `create-next-app` now ships its own `CLAUDE.md` (just `@AGENTS.md`) and `AGENTS.md` (with a `<!-- BEGIN:nextjs-agent-rules -->` block: "this is NOT the Next.js you know… read `node_modules/next/dist/docs/` before writing code"). Astro/Turbo may do the same. Do NOT blind-overwrite these — the "never clobber" rule applies.
-3. **Seed the boot docs** (templates at the bottom), MERGING with anything the scaffolder already wrote:
-   - `CLAUDE.md` — the 60-second boot doc pointing at the vault `_index.md`; keep it primary. If the scaffolder left a `CLAUDE.md`/`AGENTS.md`, merge rather than overwrite: write the boot-doc content but PRESERVE any framework `nextjs-agent-rules` (or equivalent) block — it's real and load-bearing.
-   - `AGENTS.md` — the stub pointing at `CLAUDE.md`, keeping the framework warning block.
+3. **Seed Tier 0 of the repo doc kit** (templates at the bottom), MERGING with anything the scaffolder already wrote. The seed set is the kit's Tier 0 table in `~/ObsidianVault/01-domain/repo-doc-kit.md`; what goes in the instruction body follows `~/ObsidianVault/01-domain/agents-md-best-practices.md` (the spec sheet). Six files, nothing more: a file that does not earn its keep is rent paid every session, and `REVIEW.md` in particular is never seeded (`/signoff` creates it on its first run in the repo).
+   - `AGENTS.md` — the instruction body, the one file every host reads (Claude Code, Codex, Cursor, Copilot). Shaped to the spec sheet's sections: commands, conventions, footguns, where to look, gates. If the scaffolder left an `AGENTS.md`, merge rather than overwrite: a framework block (`<!-- BEGIN:nextjs-agent-rules -->` … `<!-- END:nextjs-agent-rules -->`, or equivalent) stays at the top inside its markers, untouched, and the body goes below it so a future upgrade re-injects cleanly. It is real and load-bearing.
+   - `CLAUDE.md` — the stub: the line `@AGENTS.md`, then a `## Claude Code specific` section only when Claude-only lines follow it (skills, hooks, plan-mode requests, `.claude/`, `@DESIGN.md`). Sunrise seeds none, so the seeded file is literally one line. A real file, never a symlink. A scaffolder's `CLAUDE.md` that is already `@AGENTS.md` is kept as is.
    - `README.md` — name, one-liner, dev commands, links.
    - `.gitignore` — archetype-appropriate. **Then append `!.env.example`** so the example env is actually tracked: scaffolder `.gitignore`s use `.env*`, which silently swallows `.env.example`. Verify after the commit: `.env.example` tracked, `.env.local` still ignored.
    - `.env.example` — committed, keys present with no values.
-4. **Idempotent git.** The scaffolder may have already `git init`'d (and committed), so: init only if not already a repo; ensure the default branch is `main`; stage everything; commit. If there's nothing to commit because the scaffold already committed, that's fine — don't fail. Never assume a clean slate.
+   - `docs/.gitkeep` — an empty file so git tracks the empty `docs/` folder; the loop's paperwork lands in subfolders of `docs/` (`scope/`, `architecture/`, `plans/`, `reviews/`), each created by the first skill that writes there (or by step 5 below).
+4. **Idempotent git init.** The scaffolder may have already `git init`'d (and committed), so: init only if not already a repo; ensure the default branch is `main`. Never assume a clean slate.
+5. **Adopt staged docs.** Loop paperwork written before a repo existed sits in `~/Documents` (precon's and architect's pre-repo staging). Look for exactly these, matched by the project's `<slug>`:
+   - `~/Documents/<slug>-scope.md` → `docs/scope/<YYYY-MM-DD>-<slug>.md`
+   - `~/Documents/<slug>-architecture.md` → `docs/architecture/<YYYY-MM-DD>-<slug>.md`
+   - `~/Documents/precon-cold-reads/<slug>-cold-read-*.md` → `docs/reviews/<YYYY-MM-DD>-precon-cold-read-<slug>.md` (a same-day second file keeps a `-2`, `-3` suffix, matching precon's own naming)
+   - `~/Documents/architect-reviews/<slug>-review-*.md` → `docs/reviews/<YYYY-MM-DD>-architect-review-<slug>-<lane>.md` (`<lane>` is the model tag the staged filename carries after the date, if any; a same-day repeat keeps its `-2`, `-3` suffix)
+
+   The date is taken from the doc's own header (precon writes `# <idea> — scope doc (YYYY-MM-DD)`, architect writes the date in its title line); when the header carries none, the date in the staged filename; when neither has one, ask Tony. No match at all: print `nothing staged` and continue. More than one candidate for one role (two scope docs, two architecture docs; or a set of cold reads or reviews): list every candidate with its proposed destination and ask Tony which move — never pick. Matches **move** (`mv`, not copy: staging holds loop paperwork only until sunrise runs), creating the destination subfolder on first use. Record what moved; the Phase 8 summary names it.
+6. **First commit.** Stage everything (Tier 0, the scaffold, the adopted docs); commit. If there's nothing to commit because the scaffold already committed and nothing was adopted, that's fine — don't fail.
 
 ## Phase 2 — GitHub (the permit)  [skip if --no-github]
 
 Create the remote, link it, and push in one shot:
 
 1. `gh repo create tiny-tunnel-dot/<repo> --private --source=. --remote=origin --push` (`--public` if chosen).
-2. **Document the branch rule** in `CLAUDE.md`: feature branches + PRs, never push to `main` (Tony's standing rule). Optionally add a GitHub ruleset requiring PRs via `gh api`; note that branch protection on Free private repos may be limited, so if it errors, leave it documented rather than failing the run.
+2. **Confirm the branch rule** is in `AGENTS.md` (the seeded Gates section carries it): feature branches + PRs, never push to `main` (Tony's standing rule). Optionally add a GitHub ruleset requiring PRs via `gh api`; note that branch protection on Free private repos may be limited, so if it errors, leave it documented rather than failing the run.
 
 ## Phase 3 — Vercel (the meter)  [archetype-gated; skip if --no-vercel]
 
@@ -244,7 +262,7 @@ needs it; already true for the Project Knight integration).
    - "When `Status` is set to Not started or In progress → uncheck `Done`."
    - (Optional third: "When `Status` is set to Done → check `Done`.")
    These keep the checkbox and Status in lock-step. Nothing breaks if they are skipped (a consumer can OR the two signals, per ADR 009), but the board reads cleaner with them.
-6. **Capture the coordinates:** the parent page URL + both DB IDs (`tasksDbId`, `roadmapDbId`). Record them in the vault `_index.md` "Notion" section (Phase 6) and the repo `CLAUDE.md`. Do NOT wire app consumption by default — the board is a PM artifact. If this project's code will later read it (the Knight pattern: a PAT in Vercel env + an `identityRules.notion` shape), point Tony at ADR 009 in the Project Knight repo as the reference implementation.
+6. **Capture the coordinates:** the parent page URL + both DB IDs (`tasksDbId`, `roadmapDbId`). Record them in the vault `_index.md` "Notion" section (Phase 6) and the repo `AGENTS.md` ("Where to look"). Do NOT wire app consumption by default — the board is a PM artifact. If this project's code will later read it (the Knight pattern: a PAT in Vercel env + an `identityRules.notion` shape), point Tony at ADR 009 in the Project Knight repo as the reference implementation.
 
 **Status property — no fallback needed (tested 2026-06-01).** A plain `Status` property via `create-database` yields Notion's default options Not started / In progress / Done — exactly the Task Tracker spec. The select-fallback (create as select, convert in the UI) only matters if you ever need CUSTOM status options beyond those three defaults. Duplicating the Knight DBs (`duplicate-page`) stays an option, but building fresh is clean and avoids repointing relations.
 
@@ -282,18 +300,30 @@ appends land below them. Sunrise owns only the sourced file.
 
 ### 7b — Memory
 
-1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + pointers to the repo `CLAUDE.md` (canonical detail) and the vault folder (durable notes). Mirror the shape of `project_knight.md`.
+1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + pointers to the repo `AGENTS.md` (canonical detail) and the vault folder (durable notes). Mirror the shape of `project_knight.md`.
 2. Add a one-line entry to that store's `MEMORY.md` under the active list: `- [<Project>](project_<slug_>.md) — <hook>`.
 3. **The project's own per-directory memory store** auto-creates the first time Claude Code runs in `~/Developer/<Name>` — nothing to pre-create. (This is the inverse of sunset archiving that store.)
 
 ## Phase 8 — Closeout (the certificate of occupancy)
 
 1. **Prove it's live — verify the CLEAN production alias, not the deploy-hash URL.** New Vercel projects ship with Deployment Protection ON, so the deploy-hash URL `vercel --prod` prints (`<project>-<hash>-<team>.vercel.app`) and the team alias both return **401** — that's expected protection, NOT a failed deploy. The clean production alias `https://<project>.vercel.app` returns **200**. So: deploy (`npx vercel --prod`, or confirm the Phase 2 git-connect auto-deploy), then `curl -sI https://<project>.vercel.app` and treat **200 on the clean alias** as green; treat 401 on hash/team URLs as expected. If the clean alias isn't reserved, derive the prod alias from `npx vercel ls <project> --prod` / `npx vercel inspect` instead of curling the deploy output. For an Electron env-plane, "live" = the no-op build succeeded. If `--no-vercel`, skip; the green bar is the local scaffold running.
+
+   **Then verify the repo against the kit**, in the new repo's root (the kit note's own four lines, "Verifying a repo against the kit"):
+
+   ```bash
+   git ls-files | grep -qx AGENTS.md && echo "AGENTS.md tracked, exact case"
+   [ "$(head -1 CLAUDE.md)" = "@AGENTS.md" ] && echo "stub imports the body"
+   [ ! -L CLAUDE.md ] && echo "stub is a real file"
+   claude -p "Quote verbatim the first line of the project instructions you were given"
+   ```
+
+   The first three are yes/no. The fourth is the canary: its answer must match line 1 of `AGENTS.md` (or the framework block's first line, `<!-- BEGIN:nextjs-agent-rules -->`, where the scaffolder left one). A model saying "yes, I have it" is not evidence; only the quoted line is. Any line that fails is a failed baseline: report it exactly like a failed deploy, fix the file (case in the git index, stub content, symlink), rerun, and do not print `SUNRISE COMPLETE` until all four pass.
 2. **Print the summary + revisit recipe:**
 
    ```
    SUNRISE COMPLETE — <project>     "<Tony's one-line>"
-     Repo     -> ~/Developer/<Name> (git init, pushed)
+     Repo     -> ~/Developer/<Name> (git init, pushed); kit check 4/4
+     Docs     -> adopted: <each moved doc's new path, or "nothing staged">
      GitHub   -> tiny-tunnel-dot/<repo> (private)
      Vercel   -> linked, auto-deploys on; live: <url> (200)
      Database -> <provider> via Vercel Marketplace; .env.local pulled
@@ -303,8 +333,8 @@ appends land below them. Sunrise owns only the sourced file.
      Shortcut -> `<shortcut>` -> ~/Developer/<Name>
 
    To start building: run `source ~/.zshrc` (or open a new terminal tab), then
-   type `<shortcut>` and say "continue on <project>". CLAUDE.md will auto-load;
-   durable notes live in the vault project folder.
+   type `<shortcut>` and say "continue on <project>". AGENTS.md loads through
+   the CLAUDE.md stub; durable notes live in the vault project folder.
    ```
 
    The `source ~/.zshrc` line is not optional boilerplate — the new alias does
@@ -362,44 +392,70 @@ Created: <today>
 None yet — scaffolded via /sunrise on <today>. Add durable docs here and list them.
 ```
 
-### Repo `CLAUDE.md` (boot doc)
+### Repo `AGENTS.md` (the instruction body)
+
+The one file every host reads. Sections per the spec sheet; one plain declarative
+line per rule; plain relative paths to deeper docs, never `@import` syntax (only the
+stub may import). Where the scaffolder left a framework block, it stays above this,
+inside its markers. A `<...>` placeholder is filled from the run or the line is cut;
+the empty-section placeholders stay as one line each until a real entry earns its
+place (add on the second failure, per the spec sheet).
 
 ```markdown
 # <Project Name>
+<!-- verified: <today> -->
 
-## What this is
-<Tony's one-line description.>
+<Tony's one-line description.> <archetype + scaffolded stack>. Scaffolded <today>
+via /sunrise; green baseline.
 
-## Stack
-<archetype + scaffolded stack>
+## Commands
+- Run: `<dev command>`
+- Build: `<build command>` · Typecheck: `<typecheck command>`
+- Test one file: `<single-test command>` (not the whole suite)
+- Env: `vercel env pull` writes `.env.local` (gitignored); `.env.example` lists the keys
 
-## Current state
-Scaffolded <today> via /sunrise. Green baseline.
+## Conventions that differ from defaults
+- <a scaffolder convention an agent's default would get wrong, or leave this one line
+  until the second failure>
+
+## Footguns
+- <a thing that breaks silently in this repo, or leave this one line until the second
+  failure>
 
 ## Where to look
+- Loop paperwork: `docs/scope/` (scope docs), `docs/architecture/` (architecture docs),
+  `docs/plans/` (build docs), `docs/reviews/` (verdicts)
 - Durable notes (research, decisions, specs): vault `~/ObsidianVault/03-projects/<slug>/`
-- Architecture decisions: `docs/decisions/` (add ADRs as the design shifts)
+- Notion board: <parent page URL> (Task Tracker + Roadmap; IDs in the vault `_index.md`)
 
-## Workflow
+## Gates
 - Feature branches + PRs. Never push to `main`.
 - Merge via the GitHub PR web UI or terminal, never GitHub Desktop.
-- Local: ~/Developer/<Name> (terminal shortcut: `<shortcut>`)   Run: <dev command>
-- Env: `vercel env pull` writes .env.local (gitignored).
-
-## End-of-session protocol
-Nothing automatic — no session wraps or build logs (vault contract, 2026-08-09).
-If a session produced something durable (a decision, research, a spec) and Tony
-wants it kept, write it as a reference note in the vault project folder.
+- End of session: nothing automatic, no session wraps or build logs (vault contract,
+  2026-08-09). Something durable (a decision, research, a spec) Tony wants kept is
+  written as a reference note in the vault project folder.
 ```
 
-### Repo `AGENTS.md` (stub)
+### Repo `CLAUDE.md` (the stub)
+
+Exactly this, one line, with a trailing newline. A real file, never a symlink.
 
 ```markdown
-# AGENTS.md
-
-The canonical agent file for this repo is **`CLAUDE.md`** in the same directory.
-This stub exists for tools that look for `AGENTS.md`. Read `CLAUDE.md`.
+@AGENTS.md
 ```
+
+Only when a Claude-only line exists to put under it (a skill or hook reference, a
+plan-mode request, anything about `.claude/`, an `@DESIGN.md` import) does the file
+grow a second part, and only then:
+
+```markdown
+@AGENTS.md
+
+## Claude Code specific
+- <the Claude-only line>
+```
+
+Sunrise seeds no Claude-only lines, so the seeded stub is the one-line form.
 
 ### Memory home note `project_<slug_>.md`
 
@@ -415,7 +471,7 @@ metadata:
 terminal shortcut `<shortcut>`.
 
 Canonical detail (read before substantive work):
-- Repo `CLAUDE.md` (boot doc + invariants).
+- Repo `AGENTS.md` (the instruction body: commands, footguns, gates; `CLAUDE.md` is its `@AGENTS.md` stub).
 - Vault `03-projects/<slug>/` (durable notes: research, decisions, specs).
 ```
 
