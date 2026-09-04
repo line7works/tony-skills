@@ -215,3 +215,7 @@ Status: not started
 - MAJOR · `plugins/sun/skills/sunrise/SKILL.md:415` · (`vercel env pull` line has no placeholder) · fixed — now :417–420; the Env clause is one `<...>` placeholder with linked / app-scoped / no-Vercel branches; verifier walked library and monorepo renders
 - MINOR · `plugins/sun/skills/sunrise/SKILL.md:321` · broke: "step 3's merge rule" is unqualified inside Phase 8, whose own step 3 is the handoff prompt — a literal reader resolves it to the wrong step · fix-introduced by the Slice B fix pass
 - MINOR · `plugins/sun/skills/sunrise/SKILL.md:136` · broke: the preview example still describes the Docs line as two-way (staged lines or "nothing staged") while the rule below adds `already adopted` · illustration not updated with the rule · fix-introduced by the Slice B fix pass
+
+### 2026-09-04 — recheck: Slice B (lap 2)
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:321` · ("step 3's merge rule" unqualified inside Phase 8) · fixed — now :322 reads "Phase 1 step 3's merge rule"; verifier resolved it from inside Phase 8 and confirmed the target holds the merge rule
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:136` · (preview example two-way while the rule adds "already adopted") · fixed — now :164–167 carries all three forms; verifier compared against the governing paragraph, Phase 1 step 5, and the Phase 8 summary; no new defect
