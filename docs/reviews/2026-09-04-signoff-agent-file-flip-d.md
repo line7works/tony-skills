@@ -44,3 +44,9 @@ Questions:
 
 Next: WITH CONDITIONS — resolve Question 1 (fix or waive the MAJOR), then /recheck flips the card.
 ```
+
+## 2026-09-04 — recheck
+
+### 2026-09-04 — recheck: Slice D
+- MAJOR · `.claude-plugin/marketplace.json:81` · (architect entry says the architecture doc is "read there by /blueprint") · fixed — :81 now says "/blueprint is hand-pointed at it until its architecture hunt lands", matching blueprint :20, architect :143, README:40; JSON parses; hand-points count 0; per-user deviation from R6 recorded in Build assumptions
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · (Scope-line resolution has no branch for a Scope line naming no commit, a punch-list block, or a slice with no verdict doc) · fixed — :140 adds the fallback to the merge commit that closed the slice the block heading names; Slice A resolves to b788ab9; working tree still forbidden; named by the user, never gating

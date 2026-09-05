@@ -116,7 +116,7 @@ Acceptance criteria:
 Footprint: `README.md`; `CLAUDE.md`; `plugins/precon/skills/precon/SKILL.md` (59, 130); `plugins/signoff/skills/signoff/SKILL.md` (140); `.claude-plugin/marketplace.json` (81); `docs/evidence/agent-file-flip/sunset-reread.md`; `docs/evidence/agent-file-flip/close-out-checklist.md`; `docs/evidence/agent-file-flip/fresh-session-rerun.md`; `docs/evidence/agent-file-flip/slice-d-requirement-map.md`. The precon and signoff edits are the only changes under `plugins/`; both join the Studio reinstall list in R4(a) after D merges.
 Not in this slice: executing any of the three gated steps (Tony's word, outside the PR); the per-repo migration checklist file (phase 3 of the program); any other open MINOR from the punch list (the precon line in R5 is the one pulled in, per Tony 2026-09-04).
 Depends on: Slice C
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 
@@ -328,3 +328,7 @@ Status: signed off with conditions
 - MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:30` (with :47, :53) · first verbatim quotes of vault-note and memory-note lines in the public repo · precedent, no personal data in the quoted lines · Slice D review
 - MINOR · `CLAUDE.md:20` · "precon or architect doc" narrower than the adoption step, which also adopts cold reads and review takes (sunrise :210–214) · loose, not false · Slice D review
 - MINOR · `docs/evidence/agent-file-flip/fresh-session-rerun.md:12` (with slice-d-requirement-map.md:24) · full installed roster, `--max-turns`, and a private file's md5 exceed what R7 asked for · machine fingerprint in a public repo · Slice D review
+
+### 2026-09-04 — recheck: Slice D
+- MAJOR · `.claude-plugin/marketplace.json:81` · (architect entry says the architecture doc is "read there by /blueprint") · fixed — :81 now says "/blueprint is hand-pointed at it until its architecture hunt lands", matching blueprint :20, architect :143, README:40; JSON parses; hand-points count 0; per-user deviation from R6 recorded in Build assumptions
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · (Scope-line resolution has no branch for a Scope line naming no commit, a punch-list block, or a slice with no verdict doc) · fixed — :140 adds the fallback to the merge commit that closed the slice the block heading names; Slice A resolves to b788ab9; working tree still forbidden; named by the user, never gating
