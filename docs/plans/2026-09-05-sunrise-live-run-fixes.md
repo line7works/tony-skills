@@ -42,10 +42,22 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (Phase 0 preview line, Phase 1 step 3 `.gitignore` bullet, Phase 3 steps 1 and new 2); `docs/feedback.md` (one Dispositions line); `docs/evidence/sunrise-live-run-fixes/fresh-session-read.md` (new); this plan's ledger sections.
 Not in this slice: finding E (pending Tony), Phase 8 alias placeholders, the installed-cache read (post-merge), a live `/sunrise` rerun (post-merge, Tony's word).
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Build assumptions
+
+### 2026-09-05 · Slice A
+- Inserting the new Phase 3 step 2 renumbered the existing `git connect` confirm to step 3 and the Electron env-plane step to step 4; no other text referenced those numbers (grep for "Phase 3 step" hit only the new Phase 1 pointer) · builder call
+- AC2 asks the Phase 3 text to say "last line" or equivalent; the step says "LAST line" in its bold lead and "final line" in its body · builder call
+- The Dispositions line wraps across five physical lines at the file's existing wrap width, matching the two 2026-08-02 precedent lines; AC7 counts it as one entry by its leading `- 2026-09-05` · builder call
+- The Phase 3 step 1 parenthetical names the live run's rejected value (`Banana-Dunk`, HTTP 400, 2026-09-05) as the why R1 asks for; the repo is public and the throwaway project name is not Tony-specific · builder call
 ## Deviations
+
+### 2026-09-05 · Slice A
+- none
 ## Discovered
+
+### 2026-09-05 · Slice A
+- R4 (the Phase 1 pointer to the Phase 3 re-assert) has no acceptance criterion of its own; verified by reading `plugins/sun/skills/sunrise/SKILL.md:206`. Plan gap, logged for the inspector; not a code change.
 ## Handoffs
 ## Punch list
