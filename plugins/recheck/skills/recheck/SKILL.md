@@ -17,6 +17,8 @@ Same floor as /signoff: the reviewer runs at Opus-class or better — never pin 
 
 ## Step 1 — The checklist
 
+**The repo's inspection sheet, first.** Read `<repo>/REVIEW.md` before the doc hunt. It is the sheet only under /signoff's test (the three headings, every pass line `on` or `off`); a file of that name that fails it is reported as `present but not the kit sheet — defaults` and ignored. Present and well-formed, it governs what this run grades: its `## Severity bar` is the severity mapping for every fix-introduced defect this run assigns, overriding /signoff's generic table where they differ; its `## Passes` change nothing here — this run hunts nothing, so there is no pass to skip, and a fix-introduced defect the verifier reports is entered on the record whatever kind it is, graded by the bar, exactly as /signoff's sweep would enter it (one event, one ledger shape); and its `## Repo-specific checks` are /signoff's hunt, not this checklist — the closed list never grows from them (rule 1). Absent, the run grades on /signoff's defaults and the report's `REVIEW.md:` line says `absent — defaults`. /recheck reads the file and never writes it — not a toggle, not the stamp, not a line; a recurrence this run notices is /signoff's second-failure rule to record, and one line naming it is the most this run says.
+
 **Find the doc.** Same hunt as the siblings: `docs/plans/*.md` (what `/blueprint` writes — the repo doc kit's folder), then the older flat `docs/<feature>-build-plan.md` — both of these are read before choosing: a candidate matches the invocation by filename (the `<topic>` of a `YYYY-MM-DD-<topic>.md` name, or the `<feature>` of a flat name), an `Intent:` line is consulted only when no filename in either matches, a filename match in either beats an Intent-line match in the other, and when a `docs/plans/` doc and a flat doc both match by filename, `docs/plans/` wins and the report says which doc it took; several plausible matches are listed and asked, never silently picked, and an invocation that names nothing to match against is a stop-and-ask, never the lone doc on disk — then any phase/slice doc under `docs/` or `plan/`, the vault project folder, or this session's record. A correctness-only review with no build doc leaves `docs/punch-list.md` instead — append there and skip every `Status:` write (there is no card; say so in the output).
 
 **Resolve the slice:** the one named — or, when the invocation names entries rather than a slice, the named set is the run's scope and no slice resolves — else the slice whose punch-list review block carries the latest date among slices standing at `signed off with conditions` or `rejected` — or at `built` with uncleared BLOCKER/MAJOR entries (a rebuilt slice whose findings were never re-verified). Ambiguous → ask. Slices still open outside the run's scope → name them in the output, never absorb them.
@@ -29,7 +31,7 @@ Each item needs severity · `file:line` · claim · failure scenario. Recover wh
 
 ## Step 2 — Independence
 
-The session that wrote the fixes never grades them. One fresh `general-purpose` subagent (it must be able to run things) receives the checklist — each item's file:line, claim, and failure scenario — and reads the current source itself. It does not receive the fixer's account of what was fixed or how. The failure scenario is the test: it either still reproduces or it doesn't.
+The session that wrote the fixes never grades them. One fresh `general-purpose` subagent (it must be able to run things) receives the checklist — each item's file:line, claim, and failure scenario — and `REVIEW.md` when present, and reads the current source itself. It does not receive the fixer's account of what was fixed or how. The failure scenario is the test: it either still reproduces or it doesn't.
 
 ## Step 3 — Verify each item
 
@@ -59,7 +61,7 @@ Keep bulk output out of context: redirect runs to a file and read back the summa
 3. **Evidence flips the card.** Never the fixer's word; executed where runnable, and the method declared in the output.
 4. **Additive only.** Recheck appends its block; earlier punch-list entries are never edited or resolved in place. Latest-dated block wins.
 5. **MINORs never gate.**
-6. **Report, don't repair.** The Status line, the punch-list block, its copy appended to the slice's verdict doc under `docs/reviews/`, and user-granted `WAIVED`/`REOPENED` lines are the run's own bookkeeping; beyond them, mutate nothing and fix nothing — the next fix pass is the user's to order.
+6. **Report, don't repair.** The Status line, the punch-list block, its copy appended to the slice's verdict doc under `docs/reviews/`, and user-granted `WAIVED`/`REOPENED` lines are the run's own bookkeeping; beyond them, mutate nothing and fix nothing — never `REVIEW.md`, which /signoff alone writes — the next fix pass is the user's to order.
 
 ## Output
 
@@ -67,6 +69,7 @@ Keep bulk output out of context: redirect runs to a file and read back the summa
 RECHECK: <slice> — N items (+M new)
 Result: ALL CLEAR | PARTIAL (n open) | NOT CLEAR  ·  Status: <old → new | unchanged | no card — punch-list.md>
 Verdict doc: <docs/reviews/... path — appended | none found, build doc only>
+REVIEW.md: read — bar applied | present but not the kit sheet — defaults | absent — defaults
 Method: <per item — executed or static, and how>
 
 Bottom line: <2-3 sentences. What cleared, what didn't, what's next.>
@@ -88,5 +91,6 @@ When executing this skill required working around, reinterpreting, or excepting 
 - Don't adopt a reconstructed failure scenario the user hasn't confirmed.
 - Don't edit or resolve earlier punch-list entries.
 - Don't repair anything, and don't mutate real state to verify — the run's own doc writes (the `Status:` line, the punch-list block and its copy in the slice's verdict doc, user-granted waiver lines) are bookkeeping, not repair.
+- Don't write `REVIEW.md` — read its bar and passes, never its toggles, stamp, or checks list; recording a recurrence there is /signoff's.
 - Don't treat MINORs as gates.
 - Don't emit the `RECHECK:` block below the model floor.
