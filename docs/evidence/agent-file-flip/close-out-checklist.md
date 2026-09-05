@@ -20,7 +20,7 @@ Run inside Claude Code on the Studio, after the slice's PR is merged to `main`. 
 /plugin update build@tony-skills
 ```
 
-Then restart the session; a running session keeps the old cache. Verify with `cat ~/.claude/plugins/installed_plugins.json` and confirm each `tony-skills` entry's version is the merged `main` commit.
+Then restart the session; a running session keeps the old cache. Verify with `cat ~/.claude/plugins/installed_plugins.json`: each of the eleven plugins above shows the merged `main` commit as its version, and the other nine (`forge`, `wargame`, `arcade`, `shutdown`, `digest`, `fb`, `huh`, `jpb`, `print-tune`) keep whatever version they had, since no slice touched them and they are not updated here.
 
 ## (b) The vault note `~/ObsidianVault/01-domain/claude-skills/sunrise.md`
 
@@ -37,7 +37,7 @@ After (one line replaces both):
 - **Local repo:** `~/Developer/<Name>` scaffolded by archetype, with the [[repo-doc-kit]] Tier 0 seeded (`README.md`, `AGENTS.md` as the instruction body, `CLAUDE.md` as the one-line `@AGENTS.md` stub, `.gitignore`, `.env.example`, an empty `docs/`), any precon or architect doc staged in `~/Documents` adopted into `docs/`, git init, first commit.
 ```
 
-Run the vault check from `~/.claude/CLAUDE.md` first (`VAULT OK`), back up the note to `~/.claude/backups/vault-agent-flip-2026-09-04/01-domain__claude-skills__sunrise.md`, then edit. Expected after: `grep -c "Changing 2026-09" ~/ObsidianVault/01-domain/claude-skills/sunrise.md` prints `0`. The kit note's own line 12 ("skill edit pending as of 2026-09-03") is the same stale claim in the other file and is worth the same word.
+Run the vault check from `~/.claude/CLAUDE.md` first (`VAULT OK`), back up the note outside the vault, then edit. Expected after: `grep -c "Changing 2026-09" ~/ObsidianVault/01-domain/claude-skills/sunrise.md` prints `0`. The kit note's own line 12 ("skill edit pending as of 2026-09-03") is the same stale claim in the other file and is worth the same word.
 
 ## (c) The memory note `~/.claude/projects/-Users-tonycoon/memory/agent-file-flip-program.md`
 
@@ -53,9 +53,9 @@ Rewrite to:
 description: "2026-09-03 program to make AGENTS.md the body and CLAUDE.md the @AGENTS.md stub in every repo, plus the repo doc kit; vault pass DONE, phase 2 (skills) DONE 2026-09-04, per-repo pass (phase 3) pending"
 ```
 
-and append one dated `**Update <date>:** Phase 2 DONE — Slice D merged as PR #<n>, main <sha>.` line at the end of the body. The `MEMORY.md` index line for the note gets the same "phase 2 DONE" hook.
+That one line is the whole edit; nothing else in the note or in `MEMORY.md` changes under this step.
 
 ## Optional live checks (Tony's word, each spends real resources)
 
-1. One `/sunrise --dry-run` on a throwaway name (for example `flip-check`) from a plain session, to watch Phase 1 step 3 propose the Tier 0 set and the staged-doc adoption step report `none` without creating a GitHub repo or Vercel project. A dry run creates nothing; a live run is outward and stays gated.
-2. One live `/signoff` in a scratch repo with no `REVIEW.md` (for example `git init /tmp/flip-scratch` with one file and a two-line build doc), to exercise the first-run gate: infer, show the sheet, wait for the word, write on the word, continue on defaults without it. Spends subagents.
+1. One `/sunrise --dry-run` on a throwaway name (for example `flip-check`) from a plain session, to watch the Phase 0 preview table: it lists the Tier 0 files the run would seed and, in its staged-docs row, the single line `nothing staged` for a name with nothing in `~/Documents`. A dry run stops after Phase 0 and creates nothing; Phase 1 never runs, so the seeding itself is exercised only by a live run, which is outward and stays gated.
+2. One live `/signoff` in a scratch repo with no `REVIEW.md` (a fresh `git init` in a throwaway folder under `~/Developer/`, with one file and a two-line build doc; move it to `~/Developer/_archive` after), to exercise the first-run gate: infer, show the sheet, wait for the word, write on the word, continue on defaults without it. Spends subagents.

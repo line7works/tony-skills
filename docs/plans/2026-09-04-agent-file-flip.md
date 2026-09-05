@@ -332,3 +332,10 @@ Status: signed off
 ### 2026-09-04 — recheck: Slice D
 - MAJOR · `.claude-plugin/marketplace.json:81` · (architect entry says the architecture doc is "read there by /blueprint") · fixed — :81 now says "/blueprint is hand-pointed at it until its architecture hunt lands", matching blueprint :20, architect :143, README:40; JSON parses; hand-points count 0; per-user deviation from R6 recorded in Build assumptions
 - MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · (Scope-line resolution has no branch for a Scope line naming no commit, a punch-list block, or a slice with no verdict doc) · fixed — :140 adds the fallback to the merge commit that closed the slice the block heading names; Slice A resolves to b788ab9; working tree still forbidden; named by the user, never gating
+
+### 2026-09-04 — recheck: Slice D (checklist MINORs, per user)
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:24` · (verify step fails for the nine plugins the list leaves untouched) · fixed — the step now names the eleven updated plugins and says the other nine keep their version
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:56` · (step (c) orders three memory-note writes where R4(c) authorizes one) · fixed — the description line is the whole edit; nothing else in the note or MEMORY.md changes
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:40` (with :61) · (first publication of `~/.claude/backups/<date>` and `/tmp/flip-scratch`) · fixed — backup goes "outside the vault", scratch repo is a throwaway under `~/Developer/`
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:58` · (says the dry run shows Phase 1 step 3 and a `none` line) · fixed — describes the Phase 0 preview table and its `nothing staged` line; Phase 1 never runs on a dry run
+
