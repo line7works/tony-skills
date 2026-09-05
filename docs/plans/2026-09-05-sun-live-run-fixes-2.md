@@ -67,9 +67,16 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (Phase 3 step 1 example name, Phase 3 step 2 pointer clause, Phase 8 new pre-flight step, the `### Repo `AGENTS.md`` template's "Where to look" vault line); `docs/feedback.md` (one Dispositions line); `docs/evidence/sun-live-run-fixes-2/fresh-session-read-sunrise.md` (new); `docs/evidence/sunrise-live-run-fixes/fresh-session-read.md` and `docs/evidence/sunset-live-run-fixes/fresh-session-read.md` (post-merge installed-cache reads appended 2026-09-05, before this slice's build); this plan's ledger.
 Not in this slice: anything in `sunset/SKILL.md` (Slice A); the `<project>` alias placeholders; the "Phase 2 git-connect" cross-reference; the seeded `AGENTS.md` Notion board URL line; machine paths anywhere outside the seeded `AGENTS.md` template.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Build assumptions
+
+### 2026-09-05 — build: Slice B
+- The two uncommitted handoff-session edits (post-Slice-A SKILL NOTE in the feedback Inbox, AC6 and the handoff note amended to Inbox 38) were checkpoint-committed as d982664 before any slice work · builder call · records the previous session left, consistent with each other, so the build diff starts from a clean tree
+- The Phase 8 pre-flight is an unnumbered lead paragraph before step 1, not a renumbered step 1 · builder call · sunrise :243 (Phase 4) names "Phase 8 step 1" as the deploy check, and R1 says the pre-flight is "before step 1's deploy check"; keeping step 1 the deploy check keeps :243 true
+- The pre-flight's "named message" is `sunrise: post-link .gitignore re-assert and closeout edits`, staged with `git add -A`, run as one command line with the push, then `git status --porcelain` rerun and STOP if still dirty · builder call · R1 names no message text; one line and a rerun follow Slice A's lesson that a fresh shell per Bash call splits multi-line sequences
+- R2 wording is "a directory-derived mixed-case name such as `My-App` is rejected with HTTP 400 (seen 2026-09-05)" · builder call · the date and the HTTP 400 stay per R2; "seen" replaces "was rejected on", since the rejected name is now an example rather than the live-run event
+- R5 replacement line: "Tony's vault project folder for this project; the memory home note and the vault `_index.md` record where it lives (machine-specific paths stay out of this file)" · builder call · R5's own example sentence, with the parenthetical so a future editor knows why no path is there
 
 ### 2026-09-05 — build: Slice A
 - AC8 Inbox count read as 36, not 35 · builder call · the 35 was the blueprint-time baseline; Tony's `/fb` of the handoff SKILL NOTE (checkpointed as 11c0433 before this build) made it 36 at build start; the intact test is "unchanged from build start", so 36 is the number the criterion's intent pins
