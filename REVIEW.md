@@ -1,5 +1,5 @@
 # REVIEW.md
-<!-- verified: 2026-09-04 -->
+<!-- verified: 2026-09-05 -->
 
 ## Passes
 - correctness: on
@@ -14,3 +14,4 @@
 
 ## Repo-specific checks
 - (one line per recurring finding, added on the second occurrence)
+- sunrise: an edit the skill makes after Phase 2 pushed `main` (a kit-check fix, the post-link `.gitignore` re-assert) is never re-committed or re-pushed, yet the Phase 8 summary prints "pushed" · found 2026-09-04 (agent-file-flip Slice B, Phase 8) and 2026-09-05 (sunrise-live-run-fixes Slice A, Phase 3 step 2)
