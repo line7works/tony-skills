@@ -1,0 +1,46 @@
+# Signoff — agent-file-flip, Slice D
+
+## 2026-09-04 — signoff
+
+```
+SIGN-OFF: Slice D — Close-out
+Verdict: SIGNED OFF WITH CONDITIONS
+Scope: branch `feat/agent-file-flip-d`, commits b7e3188..a58c93b against `main` 567866c (working tree clean): `README.md`, `CLAUDE.md`, `.claude-plugin/marketplace.json`, `plugins/precon/skills/precon/SKILL.md`, `plugins/signoff/skills/signoff/SKILL.md`, four new files under `docs/evidence/agent-file-flip/`, and the build doc's own ledger. Excluded: the untracked `REVIEW.md` (this station's first-run write, on the user's word).  ·  Spec: docs/plans/2026-09-04-agent-file-flip.md · Slice D
+Depth: LEAN + security (REVIEW.md pass on)  ·  Method: executed — all nine acceptance-criteria commands re-run by the adjudicator and by two reviewers independently; evidence quotes diffed byte-for-byte against the live vault note, memory note, sunset skill, and installed_plugins.json; the four fresh-session answers spot-checked against the cache copies (the sessions themselves were not re-run)  ·  Refuted: 0
+Verdict doc: docs/reviews/2026-09-04-signoff-agent-file-flip-d.md — created
+REVIEW.md: created this run · passes skipped: accessibility (no UI), data-safety (no hosted database) · 0 repo-specific checks tried (list empty)
+
+Bottom line: All nine acceptance criteria pass as written, the footprint held, and nothing gated was executed. One MAJOR: R6's premise is wrong, so the marketplace now tells strangers that /blueprint reads docs/architecture/, which it does not; three lenses converged on it, and the fix changes R6's own wording, so it is Tony's call. R8 landed verbatim but the sentence has no branch for a Scope line that names no commit or a punch-list block with no verdict doc; under this repo's bar that is a MINOR and a question, not a gate.
+
+MAJOR
+- MAJOR · `.claude-plugin/marketplace.json:81` · the architect entry says the architecture doc is "read there by /blueprint" · blueprint's prior-docs hunt (`plugins/blueprint/skills/blueprint/SKILL.md:20`) reads `docs/scope/*.md` and the flat scope doc only; no slice added an architecture read; the replaced "hand-points" text was true for blueprint, the new text is false; `plugins/architect/skills/architect/SKILL.md:143` and `README.md:40` still carry the true statement, so three files now disagree in the direction that hides the gap · bar line: a user-visible regression · spec, correctness, seams converged · CONFIRMED
+
+MINOR
+- `plugins/signoff/skills/signoff/SKILL.md:140` · R8's sentence resolves against "the commit named in that verdict block's own Scope line", but the Scope format (:118) never requires a commit, punch-list blocks in the build doc carry no Scope line, and a slice may have no verdict doc (Slice A here) · a literal reader stalls or falls back to the working tree, which the sentence forbids · bar: everything else (no regression; R8 met verbatim) · correctness, seams · CONFIRMED · Question 2
+- `CLAUDE.md:43` · "The two files it does write" undercounts: signoff also appends punch-list blocks, flips cards, and writes sweep blocks into the build doc, and creates `docs/punch-list.md` in correctness-only mode (signoff :167) · an editor holding the invariant list strips the ledger append as unsanctioned fixing · correctness, seams
+- `plugins/architect/.claude-plugin/plugin.json:3` · still says "hand-pointed until those reworks land"; outside R6's footprint, and today the more accurate of the two descriptions · `/plugin` and the marketplace card disagree about one plugin · spec, seams
+- `README.md:101` · "laid out the way the repo doc kit says" then lists `docs/evidence/`, which the kit note does not define · a reader expects a kit folder that is not one · correctness, seams
+- `README.md:104–105` · `docs/reviews/` inventory omits architect blind-review takes (architect :114) and /recheck's appended blocks (signoff :138) · a `-architect-review-` file in `docs/reviews/` has no README explanation · correctness, spec, seams
+- `docs/evidence/agent-file-flip/close-out-checklist.md:58` · says `/sunrise --dry-run` shows Phase 1 step 3 and a `none` line; the dry run runs Phase 0 only (sunrise :43, :91) and the literal line is `nothing staged` (:167) · the runner waits for a prompt that never comes and reports the check failed · correctness
+- `docs/evidence/agent-file-flip/close-out-checklist.md:24` · the verify step "confirm each `tony-skills` entry's version is the merged `main` commit" fails for the nine plugins the eleven-line list does not update (forge, wargame, arcade, shutdown, digest, fb, huh, jpb, print-tune stay at 83923f1) · the runner cannot tell a miss from an untouched plugin · correctness, seams
+- `docs/evidence/agent-file-flip/close-out-checklist.md:56` · step (c) instructs three writes under `~/.claude/projects/*/memory/` (description line, an appended Update line, the MEMORY.md index) where R4(c) authorizes one (the status line) · a fresh session following it verbatim writes twice more than the spec sanctioned on a protected path · security
+- `docs/evidence/agent-file-flip/close-out-checklist.md:40`, `:61` · first publication of `~/.claude/backups/<date-folder>` and a `/tmp/flip-scratch` path in a public repo; `/tmp` also contradicts the scratchpad rule · new Tony-specific exposure by default rather than deliberate call; a stray repo in shared `/tmp` · security
+- `docs/evidence/agent-file-flip/close-out-checklist.md:30–31`, `:47`, `:53` · first verbatim quotes of vault-note and memory-note lines in the public repo; the quoted lines carry no personal data, the precedent is the concern · security (low)
+- `CLAUDE.md:20` · "adopts any precon or architect doc" is narrower than the adoption step, which also adopts precon cold reads and architect review takes (sunrise :210–214) · loose, not false · correctness (low)
+- `docs/evidence/agent-file-flip/fresh-session-rerun.md:12`, `slice-d-requirement-map.md:24` · the full installed-plugin roster, `--max-turns 12`, and a private file's md5 are more machine fingerprint than R7 asked for (one cache commit per check) · security (low)
+- Standing, not re-entered: `plugins/precon/skills/precon/SKILL.md:59` still says "until then Tony points /blueprint at the doc himself", the open Slice A MINOR at the same location; R5 rewrote that paragraph and left it one clause away. Same defect still standing, not a recurrence.
+
+Deferred
+- `README.md:40` roster one-liner still says "hand-pointed downstream for now" · R1: roster lines 38–47 left alone; recorded in Slice D's Discovered
+- `plugins/architect/skills/architect/SKILL.md:143` "hand-pointed until those reworks land" · R6: the architect SKILL.md is not touched
+- other open MINORs from the punch list · Slice D's Not in this slice, per Tony 2026-09-04
+- executing the three gated steps · Not in this slice
+
+Tried and failed to break: AC1 (README hits 102/104/105), AC2 (CLAUDE.md 20 and 43), AC3 (sunset grep byte-identical, sunset untouched on the branch), AC4 (vault lines 38–39 and memory line 3 byte-identical to the checklist's before blocks; `Changing 2026-09` count 1; memory md5 e81f4b00 unchanged; vault mtime Sep 3), AC5 (all eight citations open at HEAD to the quoted text), AC6 (1 of 1 relocation lines names sunrise; `never the skill's` 0), AC7 (0 hand-points; JSON parses), AC8 (four answers, each cache commit resolves to the named PR merge and matches installed_plugins.json; cache SKILL.md at each version byte-identical to main; six concrete claims in the answers spot-checked against the cache text and present), AC9 (signoff :140). Footprint: the ten changed files are the nine listed plus the build doc's ledger. Secrets: no key shapes, PEM headers, emails, or third-party names in the diff. Gates: precon :59/:130 still forbid precon relocating; signoff :140 keeps "the only two ways this skill touches REVIEW.md"; CLAUDE.md keeps "report-only — do not add fixing behavior" verbatim. Counts: 20 plugin folders, 21 skill dirs, 20 marketplace entries, names one-to-one. The eleven-plugin reinstall list covers every plugin Slices A–D touched. Sun bullet vs sunrise :198–217 (Tier 0 set, adoption step, none/one/many) agree; recheck :94 and vertical :94/:123 never write REVIEW.md. REVIEW.md's repo-specific checks list is empty, so none to try. Second-failure rule: no closed claim recurred and no open claim moved; nothing appended.
+
+Questions:
+1. R6's premise "blueprint reads it from docs/architecture/ (Slice A)" is false; Slice A only gave blueprint the scope-doc hunt. Fix the marketplace line to say blueprint is hand-pointed at the architecture doc until its hunt lands (a deviation from R6's wording), or leave the claim and add the hunt to blueprint in a later slice? The MAJOR stands until one of those is chosen.
+2. R8 as ruled has no branch for a Scope line without a commit or a ledger block with no verdict doc. Proposed one-phrase tightening: "resolved against the commit named in that verdict block's Scope line, or, when none is named or the block is a punch-list block, against the merge commit that closed the slice named in the block's heading." Your word, since the sentence is yours.
+
+Next: WITH CONDITIONS — resolve Question 1 (fix or waive the MAJOR), then /recheck flips the card.
+```

@@ -116,7 +116,7 @@ Acceptance criteria:
 Footprint: `README.md`; `CLAUDE.md`; `plugins/precon/skills/precon/SKILL.md` (59, 130); `plugins/signoff/skills/signoff/SKILL.md` (140); `.claude-plugin/marketplace.json` (81); `docs/evidence/agent-file-flip/sunset-reread.md`; `docs/evidence/agent-file-flip/close-out-checklist.md`; `docs/evidence/agent-file-flip/fresh-session-rerun.md`; `docs/evidence/agent-file-flip/slice-d-requirement-map.md`. The precon and signoff edits are the only changes under `plugins/`; both join the Studio reinstall list in R4(a) after D merges.
 Not in this slice: executing any of the three gated steps (Tony's word, outside the PR); the per-repo migration checklist file (phase 3 of the program); any other open MINOR from the punch list (the precon line in R5 is the one pulled in, per Tony 2026-09-04).
 Depends on: Slice C
-Status: built
+Status: signed off with conditions
 
 ## Build assumptions
 
@@ -168,6 +168,10 @@ Status: built
 
 ### 2026-09-04 — build: Slice A (post-recheck)
 - R2's same-day `-2` rule for architect blind-review takes was added after the recheck (the skill had none to keep; the build assumption above recorded the no-op) — applies to `docs/reviews/` and `~/Documents/architect-reviews/` alike, matching inspect's raw-output rule · per user (Tony's ruling of 2026-09-04, relayed by the orchestrating session tonycoon-66, not heard in this session)
+### 2026-09-04 — fix lap: Slice D (per user, after the verdict's Questions)
+- R6 asked the marketplace `architect` entry to say blueprint reads the doc from `docs/architecture/`; blueprint has no such hunt (its prior-docs rule reads scope docs only), so `.claude-plugin/marketplace.json:81` now says "/blueprint is hand-pointed at it until its architecture hunt lands" · per user
+- R8's sentence at `plugins/signoff/skills/signoff/SKILL.md:140` gains the fallback "or, when none is named or the entry sits in a punch-list block, against the merge commit that closed the slice the block's heading names" · per user
+
 ## Discovered
 
 ### 2026-09-04 — build: Slice A
@@ -309,3 +313,18 @@ Status: built
 ### 2026-09-04 — recheck: Slice C (location rule, per user)
 - MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · ("judged by location" can read a line-drifted same defect as a new instance) · fixed — :140 defines a location as the file plus the enclosing function, block, or section, never the line number; verifier walked a.ts:40 → a.ts:52 in the same function (same open defect, nothing appended) and the different-file / different-function cases (appended)
 - MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · broke: the location definition needs a ledger entry's enclosing function, but entries carry only `file:line` and the text does not say which version of the file to resolve it against — a sweep line "not fixed at a.ts:40" with no moved-location prose is read against today's file where :40 is now an import, so the catch block in fetchUser() reads as a new location and is appended; the same-sentence "same function at a shifted line" makes the intent plain · fix-introduced by the per-user location fix
+
+### 2026-09-04 — review: Slice D
+- MAJOR · `.claude-plugin/marketplace.json:81` · architect entry says the architecture doc is "read there by /blueprint" · blueprint's prior-docs hunt (blueprint :20) reads scope docs only, no slice added an architecture read; R6's "(Slice A)" premise is false; architect :143 and README:40 still carry the true "hand-pointed" statement · Slice D review
+- MINOR · `plugins/signoff/skills/signoff/SKILL.md:140` · R8's Scope-line resolution has no branch for a Scope line naming no commit, a punch-list block (no Scope line), or a slice with no verdict doc · a literal reader stalls or falls back to the forbidden working tree; Slice A has no verdict doc · Slice D review
+- MINOR · `CLAUDE.md:43` · "the two files it does write" undercounts signoff's build-doc and docs/punch-list.md writes (signoff :167) · an editor strips the ledger append as unsanctioned fixing · Slice D review
+- MINOR · `plugins/architect/.claude-plugin/plugin.json:3` · still says "hand-pointed until those reworks land"; outside R6's footprint · /plugin and the marketplace card disagree about one plugin · Slice D review
+- MINOR · `README.md:101` · attributes `docs/evidence/` to the repo doc kit, which does not define it · reader expects a kit folder that is not one · Slice D review
+- MINOR · `README.md:104` (with :105) · `docs/reviews/` inventory omits architect review takes (architect :114) and /recheck's appended blocks (signoff :138) · an `-architect-review-` file has no README explanation · Slice D review
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:58` · says `/sunrise --dry-run` shows Phase 1 step 3 and a `none` line; dry run is Phase 0 only and prints `nothing staged` (sunrise :43, :91, :167) · runner waits for a prompt that never comes · Slice D review
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:24` · verify step fails for the nine plugins the eleven-line list leaves at 83923f1 · runner cannot tell a miss from an untouched plugin · Slice D review
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:56` · step (c) orders three memory-note writes where R4(c) authorizes one · fresh session writes twice more than sanctioned on a protected path · Slice D review
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:40` (with :61) · first publication of `~/.claude/backups/<date>` and `/tmp/flip-scratch`; `/tmp` contradicts the scratchpad rule · new exposure by default; stray repo in shared /tmp · Slice D review
+- MINOR · `docs/evidence/agent-file-flip/close-out-checklist.md:30` (with :47, :53) · first verbatim quotes of vault-note and memory-note lines in the public repo · precedent, no personal data in the quoted lines · Slice D review
+- MINOR · `CLAUDE.md:20` · "precon or architect doc" narrower than the adoption step, which also adopts cold reads and review takes (sunrise :210–214) · loose, not false · Slice D review
+- MINOR · `docs/evidence/agent-file-flip/fresh-session-rerun.md:12` (with slice-d-requirement-map.md:24) · full installed roster, `--max-turns`, and a private file's md5 exceed what R7 asked for · machine fingerprint in a public repo · Slice D review
