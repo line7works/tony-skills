@@ -46,7 +46,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunset/SKILL.md` (Phase 2 step 2, Phase 4 intro and steps, Phase 6 steps 2 and 3, Phase 9 summary Memory line and tombstone project-store line for R3); `docs/feedback.md` (one Dispositions line); `docs/evidence/sunset-live-run-fixes/fresh-session-read.md` (new); this plan's ledger.
 Not in this slice: anything in `sunrise/SKILL.md` (Slice B); sunset's Notion phase; the by-name Vercel lookup variant; a live `/sunset` rerun.
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice B — sunrise follow-ups
 Goal: `/sunrise` ends with every working-tree edit committed and pushed before it claims "pushed", and its instruction text names no real project.
@@ -68,8 +68,20 @@ Depends on: nothing
 Status: not started
 
 ## Build assumptions
+
+### 2026-09-05 — build: Slice A
+- AC8 Inbox count read as 36, not 35 · builder call · the 35 was the blueprint-time baseline; Tony's `/fb` of the handoff SKILL NOTE (checkpointed as 11c0433 before this build) made it 36 at build start; the intact test is "unchanged from build start", so 36 is the number the criterion's intent pins
+- Phase 6 token read uses `jq -r .token` · builder call · `jq` 1.7.1 is at `/usr/bin/jq` on macOS 26; the path is named on that one command line so AC5's `auth.json` count stays 1 (the prose says "the logged-in CLI's credentials file" and names the key)
+- Phase 4 heading kept as "Local repo (skip if --keep-local)" · builder call · R2 does not rename it; the memory copy now lives under it as step 4 and the heading's skip clause is what makes R3's skip true
+- Terminal-shortcut steps renumbered 3-6 to 5-8 · builder call · consequence of R1/R2 inserting the guard and the copy as Phase 4 steps 2 and 4
+
 ## Deviations
+
 ## Discovered
+
+### 2026-09-05 — build: Slice A
+- The Phase 0 preview's Memory line (`archive project store ... -> _archive/<Name>/.claude-memory/`) prints unconditionally, so under `--keep-local` the preview promises a copy Phase 4 no longer makes; R2 says the preview line stays put, so not touched · a one-line note for a later slice
+
 ## Handoffs
 
 ### 2026-09-05 — handoff
