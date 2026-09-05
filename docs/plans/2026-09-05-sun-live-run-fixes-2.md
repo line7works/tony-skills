@@ -46,7 +46,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunset/SKILL.md` (Phase 2 step 2, Phase 4 intro and steps, Phase 6 steps 2 and 3, Phase 9 summary Memory line and tombstone project-store line for R3); `docs/feedback.md` (one Dispositions line); `docs/evidence/sunset-live-run-fixes/fresh-session-read.md` (new); this plan's ledger.
 Not in this slice: anything in `sunrise/SKILL.md` (Slice B); sunset's Notion phase; the by-name Vercel lookup variant; a live `/sunset` rerun.
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Slice B — sunrise follow-ups
 Goal: `/sunrise` ends with every working-tree edit committed and pushed before it claims "pushed", and its instruction text names no real project.
@@ -114,3 +114,9 @@ Status: not started
 - MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:45 · AC8 pins the Inbox at 35; the tree holds 36 at build start and after · builder call assumption is sound (the 36th line is Tony's own `/fb` of the handoff SKILL NOTE, committed 11c0433 before the work), but the literal criterion fails; question for Tony: accept 36 or amend AC8
 - MINOR · docs/evidence/sunset-live-run-fixes/fresh-session-read.md:3 · states the installed sun cache as `2baaecba12a1`; `installed_plugins.json` shows `sun@tony-skills` at `e7064921ac21` since 2026-09-05T14:43Z · the record's one machine fact is wrong (harmless to the skill); the plan's Handoffs line "pending `/plugin update sun` for PR #43" is stale for the same reason
 - MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:77 · three stray blank lines between Build assumptions and Deviations · cosmetic
+
+### 2026-09-05 — recheck: Slice A
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:206 · (Phase 6 token read and curl are two separate command lines) · fixed · now :205-208, one command line with an empty-token branch and `unset T`; verifier executed the exact line against fake credential files (env set, env unset, no key, file missing, empty env, null token) and a two-call control that reproduced the old empty Bearer
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:59 · (principle "archive it first" contradicts the new Phase 4 order) · fixed · :59 now says copy after the move, never before; full-file sweep found no sentence ordering the copy first (static)
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:217 · (under `--keep-local` nothing creates `_archive/<Name>` before Phase 7's backup) · fixed · now :215 `mkdir -p ~/Developer/_archive/<Name>` precedes the `pg_dump` redirect; verifier reproduced the keep-local trace and the full Phase 4 + 7 sequence in a scratch tree, no nesting, guard still fires on a pre-existing path
+- MINOR · plugins/sun/skills/sunset/SKILL.md:206 · broke: `jq` is an undeclared dependency and its `2>/dev/null` swallows "command not found" — with `VERCEL_TOKEN` unset and `jq` absent the line prints `no Vercel token in either source` although a valid credentials file exists, and step 3 sends Tony to do it by hand with the wrong diagnosis · fix-introduced by the Phase 6 rewrite

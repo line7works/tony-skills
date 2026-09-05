@@ -42,3 +42,9 @@ Refuted: 0. Prior conditions: none (no prior slice; punch list was empty).
 1. AC8: accept the Inbox baseline of 36 (your own `/fb` note is the 36th line) or amend the criterion?
 2. Phase 0 preview Memory line (:128): keep unconditional per R2, or make it conditional on `--keep-local` like the summary and tombstone?
 3. Installed `sun` is already at e706492: the post-merge installed-cache read for the sunrise fixes can run now; should the evidence file's cache id be corrected (MINOR)?
+
+### 2026-09-05 — recheck: Slice A
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:206 · (Phase 6 token read and curl are two separate command lines) · fixed · now :205-208, one command line with an empty-token branch and `unset T`; verifier executed the exact line against fake credential files (env set, env unset, no key, file missing, empty env, null token) and a two-call control that reproduced the old empty Bearer
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:59 · (principle "archive it first" contradicts the new Phase 4 order) · fixed · :59 now says copy after the move, never before; full-file sweep found no sentence ordering the copy first (static)
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:217 · (under `--keep-local` nothing creates `_archive/<Name>` before Phase 7's backup) · fixed · now :215 `mkdir -p ~/Developer/_archive/<Name>` precedes the `pg_dump` redirect; verifier reproduced the keep-local trace and the full Phase 4 + 7 sequence in a scratch tree, no nesting, guard still fires on a pre-existing path
+- MINOR · plugins/sun/skills/sunset/SKILL.md:206 · broke: `jq` is an undeclared dependency and its `2>/dev/null` swallows "command not found" — with `VERCEL_TOKEN` unset and `jq` absent the line prints `no Vercel token in either source` although a valid credentials file exists, and step 3 sends Tony to do it by hand with the wrong diagnosis · fix-introduced by the Phase 6 rewrite
