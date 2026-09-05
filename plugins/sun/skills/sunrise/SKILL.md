@@ -166,7 +166,7 @@ the Mac Studio.
             destination; "already adopted: <path>" for a doc an earlier run
             moved; or the single line "nothing staged")
    GitHub   create tiny-tunnel-dot/<repo> (private); push main
-   Vercel   link project <Name> (auto-connects GitHub repo; auto-deploys on)
+   Vercel   link project <slug> (auto-connects GitHub repo; auto-deploys on)
    Database vercel integration add supabase (auto-connect + auto-pull)
             -> .env.local (POSTGRES_URL + keys, ~17 vars)
    Notion   create page "<project>" + Task Tracker & Roadmap DBs
@@ -203,7 +203,7 @@ up), so the repo comes first.
    - `AGENTS.md` — the instruction body, the one file every host reads (Claude Code, Codex, Cursor, Copilot). Shaped to the spec sheet's sections: commands, conventions, footguns, where to look, gates. If the scaffolder left an `AGENTS.md`, merge rather than overwrite: a framework block (`<!-- BEGIN:nextjs-agent-rules -->` … `<!-- END:nextjs-agent-rules -->`, or equivalent) stays at the top inside its markers, untouched, and the body goes below it so a future upgrade re-injects cleanly. It is real and load-bearing.
    - `CLAUDE.md` — the stub: the line `@AGENTS.md`, then a `## Claude Code specific` section only when Claude-only lines follow it (skills, hooks, plan-mode requests, `.claude/`, `@DESIGN.md`). Sunrise seeds none, so the seeded file is literally one line. A real file, never a symlink. A scaffolder's `CLAUDE.md` that is already `@AGENTS.md` is kept as is. A `CLAUDE.md` that carries real content (a `--promote`d dir sunrised before the flip, with its body in `CLAUDE.md` and a "read CLAUDE.md" stub in `AGENTS.md`; a scaffolder that ships one) is merged, never clobbered and never left as a second body: lift its content into `AGENTS.md` below any framework block, folding it into the template's sections where a line fits and keeping the rest verbatim under its own heading; drop the old `AGENTS.md` stub text; then rewrite `CLAUDE.md` to the one-line stub (plus a `## Claude Code specific` section for any line that was Claude-only). Show the merged `AGENTS.md` before writing it; nothing from the old body is lost, only moved.
    - `README.md` — name, one-liner, dev commands, links.
-   - `.gitignore` — archetype-appropriate. **Then append `!.env.example`** so the example env is actually tracked: scaffolder `.gitignore`s use `.env*`, which silently swallows `.env.example`. Verify after the commit: `.env.example` tracked, `.env.local` still ignored.
+   - `.gitignore` — archetype-appropriate. **Then append `!.env.example`** so the example env is actually tracked: scaffolder `.gitignore`s use `.env*`, which silently swallows `.env.example`. Verify after the commit: `.env.example` tracked, `.env.local` still ignored. Phase 3 step 2 re-asserts this negation after `vercel link`, which appends `.env*` below it; the two sites are one rule.
    - `.env.example` — committed, keys present with no values.
    - `docs/.gitkeep` — an empty file so git tracks the empty `docs/` folder; the loop's paperwork lands in subfolders of `docs/` (`scope/`, `architecture/`, `plans/`, `reviews/`), each created by the first skill that writes there (or by step 5 below).
 4. **Idempotent git init.** The scaffolder may have already `git init`'d (and committed), so: init only if not already a repo; ensure the default branch is `main`. Never assume a clean slate.
@@ -228,9 +228,10 @@ Create the remote, link it, and push in one shot:
 Skip entirely for library / script / pure-Python. For Electron, wire it as the
 env-plane only.
 
-1. `npx vercel link --yes` (creates/links a Vercel project named `<Name>`).
-2. **`npx vercel git connect` is usually a no-op now** — `vercel link --yes` already connects the GitHub repo in the same call ("Connecting GitHub repository… Connected"). Run it only as an idempotent safety confirm (expect "already connected"). If `link` did NOT connect — e.g. the Vercel GitHub App is scoped to "select repositories" and this repo isn't on the allowlist — surface that exact GitHub step; don't guess.
-3. **Electron env-plane only:** add a placeholder `public/index.html` + minimal `vercel.json` (the Project Knight pattern) so the no-op build succeeds. There is no website to host.
+1. `npx vercel link --yes --project <slug>` (creates/links the Vercel project as `<slug>`, never `<Name>`: Vercel requires lowercase project names, and the directory-derived `Banana-Dunk` was rejected with HTTP 400 on 2026-09-05; the repo and local dir keep `<Name>`).
+2. **Re-assert `!.env.example` as the LAST line of `.gitignore`, then re-run the Phase 1 step 3 check.** `vercel link` appends `.vercel` and `.env*` to the end of `.gitignore`, below the negation Phase 1 added, so `.env.example` is silently ignored again (the live run kept it tracked only because it was already committed). Move or re-append `!.env.example` so it is the final line, then verify: `.env.example` not ignored, `.env.local` still ignored, `.vercel` ignored. This step is not redundant with Phase 1: it exists because linking rewrites the file after Phase 1 verified it.
+3. **`npx vercel git connect` is usually a no-op now** — `vercel link --yes` already connects the GitHub repo in the same call ("Connecting GitHub repository… Connected"). Run it only as an idempotent safety confirm (expect "already connected"). If `link` did NOT connect — e.g. the Vercel GitHub App is scoped to "select repositories" and this repo isn't on the allowlist — surface that exact GitHub step; don't guess.
+4. **Electron env-plane only:** add a placeholder `public/index.html` + minimal `vercel.json` (the Project Knight pattern) so the no-op build succeeds. There is no website to host.
 
 ## Phase 4 — Database (the utilities)  [archetype-gated; skip if --no-db]
 
