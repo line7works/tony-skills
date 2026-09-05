@@ -67,7 +67,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (Phase 3 step 1 example name, Phase 3 step 2 pointer clause, Phase 8 new pre-flight step, the `### Repo `AGENTS.md`` template's "Where to look" vault line); `docs/feedback.md` (one Dispositions line); `docs/evidence/sun-live-run-fixes-2/fresh-session-read-sunrise.md` (new); `docs/evidence/sunrise-live-run-fixes/fresh-session-read.md` and `docs/evidence/sunset-live-run-fixes/fresh-session-read.md` (post-merge installed-cache reads appended 2026-09-05, before this slice's build); this plan's ledger.
 Not in this slice: anything in `sunset/SKILL.md` (Slice A); the `<project>` alias placeholders; the "Phase 2 git-connect" cross-reference; the seeded `AGENTS.md` Notion board URL line; machine paths anywhere outside the seeded `AGENTS.md` template.
 Depends on: nothing
-Status: built
+Status: signed off with conditions
 
 ## Build assumptions
 
@@ -145,3 +145,22 @@ Status: built
 
 ### 2026-09-05 — recheck: Slice A (lap 2)
 - MINOR · plugins/sun/skills/sunset/SKILL.md:206 · (`jq` undeclared and its `2>/dev/null` swallows "command not found", misreporting a missing jq as no token) · fixed · the line now branches on `command -v jq` when the token is empty and prints `jq not installed; cannot read the credentials file`; step 3 (:208) routes that string to the hand-to-Tony fallback; verifier executed the exact line with jq hidden, file missing, no key, env set, env unset (8 cases), `unset T` confirmed, `auth.json` count 1, never-echo 1, `both` 1
+
+### 2026-09-05 — review: Slice B
+- MAJOR · plugins/sun/skills/sunrise/SKILL.md:312 · the pre-flight runs before step 1's kit check and names "a kit-check fix" as something it commits, but :325's fix-and-rerun loop returns to the four kit lines, never to the pre-flight · a wrong-case `agents.md` or a symlinked stub: pre-flight passes clean, kit check fails, the session fixes the file, reruns the four lines, and step 2 prints "(git init, pushed)" with the fix uncommitted (the REVIEW.md sunrise line's 2026-09-04 occurrence); four lenses converged · CONFIRMED
+- MAJOR · plugins/sun/skills/sunrise/SKILL.md:312 · the pass test is "porcelain empty", not "push succeeded", and no text handles push failure or the `--no-github` path · a landed commit plus a rejected push (Phase 2 step 2's PR-only ruleset), an auth failure, or no remote under `--no-github` leaves `git status --porcelain` empty and "(git init, pushed)" prints; a clean-but-ahead tree passes the same way; reproduced in scratch by three lenses · CONFIRMED
+- MAJOR · plugins/sun/skills/sunrise/SKILL.md:312 · `git add -A` stages blind with no read of the porcelain list and no `git check-ignore` guard at the push site; every existing guard is upstream and soft · a `--promote`d dir whose `.gitignore` lacks `.env*` reaches the pre-flight with `.env.local` (Postgres DSN) and `.vercel/project.json` dirty and the one-liner pushes them, public under `--public`; security lens · PLAUSIBLE
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · fixed commit message "post-link .gitignore re-assert and closeout edits" misdescribes the diff under `--no-vercel` or when the dirty set is placeholders or a kit-check fix · misleading history
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:437 · "the memory home note and the vault `_index.md` record where it lives" overstates the templates (the memory note records the vault-relative folder, not the vault's location; the index is the destination) and Core principle :85 is now true by name only · a non-Claude host on another machine cannot resolve the folder from the pointers given
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:437 · "(machine-specific paths stay out of this file)" is an editor's note shipped into every new repo's `AGENTS.md`; ~200-char line on a ~90-col template · rent paid every session
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · the one-liner is not anchored to the new repo's dir (prose only; cwd persists across Bash calls, Phases 6-7 work elsewhere) · a session addressing the new repo by absolute path commits and pushes the wrong repo; pre-existing prose-anchoring pattern (:316)
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:243 · Phase 4's early entry to Phase 8 step 1 bypasses the pre-flight; nothing says it runs at real Phase 8 entry; the dirty-edits list omits Phase 5 step 6's `AGENTS.md` Notion edit · a session that treats step 1 as done skips to step 2 with that edit uncommitted
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · under `--promote` a dir that already had `origin` keeps it and a bare `git push` targets that upstream; the "repo nobody else has touched" rationale does not hold there
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:245 · Phase 4 step 5's "gitignored" confirm is unqualified while step 4 pulls to `apps/<app>/.env.local`; a root-anchored `/.env*` passes the root check and the pre-flight stages the nested file · pre-existing; the new `git add -A` turns the miss into a push
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · "Phase 1 made the only commit" is not quite true (scaffolders commit on their own, Phase 1 step 2) · harmless
+- MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:61 · AC2's `grep -c` counts lines, so it prints 1 only because both occurrences share one line · brittle, not wrong
+- MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:3 · Intent says Slice B "carries two follow-ups" from "the four notes (F, G)" and Constraints cite 543 lines; R5 came from note E · header drift
+- MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:25 · Out of scope excludes installed-cache fresh reads while AC4 carries two as riding-along records · wording
+- MINOR · docs/evidence/sunrise-live-run-fixes/fresh-session-read.md:24 · with the sunset evidence :22 and the plan's `tonycoon-66`: home paths and a username added to public files · repo CLAUDE.md wants that a deliberate call
+- MINOR · docs/feedback.md:130 · the finding E note says "PENDING TONY'S RULING" and ends "(Ruled ...: move out.)" in one quoted note · a record that argues with itself
+- MINOR · ~/ObsidianVault/01-domain/agents-md-best-practices.md:50 · the spec sheet lists a vault path as a Keep fact while :282 says nothing about the machine; a future editor re-adds the path · outside this repo
