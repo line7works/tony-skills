@@ -116,7 +116,7 @@ Acceptance criteria:
 Footprint: `README.md`; `CLAUDE.md`; `plugins/precon/skills/precon/SKILL.md` (59, 130); `plugins/signoff/skills/signoff/SKILL.md` (140); `.claude-plugin/marketplace.json` (81); `docs/evidence/agent-file-flip/sunset-reread.md`; `docs/evidence/agent-file-flip/close-out-checklist.md`; `docs/evidence/agent-file-flip/fresh-session-rerun.md`; `docs/evidence/agent-file-flip/slice-d-requirement-map.md`. The precon and signoff edits are the only changes under `plugins/`; both join the Studio reinstall list in R4(a) after D merges.
 Not in this slice: executing any of the three gated steps (Tony's word, outside the PR); the per-repo migration checklist file (phase 3 of the program); any other open MINOR from the punch list (the precon line in R5 is the one pulled in, per Tony 2026-09-04).
 Depends on: Slice C
-Status: not started
+Status: built
 
 ## Build assumptions
 
@@ -157,6 +157,13 @@ Status: not started
 - "No file under `plugins/` changes in this slice" dropped from D's footprint because of the precon edit · consequence of the above
 - R8 added: signoff's location rule (:140) resolves a ledger line's enclosing function against the commit named in that verdict block's own Scope line; the Slice C fix-introduced MINOR · per user
 
+### 2026-09-04 — build: Slice D
+- R4(c)'s "status line" of the memory note is read as its frontmatter `description:` line (line 3), the only line in the file that states program status; the checklist quotes it before and after · builder call
+- R7's cache commit is taken from each plugin's `version` field in `~/.claude/plugins/installed_plugins.json`, the spec's named fallback, because the cache is not a git checkout (its folders are named by commit) · builder call
+- R2's `sun` bullet also states that `/sunset` reads and writes no repo instruction file, carrying R3's finding into the bullet the slice already rewrites · builder call
+- R1 rewords the layout table row at README line 97 as well as the paragraph at 101, since the requirement names both lines · builder call
+- R7's four questions each ask the session to read the skill and answer without running it; none instructs a `--plugin-dir`, so the answers come from the installed cache by construction · builder call
+
 ## Deviations
 
 ### 2026-09-04 — build: Slice A (post-recheck)
@@ -174,6 +181,11 @@ Status: not started
 ### 2026-09-04 — build: Slice C
 - `plugins/vertical/skills/vertical/assets/vertical-mandate.md` (the outside reviewers' prompt) says nothing about `REVIEW.md`; outside models therefore honour the repo's sheet only if they read it from the export. Outside the footprint, not changed
 - The kit note's `REVIEW.md` section says "a repo with hosted migrations makes a missing backup a blocker" as a toggle example, but the template's Severity bar line already carries "a migration without a backup" unconditionally; the inference rule sets only the four pass toggles and leaves the bar verbatim, so a CLI repo's rendered sheet names a migration blocker it can never hit. Template fidelity (R4, AC2) wins here; a per-archetype bar is the "later work" Slice C's Not-in-this-slice line names
+### 2026-09-04 — build: Slice D
+- The kit note `~/ObsidianVault/01-domain/repo-doc-kit.md:12` still says "skill edit pending as of 2026-09-03; until it lands it still writes the old direction", the same stale claim R4(b) removes from the sunrise vault note; outside the repo, named in the close-out checklist for the same word, not changed
+- `README.md:40` (the roster's `architect` one-liner) says the architecture doc is "hand-pointed downstream for now", the same stale claim R6 removes from the marketplace; R1 leaves roster lines 38–47 alone, so not changed; one-line fix for a later pass
+- The build skill's Step 1 tier text names `docs/plans/` first, and the fresh session confirmed it; no discovery there
+
 ## Handoffs
 ## Punch list
 

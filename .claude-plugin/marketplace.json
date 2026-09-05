@@ -78,7 +78,7 @@
     {
       "name": "architect",
       "source": "./plugins/architect",
-      "description": "/architect is the drawings step between /precon and /blueprint \u2014 one interview that names the first real user's walkthrough, forces 2\u20133 genuinely distinct candidate structures, cuts every component that no walkthrough requirement needs, and settles the one-way doors for the full vision. Writes one living architecture doc (which Tony hand-points /sunrise and /blueprint at until their reworks land) plus a private visual; never provisions. Strictly user-invoked.",
+      "description": "/architect is the drawings step between /precon and /blueprint \u2014 one interview that names the first real user's walkthrough, forces 2\u20133 genuinely distinct candidate structures, cuts every component that no walkthrough requirement needs, and settles the one-way doors for the full vision. Writes one living architecture doc (staged in ~/Documents before a repo exists, adopted into docs/architecture/ by /sunrise when it creates the repo, and read there by /blueprint) plus a private visual; never provisions. Strictly user-invoked.",
       "tags": [
         "build-loop",
         "architecture",
