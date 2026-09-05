@@ -42,7 +42,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (Phase 0 preview line, Phase 1 step 3 `.gitignore` bullet, Phase 3 steps 1 and new 2); `docs/feedback.md` (one Dispositions line); `docs/evidence/sunrise-live-run-fixes/fresh-session-read.md` (new); this plan's ledger sections.
 Not in this slice: finding E (pending Tony), Phase 8 alias placeholders, the installed-cache read (post-merge), a live `/sunrise` rerun (post-merge, Tony's word).
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 
@@ -75,3 +75,8 @@ Status: signed off with conditions
 - MINOR (pre-existing) · `plugins/sun/skills/sunrise/SKILL.md:312` · "Phase 2 git-connect" but git connect is Phase 3 · stale cross-reference · Slice A review
 - MINOR (pre-existing) · `docs/feedback.md:10-13` · Flow paragraph names `skill-loop-edits-build-plan.md` as where slices land · stale prose · Slice A review
 - MINOR (pre-existing) · `plugins/sun/skills/sunrise/SKILL.md:132` · `<slug>` derivation does not state `[a-z0-9-]`; a leading hyphen would parse as a flag at the new `--project` sink · Tony confirms variants first · Slice A review
+
+### 2026-09-05 — recheck: Slice A
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:232` · (Phase 3 step 2's verification cannot fail for `.env.example`) · fixed — the step now names `git check-ignore --no-index .env.example` must print nothing and `git check-ignore --no-index .env.local .vercel` must print both; executed in a throwaway repo: broken and botched states print `.env.example` rc 0, fixed state prints nothing rc 1, default form identical in every state
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:141` (with `:132`) · (Phase 0's Vercel collision check names no variant while Phase 3 links `--project <slug>` under `--yes`) · fixed — `:141` now says `<slug>` must be free and why; `:132` lists the Vercel project among `<slug>`'s uses; `:141`, `:169`, `:231` agree; no `<Name>`-with-Vercel pairing remains (static read + grep)
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:232` · broke: the pass state of `git check-ignore --no-index .env.example` is defined only as "must print nothing", never that git exits 1 there and 0 in the broken state — a session running it through a tool that surfaces "Exit code 1" reads the pass as a failure and re-edits `.gitignore` in a loop or reports the step red · Slice A fix
