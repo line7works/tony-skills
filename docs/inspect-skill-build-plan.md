@@ -80,7 +80,7 @@ Status: signed off
 ## Discovered
 
 ### 2026-08-30 — build: Slice A
-- A scope doc for the smoke target EXISTS at ~/Documents/architect-scope.md (precon slug "architect", not "architect-skill") — the smoke exercised the record-found path; R7's no-record branch remains unexercised by any run so far
+- A scope doc for the smoke target EXISTS at `docs/scope/2026-08-21-architect.md` (precon slug "architect", not "architect-skill") — the smoke exercised the record-found path; R7's no-record branch remains unexercised by any run so far
 - The smoke's real findings against the architect plan (2 MAJOR · 17 MINOR) live only in the scratch COPY; porting them to the real architect plan is Tony's call, outside this slice
 
 ### 2026-08-30 — build: Slice B

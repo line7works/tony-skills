@@ -36,7 +36,7 @@ Out of scope:
 - Diff-only disclosure to outside models — Tony chose full code
 - Self-fixing after the verdict — Tony ruled it stops at the verdict; fixes are a separate instruction, same as /signoff
 
-Research: ~/Documents/precon-cold-reads/vertical-cold-read-2026-08-21.md (three readers: local Claude, GPT, DeepSeek — DeepSeek added on Tony's word; summary + disposition at top)
+Research: `docs/reviews/2026-08-21-vertical-cold-read.md` (three readers: local Claude, GPT, DeepSeek — DeepSeek added on Tony's word; summary + disposition at top)
 
 Open: (none)
 

@@ -45,7 +45,7 @@ Out of scope:
 - Parallel worktree execution alongside the architect build — rejected (both jobs write the same repo; Tony accepted sequencing, 2026-08-31)
 - A separate private repo (tony-ops) for machine-wired skills — rejected (Round 1 Q1: Tony chose one public repo; the machine-wired 5 go public with everything else, subject to the scrub)
 
-Research: cold read at ~/Documents/precon-cold-reads/skills-migration-cold-read-2026-08-31.md (26 findings: 22 absorbed, 2 surfaced as Round 2, 2 left downstream to /blueprint — internal path-reference updates and acceptance criteria/rollback).
+Research: cold read at `docs/reviews/2026-08-31-skills-migration-cold-read.md` (26 findings: 22 absorbed, 2 surfaced as Round 2, 2 left downstream to /blueprint — internal path-reference updates and acceptance criteria/rollback).
 
 Open: none.
 

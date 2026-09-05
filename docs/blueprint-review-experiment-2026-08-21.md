@@ -13,7 +13,7 @@ standing place in /blueprint.
 
 - **Subject:** `~/Documents/skill-lab/architect-skill-build-plan.md` (the
   freshly drafted plan) reviewed against
-  `~/Documents/architect-scope.md` (the precon scope doc, the spec of record).
+  `docs/scope/2026-08-21-architect.md` (the precon scope doc, the spec of record).
 - **Reviewer 1 — local:** a fresh zero-context Claude subagent
   (general-purpose), read-only, given only the two file paths.
 - **Reviewer 2 — GPT:** `gpt-5.6-sol` via codex MCP, `web_search: disabled`,
