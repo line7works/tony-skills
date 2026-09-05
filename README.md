@@ -94,13 +94,18 @@ Code:
 plugins/<name>/                   one plugin per skill (sun bundles sunrise+sunset)
   .claude-plugin/plugin.json
   skills/<skill>/SKILL.md         (+ assets/, nested or at plugin root)
-docs/                             build plans, reviews, and the loop's paper trail
+docs/                             the loop's paper trail: scope/ plans/ reviews/ architecture/ evidence/
 tools/                            the non-plugin shelf
 ```
 
-The `docs/` folder is the workshop's real paper trail — build plans, scope
-docs, adversarial reviews, evidence files. It ships in the repo on purpose:
-the loop skills above produced it, so it doubles as their worked example.
+The `docs/` folder is the workshop's real paper trail, laid out the way the
+repo doc kit says: `docs/scope/` holds what `/precon` writes, `docs/plans/`
+what `/blueprint` writes (the build docs `/build`, `/signoff`, and `/recheck`
+work from), `docs/reviews/` the verdict docs `/signoff` and `/vertical` write
+plus cold reads and raw inspect output, `docs/architecture/` what `/architect`
+writes, and `docs/evidence/` the requirement maps and other proof a slice leaves
+behind. It ships in the repo on purpose: the loop skills above produced it, so
+it doubles as their worked example.
 
 ## License
 
