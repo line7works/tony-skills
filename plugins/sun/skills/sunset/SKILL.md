@@ -56,7 +56,7 @@ Names differ per layer (vault `project-knight`, repo `Project-Knight`, memory
 - **Preview before executing.** Always show the full "what will change and where" table and wait for an explicit go.
 - **Ask for the reason.** Always prompt Tony for a one-line "why" and use his words in the tombstone and the handoff prompt.
 - **Kill active automation.** Scheduled agents and crons keep firing after everything else is archived; cancel them.
-- **Capture knowledge before it strands.** The project's own CLI memory store gets orphaned when the repo moves; archive it first.
+- **Capture knowledge before it strands.** The project's own CLI memory store gets orphaned when the repo moves; copy it into the moved repo right after the move (Phase 4), never before, so nothing pre-creates the archive path.
 - **Protect the data.** The repo is in git; the database is not. Always back the database up before idling it.
 - **Protect the code.** Never move or archive a repo with uncommitted or unpushed work without surfacing it first.
 - **Operate on the vault via the local filesystem.** Canonical is `~/ObsidianVault` **on the Mac Studio** — not the laptop, whose copy is retired. Obsidian picks up external changes on its own. Never proceed without passing the vault gate in Phase 0.
@@ -202,18 +202,17 @@ Order matters: push everything BEFORE archiving, because an archived repo is rea
 Pause, never delete. Pausing blocks the production deployment and stops auto-assigning custom domains. Reversible with unpause; keeps env vars, domains, and deploy history.
 
 1. Get `projectId` + `orgId` (team id) from `<repo>/.vercel/project.json`, or via the Vercel MCP `list_projects` if the file is absent.
-2. Pause via the REST API. Read the token into a shell variable: `$VERCEL_TOKEN` when it is set, else key `token` of the logged-in CLI's credentials file (JSON):
-   `T="${VERCEL_TOKEN:-$(jq -r .token "$HOME/Library/Application Support/com.vercel.cli/auth.json")}"`
-   `curl -X POST "https://api.vercel.com/v1/projects/<projectId>/pause?teamId=<orgId>" -H "Authorization: Bearer $T"`
-   The token is a credential: it exists only in that variable, only for the `Authorization` header; never echo or print it, and never write it into the tombstone or any file.
-3. Only if both sources are absent (`$VERCEL_TOKEN` unset and the credentials file missing), do not guess: print the ready-to-run curl plus the dashboard path (Project → Settings → Pause Project) and ask Tony to run it with `!` or click it.
+2. Pause via the REST API, as ONE command line (the Bash tool starts a fresh shell per call, so a variable set in one call is gone in the next). The token is `$VERCEL_TOKEN` when it is set, else key `token` of the logged-in CLI's credentials file (JSON):
+   `T="${VERCEL_TOKEN:-$(jq -r '.token // empty' "$HOME/Library/Application Support/com.vercel.cli/auth.json" 2>/dev/null)}"; if [ -z "$T" ]; then echo "no Vercel token in either source"; else curl -sS -o /dev/null -w '%{http_code}\n' -X POST "https://api.vercel.com/v1/projects/<projectId>/pause?teamId=<orgId>" -H "Authorization: Bearer $T"; fi; unset T`
+   Expect `200`. The token is a credential: it exists only in that variable, only for the `Authorization` header, and the line unsets it at the end; never echo or print it, never run the `jq` read on its own "to check", never add `-v`, `--trace`, or `set -x`, and never write it into the tombstone or any file. A `401` or `403` means the stored token is expired or wrong: do not debug the token, go to step 3.
+3. If both sources came up empty (the line printed `no Vercel token in either source`: `$VERCEL_TOKEN` unset and the credentials file missing or without a `token` key), or the pause returned anything but `200`, do not guess: print the ready-to-run curl plus the dashboard path (Project → Settings → Pause Project) and ask Tony to run it with `!` or click it.
 
 ## Phase 7 — Database (skip if --keep-db)
 
 The database is the only layer whose data is NOT in git, and abandoned free-tier projects can eventually be reclaimed by the provider. So "archive" here means keep a copy and idle it. **NEVER drop or delete a database during sunset.**
 
 1. Use the connection string captured in Phase 0.
-2. **Back it up first, while it is still reachable** (before any pause):
+2. **Back it up first, while it is still reachable** (before any pause). `mkdir -p ~/Developer/_archive/<Name>` first (a no-op after Phase 4; under `--keep-local`, where Phase 4 was skipped, this is what creates the folder, and a later full sunset of the same name will then hit Phase 4's guard and report the backup sitting there), then:
    `pg_dump "<direct/non-pooled connection string>" > ~/Developer/_archive/<Name>/db-backup-<today>.sql`
    Confirm the file is non-empty. If `pg_dump` is unavailable or the dump fails, STOP and tell Tony rather than skipping the backup silently.
 3. **Idle the compute, never the data:** Neon auto-suspends when idle (optionally suspend now); Supabase pause from the dashboard (or it auto-pauses after ~1 week idle); other providers, note and let Tony idle.

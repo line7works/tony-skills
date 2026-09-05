@@ -46,7 +46,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunset/SKILL.md` (Phase 2 step 2, Phase 4 intro and steps, Phase 6 steps 2 and 3, Phase 9 summary Memory line and tombstone project-store line for R3); `docs/feedback.md` (one Dispositions line); `docs/evidence/sunset-live-run-fixes/fresh-session-read.md` (new); this plan's ledger.
 Not in this slice: anything in `sunrise/SKILL.md` (Slice B); sunset's Notion phase; the by-name Vercel lookup variant; a live `/sunset` rerun.
 Depends on: nothing
-Status: built
+Status: signed off with conditions
 
 ## Slice B — sunrise follow-ups
 Goal: `/sunrise` ends with every working-tree edit committed and pushed before it claims "pushed", and its instruction text names no real project.
@@ -97,3 +97,20 @@ Status: not started
 - Ship convention this session: the Stop hook was never armed; SHIP blocks say `NOT armed (run unwrapped)`
 
 ## Punch list
+
+### 2026-09-05 — review: Slice A
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:206 · Phase 6 token read and curl are two separate command lines · the Bash tool starts a fresh shell per call, so a session running them as two calls sends `Authorization: Bearer ` (empty), gets 403, and its natural next move (`echo $T`, `curl -v`) puts the token in the transcript; four lenses converged · CONFIRMED
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:59 · principle "archive it first" contradicts the new Phase 4 order · a session honoring the principles list copies into `_archive/<Name>/.claude-memory` before Phase 4 and recreates the nest the slice fixes; three lenses converged · CONFIRMED
+- MAJOR · plugins/sun/skills/sunset/SKILL.md:217 · under `--keep-local` nothing creates `~/Developer/_archive/<Name>` before Phase 7 writes the backup there · `/sunset Foo --keep-local` with a database: `pg_dump >` fails "No such file or directory" and :218 STOPs; on `main` Phase 2 made the dir unconditionally, so this is a regression the slice introduced · CONFIRMED
+- MINOR · plugins/sun/skills/sunset/SKILL.md:206 · `jq -r .token` degrades silently: missing key gives the string `null`, malformed file gives empty, expired token gives 401 · step 3's "both absent" test does not cover any of them, so the curl fires with a bad token and no scripted path follows
+- MINOR · plugins/sun/skills/sunset/SKILL.md:208 · the no-print sentence does not name `curl -v`/`--trace`, `set -x`, or a standalone `jq -r .token` run "to confirm", and there is no `unset T` · each leaks the value into the transcript while satisfying the letter of the sentence
+- MINOR · plugins/sun/skills/sunset/SKILL.md:128 · Phase 0 preview Memory line promises the store copy unconditionally · under `--keep-local` the preview Tony approves promises a copy Phase 4 no longer makes; R2 says the line stays put, so this is a question for Tony, not a defect charged
+- MINOR · plugins/sun/skills/sunset/SKILL.md:300 · tombstone "Local repo: `~/Developer/_archive/<Name>`", Phase 9 :241, handoff prompt :263 are unconditional under `--keep-local` · the tombstone now says the store was left in place because the repo was kept local two lines above a line saying the repo moved; pre-existing, outside R3
+- MINOR · plugins/sun/skills/sunset/SKILL.md:197 · Phase 5 step 1 says "run before the repo move" but sits after Phase 4 · pre-existing stale ordering cross-reference
+- MINOR · plugins/sun/skills/sunset/SKILL.md:175 · the guard is prose, not a self-enforcing command, and the STOP's scope (do Phases 5-8 continue?) is undefined · a session can run :176 directly; if it proceeds after a STOP, Phase 7 writes into the colliding prior archive
+- MINOR · plugins/sun/skills/sunset/SKILL.md:179 · `cp -R ~/.claude/projects/*<Name>*/memory/.` silently merges when the glob matches several stores · same-named files collide and the tombstone's single source path is wrong; pre-existing line relocated by this slice
+- MINOR · plugins/sun/skills/sunset/SKILL.md:177 · step 4 does not say "only if `mv` exited 0" · a failed `mv` followed by `mkdir -p` creates a phantom archive dir that trips the guard next time; low likelihood on APFS
+- MINOR · plugins/sun/skills/sunset/SKILL.md:180 · "If no project store exists, record none" is an addition no requirement names and no ledger line logs · inside Phase 4 steps, sensible, unlogged
+- MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:45 · AC8 pins the Inbox at 35; the tree holds 36 at build start and after · builder call assumption is sound (the 36th line is Tony's own `/fb` of the handoff SKILL NOTE, committed 11c0433 before the work), but the literal criterion fails; question for Tony: accept 36 or amend AC8
+- MINOR · docs/evidence/sunset-live-run-fixes/fresh-session-read.md:3 · states the installed sun cache as `2baaecba12a1`; `installed_plugins.json` shows `sun@tony-skills` at `e7064921ac21` since 2026-09-05T14:43Z · the record's one machine fact is wrong (harmless to the skill); the plan's Handoffs line "pending `/plugin update sun` for PR #43" is stale for the same reason
+- MINOR · docs/plans/2026-09-05-sun-live-run-fixes-2.md:77 · three stray blank lines between Build assumptions and Deviations · cosmetic
