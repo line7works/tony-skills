@@ -152,3 +152,13 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
   guard on an existing archive path, move-then-copy, `--keep-local` skips the
   copy; Phase 6 reads `auth.json` key `token` into a variable for the header
   only and stops only when both sources are absent).
+- 2026-09-05 · the three sunrise live-run follow-up notes (Banana Dunk: E, the
+  seeded `AGENTS.md` "Where to look" carried a machine-specific vault path; F, no
+  phase after Phase 2 commits or pushes, so the post-link `.gitignore` re-assert
+  stays uncommitted while Phase 8 prints "pushed"; G, the real project name
+  `Banana-Dunk` sat in the public skill text at Phase 3 step 1) → became Slice B
+  of docs/plans/2026-09-05-sun-live-run-fixes-2.md (Phase 8 pre-flight requires
+  an empty `git status --porcelain` or commits and pushes before the summary may
+  say "pushed", with Phase 3 step 2 pointing at it; the example name is the
+  generic `My-App`; the seeded `AGENTS.md` names the vault project folder without
+  a path, per Tony's 2026-09-05 ruling).
