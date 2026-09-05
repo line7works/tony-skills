@@ -4,10 +4,10 @@ Intent: /ship runs one whole slice loop with a single command — find the build
 /build the named slice, /signoff, fix every BLOCKER + MAJOR, /recheck, at most one
 extra fix+recheck lap, then report. It replaces the chain Tony hand-types every slice
 (`/goal /build slice A of docs/<plan>.md then /signoff and fix any blocker & majors,
-then /recheck`). Scope doc (settled ground, harvested): ~/Documents/ship-scope.md.
+then /recheck`). Scope doc (settled ground, harvested): `docs/scope/2026-08-20-ship.md`.
 Handoffs: ~/Documents/handoffs/2026-08-20-ship-skill-handoff.md + parent
 2026-08-20-three-new-loop-skills-handoff.md. Cold read + disposition:
-~/Documents/precon-cold-reads/ship-cold-read-2026-08-20.md.
+`docs/reviews/2026-08-20-ship-cold-read.md`.
 
 Constraints:
 - Skill file at ~/.claude/skills/ship/SKILL.md, house style of the loop skills

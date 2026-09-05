@@ -7,7 +7,7 @@ frontier models (ChatGPT, Gemini) with a reject-it mandate, merged into one veri
 verdict doc. It is the final inspection before a build is called done. Scope doc
 (settled ground, harvest first): `~/Developer/tony-skills/docs/vertical-scope.md`.
 Cold-read record with the blueprint-altitude disposition table:
-`~/Documents/precon-cold-reads/vertical-cold-read-2026-08-21.md`.
+`docs/reviews/2026-08-21-vertical-cold-read.md`.
 
 Constraints:
 - The deliverable is one skill: `~/.claude/skills/vertical/SKILL.md` plus

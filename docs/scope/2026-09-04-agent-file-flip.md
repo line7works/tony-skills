@@ -53,6 +53,6 @@ Out of scope:
 - Per-repo flips, Pour-Guys body draft, DESIGN.md backfills, the migration checklist file, program close-out — phases 3 to 6 of the program, run from the handoff, not from this build (§6)
 - /architect for this build — template swap has no drawings (§4.9)
 - Any edit to sunset's behaviour — §8 verified it touches no instruction files
-Research: cold reads (local Claude + gpt-5.6-sol, 57 items, all absorbed or left downstream, none surfaced): ~/Documents/precon-cold-reads/agent-file-flip-cold-read-2026-09-04.md; ~/Documents/handoffs/2026-09-03-agent-file-flip-handoff.md (decisions §4, write-location table §7, sunset finding §8); ~/ObsidianVault/01-domain/repo-doc-kit.md; ~/ObsidianVault/01-domain/agents-md-best-practices.md
+Research: cold reads (local Claude + gpt-5.6-sol, 57 items, all absorbed or left downstream, none surfaced): `docs/reviews/2026-09-04-agent-file-flip-cold-read.md`; ~/Documents/handoffs/2026-09-03-agent-file-flip-handoff.md (decisions §4, write-location table §7, sunset finding §8); ~/ObsidianVault/01-domain/repo-doc-kit.md; ~/ObsidianVault/01-domain/agents-md-best-practices.md
 Open: none
 Next: /blueprint when ready.

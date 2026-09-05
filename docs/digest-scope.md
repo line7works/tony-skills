@@ -37,7 +37,7 @@ Decisions:
 Out of scope:
 - Transcript scraping (~/.claude/projects/*/*.jsonl) as an input path — Tony chose /fb log-as-you-go 2026-08-20; brittle, off the table
 
-Research: cold read (local Claude reader) — ~/Documents/precon-cold-reads/digest-cold-read-2026-08-20.md
+Research: cold read (local Claude reader) — `docs/reviews/2026-08-20-digest-cold-read.md`
 
 Open: none
 Next: /blueprint when ready.

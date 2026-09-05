@@ -5,7 +5,7 @@ unchanged) captures raw notes into `<repo>/docs/feedback.md`; /digest reads that
 log and rewrites `<repo>/docs/notes.md` into one fixed current-state shape, so
 week-long notes sessions stop dying in scrolled-out chat context. Scope doc (settled
 ground, harvest first): `~/Developer/tony-skills/docs/digest-scope.md`. Cold-read
-record: `~/Documents/precon-cold-reads/digest-cold-read-2026-08-20.md`.
+record: `docs/reviews/2026-08-20-digest-cold-read.md`.
 
 Constraints:
 - The deliverable is one skill: `~/.claude/skills/digest/SKILL.md` (markdown skill
