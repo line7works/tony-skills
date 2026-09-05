@@ -99,14 +99,22 @@ Requirements:
 - R2: The repo `CLAUDE.md` `sun` bullet and the `signoff` invariant paragraph reflect Slices B and C: sunrise seeds Tier 0 from the kit with `AGENTS.md` as the body; signoff may write `REVIEW.md` and a verdict doc and is still report-only.
 - R3: `docs/evidence/agent-file-flip/sunset-reread.md` records the re-read of `plugins/sun/skills/sunset/SKILL.md`: the one `AGENTS.md` mention (the vault guard at line 83), and the statement that it reads or writes no repo instruction file, with the `grep -n "AGENTS.md\|CLAUDE.md"` output pasted.
 - R4: The same evidence folder holds `close-out-checklist.md` listing the three steps that happen outside any PR and only on Tony's word, each with its exact command or edit: (a) reinstall on the Studio after each slice's merge (`/plugin update sun@tony-skills`, and the same for precon, architect, blueprint, inspect, signoff, recheck, vertical, ship, handoff, build); (b) the vault note `~/ObsidianVault/01-domain/claude-skills/sunrise.md` line 39 ("Changing 2026-09" sub-bullet) removed and line 38's seed set rewritten to the kit's Tier 0; (c) the memory note `~/.claude/projects/-Users-tonycoon/memory/agent-file-flip-program.md` status line updated to "phase 2 DONE" with the date. The checklist also names the two optional live checks: one `/sunrise --dry-run` on a throwaway name, and one live `/signoff` in a scratch repo to exercise the `REVIEW.md` first run.
+- R5: `plugins/precon/skills/precon/SKILL.md` line 130 (What NOT to do) and line 59 (the scope-doc paragraph's "relocating the doc is Tony's, never the skill's") say relocation is Tony's or sunrise's, so precon agrees with sunrise's Slice B adoption step (Slice A's discovery, carried through B; punch-list MINOR at :130).
+- R6: The `architect` entry in `.claude-plugin/marketplace.json` (line 81) no longer says Tony hand-points `/sunrise` and `/blueprint` at the architecture doc; it says sunrise adopts the staged doc (Slice B) and blueprint reads it from `docs/architecture/` (Slice A). The `architect` SKILL.md is not touched.
+- R7: Every earlier slice's fresh-session check (A's AC3, B's AC4, C's AC3 and AC4) is re-run now that the Studio plugins are reinstalled, this time from the installed cache (plain `claude`, no `--plugin-dir`) so the check exercises what a session actually runs; each answer is recorded in `docs/evidence/agent-file-flip/fresh-session-rerun.md` with the plugin cache commit it ran against.
+- R8: `plugins/signoff/skills/signoff/SKILL.md` line 140 (the enclosing-function location rule) says a ledger line's enclosing function is resolved against the commit named in that verdict block's own Scope line (the fix-introduced MINOR carried from Slice C, per Tony 2026-09-04).
 Acceptance criteria:
 - AC1: `grep -n "docs/scope\|docs/plans\|docs/reviews\|docs/architecture" README.md` returns hits in the `docs/` description — verify: run the grep.
 - AC2: `grep -n "AGENTS.md" CLAUDE.md` returns a hit in the `sun` bullet, and `grep -n "REVIEW.md" CLAUDE.md` returns a hit in the signoff invariant — verify: run both.
 - AC3: `docs/evidence/agent-file-flip/sunset-reread.md` exists and its pasted grep output matches a fresh run of the same grep — verify: rerun the grep, diff.
 - AC4: `docs/evidence/agent-file-flip/close-out-checklist.md` exists, names the three gated steps with verbatim commands or edits, and none of them has been executed by the build session — verify: manual: read it; then `grep -c "Changing 2026-09" ~/ObsidianVault/01-domain/claude-skills/sunrise.md` = 1 and the memory note's status line is unchanged at the end of the slice.
-- AC5: `docs/evidence/agent-file-flip/slice-d-requirement-map.md` maps R1–R4 to file and line — verify: manual: open each citation.
-Footprint: `README.md`; `CLAUDE.md`; `docs/evidence/agent-file-flip/sunset-reread.md`; `docs/evidence/agent-file-flip/close-out-checklist.md`; `docs/evidence/agent-file-flip/slice-d-requirement-map.md`. No file under `plugins/` changes in this slice.
-Not in this slice: executing any of the three gated steps (Tony's word, outside the PR); the per-repo migration checklist file (phase 3 of the program).
+- AC5: `docs/evidence/agent-file-flip/slice-d-requirement-map.md` maps R1–R8 to file and line — verify: manual: open each citation.
+- AC6: `grep -n "relocation is Tony's" plugins/precon/skills/precon/SKILL.md` returns only lines that also contain "sunrise", and `grep -c "never the skill's" plugins/precon/skills/precon/SKILL.md` = 0 — verify: run both.
+- AC7: `grep -c "hand-points" .claude-plugin/marketplace.json` = 0 and `python3 -c "import json;json.load(open('.claude-plugin/marketplace.json'))"` exits 0 — verify: run both.
+- AC8: `docs/evidence/agent-file-flip/fresh-session-rerun.md` exists with one recorded answer per check (four sessions: build, sun, signoff, recheck-and-vertical), each naming the cache commit from `git -C ~/.claude/plugins/cache/tony-skills rev-parse --short HEAD` (or the marketplace's recorded commit if the cache is not a checkout) — verify: manual: read it; any answer that misses its slice's expected content is a finding, not a pass.
+- AC9: `grep -n "Scope line" plugins/signoff/skills/signoff/SKILL.md` returns a hit in the location rule near line 140 — verify: run the grep, read the line.
+Footprint: `README.md`; `CLAUDE.md`; `plugins/precon/skills/precon/SKILL.md` (59, 130); `plugins/signoff/skills/signoff/SKILL.md` (140); `.claude-plugin/marketplace.json` (81); `docs/evidence/agent-file-flip/sunset-reread.md`; `docs/evidence/agent-file-flip/close-out-checklist.md`; `docs/evidence/agent-file-flip/fresh-session-rerun.md`; `docs/evidence/agent-file-flip/slice-d-requirement-map.md`. The precon and signoff edits are the only changes under `plugins/`; both join the Studio reinstall list in R4(a) after D merges.
+Not in this slice: executing any of the three gated steps (Tony's word, outside the PR); the per-repo migration checklist file (phase 3 of the program); any other open MINOR from the punch list (the precon line in R5 is the one pulled in, per Tony 2026-09-04).
 Depends on: Slice C
 Status: not started
 
@@ -144,6 +152,11 @@ Status: not started
 - A pass marked `on` in `REVIEW.md` runs at every depth, so the template's `security: on` puts a security reviewer into every LEAN run of a sheet repo; the builder call above stands as the rule · per user
 - /recheck leaves `## Repo-specific checks` to /signoff; the closed checklist never grows from them · per user
 - Invocation wording that orders the `REVIEW.md` write counts as the word; the file is written and then shown whole in chat, so the show step still happens · per user (signoff :24 edited to say so)
+### 2026-09-04 — scope: Slice D (per user, before /ship D)
+- Three items added to D's footprint: precon's What-NOT line (:130, with :59) made "Tony's or sunrise's"; the marketplace `architect` entry's "Tony hand-points /sunrise" clause replaced; every earlier slice's fresh-session check re-run from the installed cache now that the Studio plugins are reinstalled · per user
+- "No file under `plugins/` changes in this slice" dropped from D's footprint because of the precon edit · consequence of the above
+- R8 added: signoff's location rule (:140) resolves a ledger line's enclosing function against the commit named in that verdict block's own Scope line; the Slice C fix-introduced MINOR · per user
+
 ## Deviations
 
 ### 2026-09-04 — build: Slice A (post-recheck)
