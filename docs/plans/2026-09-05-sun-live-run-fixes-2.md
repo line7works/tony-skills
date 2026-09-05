@@ -67,7 +67,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (Phase 3 step 1 example name, Phase 3 step 2 pointer clause, Phase 8 new pre-flight step, the `### Repo `AGENTS.md`` template's "Where to look" vault line); `docs/feedback.md` (one Dispositions line); `docs/evidence/sun-live-run-fixes-2/fresh-session-read-sunrise.md` (new); `docs/evidence/sunrise-live-run-fixes/fresh-session-read.md` and `docs/evidence/sunset-live-run-fixes/fresh-session-read.md` (post-merge installed-cache reads appended 2026-09-05, before this slice's build); this plan's ledger.
 Not in this slice: anything in `sunset/SKILL.md` (Slice A); the `<project>` alias placeholders; the "Phase 2 git-connect" cross-reference; the seeded `AGENTS.md` Notion board URL line; machine paths anywhere outside the seeded `AGENTS.md` template.
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 
@@ -172,3 +172,9 @@ Status: signed off with conditions
 - MAJOR · plugins/sun/skills/sunrise/SKILL.md:312 · broke: `git check-ignore -q .env.local` is an unconditional precondition, so a secret-free tree whose `.gitignore` has no `.env*` pattern prints `PREFLIGHT FAILED` even with no `.env.local` on disk — a library or script archetype (`npm init` seeds no `.gitignore`) or the single-file static branch run `--no-vercel`, Phase 5 dirties `AGENTS.md`, the pre-flight halts the run with a false STOP; reproduced in scratch · fix-introduced by Slice B's fix pass · REVIEW.md bar: a user-visible regression
 - MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · broke: the command is the "Otherwise" of "If it prints anything" yet the pass test requires `PREFLIGHT PUSHED` printed, so a clean already-pushed tree either has an unsatisfiable pass test or, if the session runs the line anyway, a false `PREFLIGHT FAILED` from "nothing to commit"; reproduced · fix-introduced by Slice B's fix pass
 - MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · broke: the `--no-github` branch says "commit with the same message, skip the push" without restating the command, so the check-ignore guard is carried over only if the session chooses to · fix-introduced by Slice B's fix pass
+
+### 2026-09-05 — recheck: Slice B (lap 2)
+- MAJOR · plugins/sun/skills/sunrise/SKILL.md:312 · (unconditional `.env.local` guard false-STOPs a secret-free tree with no `.env*` pattern) · fixed · each guard now applies only when the file exists and the prose says so; verifier ran the exact line: `.gitignore` = `node_modules` only with no `.env.local` prints `PREFLIGHT PUSHED` and the remote advances; unignored `.env.local` and unignored `.vercel/project.json` still print `PREFLIGHT FAILED` with nothing staged; both-ignored control pushes without the secrets
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · (clean-tree branch contradictory: pass test wanted `PREFLIGHT PUSHED`, "nothing to commit" printed FAILED) · fixed · the pass test now requires `PREFLIGHT PUSHED` only if the command ran, and in every case no `[ahead N]` and an empty porcelain; a clean, not-ahead tree passes without running the command (static)
+- MINOR · plugins/sun/skills/sunrise/SKILL.md:312 · (`--no-github` branch did not restate the guarded command) · fixed · the branch now gives its own line with both guards, `PREFLIGHT COMMITTED` as the pass token, and "(git init, local only)"; verifier ran it with no remote: dirty tracked file commits, unignored `.env.local` fails with nothing staged
+- Lap 1 fixes held: kit-check rerun edge at :312 and :325; pre-receive rejection and no-remote push print `PREFLIGHT FAILED` with `[ahead 1]` visible; unignored `.env.local` never reaches the remote; the four kit-check lines byte-identical to `main`
