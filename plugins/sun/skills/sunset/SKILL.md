@@ -157,10 +157,7 @@ which machine he appears to be on and that canonical lives on the Mac Studio.
 Claude Code memory is per launch-directory, so a sunset project has up to two stores.
 
 1. **Home summary note** (`~/.claude/projects/-Users-tonycoon/memory/project_<slug>.md`): set frontmatter `status: archived`, add `archived: <today>`, keep the file, and move its bullet in that store's `MEMORY.md` under an `## Archived` heading (create it if missing).
-2. **The project's own store** (`~/.claude/projects/*<Name>*/memory/`): it will be orphaned once the repo moves, so preserve it:
-   - `mkdir -p ~/Developer/_archive/<Name>/.claude-memory`
-   - `cp -R ~/.claude/projects/*<Name>*/memory/. ~/Developer/_archive/<Name>/.claude-memory/`
-   - Confirm the copy, record the source path and file count in the tombstone. Leave the original in place (a harmless orphan once the repo path changes); do not delete it.
+2. **The project's own store** (`~/.claude/projects/*<Name>*/memory/`): Claude Code keys it to the launch directory, so it is orphaned the moment `~/Developer/<Name>` moves. Nothing is copied here. The copy happens in Phase 4, after the repo has moved, into the moved repo at `~/Developer/_archive/<Name>/.claude-memory/`, so that no step creates `~/Developer/_archive/<Name>` before the repo arrives (a pre-made archive folder turned Phase 4's `mv` into a nest on 2026-09-05). Under `--keep-local` the repo stays where it is, the store is not orphaned, and no copy is made anywhere.
 
 ## Phase 3 — Scheduled agents and crons (cancel)
 
@@ -173,9 +170,14 @@ Active automation is the one leftover that keeps firing after everything else is
 
 ## Phase 4 — Local repo (skip if --keep-local)
 
-Only after the Phase 0 git safety check passed, and after Phase 2 copied the project memory store:
+Only after the Phase 0 git safety check passed. Order is the whole fix here: the repo moves first, as a rename of a path that does not exist yet, and only afterwards does anything create files under it. `mv` onto an existing directory moves the source inside it instead of renaming, which is how the 2026-09-05 live run ended at `~/Developer/_archive/<Name>/<Name>/`.
 1. `mkdir -p ~/Developer/_archive`
-2. `mv ~/Developer/<Name> ~/Developer/_archive/<Name>`
+2. **Guard.** If `~/Developer/_archive/<Name>` already exists (`ls -lad ~/Developer/_archive/<Name>` succeeds: a prior sunset of the same name, or a name collision), STOP and report exactly what is there (the `ls -la` of it); never `mv` onto an existing path.
+3. `mv ~/Developer/<Name> ~/Developer/_archive/<Name>`
+4. Now preserve the project's own memory store (Phase 2 step 2 explained why), copying into the moved repo:
+   - `mkdir -p ~/Developer/_archive/<Name>/.claude-memory`
+   - `cp -R ~/.claude/projects/*<Name>*/memory/. ~/Developer/_archive/<Name>/.claude-memory/`
+   - Confirm the copy, record the source path and file count in the tombstone. Leave the original in place (a harmless orphan once the repo path changes); do not delete it. If no project store exists, record "none" in the tombstone.
 
 ### Terminal shortcut
 
@@ -184,10 +186,10 @@ invisible until Tony types it months later. Two of them (`helix`, `guess`)
 survived past sunsets that way and were only found during the 2026-08-16
 migration — which is why this step exists.
 
-3. Record the exact line(s) from Phase 0 in the tombstone **before** removing them, so a revive can restore them verbatim.
-4. Remove each matched line from `~/.config/zsh/project-shortcuts.zsh`. Never touch `~/.zshrc` — it holds PATH exports and a live API key.
-5. Verify: `zsh -ic 'type -a <shortcut>'` comes back empty in a fresh shell. It will still work in any shell Tony already has open until he reloads; that is expected, and harmless since it now points at a moved directory.
-6. If the file does not exist, you are on an unmigrated machine — note it and skip, do not create the file.
+5. Record the exact line(s) from Phase 0 in the tombstone **before** removing them, so a revive can restore them verbatim.
+6. Remove each matched line from `~/.config/zsh/project-shortcuts.zsh`. Never touch `~/.zshrc` — it holds PATH exports and a live API key.
+7. Verify: `zsh -ic 'type -a <shortcut>'` comes back empty in a fresh shell. It will still work in any shell Tony already has open until he reloads; that is expected, and harmless since it now points at a moved directory.
+8. If the file does not exist, you are on an unmigrated machine — note it and skip, do not create the file.
 
 ## Phase 5 — GitHub (skip if --keep-github)
 
@@ -200,9 +202,11 @@ Order matters: push everything BEFORE archiving, because an archived repo is rea
 Pause, never delete. Pausing blocks the production deployment and stops auto-assigning custom domains. Reversible with unpause; keeps env vars, domains, and deploy history.
 
 1. Get `projectId` + `orgId` (team id) from `<repo>/.vercel/project.json`, or via the Vercel MCP `list_projects` if the file is absent.
-2. Pause via the REST API (needs a Vercel token from `$VERCEL_TOKEN` or the logged-in CLI):
-   `curl -X POST "https://api.vercel.com/v1/projects/<projectId>/pause?teamId=<orgId>" -H "Authorization: Bearer $VERCEL_TOKEN"`
-3. If no token is available, do not guess: print the ready-to-run curl plus the dashboard path (Project → Settings → Pause Project) and ask Tony to run it with `!` or click it.
+2. Pause via the REST API. Read the token into a shell variable: `$VERCEL_TOKEN` when it is set, else key `token` of the logged-in CLI's credentials file (JSON):
+   `T="${VERCEL_TOKEN:-$(jq -r .token "$HOME/Library/Application Support/com.vercel.cli/auth.json")}"`
+   `curl -X POST "https://api.vercel.com/v1/projects/<projectId>/pause?teamId=<orgId>" -H "Authorization: Bearer $T"`
+   The token is a credential: it exists only in that variable, only for the `Authorization` header; never echo or print it, and never write it into the tombstone or any file.
+3. Only if both sources are absent (`$VERCEL_TOKEN` unset and the credentials file missing), do not guess: print the ready-to-run curl plus the dashboard path (Project → Settings → Pause Project) and ask Tony to run it with `!` or click it.
 
 ## Phase 7 — Database (skip if --keep-db)
 
@@ -232,6 +236,7 @@ If the project has a Notion board or pages, archive them automatically (no need 
    SUNSET COMPLETE — <project>
      Vault     -> 90-archive/<slug>/ (status: archived)
      Memory    -> home note archived + de-indexed; project store -> _archive/<Name>/.claude-memory/
+                  (under --keep-local: project store left in place, repo kept local)
      Schedules -> cancelled: <list, or none>
      Repo      -> ~/Developer/_archive/<Name>
      Shortcut  -> `<shortcut>` removed (line saved in the tombstone)
@@ -290,7 +295,7 @@ tags: [meta, archived]
 ## Where everything went
 - Vault docs: `90-archive/<slug>/`
 - CLI memory (home note): `project_<slug>.md` (status: archived)
-- CLI memory (project store): copied to `_archive/<Name>/.claude-memory/` (M notes, from `<source path>`)
+- CLI memory (project store): copied to `_archive/<Name>/.claude-memory/` (M notes, from `<source path>`); under `--keep-local`: left in place at `<source path>` because the repo was kept local
 - Scheduled agents/crons: cancelled -> <list, or none>
 - Local repo: `~/Developer/_archive/<Name>`
 - Terminal shortcut: removed from `~/.config/zsh/project-shortcuts.zsh` — restore with `<the exact alias line(s), verbatim>`

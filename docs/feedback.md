@@ -143,3 +143,10 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
   `.env.example`) → became Slice A of
   docs/plans/2026-09-05-sunrise-live-run-fixes.md (`--project <slug>` on
   link; `!.env.example` re-asserted as the last `.gitignore` line after link).
+- 2026-09-05 · the two sunset live-run notes (Banana Dunk: A, Phase 2 pre-made
+  `_archive/<Name>` so Phase 4's `mv` nested the repo inside it; B, the Phase 6
+  token fallback stopped without reading the logged-in CLI's `auth.json`) →
+  became Slice A of docs/plans/2026-09-05-sun-live-run-fixes-2.md (Phase 4
+  guard on an existing archive path, move-then-copy, `--keep-local` skips the
+  copy; Phase 6 reads `auth.json` key `token` into a variable for the header
+  only and stops only when both sources are absent).
