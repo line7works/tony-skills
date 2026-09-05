@@ -140,6 +140,10 @@ Status: not started
 - Vertical's outside reviewers see `REVIEW.md` through the tracked-files export as any tracked file; the cold packet stays exactly three things and `assets/vertical-mandate.md` is untouched · builder call
 - The reviewer mandates in signoff (Step 2, rule 10) and recheck (Step 2) now hand the fresh subagents `REVIEW.md` when present, since R2's checks have to reach the reviewers who originate findings; the file is the repo's standing sheet, not the author's rationale · builder call
 - AC3 and AC4 were run with `claude --plugin-dir plugins/<name>`, same caveat as Slices A and B (the branch copy loads alongside the installed copy; the prompt named the branch file) · builder call
+### 2026-09-04 — rulings: Slice C (per user, after the verdict's Questions)
+- A pass marked `on` in `REVIEW.md` runs at every depth, so the template's `security: on` puts a security reviewer into every LEAN run of a sheet repo; the builder call above stands as the rule · per user
+- /recheck leaves `## Repo-specific checks` to /signoff; the closed checklist never grows from them · per user
+- Invocation wording that orders the `REVIEW.md` write counts as the word; the file is written and then shown whole in chat, so the show step still happens · per user (signoff :24 edited to say so)
 ## Deviations
 
 ### 2026-09-04 — build: Slice A (post-recheck)
