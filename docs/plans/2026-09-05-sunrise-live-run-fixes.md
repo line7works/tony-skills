@@ -42,7 +42,7 @@ Acceptance criteria:
 Footprint: `plugins/sun/skills/sunrise/SKILL.md` (Phase 0 preview line, Phase 1 step 3 `.gitignore` bullet, Phase 3 steps 1 and new 2); `docs/feedback.md` (one Dispositions line); `docs/evidence/sunrise-live-run-fixes/fresh-session-read.md` (new); this plan's ledger sections.
 Not in this slice: finding E (pending Tony), Phase 8 alias placeholders, the installed-cache read (post-merge), a live `/sunrise` rerun (post-merge, Tony's word).
 Depends on: nothing
-Status: built
+Status: signed off with conditions
 
 ## Build assumptions
 
@@ -61,3 +61,17 @@ Status: built
 - R4 (the Phase 1 pointer to the Phase 3 re-assert) has no acceptance criterion of its own; verified by reading `plugins/sun/skills/sunrise/SKILL.md:206`. Plan gap, logged for the inspector; not a code change.
 ## Handoffs
 ## Punch list
+
+### 2026-09-05 — review: Slice A
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:232` · Phase 3 step 2's verification cannot fail for `.env.example` (tracked by then; default `git check-ignore` is silent on tracked files; "re-run the Phase 1 step 3 check" is the vacuous "tracked" predicate) · a session that skips or botches the re-assert reports the step green; only `git check-ignore --no-index .env.example` (must print nothing) catches the broken state · Slice A review
+- MAJOR · `plugins/sun/skills/sunrise/SKILL.md:141` (with `:132`) · Phase 0's Vercel collision check names no variant and the vocabulary block omits the Vercel project from `<slug>`'s uses, while Phase 3 now links `--project <slug>` with `--yes` · a stale Vercel project `<slug>` exists, the session checks `<Name>` and finds it free, Phase 3 links the fresh repo to the old project without a prompt, auto-deploys on, Phase 4 pulls its env · Slice A review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:232` · the post-link `.gitignore` edit is never committed or pushed (no commit step after `:217`; Phase 8 prints "pushed") · dirty tree at SUNRISE COMPLETE; GitHub copy lacks `.vercel` and the last-line negation; recurrence of the Slice B `:311` MINOR, on REVIEW.md · Slice A review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:84` · core-principle alias line says `<project>.vercel.app`; the Out of scope deferral names Phase 8 only · deferred in substance, under-enumerated by the letter · Slice A review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:232` · "`vercel link` appends `.vercel` and `.env*`" is unconditional; the CLI appends `.env*` only during env pull and only when no exact `.env*` line exists · a literal reader on create-next-app finds no line to move · Slice A review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:232` · verify set omits `.env` and `.env.production` · a rewrite that drops `.env*` leaves them trackable while every listed check passes; sunrise never stages after Phase 3 · Slice A review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:232` · "move or re-append" permits a duplicate negation · cosmetic · Slice A review
+- MINOR · `plugins/sun/skills/sunrise/SKILL.md:231` · `Banana-Dunk`, a real archived private repo name, baked into a public skill's text (spec-driven via R1; the builder's "not Tony-specific" call was inaccurate) · nominal exposure; Tony's call to keep or strip · Slice A review
+- MINOR · `docs/plans/2026-09-05-sunrise-live-run-fixes.md` Footprint · says one Dispositions line while the diff to committed `main` also carries three Inbox lines (28 → 31), pre-authorized by Constraints · AC7's 31 is reproducible only against the dirty tree · Slice A review
+- MINOR (pre-existing) · `plugins/sun/skills/sunrise/SKILL.md:312` · "Phase 2 git-connect" but git connect is Phase 3 · stale cross-reference · Slice A review
+- MINOR (pre-existing) · `docs/feedback.md:10-13` · Flow paragraph names `skill-loop-edits-build-plan.md` as where slices land · stale prose · Slice A review
+- MINOR (pre-existing) · `plugins/sun/skills/sunrise/SKILL.md:132` · `<slug>` derivation does not state `[a-z0-9-]`; a leading hyphen would parse as a flag at the new `--project` sink · Tony confirms variants first · Slice A review
