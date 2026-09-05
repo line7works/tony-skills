@@ -127,6 +127,8 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
 - 2026-09-05 · sunrise live run follow-up (Banana Dunk) · sunrise · "SKILL NOTE: F. Sunrise never commits or pushes after its Phase 2 push, yet Phase 8 prints "pushed". (Sunrise skill; surfaced by the Slice A signoff, recorded there as a MINOR on the punch list and as the new `REVIEW.md` repo-specific check; confirmed by the skill-fix session and by the orchestrator on the branch at `6366123`.) The only commit step is in Phase 1 and the only push is Phase 2. Every edit a later phase makes to the working tree, today the post-link `.gitignore` re-assert in Phase 3 step 2 (and `vercel link`'s own appends), and on 2026-09-04 a kit-check fix, stays uncommitted while the Phase 8 summary line (`Repo -> ~/Developer/<Name> (git init, pushed)`, line 328 on the branch) claims the repo is pushed. Orchestrator count: `git commit` / `git push` occurrences in Phases 3 through 8 = 0. Fix: after Phase 3 step 2 (or as a Phase 8 pre-flight), `git status --porcelain` must be empty or the skill commits the remaining changes with a named message and pushes, then the summary may say "pushed"; and Phase 8's kit check gains no line (the vault note's four lines stay), the check lives in Phase 8's own pre-flight. Slice A's R3 never asked for a commit, so this is a spec gap, not an unmet requirement."
 - 2026-09-05 · sunrise live run follow-up (Banana Dunk) · sunrise · "SKILL NOTE: G. A real project name sits in the public skill text. (Sunrise skill; Slice A signoff MINOR (b).) `plugins/sun/skills/sunrise/SKILL.md` line 231 on the branch cites `Banana-Dunk` as the directory name Vercel rejected. tony-skills is PUBLIC and its `CLAUDE.md` says nothing Tony-specific goes in by default. Tony's word on 2026-09-05 (relayed by the orchestrator; confirm it in the ship report of the sunrise PR) was to leave it for that PR and genericize it here: replace the name with a generic mixed-case example such as `My-App`, keep the date and the HTTP 400. Count today: 1 mention."
 - 2026-09-05 · sun-live-run-fixes-2 handoff · handoff · "SKILL NOTE: the checkpoint commit was made on a new branch feat/sunset-live-run-fixes rather than on main, because this repo never takes direct commits on main; the branch is the one /build's preflight would have created anyway."
+- 2026-09-05 · sunrise live run follow-up (Banana Dunk) · sunrise · "SKILL NOTE: E. Machine-specific facts in the seeded `AGENTS.md` (orchestrator's addition, PENDING TONY'S RULING). The seeded body's "Where to look" section carried the vault path `~/ObsidianVault/03-projects/banana-dunk/`. The same question was raised as a MINOR in Slice B's signoff (keep the vault path and Notion URL in the repo file, or move them to the memory note and vault index like the local-path line was) and Tony has not ruled. The orchestrator's recommendation is move them out, because `AGENTS.md` is read by every host on every machine and some repos are public. Do not change this unless Tony rules in your terminal. If he rules "move out," it becomes a requirement in the same slice. (Ruled 2026-09-05 via the orchestrator: move out.)"
+- 2026-09-05 · sun-live-run-fixes-2 handoff (after Slice A) · handoff · "SKILL NOTE: the checkpoint commit went on a new branch feat/sunrise-follow-ups rather than main, because this repo never takes direct main commits; it is the branch /build's preflight would have created for Slice B."
 
 ## Dispositions
 
@@ -150,3 +152,13 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
   guard on an existing archive path, move-then-copy, `--keep-local` skips the
   copy; Phase 6 reads `auth.json` key `token` into a variable for the header
   only and stops only when both sources are absent).
+- 2026-09-05 · the three sunrise live-run follow-up notes (Banana Dunk: E, the
+  seeded `AGENTS.md` "Where to look" carried a machine-specific vault path; F, no
+  phase after Phase 2 commits or pushes, so the post-link `.gitignore` re-assert
+  stays uncommitted while Phase 8 prints "pushed"; G, the real project name
+  `Banana-Dunk` sat in the public skill text at Phase 3 step 1) → became Slice B
+  of docs/plans/2026-09-05-sun-live-run-fixes-2.md (Phase 8 pre-flight requires
+  an empty `git status --porcelain` or commits and pushes before the summary may
+  say "pushed", with Phase 3 step 2 pointing at it; the example name is the
+  generic `My-App`; the seeded `AGENTS.md` names the vault project folder without
+  a path, per Tony's 2026-09-05 ruling).
