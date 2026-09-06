@@ -32,7 +32,7 @@ import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-b-fix-2026-09-06"
+ADAPTER_VERSION = "slice-b-fix2-2026-09-06"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
 # The last-pick memory lives in the tony-skills checkout (blueprint assumption 1), never in the
@@ -252,17 +252,21 @@ def read_snapshot(sd):
     return roster, picks, meta.get("memory"), sd
 
 
-def resolve_sources(run_dir, create):
+def resolve_sources(run_dir, create, picks_override=None):
     """The roster and picks every step resolves from. With a snapshot under the run dir, that snapshot;
     else the live files, and when `create` is set the live files are frozen into <run dir>/snapshot/
     first (created exclusively: two concurrent first calls produce one snapshot, the loser reads the
-    winner's). Returns (roster, picks, memory status, snapshot path or None)."""
+    winner's). `picks_override` is the memory as the caller has already resolved it (suggest, after its
+    drop pass) and is what gets frozen when this call creates the snapshot, so a drop the live file could
+    not take still binds the run. Returns (roster, picks, memory status, snapshot path or None)."""
     sd = snapshot_dir(run_dir)
     if os.path.isfile(os.path.join(sd, "meta.json")):
         return read_snapshot(sd)
     roster = load_roster()
     status = memory_status()
     picks = memory_read() if status == "ok" else None
+    if picks_override is not None:
+        picks = picks_override
     if not create:
         return roster, picks, status, None
     os.makedirs(run_dir, exist_ok=True)
@@ -393,7 +397,9 @@ def check_validity(req, roster):
     if req.get("isolation") not in (None, "worktree"):
         raise Refuse("invalid-request", "isolation must be absent or 'worktree'")
     m = req.get("model")
-    if m is not None and (not m.strip() or m.endswith(":online") or ":online" in m):
+    if m is not None and not m.strip():
+        raise Refuse("invalid-request", "model is empty or whitespace; omit it or pass an id")
+    if m is not None and ":online" in m:
         raise Refuse("invalid-request", "model %r: a web-search suffix (:online) is never sent by readers (parity: no :online suffix); pass the bare id" % m)
     return row
 
@@ -1075,6 +1081,7 @@ def suggest(argv):
         print(json.dumps({"status": "invalid-request", "reason": "unknown row id(s): %s" % ", ".join(unknown)}))
         return 1
     notes = {}
+    resolved = None
     frozen = os.path.isfile(os.path.join(snapshot_dir(run_dir), "meta.json"))
     if not frozen:
         # drops happen at suggest time and never after, against the live memory, before the freeze
@@ -1090,12 +1097,20 @@ def suggest(argv):
                     notes[rid] = "remembered pick %s dropped: %s" % (e["model"], why)
                     changed = True
             return changed
-        try:
-            memory_update(mutate)
-        except OSError as e:
-            notes["_memory"] = "drop could not be recorded: %s" % e
+        data, status = memory_update(mutate)
+        if status == "ok":
+            resolved = data
+        elif memory_status() == "ok":
+            # the file is there but the write did not happen (a held lock, a failed write): apply the same
+            # drops to a private copy so the run freezes the dropped state, and say the record is missing
+            try:
+                resolved = memory_read()
+                mutate(resolved)
+            except (OSError, ValueError):
+                resolved = None
+            notes["_memory"] = "drop could not be recorded in the memory file (%s); the run's snapshot carries it, the file does not" % status
     try:
-        roster, picks, mem_status, snap = resolve_sources(run_dir, create=True)
+        roster, picks, mem_status, snap = resolve_sources(run_dir, create=True, picks_override=resolved)
     except OSError as e:
         print(json.dumps({"status": "invalid-request", "run_id": run_id, "run_dir": run_dir, "reason": "run dir unusable: %s" % e}, indent=2, sort_keys=True))
         return 1
