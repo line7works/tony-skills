@@ -1,6 +1,6 @@
 # Slice A evidence — the nested and denied cases from Tony's Codex window (2026-09-06)
 
-Status: authorized run RECORDED (below); refused run pending Tony's paste. The two request files and the mandate are prepared at `/tmp/readers-nest/`; the runs below are recorded verbatim once he pastes the commands into a live Codex window (parent thread on his current model and effort).
+Status: COMPLETE. Both runs recorded from Tony's Codex window, 2026-09-06. The two request files and the mandate are prepared at `/tmp/readers-nest/`; the runs below are recorded verbatim once he pastes the commands into a live Codex window (parent thread on his current model and effort).
 
 Auto-review setting in force on this Mac (`grep -E 'approval_policy|approvals_reviewer' ~/.codex/config.toml`, read 2026-09-06):
 
@@ -102,10 +102,70 @@ The first ambiguity is the end time: **“Happy hour runs until the game starts.
 
 Parent's approval behaviour observed: Codex asked once to run the command outside its sandbox (the `Operation not permitted` startup block from the scope doc's earlier test); Tony approved it with "always run commands that start with" that prefix, so the prompt will not reappear for these commands in that window.
 
-### Refused run
+### Refused run (Tony's Codex window, 2026-09-06)
 
-(paste verbatim)
+Tony's transcript, verbatim:
+
+```
+• I'll run the refusal test and check its exit code and artifacts.
+• Ran ~/Developer/tony-skills/plugins/readers/skills/readers/assets/readers /tmp/readers-nest/req-refused.json; echo exit=$?; ls /tmp/readers-nest/runs/nested/refused
+  └ { "adapter_version": "slice-a-2026-09-06", ... +40 lines ... }
+    exit=1
+    sidecar.json
+• Refusal test passed:
+  - Status: unauthorized
+  - Runner exit: 1
+  - Only artifact: sidecar.json
+  - No child dispatched and no model output captured.
+```
+
+`sidecar.json` (the only file in `/tmp/readers-nest/runs/nested/refused/`; no `dispatch.log`, no `diagnostics/`):
+
+```json
+{
+  "adapter_version": "slice-a-2026-09-06",
+  "budget": null,
+  "budget_method": null,
+  "call_id": "refused",
+  "diagnostics": null,
+  "dispatch_log": null,
+  "duration_s": 0.0,
+  "effective_effort": "low",
+  "effective_model": "gpt-6-astra",
+  "ended_at": "2026-09-06T19:08:18+00:00",
+  "envelope": "gpt-astra",
+  "exit_code": null,
+  "generation_id": null,
+  "isolation": "instruction-only (read)",
+  "kind": "portable",
+  "mandate_hash": null,
+  "memory": null,
+  "override_source": "roster default",
+  "packet_hash": null,
+  "parity": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = fresh empty dir",
+  "profile": "starved",
+  "protocol_version": 1,
+  "raw_file": null,
+  "raw_hash": null,
+  "raw_path": null,
+  "raw_text": "",
+  "reason": "outside row gpt-astra without the authorized flag (Tony's word in this run)",
+  "requested_effort": null,
+  "requested_model": null,
+  "response_raw": null,
+  "row": "gpt-astra",
+  "run_dir": "/tmp/readers-nest/runs/nested",
+  "run_id": "nested",
+  "sidecar": "/tmp/readers-nest/runs/nested/refused/sidecar.json",
+  "snapshot": null,
+  "started_at": "2026-09-06T19:08:18+00:00",
+  "status": "unauthorized",
+  "transport": "codex-exec",
+  "workdir": null,
+  "workdir_instruction_files": null
+}
+```
 
 ### Denied case
 
-(the escalation prompt declined, verbatim; or: no escalation prompt appeared; the denied case is not producible under auto-review)
+An escalation prompt did appear, on the authorized run's first attempt (the parent hit the `Operation not permitted` startup block and asked to run the command outside its sandbox). Tony approved it with "always run commands that start with" that prefix rather than declining, so the child ran on the second attempt and the decline path was not exercised. Under that standing allow-rule the denied case is not producible in that window without revoking the rule; recorded here as the standing limit. What was observed of the block: the runner's first dispatch produced no capture and the parent re-ran the same request file (two `dispatch.log` lines); no fallback send happened.
