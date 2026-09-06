@@ -1,0 +1,6 @@
+#!/bin/sh
+# readers — shell entry for the reader component's runner.
+# Resolves its own location and execs the system python3 on the sibling script.
+# Depends on no alias, startup file, or Claude-only environment variable.
+here="$(cd "$(dirname "$0")" && pwd -P)"
+exec python3 "$here/readers.py" "$@"
