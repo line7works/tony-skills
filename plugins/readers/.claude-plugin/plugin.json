@@ -1,0 +1,10 @@
+{
+  "name": "readers",
+  "description": "The loop's reader component: one cold read on any roster row (a fresh Claude subagent, GPT via codex exec, Gemini via the antigravity MCP, DeepSeek or Qwen via OpenRouter), read-only, against a caller's mandate and documents, output captured verbatim. Summoned by inspect, vertical, precon, architect, jpb, signoff, wargame, and recheck; Tony can also type /readers for an ad hoc read.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills"
+}

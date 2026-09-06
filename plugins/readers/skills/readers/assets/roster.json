@@ -1,0 +1,342 @@
+{
+  "protocol_version": 1,
+  "eligible_session_models": [
+    "claude-opus-*",
+    "claude-fable-*",
+    "claude-mythos-*"
+  ],
+  "rows": [
+    {
+      "id": "gpt-astra",
+      "provider": "openai",
+      "transport": "codex-exec",
+      "kind": "portable",
+      "model": "gpt-6-astra",
+      "effort_encoding": "flag",
+      "effort_default": "low",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "context_window": 272000,
+      "max_output": "unknown",
+      "limits_source": "~/.codex/models_cache.json context_window (checked 2026-09-06); models_cache.json carries no output-token field (checked 2026-09-06)",
+      "timeout_s": 900,
+      "credential_env": "",
+      "web_off": "-c web_search=disabled on codex exec; the top-level --search flag is never passed",
+      "parity": {
+        "starved": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = fresh empty dir",
+        "packet-only": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = packet dir only",
+        "repo": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = workspace"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo"
+      ],
+      "eligibility": "not classified",
+      "isolation": {
+        "starved": "instruction-only (read)",
+        "packet-only": "instruction-only (read)",
+        "repo": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "Default GPT row (Tony, blueprint Q3: astra on low). The roster's effort_default low overrides models_cache.json's default_reasoning_level (medium) on purpose. codex-cli 0.153.4 refuses to run outside a git repo without --skip-git-repo-check. Prompt on stdin (-); final response via -o; event stream via --json on stdout. Isolation measured 2026-09-06 (docs/evidence/readers/slice-a-isolation.md): sentinel outside the packet dir readable under starved and packet-only (command_execution in the event stream); write attempted and refused by the sandbox under both (`operation not permitted`, codex rollout records quoted in the evidence doc; the --json stream did not surface that step).",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "gpt-sol",
+      "provider": "openai",
+      "transport": "codex-exec",
+      "kind": "portable",
+      "model": "gpt-5.6-sol",
+      "effort_encoding": "flag",
+      "effort_default": "medium",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "context_window": 272000,
+      "max_output": "unknown",
+      "limits_source": "~/.codex/models_cache.json context_window (checked 2026-09-06); models_cache.json carries no output-token field (checked 2026-09-06)",
+      "timeout_s": 900,
+      "credential_env": "",
+      "web_off": "-c web_search=disabled on codex exec; the top-level --search flag is never passed",
+      "parity": {
+        "starved": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = fresh empty dir",
+        "packet-only": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = packet dir only",
+        "repo": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = workspace"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo"
+      ],
+      "eligibility": "not classified",
+      "isolation": {
+        "starved": "instruction-only (read)",
+        "packet-only": "instruction-only (read)",
+        "repo": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "Selectable GPT row. The roster's effort_default medium (plan assumption 10) overrides models_cache.json's default_reasoning_level (low) on purpose. Same transport and sandbox as gpt-astra; its isolation labels are inherited from gpt-astra's measurement (both halves measured 2026-09-06).",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "gemini",
+      "provider": "google",
+      "transport": "antigravity-mcp",
+      "kind": "host",
+      "model": "gemini-3.1-pro-high",
+      "effort_encoding": "suffix",
+      "effort_default": "high",
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "context_window": "unknown",
+      "max_output": "unknown",
+      "limits_source": "antigravity list_models (to be read in Slice C when the host lane is built)",
+      "timeout_s": 900,
+      "credential_env": "",
+      "web_off": "the antigravity tool has no web switch; the mandate forbids web use",
+      "parity": {
+        "starved": "skip_permissions off, cwd = fresh empty dir, non-empty response",
+        "packet-only": "skip_permissions off, cwd = packet dir only, non-empty response",
+        "repo": "skip_permissions off, cwd = workspace only, non-empty response"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo"
+      ],
+      "eligibility": "not classified",
+      "isolation": {
+        "starved": "unmeasured",
+        "packet-only": "unmeasured",
+        "repo": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md).",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "deepseek",
+      "provider": "deepseek",
+      "transport": "openrouter",
+      "kind": "portable",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "effort_encoding": "unsupported",
+      "effort_default": "",
+      "efforts": [],
+      "context_window": 1048576,
+      "max_output": 384000,
+      "limits_source": "OpenRouter live catalog, read 2026-09-06 (scope doc)",
+      "timeout_s": 900,
+      "credential_env": "OPENROUTER_API_KEY",
+      "web_off": "no :online suffix on the model id",
+      "parity": {
+        "starved": "no :online suffix",
+        "packet-only": "no :online suffix"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only"
+      ],
+      "eligibility": "not classified",
+      "isolation": {
+        "starved": "no-workspace",
+        "packet-only": "no-workspace"
+      },
+      "available": true,
+      "reasoning": "on",
+      "quirks": "Reasoning on by default (Tony 2026-09-06); the exact provider parameter is recorded here by Slice B after one live run. Adapter lands in Slice B.",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "qwen",
+      "provider": "alibaba",
+      "transport": "openrouter",
+      "kind": "portable",
+      "model": "qwen/qwen3.8-max-0902",
+      "effort_encoding": "unsupported",
+      "effort_default": "",
+      "efforts": [],
+      "context_window": 1000000,
+      "max_output": 131072,
+      "limits_source": "OpenRouter live catalog, read 2026-09-06 (scope doc)",
+      "timeout_s": 900,
+      "credential_env": "OPENROUTER_API_KEY",
+      "web_off": "no :online suffix on the model id",
+      "parity": {
+        "starved": "no :online suffix",
+        "packet-only": "no :online suffix"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only"
+      ],
+      "eligibility": "not classified",
+      "isolation": {
+        "starved": "no-workspace",
+        "packet-only": "no-workspace"
+      },
+      "available": true,
+      "reasoning": "on",
+      "quirks": "Reasoning on by default (Tony 2026-09-06); the exact provider parameter is recorded here by Slice B after one live run. Adapter lands in Slice B.",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "claude-session",
+      "provider": "anthropic",
+      "transport": "claude-subagent",
+      "kind": "host",
+      "model": "session",
+      "effort_encoding": "field",
+      "effort_default": "",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "context_window": "unknown",
+      "max_output": "unknown",
+      "limits_source": "harness",
+      "timeout_s": 1800,
+      "credential_env": "",
+      "web_off": "the fixed instruction forbids web tools; toolCalls: 0 under starved and packet-only",
+      "parity": {
+        "starved": "toolCalls: 0",
+        "packet-only": "toolCalls: 0",
+        "repo": "web tools forbidden by instruction",
+        "repo-with-tools": "web tools forbidden by instruction"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo",
+        "repo-with-tools"
+      ],
+      "eligibility": "session-dependent",
+      "isolation": {
+        "starved": "unmeasured",
+        "packet-only": "unmeasured",
+        "repo": "unmeasured",
+        "repo-with-tools": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "Inherits the session model; the skill body fills session_model on every request so the floor check has its input. Lane lands in Slice C.",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "claude-fable",
+      "provider": "anthropic",
+      "transport": "claude-subagent",
+      "kind": "host",
+      "model": "fable",
+      "effort_encoding": "field",
+      "effort_default": "",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "context_window": "unknown",
+      "max_output": "unknown",
+      "limits_source": "harness",
+      "timeout_s": 1800,
+      "credential_env": "",
+      "web_off": "the fixed instruction forbids web tools; toolCalls: 0 under starved and packet-only",
+      "parity": {
+        "starved": "toolCalls: 0",
+        "packet-only": "toolCalls: 0",
+        "repo": "web tools forbidden by instruction",
+        "repo-with-tools": "web tools forbidden by instruction"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo",
+        "repo-with-tools"
+      ],
+      "eligibility": "eligible",
+      "isolation": {
+        "starved": "unmeasured",
+        "packet-only": "unmeasured",
+        "repo": "unmeasured",
+        "repo-with-tools": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Lane lands in Slice C.",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    },
+    {
+      "id": "claude-opus",
+      "provider": "anthropic",
+      "transport": "claude-subagent",
+      "kind": "host",
+      "model": "opus",
+      "effort_encoding": "field",
+      "effort_default": "",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "context_window": "unknown",
+      "max_output": "unknown",
+      "limits_source": "harness",
+      "timeout_s": 1800,
+      "credential_env": "",
+      "web_off": "the fixed instruction forbids web tools; toolCalls: 0 under starved and packet-only",
+      "parity": {
+        "starved": "toolCalls: 0",
+        "packet-only": "toolCalls: 0",
+        "repo": "web tools forbidden by instruction",
+        "repo-with-tools": "web tools forbidden by instruction"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo",
+        "repo-with-tools"
+      ],
+      "eligibility": "eligible",
+      "isolation": {
+        "starved": "unmeasured",
+        "packet-only": "unmeasured",
+        "repo": "unmeasured",
+        "repo-with-tools": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Lane lands in Slice C.",
+      "guide": "",
+      "verified_at": "2026-09-06"
+    }
+  ]
+}
