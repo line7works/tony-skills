@@ -419,6 +419,10 @@ def run(req, dispatching):
     call_id = req.get("call_id") or "c-%s" % uuid.uuid4().hex[:8]
     call_dir = os.path.join(run_dir, call_id)
     result = new_result(req, run_id, run_dir, call_id)
+    if dispatching and os.path.exists(os.path.join(call_dir, "sidecar.json")):
+        # R7: a sidecar is never rewritten. A reused call id is refused without touching the call dir.
+        result.update({"status": "invalid-request", "reason": "call id %s already has a sidecar under %s; mint a new call id" % (call_id, run_dir), "ended_at": now()})
+        return result
     try:
         row = check_validity(req, roster)
         result["row"] = row["id"]
