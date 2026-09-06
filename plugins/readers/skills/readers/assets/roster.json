@@ -46,7 +46,7 @@
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Default GPT row (Tony, blueprint Q3: astra on low). The roster's effort_default low overrides models_cache.json's default_reasoning_level (medium) on purpose. codex-cli 0.153.4 refuses to run outside a git repo without --skip-git-repo-check. Prompt on stdin (-); final response via -o; event stream via --json on stdout. Isolation measured 2026-09-06 (docs/evidence/readers/slice-a-isolation.md): sentinel outside the packet dir readable under starved and packet-only; write denied under both.",
+      "quirks": "Default GPT row (Tony, blueprint Q3: astra on low). The roster's effort_default low overrides models_cache.json's default_reasoning_level (medium) on purpose. codex-cli 0.153.4 refuses to run outside a git repo without --skip-git-repo-check. Prompt on stdin (-); final response via -o; event stream via --json on stdout. Isolation measured 2026-09-06 (docs/evidence/readers/slice-a-isolation.md): sentinel outside the packet dir readable under starved and packet-only (command_execution in the event stream); write attempted and refused by the sandbox under both (`operation not permitted`, codex rollout records quoted in the evidence doc; the --json stream did not surface that step).",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -90,7 +90,7 @@
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Selectable GPT row. The roster's effort_default medium (plan assumption 10) overrides models_cache.json's default_reasoning_level (low) on purpose. Same transport and sandbox as gpt-astra; its isolation labels are inherited from gpt-astra's measurement.",
+      "quirks": "Selectable GPT row. The roster's effort_default medium (plan assumption 10) overrides models_cache.json's default_reasoning_level (low) on purpose. Same transport and sandbox as gpt-astra; its isolation labels are inherited from gpt-astra's measurement (both halves measured 2026-09-06).",
       "guide": "",
       "verified_at": "2026-09-06"
     },
