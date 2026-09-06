@@ -8,7 +8,7 @@ A JSON object, from a file path or stdin (`-`):
 
 - `protocol_version` — the version the caller was written against (required; the runner's is `1`).
 - `run_id` — the caller's run (a fleet shares one). Minted as `adhoc-<hex>` when absent.
-- `call_id` — caller-supplied, or minted by the runner (`c-<hex>`) and returned in the result. A call id is single-use: a call id whose `sidecar.json` already exists under the run dir is refused as `invalid-request` without touching it, whatever the earlier call's status (a retry mints a new id). Both ids are one path segment: characters `[A-Za-z0-9._-]`, not starting with a dot, never `.` or `..`; anything else is `invalid-request`.
+- `call_id` — caller-supplied, or minted by the runner (`c-<hex>`) and returned in the result. A call id is single-use: a call id whose `sidecar.json` already exists under the run dir is refused as `invalid-request` without touching it, whatever the earlier call's status (a retry mints a new id). Both ids are one path segment: characters `[A-Za-z0-9._-]`, not starting with a dot, never `.` or `..`; anything else is `invalid-request`, and because such a request names no legal call directory that refusal is the one case that writes no sidecar (the result is still printed).
 - `run_dir` — optional. Default: `$READERS_RUN_ROOT/<run id>` when set, else `${TMPDIR:-/tmp}/readers/<run id>`. Every step (`suggest`, `validate`, dispatch) resolves it the same way.
 - `row` — a roster row id (`roster.json`).
 - `mandate` — the text, or a path to a file holding it. The runner never rewrites a mandate.
@@ -73,7 +73,7 @@ This is a semantic migration from the MCP route's `base-instructions`; nothing i
 
 ## Evidence
 
-Every call has `<run dir>/<call id>/` holding `sidecar.json` (every result field; written before the result is returned; never rewritten), `raw.md` (the exact final response; `raw_hash` covers it), `diagnostics/` (the event stream, stderr, the command line, `partial.md` when truncated), and `dispatch.log`, one line appended before any child launch or request. A refused call writes `sidecar.json` alone: no `dispatch.log`, no `diagnostics/`. A caller-named `raw_path` receives a copy; when that path already exists the runner appends `-2`, `-3` to the filename rather than overwriting. What a caller does to its copy (inspect's banner, precon's disposition) never touches `raw.md` or the hash. The run-dir `raw.md` is evidence; whether and where a raw file is filed under `docs/` is the caller's filing policy.
+Every call has `<run dir>/<call id>/` holding `sidecar.json` (every result field; written before the result is returned; never rewritten), `raw.md` (the exact final response; `raw_hash` covers it), `diagnostics/` (the event stream, stderr, the command line, `partial.md` when truncated), and `dispatch.log`, one line appended before any child launch or request. A refused call writes `sidecar.json` alone: no `dispatch.log`, no `diagnostics/` (the one exception: a request whose `run_id`, `call_id`, or `run_dir` is invalid has no call directory and writes nothing). A caller-named `raw_path` receives a copy; when that path already exists the runner appends `-2`, `-3` to the filename rather than overwriting. What a caller does to its copy (inspect's banner, precon's disposition) never touches `raw.md` or the hash. The run-dir `raw.md` is evidence; whether and where a raw file is filed under `docs/` is the caller's filing policy.
 
 ## Guards, GPT lane (codex exec)
 

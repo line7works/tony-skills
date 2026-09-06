@@ -549,8 +549,23 @@ def finish(result, call_dir, status, reason=None, extra=None):
     return result
 
 
+def check_ids(req):
+    """The ids and run_dir name the call directory, so they are checked before any path is joined.
+    A request that fails here has no legal call directory: the refusal is returned and nothing is written."""
+    for k in ("run_id", "call_id"):
+        if req.get(k) is not None and not valid_id(req[k]):
+            raise Refuse("invalid-request", "%s must be one path segment of [A-Za-z0-9._-], not starting with a dot: %r" % (k, req[k]))
+    if req.get("run_dir") is not None and not isinstance(req["run_dir"], str):
+        raise Refuse("invalid-request", "run_dir must be a string")
+
+
 def run(req, dispatching):
     roster = load_roster()
+    try:
+        check_ids(req)
+    except Refuse as r:
+        result = new_result(req, str(req.get("run_id")), None, str(req.get("call_id")))
+        return finish(result, None, r.status, r.reason)
     run_id, run_dir = resolve_run_dir(req)
     call_id = req.get("call_id") or "c-%s" % uuid.uuid4().hex[:8]
     call_dir = os.path.join(run_dir, call_id) if dispatching else None
