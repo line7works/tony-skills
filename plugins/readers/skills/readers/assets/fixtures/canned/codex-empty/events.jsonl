@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"canned-thread-empty"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"Reading the document."}}
+{"type":"turn.completed","usage":{"input_tokens":300,"cached_input_tokens":0,"output_tokens":0}}

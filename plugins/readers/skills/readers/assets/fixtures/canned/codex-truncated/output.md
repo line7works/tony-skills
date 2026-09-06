@@ -1,0 +1,1 @@
+CANNED-PARTIAL: the document leaves open whether

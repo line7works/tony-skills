@@ -6,29 +6,43 @@ Standard library only; compatible with Python 3.9.
 Usage:
   readers --version
   readers validate <request.json | ->
+  readers suggest <row>[,<row>...] --run <run id> [--run-dir <dir>] [--floor <floor>]
   readers <request.json | ->            run one call (the request on stdin with -)
 
 Slice A carries the contract's pre-send checks, the roster, and the GPT lane
-(codex exec). The OpenRouter adapter, the last-pick memory, `suggest`, and the
-run-wide freeze land in Slice B; the host lanes (Claude, Gemini) run from the
-skill body and hand their capture to `record` in Slice C.
+(codex exec). Slice B adds the OpenRouter adapter (deepseek, qwen), the last-pick
+memory in the checkout, the `suggest` step, the run-wide freeze (snapshot), and the
+canned transport hooks. The host lanes (Claude, Gemini) run from the skill body and
+hand their capture to `record` in Slice C.
 """
+import errno
 import fnmatch
 import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-a-fix-2026-09-06"
+ADAPTER_VERSION = "slice-b-2026-09-06"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
+# The last-pick memory lives in the tony-skills checkout (blueprint assumption 1), never in the
+# installed plugin cache; the roster is always read beside this script.
+DEFAULT_CHECKOUT = os.path.join(os.path.expanduser("~"), "Developer", "tony-skills")
+MEMORY_REL = os.path.join("plugins", "readers", "last-picks.json")
+MEMORY_SEED = {"protocol_version": PROTOCOL_VERSION, "picks": {}}
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+CODEX_MODELS_CACHE = os.path.join(os.path.expanduser("~"), ".codex", "models_cache.json")
 PROFILES = ("starved", "packet-only", "repo", "repo-with-tools")
 STATUSES = (
     "ok", "empty", "incomplete", "oversize", "invalid-request", "lane-unavailable",
@@ -49,7 +63,7 @@ RESULT_FIELDS = (
     "adapter_version", "mandate_hash", "packet_hash", "profile", "workdir",
     "workdir_instruction_files", "isolation", "parity", "raw_text", "raw_file",
     "raw_hash", "raw_path", "diagnostics", "dispatch_log", "exit_code", "generation_id",
-    "response_raw", "memory", "snapshot", "sidecar", "started_at", "ended_at",
+    "response_raw", "memory", "snapshot", "canned", "sidecar", "started_at", "ended_at",
     "duration_s",
 )
 
@@ -81,6 +95,193 @@ def sha256_file(path):
 def load_roster():
     with open(ROSTER_PATH) as f:
         return json.load(f)
+
+
+# ---------- the last-pick memory (Slice B R4) ----------
+
+def checkout_root():
+    return os.path.abspath(os.path.expanduser(os.environ.get("READERS_CHECKOUT") or DEFAULT_CHECKOUT))
+
+
+def memory_path():
+    return os.path.join(checkout_root(), MEMORY_REL)
+
+
+def memory_status():
+    """'ok' or 'unavailable: <reason>'. The checkout and the memory file's directory must exist and be
+    writable; an existing file must parse. Nothing is created anywhere when it is unavailable."""
+    root = checkout_root()
+    if not os.path.isdir(root):
+        return "unavailable: checkout %s not found" % root
+    p = memory_path()
+    d = os.path.dirname(p)
+    if not os.path.isdir(d):
+        return "unavailable: %s not found" % d
+    if not os.access(d, os.W_OK):
+        return "unavailable: %s not writable" % d
+    if os.path.exists(p):
+        if not os.access(p, os.R_OK | os.W_OK):
+            return "unavailable: %s not readable and writable" % p
+        try:
+            with open(p) as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or not isinstance(data.get("picks"), dict):
+                return "unavailable: %s is not a picks file" % p
+        except (OSError, ValueError) as e:
+            return "unavailable: %s unreadable (%s)" % (p, e)
+    return "ok"
+
+
+def memory_read():
+    p = memory_path()
+    if not os.path.exists(p):
+        return json.loads(json.dumps(MEMORY_SEED))
+    with open(p) as f:
+        return json.load(f)
+
+
+class MemoryLock(object):
+    """Exclusive creation of <memory>.lock beside the file: one writer at a time across processes.
+    A lock older than STALE_S is broken (a crashed writer). The lock file never outlives the write."""
+    STALE_S = 60.0
+    WAIT_S = 30.0
+
+    def __init__(self, path):
+        self.lock = path + ".lock"
+        self.fd = None
+
+    def __enter__(self):
+        deadline = time.time() + self.WAIT_S
+        while True:
+            try:
+                self.fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                os.write(self.fd, str(os.getpid()).encode())
+                return self
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
+                try:
+                    if time.time() - os.stat(self.lock).st_mtime > self.STALE_S:
+                        os.remove(self.lock)
+                        continue
+                except OSError:
+                    continue
+                if time.time() > deadline:
+                    raise OSError("memory lock %s held for over %ds" % (self.lock, self.WAIT_S))
+                time.sleep(0.02)
+
+    def __exit__(self, *exc):
+        try:
+            if self.fd is not None:
+                os.close(self.fd)
+            os.remove(self.lock)
+        except OSError:
+            pass
+
+
+def memory_update(mutate):
+    """Atomic read-modify-write of the memory file under the lock: read, mutate(data) -> changed?,
+    write to a temporary file in the same directory, rename over the original. Returns (data, status)."""
+    status = memory_status()
+    if status != "ok":
+        return None, status
+    p = memory_path()
+    with MemoryLock(p):
+        data = memory_read()
+        if mutate(data):
+            fd, tmp = tempfile.mkstemp(prefix=".last-picks.", suffix=".tmp", dir=os.path.dirname(p))
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(data, f, indent=2, sort_keys=True)
+                    f.write("\n")
+                os.replace(tmp, p)
+            except Exception:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                raise
+    return data, "ok"
+
+
+def remember_pick(row, model):
+    """Written when a call is dispatched with an explicit pick that differs from the row's default."""
+    def mutate(data):
+        data.setdefault("picks", {})[row["id"]] = {
+            "model": model, "date": now()[:10], "row_default": row["model"], "dropped": None,
+        }
+        return True
+    _, status = memory_update(mutate)
+    if status == "ok":
+        return "ok: remembered %s for %s at %s" % (model, row["id"], memory_path())
+    return "%s; pick %s for %s not remembered" % (status, model, row["id"])
+
+
+def pick_entry(picks, row):
+    """The remembered pick for a row when one exists, is not dropped, differs from the row's default,
+    and was made against the row's current default (a bumped row's pick is not used; suggest drops it)."""
+    if not isinstance(picks, dict):
+        return None
+    e = (picks.get("picks") or {}).get(row["id"])
+    if not isinstance(e, dict) or e.get("dropped") or not e.get("model"):
+        return None
+    if e.get("row_default") != row["model"] or e["model"] == row["model"]:
+        return None
+    return e
+
+
+# ---------- the run-wide freeze (Slice B R6) ----------
+
+def snapshot_dir(run_dir):
+    return os.path.join(run_dir, "snapshot")
+
+
+def read_snapshot(sd):
+    with open(os.path.join(sd, "roster.json")) as f:
+        roster = json.load(f)
+    with open(os.path.join(sd, "meta.json")) as f:
+        meta = json.load(f)
+    picks = None
+    mp = os.path.join(sd, "memory.json")
+    if os.path.exists(mp):
+        with open(mp) as f:
+            picks = json.load(f)
+    return roster, picks, meta.get("memory"), sd
+
+
+def resolve_sources(run_dir, create):
+    """The roster and picks every step resolves from. With a snapshot under the run dir, that snapshot;
+    else the live files, and when `create` is set the live files are frozen into <run dir>/snapshot/
+    first (created exclusively: two concurrent first calls produce one snapshot, the loser reads the
+    winner's). Returns (roster, picks, memory status, snapshot path or None)."""
+    sd = snapshot_dir(run_dir)
+    if os.path.isfile(os.path.join(sd, "meta.json")):
+        return read_snapshot(sd)
+    roster = load_roster()
+    status = memory_status()
+    picks = memory_read() if status == "ok" else None
+    if not create:
+        return roster, picks, status, None
+    os.makedirs(run_dir, exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="snapshot.tmp-", dir=run_dir)
+    try:
+        with open(os.path.join(tmp, "roster.json"), "w") as f:
+            json.dump(roster, f, indent=2, sort_keys=True)
+        if picks is not None:
+            with open(os.path.join(tmp, "memory.json"), "w") as f:
+                json.dump(picks, f, indent=2, sort_keys=True)
+        with open(os.path.join(tmp, "meta.json"), "w") as f:
+            json.dump({
+                "created_at": now(), "adapter_version": ADAPTER_VERSION,
+                "roster_source": ROSTER_PATH,
+                "memory_source": memory_path() if status == "ok" else None,
+                "memory": status if status != "ok" else "ok: %s" % memory_path(),
+            }, f, indent=2, sort_keys=True)
+        os.rename(tmp, sd)
+    except OSError:
+        # the other first call won the rename; its snapshot is complete (rename is atomic)
+        shutil.rmtree(tmp, ignore_errors=True)
+        if not os.path.isfile(os.path.join(sd, "meta.json")):
+            raise
+    return read_snapshot(sd)
 
 
 def read_request(arg):
@@ -245,8 +446,6 @@ def check_lane(req, row, dispatching):
         raise Refuse("lane-unavailable", "codex CLI not on PATH")
     if row["credential_env"] and not os.environ.get(row["credential_env"]):
         raise Refuse("lane-unavailable", "credential %s not set in the environment" % row["credential_env"])
-    if row["transport"] == "openrouter" and dispatching:
-        raise Refuse("lane-unavailable", "OpenRouter adapter lands in Slice B")
 
 
 def mandate_text(req):
@@ -310,10 +509,17 @@ def check_budget(req, row, prompt, result):
                      {"budget": result["budget"]})
 
 
-def resolve_model(req, row, result):
+def resolve_model(req, row, result, picks=None):
+    """An explicit pick first (a typed id under the row's envelope, R7), then the remembered pick from
+    the run's snapshot, then the roster default."""
+    remembered = pick_entry(picks, row)
     if req.get("model") and req["model"] != row["model"]:
         result["override_source"] = "explicit pick"
         result["effective_model"] = req["model"]
+        result["envelope"] = "inherited from %s" % row["id"]
+    elif remembered:
+        result["override_source"] = "remembered pick"
+        result["effective_model"] = remembered["model"]
         result["envelope"] = "inherited from %s" % row["id"]
     else:
         result["override_source"] = "roster default"
@@ -324,6 +530,25 @@ def resolve_model(req, row, result):
     result["kind"] = row["kind"]
     result["isolation"] = row["isolation"].get(req["profile"], "unmeasured")
     result["parity"] = row["parity"].get(req["profile"])
+
+
+# ---------- transport test hooks (Slice B R8) ----------
+
+def canned_hook(env_key, result):
+    """A canned transport reply stands in for the network or the child only under READERS_TEST=1.
+    Set without it, the call is transport-failed and nothing is sent. The sidecar records the hook."""
+    v = os.environ.get(env_key)
+    if not v:
+        return None
+    if os.environ.get("READERS_TEST") != "1":
+        raise Refuse("transport-failed", "canned response outside test (%s is set without READERS_TEST=1); nothing sent" % env_key)
+    result["canned"] = "%s=%s" % (env_key, v)
+    return v
+
+
+def log_dispatch(call_dir, line):
+    with open(os.path.join(call_dir, "dispatch.log"), "a") as f:
+        f.write("%s %s\n" % (now(), line))
 
 
 # ---------- the GPT adapter (codex exec) ----------
@@ -445,28 +670,43 @@ def run_codex(req, row, prompt, result, call_dir, diag):
     ]
     with open(os.path.join(diag, "command.txt"), "w") as f:
         f.write(" ".join(cmd) + "\n")
-    with open(os.path.join(call_dir, "dispatch.log"), "a") as f:
-        f.write("%s dispatch codex exec model=%s effort=%s profile=%s\n" % (now(), result["effective_model"], result["effective_effort"], req["profile"]))
-    with open(events, "wb") as ev, open(stderr_f, "wb") as er:
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=ev, stderr=er, cwd=wd, env=child_env())
+    log_dispatch(call_dir, "dispatch codex exec model=%s effort=%s profile=%s" % (result["effective_model"], result["effective_effort"], req["profile"]))
+    canned = canned_hook("READERS_CANNED_CODEX", result)
+    if canned:
+        # the saved child: events.jsonl, output.md, stderr.txt, exit, read in place of a launch
+        for name, dest in (("events.jsonl", events), ("stderr.txt", stderr_f), ("output.md", out_file)):
+            src = os.path.join(canned, name)
+            if os.path.exists(src):
+                shutil.copyfile(src, dest)
+            elif name != "output.md":
+                open(dest, "wb").close()
         try:
-            proc.communicate(prompt.encode("utf-8"), timeout=row["timeout_s"])
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.communicate()
-            result["exit_code"] = proc.returncode
-            raise Refuse("timed-out", "codex exec exceeded timeout_s %d and was killed" % row["timeout_s"])
-        except KeyboardInterrupt:
-            proc.kill()
-            proc.communicate()
-            result["exit_code"] = proc.returncode
-            raise Refuse("cancelled", "interrupted; child killed")
-    result["exit_code"] = proc.returncode
+            with open(os.path.join(canned, "exit")) as f:
+                returncode = int(f.read().strip() or "0")
+        except (OSError, ValueError) as e:
+            raise Refuse("transport-failed", "canned codex directory %s: exit file unreadable (%s)" % (canned, e))
+    else:
+        with open(events, "wb") as ev, open(stderr_f, "wb") as er:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=ev, stderr=er, cwd=wd, env=child_env())
+            try:
+                proc.communicate(prompt.encode("utf-8"), timeout=row["timeout_s"])
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                result["exit_code"] = proc.returncode
+                raise Refuse("timed-out", "codex exec exceeded timeout_s %d and was killed" % row["timeout_s"])
+            except KeyboardInterrupt:
+                proc.kill()
+                proc.communicate()
+                result["exit_code"] = proc.returncode
+                raise Refuse("cancelled", "interrupted; child killed")
+        returncode = proc.returncode
+    result["exit_code"] = returncode
     # guards, in the contract's order
     objs, other = read_events(events)
-    if proc.returncode != 0:
+    if returncode != 0:
         msg = transport_messages(objs, other, stderr_f)
-        raise Refuse("transport-failed", "codex exec exit %d: %s" % (proc.returncode, msg or "(no message on stdout or stderr)"))
+        raise Refuse("transport-failed", "codex exec exit %d: %s" % (returncode, msg or "(no message on stdout or stderr)"))
     text = ""
     if os.path.exists(out_file):
         with open(out_file, encoding="utf-8", errors="replace") as f:
@@ -480,6 +720,107 @@ def run_codex(req, row, prompt, result, call_dir, diag):
     if not text.strip():
         raise Refuse("empty", "no content or whitespace only")
     return text
+
+
+# ---------- the OpenRouter adapter (Slice B R1, R2) ----------
+
+def openrouter_message(data, raw, status):
+    """The provider's own message, wherever it put it."""
+    if isinstance(data, dict):
+        err = data.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return "%s (code %s)" % (err["message"], err.get("code"))
+        if err:
+            return json.dumps(err)
+    head = raw[:300].decode("utf-8", errors="replace").strip() if isinstance(raw, bytes) else str(raw)[:300]
+    return "HTTP %s: %s" % (status, head or "(empty body)")
+
+
+def run_openrouter(req, row, prompt, result, call_dir, diag):
+    # the model has no filesystem: documents travel only in the prompt, there is no working directory
+    result["workdir"] = None
+    result["workdir_instruction_files"] = []
+    if req["profile"] == "packet-only":
+        result["profile"] = "packet-only (no workspace)"
+    ob = req.get("output_budget")
+    if ob is None and isinstance(row["max_output"], int):
+        ob = row["max_output"]
+    body = {"model": result["effective_model"], "messages": [{"role": "user", "content": prompt}]}
+    if ob is not None:
+        body["max_tokens"] = ob
+    if row.get("reasoning") == "on":
+        body["reasoning"] = {"enabled": True}
+    # what was sent, minus the prompt (the packet hash covers it) and minus every header
+    with open(os.path.join(diag, "request-meta.json"), "w") as f:
+        json.dump({"url": OPENROUTER_URL, "model": body["model"], "max_tokens": body.get("max_tokens"),
+                   "reasoning": body.get("reasoning"), "prompt_bytes": len(prompt.encode("utf-8"))}, f, indent=2)
+    log_dispatch(call_dir, "dispatch openrouter model=%s max_tokens=%s reasoning=%s profile=%s" % (
+        body["model"], body.get("max_tokens"), body.get("reasoning"), req["profile"]))
+    canned = canned_hook("READERS_CANNED_RESPONSE", result)
+    partial_f = os.path.join(diag, "partial.md")
+    if os.path.exists(partial_f):
+        os.remove(partial_f)
+    if canned:
+        try:
+            with open(canned) as f:
+                c = json.load(f)
+            status = int(c["http_status"])
+            raw = c["body"].encode("utf-8") if isinstance(c["body"], str) else json.dumps(c["body"]).encode("utf-8")
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise Refuse("transport-failed", "canned response %s unusable: %s" % (canned, e))
+    else:
+        headers = {"Content-Type": "application/json", "Accept": "application/json",
+                   "Authorization": "Bearer %s" % os.environ[row["credential_env"]]}
+        rq = urllib.request.Request(OPENROUTER_URL, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(rq, timeout=row["timeout_s"]) as resp:
+                status = resp.status
+                raw = resp.read()
+        except urllib.error.HTTPError as e:
+            status = e.code
+            raw = e.read()
+        except socket.timeout:
+            raise Refuse("timed-out", "OpenRouter request exceeded timeout_s %d" % row["timeout_s"])
+        except (urllib.error.URLError, OSError) as e:
+            reason = getattr(e, "reason", e)
+            if isinstance(reason, socket.timeout):
+                raise Refuse("timed-out", "OpenRouter request exceeded timeout_s %d" % row["timeout_s"])
+            raise Refuse("transport-failed", "OpenRouter request failed: %s" % reason)
+        except KeyboardInterrupt:
+            raise Refuse("cancelled", "interrupted by the caller")
+        finally:
+            headers = None
+    response_raw = os.path.join(call_dir, "response.raw")
+    with open(response_raw, "wb") as f:
+        f.write(raw)
+    result["response_raw"] = response_raw
+    result["exit_code"] = status
+    with open(os.path.join(diag, "http.txt"), "w") as f:
+        f.write("%d\n" % status)
+    # guards, in the contract's order
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        raise Refuse("transport-failed", "unparseable response body (%s); %s" % (e, openrouter_message(None, raw, status)))
+    if status != 200:
+        raise Refuse("transport-failed", openrouter_message(data, raw, status))
+    if isinstance(data, dict) and "error" in data:
+        raise Refuse("transport-failed", "provider error: %s" % openrouter_message(data, raw, status))
+    if not isinstance(data, dict):
+        raise Refuse("transport-failed", "response is not a JSON object")
+    result["generation_id"] = data.get("id")
+    choice = (data.get("choices") or [{}])[0] or {}
+    finish = choice.get("finish_reason")
+    content = (choice.get("message") or {}).get("content") or ""
+    if finish == "length":
+        with open(partial_f, "w", encoding="utf-8") as f:
+            f.write(content)
+        raise Refuse("incomplete", "finish_reason length (output cap); partial text kept in diagnostics only")
+    if not content.strip():
+        raise Refuse("empty", "no content or whitespace only (finish_reason %r)" % finish)
+    if finish != "stop":
+        raise Refuse("transport-failed", "finish_reason %r (native %r)" % (finish, choice.get("native_finish_reason")))
+    return content
 
 
 # ---------- capture and evidence ----------
@@ -559,8 +900,10 @@ def check_ids(req):
         raise Refuse("invalid-request", "run_dir must be a string")
 
 
+ADAPTERS = {"codex-exec": None, "openrouter": None}  # filled below, after both adapters are defined
+
+
 def run(req, dispatching):
-    roster = load_roster()
     try:
         check_ids(req)
     except Refuse as r:
@@ -576,13 +919,18 @@ def run(req, dispatching):
         return result
     launched = False
     try:
+        # R6: a dispatch freezes the roster and memory for its run on the run's first call and resolves
+        # from the frozen copy afterwards; validate reads the snapshot when one exists and creates none.
+        roster, picks, mem_status, snap = resolve_sources(run_dir, create=dispatching)
+        result["snapshot"] = snap
+        result["memory"] = mem_status if mem_status != "ok" else "ok: %s" % memory_path()
         row = check_validity(req, roster)
         result["row"] = row["id"]
         check_version(req)
         check_authorization(req, row)
         check_profile(req, row)
         check_floor(req, row, roster)
-        resolve_model(req, row, result)
+        resolve_model(req, row, result, picks)
         check_lane(req, row, dispatching)
         prompt = compose(req)
         result["mandate_hash"] = sha256_text(mandate_text(req))
@@ -590,14 +938,18 @@ def run(req, dispatching):
         check_budget(req, row, prompt, result)
         if not dispatching:
             return finish(result, None, "ok", "valid (pre-send checks only; nothing dispatched, nothing written)")
-        if row["transport"] != "codex-exec":
+        adapter = ADAPTERS.get(row["transport"])
+        if adapter is None:
             raise Refuse("lane-unavailable", "no adapter for transport %s in this slice" % row["transport"])
         diag = os.path.join(call_dir, "diagnostics")
         os.makedirs(diag, exist_ok=True)
         result["diagnostics"] = diag
         result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
         launched = True
-        text = run_codex(req, row, prompt, result, call_dir, diag)
+        if result["override_source"] == "explicit pick":
+            # R4: written when a call is dispatched with an explicit pick (the live file, never the snapshot)
+            result["memory"] = remember_pick(row, result["effective_model"])
+        text = adapter(req, row, prompt, result, call_dir, diag)
         capture(text, req, call_dir, result)
         return finish(result, call_dir, "ok")
     except Refuse as r:
@@ -609,6 +961,140 @@ def run(req, dispatching):
         return finish(result, call_dir, status, "runner error (%s): %s" % (type(e).__name__, e))
 
 
+ADAPTERS["codex-exec"] = run_codex
+ADAPTERS["openrouter"] = run_openrouter
+
+
+# ---------- suggest (Slice B R5) ----------
+
+_catalog_cache = {}
+
+
+def openrouter_ids():
+    """The public model list (no credential). Returns (set of ids, None) or (None, reason)."""
+    if "openrouter" not in _catalog_cache:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(OPENROUTER_MODELS_URL, headers={"Accept": "application/json"}), timeout=20) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            _catalog_cache["openrouter"] = (set(m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")), None)
+        except Exception as e:
+            _catalog_cache["openrouter"] = (None, "OpenRouter model list unreachable (%s)" % e)
+    return _catalog_cache["openrouter"]
+
+
+def codex_ids():
+    if "codex" not in _catalog_cache:
+        try:
+            with open(CODEX_MODELS_CACHE) as f:
+                data = json.load(f)
+            _catalog_cache["codex"] = (set(m.get("slug") for m in data.get("models", []) if isinstance(m, dict) and m.get("slug")), None)
+        except Exception as e:
+            _catalog_cache["codex"] = (None, "%s unreadable (%s)" % (CODEX_MODELS_CACHE, e))
+    return _catalog_cache["codex"]
+
+
+def existence(row, model):
+    """Whether a remembered id still exists where that can be checked. Returns (True|False|None, note)."""
+    if row["transport"] == "openrouter":
+        ids, why = openrouter_ids()
+    elif row["transport"] == "codex-exec":
+        ids, why = codex_ids()
+    else:
+        return None, "existence not checkable for transport %s" % row["transport"]
+    if ids is None:
+        return None, "existence unverified: %s" % why
+    return model in ids, None
+
+
+def drop_reason(row, entry, floor):
+    """Why a remembered pick is dropped at suggest time, or None. The three rules of R5, in order."""
+    if entry.get("row_default") != row["model"]:
+        return "roster default changed (%s -> %s) since the pick on %s" % (entry.get("row_default"), row["model"], entry.get("date"))
+    exists, _ = existence(row, entry["model"])
+    if exists is False:
+        return "id %s no longer listed for transport %s" % (entry["model"], row["transport"])
+    if floor and entry["model"] != row["model"]:
+        return "typed id %s is not classified against floor %s" % (entry["model"], floor)
+    return None
+
+
+def suggest(argv):
+    rows_arg, run_id, run_dir_arg, floor = None, None, None, None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--run" and i + 1 < len(argv):
+            run_id = argv[i + 1]; i += 2
+        elif a == "--run-dir" and i + 1 < len(argv):
+            run_dir_arg = argv[i + 1]; i += 2
+        elif a == "--floor" and i + 1 < len(argv):
+            floor = argv[i + 1]; i += 2
+        elif a.startswith("--"):
+            print(json.dumps({"status": "invalid-request", "reason": "unknown option %s" % a}))
+            return 1
+        else:
+            rows_arg = a; i += 1
+    if not rows_arg or not run_id:
+        print(json.dumps({"status": "invalid-request", "reason": "usage: readers suggest <row>[,<row>...] --run <run id> [--run-dir <dir>] [--floor <floor>]"}))
+        return 1
+    if not valid_id(run_id):
+        print(json.dumps({"status": "invalid-request", "reason": "run id must be one path segment of [A-Za-z0-9._-], not starting with a dot: %r" % run_id}))
+        return 1
+    _, run_dir = resolve_run_dir({"run_id": run_id, "run_dir": run_dir_arg})
+    wanted = [r for r in rows_arg.split(",") if r]
+    live_rows = {x["id"]: x for x in load_roster()["rows"]}
+    unknown = [r for r in wanted if r not in live_rows]
+    if unknown:
+        print(json.dumps({"status": "invalid-request", "reason": "unknown row id(s): %s" % ", ".join(unknown)}))
+        return 1
+    notes = {}
+    frozen = os.path.isfile(os.path.join(snapshot_dir(run_dir), "meta.json"))
+    if not frozen:
+        # drops happen at suggest time and never after, against the live memory, before the freeze
+        def mutate(data):
+            changed = False
+            for rid in wanted:
+                e = (data.get("picks") or {}).get(rid)
+                if not isinstance(e, dict) or e.get("dropped") or not e.get("model"):
+                    continue
+                why = drop_reason(live_rows[rid], e, floor)
+                if why:
+                    e["dropped"] = {"date": now()[:10], "reason": why}
+                    notes[rid] = "remembered pick %s dropped: %s" % (e["model"], why)
+                    changed = True
+            return changed
+        try:
+            memory_update(mutate)
+        except OSError as e:
+            notes["_memory"] = "drop could not be recorded: %s" % e
+    roster, picks, mem_status, snap = resolve_sources(run_dir, create=True)
+    rows = {x["id"]: x for x in roster["rows"]}
+    out = {"run_id": run_id, "run_dir": run_dir, "snapshot": snap, "floor": floor,
+           "memory": mem_status if mem_status != "ok" else "ok: %s" % memory_path(), "suggestions": []}
+    for rid in wanted:
+        row = rows.get(rid) or live_rows[rid]
+        e = pick_entry(picks, row)
+        exists_note = None
+        if e:
+            ok_, exists_note = existence(row, e["model"])
+        out["suggestions"].append({
+            "row": rid, "model": e["model"] if e else row["model"],
+            "source": "remembered pick" if e else "roster default",
+            "picked_on": e.get("date") if e else None,
+            "effort": row["effort_default"] or None,
+            "outside": is_outside(row),
+            "needs_word": is_outside(row),
+            "available": row.get("available"),
+            "eligibility": row["eligibility"] if not e else "not classified",
+            "drop_note": notes.get(rid),
+            "note": exists_note,
+        })
+    if "_memory" in notes:
+        out["note"] = notes["_memory"]
+    print(json.dumps(out, indent=2, sort_keys=True))
+    return 0
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())
@@ -616,6 +1102,8 @@ def main(argv):
     if argv[0] == "--version":
         print(PROTOCOL_VERSION)
         return 0
+    if argv[0] == "suggest":
+        return suggest(argv[1:])
     if argv[0] == "validate":
         if len(argv) < 2:
             print("invalid-request")
