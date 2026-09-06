@@ -165,7 +165,7 @@
       },
       "available": true,
       "reasoning": "on",
-      "quirks": "Reasoning on by default (Tony 2026-09-06); the exact provider parameter is recorded here by Slice B after one live run. Adapter lands in Slice B.",
+      "quirks": "Reasoning on by default (Tony 2026-09-06): the adapter sends the OpenRouter unified parameter `\"reasoning\": {\"enabled\": true}`, verified live 2026-09-06 (usage.completion_tokens_details.reasoning_tokens 202 on the AC1 run; docs/evidence/readers/slice-b-openrouter-runs.md). Documents travel only in the prompt (no filesystem); packet-only is recorded as `packet-only (no workspace)`. max_tokens is the request's output_budget, else this row's max_output. Adapter: Slice B.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -199,7 +199,7 @@
       },
       "available": true,
       "reasoning": "on",
-      "quirks": "Reasoning on by default (Tony 2026-09-06); the exact provider parameter is recorded here by Slice B after one live run. Adapter lands in Slice B.",
+      "quirks": "Reasoning on by default (Tony 2026-09-06): the adapter sends the OpenRouter unified parameter `\"reasoning\": {\"enabled\": true}`, verified live 2026-09-06 (usage.completion_tokens_details.reasoning_tokens 117 on the AC1 run; docs/evidence/readers/slice-b-openrouter-runs.md). Documents travel only in the prompt (no filesystem); packet-only is recorded as `packet-only (no workspace)`. max_tokens is the request's output_budget, else this row's max_output. Adapter: Slice B.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
