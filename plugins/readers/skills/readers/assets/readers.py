@@ -26,7 +26,7 @@ import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-a-2026-09-06"
+ADAPTER_VERSION = "slice-a-fix-2026-09-06"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
 PROFILES = ("starved", "packet-only", "repo", "repo-with-tools")
@@ -35,7 +35,11 @@ STATUSES = (
     "unauthorized", "floor-refused", "unknown-model", "profile-unsupported",
     "version-mismatch", "transport-failed", "capture-failed", "cancelled", "timed-out",
 )
-OUTSIDE_PROVIDERS = ("openai", "google", "deepseek", "alibaba")
+HOME_PROVIDER = "anthropic"   # Claude rows never need the authorized flag; every other provider is outside
+ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+# The child's environment is built from this list and nothing else (a credential in the
+# parent's environment never reaches the model's sandbox).
+CHILD_ENV_KEYS = ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "SHELL", "CODEX_HOME")
 BYTES_PER_TOKEN = 3.5
 HEADROOM = 1.10
 RESULT_FIELDS = (
@@ -121,6 +125,11 @@ def new_result(req, run_id, run_dir, call_id):
 
 # ---------- pre-send checks, in the contract's order ----------
 
+def valid_id(s):
+    """A run or call id is one path segment: no separators, not . or .., only [A-Za-z0-9._-]."""
+    return isinstance(s, str) and 0 < len(s) <= 128 and set(s) <= ID_CHARS and s not in (".", "..") and not s.startswith(".")
+
+
 def check_validity(req, roster):
     """1. request validity -> invalid-request"""
     for k in ("row", "mandate", "profile"):
@@ -128,8 +137,21 @@ def check_validity(req, roster):
             raise Refuse("invalid-request", "missing required field: %s" % k)
     if "protocol_version" not in req:
         raise Refuse("invalid-request", "missing required field: protocol_version")
-    if not (req.get("documents") or req.get("workspace")):
+    for k in ("row", "profile", "run_dir", "raw_path", "workspace", "effort", "model", "floor", "session_model"):
+        if req.get(k) is not None and not isinstance(req[k], str):
+            raise Refuse("invalid-request", "%s must be a string" % k)
+    if not isinstance(req["mandate"], str):
+        raise Refuse("invalid-request", "mandate must be a string (text or a file path)")
+    for k in ("run_id", "call_id"):
+        if req.get(k) is not None and not valid_id(req[k]):
+            raise Refuse("invalid-request", "%s must be one path segment of [A-Za-z0-9._-], not starting with a dot: %r" % (k, req[k]))
+    docs = req.get("documents")
+    if docs is not None and (not isinstance(docs, list) or not all(isinstance(d, str) for d in docs)):
+        raise Refuse("invalid-request", "documents must be a list of file paths")
+    if not (docs or req.get("workspace")):
         raise Refuse("invalid-request", "a request needs documents and/or workspace")
+    if req.get("run_dir") and os.path.exists(req["run_dir"]) and not os.path.isdir(req["run_dir"]):
+        raise Refuse("invalid-request", "run_dir exists and is not a directory: %s" % req["run_dir"])
     rows = {x["id"]: x for x in roster["rows"]}
     row = rows.get(req["row"])
     if row is None:
@@ -147,8 +169,21 @@ def check_validity(req, roster):
     for d in req.get("documents") or []:
         if not os.path.isfile(d):
             raise Refuse("invalid-request", "document not found: %s" % d)
+        try:
+            with open(d, encoding="utf-8") as f:
+                f.read()
+        except (OSError, UnicodeDecodeError) as e:
+            raise Refuse("invalid-request", "document unreadable as UTF-8 text: %s (%s)" % (d, e))
+    if os.path.isfile(req["mandate"]):
+        try:
+            with open(req["mandate"], encoding="utf-8") as f:
+                f.read()
+        except (OSError, UnicodeDecodeError) as e:
+            raise Refuse("invalid-request", "mandate file unreadable as UTF-8 text: %s (%s)" % (req["mandate"], e))
     if req.get("workspace") and not os.path.isdir(req["workspace"]):
         raise Refuse("invalid-request", "workspace not a directory: %s" % req["workspace"])
+    if req["profile"] in ("repo", "repo-with-tools") and not req.get("workspace"):
+        raise Refuse("invalid-request", "profile %s needs a workspace" % req["profile"])
     if req.get("isolation") not in (None, "worktree"):
         raise Refuse("invalid-request", "isolation must be absent or 'worktree'")
     return row
@@ -161,7 +196,7 @@ def check_version(req):
 
 
 def is_outside(row):
-    return row["provider"] in OUTSIDE_PROVIDERS
+    return row.get("provider") != HOME_PROVIDER
 
 
 def check_authorization(req, row):
@@ -217,18 +252,34 @@ def check_lane(req, row, dispatching):
 def mandate_text(req):
     m = req["mandate"]
     if isinstance(m, str) and os.path.isfile(m):
-        with open(m) as f:
+        with open(m, encoding="utf-8") as f:
             return f.read()
     return str(m)
+
+
+def packet_names(req):
+    """One name per document, unique within the request: the basename, then -2, -3 on a collision.
+    The prompt's DOCUMENT labels and the packet-only copies use the same names, so they agree."""
+    names, seen = [], {}
+    for d in req.get("documents") or []:
+        base = os.path.basename(d)
+        n = seen.get(base, 0) + 1
+        seen[base] = n
+        if n == 1:
+            names.append(base)
+        else:
+            stem, ext = os.path.splitext(base)
+            names.append("%s-%d%s" % (stem, n, ext))
+    return names
 
 
 def compose(req):
     """The mandate at the top, then each document delimited as evidence."""
     parts = [mandate_text(req).rstrip("\n"), ""]
-    for d in req.get("documents") or []:
-        with open(d) as f:
+    for d, name in zip(req.get("documents") or [], packet_names(req)):
+        with open(d, encoding="utf-8") as f:
             body = f.read()
-        parts += ["<<<DOCUMENT %s>>>" % os.path.basename(d), body.rstrip("\n"), "<<<END DOCUMENT>>>", ""]
+        parts += ["<<<DOCUMENT %s>>>" % name, body.rstrip("\n"), "<<<END DOCUMENT>>>", ""]
     if req.get("workspace") and not req.get("documents"):
         parts += ["<<<WORKSPACE>>>", "Your working directory holds the material to read.", "<<<END WORKSPACE>>>", ""]
     return "\n".join(parts)
@@ -286,8 +337,8 @@ def prepare_workdir(req, call_dir):
     if profile == "packet-only":
         wd = os.path.join(call_dir, "packet")
         os.makedirs(wd, exist_ok=True)
-        for d in req.get("documents") or []:
-            shutil.copyfile(d, os.path.join(wd, os.path.basename(d)))
+        for d, name in zip(req.get("documents") or [], packet_names(req)):
+            shutil.copyfile(d, os.path.join(wd, name))
         return wd
     return os.path.abspath(req["workspace"])
 
@@ -296,8 +347,81 @@ def instruction_files(wd):
     return [n for n in ("AGENTS.md", "CLAUDE.md") if os.path.exists(os.path.join(wd, n))]
 
 
-TRUNCATION_MARKERS = ('"finish_reason":"length"', '"finish_reason": "length"', '"status":"incomplete"',
-                      '"status": "incomplete"', 'max_output_tokens', '"reason":"max_tokens"')
+def child_env():
+    return {k: os.environ[k] for k in CHILD_ENV_KEYS if k in os.environ}
+
+
+def read_events(events):
+    """Parse the codex --json stream. Returns (parsed objects, non-JSON lines)."""
+    objs, other = [], []
+    try:
+        with open(events, errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    objs.append(json.loads(line))
+                except ValueError:
+                    other.append(line)
+    except OSError:
+        pass
+    return objs, other
+
+
+def walk(obj):
+    """Every dict reachable from obj (the event, its item, its usage ...)."""
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            for d in walk(v):
+                yield d
+    elif isinstance(obj, list):
+        for v in obj:
+            for d in walk(v):
+                yield d
+
+
+def truncation_signal(objs):
+    """A structural signal only, never a scan of the answer text: an event or item whose own
+    status/finish/stop field says the output was cut, or a stream that never reached
+    turn.completed (interrupted). Returns the signal's description or None."""
+    completed = False
+    for ev in objs:
+        t = ev.get("type") if isinstance(ev, dict) else None
+        if t == "turn.completed":
+            completed = True
+        for d in walk(ev):
+            if d.get("finish_reason") == "length" or d.get("stop_reason") in ("max_tokens", "length"):
+                return "finish_reason/stop_reason: output cap"
+            if d.get("status") == "incomplete" or d.get("incomplete_details"):
+                return "status: incomplete (%s)" % (d.get("incomplete_details") or "no detail")
+            if d.get("truncated") is True:
+                return "truncated: true"
+    if objs and not completed:
+        return "stream ended without turn.completed (interrupted)"
+    return None
+
+
+def transport_messages(objs, other, stderr_f):
+    """The CLI's own error text, wherever it put it: error / turn.failed events on stdout,
+    non-JSON stdout lines, then the stderr tail."""
+    msgs = []
+    for ev in objs:
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("type") in ("error", "turn.failed"):
+            err = ev.get("error") or ev.get("message") or ev
+            msgs.append(err.get("message") if isinstance(err, dict) and err.get("message") else json.dumps(err))
+    msgs += other[-5:]
+    try:
+        with open(stderr_f, errors="replace") as f:
+            tail = f.read()[-2000:].strip()
+        if tail:
+            msgs.append(tail)
+    except OSError:
+        pass
+    return " | ".join(m for m in msgs if m)
 
 
 def run_codex(req, row, prompt, result, call_dir, diag):
@@ -307,6 +431,11 @@ def run_codex(req, row, prompt, result, call_dir, diag):
     out_file = os.path.join(call_dir, "output.md")
     events = os.path.join(diag, "events.jsonl")
     stderr_f = os.path.join(diag, "stderr.txt")
+    # R5: never read a stale file from an earlier attempt (a crashed attempt leaves no sidecar,
+    # so the reuse guard does not fire); the output and partial files are removed before launch.
+    for stale in (out_file, os.path.join(diag, "partial.md")):
+        if os.path.exists(stale):
+            os.remove(stale)
     cmd = [
         "codex", "exec", "-m", result["effective_model"],
         "-c", "model_reasoning_effort=%s" % result["effective_effort"],
@@ -319,7 +448,7 @@ def run_codex(req, row, prompt, result, call_dir, diag):
     with open(os.path.join(call_dir, "dispatch.log"), "a") as f:
         f.write("%s dispatch codex exec model=%s effort=%s profile=%s\n" % (now(), result["effective_model"], result["effective_effort"], req["profile"]))
     with open(events, "wb") as ev, open(stderr_f, "wb") as er:
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=ev, stderr=er, cwd=wd)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=ev, stderr=er, cwd=wd, env=child_env())
         try:
             proc.communicate(prompt.encode("utf-8"), timeout=row["timeout_s"])
         except subprocess.TimeoutExpired:
@@ -334,31 +463,20 @@ def run_codex(req, row, prompt, result, call_dir, diag):
             raise Refuse("cancelled", "interrupted; child killed")
     result["exit_code"] = proc.returncode
     # guards, in the contract's order
+    objs, other = read_events(events)
     if proc.returncode != 0:
-        tail = ""
-        try:
-            with open(stderr_f, errors="replace") as f:
-                tail = f.read()[-2000:].strip()
-        except OSError:
-            pass
-        raise Refuse("transport-failed", "codex exec exit %d: %s" % (proc.returncode, tail or "(no stderr)"))
+        msg = transport_messages(objs, other, stderr_f)
+        raise Refuse("transport-failed", "codex exec exit %d: %s" % (proc.returncode, msg or "(no message on stdout or stderr)"))
     text = ""
     if os.path.exists(out_file):
-        with open(out_file, errors="replace") as f:
+        with open(out_file, encoding="utf-8", errors="replace") as f:
             text = f.read()
-    truncated = False
-    try:
-        with open(events, errors="replace") as f:
-            for line in f:
-                if any(m in line for m in TRUNCATION_MARKERS):
-                    truncated = True
-                    break
-    except OSError:
-        pass
-    if truncated:
-        with open(os.path.join(diag, "partial.md"), "w") as f:
+    signal = truncation_signal(objs)
+    if signal:
+        with open(os.path.join(diag, "partial.md"), "w", encoding="utf-8") as f:
             f.write(text)
-        raise Refuse("incomplete", "truncation signal in the event stream; partial text kept in diagnostics only")
+        os.remove(out_file) if os.path.exists(out_file) else None
+        raise Refuse("incomplete", "truncation signal in the event stream (%s); partial text kept in diagnostics only" % signal)
     if not text.strip():
         raise Refuse("empty", "no content or whitespace only")
     return text
@@ -379,7 +497,7 @@ def unique_path(path):
 def capture(text, req, call_dir, result):
     raw = os.path.join(call_dir, "raw.md")
     try:
-        with open(raw, "w") as f:
+        with open(raw, "w", encoding="utf-8") as f:
             f.write(text)
         result["raw_hash"] = sha256_file(raw)
     except OSError as e:
@@ -387,10 +505,15 @@ def capture(text, req, call_dir, result):
     result["raw_file"] = raw
     result["raw_text"] = text
     if req.get("raw_path"):
-        dest = unique_path(os.path.abspath(req["raw_path"]))
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        shutil.copyfile(raw, dest)
-        result["raw_path"] = dest
+        try:
+            dest = unique_path(os.path.abspath(req["raw_path"]))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copyfile(raw, dest)
+            result["raw_path"] = dest
+        except (OSError, TypeError, ValueError) as e:
+            # not ok: the contract's raw fields are null / empty on every other status; raw.md stays on disk
+            result["raw_text"], result["raw_file"], result["raw_hash"] = "", None, None
+            raise Refuse("capture-failed", "raw.md is written (%s) but the raw_path copy failed: %s" % (raw, e))
 
 
 def finish(result, call_dir, status, reason=None, extra=None):
@@ -405,11 +528,24 @@ def finish(result, call_dir, status, reason=None, extra=None):
         result["duration_s"] = round((t1 - t0).total_seconds(), 3)
     except Exception:
         result["duration_s"] = None
-    os.makedirs(call_dir, exist_ok=True)
+    if call_dir is None:
+        # validate: the result is returned, nothing is written (R7: a call's sidecar is never rewritten,
+        # and a validate is not a call)
+        return result
     sidecar = os.path.join(call_dir, "sidecar.json")
     result["sidecar"] = sidecar
-    with open(sidecar, "w") as f:
-        json.dump(result, f, indent=2, sort_keys=True)
+    if os.path.exists(sidecar):
+        # R7 backstop: never rewrite. Whatever path reached here with an existing sidecar returns without touching it.
+        result["sidecar"] = None
+        result["reason"] = "%s (sidecar already present at %s; not rewritten)" % (result["reason"], sidecar)
+        return result
+    try:
+        os.makedirs(call_dir, exist_ok=True)
+        with open(sidecar, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, sort_keys=True)
+    except OSError as e:
+        result["sidecar"] = None
+        result["reason"] = "%s (sidecar could not be written: %s)" % (result["reason"], e)
     return result
 
 
@@ -417,38 +553,45 @@ def run(req, dispatching):
     roster = load_roster()
     run_id, run_dir = resolve_run_dir(req)
     call_id = req.get("call_id") or "c-%s" % uuid.uuid4().hex[:8]
-    call_dir = os.path.join(run_dir, call_id)
+    call_dir = os.path.join(run_dir, call_id) if dispatching else None
     result = new_result(req, run_id, run_dir, call_id)
     if dispatching and os.path.exists(os.path.join(call_dir, "sidecar.json")):
         # R7: a sidecar is never rewritten. A reused call id is refused without touching the call dir.
         result.update({"status": "invalid-request", "reason": "call id %s already has a sidecar under %s; mint a new call id" % (call_id, run_dir), "ended_at": now()})
         return result
+    launched = False
     try:
         row = check_validity(req, roster)
         result["row"] = row["id"]
-        resolve_model(req, row, result)
         check_version(req)
         check_authorization(req, row)
         check_profile(req, row)
         check_floor(req, row, roster)
+        resolve_model(req, row, result)
         check_lane(req, row, dispatching)
         prompt = compose(req)
         result["mandate_hash"] = sha256_text(mandate_text(req))
         result["packet_hash"] = sha256_text(prompt)
         check_budget(req, row, prompt, result)
         if not dispatching:
-            return finish(result, call_dir, "ok", "valid (pre-send checks only; nothing dispatched)")
+            return finish(result, None, "ok", "valid (pre-send checks only; nothing dispatched, nothing written)")
+        if row["transport"] != "codex-exec":
+            raise Refuse("lane-unavailable", "no adapter for transport %s in this slice" % row["transport"])
         diag = os.path.join(call_dir, "diagnostics")
         os.makedirs(diag, exist_ok=True)
         result["diagnostics"] = diag
         result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
-        if row["transport"] != "codex-exec":
-            raise Refuse("lane-unavailable", "no adapter for transport %s in this slice" % row["transport"])
+        launched = True
         text = run_codex(req, row, prompt, result, call_dir, diag)
         capture(text, req, call_dir, result)
         return finish(result, call_dir, "ok")
     except Refuse as r:
         return finish(result, call_dir, r.status, r.reason, r.extra)
+    except KeyboardInterrupt:
+        return finish(result, call_dir, "cancelled", "interrupted by the caller")
+    except Exception as e:  # never a traceback in place of a result (contract: JSON in every case)
+        status = "capture-failed" if launched else "invalid-request"
+        return finish(result, call_dir, status, "runner error (%s): %s" % (type(e).__name__, e))
 
 
 def main(argv):
@@ -473,7 +616,10 @@ def main(argv):
     try:
         req = read_request(argv[0])
     except Refuse as r:
-        print(json.dumps({"status": r.status, "reason": r.reason}, indent=2))
+        res = {k: None for k in RESULT_FIELDS}
+        res.update({"status": r.status, "reason": r.reason, "protocol_version": PROTOCOL_VERSION,
+                    "adapter_version": ADAPTER_VERSION, "raw_text": ""})
+        print(json.dumps(res, indent=2, sort_keys=True))
         return 1
     res = run(req, dispatching=True)
     print(json.dumps(res, indent=2, sort_keys=True))

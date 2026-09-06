@@ -8,17 +8,17 @@ A JSON object, from a file path or stdin (`-`):
 
 - `protocol_version` — the version the caller was written against (required; the runner's is `1`).
 - `run_id` — the caller's run (a fleet shares one). Minted as `adhoc-<hex>` when absent.
-- `call_id` — caller-supplied, or minted by the runner (`c-<hex>`) and returned in the result.
+- `call_id` — caller-supplied, or minted by the runner (`c-<hex>`) and returned in the result. A call id is single-use: a call id whose `sidecar.json` already exists under the run dir is refused as `invalid-request` without touching it, whatever the earlier call's status (a retry mints a new id). Both ids are one path segment: characters `[A-Za-z0-9._-]`, not starting with a dot, never `.` or `..`; anything else is `invalid-request`.
 - `run_dir` — optional. Default: `$READERS_RUN_ROOT/<run id>` when set, else `${TMPDIR:-/tmp}/readers/<run id>`. Every step (`suggest`, `validate`, dispatch) resolves it the same way.
 - `row` — a roster row id (`roster.json`).
 - `mandate` — the text, or a path to a file holding it. The runner never rewrites a mandate.
-- `documents` — file paths, and/or `workspace` — a directory. At least one of the two.
+- `documents` — file paths (UTF-8 text; a document that does not decode is `invalid-request`), and/or `workspace` — a directory. At least one of the two; the `repo` and `repo-with-tools` profiles need a `workspace`. Each document gets one name inside the request, its basename, with `-2`, `-3` appended on a collision; the prompt's `DOCUMENT` labels and the `packet-only` copies use the same names.
 - `profile` — the access profile: `starved` (a fresh empty directory), `packet-only` (a fresh directory the runner fills with copies of the documents and nothing else; on rows whose model has no filesystem the documents travel only in the prompt and the sidecar records `packet-only (no workspace)`), `repo` (the caller's workspace, read), `repo-with-tools` (the caller's workspace; the reviewer may run tests, writes confined to scratch and ignored caches, never a tracked file; an execution the sandbox blocks is reported as "verification blocked", never marked checked).
 - `effort` — optional; must be one of the row's `efforts`.
 - `model` — optional typed model id. An id that is not the row's default is sent as-is under the row's envelope and recorded as `explicit pick`; on a floor-bound call it is `unknown-model`.
 - `output_budget` — optional positive integer, never above the row's `max_output` when that is known.
 - `raw_path` — optional path the caller owns; it receives a copy of `raw.md` (collision rule below).
-- `authorized` — `true` when Tony's word in this run named an outside row. Required for every outside row (GPT, Gemini, DeepSeek, Qwen). Claude rows never need it.
+- `authorized` — `true` when Tony's word in this run named an outside row. Required for every outside row: every row whose `provider` is not `anthropic` (GPT, Gemini, DeepSeek, Qwen today, and any row added later). Claude rows never need it.
 - `floor` — optional model floor (`opus` today). Enforced by the rules under `floor-refused` and `unknown-model`.
 - `session_model` — the harness model id of the session that summoned a `claude-session` call. The skill body fills it; the shell entry leaves it empty. A floor-bound `claude-session` call with none is `floor-refused` (reason `session model unknown`).
 - `isolation` — optional, `worktree`: a `repo-with-tools` Claude call whose method mutates the checkout runs its reviewer in the Agent tool's worktree isolation (Slice C); the sidecar records it.
@@ -51,7 +51,7 @@ The shell entry prints the result as JSON on stdout in every case, including `in
 
 ## Pre-send checks, in this order
 
-Every call, host or portable, runs these before a child is launched or a request sent, and any failure returns before that point: request validity, version, authorization, profile support, floor and classification, lane availability, budget. `readers validate <request | ->` runs exactly these and prints `valid` or the refusing status, never dispatching; validate reads the named documents to size them, so a missing document is `invalid-request`; validate does not apply the host-row rule, so a caller can check a host request from a shell.
+Every call, host or portable, runs these before a child is launched or a request sent, and any failure returns before that point: request validity, version, authorization, profile support, floor and classification, lane availability, budget. `readers validate <request | ->` runs exactly these and prints `valid` or the refusing status, never dispatching; validate reads the named documents to size them, so a missing document is `invalid-request`; validate does not apply the host-row rule, so a caller can check a host request from a shell. Validate writes nothing to disk: no run directory, no call directory, no sidecar, so a validated request can be dispatched afterwards under the same ids.
 
 ## Budget
 
@@ -69,7 +69,7 @@ The mandate at the top, then each document delimited as evidence:
 <<<END DOCUMENT>>>
 ```
 
-This is a semantic migration from the MCP route's `base-instructions`; nothing is placed in Codex's instructions-file setting. Document bytes reach the child through stdin or files, never through generated shell source, argv, or `eval`.
+This is a semantic migration from the MCP route's `base-instructions`; nothing is placed in Codex's instructions-file setting. Document bytes reach the child through stdin or files, never through generated shell source, argv, or `eval`. The child's environment is built from a fixed list (`PATH`, `HOME`, `TMPDIR`, locale, `TERM`, `USER`, `SHELL`, `CODEX_HOME`) and nothing else: a credential in the runner's environment never reaches the model's sandbox.
 
 ## Evidence
 
@@ -77,7 +77,7 @@ Every call has `<run dir>/<call id>/` holding `sidecar.json` (every result field
 
 ## Guards, GPT lane (codex exec)
 
-In this order, each mapped to a status: the child's exit code and startup failure (`transport-failed`); a truncation signal from the event stream or output cap (`incomplete`); empty content (`empty`); a response that cannot be written (`capture-failed`). Transport success and content status are separate fields (`exit_code`, `status`). The child is killed at the row's `timeout_s` (`timed-out`).
+In this order, each mapped to a status: the child's exit code and startup failure (`transport-failed`, with the CLI's own message wherever it put it: `error` / `turn.failed` events on stdout, non-JSON stdout lines, then the stderr tail); a truncation signal from the event stream (`incomplete`: a structural field on an event or item, `finish_reason: length`, `stop_reason: max_tokens`, `status: incomplete`, `incomplete_details`, `truncated: true`, or a stream that ends without `turn.completed`; the answer text itself is never scanned); empty content (`empty`); a response, or the caller's `raw_path` copy, that cannot be written (`capture-failed`; `raw.md` may remain on disk and the reason names it, the result's raw fields are null). Transport success and content status are separate fields (`exit_code`, `status`). The child is killed at the row's `timeout_s` (`timed-out`). Before every launch the call directory's `output.md` and `diagnostics/partial.md` from any earlier attempt are removed, so a stale file is never read. An unexpected runner error is still a result: `invalid-request` before the launch, `capture-failed` after it, never a traceback in place of the JSON.
 
 ## Isolation
 
