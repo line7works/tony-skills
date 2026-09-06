@@ -121,3 +121,8 @@ Second visit, after commits 8ee07d1 and 9970c5b (the Gemini-limits BLOCKER is wa
 - MAJOR · plugins/readers/skills/readers/assets/readers.py:337 · (transport-failed preserves only stderr) · fixed — executed: a stdout-only CLI error line reaches `reason` (now `transport_messages`)
 - MAJOR · plugins/readers/skills/readers/assets/readers.py:290 · (packet-only collapses same-basename documents) · fixed — executed: same.md and same-2.md in the packet, prompt labels agree (now `packet_names`)
 Pre-existing, not fix-introduced, noted for the next pass: a non-string `run_dir`, `run_id`, or `call_id` raises in `resolve_run_dir` before the try in `run()` (readers.py:554–556), against contract.md:32; same root as the open item.
+
+### 2026-09-06 — recheck: slice A
+Third visit, after commit 2ccbdbe; one open item.
+- MAJOR · plugins/readers/skills/readers/assets/readers.py:420 · (run_id and call_id joined into paths unnormalised) · fixed — executed: 32 runs through the entry (relative, dot, hidden, nested, absolute call ids; run_id `../..` under READERS_RUN_ROOT; non-string run_dir/run_id/call_id; empty call_id) on dispatch and validate each returned `invalid-request` as JSON with nothing written anywhere; a valid id still writes `sidecar.json` alone and a second run hits the reuse refusal (now `check_ids()` ahead of any path join, readers.py:552–568)
+Pre-existing or cosmetic, not fix-introduced, left for the next /signoff: `valid_id` caps ids at 128 characters and the contract names no cap; an id refusal with no `run_id` in the request prints `"run_id": "None"` (the string) in the result, no sidecar involved.
