@@ -32,7 +32,7 @@ import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-b-2026-09-06"
+ADAPTER_VERSION = "slice-b-fix-2026-09-06"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
 # The last-pick memory lives in the tony-skills checkout (blueprint assumption 1), never in the
@@ -63,8 +63,8 @@ RESULT_FIELDS = (
     "adapter_version", "mandate_hash", "packet_hash", "profile", "workdir",
     "workdir_instruction_files", "isolation", "parity", "raw_text", "raw_file",
     "raw_hash", "raw_path", "diagnostics", "dispatch_log", "exit_code", "generation_id",
-    "response_raw", "memory", "snapshot", "canned", "sidecar", "started_at", "ended_at",
-    "duration_s",
+    "response_raw", "memory", "snapshot", "snapshot_fault", "canned", "sidecar", "started_at",
+    "ended_at", "duration_s",
 )
 
 
@@ -144,7 +144,7 @@ class MemoryLock(object):
     """Exclusive creation of <memory>.lock beside the file: one writer at a time across processes.
     A lock older than STALE_S is broken (a crashed writer). The lock file never outlives the write."""
     STALE_S = 60.0
-    WAIT_S = 30.0
+    WAIT_S = 5.0
 
     def __init__(self, path):
         self.lock = path + ".lock"
@@ -167,7 +167,7 @@ class MemoryLock(object):
                 except OSError:
                     continue
                 if time.time() > deadline:
-                    raise OSError("memory lock %s held for over %ds" % (self.lock, self.WAIT_S))
+                    raise OSError("memory lock %s held for over %ds; pick not remembered" % (self.lock, self.WAIT_S))
                 time.sleep(0.02)
 
     def __exit__(self, *exc):
@@ -181,24 +181,29 @@ class MemoryLock(object):
 
 def memory_update(mutate):
     """Atomic read-modify-write of the memory file under the lock: read, mutate(data) -> changed?,
-    write to a temporary file in the same directory, rename over the original. Returns (data, status)."""
+    write to a temporary file in the same directory, rename over the original. Returns (data, status);
+    every failure (lock not taken in time, unreadable file, failed write) is a status, never an exception,
+    so memory trouble degrades to `unavailable` and the call goes on (R4)."""
     status = memory_status()
     if status != "ok":
         return None, status
     p = memory_path()
-    with MemoryLock(p):
-        data = memory_read()
-        if mutate(data):
-            fd, tmp = tempfile.mkstemp(prefix=".last-picks.", suffix=".tmp", dir=os.path.dirname(p))
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(data, f, indent=2, sort_keys=True)
-                    f.write("\n")
-                os.replace(tmp, p)
-            except Exception:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-                raise
+    try:
+        with MemoryLock(p):
+            data = memory_read()
+            if mutate(data):
+                fd, tmp = tempfile.mkstemp(prefix=".last-picks.", suffix=".tmp", dir=os.path.dirname(p))
+                try:
+                    with os.fdopen(fd, "w") as f:
+                        json.dump(data, f, indent=2, sort_keys=True)
+                        f.write("\n")
+                    os.replace(tmp, p)
+                except Exception:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+                    raise
+    except (OSError, ValueError) as e:
+        return None, "unavailable: %s" % e
     return data, "ok"
 
 
@@ -387,6 +392,9 @@ def check_validity(req, roster):
         raise Refuse("invalid-request", "profile %s needs a workspace" % req["profile"])
     if req.get("isolation") not in (None, "worktree"):
         raise Refuse("invalid-request", "isolation must be absent or 'worktree'")
+    m = req.get("model")
+    if m is not None and (not m.strip() or m.endswith(":online") or ":online" in m):
+        raise Refuse("invalid-request", "model %r: a web-search suffix (:online) is never sent by readers (parity: no :online suffix); pass the bare id" % m)
     return row
 
 
@@ -444,8 +452,14 @@ def check_lane(req, row, dispatching):
         return
     if row["transport"] == "codex-exec" and shutil.which("codex") is None:
         raise Refuse("lane-unavailable", "codex CLI not on PATH")
-    if row["credential_env"] and not os.environ.get(row["credential_env"]):
-        raise Refuse("lane-unavailable", "credential %s not set in the environment" % row["credential_env"])
+    if row["credential_env"]:
+        key = os.environ.get(row["credential_env"], "")
+        if not key:
+            raise Refuse("lane-unavailable", "credential %s not set in the environment" % row["credential_env"])
+        # A value with a CR, LF, or NUL cannot be a header (http.client would raise with the value in its
+        # message); refuse pre-send so a malformed credential never reaches an exception text, a sidecar, or stdout.
+        if any(ch in key for ch in "\r\n\0") or not key.strip():
+            raise Refuse("lane-unavailable", "credential %s is malformed (a line break, NUL, or only whitespace); fix the exported value" % row["credential_env"])
 
 
 def mandate_text(req):
@@ -510,13 +524,14 @@ def check_budget(req, row, prompt, result):
 
 
 def resolve_model(req, row, result, picks=None):
-    """An explicit pick first (a typed id under the row's envelope, R7), then the remembered pick from
-    the run's snapshot, then the roster default."""
+    """An explicit pick first (Tony's word: a typed id, the row's own default included), then the
+    remembered pick from the run's snapshot, then the roster default. A typed id that equals the row
+    default is an explicit pick of the default (recorded so, envelope the row) and is never remembered."""
     remembered = pick_entry(picks, row)
-    if req.get("model") and req["model"] != row["model"]:
+    if req.get("model"):
         result["override_source"] = "explicit pick"
         result["effective_model"] = req["model"]
-        result["envelope"] = "inherited from %s" % row["id"]
+        result["envelope"] = row["id"] if req["model"] == row["model"] else "inherited from %s" % row["id"]
     elif remembered:
         result["override_source"] = "remembered pick"
         result["effective_model"] = remembered["model"]
@@ -769,8 +784,10 @@ def run_openrouter(req, row, prompt, result, call_dir, diag):
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise Refuse("transport-failed", "canned response %s unusable: %s" % (canned, e))
     else:
-        headers = {"Content-Type": "application/json", "Accept": "application/json",
-                   "Authorization": "Bearer %s" % os.environ[row["credential_env"]]}
+        key = os.environ.get(row["credential_env"], "")
+        if any(ch in key for ch in "\r\n\0") or not key.strip():  # check_lane refused this already; belt and braces
+            raise Refuse("lane-unavailable", "credential %s is malformed; nothing sent" % row["credential_env"])
+        headers = {"Content-Type": "application/json", "Accept": "application/json", "Authorization": "Bearer " + key}
         rq = urllib.request.Request(OPENROUTER_URL, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
         try:
             with urllib.request.urlopen(rq, timeout=row["timeout_s"]) as resp:
@@ -786,10 +803,12 @@ def run_openrouter(req, row, prompt, result, call_dir, diag):
             if isinstance(reason, socket.timeout):
                 raise Refuse("timed-out", "OpenRouter request exceeded timeout_s %d" % row["timeout_s"])
             raise Refuse("transport-failed", "OpenRouter request failed: %s" % reason)
+        except (ValueError, UnicodeError):
+            # http.client rejected the request (a header or URL it will not send); the message can carry
+            # header values, so it is never repeated here
+            raise Refuse("transport-failed", "OpenRouter request could not be built (http.client rejected a header or the URL); nothing sent")
         except KeyboardInterrupt:
             raise Refuse("cancelled", "interrupted by the caller")
-        finally:
-            headers = None
     response_raw = os.path.join(call_dir, "response.raw")
     with open(response_raw, "wb") as f:
         f.write(raw)
@@ -921,7 +940,14 @@ def run(req, dispatching):
     try:
         # R6: a dispatch freezes the roster and memory for its run on the run's first call and resolves
         # from the frozen copy afterwards; validate reads the snapshot when one exists and creates none.
-        roster, picks, mem_status, snap = resolve_sources(run_dir, create=dispatching)
+        try:
+            roster, picks, mem_status, snap = resolve_sources(run_dir, create=dispatching)
+        except OSError as e:
+            # The run dir cannot be made or the snapshot cannot be read: resolve from the live files so the
+            # pre-send checks still return their own status; the fault is reported beside it, and the
+            # sidecar write below says so again if it fails too (a status is never replaced by a path fault).
+            roster, picks, mem_status, snap = load_roster(), None, "unavailable: run dir fault (%s)" % e, None
+            result["snapshot_fault"] = "run dir %s: %s" % (run_dir, e)
         result["snapshot"] = snap
         result["memory"] = mem_status if mem_status != "ok" else "ok: %s" % memory_path()
         row = check_validity(req, roster)
@@ -946,8 +972,9 @@ def run(req, dispatching):
         result["diagnostics"] = diag
         result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
         launched = True
-        if result["override_source"] == "explicit pick":
-            # R4: written when a call is dispatched with an explicit pick (the live file, never the snapshot)
+        if result["override_source"] == "explicit pick" and result["effective_model"] != row["model"]:
+            # R4: written when a call is dispatched with an explicit pick (the live file, never the snapshot).
+            # Memory trouble never loses the call: the pick is sent regardless and the result says what happened.
             result["memory"] = remember_pick(row, result["effective_model"])
         text = adapter(req, row, prompt, result, call_dir, diag)
         capture(text, req, call_dir, result)
@@ -1067,7 +1094,11 @@ def suggest(argv):
             memory_update(mutate)
         except OSError as e:
             notes["_memory"] = "drop could not be recorded: %s" % e
-    roster, picks, mem_status, snap = resolve_sources(run_dir, create=True)
+    try:
+        roster, picks, mem_status, snap = resolve_sources(run_dir, create=True)
+    except OSError as e:
+        print(json.dumps({"status": "invalid-request", "run_id": run_id, "run_dir": run_dir, "reason": "run dir unusable: %s" % e}, indent=2, sort_keys=True))
+        return 1
     rows = {x["id"]: x for x in roster["rows"]}
     out = {"run_id": run_id, "run_dir": run_dir, "snapshot": snap, "floor": floor,
            "memory": mem_status if mem_status != "ok" else "ok: %s" % memory_path(), "suggestions": []}
@@ -1103,7 +1134,14 @@ def main(argv):
         print(PROTOCOL_VERSION)
         return 0
     if argv[0] == "suggest":
-        return suggest(argv[1:])
+        try:
+            return suggest(argv[1:])
+        except KeyboardInterrupt:
+            print(json.dumps({"status": "cancelled", "reason": "interrupted by the caller"}))
+            return 1
+        except Exception as e:  # JSON in every case, never a traceback
+            print(json.dumps({"status": "invalid-request", "reason": "runner error (%s): %s" % (type(e).__name__, e)}, indent=2, sort_keys=True))
+            return 1
     if argv[0] == "validate":
         if len(argv) < 2:
             print("invalid-request")
