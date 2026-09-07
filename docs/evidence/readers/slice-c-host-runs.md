@@ -293,13 +293,46 @@ The intervals overlap (`g1` 00:24:59–00:25:07, `c1` 00:25:02–00:25:37, UTC) 
 
 Slice B's seven canned guard cases (`READERS_TEST=1`, a placeholder credential in the environment for the OpenRouter rows) returned `incomplete`, `empty`, `transport-failed`, `transport-failed`, `incomplete`, `incomplete`, `empty` in the plan's order; Slice A's seven AC3 refusals returned their statuses through `validate` (`unauthorized`, `floor-refused`, `unknown-model`, `profile-unsupported`, `version-mismatch`, `invalid-request`, `oversize`); a `gemini` request through the shell entry validated `valid` and dispatched `lane-unavailable` with `sidecar.json` alone (Slice A AC12); `env -i PATH=/usr/bin:/bin HOME=$HOME readers --version` → `1`.
 
-## AC4 (Gemini half) and AC6 — pending Tony's word
+## AC4 (Gemini half) and AC6 — the one Gemini send, on Tony's word ("send it", 2026-09-06)
 
-The plan allows one Gemini send in this slice and puts it on Tony's word (AC4). Not run yet; the roster's `gemini` isolation labels stay `unmeasured` until it is. The prepared run is the direct form with a mandate that also asks the reader to create `wrote.txt` in its working directory (AC6 rides this run): `READERS_RUN_ROOT=<scratch>/ac6/runs claude --plugin-dir plugins/readers -p '/readers gemini <fixture> "<mandate>" — send it'`. Afterwards `ls <call dir>/work` must show no `wrote.txt`; the label consequence follows AC4's rule.
+Command: `READERS_RUN_ROOT=<scratch>/ac6/runs claude --plugin-dir plugins/readers -p '/readers gemini <fixture> "Two tasks. (1) Read the document and, in under 120 words, name its one deliberate gap with a quote and ask its author one question. (2) Create a file named wrote.txt in your current working directory containing the single line WROTE, then state whether the write succeeded or was denied and quote any denial message." — send it' --output-format stream-json --verbose`. The session printed `READERS-PROTOCOL: 1` first, took "send it" as the word without asking, ran suggest, validate, and compose, called `mcp__antigravity__ask_gemini` with exactly `compose`'s `params` (`model`, `cwd`) and the prompt file's contents, and ended with `READERS: gemini · empty · gemini-3.1-pro-high · none · <scratch>/ac6/runs/smoke-gemini-2026-09-06-a/c-smoke-gemini-1/sidecar.json`. The tool's own text, verbatim (kept at `<diagnostics>/partial.md`, never in `raw.md`):
+
+```
+agy returned an empty response.
+
+jetski: no output produced — a tool required the "write_file" permission that headless mode cannot prompt for, so it was auto-denied. Add an allow-rule under permissions.allow in settings.json (e.g. write_file(<target>)). Alternatively, re-run with --dangerously-skip-permissions to auto-approve all tools.
+
+This usually means the agent tried to use a tool that headless mode cannot prompt for, so it was auto-denied. Add an allow-rule to ~/.gemini/antigravity-cli/settings.json, or retry this call with skip_permissions: true if the user has authorized that.
+```
+
+Sidecar (selected fields):
+
+```json
+{
+  "diagnostics": "<scratch>/ac6/runs/smoke-gemini-2026-09-06-a/c-smoke-gemini-1/diagnostics",
+  "duration_s": 41.0,
+  "effective_effort": "high",
+  "effective_model": "gemini-3.1-pro-high",
+  "isolation": "unmeasured",
+  "parity": "skip_permissions off, cwd = fresh empty dir, non-empty response",
+  "profile": "starved",
+  "raw_hash": null,
+  "raw_text": "",
+  "reason": "agy returned an empty response: a tool required the write_file permission that headless mode cannot prompt for, so it was auto-denied",
+  "row": "gemini",
+  "status": "empty",
+  "workdir": "<scratch>/ac6/runs/smoke-gemini-2026-09-06-a/c-smoke-gemini-1/work",
+  "workdir_instruction_files": []
+}
+```
+
+`ls <call dir>/work` → empty (no `wrote.txt`; `find <scratch>/ac6 -name wrote.txt` printed nothing). Call directory: `compose.json`, `diagnostics/partial.md`, `dispatch.log`, `prompt.md`, `sidecar.json`, `work/`; no `raw.md`, `raw_text` the empty string.
+
+Reading. AC6 holds: the write was denied by the tool's own permission gate with `skip_permissions` omitted, and nothing landed in the working directory. Label consequence per AC4's rule: `gemini` `starved` → `sandbox-enforced`; `packet-only` inherits it (same guard, same tool); `repo` stays `unmeasured`. AC4's Gemini half did not land in this send: the denied tool call emptied the whole reply, so no reading was delivered and the status is `empty`, not `ok`; the runner and the body treated that correctly as a failed run (the roster's "an empty response is a failed run whatever the status flag says"). The plan foresaw a second Gemini run "on Tony's word" for AC6; the same word would cover a plain read with no write ask for AC4's `ok`. New trap for the Gemini guide (Slice I): a Gemini mandate must never ask the reader to write, because a denied tool call costs the entire answer.
 
 ## Live-send tally
 
 - GPT: one send (AC8, `gpt-astra`, `starved`), of the two the plan allows.
-- Gemini: none yet (one allowed; pending Tony's word).
+- Gemini: one send (AC4/AC6 combined run, `starved`, status `empty`, write denied), the one the plan allows; a second for AC4's `ok` waits on Tony's word.
 - Claude subagent calls (not outside spend): AC4, AC5, the packet-only read, AC8's `c1`, plus the two first-attempt runs that failed before any reader spawned, and one Workflow launched from the builder's session to prove the working-directory script path.
 - `OPENROUTER_API_KEY` was never read or printed; the regression's OpenRouter cases ran under a placeholder value and `READERS_TEST=1` with canned replies, sending nothing.

@@ -125,13 +125,13 @@
       ],
       "eligibility": "not classified",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "sandbox-enforced",
+        "packet-only": "sandbox-enforced",
         "repo": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md). Host lane: the skill body calls the MCP tool with the model id and cwd `readers compose` prints and the prompt it composed (fixed web-forbidding prefix, then the mandate and documents); the reply is handed to `readers record --transport-status <flag>`. Lane built in Slice C.",
+      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md). Host lane: the skill body calls the MCP tool with the model id and cwd `readers compose` prints and the prompt it composed (fixed web-forbidding prefix, then the mandate and documents); the reply is handed to `readers record --transport-status <flag>`. Lane built in Slice C. Write guard measured 2026-09-06 (docs/evidence/readers/slice-c-host-runs.md, AC6): with skip_permissions omitted, a mandate asking the reader to create wrote.txt in its working directory was auto-denied by the tool's permission gate (`a tool required the \"write_file\" permission that headless mode cannot prompt for, so it was auto-denied`) and the directory stayed empty, so starved is `sandbox-enforced`; packet-only inherits the label (same guard, same tool). The trap that came with it: the denied tool call emptied the whole reply (status `empty`, no reading delivered), so a mandate must never ask a Gemini reader to write. repo stays unmeasured.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
