@@ -54,7 +54,7 @@ Every line traces to Tony's words or an answered question. The skill records; it
 
 **The out-of-scope channel.** When Tony rules something out — an option rejected, a feature deferred, a direction declined — it lands in the doc's `Out of scope:` section with the reason, not as a Decisions line. Those lines are /blueprint's descope evidence, they trace to Tony's words or an answered question like everything else, and they are what the report's `out of scope N` counts.
 
-**Suggest only, never act.** When the idea deserves an outside panel, the skill may say "this smells like a /jpb" (Tony's multi-model product-box consensus skill, `~/Developer/tony-skills/plugins/jpb/`) in one line. When a question needs something concrete to react to, it may say "this would be easier with a throwaway to look at." That is the ceiling: it never invokes a skill, never builds a prototype (or anything else), never queues anything. The suggestion is one line; acting on it is Tony's.
+**Suggest only, never act.** When the idea deserves an outside panel, the skill may say "this smells like a /jpb" (Tony's multi-model product-box consensus skill, `~/Developer/tony-skills/plugins/jpb/`) in one line. When a question needs something concrete to react to, it may say "this would be easier with a throwaway to look at." That is the ceiling: it never invokes a skill (except `/readers`, the loop's reader component, for the exit test), never builds a prototype (or anything else), never queues anything. The suggestion is one line; acting on it is Tony's.
 
 **The scope doc.** Written to `<repo>/docs/scope/<YYYY-MM-DD>-<idea>.md` (the repo doc kit's layout: `docs/scope/` is precon's folder, names inside are date-topic; create the folder on first use) — the repo the idea unambiguously belongs to, whether or not the session was invoked inside it, with that call ledgered as `assumed` when it wasn't; when no repo owns the idea, `~/Documents/<idea>-scope.md` — the pre-repo staging home, which /sunrise empties into the new repo's `docs/` when it creates the repo. The doc is born at the first settled ledger line — always after triage, so a napkin idea ruled "no scope doc" never leaves an orphan file. `<idea>` is a kebab-case slug of the idea's working name; when the name isn't obvious, settling it is a round-one question, and a re-invocation looks for an existing doc under that slug in three places (`docs/scope/*-<idea>.md`, the older flat `docs/<idea>-scope.md`, and `~/Documents/<idea>-scope.md`) before creating anything — rule 8 depends on the slug matching. The path is printed in the report block; relocating the doc is Tony's or /sunrise's (its staged-doc adoption step, when it creates the repo), never this skill's. The format is load-bearing — these are the sections /blueprint Step 1 is meant to harvest once its deferred one-line edit lands; until then Tony points /blueprint at the doc himself — so keep it exact:
 
@@ -74,19 +74,23 @@ Next: /blueprint when ready.
 
 ## Step 5 — Exit test
 
-When the frontier empties — no settled-prerequisite questions remain — offer the cold read as one numbered question with a ➡️ recommendation:
+When the frontier empties — no settled-prerequisite questions remain — offer the cold read as one numbered question with a ➡️ recommendation. The readers are roster rows of `/readers`, the loop's reader component (`readers-protocol: 1`; every request this skill sends carries `protocol_version: 1`). Before the question, mint a run id for the sitting and summon `/readers suggest claude-session,gpt-astra,gpt-sol,gemini,deepseek,qwen --run <run id>`; the question shows its result beside each row — the model that row would send and any drop note — so Tony picks against what will actually run:
 
-1. **Local Claude reader** (➡️ the recommendation and the default) — a fresh zero-context subagent reads the scope doc read-only and reports its confusions in chat.
-2. **GPT via the codex MCP** — `gpt-5.6-sol` pinned, or another GPT model on Tony's pick. This is external: it sends only on Tony's explicit word in this run, never by default. The call carries `config: {web_search: disabled}` — a reader that can search answers its own questions instead of reporting them, and the cold read is contaminated. Transport only is borrowed from jpb (`mcp__codex__codex`; the pinned id and its refresh procedure live in `~/Developer/tony-skills/plugins/jpb/skills/jpb/SKILL.md`) — none of jpb's box mandate or verdict machinery comes with it.
+1. **Claude** (➡️ the recommendation and the default) — row `claude-session`: a fresh zero-context subagent reads the scope doc read-only and reports its confusions in chat. Needs no word.
+2. **An outside row** — `gpt-astra` (the default GPT row), `gpt-sol`, `gemini`, `deepseek`, or `qwen`, at the model `suggest` showed, or another id Tony types against that row. This is external: it sends only on Tony's explicit word in this run, never by default. The reader gets no web tool on any row — a reader that can search answers its own questions instead of reporting them, and the cold read is contaminated. The ids, their refresh rule, and the transport live in the roster; this skill pins none of them.
 3. **Decline** — a clean path; the doc stands as written.
+
+Tony may name several readers in one answer. Each named reader runs as its own `/readers` call under the sitting's run id, and each gets its own verbatim section and its own disposition in the cold-read doc.
+
+On the answer, summon `/readers` with one request per named reader: `row` the roster row id, `documents` the scope doc as the single document, `profile: starved`, `mandate` the cold-reader prompt below, `protocol_version: 1`, `run_id` the sitting's, a `call_id` per reader, `session_model` on `claude-session` only (the model id the session reports for itself), and `authorized: true` only on an outside row that Tony's word in this run named — never on a Claude row, never carried over from an earlier sitting.
 
 The reader gets a cold-reader prompt with zero context supplied: read this scope doc — what's unclear, what would you ask before building this?
 
-**The cold-read doc.** The reader's findings are Tony's to review, never the session's to filter invisibly. Before any triage, write the output verbatim to `<repo>/docs/reviews/<YYYY-MM-DD>-precon-cold-read-<idea>.md` when the scope doc is repo-owned (create `docs/reviews/` on first use), or to `~/Documents/precon-cold-reads/<idea>-cold-read-<date>.md` when the scope doc is staged in `~/Documents`; as triage happens, add a summary at the top saying what was taken and what was left behind, and a disposition marking every item `surfaced` (put to Tony), `absorbed` (folded into the doc), or `left downstream` (blueprint-altitude, with the why). The scope doc's `Research:` section gets the pointer. Returned confusions reopen branches: back to Step 3 for whatever they surface. No other readers exist — there is no multi-model panel.
+**The cold-read doc.** The reader's findings are Tony's to review, never the session's to filter invisibly. Before any triage, write each reader's `raw_text` verbatim (from its `READERS:` result) to `<repo>/docs/reviews/<YYYY-MM-DD>-precon-cold-read-<idea>.md` when the scope doc is repo-owned (create `docs/reviews/` on first use), or to `~/Documents/precon-cold-reads/<idea>-cold-read-<date>.md` when the scope doc is staged in `~/Documents` — one section per reader, headed by the row and the effective model the result names, with the sidecar path noted under the heading; as triage happens, add a summary at the top saying what was taken and what was left behind, and a disposition marking every item `surfaced` (put to Tony), `absorbed` (folded into the doc), or `left downstream` (blueprint-altitude, with the why). A call whose `READERS:` status is not `ok` is reported in chat by that status and reason and gets no section; a retry is a new call on Tony's word again. The scope doc's `Research:` section gets the pointer. Returned confusions reopen branches: back to Step 3 for whatever they surface.
 
 ## Step 6 — The gate
 
-The sitting ends by reading the record back — the ledger's decisions, assumptions, parked items, and open threads — and stopping. Ending requires a one-line written justification that every branch was visited or explicitly parked. Then a full stop: the skill never starts building and never auto-invokes /blueprint (or any other skill). "Precon it and blueprint it" is Tony collapsing the gate in his invocation; the skill never assumes it.
+The sitting ends by reading the record back — the ledger's decisions, assumptions, parked items, and open threads — and stopping. Ending requires a one-line written justification that every branch was visited or explicitly parked. Then a full stop: the skill never starts building and never auto-invokes /blueprint (or any other skill, except `/readers`, the loop's reader component, for the exit test). "Precon it and blueprint it" is Tony collapsing the gate in his invocation; the skill never assumes it.
 
 ## The rules
 
@@ -96,7 +100,7 @@ The sitting ends by reading the record back — the ledger's decisions, assumpti
 4. **Facts are looked up, decisions are asked.** Never ask what the repo or docs can answer.
 5. **Record, don't decide.** Every ledger line traces to Tony's words or an answered question. Unsettled means `open` or `parked`.
 6. **Questions earn their slot.** Ask only where the answer could plausibly differ from the recommendation; the rest are logged as `assumed` with the why.
-7. **Suggest only, never act.** One-line pointers to /jpb or a throwaway are the ceiling. No invoking, no building, no queuing — and anything external sends only on Tony's word in that run.
+7. **Suggest only, never act.** One-line pointers to /jpb or a throwaway are the ceiling. No invoking (except `/readers`, the loop's reader component, for the exit test), no building, no queuing — and anything external sends only on Tony's word in that run.
 8. **One living doc.** Re-invocation continues the existing scope doc in place; never fork a second one.
 9. **The gate is real.** Read back, justify the ending in one written line, stop.
 
@@ -119,7 +123,7 @@ When executing this skill required working around, reinterpreting, or excepting 
 
 - Don't research or leave the property — no web, no research docs, no research subagents. Park it instead.
 - Don't ask what the property can answer — look it up.
-- Don't invoke any skill, ever — not /jpb, not /blueprint, not a research dispatch. Suggesting in one line is the ceiling.
+- Don't invoke any skill, ever — not /jpb, not /blueprint, not a research dispatch — except `/readers`, the loop's reader component, for the exit test. Suggesting in one line is the ceiling.
 - Don't build anything, prototypes included — "a throwaway would help" is something to say, not do.
 - Don't send anything to an external model without Tony's explicit word in that run.
 - Don't drip questions one at a time — batch them into rounds.
