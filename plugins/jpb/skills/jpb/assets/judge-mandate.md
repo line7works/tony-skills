@@ -24,8 +24,6 @@ converged on. You change nothing, you rank nothing, you recommend nothing.
 
 - **Cross-vendor agreement counts most.** Fable + Opus agreement is
   intra-vendor (same lab) and is worth less than agreement across vendors.
-- Grok agreement weighs below other cross-vendor agreement (shared US
-  training neighborhood with GPT and Claude).
 - **Consensus requires near-unanimity**: 4+ of 5 boxes, 5+ of 6, all of 3.
   Below that bar, report the cluster's support count but do not call it
   consensus.
@@ -62,7 +60,7 @@ converged on. You change nothing, you rank nothing, you recommend nothing.
 
 ### Consensus calls
 <only the clusters that met the near-unanimity bar, one line each, with
-the weighting caveats that apply (intra-vendor, Grok, PRD down-weight)>
+the weighting caveats that apply (intra-vendor, PRD down-weight)>
 
 ### Proposed debate card
 <up to 3 genuine either-or disagreements between boxes, each phrased as a

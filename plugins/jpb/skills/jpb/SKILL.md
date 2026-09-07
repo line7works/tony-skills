@@ -3,7 +3,7 @@ name: jpb
 description: >-
   Jon's Product Box — a consensus instrument that vets an idea before it has a
   name. Three to six independent frontier-model "box teams" (GPT, Fable, Opus,
-  Gemini, DeepSeek, Grok) each receive the same scrubbed brief with an identical
+  Gemini, DeepSeek, Qwen) each receive the same scrubbed brief with an identical
   mandate and fill a strict product-box template; the run produces one output
   doc holding the scrubbed brief and every box verbatim. Use when Tony says
   "/jpb <idea or path>", "run the product box on this", "box this idea", or
@@ -44,23 +44,42 @@ pointed questions (who is it for, what does it do, what exists already,
 what's the constraint) and stop. The run resumes only when Tony supplies
 more.
 
-## Step 2 — Preflight: roster freshness
+## Step 2 — Preflight: the roster, through readers
 
-Before the approval ask, re-verify the pinned roster and look for newer
-frontier models per vendor:
+The six boxes and both judges are calls on roster rows of `/readers`, the
+loop's reader component (`readers-protocol: 1`; every request this skill
+sends carries `protocol_version: 1`). The model ids, efforts, windows,
+budgets, sandboxes, no-web parity lines, and transports live in readers'
+roster; this skill pins none of them, and a roster row moves only by PR on
+Tony's word, never mid-run (`assets/box-runners.md` says where each of the
+old recipes' recorded traps now lives). Before the approval ask, every run:
 
-1. `curl -s https://openrouter.ai/api/v1/models` — confirm the pinned
-   `deepseek/deepseek-v4-pro` and `x-ai/grok-4.5` still exist, and scan
-   `deepseek/*` and `x-ai/*` entries for ids with a newer `created`
-   timestamp that read as frontier successors (ignore minis/distills).
-2. `~/.codex/models_cache.json` — confirm `gpt-5.6-sol`; note any newer
-   `gpt-*` frontier variant.
-3. antigravity `list_models` — confirm `gemini-3.1-pro-high`; note newer.
-
-A pinned id that no longer exists marks that box dropped-with-reason (the
-run continues if ≥3 boxes remain). Anything newer becomes a suggestion line
-in the approval ask ("newer model available: X — switch?"). **Pinned ids
-change only on Tony's word, and never mid-run.**
+1. Mint a fresh run id for this run — one path segment, characters
+   `[A-Za-z0-9._-]` only (readers refuses anything else as
+   `invalid-request`), e.g. `jpb-<YYYYMMDD>-<four hex>` — and make the run
+   directory (`mktemp -d`, a scratch path outside any repo). Every request
+   below carries that directory as `run_dir` and the suggest carries it as
+   `--run-dir`, so the whole run resolves from one frozen snapshot. Nothing
+   is ever re-sent under this run id: a call id is single-use, and a rerun
+   of the exercise is a fresh Step 1–7 run with a fresh run id.
+2. Summon `/readers suggest
+   claude-fable,claude-opus,gpt-astra,gemini,deepseek,qwen,claude-session
+   --run <run id> --run-dir <run dir>` — one call, every row the run
+   touches. This is the roster freshness check: per row it reports the
+   model the run would send (a remembered pick or the roster default),
+   whether the row is outside, whether it is available, and any drop note;
+   its first call freezes the run, so the model the ask shows is the model
+   that sends. A row `suggest` reports unavailable is that box
+   dropped-with-reason before the ask (the run continues if ≥3 boxes
+   remain); a drop note (a remembered pick readers dropped) is shown in the
+   ask beside its row as-is, and the row sends the model `suggest` now
+   shows. The old "newer model available" scan is gone: a newer model is a
+   roster PR on Tony's word, never a run-time suggestion.
+3. Confirm the Workflow tool is among this session's tools. The Fable and
+   Opus boxes (`starved`, effort pinned) and Judge K route through it;
+   without it readers returns `lane-unavailable` for those calls, and a
+   failed Judge K is a failed run (Step 8) — so a session without the tool
+   stops here and says so, before any ask and before any spend.
 
 ## Step 3 — Scrub
 
@@ -79,33 +98,73 @@ run with the honest state.
 
 Show Tony, in chat:
 - the scrubbed brief in full,
-- a one-line cost estimate (OpenRouter boxes are the only marginal dollars;
-  short brief ≈ a penny or two, PRD-length ≈ tens of cents),
-- the roster: which boxes will launch, any dropped-with-reason,
-- any freshness suggestions from Step 2.
+- a one-line cost estimate (the OpenRouter boxes, DeepSeek and Qwen, are
+  the only marginal dollars; short brief ≈ a penny or two, PRD-length ≈
+  tens of cents),
+- the roster as seven enumerated calls, each with the model `suggest`
+  showed for its row and any drop note: the six boxes — `claude-fable`,
+  `claude-opus`, `gpt-astra`, `gemini`, `deepseek`, `qwen` — and, seventh,
+  Judge G on the GPT row (`gpt-astra`, the same model as the GPT box); a
+  box dropped at Step 2 is listed as dropped-with-reason below the seven,
+- beneath the seven, one line for Judge K: row `claude-session`, this
+  session's own model (name the id the session reports for itself —
+  `suggest` shows the placeholder `session` for this row), a Claude call
+  that needs no word.
 
-Then STOP and wait. No box launches before Tony approves. "Go" approves the
-roster as shown; a model-switch instruction updates the pinned id for this
-and future runs (record it in the run doc's roster).
+Then STOP and wait. No box launches before Tony approves. "Go" approves
+the seven calls exactly as shown, and that answer is the word for the five
+outside calls among them (the GPT, Gemini, DeepSeek, and Qwen boxes, and
+Judge G): `authorized: true` goes on those five requests and on nothing
+else — never on a Claude call, never inferred, never carried over from
+another run. A model switch is an id Tony types against a row ("GPT box on
+gpt-5.6-sol"): it is passed as `model` on every call on that row in this
+run (the box, and Judge G when the row is the GPT row) and readers
+remembers it as an explicit pick for future runs, so the next run's
+`suggest` shows it as the row's model; record the switch in the run doc's
+roster. A switch is never a different row — the rows are fixed, the id is
+his. "Skip <box>" drops that box with the reason "Tony's word" and the run
+continues if three or more boxes remain. If anything re-asks after a change
+(a fresh run's `suggest` showing a different model beside a row), the send
+goes out under the model he saw, never under one he did not.
 
 ## Step 5 — Fleet launch
 
-Execute `assets/box-runners.md` verbatim — it is the mechanism, not a
-reference. Per run:
+The launch is one `/readers` fleet of six calls under this run's id,
+launched together (readers runs the portable rows in the background and the
+host rows through their tools in one message), each with ZERO shared
+context: a box receives the prompt readers composes from its request — the
+mandate and the brief, plus readers' fixed reader instruction on the Claude
+rows — never chat history, never another box's output.
 
-- Compose the one prompt every box receives: `assets/box-mandate.md` with
-  `[TEMPLATE]` replaced by `assets/box-template.md`, then
-  `\n---\n\nThe brief:\n\n` + the scrubbed brief.
-- Launch all reachable roster boxes in parallel with ZERO shared context:
-  each invocation contains only the composed prompt — never chat history,
-  never another box's output. Routes and guards per box-runners.md
-  (OpenRouter via `assets/openrouter-box.sh`; Fable/Opus via
-  `assets/claude-boxes.workflow.js` with the prompt embedded in the script
-  body, never via Workflow `args`; GPT via codex MCP; Gemini via
-  antigravity MCP — each with its recorded parity mechanism).
-- Validate every returned box with `assets/validate-box.py`. INVALID →
-  that box is dropped, the validator's reasons recorded. Guard-FAILED →
-  dropped, the guard's reason recorded.
+- Compose the one mandate every box receives, jpb's as before:
+  `assets/box-mandate.md` with `[TEMPLATE]` replaced by the full contents of
+  `assets/box-template.md`, written to `<run dir>/box-mandate.md`. Write the
+  scrubbed brief to `<run dir>/brief.md`; it travels as each request's one
+  document, so the composed prompt is the mandate, then the brief delimited
+  as `<<<DOCUMENT brief.md>>>` … `<<<END DOCUMENT>>>` (readers' contract,
+  Prompt composition) where the old separator line stood.
+- Six requests, one per box row, identical except for the row-specific
+  fields: `protocol_version: 1`, `run_id` this run's, `run_dir` this run's
+  directory, `call_id` `<run id>-box-<row>`, `row` the box's row, `mandate`
+  `<run dir>/box-mandate.md`, `documents` `["<run dir>/brief.md"]`,
+  `profile: starved`, `raw_path` `<run dir>/boxes/<row>.md`, `effort: high`
+  on the rows that accept one (`claude-fable`, `claude-opus`, `gpt-astra`;
+  `gemini`'s effort is the suffix of its roster id and DeepSeek and Qwen take
+  none, so those three carry no `effort`), `authorized: true` on the four
+  outside boxes only, and `model` only where Tony typed an id against that
+  row at approval. No `session_model`: no box runs on `claude-session`.
+- Each `READERS:` line is one box's result. `ok` means the box text is at
+  its `raw_path` (readers' verbatim copy; the `raw.md`, sidecar, and
+  diagnostics under `<run dir>/<call id>/` are the evidence and are never
+  edited). Any other status — `lane-unavailable`, `unauthorized`, `empty`,
+  `incomplete`, `transport-failed`, `oversize`, any refusal — is that box
+  dropped, with the status and the sidecar's `reason` recorded; never
+  retried, never re-sent under another id (one box per model per run).
+- Validate every `ok` box's copy with `assets/validate-box.py <raw_path>`.
+  INVALID → that box is dropped, the validator's reasons recorded.
+- A box's no-web parity and isolation record are its sidecar's `parity` and
+  `isolation` fields — what readers recorded for the row and profile, never
+  a sentence typed here.
 - **Minimum three** template-valid boxes or the run aborts with a plain
   message naming what failed; failed/dropped boxes are recorded with
   reasons and the run otherwise continues.
@@ -113,9 +172,22 @@ reference. Per run:
 ## Step 6 — Cost actuals
 
 Dollars only — Tony's rule (2026-08-09): record real money for anything
-API-billed; no token counts anywhere. For each OpenRouter box, read the
-generation id from the run's `.raw` response and fetch the actual billed
-USD: `assets/openrouter-cost.sh <raw-file>`. Sum an OpenRouter total.
+API-billed; no token counts anywhere. For every OpenRouter box (DeepSeek,
+Qwen) whose sidecar carries a `response_raw` path — `ok`, `incomplete`,
+`empty`, or `transport-failed` alike: readers saves the body whatever the
+status, and a body that carries a generation id (the sidecar's
+`generation_id` is set) was billed whether or not the box survived Step 5
+— take that path (readers' copy of the exact HTTP body,
+`<run dir>/<call id>/response.raw`) and fetch the actual billed USD:
+`assets/openrouter-cost.sh <response_raw>` (the script reads the body's
+top-level `id`, unchanged). Every box's dollars, dropped boxes included,
+go in the frontmatter cost block (Step 7), one line per box, and the
+OpenRouter total is their sum; a dropped box's cost line names it
+dropped. A `response_raw` whose sidecar has no `generation_id` (a non-200
+or error body: the provider refused the request and billed nothing)
+records the cost line "no charge (provider error, no generation id)"
+without running the script. A box with no `response_raw` (refused before
+any send) records nothing.
 Subscription boxes (Fable, Opus, GPT) each record a cost line of: a
 dollar sign, the digit zero, an em dash, then "subscription" — per the
 vision doc's format. Gemini records the same zero-dollar figure followed
@@ -125,12 +197,13 @@ dollar-sign-zero appearing in this file; the run doc itself carries the
 normal dollar figure exactly as the vision doc and prior run docs write
 it.)
 
-If the cost fetch FAILS (script exit 1): do NOT delete that `.raw`. Record
-the box's cost line as "unavailable (generation id <id>; raw kept at
-<path>)" so the cost stays recoverable, and move on — a cost-fetch failure
-never fails the run. Only after a box's cost is recorded (or its id
-preserved in the doc) is its `.raw` deleted, and raw files never live in
-or beside the doc's directory.
+If the cost fetch FAILS (script exit 1): record the box's cost line as
+"unavailable (generation id <the sidecar's `generation_id`>; response.raw
+kept at <response_raw>)" so the cost stays recoverable, and move on — a
+cost-fetch failure never fails the run. `response.raw` is readers'
+run-directory evidence: this skill never deletes or rewrites it, whatever
+the cost fetch did, and raw files never live in or beside the doc's
+directory (the run directory is scratch, outside any repo).
 
 ## Step 7 — Output doc
 
@@ -141,16 +214,22 @@ reruns never overwrite.
 
 Frontmatter: `status: open`, run date, roster (which model filled which
 box, which were dropped and why, any id switch Tony ordered), a `parity:`
-block — one line per box recording its no-web parity fact exactly as
-box-runners.md defines it (OpenRouter: "no :online suffix"; GPT:
-"web_search: disabled"; Fable/Opus: "toolCalls: 0"; Gemini: "plan mode,
-skip_permissions off, neutral cwd, non-empty response") — and the cost
-block (per-box billed USD + OpenRouter total). A box whose parity line
-cannot be truthfully written is dropped-with-reason, per box-runners.md.
+block — one line per box recording its no-web parity fact exactly as the
+box's sidecar `parity` field reads (readers' line for the row under
+`starved`: DeepSeek and Qwen "no :online suffix"; GPT "web_search:
+disabled …"; Fable/Opus "toolCalls: 0"; Gemini "skip_permissions off, cwd =
+fresh empty dir, non-empty response") — and the cost block (per-box billed
+USD + OpenRouter total). A box whose parity line cannot be truthfully
+written — its status was not `ok`, or its sidecar carries no `parity` — is
+dropped-with-reason.
 
 Body, in order: the scrubbed brief, then every box VERBATIM under a
-vendor-labeled heading (`## GPT box — gpt-5.6-sol`, …), dropped boxes as a
-heading + reason. Nothing summarizes, ranks, or replaces the raw boxes; no
+vendor-labeled heading (`## GPT box — gpt-6-astra`, …), dropped boxes as a
+heading + reason. `<Vendor>` is the row's label — `claude-fable` Fable,
+`claude-opus` Opus, `gpt-astra` GPT, `gemini` Gemini, `deepseek` DeepSeek,
+`qwen` Qwen, the six names `render-page.py` and the styles JSON key on —
+and `<model-id>` is the effective model id the box's `READERS:` line
+carries (the harness names `fable` and `opus` on the two Claude rows). Nothing summarizes, ranks, or replaces the raw boxes; no
 recommendation language anywhere. **The vendor-heading pattern is a
 contract**: `## <Vendor> box — <model-id>` is exactly what Step 8 parses to
 hand the boxes to the judges — never vary it. A box runs from its vendor
@@ -174,30 +253,40 @@ skill exists to protect. Either way: STOP and report
 — judges are never re-run over a judged doc, and a rerun of the exercise is
 a fresh Step 1–7 run producing a new doc under the collision rule.
 
-Both judges receive an identical composed prompt and NOTHING else:
-`assets/judge-mandate.md` + `\n---\n\nThe scrubbed brief:\n\n` + the scrubbed
-brief + `\n---\n\nThe boxes:\n\n` + every filled box verbatim under its
-vendor-labeled heading (parsed from the doc by the `## <Vendor> box —
-<model-id>` contract above). No chat context, no repo context, and neither
-judge ever sees the other's tally — independence is structural, not
-promised.
+Both judges are `/readers` calls that receive an identical mandate and
+identical documents and NOTHING else: `mandate` `assets/judge-mandate.md`
+(by path); `documents` two files written into the run directory —
+`<run dir>/judge-brief.md` (the scrubbed brief) and `<run dir>/judge-boxes.md`
+(every filled box verbatim under its vendor-labeled heading, parsed from
+the doc by the `## <Vendor> box — <model-id>` contract above). Readers
+composes the prompt as the mandate, then the two documents delimited, the
+same for both rows (the Claude row's copy opens with readers' fixed reader
+instruction — the one difference). No chat context, no repo context, and
+neither judge ever sees the other's tally — independence is structural, not
+promised. One fleet of two calls, launched together under this run's id:
+`protocol_version: 1`, `run_id` this run's, `run_dir` this run's directory,
+`profile: starved`, `effort: high`, `raw_path` `<run dir>/judges/<judge>.md`.
 
-- **Judge K** — a fresh Claude subagent of the session-model class with
-  effort pinned high. The bare Agent tool has no effort parameter, so route
-  through the Workflow tool with the composed prompt embedded IN the script
-  body (never via `args` — the recorded trap), `agent(prompt, {label:
-  'judge-k', effort: 'high'})`, model omitted so it inherits the session
-  model. `assets/claude-boxes.workflow.js` is the committed pattern.
-- **Judge G** — `gpt-5.6-sol` via `mcp__codex__codex` with exactly the GPT
-  box's parity config: `model: "gpt-5.6-sol"`, `base-instructions`: the
-  judge mandate, `prompt`: the brief + boxes, `sandbox: "read-only"`,
-  `cwd`: a neutral empty directory, `config: {"web_search": "disabled"}`.
+- **Judge K** — one `claude-session` call, `call_id` `<run id>-judge-k`,
+  `session_model` the model id this session reports for itself (it becomes
+  the sidecar's effective model), no `authorized` (a Claude row never
+  carries it). The pinned effort routes it through the Workflow tool
+  (readers' committed script pattern; the prompt lives in the script body,
+  never in Workflow `args`), so it inherits the session model at effort
+  high, as before.
+- **Judge G** — one call on the GPT row, `row: gpt-astra`, `call_id`
+  `<run id>-judge-g`, `authorized: true` — the Step 4 approval's seventh
+  line is its word — and `model` only when Tony typed an id against the GPT
+  row at approval. Its read-only sandbox, neutral working directory, and
+  `web_search: disabled` parity are the row's, resolved by readers.
 
-Guards: an empty/null result is a FAILED judge. If Judge G fails or its
-parity can't be established, the run completes with Judge K alone and the
-doc says so plainly. Judge K failing is a failed run — report honestly and
-stop. Judges are never re-run to "get a better tally"; one tally per judge
-per run.
+Guards: a `READERS:` status other than `ok` (`empty` included) is a FAILED
+judge; a judge's tally is its `raw_text` (the copy at its `raw_path`). If
+Judge G fails or its parity can't be established (its sidecar carries no
+`parity` line), the run completes with Judge K alone and the doc says so
+plainly. Judge K failing is a failed run — report honestly and stop. Judges
+are never re-run to "get a better tally"; one tally per judge per run, and
+no call is ever re-sent under this run's id.
 
 ## Step 9 — Reconciliation + debate card (mechanical)
 
@@ -375,7 +464,12 @@ reads `status: closed` — say so and stop.
 - Never let a box see chat context or another box's output, and never let a
   judge see chat context or the other judge's tally.
 - Never edit, trim, or paraphrase a box in the doc — verbatim or dropped.
-- Never change a pinned model id without Tony's word.
+- Never pass a `model` Tony didn't type at this run's approval, and never
+  move a roster row — that is a readers PR on his word, never a run.
+- Never put `authorized: true` on a call the approval didn't enumerate, and
+  never on a Claude call.
+- Never edit readers' `raw.md`, a sidecar, or `response.raw`; the run
+  directory is evidence.
 - Never write the output doc anywhere but the two sanctioned homes, and
   never overwrite an existing run doc.
 - Never put an API key in the doc, the chat, or the repo.
