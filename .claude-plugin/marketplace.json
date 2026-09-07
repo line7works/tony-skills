@@ -58,7 +58,7 @@
     {
       "name": "inspect",
       "source": "./plugins/inspect",
-      "description": "/inspect plan-checks a /blueprint build doc BEFORE /build runs it — traceability, code-book, and repo-reality lenses, inspector chosen per run (Claude / GPT / Gemini / DeepSeek / local Qwen), verdict APPROVED / WITH CONDITIONS / REJECTED stamped with the inspector's model id. The building department of the loop.",
+      "description": "/inspect plan-checks a /blueprint build doc BEFORE /build runs it — traceability, code-book, and repo-reality lenses, inspector chosen per run from the readers roster (Claude / GPT / Gemini / DeepSeek / Qwen), verdict APPROVED / WITH CONDITIONS / REJECTED stamped with the inspector's model id. The building department of the loop.",
       "tags": [
         "review",
         "plan-check",

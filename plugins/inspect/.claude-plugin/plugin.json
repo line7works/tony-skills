@@ -1,6 +1,6 @@
 {
   "name": "inspect",
-  "description": "/inspect is the plan-check station of the build loop: an adversarial review of a /blueprint build doc BEFORE /build runs it, by an inspector chosen at summon — Claude subagents, GPT, Gemini, DeepSeek, or local Qwen. Three lenses (traceability, blueprint's own rules as the code book, repo reality), verdicts APPROVED / WITH CONDITIONS / REJECTED, every verdict stamped with the inspector's model id. Strictly user-invoked.",
+  "description": "/inspect is the plan-check station of the build loop: an adversarial review of a /blueprint build doc BEFORE /build runs it, by an inspector chosen at summon from the readers roster — Claude, GPT, Gemini, DeepSeek, or Qwen. Three lenses (traceability, blueprint's own rules as the code book, repo reality), verdicts APPROVED / WITH CONDITIONS / REJECTED, every verdict stamped with the inspector's model id. Strictly user-invoked.",
   "author": {
     "name": "Tony Coon",
     "email": "tonycoon@gmail.com"
