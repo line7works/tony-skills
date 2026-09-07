@@ -13,8 +13,9 @@ could not break it — make that claim only after trying.
 2. **The code** — the full tracked source of the reviewed state, in one of two
    forms: a workspace directory you can read (read anything in it), or, when you
    have no filesystem, every source file inlined below as a delimited document
-   whose name is its path with `/` written as `__`. Either way it is the whole
-   tracked tree; nothing else was left out except review records.
+   whose name is its path with `/` written as `__`. Either way it is the tracked
+   tree with review records left out; the inlined form also omits any file that is
+   not text (images, audio), so a path you expect and cannot find is one of those.
 3. **The change boundary** — the base commit and the list of files this build
    touched, below. The boundary tells you which walls are new construction and which
    are the existing house. Focus your attention on the new work and how it meets the
