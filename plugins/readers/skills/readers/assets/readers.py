@@ -222,6 +222,14 @@ def memory_update(mutate):
     return data, "ok"
 
 
+def typed_pick(req, row):
+    """The id Tony typed for this call when it is a real pick: the request's `model`, present and other than the
+    row's own default. The resolved `effective_model` is never the test: on claude-session the roster's
+    `session` placeholder resolves to the harness-reported id, which is not a pick and is never remembered."""
+    m = req.get("model")
+    return m if m and m != row["model"] else None
+
+
 def remember_pick(row, model):
     """Written when a call is dispatched with an explicit pick that differs from the row's default."""
     def mutate(data):
@@ -1167,9 +1175,11 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
         json.dump(meta, f, indent=2, sort_keys=True)
     log_dispatch(call_dir, "compose %s route=%s model=%s effort=%s profile=%s (the skill body runs the lane; record follows)" % (
         row["transport"], route, result["effective_model"], result["effective_effort"], req["profile"]))
-    if result["override_source"] == "explicit pick" and result["effective_model"] != row["model"]:
-        # Slice B R4 on the host lanes: compose is the dispatch, so the pick is remembered here
-        result["memory"] = remember_pick(row, result["effective_model"])
+    pick = typed_pick(req, row)
+    if pick is not None:
+        # Slice B R4 on the host lanes: compose is the dispatch, so the pick is remembered here (the typed id,
+        # never the resolved one: a typed `session` placeholder resolves to the harness id and is no pick)
+        result["memory"] = remember_pick(row, pick)
     out = dict(meta)
     out["memory"] = result["memory"]
     out["snapshot_fault"] = result["snapshot_fault"]
@@ -1202,6 +1212,10 @@ def host_record(req, row, prompt, result, call_dir, diag, host):
     n = host.get("tool_calls")
     if meta.get("route") == "workflow" and not host.get("failed") and n is None:
         raise Refuse("invalid-request", "record needs --tool-calls <count> on the Workflow route (the run record's tool_uses); call %s keeps its id" % result["call_id"], nowrite=True)
+    if text is None and not host.get("failed"):
+        # REVIEW.md repo check (2), MAJOR for readers: no artefact (diagnostics/, dispatch.log, the .readers/
+        # copy removed) before a refusal that records nothing
+        raise Refuse("invalid-request", "record needs --capture <file> or --failed <reason>", nowrite=True)
     remove_script_in_cwd(meta.get("script_path"))
     for k in ("started_at", "workdir", "workdir_instruction_files", "profile"):
         result[k] = meta.get(k)
@@ -1218,8 +1232,6 @@ def host_record(req, row, prompt, result, call_dir, diag, host):
             with open(os.path.join(diag, "partial.md"), "w", encoding="utf-8") as f:
                 f.write(text)
         raise Refuse(host.get("status") or "transport-failed", host["failed"])
-    if text is None:
-        raise Refuse("invalid-request", "record needs --capture <file> or --failed <reason>", nowrite=True)
     if row["transport"] == "claude-subagent" and req["profile"] in ("starved", "packet-only"):
         if n is None:
             result["parity"] = "toolCalls: not reported"
@@ -1309,10 +1321,11 @@ def run(req, dispatching, host=None):
         result["diagnostics"] = diag
         result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
         launched = True
-        if result["override_source"] == "explicit pick" and result["effective_model"] != row["model"]:
+        pick = typed_pick(req, row)
+        if pick is not None:
             # R4: written when a call is dispatched with an explicit pick (the live file, never the snapshot).
             # Memory trouble never loses the call: the pick is sent regardless and the result says what happened.
-            result["memory"] = remember_pick(row, result["effective_model"])
+            result["memory"] = remember_pick(row, pick)
         text = adapter(req, row, prompt, result, call_dir, diag)
         capture(text, req, call_dir, result)
         return finish(result, call_dir, "ok")

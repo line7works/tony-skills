@@ -11,6 +11,7 @@
 - BLOCKER: data loss, auth bypass, a gate in AGENTS.md violated, a migration without a backup
 - MAJOR: a user-visible regression, a failing check that CI would catch
 - MINOR: everything else worth a line
+- readers: repo check (2) below (dispatch artefacts written before a refusal that sends nothing) is MAJOR for readers, never MINOR · Tony's word 2026-09-06 at the Slice C handoff ("Raise it to a major. Have it fixed on the next run")
 
 ## Repo-specific checks
 - (one line per recurring finding, added on the second occurrence)
