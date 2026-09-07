@@ -47,7 +47,7 @@
       "available": true,
       "reasoning": "n/a",
       "quirks": "Default GPT row (Tony, blueprint Q3: astra on low). The roster's effort_default low overrides models_cache.json's default_reasoning_level (medium) on purpose. codex-cli 0.153.4 refuses to run outside a git repo without --skip-git-repo-check. Prompt on stdin (-); final response via -o; event stream via --json on stdout. Isolation measured 2026-09-06 (docs/evidence/readers/slice-a-isolation.md): sentinel outside the packet dir readable under starved and packet-only (command_execution in the event stream); write attempted and refused by the sandbox under both (`operation not permitted`, codex rollout records quoted in the evidence doc; the --json stream did not surface that step).",
-      "guide": "",
+      "guide": "guides/gpt.md",
       "verified_at": "2026-09-06"
     },
     {
@@ -91,7 +91,7 @@
       "available": true,
       "reasoning": "n/a",
       "quirks": "Selectable GPT row. The roster's effort_default medium (plan assumption 10) overrides models_cache.json's default_reasoning_level (low) on purpose. Same transport and sandbox as gpt-astra; its isolation labels are inherited from gpt-astra's measurement (both halves measured 2026-09-06).",
-      "guide": "",
+      "guide": "guides/gpt.md",
       "verified_at": "2026-09-06"
     },
     {
@@ -132,7 +132,7 @@
       "available": true,
       "reasoning": "n/a",
       "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md). Host lane: the skill body calls the MCP tool with the model id and cwd `readers compose` prints and the prompt it composed (fixed web-forbidding prefix, then the mandate and documents); the reply is handed to `readers record --transport-status <flag>`. Lane built in Slice C. Write guard measured 2026-09-06 (docs/evidence/readers/slice-c-host-runs.md, AC6): with skip_permissions omitted, a mandate asking the reader to create wrote.txt in its working directory was auto-denied by the tool's permission gate (`a tool required the \"write_file\" permission that headless mode cannot prompt for, so it was auto-denied`) and the directory stayed empty, so starved is `sandbox-enforced`; packet-only inherits the label (same guard, same tool). The trap that came with it: the denied tool call emptied the whole reply (status `empty`, no reading delivered), so a mandate must never ask a Gemini reader to write. repo stays unmeasured.",
-      "guide": "",
+      "guide": "guides/gemini.md",
       "verified_at": "2026-09-06"
     },
     {

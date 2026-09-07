@@ -26,9 +26,11 @@ self-contained ones (`huh`, `wargame`, `signoff`, `recheck`, `blueprint`,
 `build`, `ship`, `digest`) travel well. Others carry hard-wired paths into
 Tony's clone of this repo — `inspect` reads its code book from
 `~/Developer/tony-skills/...` at run time, `fb` routes loop notes to a file
-there, `precon` points at jpb by the same path — so they, like the
-machine-wired rest, are best read as reference implementations you adapt
-rather than run unmodified.
+there, and a shell-only harness with no plugin cache (Codex) runs `readers`
+from the checkout at
+`~/Developer/tony-skills/plugins/readers/skills/readers/assets/readers` — so
+they, like the machine-wired rest, are best read as reference implementations
+you adapt rather than run unmodified.
 
 ## The plugins
 
