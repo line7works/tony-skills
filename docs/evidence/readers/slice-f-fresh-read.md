@@ -168,3 +168,126 @@ After the seven validations both scratch run roots held nothing: `validate` crea
 ## What this slice does not prove
 
 A live `/vertical` run is deferred (Out of scope: it needs a fully signed-off build and Tony's call after this plan's own slices are signed off). The read above shows the rewritten skill yields valid requests from a cold read of the file; it does not show the summon returning captures, the local fleet's `raw_text` reaching the appendix, an outside reviewer's sidecar `profile` landing in the Method line, or a packet-only reviewer's path-encoded citations mapping back at the merge.
+
+## Fix pass (2026-09-07) — the read repeated against the fixed text
+
+The signoff's three in-footprint MAJORs changed the local fleet's shape (workspace a worktree Step 3 cuts at the reviewed head, no `isolation`), the suggest (`--floor opus`), and the launch (two summons in sequence), so the cold read was run again at de21386 with the same scenario plus the worktree at `<scratch>/vertical-run/worktree` (cut with `git worktree add --detach` at the reviewed head) and a fourth key asking which requests go out in each summon. Command as above; the prompt was:
+
+> Read the file plugins/vertical/skills/vertical/SKILL.md at its checkout path in this repo (use the Read tool on it; read nothing else). Scenario: a /vertical run on the build doc plugins/readers/skills/readers/assets/fixtures/smoke-doc.md (repo-relative path; every slice signed off, the gate passed); the repo root is <checkout> and REVIEW.md is present there with passes correctness on, security on, accessibility off, data-safety off; the run id is vertical-fresh-read-2; the run directory is <scratch>/vertical-run; Step 2's suggest has already run (every row available, no drop notes); Tony answered 'local + GPT + DeepSeek' (GPT on the default GPT row, no model typed); the base is 6d8f19d; Step 3 is done: the export sits at <scratch>/vertical-run/export, the worktree at <scratch>/vertical-run/worktree, the composed mandate at <scratch>/vertical-run/mandate.md, the local lens briefs at <scratch>/vertical-run/local-<lens>.md for the lenses signoff selects at LEAN depth plus the REVIEW.md passes marked on, and the DeepSeek packet is staged at <scratch>/vertical-run/packet-deepseek holding exactly three files: README.md, plugins__vertical__skills__vertical__SKILL.md, plugins__readers__skills__readers__assets__contract.md. Your system prompt names your model id; use it where the skill says to. Print ONLY the JSON request blocks this skill would send to /readers, as one JSON object with four keys: "local_fleet" (an array of the local lens request objects, the first summon), "gpt" (the GPT reviewer's request object), "deepseek" (the DeepSeek reviewer's request object), "summons" (an array of strings naming, in order, which requests go out in each summon) — absolute paths everywhere, no fence, no prose before or after it, and no other output.
+
+Output, verbatim (stdout; stderr was empty), pretty-printed here for reading:
+
+```
+{
+  "local_fleet": [
+    {
+      "protocol_version": 1,
+      "run_id": "vertical-fresh-read-2",
+      "run_dir": "<scratch>/vertical-run/readers",
+      "call_id": "vertical-fresh-read-2-local-spec",
+      "row": "claude-session",
+      "profile": "repo-with-tools",
+      "workspace": "<scratch>/vertical-run/worktree",
+      "documents": [
+        "<checkout>/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md",
+        "<checkout>/REVIEW.md"
+      ],
+      "mandate": "<scratch>/vertical-run/local-spec.md",
+      "floor": "opus",
+      "session_model": "claude-fable-5-1"
+    },
+    {
+      "protocol_version": 1,
+      "run_id": "vertical-fresh-read-2",
+      "run_dir": "<scratch>/vertical-run/readers",
+      "call_id": "vertical-fresh-read-2-local-correctness",
+      "row": "claude-session",
+      "profile": "repo-with-tools",
+      "workspace": "<scratch>/vertical-run/worktree",
+      "documents": [
+        "<checkout>/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md",
+        "<checkout>/REVIEW.md"
+      ],
+      "mandate": "<scratch>/vertical-run/local-correctness.md",
+      "floor": "opus",
+      "session_model": "claude-fable-5-1"
+    },
+    {
+      "protocol_version": 1,
+      "run_id": "vertical-fresh-read-2",
+      "run_dir": "<scratch>/vertical-run/readers",
+      "call_id": "vertical-fresh-read-2-local-seams",
+      "row": "claude-session",
+      "profile": "repo-with-tools",
+      "workspace": "<scratch>/vertical-run/worktree",
+      "documents": [
+        "<checkout>/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md",
+        "<checkout>/REVIEW.md"
+      ],
+      "mandate": "<scratch>/vertical-run/local-seams.md",
+      "floor": "opus",
+      "session_model": "claude-fable-5-1"
+    },
+    {
+      "protocol_version": 1,
+      "run_id": "vertical-fresh-read-2",
+      "run_dir": "<scratch>/vertical-run/readers",
+      "call_id": "vertical-fresh-read-2-local-security",
+      "row": "claude-session",
+      "profile": "repo-with-tools",
+      "workspace": "<scratch>/vertical-run/worktree",
+      "documents": [
+        "<checkout>/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md",
+        "<checkout>/REVIEW.md"
+      ],
+      "mandate": "<scratch>/vertical-run/local-security.md",
+      "floor": "opus",
+      "session_model": "claude-fable-5-1"
+    }
+  ],
+  "gpt": {
+    "protocol_version": 1,
+    "run_id": "vertical-fresh-read-2",
+    "run_dir": "<scratch>/vertical-run/readers",
+    "call_id": "vertical-fresh-read-2-gpt-astra",
+    "row": "gpt-astra",
+    "profile": "repo",
+    "workspace": "<scratch>/vertical-run/export",
+    "mandate": "<scratch>/vertical-run/mandate.md",
+    "authorized": true
+  },
+  "deepseek": {
+    "protocol_version": 1,
+    "run_id": "vertical-fresh-read-2",
+    "run_dir": "<scratch>/vertical-run/readers",
+    "call_id": "vertical-fresh-read-2-deepseek",
+    "row": "deepseek",
+    "profile": "packet-only",
+    "documents": [
+      "<scratch>/vertical-run/packet-deepseek/README.md",
+      "<scratch>/vertical-run/packet-deepseek/plugins__vertical__skills__vertical__SKILL.md",
+      "<scratch>/vertical-run/packet-deepseek/plugins__readers__skills__readers__assets__contract.md"
+    ],
+    "mandate": "<scratch>/vertical-run/mandate.md",
+    "output_budget": 32768,
+    "authorized": true
+  },
+  "summons": [
+    "summon 1 (local fleet): vertical-fresh-read-2-local-spec, vertical-fresh-read-2-local-correctness, vertical-fresh-read-2-local-seams, vertical-fresh-read-2-local-security",
+    "summon 2 (outside fleet, after the local merge and verification are written): vertical-fresh-read-2-gpt-astra, vertical-fresh-read-2-deepseek"
+  ]
+}
+```
+
+Each block validated the same way (`READERS_RUN_ROOT` at a scratch directory, a placeholder key; both run roots empty afterwards):
+
+```
+vertical-fresh-read-2-local-spec → valid
+vertical-fresh-read-2-local-correctness → valid
+vertical-fresh-read-2-local-seams → valid
+vertical-fresh-read-2-local-security → valid
+vertical-fresh-read-2-gpt-astra → valid
+vertical-fresh-read-2-deepseek → valid
+```
+
+The fixed suggest, session-run against a scratch memory seeded with a remembered `opus` on `claude-session` and a remembered `gpt-5.6-sol` on `gpt-astra`: `readers suggest claude-session,gpt-astra,gpt-sol,gemini,deepseek,qwen --run fx1 --run-dir <scratch>/fx1 --floor opus` dropped both picks with a drop note each (`typed id … is not classified against floor opus`) and showed the roster default beside every row; the Step 4 local request under that run on the worktree → `valid` (the same request under a floorless suggest of the same memory → `unknown-model`, the review's reproduction); a `gpt-astra` request re-typing `gpt-5.6-sol` as `model` with no floor → `valid`.
