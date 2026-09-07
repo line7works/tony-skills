@@ -1,0 +1,13 @@
+{
+  "call_id": "judge-k",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "effort": "high",
+  "mandate": "You are Judge K. Tally the boxes below per the judge mandate and return the tally only.",
+  "profile": "starved",
+  "protocol_version": 1,
+  "row": "claude-session",
+  "run_id": "example-jpb-judge",
+  "session_model": "claude-opus-5"
+}

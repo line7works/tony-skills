@@ -4,3 +4,6 @@ __pycache__/
 
 # /forge run output — images and manifests, not repo content
 generated-assets/
+
+# readers: the transient Workflow-script copy `readers compose` writes into the working directory and `readers record` removes (Tony, 2026-09-06)
+.readers/

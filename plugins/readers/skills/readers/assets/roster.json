@@ -109,7 +109,7 @@
       ],
       "context_window": "unknown",
       "max_output": "unknown",
-      "limits_source": "antigravity list_models (to be read in Slice C when the host lane is built)",
+      "limits_source": "antigravity list_models lists model ids only, no window or output-token field (checked 2026-09-06, agy 1.1.27, Slice C); tools/antigravity-mcp/README.md carries none either",
       "timeout_s": 900,
       "credential_env": "",
       "web_off": "the antigravity tool has no web switch; the mandate forbids web use",
@@ -125,13 +125,13 @@
       ],
       "eligibility": "not classified",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "sandbox-enforced",
+        "packet-only": "sandbox-enforced",
         "repo": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md).",
+      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md). Host lane: the skill body calls the MCP tool with the model id and cwd `readers compose` prints and the prompt it composed (fixed web-forbidding prefix, then the mandate and documents); the reply is handed to `readers record --transport-status <flag>`. Lane built in Slice C. Write guard measured 2026-09-06 (docs/evidence/readers/slice-c-host-runs.md, AC6): with skip_permissions omitted, a mandate asking the reader to create wrote.txt in its working directory was auto-denied by the tool's permission gate (`a tool required the \"write_file\" permission that headless mode cannot prompt for, so it was auto-denied`) and the directory stayed empty, so starved is `sandbox-enforced`; packet-only inherits the label (same guard, same tool). The trap that came with it: the denied tool call emptied the whole reply (status `empty`, no reading delivered), so a mandate must never ask a Gemini reader to write. repo stays unmeasured.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -237,14 +237,14 @@
       ],
       "eligibility": "session-dependent",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0)",
+        "packet-only": "harness-enforced (toolCalls: 0)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Inherits the session model; the skill body fills session_model on every request so the floor check has its input. Lane lands in Slice C.",
+      "quirks": "Inherits the session model; the skill body fills session_model on every request (the id its harness reports) so the floor check has its input and the sidecar's effective_model names the real id. Host lane (Slice C): starved, packet-only, and any pinned effort run through the Workflow route (assets/claude-boxes.workflow.js filled by `readers compose`; the run record's per-agent toolCalls goes to `readers record --tool-calls`); repo and repo-with-tools with no effort run as a general-purpose subagent through the Agent tool, in worktree isolation when the request says so. Isolation measured 2026-09-06 (docs/evidence/readers/slice-c-host-runs.md): starved and packet-only reads through the Workflow route returned with tool_uses 0 and the decoy read (AC5) quoted no file, reported no decoy line, and named no earlier finding; repo and repo-with-tools are instruction-bound and stay unmeasured.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -282,14 +282,14 @@
       ],
       "eligibility": "eligible",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0)",
+        "packet-only": "harness-enforced (toolCalls: 0)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Lane lands in Slice C.",
+      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call. Isolation labels for starved and packet-only inherited from claude-session's 2026-09-06 measurement: the same Workflow route and the same tool_uses count, with only the model name pinned.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -327,14 +327,14 @@
       ],
       "eligibility": "eligible",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0)",
+        "packet-only": "harness-enforced (toolCalls: 0)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Lane lands in Slice C.",
+      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call. Isolation labels for starved and packet-only inherited from claude-session's 2026-09-06 measurement: the same Workflow route and the same tool_uses count, with only the model name pinned.",
       "guide": "",
       "verified_at": "2026-09-06"
     }

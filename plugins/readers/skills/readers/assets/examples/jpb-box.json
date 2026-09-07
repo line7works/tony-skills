@@ -1,0 +1,13 @@
+{
+  "authorized": true,
+  "call_id": "box-gpt",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "effort": "high",
+  "mandate": "Fill the product box template for the brief below. Return only the completed box.",
+  "profile": "starved",
+  "protocol_version": 1,
+  "row": "gpt-astra",
+  "run_id": "example-jpb-box"
+}

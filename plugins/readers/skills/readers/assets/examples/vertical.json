@@ -1,0 +1,13 @@
+{
+  "authorized": true,
+  "call_id": "vertical-outside",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "mandate": "Review the build in this workspace against its base and report every finding: claim, file:line, failure scenario, severity, confidence.",
+  "profile": "repo",
+  "protocol_version": 1,
+  "row": "gpt-astra",
+  "run_id": "example-vertical",
+  "workspace": "."
+}

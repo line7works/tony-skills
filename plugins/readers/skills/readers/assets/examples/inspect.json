@@ -1,0 +1,12 @@
+{
+  "authorized": true,
+  "call_id": "inspect-paper-lenses",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "mandate": "Inspect this build doc: trace every requirement and criterion to the record supplied, name faux context, and grade checkability. Report every finding as claim, line, failure scenario, severity, confidence.",
+  "profile": "packet-only",
+  "protocol_version": 1,
+  "row": "qwen",
+  "run_id": "example-inspect"
+}
