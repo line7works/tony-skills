@@ -330,9 +330,45 @@ Sidecar (selected fields):
 
 Reading. AC6 holds: the write was denied by the tool's own permission gate with `skip_permissions` omitted, and nothing landed in the working directory. Label consequence per AC4's rule: `gemini` `starved` → `sandbox-enforced`; `packet-only` inherits it (same guard, same tool); `repo` stays `unmeasured`. AC4's Gemini half did not land in this send: the denied tool call emptied the whole reply, so no reading was delivered and the status is `empty`, not `ok`; the runner and the body treated that correctly as a failed run (the roster's "an empty response is a failed run whatever the status flag says"). The plan foresaw a second Gemini run "on Tony's word" for AC6; the same word would cover a plain read with no write ask for AC4's `ok`. New trap for the Gemini guide (Slice I): a Gemini mandate must never ask the reader to write, because a denied tool call costs the entire answer.
 
+## AC4 (Gemini half) — the second Gemini send, on Tony's word ("send again", 2026-09-06): status `ok`
+
+Command: `READERS_RUN_ROOT=<scratch>/ac4g/runs claude --plugin-dir plugins/readers -p '/readers gemini <fixture> "Read the document and, in under 120 words, name its one deliberate gap with a quote and ask its author one question. Do not create or modify any file." — send it' --output-format stream-json --verbose`. The session printed `READERS-PROTOCOL: 1` first, called `mcp__antigravity__ask_gemini` with exactly `compose`'s `params` (`cwd`, `model`) plus the prompt, and ended with `READERS: gemini · ok · gemini-3.1-pro-high · none · <scratch>/ac4g/runs/direct-866685/c-7d018e/sidecar.json`. `raw.md`, verbatim:
+
+```
+The deliberate gap in the document is the ambiguity regarding the end time of the happy hour in relation to an unspecified game. The text explicitly notes this missing information:
+
+> "Happy hour runs until the game starts" — the doc never says which game, or what happens on a night with no game.
+
+**Question for the author:** 
+What specific end time should the staff write on the chalkboard on nights when there is no game scheduled?
+---
+conversation_id: d052bc96-2059-4d88-95d4-7d6e76ba521b | model: gemini-3.1-pro-high | mode: plan | 7.0s | 8008 tokens
+```
+
+Sidecar (selected fields):
+
+```json
+{
+  "duration_s": 45.0,
+  "effective_effort": "high",
+  "effective_model": "gemini-3.1-pro-high",
+  "isolation": "sandbox-enforced",
+  "parity": "skip_permissions off, cwd = fresh empty dir, non-empty response",
+  "profile": "starved",
+  "raw_hash": "4cec44c3295254e33e30f279127db6800763a78b60e42f5910cd546b9ad6a06d",
+  "reason": null,
+  "row": "gemini",
+  "status": "ok",
+  "workdir": "<scratch>/ac4g/runs/direct-866685/c-7d018e/work",
+  "workdir_instruction_files": []
+}
+```
+
+`ls <call dir>/work` → empty. The sidecar's parity is the roster row's `starved` line and its isolation label is `sandbox-enforced` (from the AC6 measurement above). Two body decisions the session flagged, both now on the record: the antigravity tool returns no status word on a clean reply, so the body passed `SUCCESS` to `record --transport-status` (the contract now says so); and the tool's trailer line (`conversation_id … | model … | mode: plan | 7.0s | 8008 tokens`) stayed inside the capture because the capture is verbatim, so `raw_hash` covers it (a guide note for Slice I: callers that parse a Gemini reply should expect that trailer).
+
 ## Live-send tally
 
 - GPT: one send (AC8, `gpt-astra`, `starved`), of the two the plan allows.
-- Gemini: one send (AC4/AC6 combined run, `starved`, status `empty`, write denied), the one the plan allows; a second for AC4's `ok` waits on Tony's word.
+- Gemini: two sends, both on Tony's word ("send it", "send again"): the AC4/AC6 combined run (`starved`, `empty`, write denied) and the plain AC4 run (`starved`, `ok`); the plan's count was one, the second is the run AC6 foresaw "on Tony's word".
 - Claude subagent calls (not outside spend): AC4, AC5, the packet-only read, AC8's `c1`, plus the two first-attempt runs that failed before any reader spawned, and one Workflow launched from the builder's session to prove the working-directory script path.
 - `OPENROUTER_API_KEY` was never read or printed; the regression's OpenRouter cases ran under a placeholder value and `READERS_TEST=1` with canned replies, sending nothing.
