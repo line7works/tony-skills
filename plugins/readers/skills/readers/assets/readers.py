@@ -618,9 +618,10 @@ def resolve_model(req, row, result, picks=None):
         result["override_source"] = "roster default"
         result["effective_model"] = row["model"]
         result["envelope"] = row["id"]
-        if row["id"] == "claude-session" and req.get("session_model"):
-            # the row inherits the session; the id the harness reports for it is the effective model
-            result["effective_model"] = req["session_model"]
+    if row["id"] == "claude-session" and result["effective_model"] == row["model"] and req.get("session_model"):
+        # the row inherits the session (the roster default, or its placeholder typed by mistake): the id the
+        # harness reports for the session is the effective model
+        result["effective_model"] = req["session_model"]
     result["effective_effort"] = req.get("effort") or row["effort_default"] or None
     result["transport"] = row["transport"]
     result["kind"] = row["kind"]
@@ -1024,6 +1025,19 @@ def js_escape(text):
     return text.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 
 
+def pinned_model(req, row, result):
+    """The harness model name the tool receives, or None when the reader inherits the session: a pinned row's
+    name always; on claude-session only a real pick (a remembered pick, or a typed id other than the roster's
+    `session` placeholder), never the placeholder itself."""
+    if row["id"] != "claude-session":
+        return result["effective_model"]
+    if result["override_source"] == "remembered pick":
+        return result["effective_model"]
+    if result["override_source"] == "explicit pick" and req.get("model") != row["model"]:
+        return result["effective_model"]
+    return None
+
+
 def write_workflow(req, row, result, prompt, call_dir):
     """The Workflow script for a Claude call: the committed template with the composed prompt embedded in the
     script body (never via Workflow args, the recorded trap) and the agent options filled from the resolved
@@ -1035,9 +1049,9 @@ def write_workflow(req, row, result, prompt, call_dir):
     if tmpl.count(target) != 1 or tmpl.count("__AGENT_OPTS__") != 1:
         raise Refuse("lane-unavailable", "workflow template %s is not the committed shape (one prompt placeholder, one options placeholder)" % WORKFLOW_TEMPLATE)
     opts = {"label": "reader:%s" % result["call_id"]}
-    if row["id"] != "claude-session" or result["override_source"] != "roster default":
-        # the row's harness model name, or the explicit/remembered pick on the session row
-        opts["model"] = result["effective_model"]
+    pin = pinned_model(req, row, result)
+    if pin is not None:
+        opts["model"] = pin
     if req.get("effort"):
         opts["effort"] = req["effort"]
     if req.get("isolation") == "worktree":
@@ -1111,8 +1125,9 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
     elif route == "agent":
         params = {"subagent_type": "general-purpose",
                   "description": "readers %s %s read (%s)" % (row["id"], req["profile"], result["call_id"])}
-        if row["id"] != "claude-session" or result["override_source"] != "roster default":
-            params["model"] = result["effective_model"]
+        pin = pinned_model(req, row, result)
+        if pin is not None:
+            params["model"] = pin
         if req.get("isolation") == "worktree":
             params["isolation"] = "worktree"
         tool = {"name": "Agent", "params": params, "prompt_param": "prompt", "prompt_file": prompt_file,
@@ -1158,6 +1173,7 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
     out = dict(meta)
     out["memory"] = result["memory"]
     out["snapshot_fault"] = result["snapshot_fault"]
+    out["override_source"] = result["override_source"]
     out["status"] = "composed"
     out["reason"] = "pre-send checks passed; run the lane, then `readers record`"
     return out
