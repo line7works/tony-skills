@@ -1,5 +1,5 @@
 # REVIEW.md
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-09-06 -->
 
 ## Passes
 - correctness: on
@@ -15,3 +15,5 @@
 ## Repo-specific checks
 - (one line per recurring finding, added on the second occurrence)
 - sunrise: an edit the skill makes after Phase 2 pushed `main` (a kit-check fix, the post-link `.gitignore` re-assert) is never re-committed or re-pushed, yet the Phase 8 summary prints "pushed" · found 2026-09-04 (agent-file-flip Slice B, Phase 8) and 2026-09-05 (sunrise-live-run-fixes Slice A, Phase 3 step 2)
+- readers: an input path escapes as an uncaught exception, a traceback on stderr and no JSON on stdout, where the entry promises JSON in every case (Slice A: `run()` on a bad request; Slice B: `suggest` on a run-dir fault) · found 2026-09-06 (readers Slice A signoff) and 2026-09-06 (readers Slice B signoff)
+- readers: dispatch artefacts (`diagnostics/`, `dispatch.log`, command or request metadata) are written before a transport-level refusal that sends nothing, so the record shows a dispatch that did not happen (Slice A: `run()` before the no-adapter refusal; Slice B: both adapters before the canned-hook refusal) · found 2026-09-06 (readers Slice A signoff) and 2026-09-06 (readers Slice B signoff)
