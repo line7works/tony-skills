@@ -13,7 +13,7 @@ One component, every reader. A caller hands over a mandate and documents; a fres
 
 ## Step 0 — The version line
 
-Print `READERS-PROTOCOL: 1` as the first line of the run, before any dispatch. Callers key on the `READERS:` lines (Step 4), never on this one.
+Print `READERS-PROTOCOL: 1` as the first line of the run, before any dispatch, in every form, and repeat it as the first line of the final report so a headless run's output carries it too. Callers key on the `READERS:` lines (Step 4), never on this one.
 
 ## Step 1 — Read the summon
 
@@ -32,7 +32,7 @@ Print `READERS-PROTOCOL: 1` as the first line of the run, before any dispatch. C
 
 **Portable rows** (roster `kind: portable`): `RUNNER <request file> > <scratch>/<call id>.result.json`, in the background when the fleet has more than one call, all launched before any host call. The result JSON is the runner's stdout.
 
-**Host rows** (`kind: host`): `RUNNER compose <request file>`, with `--no-workflow` added when the Workflow tool is not among your tools. `status: composed` comes with `call_dir`, `prompt_file`, and `tool`; anything else is the refusal, and its sidecar is written. Then invoke the tool `tool.name` with `tool.params` exactly, the contents of `tool.prompt_file` read verbatim as the parameter `tool.prompt_param` (null means the prompt is already inside the script), never any parameter under `tool.omit`, and nothing else. The reply is where `tool.capture` says: for the Workflow tool the run's `capture` plus the run record's per-agent tool-call count; for the Agent tool the subagent's final message; for the Gemini tool the returned text plus the status flag it reported. Several Workflow invocations in one fleet go out in one message.
+**Host rows** (`kind: host`): `RUNNER compose <request file>`, with `--no-workflow` added when the Workflow tool is not among your tools. `status: composed` comes with `call_dir`, `prompt_file`, and `tool`; anything else is the refusal, and its sidecar is written. Then invoke the tool `tool.name` with `tool.params` exactly, the contents of `tool.prompt_file` read verbatim as the parameter `tool.prompt_param` (null means the prompt is already inside the script), never any parameter under `tool.omit`, and nothing else. The reply is where `tool.capture` says: for the Workflow tool the run's `capture` plus the `tool_uses` count in the run's usage record (one reader per script, so it is the reader's count); for the Agent tool the subagent's final message; for the Gemini tool the returned text plus the status flag it reported. The Workflow tool reads the script from the working directory copy `compose` wrote; `record` removes it. Several Workflow invocations in one fleet go out in one message.
 
 Write the reply verbatim to `<call dir>/capture.md` (a heredoc or the Write tool; change nothing). Then record:
 - `RUNNER record <request file> --capture <call dir>/capture.md [--tool-calls <count>] [--transport-status <flag>]`: `--tool-calls` on every Workflow-route call, `--transport-status` on every Gemini call. The runner applies the guards (empty, parity, an error flag under a complete reply).

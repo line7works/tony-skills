@@ -9,8 +9,10 @@
 // Never pass the prompt via Workflow `args` — verified 2026-08-09: args can
 // arrive as a JSON string, leaving the reader prompt-less.
 // Guard: a null/empty result is a FAILED read (readers record maps it).
-// Parity: under starved and packet-only the run record's per-agent toolCalls
-// must be 0; the skill body passes that count to `readers record --tool-calls`.
+// Parity: under starved and packet-only the run record's tool_uses count (one
+// reader per script) must be 0; the body passes it to `readers record --tool-calls`.
+// The Workflow tool reads this script only from the session's working directory,
+// so compose writes the copy it hands over under <cwd>/.readers/ and record removes it.
 export const meta = {
   name: 'readers-claude-lane',
   description: 'One cold read by a fresh Claude reader with the model and effort the roster resolved',

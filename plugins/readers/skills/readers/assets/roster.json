@@ -237,14 +237,14 @@
       ],
       "eligibility": "session-dependent",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0)",
+        "packet-only": "harness-enforced (toolCalls: 0)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Inherits the session model; the skill body fills session_model on every request (the id its harness reports) so the floor check has its input and the sidecar's effective_model names the real id. Host lane (Slice C): starved, packet-only, and any pinned effort run through the Workflow route (assets/claude-boxes.workflow.js filled by `readers compose`; the run record's per-agent toolCalls goes to `readers record --tool-calls`); repo and repo-with-tools with no effort run as a general-purpose subagent through the Agent tool, in worktree isolation when the request says so.",
+      "quirks": "Inherits the session model; the skill body fills session_model on every request (the id its harness reports) so the floor check has its input and the sidecar's effective_model names the real id. Host lane (Slice C): starved, packet-only, and any pinned effort run through the Workflow route (assets/claude-boxes.workflow.js filled by `readers compose`; the run record's per-agent toolCalls goes to `readers record --tool-calls`); repo and repo-with-tools with no effort run as a general-purpose subagent through the Agent tool, in worktree isolation when the request says so. Isolation measured 2026-09-06 (docs/evidence/readers/slice-c-host-runs.md): starved and packet-only reads through the Workflow route returned with tool_uses 0 and the decoy read (AC5) quoted no file, reported no decoy line, and named no earlier finding; repo and repo-with-tools are instruction-bound and stay unmeasured.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -282,14 +282,14 @@
       ],
       "eligibility": "eligible",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0)",
+        "packet-only": "harness-enforced (toolCalls: 0)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call.",
+      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call. Isolation labels for starved and packet-only inherited from claude-session's 2026-09-06 measurement: the same Workflow route and the same tool_uses count, with only the model name pinned.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -327,14 +327,14 @@
       ],
       "eligibility": "eligible",
       "isolation": {
-        "starved": "unmeasured",
-        "packet-only": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0)",
+        "packet-only": "harness-enforced (toolCalls: 0)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call.",
+      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call. Isolation labels for starved and packet-only inherited from claude-session's 2026-09-06 measurement: the same Workflow route and the same tool_uses count, with only the model name pinned.",
       "guide": "",
       "verified_at": "2026-09-06"
     }

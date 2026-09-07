@@ -75,7 +75,7 @@ RESULT_FIELDS = (
     "adapter_version", "mandate_hash", "packet_hash", "profile", "workdir",
     "workdir_instruction_files", "isolation", "parity", "raw_text", "raw_file",
     "raw_hash", "raw_path", "diagnostics", "dispatch_log", "exit_code", "generation_id",
-    "response_raw", "memory", "snapshot", "snapshot_fault", "canned", "sidecar", "started_at",
+    "response_raw", "memory", "snapshot", "snapshot_fault", "canned", "session_model", "sidecar", "started_at",
     "ended_at", "duration_s",
 )
 
@@ -340,6 +340,7 @@ def new_result(req, run_id, run_dir, call_id):
         "row": req.get("row"), "profile": req.get("profile"),
         "protocol_version": PROTOCOL_VERSION, "adapter_version": ADAPTER_VERSION,
         "requested_model": req.get("model"), "requested_effort": req.get("effort"),
+        "session_model": req.get("session_model") or None,
         "raw_text": "", "started_at": now(),
     })
     return r
@@ -1029,6 +1030,31 @@ def write_workflow(req, row, result, prompt, call_dir):
     return os.path.join(call_dir, "reader.workflow.js"), out, opts
 
 
+def script_path_in_cwd(result):
+    """Where the Workflow tool reads the script from: the tool accepts a scriptPath only inside the session's
+    working directory (or a directory the session added), never under a temp run dir (measured 2026-09-06,
+    docs/evidence/readers/slice-c-host-runs.md). compose writes the script there too; record removes it."""
+    return os.path.join(os.getcwd(), ".readers", result["run_id"], "%s.workflow.js" % result["call_id"])
+
+
+def remove_script_in_cwd(path):
+    """The working-directory copy of a Workflow script is transient: gone once the call is recorded, and its
+    directories pruned when empty. Never touches anything else."""
+    try:
+        if path and os.path.isfile(path):
+            os.remove(path)
+        d = os.path.dirname(path or "")
+        for _ in range(2):
+            if d and os.path.basename(os.path.dirname(d)) in (".readers",) or os.path.basename(d) == ".readers":
+                try:
+                    os.rmdir(d)
+                except OSError:
+                    break
+                d = os.path.dirname(d)
+    except OSError:
+        pass
+
+
 def host_compose(req, row, prompt, result, call_dir, diag, host):
     """Step 1 of a host call: the working directory, the prompt file, the Workflow script, the dispatch line,
     and compose.json (what record reads back). Prints what the skill body needs to run the lane and nothing
@@ -1058,11 +1084,12 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
         result["workdir"] = wd
         result["workdir_instruction_files"] = instruction_files(wd)
     prompt_file = os.path.join(call_dir, "prompt.md")
-    workflow_file, workflow_text = None, None
+    workflow_file, workflow_text, script_path = None, None, None
     if route == "workflow":
         # every check before any write: a refused compose leaves sidecar.json alone
         workflow_file, workflow_text, opts = write_workflow(req, row, result, prompt, call_dir)
-        tool = {"name": "Workflow", "params": {"scriptPath": workflow_file}, "prompt_param": None, "prompt_file": prompt_file,
+        script_path = script_path_in_cwd(result)
+        tool = {"name": "Workflow", "params": {"scriptPath": script_path}, "prompt_param": None, "prompt_file": prompt_file,
                 "omit": ["args", "script"], "agent_options": opts,
                 "capture": "the `capture` the run returns; pass the run record's per-agent toolCalls count to `readers record --tool-calls`"}
     elif route == "agent":
@@ -1084,12 +1111,15 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
     if workflow_text is not None:
         with open(workflow_file, "w", encoding="utf-8") as f:
             f.write(workflow_text)
+        os.makedirs(os.path.dirname(script_path), exist_ok=True)
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(workflow_text)
     meta = {
         "call_id": result["call_id"], "run_id": result["run_id"], "run_dir": result["run_dir"], "call_dir": call_dir,
         "row": row["id"], "transport": row["transport"], "route": route, "profile": result["profile"],
         "effective_model": result["effective_model"], "effective_effort": result["effective_effort"],
         "workdir": result["workdir"], "workdir_instruction_files": result["workdir_instruction_files"],
-        "prompt_file": prompt_file, "prompt_hash": result["packet_hash"], "workflow_file": workflow_file,
+        "prompt_file": prompt_file, "prompt_hash": result["packet_hash"], "workflow_file": workflow_file, "script_path": script_path,
         "tool": tool, "snapshot": result["snapshot"], "started_at": result["started_at"], "composed_at": now(),
     }
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -1112,6 +1142,7 @@ def host_record(req, row, prompt, result, call_dir, diag, host):
         raise Refuse("invalid-request", "no compose record for call %s (%s: %s); run `readers compose` first" % (result["call_id"], meta_path, e))
     if meta.get("prompt_hash") != result["packet_hash"]:
         raise Refuse("invalid-request", "the request does not match the composed call %s (prompt hash differs); record the call with the request compose saw" % result["call_id"])
+    remove_script_in_cwd(meta.get("script_path"))
     for k in ("started_at", "workdir", "workdir_instruction_files", "profile"):
         result[k] = meta.get(k)
     result["diagnostics"] = diag
