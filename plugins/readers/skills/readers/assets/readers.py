@@ -1257,6 +1257,7 @@ def host_record(req, row, prompt, result, call_dir, diag, host):
 
 
 ADAPTERS = {"codex-exec": None, "openrouter": None}  # filled below, after both adapters are defined
+CANNED_HOOK_ENV = {"codex-exec": "READERS_CANNED_CODEX", "openrouter": "READERS_CANNED_RESPONSE"}
 
 
 def run(req, dispatching, host=None):
@@ -1316,6 +1317,12 @@ def run(req, dispatching, host=None):
         adapter = ADAPTERS.get(row["transport"])
         if adapter is None:
             raise Refuse("lane-unavailable", "no adapter for transport %s in this slice" % row["transport"])
+        # REVIEW.md repo check (2), MAJOR for readers: a test hook set outside READERS_TEST=1 is a transport-level
+        # refusal that sends nothing, so it is raised here, before the diagnostics directory, the dispatch line, or
+        # any request metadata exists; the adapter's own hook call below then only reads the reply
+        hook_env = CANNED_HOOK_ENV.get(row["transport"])
+        if hook_env:
+            canned_hook(hook_env, result)
         diag = os.path.join(call_dir, "diagnostics")
         os.makedirs(diag, exist_ok=True)
         result["diagnostics"] = diag
