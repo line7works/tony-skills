@@ -21,7 +21,7 @@ run_date = fm_get("run_date")
 # cost block: lines indented under "cost:"
 cost_lines = []
 cm = re.search(r"^cost:\n((?:[ \t]+.*\n?)+)", fm_text, re.M)
-COST_LABELS = {"deepseek": "DeepSeek", "grok": "Grok", "openrouter_total": "OpenRouter total", "fable": "Fable", "opus": "Opus", "gpt": "GPT", "gemini": "Gemini", "note": "Note"}
+COST_LABELS = {"deepseek": "DeepSeek", "qwen": "Qwen", "openrouter_total": "OpenRouter total", "fable": "Fable", "opus": "Opus", "gpt": "GPT", "gemini": "Gemini", "note": "Note"}
 if cm:
     for ln in cm.group(1).strip().splitlines():
         ln = re.sub(r"^\s*-\s*", "", ln.strip())
@@ -44,7 +44,7 @@ if cm:
 # carries its own H2s; those belong to the enclosing section and are
 # demoted by md_block, never sectioned (Step 11 contract: ONE Brief panel).
 JUDGE_PREFIXES = ("## Judge K tally", "## Judge G tally", "## Reconciliation", "## Debate card")
-VENDOR_RE = re.compile(r"^## (GPT|Fable|Opus|Gemini|DeepSeek|Grok) box — (.+)$")
+VENDOR_RE = re.compile(r"^## (GPT|Fable|Opus|Gemini|DeepSeek|Qwen) box — (.+)$")
 DROPPED_RE = re.compile(r"^## Dropped — (\w+) \((.+)\)$")
 BRIEF_RE = re.compile(r"^## (The )?scrubbed brief\s*$", re.I)
 

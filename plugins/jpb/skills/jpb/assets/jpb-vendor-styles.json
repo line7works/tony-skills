@@ -26,10 +26,10 @@
       "tint": "#232946",
       "badge": "DEEPSEEK"
     },
-    "Grok": {
-      "accent": "#d1d1d6",
-      "tint": "#33333a",
-      "badge": "GROK"
+    "Qwen": {
+      "accent": "#d96fb0",
+      "tint": "#3a2233",
+      "badge": "QWEN"
     }
   },
   "dropped": {
