@@ -12,7 +12,9 @@ Field feedback on the four loop skills (/blueprint, /build, /signoff,
    build → signoff → recheck). Skills change only through the loop, never
    directly from a note.
 3. **Disposition** — every triaged note gets a dated line in
-   `## Dispositions`: note → what became of it (slice shipped, declined with
+   `
+
+## Dispositions`: note → what became of it (slice shipped, declined with
    reason, parked). Additive-only, so a note is never re-triaged.
 
 The skills never reference this doc (deliberate decoupling — the SKILL NOTE
@@ -136,6 +138,7 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
 - 2026-09-06 · DJ sunrise · sunrise · "Phase 0 step 3 collision check uses a bare glob (`ls -d ~/Developer/*<Name>* 2>/dev/null`). Under zsh an unmatched glob aborts the whole ls and prints 'no matches found', so the count reads 0 even when a sibling pattern would have matched. Bit the DJ sunrise 2026-09-06: the Studio check passed only because nothing existed; the same shape relayed to the laptop reported 0 while ~/Developer/DJ already held DJ-LIBRARY.md. Fix: `find ~/Developer -maxdepth 1 -iname '*<name>*'` (case-insensitive, no glob abort), and treat 'no matches found' in output as a broken check. Same fix applies to any relay brief that copies the sunrise check."
 - 2026-09-06 · readers slice A signoff/recheck · recheck · "SKILL NOTE: the two recheck: slice A blocks carry shortened parenthesised claims of the review: slice A lines rather than the originals verbatim, so a strict file:line + claim join fails; every file:line is unique within the review block, so a location-only match resolves each item. The handoff block says so for the next preflight."
 - 2026-09-06 · readers slice B ship · ship · "SKILL NOTE: every reviewer and verifier worktree came up at main and each moved itself to the slice commit; the reviewer mandate should require a canned hook on every dispatch, refusals included, after two accidental sends. The handoff checkpoint from Slice A rode onto this branch by cherry-pick because it never reached PR #47; a recurrence appended two lines to REVIEW.md under signoff's second-failure rule."
+- 2026-09-06 · readers · ship · "SKILL NOTE: /ship's Step 1 assumed the slice branch comes off merged main per the handoff; B was unmerged when Tony summoned C, so the branch was cut off feat/readers-slice-b and logged as a build assumption. Under /ship's fix step, one MAJOR (the `.readers/` residue) had an out-of-footprint half (`.gitignore`); the in-footprint half was fixed and the rest carried as a question rather than treated as stop condition 4, since the recorded failure scenario was closable inside the footprint."
 
 ## Dispositions
 
