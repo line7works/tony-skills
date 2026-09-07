@@ -151,3 +151,38 @@ The field check over the four: every one carries `floor` `opus`, `session_model`
 ## What this slice does not prove
 
 Live `/signoff` and `/recheck` runs through the installed readers plugin are Slice I's (the plan's Source of truth: the installed copy runs, not this checkout); a live `/wargame` FULL run stays deferred to Tony's call (Out of scope). The reads show the rewritten skills yield valid requests from a cold read of each file; they do not show a summon returning captures, a "verification blocked" report reaching a Method line or a `not fixed` row, or a mutating signoff lens actually running inside a caller-cut worktree.
+
+## Fix pass (2026-09-07) — the reads repeated against the fixed text
+
+The signoff's three MAJORs changed signoff's mechanics paragraph (a mutating check is the session's, run in Step 3.5 inside a worktree the session cuts; every reviewer call keeps the live checkout as `workspace`; the mandate list carries rule 9's read-only constraints), recheck's mandate list (the same constraints), and wargame's workspace rule (outside a git repo, `<run dir>/target/` — a fresh directory holding a copy of the target's document — never the current directory), so the cold reads were run again at dbe4363, all three with `< /dev/null` (the stdin warning did not print). Run ids `signoff-fresh-read-2` and `wargame-fresh-read-2` with the prompts above and the same prepared directories; a third read, `wargame-fresh-read-3`, exercised the changed rule with this scenario:
+
+> ... a /wargame run at FULL depth, GREENFIELD mode, on a target that is a scope document at /Users/someone/Documents/precon-x.md, invoked from the directory /Users/someone/Documents, which is NOT inside any git repo; the run id is wargame-fresh-read-3; the run directory is <scratch>/wargame-run2 and the session has already done whatever the skill says to prepare under it (the target directory it names holds a copy of the document as precon-x.md); ...
+
+Outputs (stdout; stderr carried only `exit 0`): four signoff blocks and five repo-target wargame blocks identical in shape to the first reads (call ids under the new run ids); the five non-repo wargame blocks carry `workspace` `<scratch>/wargame-run2/target` and `documents` the target document — the first, pretty-printed, after the one substitution described below:
+
+```
+{
+  "protocol_version": 1,
+  "row": "claude-session",
+  "profile": "repo-with-tools",
+  "workspace": "<scratch>/wargame-run2/target",
+  "documents": ["<scratch>/wargame-run2/target/precon-x.md"],
+  "mandate": "<scratch>/wargame-run2/security.md",
+  "floor": "opus",
+  "session_model": "claude-fable-5-1",
+  "run_id": "wargame-fresh-read-3",
+  "run_dir": "<scratch>/wargame-run2/readers",
+  "call_id": "wargame-fresh-read-3-security"
+}
+```
+
+Validations (`READERS_RUN_ROOT` at a scratch directory, a placeholder key):
+
+```
+signoff-fresh-read-2-spec / -correctness / -seams / -security → valid (4)
+wargame-fresh-read-2-security / -races / -data / -cost-limits / -failure-ux → valid (5)
+wargame-fresh-read-3-* as printed → invalid-request (5): the scenario's document path /Users/someone/Documents/precon-x.md does not exist on this machine, and validate reads documents to size them
+wargame-fresh-read-3-* with that one path replaced by the copy at <scratch>/wargame-run2/target/precon-x.md → valid (5)
+```
+
+The `invalid-request` lines are the scenario's fiction, not the skill's shape: the read passed the target's document by the path the scenario gave it, which is what the text says to do; on a real run that file exists. After the validations the scratch run root held `0` entries and `<scratch>/wargame-run2/readers/` held `0`. The AC1–AC4 greps at dbe4363 print the same counts as the table above (S 3/2/1/3, R 3/2/1/3, W 2/1/1/2; AC2 0/0/0; AC3 1/1/1/1/1/1; AC4 3/4/3, form 2).
