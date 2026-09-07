@@ -7,13 +7,21 @@ Usage:
   readers --version
   readers validate <request.json | ->
   readers suggest <row>[,<row>...] --run <run id> [--run-dir <dir>] [--floor <floor>]
+  readers compose <request.json | -> [--no-workflow]
+                                        host lanes, step 1: pre-send checks, the working directory,
+                                        the composed prompt (<call dir>/prompt.md) and, on the
+                                        Workflow route, the script (<call dir>/reader.workflow.js)
+  readers record <request.json | -> --capture <file> [--tool-calls <n>] [--transport-status <text>]
+  readers record <request.json | -> --failed <reason> [--status <status>] [--capture <partial file>]
+                                        host lanes, step 2: guards, raw.md, the sidecar
   readers <request.json | ->            run one call (the request on stdin with -)
 
 Slice A carries the contract's pre-send checks, the roster, and the GPT lane
 (codex exec). Slice B adds the OpenRouter adapter (deepseek, qwen), the last-pick
 memory in the checkout, the `suggest` step, the run-wide freeze (snapshot), and the
-canned transport hooks. The host lanes (Claude, Gemini) run from the skill body and
-hand their capture to `record` in Slice C.
+canned transport hooks. Slice C adds the host lanes' two steps: `compose` (the skill body
+runs the lane with what it prints) and `record` (the body hands the capture back), so a host
+sidecar has the same shape and passed the same checks as a portable one.
 """
 import errno
 import fnmatch
@@ -32,7 +40,7 @@ import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-b-fix2-2026-09-06"
+ADAPTER_VERSION = "slice-c-2026-09-06"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
 # The last-pick memory lives in the tony-skills checkout (blueprint assumption 1), never in the
@@ -44,6 +52,10 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 CODEX_MODELS_CACHE = os.path.join(os.path.expanduser("~"), ".codex", "models_cache.json")
 PROFILES = ("starved", "packet-only", "repo", "repo-with-tools")
+WORKFLOW_TEMPLATE = os.path.join(HERE, "claude-boxes.workflow.js")
+HOST_TRANSPORTS = ("claude-subagent", "antigravity-mcp")
+# statuses the skill body may report for a host call that produced no usable capture
+HOST_FAIL_STATUSES = ("transport-failed", "lane-unavailable", "timed-out", "cancelled", "empty", "incomplete")
 STATUSES = (
     "ok", "empty", "incomplete", "oversize", "invalid-request", "lane-unavailable",
     "unauthorized", "floor-refused", "unknown-model", "profile-unsupported",
@@ -340,6 +352,14 @@ def valid_id(s):
     return isinstance(s, str) and 0 < len(s) <= 128 and set(s) <= ID_CHARS and s not in (".", "..") and not s.startswith(".")
 
 
+def path_shaped(s):
+    """A mandate string that looks like a path and not like prose: no whitespace, and either a path
+    separator or a .md/.txt ending."""
+    if not isinstance(s, str) or not s or any(ch.isspace() for ch in s):
+        return False
+    return "/" in s or s.lower().endswith((".md", ".txt"))
+
+
 def check_validity(req, roster):
     """1. request validity -> invalid-request"""
     for k in ("row", "mandate", "profile"):
@@ -390,6 +410,10 @@ def check_validity(req, roster):
                 f.read()
         except (OSError, UnicodeDecodeError) as e:
             raise Refuse("invalid-request", "mandate file unreadable as UTF-8 text: %s (%s)" % (req["mandate"], e))
+    elif path_shaped(req["mandate"]):
+        # Tony, 2026-09-06 (Slice B handoff gate): a path-shaped mandate that is not a readable file is
+        # refused, never sent verbatim as mandate text.
+        raise Refuse("invalid-request", "mandate %r looks like a path (a separator or a .md/.txt ending) but is not a readable file; pass the text or an existing file" % req["mandate"])
     if req.get("workspace") and not os.path.isdir(req["workspace"]):
         raise Refuse("invalid-request", "workspace not a directory: %s" % req["workspace"])
     if req["profile"] in ("repo", "repo-with-tools") and not req.get("workspace"):
@@ -426,13 +450,17 @@ def check_profile(req, row):
         raise Refuse("profile-unsupported", "row %s does not support profile %s (supports %s)" % (row["id"], req["profile"], row["supported_profiles"]))
 
 
-def check_floor(req, row, roster):
+def check_floor(req, row, roster, picks=None):
     """5. floor and classification -> floor-refused | unknown-model"""
     floor = req.get("floor")
     if not floor:
         return
     if req.get("model") and req["model"] != row["model"]:
         raise Refuse("unknown-model", "typed id %s is not classified against floor %s" % (req["model"], floor))
+    remembered = None if req.get("model") else pick_entry(picks, row)
+    if remembered:
+        # a remembered pick is a typed id too (suggest --floor drops it; a floor-bound dispatch never uses it)
+        raise Refuse("unknown-model", "remembered pick %s for row %s is a typed id, not classified against floor %s" % (remembered["model"], row["id"], floor))
     elig = row["eligibility"]
     if elig == "eligible":
         return
@@ -492,9 +520,45 @@ def packet_names(req):
     return names
 
 
-def compose(req):
-    """The mandate at the top, then each document delimited as evidence."""
-    parts = [mandate_text(req).rstrip("\n"), ""]
+CLAUDE_PREFIX = """READER INSTRUCTIONS (fixed by readers; the mandate follows them):
+- You are a cold reader. Report everything you find, low-confidence findings included; never self-censor or pre-filter. Your final message is the report and is captured verbatim.
+- Use no web tool of any kind (no search, no fetch, no browser), under any profile.
+- Do not summon /readers, do not use the Skill tool, and do not spawn agents."""
+CLAUDE_PROFILE_LINES = {
+    "starved": "- Access profile starved: read no files and use no tools at all; answer from this message alone.",
+    "packet-only": "- Access profile packet-only: read no files and use no tools at all; the documents are in this message.",
+    "repo": "- Access profile repo: you may read files inside the workspace %s and nowhere else; run nothing.",
+    "repo-with-tools": "- Access profile repo-with-tools: you may read files and run tests inside the workspace %s; writes only to scratch and ignored caches, never a tracked file. When the sandbox stops an execution you needed, report \"verification blocked\" for that check and never mark it checked.",
+}
+GEMINI_PREFIX = """READER INSTRUCTIONS (fixed by readers; the mandate follows them):
+- You are a cold reader. Report everything you find; your reply is captured verbatim.
+- Use no web search or fetch tool.
+- %s"""
+GEMINI_PROFILE_LINES = {
+    "starved": "Access profile starved: your working directory is empty on purpose; answer from this message alone.",
+    "packet-only": "Access profile packet-only: your working directory holds copies of the documents in this message and nothing else.",
+    "repo": "Access profile repo: your working directory is the workspace to read.",
+}
+
+
+def host_prefix(req, row):
+    """The fixed instruction a host reader receives ahead of the mandate (Slice C R3, R4); portable rows get none."""
+    if row is None:
+        return None
+    if row["transport"] == "claude-subagent":
+        line = CLAUDE_PROFILE_LINES[req["profile"]]
+        if "%s" in line:
+            line = line % os.path.abspath(req["workspace"])
+        return CLAUDE_PREFIX + "\n" + line
+    if row["transport"] == "antigravity-mcp":
+        return GEMINI_PREFIX % GEMINI_PROFILE_LINES[req["profile"]]
+    return None
+
+
+def compose(req, row=None):
+    """The mandate at the top (a host row's fixed prefix above it), then each document delimited as evidence."""
+    prefix = host_prefix(req, row)
+    parts = ([prefix, ""] if prefix else []) + [mandate_text(req).rstrip("\n"), ""]
     for d, name in zip(req.get("documents") or [], packet_names(req)):
         with open(d, encoding="utf-8") as f:
             body = f.read()
@@ -546,6 +610,9 @@ def resolve_model(req, row, result, picks=None):
         result["override_source"] = "roster default"
         result["effective_model"] = row["model"]
         result["envelope"] = row["id"]
+        if row["id"] == "claude-session" and req.get("session_model"):
+            # the row inherits the session; the id the harness reports for it is the effective model
+            result["effective_model"] = req["session_model"]
     result["effective_effort"] = req.get("effort") or row["effort_default"] or None
     result["transport"] = row["transport"]
     result["kind"] = row["kind"]
@@ -925,10 +992,180 @@ def check_ids(req):
         raise Refuse("invalid-request", "run_dir must be a string")
 
 
+# ---------- the host lanes' two steps (Slice C R2-R4) ----------
+
+def claude_route(req):
+    """Blueprint assumption 9: starved and packet-only, and any call with a pinned effort, run through the
+    Workflow route (its run record carries the per-agent tool-call count the parity line needs); repo and
+    repo-with-tools with no effort run as plain subagents through the Agent tool."""
+    if req["profile"] in ("starved", "packet-only") or req.get("effort"):
+        return "workflow"
+    return "agent"
+
+
+def js_escape(text):
+    """The prompt lands in a JS template literal (box-runners.md's rule): backslashes, backticks, ${."""
+    return text.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+
+
+def write_workflow(req, row, result, prompt, call_dir):
+    """The Workflow script for a Claude call: the committed template with the composed prompt embedded in the
+    script body (never via Workflow args, the recorded trap) and the agent options filled from the resolved
+    request: the row's harness model name unless the row inherits the session, the pinned effort, worktree
+    isolation when asked for."""
+    with open(WORKFLOW_TEMPLATE, encoding="utf-8") as f:
+        tmpl = f.read()
+    target = "`__COMPOSED_PROMPT__`"
+    if tmpl.count(target) != 1 or tmpl.count("__AGENT_OPTS__") != 1:
+        raise Refuse("lane-unavailable", "workflow template %s is not the committed shape (one prompt placeholder, one options placeholder)" % WORKFLOW_TEMPLATE)
+    opts = {"label": "reader:%s" % result["call_id"]}
+    if row["id"] != "claude-session":
+        opts["model"] = result["effective_model"]
+    if req.get("effort"):
+        opts["effort"] = req["effort"]
+    if req.get("isolation") == "worktree":
+        opts["isolation"] = "worktree"
+    out = tmpl.replace(target, "`" + js_escape(prompt) + "`").replace("__AGENT_OPTS__", json.dumps(opts))
+    return os.path.join(call_dir, "reader.workflow.js"), out, opts
+
+
+def host_compose(req, row, prompt, result, call_dir, diag, host):
+    """Step 1 of a host call: the working directory, the prompt file, the Workflow script, the dispatch line,
+    and compose.json (what record reads back). Prints what the skill body needs to run the lane and nothing
+    the body has to know on its own: the model id, the effort, the cwd, and the tool all come from here."""
+    meta_path = os.path.join(call_dir, "compose.json")
+    if os.path.exists(meta_path):
+        raise Refuse("invalid-request", "call id %s is already composed (%s); mint a new call id for a retry" % (result["call_id"], meta_path))
+    route = None
+    tool = None
+    if row["transport"] == "claude-subagent":
+        route = claude_route(req)
+        if route == "workflow" and not os.path.isfile(WORKFLOW_TEMPLATE):
+            raise Refuse("lane-unavailable", "workflow template %s missing" % WORKFLOW_TEMPLATE)
+        if route == "workflow" and req["profile"] in ("starved", "packet-only"):
+            # the model has no filesystem on this route: the documents travel only in the prompt
+            result["workdir"] = None
+            result["workdir_instruction_files"] = []
+            if req["profile"] == "packet-only":
+                result["profile"] = "packet-only (no workspace)"
+        else:
+            wd = os.path.abspath(req["workspace"]) if req.get("workspace") else None
+            result["workdir"] = wd
+            result["workdir_instruction_files"] = instruction_files(wd) if wd else []
+    else:
+        route = "mcp"
+        wd = prepare_workdir(req, call_dir)
+        result["workdir"] = wd
+        result["workdir_instruction_files"] = instruction_files(wd)
+    prompt_file = os.path.join(call_dir, "prompt.md")
+    workflow_file, workflow_text = None, None
+    if route == "workflow":
+        # every check before any write: a refused compose leaves sidecar.json alone
+        workflow_file, workflow_text, opts = write_workflow(req, row, result, prompt, call_dir)
+        tool = {"name": "Workflow", "params": {"scriptPath": workflow_file}, "prompt_param": None, "prompt_file": prompt_file,
+                "omit": ["args", "script"], "agent_options": opts,
+                "capture": "the `capture` the run returns; pass the run record's per-agent toolCalls count to `readers record --tool-calls`"}
+    elif route == "agent":
+        params = {"subagent_type": "general-purpose"}
+        if row["id"] != "claude-session":
+            params["model"] = result["effective_model"]
+        if req.get("isolation") == "worktree":
+            params["isolation"] = "worktree"
+        tool = {"name": "Agent", "params": params, "prompt_param": "prompt", "prompt_file": prompt_file,
+                "omit": [], "capture": "the subagent's final message"}
+    else:
+        tool = {"name": "mcp__antigravity__ask_gemini", "params": {"model": result["effective_model"], "cwd": result["workdir"]},
+                "prompt_param": "prompt", "prompt_file": prompt_file,
+                "omit": ["effort", "mode", "skip_permissions", "add_dirs", "conversation_id", "timeout_ms"],
+                "capture": "the returned text; pass the status flag the tool reported to `readers record --transport-status`"}
+    os.makedirs(diag, exist_ok=True)
+    with open(prompt_file, "w", encoding="utf-8") as f:
+        f.write(prompt)
+    if workflow_text is not None:
+        with open(workflow_file, "w", encoding="utf-8") as f:
+            f.write(workflow_text)
+    meta = {
+        "call_id": result["call_id"], "run_id": result["run_id"], "run_dir": result["run_dir"], "call_dir": call_dir,
+        "row": row["id"], "transport": row["transport"], "route": route, "profile": result["profile"],
+        "effective_model": result["effective_model"], "effective_effort": result["effective_effort"],
+        "workdir": result["workdir"], "workdir_instruction_files": result["workdir_instruction_files"],
+        "prompt_file": prompt_file, "prompt_hash": result["packet_hash"], "workflow_file": workflow_file,
+        "tool": tool, "snapshot": result["snapshot"], "started_at": result["started_at"], "composed_at": now(),
+    }
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, sort_keys=True)
+    log_dispatch(call_dir, "compose %s route=%s model=%s effort=%s profile=%s (the skill body runs the lane; record follows)" % (
+        row["transport"], route, result["effective_model"], result["effective_effort"], req["profile"]))
+    out = dict(meta)
+    out["status"] = "composed"
+    out["reason"] = "pre-send checks passed; run the lane, then `readers record`"
+    return out
+
+
+def host_record(req, row, prompt, result, call_dir, diag, host):
+    """Step 2 of a host call: the guards the portable adapters apply, then the same capture and sidecar."""
+    meta_path = os.path.join(call_dir, "compose.json")
+    try:
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+    except (OSError, ValueError) as e:
+        raise Refuse("invalid-request", "no compose record for call %s (%s: %s); run `readers compose` first" % (result["call_id"], meta_path, e))
+    if meta.get("prompt_hash") != result["packet_hash"]:
+        raise Refuse("invalid-request", "the request does not match the composed call %s (prompt hash differs); record the call with the request compose saw" % result["call_id"])
+    for k in ("started_at", "workdir", "workdir_instruction_files", "profile"):
+        result[k] = meta.get(k)
+    result["diagnostics"] = diag
+    result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
+    log_dispatch(call_dir, "record %s" % ("failed: %s" % host["failed"] if host.get("failed") else "capture %s" % host.get("capture")))
+    text = None
+    if host.get("capture"):
+        try:
+            with open(host["capture"], encoding="utf-8") as f:
+                text = f.read()
+        except (OSError, UnicodeDecodeError) as e:
+            raise Refuse("invalid-request", "capture file unreadable as UTF-8 text: %s (%s)" % (host["capture"], e))
+    if host.get("transport_status"):
+        with open(os.path.join(diag, "transport-status.txt"), "w", encoding="utf-8") as f:
+            f.write(host["transport_status"] + "\n")
+    if host.get("failed"):
+        if text:
+            # partial text or a diagnostic string stays in diagnostics only, never raw.md or raw_text
+            with open(os.path.join(diag, "partial.md"), "w", encoding="utf-8") as f:
+                f.write(text)
+        raise Refuse(host.get("status") or "transport-failed", host["failed"])
+    if text is None:
+        raise Refuse("invalid-request", "record needs --capture <file> or --failed <reason>")
+    n = host.get("tool_calls")
+    if row["transport"] == "claude-subagent" and req["profile"] in ("starved", "packet-only"):
+        if n is None:
+            result["parity"] = "toolCalls: not reported"
+        else:
+            with open(os.path.join(diag, "tool-calls.txt"), "w") as f:
+                f.write("%d\n" % n)
+            if n > 0:
+                with open(os.path.join(diag, "capture.md"), "w", encoding="utf-8") as f:
+                    f.write(text)
+                raise Refuse("transport-failed", "parity violated: the reader made %d tool call(s) under %s (toolCalls: 0 required); capture kept in diagnostics only" % (n, req["profile"]))
+    elif n is not None:
+        with open(os.path.join(diag, "tool-calls.txt"), "w") as f:
+            f.write("%d\n" % n)
+    if not text.strip():
+        raise Refuse("empty", "no content or whitespace only")
+    anomaly = None
+    ts = (host.get("transport_status") or "").strip()
+    if ts and ts.split()[0].upper() not in ("SUCCESS", "OK"):
+        # vertical SKILL.md:58's rule: a complete response under an error status is delivered, anomaly recorded
+        anomaly = "ok; transport reported %s (anomaly recorded; content decides)" % ts
+    capture(text, req, call_dir, result)
+    return finish(result, call_dir, "ok", anomaly)
+
+
 ADAPTERS = {"codex-exec": None, "openrouter": None}  # filled below, after both adapters are defined
 
 
-def run(req, dispatching):
+def run(req, dispatching, host=None):
+    """dispatching: the shell entry runs the call (portable rows). host: the skill body's step for a host row,
+    {"step": "compose" | "record", ...options}; the pre-send checks run the same way in every mode."""
     try:
         check_ids(req)
     except Refuse as r:
@@ -936,9 +1173,9 @@ def run(req, dispatching):
         return finish(result, None, r.status, r.reason)
     run_id, run_dir = resolve_run_dir(req)
     call_id = req.get("call_id") or "c-%s" % uuid.uuid4().hex[:8]
-    call_dir = os.path.join(run_dir, call_id) if dispatching else None
+    call_dir = os.path.join(run_dir, call_id) if (dispatching or host is not None) else None
     result = new_result(req, run_id, run_dir, call_id)
-    if dispatching and os.path.exists(os.path.join(call_dir, "sidecar.json")):
+    if call_dir and os.path.exists(os.path.join(call_dir, "sidecar.json")):
         # R7: a sidecar is never rewritten. A reused call id is refused without touching the call dir.
         result.update({"status": "invalid-request", "reason": "call id %s already has a sidecar under %s; mint a new call id" % (call_id, run_dir), "ended_at": now()})
         return result
@@ -947,7 +1184,7 @@ def run(req, dispatching):
         # R6: a dispatch freezes the roster and memory for its run on the run's first call and resolves
         # from the frozen copy afterwards; validate reads the snapshot when one exists and creates none.
         try:
-            roster, picks, mem_status, snap = resolve_sources(run_dir, create=dispatching)
+            roster, picks, mem_status, snap = resolve_sources(run_dir, create=dispatching or host is not None)
         except OSError as e:
             # The run dir cannot be made or the snapshot cannot be read: resolve from the live files so the
             # pre-send checks still return their own status; the fault is reported beside it, and the
@@ -961,15 +1198,26 @@ def run(req, dispatching):
         check_version(req)
         check_authorization(req, row)
         check_profile(req, row)
-        check_floor(req, row, roster)
+        check_floor(req, row, roster, picks)
         resolve_model(req, row, result, picks)
-        check_lane(req, row, dispatching)
-        prompt = compose(req)
+        check_lane(req, row, dispatching and host is None)
+        if host is not None and row["transport"] not in HOST_TRANSPORTS:
+            raise Refuse("invalid-request", "compose/record serve host rows only; dispatch row %s (%s) with `readers <request>`" % (row["id"], row["transport"]))
+        if host is not None and host.get("no_workflow") and row["transport"] == "claude-subagent" and claude_route(req) == "workflow":
+            raise Refuse("lane-unavailable", "Workflow tool absent; a Claude call under %s%s needs it" % (req["profile"], " with a pinned effort" if req.get("effort") else ""))
+        prompt = compose(req, row)
         result["mandate_hash"] = sha256_text(mandate_text(req))
         result["packet_hash"] = sha256_text(prompt)
         check_budget(req, row, prompt, result)
-        if not dispatching:
+        if not dispatching and host is None:
             return finish(result, None, "ok", "valid (pre-send checks only; nothing dispatched, nothing written)")
+        if host is not None:
+            diag = os.path.join(call_dir, "diagnostics")
+            if host["step"] == "compose":
+                return host_compose(req, row, prompt, result, call_dir, diag, host)
+            os.makedirs(diag, exist_ok=True)
+            launched = True
+            return host_record(req, row, prompt, result, call_dir, diag, host)
         adapter = ADAPTERS.get(row["transport"])
         if adapter is None:
             raise Refuse("lane-unavailable", "no adapter for transport %s in this slice" % row["transport"])
@@ -1141,6 +1389,57 @@ def suggest(argv):
     return 0
 
 
+def host_step(step, argv):
+    """`readers compose <request> [--no-workflow]` and `readers record <request> (--capture <file> [--tool-calls <n>]
+    [--transport-status <text>] | --failed <reason> [--status <status>] [--capture <partial>])`. JSON on stdout in
+    every case; exit 0 on `composed` (compose) or `ok` (record)."""
+    host = {"step": step}
+    src = None
+    i = 0
+    usage = "usage: readers compose <request | -> [--no-workflow] | readers record <request | -> (--capture <file> [--tool-calls <n>] [--transport-status <text>] | --failed <reason> [--status <status>] [--capture <partial file>])"
+    def fail(reason):
+        print(json.dumps({"status": "invalid-request", "reason": reason}, indent=2, sort_keys=True))
+        return 2
+    while i < len(argv):
+        a = argv[i]
+        if a == "--no-workflow" and step == "compose":
+            host["no_workflow"] = True; i += 1
+        elif a in ("--capture", "--failed", "--status", "--transport-status", "--tool-calls") and step == "record" and i + 1 < len(argv):
+            host[a[2:].replace("-", "_")] = argv[i + 1]; i += 2
+        elif a.startswith("--"):
+            return fail("unknown or incomplete option %s; %s" % (a, usage))
+        elif src is None:
+            src = a; i += 1
+        else:
+            return fail("one request only; %s" % usage)
+    if src is None:
+        return fail(usage)
+    if step == "record":
+        if not host.get("capture") and not host.get("failed"):
+            return fail("record needs --capture <file> or --failed <reason>; %s" % usage)
+        if host.get("status") and host["status"] not in HOST_FAIL_STATUSES:
+            return fail("--status must be one of %s" % ", ".join(HOST_FAIL_STATUSES))
+        if host.get("status") and not host.get("failed"):
+            return fail("--status goes with --failed")
+        if host.get("tool_calls") is not None:
+            try:
+                host["tool_calls"] = int(host["tool_calls"])
+                assert host["tool_calls"] >= 0
+            except (ValueError, AssertionError):
+                return fail("--tool-calls must be a non-negative integer")
+    try:
+        req = read_request(src)
+    except Refuse as r:
+        res = {k: None for k in RESULT_FIELDS}
+        res.update({"status": r.status, "reason": r.reason, "protocol_version": PROTOCOL_VERSION,
+                    "adapter_version": ADAPTER_VERSION, "raw_text": ""})
+        print(json.dumps(res, indent=2, sort_keys=True))
+        return 1
+    res = run(req, dispatching=False, host=host)
+    print(json.dumps(res, indent=2, sort_keys=True))
+    return 0 if res["status"] in ("ok", "composed") else 1
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())
@@ -1157,6 +1456,8 @@ def main(argv):
         except Exception as e:  # JSON in every case, never a traceback
             print(json.dumps({"status": "invalid-request", "reason": "runner error (%s): %s" % (type(e).__name__, e)}, indent=2, sort_keys=True))
             return 1
+    if argv[0] in ("compose", "record"):
+        return host_step(argv[0], argv[1:])
     if argv[0] == "validate":
         if len(argv) < 2:
             print("invalid-request")

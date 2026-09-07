@@ -1,0 +1,12 @@
+{
+  "authorized": true,
+  "call_id": "architect-review",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "mandate": "Review this architecture note for one-way doors it leaves open and assumptions it never states. Report every finding with a line cite.",
+  "profile": "packet-only",
+  "protocol_version": 1,
+  "row": "deepseek",
+  "run_id": "example-architect"
+}

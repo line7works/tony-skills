@@ -1,0 +1,14 @@
+{
+  "call_id": "wargame-adversary",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "floor": "opus",
+  "mandate": "Adversary: enumerate the ways this target fails in production, ranked, each with the check or test that would prove it.",
+  "profile": "repo-with-tools",
+  "protocol_version": 1,
+  "row": "claude-session",
+  "run_id": "example-wargame",
+  "session_model": "claude-opus-5",
+  "workspace": "."
+}

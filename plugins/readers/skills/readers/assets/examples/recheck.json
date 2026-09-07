@@ -1,0 +1,14 @@
+{
+  "call_id": "recheck-verifier",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "floor": "opus",
+  "mandate": "Verifier: for each named finding below, execute the check that proves the fix landed and report fixed or not fixed with the command and its output.",
+  "profile": "repo-with-tools",
+  "protocol_version": 1,
+  "row": "claude-session",
+  "run_id": "example-recheck",
+  "session_model": "claude-opus-5",
+  "workspace": "."
+}

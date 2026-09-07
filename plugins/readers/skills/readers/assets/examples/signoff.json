@@ -1,0 +1,15 @@
+{
+  "call_id": "signoff-correctness",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "floor": "opus",
+  "isolation": "worktree",
+  "mandate": "Senior reviewer, correctness lens: try to break the slice in this workspace; run its tests; report every finding as claim, file:line, failure scenario, severity, confidence, and what you tried to break and could not.",
+  "profile": "repo-with-tools",
+  "protocol_version": 1,
+  "row": "claude-session",
+  "run_id": "example-signoff",
+  "session_model": "claude-opus-5",
+  "workspace": "."
+}

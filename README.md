@@ -1,8 +1,8 @@
 # tony-skills
 
 A Claude Code plugin marketplace: the skills Tony Coon builds and runs on his
-own machines, published so anyone can install them. Twenty plugins covering
-twenty-one skills — a full build loop (blueprint → build → signoff → recheck, with
+own machines, published so anyone can install them.
+Twenty-one plugins covering twenty-two skills — a full build loop (blueprint → build → signoff → recheck, with
 /ship to run a whole lap), project lifecycle bootstrapping, image generation,
 adversarial reviews, and a handful of workshop utilities — plus a `tools/`
 shelf of non-plugin tools and specs.
@@ -45,6 +45,7 @@ features in verified slices. Each station is a skill, composed by name:
 - `recheck` — closed-checklist re-inspection that verifies named fixes and flips the card
 - `ship` — one command that runs a slice through the whole loop with a hard lap limit
 - `vertical` — the whole-build capstone review once every slice is signed off
+- `readers` — the loop's reader component: one cold read on any roster row (a fresh Claude subagent, GPT, Gemini, DeepSeek, or Qwen), read-only against a mandate and documents, output captured verbatim with a sidecar; summoned by the review stations, or typed directly for an ad hoc read
 - `handoff` — end-of-slice thread prep: record rulings, write the handoff block, hand over the kickoff line
 - `fb` / `digest` — capture feedback notes verbatim / compile them into a current-state notes board
 - `huh` — re-explain the pending question in plain language, ending with a recommendation
@@ -90,7 +91,7 @@ Code:
 ## Layout
 
 ```
-.claude-plugin/marketplace.json   the catalog — 20 entries
+.claude-plugin/marketplace.json   the catalog — 21 entries
 plugins/<name>/                   one plugin per skill (sun bundles sunrise+sunset)
   .claude-plugin/plugin.json
   skills/<skill>/SKILL.md         (+ assets/, nested or at plugin root)

@@ -109,7 +109,7 @@
       ],
       "context_window": "unknown",
       "max_output": "unknown",
-      "limits_source": "antigravity list_models (to be read in Slice C when the host lane is built)",
+      "limits_source": "antigravity list_models lists model ids only, no window or output-token field (checked 2026-09-06, agy 1.1.27, Slice C); tools/antigravity-mcp/README.md carries none either",
       "timeout_s": 900,
       "credential_env": "",
       "web_off": "the antigravity tool has no web switch; the mandate forbids web use",
@@ -131,7 +131,7 @@
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md).",
+      "quirks": "The -high suffix IS the effort; never also pass effort. An empty response is a failed run even under status SUCCESS. skip_permissions omitted (default false) is the only real write guard; plan mode is not one (tools/antigravity-mcp/README.md). Host lane: the skill body calls the MCP tool with the model id and cwd `readers compose` prints and the prompt it composed (fixed web-forbidding prefix, then the mandate and documents); the reply is handed to `readers record --transport-status <flag>`. Lane built in Slice C.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -244,7 +244,7 @@
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Inherits the session model; the skill body fills session_model on every request so the floor check has its input. Lane lands in Slice C.",
+      "quirks": "Inherits the session model; the skill body fills session_model on every request (the id its harness reports) so the floor check has its input and the sidecar's effective_model names the real id. Host lane (Slice C): starved, packet-only, and any pinned effort run through the Workflow route (assets/claude-boxes.workflow.js filled by `readers compose`; the run record's per-agent toolCalls goes to `readers record --tool-calls`); repo and repo-with-tools with no effort run as a general-purpose subagent through the Agent tool, in worktree isolation when the request says so.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -289,7 +289,7 @@
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Lane lands in Slice C.",
+      "quirks": "Pinned to the harness model name fable (what the Agent and Workflow tools accept), not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call.",
       "guide": "",
       "verified_at": "2026-09-06"
     },
@@ -334,7 +334,7 @@
       },
       "available": true,
       "reasoning": "n/a",
-      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Lane lands in Slice C.",
+      "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call.",
       "guide": "",
       "verified_at": "2026-09-06"
     }

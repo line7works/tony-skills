@@ -1,0 +1,12 @@
+{
+  "authorized": true,
+  "call_id": "precon-cold-read",
+  "documents": [
+    "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
+  ],
+  "mandate": "Cold read of a scope doc: list every decision it fixes, every open item, and one question its author should answer before a build plan is drafted. Cite lines.",
+  "profile": "packet-only",
+  "protocol_version": 1,
+  "row": "gpt-astra",
+  "run_id": "example-precon"
+}
