@@ -15,13 +15,13 @@ Step 3 says the session writes the packet directory before any summon, so each r
 - Claude lane, `<scratch>/packet-claude/`: `build-doc.md`, `scope-doc.md`, `code-book.md`, each line-numbered (`N: `) with `cat -n | sed`.
 - GPT lane, `<scratch>/packet-gpt/`: the same three files plus `packet.md`, `assets/inspect-mandate.md` with its three placeholders filled from the numbered files (14,653 bytes).
 
-`<scratch>` was this session's scratchpad directory (`/private/tmp/claude-501/…/scratchpad`); the absolute paths appear verbatim in the blocks below. `docs/reviews/` already existed in the repo.
+`<scratch>` stands for this session's scratchpad directory and `<checkout>` for the tony-skills checkout root; the reads and the validate runs used the absolute paths, scrubbed here on Tony's word (2026-09-06) so the public record carries no machine-specific path. `docs/reviews/` already existed in the repo.
 
 ## AC3 — the Claude lane: the three-call fleet
 
 Command, from the repo root: `claude -p "<prompt>" --output-format text`, where the prompt was:
 
-> Read the file plugins/inspect/skills/inspect/SKILL.md at its checkout path in this repo (use the Read tool on it; read nothing else). Scenario: an /inspect run on the build doc plugins/readers/skills/readers/assets/fixtures/smoke-doc.md (repo-relative path), whose scope doc is that same file; the repo root is /Users/tonycoon/Developer/tony-skills; the run id is inspect-fresh-read; Step 2's suggest has already run; the packet directory for this lane is /private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-claude and already holds the line-numbered files Step 3 names; Tony answered 1 (Claude). Your system prompt names your model id; use it where the skill says to. Print ONLY the JSON request blocks Step 3 says you would send to /readers for this lane, as one JSON array holding the request objects (absolute paths for documents and workspace), with no fence, no prose before or after it, and no other output.
+> Read the file plugins/inspect/skills/inspect/SKILL.md at its checkout path in this repo (use the Read tool on it; read nothing else). Scenario: an /inspect run on the build doc plugins/readers/skills/readers/assets/fixtures/smoke-doc.md (repo-relative path), whose scope doc is that same file; the repo root is <checkout>; the run id is inspect-fresh-read; Step 2's suggest has already run; the packet directory for this lane is <scratch>/packet-claude and already holds the line-numbered files Step 3 names; Tony answered 1 (Claude). Your system prompt names your model id; use it where the skill says to. Print ONLY the JSON request blocks Step 3 says you would send to /readers for this lane, as one JSON array holding the request objects (absolute paths for documents and workspace), with no fence, no prose before or after it, and no other output.
 
 Output, verbatim (stdout; stderr was empty):
 
@@ -35,8 +35,8 @@ Output, verbatim (stdout; stderr was empty):
     "profile": "packet-only",
     "session_model": "claude-fable-5-1",
     "documents": [
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-claude/build-doc.md",
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-claude/scope-doc.md"
+      "<scratch>/packet-claude/build-doc.md",
+      "<scratch>/packet-claude/scope-doc.md"
     ],
     "mandate": "You are the traceability inspector. The build doc is about to become a builder's only source of requirements. Every requirement, rationale, and criterion in it must trace to the record (the scope doc, or the repo, which a separate local inspector checks: mark repo-grounded claims 'repo-grounded, not checked here'). Hunt faux context: plausible detail presented as settled that the record never established. When the record is NO RECORD, an untraceable item is 'unverifiable — needs confirmation', never asserted as invented.\n\nYour mandate is to find reasons to REJECT the plan. Report EVERY finding, low-confidence ones included; filtering is the verifier's job, not yours. Each finding: claim (one sentence) · location (`<doc>:<line>` using the `N: ` numbers on the documents; repo `file:line` for repository findings; a finding you cannot pin goes under 'Concerns without location') · failure scenario (what the builder would wrongly build, or what a grader could not check) · severity (BLOCKER: the plan as written would build a mistake · MAJOR: a real doc defect fixable in place · MINOR: a rough edge · QUESTION: unverifiable against a missing or silent record) · confidence (high / medium / low). End with what you attacked that held up, and a one-paragraph judgment: would you approve this plan for construction."
   },
@@ -48,8 +48,8 @@ Output, verbatim (stdout; stderr was empty):
     "profile": "packet-only",
     "session_model": "claude-fable-5-1",
     "documents": [
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-claude/code-book.md",
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-claude/build-doc.md"
+      "<scratch>/packet-claude/code-book.md",
+      "<scratch>/packet-claude/build-doc.md"
     ],
     "mandate": "You are the code-book inspector. Grade the build doc against the code book, quoting the code book's rules, never paraphrasing: checkable criteria (would a grader know pass from fail), self-containedness (could a builder who was never in the room execute it), slice integrity (dependency order, ends wired in, independently verifiable, ceremony scaled), and the exact load-bearing forms downstream stations key on (section names, Status labels, the ledger scaffold, ·-separated fields).\n\nYour mandate is to find reasons to REJECT the plan. Report EVERY finding, low-confidence ones included; filtering is the verifier's job, not yours. Each finding: claim (one sentence) · location (`<doc>:<line>` using the `N: ` numbers on the documents; repo `file:line` for repository findings; a finding you cannot pin goes under 'Concerns without location') · failure scenario (what the builder would wrongly build, or what a grader could not check) · severity (BLOCKER: the plan as written would build a mistake · MAJOR: a real doc defect fixable in place · MINOR: a rough edge · QUESTION: unverifiable against a missing or silent record) · confidence (high / medium / low). End with what you attacked that held up, and a one-paragraph judgment: would you approve this plan for construction."
   },
@@ -59,10 +59,10 @@ Output, verbatim (stdout; stderr was empty):
     "call_id": "inspect-fresh-read-repo-reality",
     "row": "claude-session",
     "profile": "repo",
-    "workspace": "/Users/tonycoon/Developer/tony-skills",
+    "workspace": "<checkout>",
     "session_model": "claude-fable-5-1",
     "documents": [
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-claude/build-doc.md"
+      "<scratch>/packet-claude/build-doc.md"
     ],
     "mandate": "You are the repo-reality inspector. Every path, component, command, and convention the build doc names must exist in the workspace as claimed; check each against the repository and report what does not hold, with the repo file:line where it should have been.\n\nYour mandate is to find reasons to REJECT the plan. Report EVERY finding, low-confidence ones included; filtering is the verifier's job, not yours. Each finding: claim (one sentence) · location (`<doc>:<line>` using the `N: ` numbers on the documents; repo `file:line` for repository findings; a finding you cannot pin goes under 'Concerns without location') · failure scenario (what the builder would wrongly build, or what a grader could not check) · severity (BLOCKER: the plan as written would build a mistake · MAJOR: a real doc defect fixable in place · MINOR: a rough edge · QUESTION: unverifiable against a missing or silent record) · confidence (high / medium / low). End with what you attacked that held up, and a one-paragraph judgment: would you approve this plan for construction."
   }
@@ -81,7 +81,7 @@ inspect-fresh-read-repo-reality → valid
 
 Command, from the repo root: `claude -p "<prompt>" --output-format text`, where the prompt was:
 
-> Read the file plugins/inspect/skills/inspect/SKILL.md at its checkout path in this repo (use the Read tool on it; read nothing else). Scenario: an /inspect run on the build doc plugins/readers/skills/readers/assets/fixtures/smoke-doc.md (repo-relative path), whose scope doc is that same file; the repo root is /Users/tonycoon/Developer/tony-skills; today is 2026-09-06; the run id is inspect-fresh-read-gpt; Step 2's suggest has already run; the packet directory for this lane is /private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-gpt and already holds packet.md and the line-numbered files Step 3 names; docs/reviews/ exists in the repo; Tony answered 2 (GPT) and typed no other id. Your system prompt names your model id; use it where the skill says to. Print ONLY the JSON request blocks Step 3 says you would send to /readers for this lane, as one JSON array holding the request objects (absolute paths for documents, workspace, and raw_path), with no fence, no prose before or after it, and no other output.
+> Read the file plugins/inspect/skills/inspect/SKILL.md at its checkout path in this repo (use the Read tool on it; read nothing else). Scenario: an /inspect run on the build doc plugins/readers/skills/readers/assets/fixtures/smoke-doc.md (repo-relative path), whose scope doc is that same file; the repo root is <checkout>; today is 2026-09-06; the run id is inspect-fresh-read-gpt; Step 2's suggest has already run; the packet directory for this lane is <scratch>/packet-gpt and already holds packet.md and the line-numbered files Step 3 names; docs/reviews/ exists in the repo; Tony answered 2 (GPT) and typed no other id. Your system prompt names your model id; use it where the skill says to. Print ONLY the JSON request blocks Step 3 says you would send to /readers for this lane, as one JSON array holding the request objects (absolute paths for documents, workspace, and raw_path), with no fence, no prose before or after it, and no other output.
 
 Output, verbatim (stdout; stderr was empty):
 
@@ -94,10 +94,10 @@ Output, verbatim (stdout; stderr was empty):
     "row": "gpt-astra",
     "profile": "packet-only",
     "documents": [
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-gpt/packet.md"
+      "<scratch>/packet-gpt/packet.md"
     ],
     "mandate": "Inspect the build doc per the packet's instructions and report every finding.",
-    "raw_path": "/Users/tonycoon/Developer/tony-skills/docs/reviews/2026-09-06-inspect-smoke-doc-gpt.md",
+    "raw_path": "<checkout>/docs/reviews/2026-09-06-inspect-smoke-doc-gpt.md",
     "authorized": true
   },
   {
@@ -106,9 +106,9 @@ Output, verbatim (stdout; stderr was empty):
     "call_id": "inspect-fresh-read-gpt-repo-reality",
     "row": "claude-session",
     "profile": "repo",
-    "workspace": "/Users/tonycoon/Developer/tony-skills",
+    "workspace": "<checkout>",
     "documents": [
-      "/private/tmp/claude-501/-Users-tonycoon-Developer-tony-skills/71e40daa-ea15-4949-a77e-54e9edf37e49/scratchpad/packet-gpt/build-doc.md"
+      "<scratch>/packet-gpt/build-doc.md"
     ],
     "mandate": "You are the repo-reality inspector. Every path, component, command, and convention the build doc names must exist in the workspace as claimed; check each against the repository and report what does not hold, with the repo file:line where it should have been.\n\nYour mandate is to find reasons to REJECT the plan. Report EVERY finding, low-confidence ones included; filtering is the verifier's job, not yours. Each finding: claim (one sentence) · location (`<doc>:<line>` using the `N: ` numbers on the documents; repo `file:line` for repository findings; a finding you cannot pin goes under 'Concerns without location') · failure scenario (what the builder would wrongly build, or what a grader could not check) · severity (BLOCKER: the plan as written would build a mistake · MAJOR: a real doc defect fixable in place · MINOR: a rough edge · QUESTION: unverifiable against a missing or silent record) · confidence (high / medium / low). End with what you attacked that held up, and a one-paragraph judgment: would you approve this plan for construction.",
     "session_model": "claude-fable-5-1"
