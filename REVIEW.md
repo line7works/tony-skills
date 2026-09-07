@@ -1,5 +1,5 @@
 # REVIEW.md
-<!-- verified: 2026-09-06 -->
+<!-- verified: 2026-09-07 -->
 
 ## Passes
 - correctness: on
@@ -25,3 +25,4 @@
 - readers callers: the Workflow route's `<cwd>/.readers/<run id>/<call id>.workflow.js` copy carries the composed prompt into whatever repo the caller runs in, only tony-skills ignores it, and the caller's text never names it · found 2026-09-06 (readers Slice D signoff, readers.py:1075) and 2026-09-06 (readers Slice G signoff, jpb:57–60)
 - readers callers: a typed model id on a Claude row is pinned verbatim as a harness model name and no existence check ever drops it, and the caller gives the session no source for a valid one · found 2026-09-06 (readers Slice D signoff, readers.py:225) and 2026-09-06 (readers Slice G signoff, jpb:119–128)
 - readers callers: nothing refuses a `claude-session` request without `session_model` when no floor is passed, so a caller that omits it stamps `session` as the effective model · found 2026-09-06 (readers Slice E signoff, inspect:82) and 2026-09-06 (readers Slice G signoff, jpb:259–262)
+- readers evidence: a number recorded in the slice's `docs/evidence/readers/` file does not reproduce from its own command (a character count for bytes, a limit computed with the wrong subtrahend, a before-edit grep count) · found 2026-09-06 (readers Slice E signoff, slice-e-fresh-read.md:16) and 2026-09-07 (readers Slice F signoff, slice-f-fresh-read.md:9, :25, :34)

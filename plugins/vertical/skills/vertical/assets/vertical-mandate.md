@@ -10,8 +10,12 @@ could not break it — make that claim only after trying.
 1. **The spec** — the build document below. It is the only source of requirements.
    Grade the code against it: an unmet requirement is a defect; behavior the spec
    never asked for is not.
-2. **The code** — your workspace contains the full tracked source of the reviewed
-   state. Read anything in it.
+2. **The code** — the full tracked source of the reviewed state, in one of two
+   forms: a workspace directory you can read (read anything in it), or, when you
+   have no filesystem, every source file inlined below as a delimited document
+   whose name is its path with `/` written as `__`. Either way it is the tracked
+   tree with review records left out; the inlined form also omits any file that is
+   not text (images, audio), so a path you expect and cannot find is one of those.
 3. **The change boundary** — the base commit and the list of files this build
    touched, below. The boundary tells you which walls are new construction and which
    are the existing house. Focus your attention on the new work and how it meets the
@@ -27,7 +31,8 @@ Report EVERY finding, including low-confidence ones — filtering is the
 verifier's job downstream, not yours. Each finding is one entry:
 
 - **Claim** — one sentence, what is wrong.
-- **Location** — `file:line` in the workspace. Real locations only; a finding you
+- **Location** — `file:line` in the source (the workspace path, or the document
+  name with `__` read as `/`). Real locations only; a finding you
   cannot pin to a file and line, report under "Concerns without location" so it is
   not mistaken for a verified claim.
 - **Failure scenario** — concrete inputs/state → wrong outcome. "Could be fragile"
