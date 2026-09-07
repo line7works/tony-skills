@@ -18,7 +18,7 @@ Print `READERS-PROTOCOL: 1` as the first line of the run, before any dispatch, i
 ## Step 1 — Read the summon
 
 - **Summon** (a caller skill): a request block in the contract's fields, one call or a fleet (several calls sharing `run_id` and the caller's authorization, each with its own `row`, `mandate`, `documents` or `workspace`, `profile`, `call_id`, `raw_path`). Ask Tony nothing: the caller's `authorized` flag is his word for an outside row, and its absence refuses the call.
-- **Direct** (Tony types it): `/readers <row id> <document path> "<one-line mandate>" [<profile>]`. The profile is `starved` unless the fourth argument names one. Mint `run_id` and `call_id`. When the row is outside (its roster `provider` is not `anthropic`), ask once for the word and wait, unless the invocation already carries it ("send it", "go", "authorized"); then set `authorized: true`. Claude rows need no word.
+- **Direct** (Tony types it): `/readers <row id> <document path> "<one-line mandate>" [<profile>]`. The profile is `starved` unless the fourth argument names one. Mint `run_id` and `call_id`. When the row is outside (its roster `provider` is not `anthropic`), ask once for the word and wait, unless the invocation itself already carries it as an explicit send instruction (the words "send it"; ordinary prose in the mandate never counts); then set `authorized: true`. Claude rows need no word.
 - **Suggest** (`/readers suggest <rows> --run <run id> [--run-dir <dir>] [--floor <floor>]`): run `RUNNER suggest` with those arguments, print its lines (per row: the model, whether it is outside, any drop note), make no call, and stop.
 
 ## Step 2 — Prepare every call
@@ -37,13 +37,14 @@ Print `READERS-PROTOCOL: 1` as the first line of the run, before any dispatch, i
 Write the reply verbatim to `<call dir>/capture.md` (a heredoc or the Write tool; change nothing). Then record:
 - `RUNNER record <request file> --capture <call dir>/capture.md [--tool-calls <count>] [--transport-status <flag>]`: `--tool-calls` on every Workflow-route call, `--transport-status` on every Gemini call. The runner applies the guards (empty, parity, an error flag under a complete reply).
 - A tool that failed, timed out, or returned partial text or a diagnostic string instead of a report: `RUNNER record <request file> --failed "<the tool's own error text>" [--status <status>] [--capture <file holding the partial text>]`.
+- A `record` that comes back `invalid-request` with `sidecar: null` is a usage slip (no compose, the wrong request file, an unreadable capture, a missing `--tool-calls`): nothing was written, the call keeps its id; fix the slip and record again.
 One call, one record. Never re-run a reader for a better answer; a retry is a new call id on the caller's or Tony's word.
 
 ## Step 4 — Report
 
-For every call, one line in this fixed form, then the result JSON (the runner's stdout):
-`READERS: <row id> · <status> · <effective model id> · <raw path | none> · <sidecar path>`
-`<raw path>` is the result's `raw_path` or `none`; `<sidecar path>` is the result's `sidecar`. In the direct form, also print `raw_text` in chat, and file a copy only when Tony names a path (`raw_path`).
+Your final report carries, for every call, one line in this fixed form, bare at the start of a line (no backticks, no bullet, no prefix), immediately followed by the result JSON verbatim (the runner's stdout, in a fenced `json` block), whatever earlier messages already showed:
+READERS: <row id> · <status> · <effective model id> · <raw path | none> · <sidecar path>
+`<effective model id>` is the result's `effective_model`, or `none` when it is null (a call refused before the model was resolved); `<raw path>` is the result's `raw_path` or `none`; `<sidecar path>` is the result's `sidecar`, or `none` when it is null (a usage slip the runner returned without writing: fix the slip and record again under the same call id). In the direct form, also print `raw_text` in chat, and file a copy only when Tony names a path (`raw_path`).
 
 ## The rules
 

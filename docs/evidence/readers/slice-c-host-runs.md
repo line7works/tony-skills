@@ -366,9 +366,13 @@ Sidecar (selected fields):
 
 `ls <call dir>/work` → empty. The sidecar's parity is the roster row's `starved` line and its isolation label is `sandbox-enforced` (from the AC6 measurement above). Two body decisions the session flagged, both now on the record: the antigravity tool returns no status word on a clean reply, so the body passed `SUCCESS` to `record --transport-status` (the contract now says so); and the tool's trailer line (`conversation_id … | model … | mode: plan | 7.0s | 8008 tokens`) stayed inside the capture because the capture is verbatim, so `raw_hash` covers it (a guide note for Slice I: callers that parse a Gemini reply should expect that trailer).
 
+## Fix pass after the signoff (2026-09-06) — the report shape, re-proven headless
+
+After the fix pass (the body's Step 4 now demands the bare `READERS:` line followed by the result JSON in the final report, and a usage slip at `record` no longer writes a sidecar), one more free Claude read from the checkout: `READERS_RUN_ROOT=<scratch>/fix7/runs claude --plugin-dir plugins/readers -p '/readers claude-session <fixture> "Read the document and name its deliberate gap in one sentence."' --output-format stream-json --verbose`. The final message opens with `READERS-PROTOCOL: 1`, then the bare line `READERS: claude-session · ok · claude-fable-5-1 · none · <scratch>/fix7/runs/adhoc-31e6bbf1/c-9d2693a6/sidecar.json`, then the full result JSON in a fenced block (43 keys, `session_model: claude-fable-5-1`, `parity: toolCalls: 0`, `isolation: harness-enforced (toolCalls: 0)`, `adapter_version: slice-c-fix-2026-09-06`). No `.readers/` residue in the checkout afterwards. The earlier AC4 and AC5 sidecars in this file predate the `session_model` field and the roster's Claude labels (they read 42 keys and `isolation: unmeasured`); this run and the AC8 and packet-only runs are the ones that carry both.
+
 ## Live-send tally
 
 - GPT: one send (AC8, `gpt-astra`, `starved`), of the two the plan allows.
 - Gemini: two sends, both on Tony's word ("send it", "send again"): the AC4/AC6 combined run (`starved`, `empty`, write denied) and the plain AC4 run (`starved`, `ok`); the plan's count was one, the second is the run AC6 foresaw "on Tony's word".
-- Claude subagent calls (not outside spend): AC4, AC5, the packet-only read, AC8's `c1`, plus the two first-attempt runs that failed before any reader spawned, and one Workflow launched from the builder's session to prove the working-directory script path.
+- Claude subagent calls (not outside spend): AC4, AC5, the packet-only read, AC8's `c1`, the fix-pass report-shape read, plus the two first-attempt runs that failed before any reader spawned, and one Workflow launched from the builder's session to prove the working-directory script path.
 - `OPENROUTER_API_KEY` was never read or printed; the regression's OpenRouter cases ran under a placeholder value and `READERS_TEST=1` with canned replies, sending nothing.

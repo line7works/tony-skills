@@ -40,7 +40,7 @@ import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-c-2026-09-06"
+ADAPTER_VERSION = "slice-c-fix-2026-09-06"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
 # The last-pick memory lives in the tony-skills checkout (blueprint assumption 1), never in the
@@ -81,11 +81,14 @@ RESULT_FIELDS = (
 
 
 class Refuse(Exception):
-    def __init__(self, status, reason, extra=None):
+    def __init__(self, status, reason, extra=None, nowrite=False):
         super().__init__(reason)
         self.status = status
         self.reason = reason
         self.extra = extra or {}
+        # nowrite: the refusal is returned but never written as the call's sidecar, so a composed call whose
+        # reader already ran keeps its id free for the real record (a usage slip must not burn a paid reply)
+        self.nowrite = nowrite
 
 
 def now():
@@ -307,13 +310,17 @@ def resolve_sources(run_dir, create, picks_override=None):
 
 def read_request(arg):
     if arg == "-":
-        text = sys.stdin.read()
+        try:
+            text = sys.stdin.read()
+        except ValueError as e:
+            raise Refuse("invalid-request", "request on stdin is not UTF-8 text: %s" % e)
     else:
         try:
-            with open(arg) as f:
+            with open(arg, encoding="utf-8") as f:
                 text = f.read()
-        except OSError as e:
-            raise Refuse("invalid-request", "request file unreadable: %s" % e)
+        except (OSError, ValueError) as e:
+            # ValueError covers UnicodeDecodeError (a request that is not UTF-8) and a NUL in the path
+            raise Refuse("invalid-request", "request file unreadable as UTF-8 text: %s" % e)
     try:
         req = json.loads(text)
     except ValueError as e:
@@ -618,6 +625,9 @@ def resolve_model(req, row, result, picks=None):
     result["transport"] = row["transport"]
     result["kind"] = row["kind"]
     result["isolation"] = row["isolation"].get(req["profile"], "unmeasured")
+    if req.get("isolation") == "worktree":
+        # the request asked for the Agent tool's worktree isolation; the sidecar says so (Slice C R3)
+        result["isolation"] = "worktree"
     result["parity"] = row["parity"].get(req["profile"])
 
 
@@ -986,6 +996,11 @@ def finish(result, call_dir, status, reason=None, extra=None):
 def check_ids(req):
     """The ids and run_dir name the call directory, so they are checked before any path is joined.
     A request that fails here has no legal call directory: the refusal is returned and nothing is written."""
+    for k, v in req.items():
+        if isinstance(v, str) and "\0" in v:
+            raise Refuse("invalid-request", "%s contains a NUL byte" % k)
+        if isinstance(v, list) and any(isinstance(x, str) and "\0" in x for x in v):
+            raise Refuse("invalid-request", "%s contains a NUL byte" % k)
     for k in ("run_id", "call_id"):
         if req.get(k) is not None and not valid_id(req[k]):
             raise Refuse("invalid-request", "%s must be one path segment of [A-Za-z0-9._-], not starting with a dot: %r" % (k, req[k]))
@@ -1020,7 +1035,8 @@ def write_workflow(req, row, result, prompt, call_dir):
     if tmpl.count(target) != 1 or tmpl.count("__AGENT_OPTS__") != 1:
         raise Refuse("lane-unavailable", "workflow template %s is not the committed shape (one prompt placeholder, one options placeholder)" % WORKFLOW_TEMPLATE)
     opts = {"label": "reader:%s" % result["call_id"]}
-    if row["id"] != "claude-session":
+    if row["id"] != "claude-session" or result["override_source"] != "roster default":
+        # the row's harness model name, or the explicit/remembered pick on the session row
         opts["model"] = result["effective_model"]
     if req.get("effort"):
         opts["effort"] = req["effort"]
@@ -1061,7 +1077,7 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
     the body has to know on its own: the model id, the effort, the cwd, and the tool all come from here."""
     meta_path = os.path.join(call_dir, "compose.json")
     if os.path.exists(meta_path):
-        raise Refuse("invalid-request", "call id %s is already composed (%s); mint a new call id for a retry" % (result["call_id"], meta_path))
+        raise Refuse("invalid-request", "call id %s is already composed (%s); the composed call keeps its id, record it or mint a new id for a retry" % (result["call_id"], meta_path), nowrite=True)
     route = None
     tool = None
     if row["transport"] == "claude-subagent":
@@ -1093,8 +1109,9 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
                 "omit": ["args", "script"], "agent_options": opts,
                 "capture": "the `capture` the run returns; pass the run record's per-agent toolCalls count to `readers record --tool-calls`"}
     elif route == "agent":
-        params = {"subagent_type": "general-purpose"}
-        if row["id"] != "claude-session":
+        params = {"subagent_type": "general-purpose",
+                  "description": "readers %s %s read (%s)" % (row["id"], req["profile"], result["call_id"])}
+        if row["id"] != "claude-session" or result["override_source"] != "roster default":
             params["model"] = result["effective_model"]
         if req.get("isolation") == "worktree":
             params["isolation"] = "worktree"
@@ -1105,13 +1122,22 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
                 "prompt_param": "prompt", "prompt_file": prompt_file,
                 "omit": ["effort", "mode", "skip_permissions", "add_dirs", "conversation_id", "timeout_ms"],
                 "capture": "the returned text; pass the status flag the tool reported to `readers record --transport-status`"}
+    if workflow_text is not None:
+        # the working-directory script location is checked before anything is written, so a `.readers` that
+        # is a file, or an unwritable working directory, refuses with sidecar.json alone
+        sd = os.path.dirname(script_path)
+        try:
+            os.makedirs(sd, exist_ok=True)
+        except OSError as e:
+            raise Refuse("lane-unavailable", "cannot create %s for the Workflow script: %s" % (sd, e))
+        if not os.access(sd, os.W_OK):
+            raise Refuse("lane-unavailable", "%s is not writable for the Workflow script" % sd)
     os.makedirs(diag, exist_ok=True)
     with open(prompt_file, "w", encoding="utf-8") as f:
         f.write(prompt)
     if workflow_text is not None:
         with open(workflow_file, "w", encoding="utf-8") as f:
             f.write(workflow_text)
-        os.makedirs(os.path.dirname(script_path), exist_ok=True)
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(workflow_text)
     meta = {
@@ -1126,7 +1152,12 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
         json.dump(meta, f, indent=2, sort_keys=True)
     log_dispatch(call_dir, "compose %s route=%s model=%s effort=%s profile=%s (the skill body runs the lane; record follows)" % (
         row["transport"], route, result["effective_model"], result["effective_effort"], req["profile"]))
+    if result["override_source"] == "explicit pick" and result["effective_model"] != row["model"]:
+        # Slice B R4 on the host lanes: compose is the dispatch, so the pick is remembered here
+        result["memory"] = remember_pick(row, result["effective_model"])
     out = dict(meta)
+    out["memory"] = result["memory"]
+    out["snapshot_fault"] = result["snapshot_fault"]
     out["status"] = "composed"
     out["reason"] = "pre-send checks passed; run the lane, then `readers record`"
     return out
@@ -1135,26 +1166,33 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
 def host_record(req, row, prompt, result, call_dir, diag, host):
     """Step 2 of a host call: the guards the portable adapters apply, then the same capture and sidecar."""
     meta_path = os.path.join(call_dir, "compose.json")
+    # Every check that can fail on the body's slip (no compose, a different request, an unreadable capture, a
+    # missing count) refuses without writing: the call keeps its id free for the real record, nothing is
+    # created in its directory, and the .readers/ copy stays until then.
     try:
         with open(meta_path, encoding="utf-8") as f:
             meta = json.load(f)
     except (OSError, ValueError) as e:
-        raise Refuse("invalid-request", "no compose record for call %s (%s: %s); run `readers compose` first" % (result["call_id"], meta_path, e))
+        raise Refuse("invalid-request", "no compose record for call %s (%s: %s); run `readers compose` first" % (result["call_id"], meta_path, e), nowrite=True)
     if meta.get("prompt_hash") != result["packet_hash"]:
-        raise Refuse("invalid-request", "the request does not match the composed call %s (prompt hash differs); record the call with the request compose saw" % result["call_id"])
-    remove_script_in_cwd(meta.get("script_path"))
-    for k in ("started_at", "workdir", "workdir_instruction_files", "profile"):
-        result[k] = meta.get(k)
-    result["diagnostics"] = diag
-    result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
-    log_dispatch(call_dir, "record %s" % ("failed: %s" % host["failed"] if host.get("failed") else "capture %s" % host.get("capture")))
+        raise Refuse("invalid-request", "the request does not match the composed call %s (prompt hash differs); record the call with the request compose saw" % result["call_id"], nowrite=True)
     text = None
     if host.get("capture"):
         try:
             with open(host["capture"], encoding="utf-8") as f:
                 text = f.read()
-        except (OSError, UnicodeDecodeError) as e:
-            raise Refuse("invalid-request", "capture file unreadable as UTF-8 text: %s (%s)" % (host["capture"], e))
+        except (OSError, ValueError) as e:
+            raise Refuse("invalid-request", "capture file unreadable as UTF-8 text: %s (%s)" % (host["capture"], e), nowrite=True)
+    n = host.get("tool_calls")
+    if meta.get("route") == "workflow" and not host.get("failed") and n is None:
+        raise Refuse("invalid-request", "record needs --tool-calls <count> on the Workflow route (the run record's tool_uses); call %s keeps its id" % result["call_id"], nowrite=True)
+    remove_script_in_cwd(meta.get("script_path"))
+    for k in ("started_at", "workdir", "workdir_instruction_files", "profile"):
+        result[k] = meta.get(k)
+    os.makedirs(diag, exist_ok=True)
+    result["diagnostics"] = diag
+    result["dispatch_log"] = os.path.join(call_dir, "dispatch.log")
+    log_dispatch(call_dir, "record %s" % ("failed: %s" % host["failed"] if host.get("failed") else "capture %s" % host.get("capture")))
     if host.get("transport_status"):
         with open(os.path.join(diag, "transport-status.txt"), "w", encoding="utf-8") as f:
             f.write(host["transport_status"] + "\n")
@@ -1165,8 +1203,7 @@ def host_record(req, row, prompt, result, call_dir, diag, host):
                 f.write(text)
         raise Refuse(host.get("status") or "transport-failed", host["failed"])
     if text is None:
-        raise Refuse("invalid-request", "record needs --capture <file> or --failed <reason>")
-    n = host.get("tool_calls")
+        raise Refuse("invalid-request", "record needs --capture <file> or --failed <reason>", nowrite=True)
     if row["transport"] == "claude-subagent" and req["profile"] in ("starved", "packet-only"):
         if n is None:
             result["parity"] = "toolCalls: not reported"
@@ -1216,7 +1253,7 @@ def run(req, dispatching, host=None):
         # from the frozen copy afterwards; validate reads the snapshot when one exists and creates none.
         try:
             roster, picks, mem_status, snap = resolve_sources(run_dir, create=dispatching or host is not None)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             # The run dir cannot be made or the snapshot cannot be read: resolve from the live files so the
             # pre-send checks still return their own status; the fault is reported beside it, and the
             # sidecar write below says so again if it fails too (a status is never replaced by a path fault).
@@ -1246,7 +1283,6 @@ def run(req, dispatching, host=None):
             diag = os.path.join(call_dir, "diagnostics")
             if host["step"] == "compose":
                 return host_compose(req, row, prompt, result, call_dir, diag, host)
-            os.makedirs(diag, exist_ok=True)
             launched = True
             return host_record(req, row, prompt, result, call_dir, diag, host)
         adapter = ADAPTERS.get(row["transport"])
@@ -1265,7 +1301,7 @@ def run(req, dispatching, host=None):
         capture(text, req, call_dir, result)
         return finish(result, call_dir, "ok")
     except Refuse as r:
-        return finish(result, call_dir, r.status, r.reason, r.extra)
+        return finish(result, None if r.nowrite else call_dir, r.status, r.reason, r.extra)
     except KeyboardInterrupt:
         return finish(result, call_dir, "cancelled", "interrupted by the caller")
     except Exception as e:  # never a traceback in place of a result (contract: JSON in every case)
