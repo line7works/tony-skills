@@ -172,11 +172,16 @@ rows — never chat history, never another box's output.
 ## Step 6 — Cost actuals
 
 Dollars only — Tony's rule (2026-08-09): record real money for anything
-API-billed; no token counts anywhere. For each OpenRouter box (DeepSeek,
-Qwen) that returned, take the sidecar's `response_raw` path — readers' copy
-of the exact HTTP body, `<run dir>/<call id>/response.raw` — and fetch the
-actual billed USD: `assets/openrouter-cost.sh <response_raw>` (the script
-reads the body's top-level `id`, unchanged). Sum an OpenRouter total.
+API-billed; no token counts anywhere. For every OpenRouter box (DeepSeek,
+Qwen) whose sidecar carries a `response_raw` path — `ok`, `incomplete`,
+`empty`, or `transport-failed` alike: readers saves the body whatever the
+status, and a box the provider answered was billed whether or not it
+survived Step 5 — take that path (readers' copy of the exact HTTP body,
+`<run dir>/<call id>/response.raw`) and fetch the actual billed USD:
+`assets/openrouter-cost.sh <response_raw>` (the script reads the body's
+top-level `id`, unchanged). Sum an OpenRouter total; a dropped box's
+dollars go on its dropped line. A box with no `response_raw` (refused
+before any send) records nothing.
 Subscription boxes (Fable, Opus, GPT) each record a cost line of: a
 dollar sign, the digit zero, an em dash, then "subscription" — per the
 vision doc's format. Gemini records the same zero-dollar figure followed

@@ -33,7 +33,7 @@ if cm:
         m3 = re.match(r"^(.+?) — (.+)$", ln)
         if km:
             kk = km.group(1)
-            cost_lines.append((COST_LABELS.get(kk, kk), km.group(2).strip().strip('"')))
+            cost_lines.append((COST_LABELS.get(kk, kk.capitalize()), km.group(2).strip().strip('"')))
         elif m3:
             cost_lines.append((m3.group(1).strip(), m3.group(2).strip().strip('"')))
         else:
@@ -45,11 +45,16 @@ if cm:
 # demoted by md_block, never sectioned (Step 11 contract: ONE Brief panel).
 JUDGE_PREFIXES = ("## Judge K tally", "## Judge G tally", "## Reconciliation", "## Debate card")
 VENDOR_RE = re.compile(r"^## (GPT|Fable|Opus|Gemini|DeepSeek|Qwen) box — (.+)$")
+# A vendor heading VENDOR_RE does not name (a run doc from a roster this
+# renderer predates, re-rendered at resolve) is still a box: cut it and
+# render it on the fallback style, never merge it into the panel above.
+LEGACY_BOX_RE = re.compile(r"^## (\w+) box — (.+)$")
 DROPPED_RE = re.compile(r"^## Dropped — (\w+) \((.+)\)$")
 BRIEF_RE = re.compile(r"^## (The )?scrubbed brief\s*$", re.I)
 
 def is_cut(ln):
-    return bool(BRIEF_RE.match(ln) or VENDOR_RE.match(ln) or DROPPED_RE.match(ln)
+    return bool(BRIEF_RE.match(ln) or VENDOR_RE.match(ln) or LEGACY_BOX_RE.match(ln)
+                or DROPPED_RE.match(ln)
                 or ln.startswith(JUDGE_PREFIXES) or ln.startswith("## Verdicts"))
 
 lines = body.splitlines()
@@ -126,6 +131,7 @@ panels, tabs = [], []
 judge_bits, summary_bits, verdict_bits = [], [], []
 for heading, content in sections:
     vm, dm = VENDOR_RE.match(heading), DROPPED_RE.match(heading)
+    lm = None if vm else LEGACY_BOX_RE.match(heading)
     if BRIEF_RE.match(heading):
         s, v = sty("brief")
         panels.append(f'<section class="panel" id="brief" {s}><span class="badge">BRIEF</span>'
@@ -138,6 +144,13 @@ for heading, content in sections:
                       f'<span class="badge">{v["badge"]}</span><h2>{vendor} box</h2>'
                       f'<p class="modelid">{html.escape(model)}</p>{md_block(content)}</section>')
         tabs.append((f"box-{vendor.lower()}", vendor, v["accent"]))
+    elif lm:
+        vendor, model = lm.group(1), lm.group(2)
+        s, v = sty("summary")
+        panels.append(f'<section class="panel" id="box-{vendor.lower()}" {s}>'
+                      f'<span class="badge">{html.escape(vendor.upper())}</span><h2>{html.escape(vendor)} box</h2>'
+                      f'<p class="modelid">{html.escape(model)}</p>{md_block(content)}</section>')
+        tabs.append((f"box-{vendor.lower()}", html.escape(vendor), v["accent"]))
     elif dm:
         vendor, model = dm.group(1), dm.group(2)
         s, v = sty("dropped") if False else (f'style="--accent:{styles["dropped"]["accent"]};--tint:{styles["dropped"]["tint"]}"', styles["dropped"])
