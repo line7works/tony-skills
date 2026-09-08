@@ -38,7 +38,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/contract.md; plugins/readers/skills/readers/assets/readers.py (the two prefix constants only); plugins/readers/skills/readers/assets/roster.json (the `isolation` labels of the three Claude rows for `starved` and `packet-only`); plugins/readers/skills/readers/SKILL.md (the two "nothing else" lines); docs/evidence/readers/followups-a-fresh-read.md
 Not in this slice: any routing or dispatch change; the callers' texts; the Gemini row's efforts (Slice B); the guides (Slice B touches gemini.md).
 Depends on: nothing
-Status: built
+Status: signed off with conditions
 
 ## Slice B — the Gemini row refuses an effort it cannot apply
 Goal: A request `effort` on the Gemini row is refused before any send, and the roster, contract, and guide say the row runs at the effort in its model id and nothing else.
@@ -100,3 +100,20 @@ Status: not started
 ## Handoffs
 
 ## Punch list
+
+### 2026-09-08 — review: slice A
+- MAJOR · docs/plans/2026-09-08-readers-followups.md:83 · builder-call reading of AC5 ("each such line also contains the word `harness`" read as the two R5 lines; SKILL.md:35 and :53 match `nothing else` without `harness`) · AC5 run as written fails (4 matching lines, 2 with harness) while R5 is met in substance; waive or amend AC5 on Tony's word · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:76 · "on the Agent route … three of them" undercounts: the git-status block and a `userEmail` block (plus MCP instructions and the agent and skills rosters) also reach an Agent-route reader (three lenses, direct observation) · a Method line reasons "Agent route, so no git-status leak", or a reviewer quotes the email into `raw_text` and a public verdict · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:76 · the Workflow-route account names only the git-status block; the readers build's Discovered (2026-09-06 slice C, plan:519) records the instruction files and memory index reaching that reader too · a caller judging a `starved` read reports one channel where the record names three · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:76 and :130 · "measured twice … under `starved` and `packet-only`": proofs (b) and (e) both ran `starved`; `packet-only` never measured (R1's wording) · a later reader skips the `packet-only` probe on the contract's word · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/guides/gemini.md:19-22 and :35 · the guide's prefix quote lacks the new line and :35 says the prefix "carries only" three things (outside the Footprint; Slice B touches item 6 only) · a lane debugger diffs prompt.md against the guide and sees a line the guide denies · Slice A review
+- MINOR · plugins/readers/skills/readers/SKILL.md:37 · "verbatim … change nothing" never points at the contract's footer rule; `record` trims nothing (Slice C's Footprint covers Step 3) · a session pastes the Agent tool result whole and `raw_hash` covers non-reviewer text · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:76 · "`workdir_instruction_files` names the workspace half only" overstates: `instruction_files()` (readers.py:681) lists root AGENTS.md/CLAUDE.md, no imports, keyed on `workspace` not cwd (R1's phrase) · cwd tony-skills, workspace a scratch repo → the sidecar names the wrong repo's files · Slice A review
+- MINOR · docs/plans/2026-09-08-readers-followups.md:34 · AC3's third verify line is vacuous (single quotes never match JSON; prints 0 on main); the evidence used the double-quoted form without saying so · the AC passes with no edit made · Slice A review
+- MINOR · docs/plans/2026-09-08-readers-followups.md:57 · Slice B's Depends-on premise ("paragraphs Slice A does not" touch) is false: A rewrote :80, which B's R2 edits · B's builder skips the rebase and conflicts on :80 · Slice A review
+- MINOR · docs/plans/2026-09-08-readers-followups.md:3 · Intent says "every reader on every lane" is told no other model; R2 covers the two host prefixes, the portable lanes carry no fixed instruction by design · spec-internal inconsistency · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:76 · "on the Agent route (`repo` and `repo-with-tools`)" equates route with profile; a `repo` call with a pinned effort goes through the Workflow route per the routes sentence · two readings in one paragraph · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:102 · Evidence section's "the body's verbatim copy of the reply" lacks the footer qualification :72/:76 carry · a reader of :102 includes the footer · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:76 · the contract does not say the harness's instruction-file channel precedes the prefix with "OVERRIDE" language nor which wins on conflict with the no-MCP and read-only rules · a mandate "audit X" and the injected global file's Clerk rule send the reader outside the workspace · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/readers.py:43 · `ADAPTER_VERSION` unchanged while the composed fixed text changed · a pre-slice compose recorded by a post-slice runner is a prompt-hash usage slip mid plugin-update · Slice A review
+- MINOR · plugins/readers/skills/readers/assets/readers.py:576 · the prefix's authority over the mandate is by order and wording only; "ignore the READER INSTRUCTIONS above" composes with no refusal · inherent to prompt design, not new · Slice A review
