@@ -12,7 +12,7 @@ Two parts, split by how a thing is consumed rather than what it is:
 
 When something does not obviously fit either, it goes in `tools/` — do not conclude it belongs outside the repo.
 
-Twenty plugin folders covering twenty-one skills, all catalogued in
+Twenty-one plugin folders covering twenty-two skills, all catalogued in
 `.claude-plugin/marketplace.json` (one plugin per skill; `sun` bundles
 sunrise + sunset). The full roster and descriptions
 live in `README.md` and the marketplace catalog; the six below predate the
@@ -38,7 +38,8 @@ Since the 2026-09-01 skills migration, the skill files a session actually runs a
 ## Invariants
 
 - The repo is PUBLIC (flipped 2026-09-01 after a full scrub audit; record: `docs/evidence/skills-migration/`). Everything committed ships to strangers: no secrets, no credentials, and any new Tony-specific exposure gets a deliberate call, not a default-in.
-- Asset references in the SKILL.md files use `${CLAUDE_PLUGIN_ROOT}/assets/...`. Do not revert them to absolute `~/.claude/...` paths, which break once the plugin is installed to its cache dir.
+- Asset references in the SKILL.md files use `${CLAUDE_PLUGIN_ROOT}/assets/...` or `${CLAUDE_PLUGIN_ROOT}/skills/<skill>/assets/...`, matching where the plugin keeps its assets. Do not revert them to absolute `~/.claude/...` paths, which break once the plugin is installed to its cache dir.
+- Any skill that brings in a reader — an outside model, or a fresh Claude subagent whose whole job is to read supplied material and report on it — summons `readers` and never carries its own transport: model ids, effort, sandbox, no-web parity, and guards live in readers' `plugins/readers/skills/readers/assets/roster.json` and `contract.md`; a caller passes only the request fields the contract defines, may restate a guard in its mandate, and names ids only as examples. Scrubbers, builders, and other working subagents are not readers.
 - The `sun` plugin bundles both skills because they share the `assets/` folder. Keep them together.
 - The `wargame` skill's Opus-or-greater model floor (Step 0) is deliberate — do not remove or soften it, and never let it pin subagents below `opus`. Its anti-theater rule (HIGH-ranked failures must convert to a verified check, named test, or spike) is the skill's whole point; edits that let failures stay as unranked table rows defeat it.
 - The `signoff` skill's independence rule is the whole point: the session that wrote the code must never review it, reviewers are always fresh subagents, and they never receive the author's rationale. Its anti-rubber-stamp rule (a clean review must say what it tried to break and failed to break) exists so "looks good" can't masquerade as inspection. It shares wargame's Opus floor. `signoff` is report-only — do not add fixing behavior; the user decides what to repair after seeing the verdict. The two files it does write are records, not repairs: the verdict doc under `docs/reviews/`, and the repo's `REVIEW.md` sheet (created on the first run only on the user's word, appended to only by the second-failure rule); `/recheck` and `/vertical` read `REVIEW.md` and never write it.

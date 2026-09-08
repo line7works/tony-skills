@@ -1,5 +1,5 @@
 # REVIEW.md
-<!-- verified: 2026-09-07 -->
+<!-- verified: 2026-09-08 -->
 
 ## Passes
 - correctness: on
@@ -28,3 +28,6 @@
 - readers evidence: a number recorded in the slice's `docs/evidence/readers/` file does not reproduce from its own command (a character count for bytes, a limit computed with the wrong subtrahend, a before-edit grep count) · found 2026-09-06 (readers Slice E signoff, slice-e-fresh-read.md:16) and 2026-09-07 (readers Slice F signoff, slice-f-fresh-read.md:9, :25, :34)
 - readers callers: the verdict or report records the run id at most and never the run dir, while the skill calls the `mktemp -d` sidecars "the evidence", so parity, isolation, and raw captures cannot be re-audited after scratch cleanup · found 2026-09-07 (readers Slice F signoff, vertical:84) and 2026-09-07 (readers Slice H signoff, signoff:119 / recheck:81)
 - readers callers: a readers step the caller runs mid-review (a dispatch remembering a typed pick, a floored `suggest` dropping one) writes the tracked `plugins/readers/last-picks.json`, so a review of tony-skills mutates the union under review · found 2026-09-07 (readers Slice F signoff, vertical:101) and 2026-09-07 (readers Slice H signoff, signoff:66 / recheck:36 / wargame:53)
+- readers callers: a document target or spec is inlined into every lens or adversary prompt as `documents` where passing it by path in the mandate, or the copy already in the workspace, would do, and the Claude row skips the budget check so `oversize` never fires · found 2026-09-07 (readers Slice F signoff, vertical:63) and 2026-09-07 (readers Slice H signoff, demonstration run per Slice I R5(d), wargame:53)
+- readers callers: a caller's text sends a lens to mutate the checkout in a worktree or "isolated copy" while readers' `repo-with-tools` instruction composes "never a tracked file" into every prompt, so the lens reports "verification blocked" and nothing runs the mutating check · found 2026-09-07 (readers Slice H signoff, signoff:66, closed by "Session runs it") and 2026-09-07 (readers Slice H signoff, demonstration run per Slice I R5(d), vertical:63)
+- readers records: absolute `/Users/<user>` and per-user TMPDIR paths, and machine or session names, land in committed records under `docs/evidence` and `docs/reviews` where the Slice E convention scrubs them to `<checkout>` / `<scratch>` · found 2026-09-07 (readers Slice H signoff, signoff:66 / wargame:62) and 2026-09-08 (readers Slice I signoff, slice-i-closeout.md)
