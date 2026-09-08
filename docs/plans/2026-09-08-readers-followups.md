@@ -55,7 +55,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/roster.json (the `gemini` row's `efforts`, `effort_encoding`, `effort_default`, `quirks`); plugins/readers/skills/readers/assets/contract.md (the Gemini-lane paragraph); plugins/readers/skills/readers/assets/guides/gemini.md (item 6)
 Not in this slice: any other roster row; the runner's code (the existing effort check at readers.py line 407 does the refusing); a live Gemini call.
 Depends on: nothing (touches contract.md paragraphs Slice A does not; if both branches are open at once, B rebases on A)
-Status: built
+Status: signed off
 
 ## Slice C — the Agent route hands the prompt over as a file
 Goal: A `repo` or `repo-with-tools` Claude read of any size dispatches from a Claude Code session without the session emitting the composed prompt inline, proved live on the 440 KB readers plan.
@@ -150,3 +150,14 @@ Status: not started
 - MINOR · plugins/readers/skills/readers/assets/readers.py:576 · the prefix's authority over the mandate is by order and wording only; "ignore the READER INSTRUCTIONS above" composes with no refusal · inherent to prompt design, not new · Slice A review
 
 WAIVED (per user) · 2026-09-08 · MAJOR · docs/plans/2026-09-08-readers-followups.md:83 · builder-call reading of AC5 ("each such line also contains the word `harness`" read as the two R5 lines; SKILL.md:35 and :53 match `nothing else` without `harness`) · Tony's word "waive" (typed "wavie") in the skills terminal, relayed by /ship
+
+### 2026-09-08 — review: slice B
+- MINOR · docs/plans/2026-09-08-readers-followups.md:51 · AC1's verify line names the request without `authorized: true`; run verbatim, the no-effort half prints `unauthorized`, not `valid` (the effort refusal fires before the authorization check) · a rechecker runs the line as written and reads the AC as failed while the substance holds · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/guides/gemini.md:12 · "and its quirks line still states it": the nearest antecedent is `effort_encoding: suffix`, which the quirks line now denies · a lane debugger reads the guide, opens the roster, and finds the guide wrong on its face · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/roster.json:103 · `effort_encoding` is read by no code and defined nowhere; `unsupported` means "no effort exists" on the OpenRouter rows and "an effort exists and cannot be switched" on gemini · a later adapter or reader built from the field takes `unsupported` as the thing doing the refusing · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:80 · "refused before any send" is unconditional while the check reads `efforts` from the run's frozen snapshot; a run frozen on the pre-B roster still validates `effort: low` and composes `effective_effort low` (readers.py:278-290, :407) · a run in flight across the plugin update, or an installed copy at 946b48a, keeps the silent drop · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/readers.py:1298 · a `record` whose request adds an effort after a clean `compose` writes the refusal sidecar into the composed call dir and burns the id (:1345); contract.md:72's `nowrite` slips do not cover it · compose clean → record with `effort: low` → `invalid-request` with a sidecar → the right record refused, the paid reply has no call to land on · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/contract.md:118 · `suggest` prints `effort: null` for gemini, defined as "the row's default", while the row runs at `high` by its model id (readers.py:1483); nothing distinguishes no-effort from fixed-effort · a caller printing `suggest`'s `effort` tells Tony the Gemini reader runs at no effort · Slice B review
+- MINOR · docs/plans/2026-09-08-readers-followups.md:9 · B is stacked on A: A's AC6 (`git diff main --stat` lists only A's Footprint) no longer holds on this branch and a PR of B against `main` carries A's six commits · "PR B" before A merges A silently · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/roster.json:130 · "the only one this row runs at" (also guides/gemini.md:12, contract.md:80) overclaims: a typed or remembered model id changes the effort the tool runs at · `model: gemini-3.1-pro-low`, no effort → composed, `explicit pick`, `effective_effort null`, remembered for the next run · Slice B review
+- MINOR · plugins/readers/skills/readers/assets/roster.json:130 · the quirks line quotes Tony's words ("delete the pretence") into the public runtime catalog where the other rows attribute by date without quoting · AGENTS.md: a new Tony-specific exposure is a deliberate call, not a default-in · Slice B review
