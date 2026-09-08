@@ -691,7 +691,15 @@ Two of those matter beyond this throwaway. The reader evidence chain is unaudita
 **One question the run did not need to stop for, stated per your instruction:** nothing blocked. The ask was pre-answered (1, `claude-session`), `suggest` showed no drop note for that row, the build-doc hunt returned exactly one candidate matching by filename in `docs/plans/`, and the scope-doc glob returned exactly one candidate matching by Intent. No list-and-ask arose.
 ```
 
-Checks after: the headless transcript above (the session's final message, which is all `--output-format text` prints) carries NO `READERS:` line — count 0 — so the three calls are evidenced by the run's sidecars alone, at `/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/inspect-widget-adder-2026-09-08-302bcf`, one per lens, each `claude-session · ok` (`call_id · status · effective_model · profile · parity · isolation · duration`):
+Checks after: the headless transcript above is the session's final message, which is all `--output-format text` prints, and it carries NO `READERS:` line (count 0): the inspect session printed them mid-run and did not repeat them in its report (readers' Step 4 says the final report must). The three lines exist verbatim in that headless session's own saved transcript, `~/.claude/projects/<the scratch repo's project dir>/964a5adc-6c61-45fa-b301-5ddc0073ebfb.jsonl`, jsonl line 138, an assistant message stamped `2026-09-08T12:46:59.783Z`, quoted here exactly as the session printed them (the path ellipsis is the session's own):
+
+```
+READERS: claude-session · ok · claude-opus-5[1m] · none · /var/folders/7k/.../inspect-widget-adder-2026-09-08-302bcf-traceability/sidecar.json
+READERS: claude-session · ok · claude-opus-5[1m] · none · /var/folders/7k/.../inspect-widget-adder-2026-09-08-302bcf-code-book/sidecar.json
+READERS: claude-session · ok · claude-opus-5[1m] · none · /var/folders/7k/.../inspect-widget-adder-2026-09-08-302bcf-repo-reality/sidecar.json
+```
+
+The three sidecars they name, at `<scratch TMPDIR>/readers/inspect-widget-adder-2026-09-08-302bcf/` (`call_id · status · effective_model · profile · parity · isolation · duration`):
 
 ```
 inspect-widget-adder-2026-09-08-302bcf-code-book · ok · claude-opus-5[1m] · packet-only (no workspace) · toolCalls: 0 · harness-enforced (toolCalls: 0) · 243.0 s
@@ -699,7 +707,7 @@ inspect-widget-adder-2026-09-08-302bcf-repo-reality · ok · claude-opus-5[1m] �
 inspect-widget-adder-2026-09-08-302bcf-traceability · ok · claude-opus-5[1m] · packet-only (no workspace) · toolCalls: 0 · harness-enforced (toolCalls: 0) · 243.0 s
 ```
 
-That is a caller-level slip the readers body's Step 4 names (the final report must repeat every `READERS:` line): the inspect session printed them mid-run, where a text-format headless transcript cannot show them, and left them out of its final message; the R5(d) signoff session, by contrast, carried its four in the final message; the `Inspector:` line carries `claude-session` and the session model id (`claude-opus-5[1m]`, the model this headless session reported for itself); `Raw: n/a — Claude lane`; a verdict (REJECTED, 6 BLOCKER · 11 MAJOR · 10 MINOR · 4 QUESTION) with the stamp `Plan: inspected 2026-09-08 by claude-opus-5[1m] · …` written directly after the throwaway doc's `Out of scope:` block and the `### 2026-09-08 — inspect: plan` block appended at its ledger tail (`git -C <scratch>/proofs/widget-repo diff -- docs/plans`); no `.readers/` residue in the scratch repo; nothing in this repo touched. R5(c)'s letter is met on the throwaway doc. The inspect verdict's findings are about the throwaway doc and are not adjudicated (the doc exists only as a proof target); its SKILL NOTE (the stamp insert shifts the block's own line citations by one) is a note for inspect's author, recorded in the build doc's `## Discovered`.
+With those three lines on the record, the `Inspector:` line carrying `claude-session` and the session model id (`claude-opus-5[1m]`, the model this headless session reported for itself), `Raw: n/a — Claude lane`, a verdict (REJECTED, 6 BLOCKER · 11 MAJOR · 10 MINOR · 4 QUESTION), the stamp `Plan: inspected 2026-09-08 by claude-opus-5[1m] · …` written directly after the throwaway doc's `Out of scope:` block and the `### 2026-09-08 — inspect: plan` block appended at its ledger tail (`git -C <scratch>/proofs/widget-repo diff -- docs/plans`), no `.readers/` residue in the scratch repo, and nothing in this repo touched, R5(c)'s letter is met on the throwaway doc. The inspect verdict's findings are about the throwaway doc and are not adjudicated (the doc exists only as a proof target); its SKILL NOTE (the stamp insert shifts the block's own line citations by one) is a note for inspect's author, recorded in the build doc's `## Discovered`.
 
 ## R5 (g) — the jpb six-box smoke
 
