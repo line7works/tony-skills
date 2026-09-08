@@ -142,6 +142,15 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
 - 2026-09-06 · readers · handoff · "we need some feedback on the handoff for a clearer understanding of what to post in a fresh terminal after a clear. Trigger: the readers after-Slice-D HANDOFF block (20:50) gave Next as `/recheck` naming readers.py:779, then `/ship slice E docs/plans/2026-09-06-readers.md`, and Tony asked whether to paste the whole block or just the doc name into the fresh terminal."
 - 2026-09-06 · readers · readers · "Slice E build-ledger discoveries, logged on Tony's word after the good-or-bad read: (1) under readers the Claude lane's two paper lenses run packet-only on the Workflow route, so a session without the Workflow tool gets lane-unavailable where the old general-purpose subagents ran anywhere; follow-up wanted: a roster fallback route through the plain subagent, labeled unmeasured, so a missing tool degrades on record instead of stopping the lane. (2) the Claude lane's isolation label is split, paper lenses harness-enforced (toolCalls: 0) and repo-reality under repo unmeasured, while inspect's report carries one Inspector label; follow-up wanted: a label per lens, or the paper label plus 'repo-reality: repo, by design'."
 - 2026-09-06 · readers · ship · "i want to discuss the pros and cons of adding "handoff" to the ship skill as well"
+- 2026-09-08 · tony-skills · signoff / readers · (per Tony's 2026-09-08 ruling
+  "stands", relayed by the orchestrator session) "under /ship the author
+  session is the one that runs a lens's mutating check in the worktree it
+  cuts at Step 3.5, because readers' `repo-with-tools` instruction bans
+  tracked-file writes wherever the workspace points; that check is
+  self-graded by the session that wrote the fix. Wanted later, not now: a
+  readers write-permitted worktree mode so a fresh reviewer can run the
+  mutating check in an isolated copy and the session never grades its own
+  fix."
 
 ## Dispositions
 
