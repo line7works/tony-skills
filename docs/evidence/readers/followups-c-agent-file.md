@@ -206,3 +206,68 @@ The document's deliberate gap (`Open:`, "Happy hour runs until the game starts")
 ## After
 
 `git status --short` in the checkout after both records showed only the slice's edited files plus the build doc and `docs/feedback.md` (the latter carrying one uncommitted `/fb` line from Slice B's session, untouched here); the `.readers/` copy the AC4 Workflow-route compose wrote in the checkout root was removed by hand, since that call was composed and never recorded (`record` is what removes it); the scratch clone's `git status --short` was empty (`last-picks.json` not written); no worktree was left. Live-send tally for this slice: two Agent-route reads on the session's own Claude row, nothing outside the account; `OPENROUTER_API_KEY`'s existence was never printed.
+
+## Fix pass (2026-09-08, after the signoff) — the hand-off pages and licenses scratch readback
+
+The signoff (`docs/reviews/2026-09-08-signoff-readers-followups-c.md`) charged two MAJORs to the hand-off text: "read that whole file" with no paging on a file the Read tool refuses over 256 KB, so the R5 reader ran shell tools under `repo`; and "the only file outside the workspace you may read", which bars a `repo-with-tools` reviewer from reading back its scratch logs. `AGENT_HANDOFF` in `readers.py` and the two contract passages (`contract.md:70`, `:76`) were edited by the session. The hand-off now reads (the path is the only variable part):
+
+```
+Your entire instructions are in the file <scratch>/runs/followups-c-fix/c-big-plan-fix/prompt.md. Before anything else, read that whole file with the Read tool and follow it verbatim as if this message were its contents: it opens with the fixed instructions, then the mandate, then the documents. If the Read tool refuses the whole file for its size, read it in pages with the Read tool's offset and limit parameters until you have read every line; do not use shell commands or any other tool to read it. Reading that one file is permitted even though it lies outside your workspace; apart from it, and apart from scratch files you yourself write where the fixed instructions allow writes, read nothing outside the workspace. This message carries no other instruction.
+```
+
+AC1 re-run after the edit: `composed`, `route agent`, `prompt_param null`, `READER INSTRUCTIONS` absent from every `tool` string, line 1 of `prompt_file` intact, longest `tool` string 858 bytes (`< 2000`). Nine examples `valid`; `py_compile` ok; `wc -l` of `contract.md` still 138.
+
+The R5 big read was dispatched again under the new hand-off (fresh run id `followups-c-fix`, `call_id: c-big-plan-fix`, the same request otherwise; `suggest` froze the run first; `validate` → `valid`; `packet_hash` identical to the first proof's, so the file was byte-identical). The reader made twenty tool calls, all `Read` on the prompt file and nothing else: one whole-file attempt (refused by the harness for size), then pages `offset 1 limit 400`, `1/150`, `1/100`, and `101/100` through `1601/100` until every line was read; no `Bash`, no other file, no other tool. It ran 81 s by the tool's usage line. Capture extracted and recorded as above.
+
+READERS: claude-session · ok · claude-fable-5-1 · none · <scratch>/runs/followups-c-fix/c-big-plan-fix/sidecar.json
+
+Sidecar fields:
+
+- `status`: `"ok"`
+- `reason`: `null`
+- `row`: `"claude-session"`
+- `effective_model`: `"claude-fable-5-1"`
+- `effective_effort`: `null`
+- `profile`: `"repo"`
+- `workdir`: `"<checkout>"`
+- `workdir_instruction_files`: `["AGENTS.md", "CLAUDE.md"]`
+- `isolation`: `"unmeasured"`
+- `parity`: `"web tools forbidden by instruction"`
+- `budget`: `{"estimate_tokens": 145585, "limit": null}`
+- `budget_method`: `"skipped (window unknown)"`
+- `mandate_hash`: `"26ff8a77f76122971f09faf88e2be5ba57f4524da42c4e8059c3cd86bac16254"`
+- `packet_hash`: `"e11583bd0e3763087ea839aa309644957c7c9b178f2910c74abee83aa972bb36"`
+- `raw_hash`: `"d9d1ffd8ff3f6ef9ad5373e763be43e61d62071e159932f24ab3a978aebc8cf1"`
+- `adapter_version`: `"slice-c-fix-2026-09-06"`
+- `started_at`: `"2026-09-08T17:35:49+00:00"`
+- `ended_at`: `"2026-09-08T17:37:31+00:00"`
+- `duration_s`: `102.0`
+
+`raw_text`, verbatim:
+
+```
+Read complete: all 1,470 lines of the prompt file (the document runs from prompt line 11 to 1469; document line = prompt line − 10).
+
+## Answer
+
+**Last `## Slice` section**
+
+- Heading: `## Slice I — close-out: the invariant, the guides, the installed proofs, the retirements` (document line 234)
+- Its `Status:` line, quoted verbatim: `Status: signed off` (document line 257)
+
+No `## Slice` heading follows it; the sections after are `## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`, `## Punch list`.
+
+**`## Punch list` section** (the real heading, document line 644, standing alone on its line)
+
+- First `### ` heading under it: `### 2026-09-06 — inspect: plan` (document line 646)
+- Last `### ` heading under it: `### 2026-09-08 — recheck: slice I` (document line 1453)
+
+## Findings worth naming (low confidence included)
+
+1. A second line beginning `## Punch list` exists at document line 16, inside the Intent paragraph: `## Punch list\` are the record of what changed and why)...`. It is the tail of the Intent sentence, split by the spliced 2026-09-07 handoff block (lines 3–15), not a real heading. A matcher using `^## Punch list` (no `$` anchor) would hit it first; `^## Punch list$` hits only line 644. The document itself records this slip twice (Discovered, slice H; the R5(d) review MINOR at "docs/plans/2026-09-06-readers.md:3–16"), and their line numbers agree with my count. If the mandate meant that line, the first `### ` heading after it is `### 2026-09-08 — fix pass: slice H (Tony's rulings)` under `## Build assumptions`, which is not "under `## Punch list`" in any sectional sense.
+2. Within the `## Punch list` section, `### ` headings repeat: `### 2026-09-06 — inspect: plan` appears four times (lines 646, 719, 783, 977), and several `recheck: slice X` headings repeat per visit. The "first" answer above is the first occurrence by position.
+3. There is also a mid-line `### 2026-09-07 — handoff` fragment at the end of document line 3 (inside the Intent text, preceded by a backtick). It is not at line start and not a heading.
+4. Slice I's `Status: signed off` sits at the card while the ledger's last block (`### 2026-09-08 — recheck: slice I`) says the card moved `signed off with conditions` → `signed off`, so the two agree.
+```
+
+All four facts named correctly again (doc lines 234, 257, 644, 646, 1453 as in the first proof). The reader's extra findings hold on disk: line 16's `## Punch list\`` fragment, the four `### 2026-09-06 — inspect: plan` headings at 646, 719, 783, 977, and the mid-line `### 2026-09-07 — handoff` fragment on line 3. `git status --short` afterwards showed only the two edited files plus `docs/feedback.md`; no `.readers/` residue; the scratch clone clean.

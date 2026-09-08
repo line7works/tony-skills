@@ -1048,7 +1048,7 @@ def pinned_model(req, row, result):
     return None
 
 
-AGENT_HANDOFF = """Your entire instructions are in the file %s. Before anything else, read that whole file and follow it verbatim as if this message were its contents: it opens with the fixed instructions, then the mandate, then the documents. Reading that one file is permitted even though it lies outside your workspace; it is the only file outside the workspace you may read. This message carries no other instruction."""
+AGENT_HANDOFF = """Your entire instructions are in the file %s. Before anything else, read that whole file with the Read tool and follow it verbatim as if this message were its contents: it opens with the fixed instructions, then the mandate, then the documents. If the Read tool refuses the whole file for its size, read it in pages with the Read tool's offset and limit parameters until you have read every line; do not use shell commands or any other tool to read it. Reading that one file is permitted even though it lies outside your workspace; apart from it, and apart from scratch files you yourself write where the fixed instructions allow writes, read nothing outside the workspace. This message carries no other instruction."""
 
 
 def agent_handoff(prompt_file):
