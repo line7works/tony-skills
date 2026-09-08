@@ -75,7 +75,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/readers.py (the Agent-route branch of `compose`, and whatever helper the hand-off text needs); plugins/readers/skills/readers/assets/contract.md; plugins/readers/skills/readers/SKILL.md (Step 3); docs/evidence/readers/followups-c-agent-file.md
 Not in this slice: the Workflow route; the GPT and OpenRouter lanes; any caller text; the isolation labels (Slice A).
 Depends on: Slice A (the contract paragraphs it edits are Slice A's; C rebases on A's merge)
-Status: not started
+Status: built
 
 ## Build assumptions
 
@@ -95,6 +95,15 @@ Status: not started
 - R4 read as reported, no text edited: jpb SKILL.md:150–153 says `gemini`'s effort is the suffix of its roster id and that row carries no `effort`; the two example requests that set `effort: high` (`jpb-box.json`, `jpb-judge.json`) are on `gpt-astra` and `claude-session`; no other caller SKILL.md pairs `gemini` with `effort` (grep across `plugins/*/skills/*/SKILL.md`) · builder call
 - AC1's "before any send" is exercised through `readers validate` (the pre-send check at readers.py:407, reason text `effort 'low' not in row gemini efforts []`), not a compose with an effort; AC4's compose carries no effort, as the criterion says · builder call
 
+### 2026-09-08 — build: slice C
+- R1's field shape: on the Agent route `prompt_param` is `null` and `params.prompt` carries the runner's fixed hand-off text (`AGENT_HANDOFF`, helper `agent_handoff(prompt_file)`, readers.py); the body's existing null handling (SKILL.md Step 3: pass `params` exactly, read nothing into a parameter) is what runs it, and `prompt_file` is still printed for the record · builder call
+- The hand-off text says "the fixed instructions" and never the phrase `READER INSTRUCTIONS`, so AC1's absence assertion tests something; it licenses exactly one file outside the workspace · builder call
+- R3's "captured as Slice A's R4 says": the footer qualification now sits in compose's `capture` string, in SKILL.md Step 3's Agent-tool clause, and in its "change nothing" line (A's open MINOR at SKILL.md:37, closed here because Step 3 is in the Footprint); contract.md:102 (the Evidence section's "verbatim copy") is outside R4's three passages and is left · builder call
+- AC2's `budget.estimate_tokens` is `145585` with `budget_method: skipped (window unknown)` (the `claude-session` row's `context_window` is `unknown`, so no limit applied); the criterion's "above 100,000" is read on the estimate · builder call
+- AC3's mandate is the builder's wording ("Name the one gap this document deliberately leaves open, quoting the line that leaves it open"); AC6's four-lens set is `examples/signoff.json` with four call ids and the lens word swapped; AC5's fresh-read question is the builder's wording; all three are recorded verbatim in the evidence file · builder call
+- The two live captures were extracted byte-exact from the subagent transcripts by a scratch script (A's workaround: the Agent tool's completion notification HTML-escapes angle brackets); `raw_hash` covers the extraction · builder call
+- AC5's `wc -l` parity is not a criterion here but held anyway (SKILL.md 63, contract.md 138 before and after); `git diff main --stat` also lists this build doc and `docs/feedback.md` (one uncommitted `/fb` line from Slice B's session, not this slice's write) · builder call
+
 ## Deviations
 
 ### 2026-09-08 — build: slice A
@@ -107,6 +116,9 @@ Status: not started
 ### 2026-09-08 — build: slice B
 - none
 
+### 2026-09-08 — build: slice C
+- none
+
 ## Discovered
 
 ### 2026-09-08 — build: slice A
@@ -116,6 +128,13 @@ Status: not started
 - `readers suggest gemini` now prints `effort: null` where it printed `high` (readers.py:1483 reads `effort_default`); the OpenRouter rows already print null there, and no caller text names a suggest effort for `gemini` (jpb SKILL.md:150–153 already says the row carries none) — a consequence of R1, not built around
 - `guides/gemini.md:19-22` and `:35` still quote the pre-Slice-A prefix (A's open MINOR, outside this Footprint; Tony's invocation carried no word for it) — left
 - `docs/evidence/readers/followups-a-fresh-read.md:35` records the Slice A compose's `effective_effort high` and already says Slice B changes it — a record, left
+
+### 2026-09-08 — build: slice C
+- The harness's Read tool refuses a file over 256 KB (`File content (452.4KB) exceeds maximum allowed size (256KB)`), so the 462 KB reader read `prompt.md` with `wc`, `grep`, `sed`, `awk`, and `tail` through Bash: five tool calls under `repo`, whose profile line says "run nothing". The answer was correct and the reader touched no other file, but on a document set that size the profile line and the hand-off text ask for a read the Read tool cannot do; the profile line is the prefix's (Slice A's R2 territory), not built around
+- `docs/plans/2026-09-06-readers.md:12-16` has a 2026-09-07 handoff block pasted inside its Intent paragraph, leaving line 16 starting with `## Punch list\``, a second H2 before Slice A (the big reader found it; confirmed on disk) — a closed record doc, left
+- `ADAPTER_VERSION` (readers.py:43) is unchanged while compose's Agent-route output shape changed (A's MINOR recurs, as the handoff's seam note predicted; outside the Footprint) — left
+- SKILL.md's "What NOT to do" still forbids only Workflow `args` as a prompt carrier; the Agent-call rule lives in Step 3's parenthetical alone (the list is outside the Footprint) — left
+- The guides (`guides/gemini.md`, `guides/gpt.md`; there is no Claude guide) do not describe the Agent route: the one `prompt_param` mention (gemini.md:16) is the Gemini lane's own `prompt_param: prompt`, which this slice leaves true, so nothing there contradicts the hand-off; outside the Footprint either way
 
 ## Handoffs
 
