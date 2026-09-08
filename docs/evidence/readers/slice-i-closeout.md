@@ -1,6 +1,8 @@
-# Slice I evidence — the close-out: installed proofs, both Macs, the MCP entry (2026-09-07)
+# Slice I evidence — the close-out: installed proofs, both Macs, the MCP entry (2026-09-07 and 2026-09-08)
 
 Every proof below ran against the INSTALLED copies on the Mac Studio (`~/.claude/plugins/cache/tony-skills/<plugin>/a2e279be871a/`, the version dir of Slice H's merge commit `a2e279b`), never `--plugin-dir`, in a fresh headless session (`claude -p '<invocation>' --output-format text < /dev/null`, stdout to a file) so the transcript is verbatim. The build session that wrote Slice I ran no reader itself. Lane picks follow R5's own text (Claude everywhere; Gemini and the jpb smoke on Tony's word only); where a skill would ask a question, the answer R5 fixes was given in the invocation up front, because a headless run cannot wait, and the invocation text is quoted with each proof.
+
+`<checkout>` stands for the tony-skills checkout root, `<scratch>` for this session's scratchpad directory, `<scratch TMPDIR>` for the per-user temp root the runner defaults to, and `<home>` for the home directory (the proofs used the absolute paths; scrubbed here per the Slice E convention, Tony's word 2026-09-06, on his word again 2026-09-08). The three `READERS:` lines quoted from the inspect session's transcript keep the session's own `/var/folders/7k/...` ellipsis, which carries no user segment.
 
 ## No-spend criteria (run from the repo root at the slice's head)
 
@@ -28,7 +30,7 @@ wargame@tony-skills a2e279be871a
 
 ## R5 (a) — the direct form, Claude row, installed copy
 
-Command, from a scratch directory outside any repo, with `READERS_RUN_ROOT` at a scratch run root: `claude -p '/readers claude-session /Users/tonycoon/Developer/tony-skills/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md "Name the document'"'"'s deliberate gap in one sentence."' --output-format text < /dev/null`. Started 15:54:24 PDT, 19 s of reader time (`duration_s` in the sidecar). Output verbatim, scratch paths shortened to `<scratch>`:
+Command, from a scratch directory outside any repo, with `READERS_RUN_ROOT` at a scratch run root: `claude -p '/readers claude-session <checkout>/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md "Name the document'"'"'s deliberate gap in one sentence."' --output-format text < /dev/null`. Started 15:54:24 PDT, 19 s of reader time (`duration_s` in the sidecar). Output verbatim, scratch paths shortened to `<scratch>`:
 
 ```
 READERS-PROTOCOL: 1
@@ -60,7 +62,7 @@ READERS: claude-session · ok · claude-fable-5-1 · none · <scratch>/proofs/a/
   "isolation": "harness-enforced (toolCalls: 0)",
   "kind": "host",
   "mandate_hash": "fda18d3dd2bcf1337b619b9267337c8f22f15f6c7624f4f6367e8ea14da8f487",
-  "memory": "ok: /Users/tonycoon/Developer/tony-skills/plugins/readers/last-picks.json",
+  "memory": "ok: <checkout>/plugins/readers/last-picks.json",
   "override_source": "roster default",
   "packet_hash": "91c7a0faf8a534c9ca6d65712e209bb91e1aee1beb31855170a687866757b704",
   "parity": "toolCalls: 0",
@@ -90,7 +92,7 @@ READERS: claude-session · ok · claude-fable-5-1 · none · <scratch>/proofs/a/
 ```
 ```
 
-Checks after: the run dir holds `snapshot/` and `c-02cbf578/` (`capture.md`, `prompt.md`, `raw.md`, `compose.json`, `reader.workflow.js`, `dispatch.log`, `sidecar.json`, `diagnostics/`); no `.readers/` copy remained in the working directory (the Workflow route's transient script was removed by `record`); `git status --short` in the checkout printed nothing, so the tracked `plugins/readers/last-picks.json` was not written. The Gemini half of (a) ran on Tony's word, typed in the skills terminal 2026-09-08 ("Run it"): from the same scratch directory, `claude -p '/readers gemini /Users/tonycoon/Developer/tony-skills/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md "Name the document'"'"'s deliberate gap in one sentence." send it' --output-format text < /dev/null`, the words "send it" in the invocation being the direct form's word for an outside row. Started 05:58:49 PDT, 41 s of reader time. Output verbatim:
+Checks after: the run dir holds `snapshot/` and `c-02cbf578/` (`capture.md`, `prompt.md`, `raw.md`, `compose.json`, `reader.workflow.js`, `dispatch.log`, `sidecar.json`, `diagnostics/`); no `.readers/` copy remained in the working directory (the Workflow route's transient script was removed by `record`); `git status --short` in the checkout printed nothing, so the tracked `plugins/readers/last-picks.json` was not written. The Gemini half of (a) ran on Tony's word, typed in the skills terminal 2026-09-08 ("Run it"): from the same scratch directory, `claude -p '/readers gemini <checkout>/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md "Name the document'"'"'s deliberate gap in one sentence." send it' --output-format text < /dev/null`, the words "send it" in the invocation being the direct form's word for an outside row. Started 05:58:49 PDT, 41 s of reader time. Output verbatim:
 
 ```
 READERS-PROTOCOL: 1
@@ -126,7 +128,7 @@ READERS: gemini · ok · gemini-3.1-pro-high · none · <scratch>/proofs/a-gemin
   "isolation": "sandbox-enforced",
   "kind": "host",
   "mandate_hash": "fda18d3dd2bcf1337b619b9267337c8f22f15f6c7624f4f6367e8ea14da8f487",
-  "memory": "ok: /Users/tonycoon/Developer/tony-skills/plugins/readers/last-picks.json",
+  "memory": "ok: <checkout>/plugins/readers/last-picks.json",
   "override_source": "roster default",
   "packet_hash": "a4b77e5176dc70aa0b5b4e74462c5287e2398b1a15e94abb1b324bb4235504ae",
   "parity": "skip_permissions off, cwd = fresh empty dir, non-empty response",
@@ -160,7 +162,7 @@ Checks after: `READERS: gemini · ok · gemini-3.1-pro-high`; the sidecar's `par
 
 ## R6 — the laptop, brought level (AC7)
 
-The laptop's live Claude Code session (Remote Control row `macbook-pro-2-steady-thacker`; Tony named the terminal "laptop" in the invocation) ran the steps over the claude-relay channel: first a read-only report (2026-09-07: readers and architect absent, the seven other callers at `d1539b67a035`, checkout at PR #31), then the hand-off file `~/Documents/claude-relay/to-laptop/2026-09-07-readers-slice-i-laptop-level-2.md` (archived after: `git pull --ff-only`, `claude plugin marketplace update tony-skills`, `claude plugin install readers@tony-skills` and `architect@tony-skills`, `claude plugin update <name>@tony-skills --yes` for the seven). One deviation the laptop session reported: its checkout carried one uncommitted line in `docs/feedback.md` (a 2026-09-01 fb note); the relay file said back it up, stash, pull, pop; per that session's report Tony said mid-run "discard it is my call", so it backed the line up to `~/Documents/handoffs/2026-09-07-laptop-feedback-md-before-readers-pull.{md,diff}`, ran `git checkout -- docs/feedback.md`, and pulled. Its Step 5 outputs, verbatim as reported:
+The laptop's live Claude Code session (the Remote Control row for the laptop; Tony named the terminal "laptop" in the invocation) ran the steps over the claude-relay channel: first a read-only report (2026-09-07: readers and architect absent, the seven other callers at `d1539b67a035`, checkout at PR #31), then the hand-off file `~/Documents/claude-relay/to-laptop/2026-09-07-readers-slice-i-laptop-level-2.md` (archived after: `git pull --ff-only`, `claude plugin marketplace update tony-skills`, `claude plugin install readers@tony-skills` and `architect@tony-skills`, `claude plugin update <name>@tony-skills --yes` for the seven). One deviation the laptop session reported: its checkout carried one uncommitted line in `docs/feedback.md` (a 2026-09-01 fb note); the relay file said back it up, stash, pull, pop; per that session's report Tony said mid-run "discard it is my call", so it backed the line up to `~/Documents/handoffs/2026-09-07-laptop-feedback-md-before-readers-pull.{md,diff}`, ran `git checkout -- docs/feedback.md`, and pulled. Its Step 5 outputs, verbatim as reported:
 
 ```
 architect@tony-skills a2e279be871a
@@ -175,10 +177,10 @@ wargame@tony-skills a2e279be871a
 ```
 
 ```
-/Users/tonycoon/.claude/plugins/cache/tony-skills/architect:
+~/.claude/plugins/cache/tony-skills/architect:
 a2e279be871a
 
-/Users/tonycoon/.claude/plugins/cache/tony-skills/readers:
+~/.claude/plugins/cache/tony-skills/readers:
 a2e279be871a
 ```
 
@@ -202,7 +204,7 @@ READERS-PROTOCOL: 1
 
 The sitting is complete. One cold read ran on the Claude row, its findings are filed verbatim, the scope doc carries the triage, and three threads now wait on you. Nothing was committed and nothing external was sent.
 
-READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/sidecar.json
+READERS: claude-session · ok · claude-fable-5-1 · none · <scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/sidecar.json
 ```json
 {
   "adapter_version": "slice-c-fix-2026-09-06",
@@ -213,8 +215,8 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3
   "budget_method": "skipped (window unknown)",
   "call_id": "precon-cold-read-claude-session",
   "canned": null,
-  "diagnostics": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/diagnostics",
-  "dispatch_log": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/dispatch.log",
+  "diagnostics": "<scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/diagnostics",
+  "dispatch_log": "<scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/dispatch.log",
   "duration_s": 120.0,
   "effective_effort": null,
   "effective_model": "claude-fable-5-1",
@@ -225,13 +227,13 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3
   "isolation": "harness-enforced (toolCalls: 0)",
   "kind": "host",
   "mandate_hash": "f03974ca5bef9418fddb5941e674a466bee32e84407b4ead143a12c6adc80a33",
-  "memory": "ok: /Users/tonycoon/Developer/tony-skills/plugins/readers/last-picks.json",
+  "memory": "ok: <checkout>/plugins/readers/last-picks.json",
   "override_source": "roster default",
   "packet_hash": "6ef88dd9d0ddd462f943b56bbdcd4bbb7fd7870cad9f5949c91ac287fc8e0fae",
   "parity": "toolCalls: 0",
   "profile": "starved",
   "protocol_version": 1,
-  "raw_file": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/raw.md",
+  "raw_file": "<scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/raw.md",
   "raw_hash": "c1ae8333aab84c896e9b80c9d1a22fbe94e359f19aa27490a52e1fa616a3df13",
   "raw_path": null,
   "raw_text": "<raw_text: the fifteen findings and the environment note, filed verbatim in the cold-read doc>",
@@ -240,11 +242,11 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3
   "requested_model": null,
   "response_raw": null,
   "row": "claude-session",
-  "run_dir": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32",
+  "run_dir": "<scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32",
   "run_id": "precon-widget-adder-2026-09-07-386f32",
   "session_model": "claude-fable-5-1",
-  "sidecar": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/sidecar.json",
-  "snapshot": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/precon-widget-adder-2026-09-07-386f32/snapshot",
+  "sidecar": "<scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32/precon-cold-read-claude-session/sidecar.json",
+  "snapshot": "<scratch TMPDIR>/readers/precon-widget-adder-2026-09-07-386f32/snapshot",
   "snapshot_fault": null,
   "started_at": "2026-09-07T22:57:27+00:00",
   "status": "ok",
@@ -328,7 +330,7 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /tmp/recheck-widget
   "isolation": "unmeasured",
   "kind": "host",
   "mandate_hash": "da940b026f6dacad55be23d4db8f835a0b39a03919c7dd8dab009ea79863a041",
-  "memory": "ok: /Users/tonycoon/Developer/tony-skills/plugins/readers/last-picks.json",
+  "memory": "ok: <checkout>/plugins/readers/last-picks.json",
   "override_source": "roster default",
   "packet_hash": "25fdbc6d2acf8dc535a6e77d03fa4c778e922acf0f073957f83137f55adf58f9",
   "parity": "web tools forbidden by instruction",
@@ -398,7 +400,7 @@ The run is done and stopped where you asked: exit ramp taken on your words, tiny
 
 One thing I did not do and want on the record first. Git shows two tracked files modified that I never touched: the build doc and the slice A signoff record. The diff is a recheck block written at 16:08 PDT by run `recheck-a-20260907-a573`, another session running the proof's /recheck in this repo while this run was in flight. I left both files as they are.
 
-READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/sidecar.json
+READERS: claude-session · ok · claude-fable-5-1 · none · <scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/sidecar.json
 
 ```json
 {
@@ -410,8 +412,8 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3
   "budget_method": "skipped (window unknown)",
   "call_id": "architect-claude-1",
   "canned": null,
-  "diagnostics": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/diagnostics",
-  "dispatch_log": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/dispatch.log",
+  "diagnostics": "<scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/diagnostics",
+  "dispatch_log": "<scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/dispatch.log",
   "duration_s": 147.0,
   "effective_effort": null,
   "effective_model": "claude-fable-5-1",
@@ -422,13 +424,13 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3
   "isolation": "harness-enforced (toolCalls: 0)",
   "kind": "host",
   "mandate_hash": "d3f64b93e26df07a3f6d0a27e35843a2480e82d23a59a8f665846b336c64c20c",
-  "memory": "ok: /Users/tonycoon/Developer/tony-skills/plugins/readers/last-picks.json",
+  "memory": "ok: <checkout>/plugins/readers/last-picks.json",
   "override_source": "roster default",
   "packet_hash": "512303ecdc3d91706f77ef56648b0d8314d48e7915e5bb8596cd49b9450e1c49",
   "parity": "toolCalls: 0",
   "profile": "starved",
   "protocol_version": 1,
-  "raw_file": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/raw.md",
+  "raw_file": "<scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/raw.md",
   "raw_hash": "8f58caed5b9f9a53c1978d08723936a0f06b0dcdf027c1aafe3737f338923db1",
   "raw_path": null,
   "raw_text": "<raw_text: the take, filed verbatim in the review file>",
@@ -437,11 +439,11 @@ READERS: claude-session · ok · claude-fable-5-1 · none · /var/folders/7k/pr3
   "requested_model": null,
   "response_raw": null,
   "row": "claude-session",
-  "run_dir": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4",
+  "run_dir": "<scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4",
   "run_id": "architect-widget-adder-2026-09-07-7790b4",
   "session_model": "claude-fable-5-1",
-  "sidecar": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/sidecar.json",
-  "snapshot": "/var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/architect-widget-adder-2026-09-07-7790b4/snapshot",
+  "sidecar": "<scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4/architect-claude-1/sidecar.json",
+  "snapshot": "<scratch TMPDIR>/readers/architect-widget-adder-2026-09-07-7790b4/snapshot",
   "snapshot_fault": null,
   "started_at": "2026-09-07T23:07:20+00:00",
   "status": "ok",
@@ -584,14 +586,14 @@ Invocation (from this repo's root, the ask answered up front):
 Headless run per Slice I R5(c) of that same build doc: no one can answer mid-run, so my answer to the ask is given up front: 1 (Claude, row claude-session). Construction on this doc has started (Slices A–H signed off, I in progress), which the skill notes and still inspects. Where the skill would otherwise need an answer from me, state the question in your output and stop. Do not commit or push.
 ```
 
-**Attempt 1**, launched 16:28:08 PDT at `4604980`: the headless session hit the account's session usage limit before dispatching anything. Its whole output was the one line `You've hit your session limit · resets 5:30pm (America/Los_Angeles)`. On disk it had minted run `inspect-20260907-6b5f24`, run `suggest` (the snapshot exists), and composed the three lenses (`prompt.md` and `compose.json` in each call dir, no sidecar, no capture); the two Workflow scripts and the packet's `build-doc.md` were left under the repo's ignored `.readers/inspect-20260907-6b5f24/` because no `record` ran; removed by hand after. No plan write.
+**Attempt 1**, launched 16:28:08 PDT at `4604980`: the headless session hit the account's session usage limit before dispatching anything. Its whole output was the one line `You've hit your session limit · resets 5:30pm (<local timezone>)`. On disk it had minted run `inspect-20260907-6b5f24`, run `suggest` (the snapshot exists), and composed the three lenses (`prompt.md` and `compose.json` in each call dir, no sidecar, no capture); the two Workflow scripts and the packet's `build-doc.md` were left under the repo's ignored `.readers/inspect-20260907-6b5f24/` because no `record` ran; removed by hand after. No plan write.
 
 **Attempt 2**, relaunched 17:44:01 PDT at `82102c8` after the reset, on the same invocation. Output verbatim:
 
 ```
 READERS-PROTOCOL: 1
 
-READERS: claude-session · transport-failed · claude-opus-5[1m] · none · /var/folders/7k/pr3xvrrs4hj__cw9hrgs7_q40000gn/T/readers/inspect-20260907-readers-a/inspect-20260907-readers-a-repo-reality/sidecar.json
+READERS: claude-session · transport-failed · claude-opus-5[1m] · none · <scratch TMPDIR>/readers/inspect-20260907-readers-a/inspect-20260907-readers-a-repo-reality/sidecar.json
 
 ```json
 {
@@ -721,10 +723,10 @@ Studio, run by this session 2026-09-08 (`claude mcp remove codex`), output verba
 
 ```
 == before
-codex: /Users/tonycoon/.npm-global/bin/codex mcp-server - ✔ Connected
+codex: <home>/.npm-global/bin/codex mcp-server - ✔ Connected
 == remove
 Removed MCP server "codex" from user config
-File modified: /Users/tonycoon/.claude.json
+File modified: ~/.claude.json
 == after
 (exit 1 — 1 means no codex entry)
 ```
@@ -737,18 +739,18 @@ Laptop, as its session reported on 2026-09-08 (removal on Tony's word typed in t
 
 ```
 Step 0 (before):
-codex: /Users/tonycoon/.local/bin/codex mcp-server - ✔ Connected
+codex: <home>/.local/bin/codex mcp-server - ✔ Connected
 claude mcp get codex:
   Scope: User config (available in all your projects)
   Status: ✔ Connected
   Type: stdio
-  Command: /Users/tonycoon/.local/bin/codex
+  Command: <home>/.local/bin/codex
   Args: mcp-server
 Connected count before: 11
 
 Step 1:
 Removed MCP server codex from user config
-File modified: /Users/tonycoon/.claude.json
+File modified: ~/.claude.json
 
 Step 2 (after):
 grep codex: (nothing)

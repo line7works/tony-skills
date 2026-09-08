@@ -22,8 +22,9 @@ Swap `huh` for any plugin below. Update later with
 **Fair warning:** these are personal, working skills, shared as-is. Several are
 wired to Tony's own setup — absolute paths under `~/Developer`, machine names,
 a two-Mac relay protocol, live production endpoints for his sites. The
-self-contained ones (`huh`, `wargame`, `signoff`, `recheck`, `blueprint`,
-`build`, `ship`, `digest`) travel well. Others carry hard-wired paths into
+self-contained ones (`huh`, `blueprint`, `build`, `digest`) travel well;
+`signoff`, `recheck`, `wargame`, and `ship` (which runs the first two) need
+the `readers` plugin installed beside them. Others carry hard-wired paths into
 Tony's clone of this repo — `inspect` reads its code book from
 `~/Developer/tony-skills/...` at run time, `fb` routes loop notes to a file
 there, and a shell-only harness with no plugin cache (Codex) runs `readers`
