@@ -38,7 +38,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/contract.md; plugins/readers/skills/readers/assets/readers.py (the two prefix constants only); plugins/readers/skills/readers/assets/roster.json (the `isolation` labels of the three Claude rows for `starved` and `packet-only`); plugins/readers/skills/readers/SKILL.md (the two "nothing else" lines); docs/evidence/readers/followups-a-fresh-read.md
 Not in this slice: any routing or dispatch change; the callers' texts; the Gemini row's efforts (Slice B); the guides (Slice B touches gemini.md).
 Depends on: nothing
-Status: not started
+Status: built
 
 ## Slice B — the Gemini row refuses an effort it cannot apply
 Goal: A request `effort` on the Gemini row is refused before any send, and the roster, contract, and guide say the row runs at the effort in its model id and nothing else.
@@ -79,9 +79,23 @@ Status: not started
 
 ## Build assumptions
 
+### 2026-09-08 — build: slice A
+- AC5's "each such line also contains the word `harness`" is read as the two lines R5 and the Footprint name (SKILL.md:12 and :51); the other two `nothing else` matches (SKILL.md:35, the tool-parameter rule; :53, the fleet-authorization rule) say nothing about what the reader receives and are left as they were, so the count stays 4 before and after · builder call
+- R3's label reads `harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)` on all six Claude-row `starved`/`packet-only` entries; the contract's Isolation section defines it and the Claude lane cites it verbatim, so AC3's verbatim grep holds; verdict `Inspector:` lines that carry the label get longer · builder call
+- R1's two dates are both 2026-09-07 as the plan states; the Claude lane cites `docs/evidence/readers/slice-i-closeout.md` and its proofs (b) and (e) by letter rather than by line · builder call
+- R4's footer rule is one clause in each of the two places the plan names (the `record` paragraph and the Claude lane's capture sentence), worded as "the capture ends where the reviewer's text ends", so AC4's two `footer`+`capture` lines are exactly those · builder call
+- AC6's `git diff main --stat` also lists this build doc, committed on the branch before the slice and carrying the builder's ledger and card; read as within the Footprint's intent, since the doc is the loop's record · builder call
+- The AC2 Gemini compose reports `effective_effort high` (the row's default at `946b48a`); Slice B changes that and Slice A leaves it · builder call
+
 ## Deviations
 
+### 2026-09-08 — build: slice A
+- none
+
 ## Discovered
+
+### 2026-09-08 — build: slice A
+- none new; the old label string `harness-enforced (toolCalls: 0)` still appears in the readers build doc, its review docs, and the `docs/evidence/readers/` records as history and is left there (records, not texts)
 
 ## Handoffs
 
