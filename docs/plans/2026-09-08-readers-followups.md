@@ -75,7 +75,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/readers.py (the Agent-route branch of `compose`, and whatever helper the hand-off text needs); plugins/readers/skills/readers/assets/contract.md; plugins/readers/skills/readers/SKILL.md (Step 3); docs/evidence/readers/followups-c-agent-file.md
 Not in this slice: the Workflow route; the GPT and OpenRouter lanes; any caller text; the isolation labels (Slice A).
 Depends on: Slice A (the contract paragraphs it edits are Slice A's; C rebases on A's merge)
-Status: signed off with conditions
+Status: signed off
 
 ## Build assumptions
 
@@ -209,3 +209,8 @@ WAIVED (per user) · 2026-09-08 · MAJOR · docs/plans/2026-09-08-readers-follow
 - MINOR · plugins/readers/skills/readers/assets/contract.md:70 (also the evidence title and plan:67) · the same document is "460 KB", "462 KB", "440 KB" across the texts, and the 1,014-byte fixture is "2 KB" in the spec · a reader cannot tell which number is the file · Slice C review
 - MINOR · docs/evidence/readers/followups-c-agent-file.md ("After") · the AC4 Workflow compose ran with the checkout as cwd and left a `.readers/` copy removed by hand · the standing Workflow-copy finding, recorded · Slice C review
 - MINOR · plugins/readers/skills/readers/assets/readers.py (`resolve_sources`) · a refused compose on an over-long `run_dir` leaves the nested directories created before `ENAMETOOLONG` · empty dirs, `sidecar: null` · Slice C review
+
+### 2026-09-08 — recheck: slice C
+- MAJOR · plugins/readers/skills/readers/assets/readers.py:1051 · (the hand-off says "read that whole file" and the `repo` line says "run nothing" while the Read tool refuses a file over 256 KB, so the reader pages unprompted or runs shell tools the profile forbids) · fixed — the hand-off now instructs paging with the Read tool's offset and limit and forbids shell or any other tool for the read; contract.md:70 and :76 agree; verified by the fresh reviewer composing the 462 KB `repo` request and reading `tool.params.prompt` (executed), and by the session's live re-dispatch at abb3eac (twenty Read calls, no shell, four facts correct; `docs/evidence/readers/followups-c-agent-file.md`, fix pass)
+- MAJOR · plugins/readers/skills/readers/assets/readers.py:1051 · ("it is the only file outside the workspace you may read" contradicts the `repo-with-tools` scratch-write allowance and every caller mandate ordering scratch readback) · fixed — the sentence now licenses reading back scratch files the reader itself writes where the fixed instructions allow writes and confines every other outside read to the prompt file; contract.md:70 and :76 agree; the old sentence survives nowhere in `plugins/readers` (executed compose of a `repo-with-tools` request; grep)
+- Run `recheck-c-20260908-16fc`, run dir `<scratch>/recheck-c.kQl6/readers` (one sidecar and `raw.md`, `claude-session · ok · claude-fable-5-1`, `repo-with-tools`); no fix-introduced defect reported; the verifier's one out-of-scope line ("measured at 256 KB" is the harness's own number, not a measured boundary) is a MINOR for a later /signoff
