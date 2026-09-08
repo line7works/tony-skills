@@ -90,7 +90,73 @@ READERS: claude-session · ok · claude-fable-5-1 · none · <scratch>/proofs/a/
 ```
 ```
 
-Checks after: the run dir holds `snapshot/` and `c-02cbf578/` (`capture.md`, `prompt.md`, `raw.md`, `compose.json`, `reader.workflow.js`, `dispatch.log`, `sidecar.json`, `diagnostics/`); no `.readers/` copy remained in the working directory (the Workflow route's transient script was removed by `record`); `git status --short` in the checkout printed nothing, so the tracked `plugins/readers/last-picks.json` was not written. The Gemini half of (a) did not run: it sends only on Tony's word, and none was given in this run.
+Checks after: the run dir holds `snapshot/` and `c-02cbf578/` (`capture.md`, `prompt.md`, `raw.md`, `compose.json`, `reader.workflow.js`, `dispatch.log`, `sidecar.json`, `diagnostics/`); no `.readers/` copy remained in the working directory (the Workflow route's transient script was removed by `record`); `git status --short` in the checkout printed nothing, so the tracked `plugins/readers/last-picks.json` was not written. The Gemini half of (a) ran on Tony's word, typed in the skills terminal 2026-09-08 ("Run it"): from the same scratch directory, `claude -p '/readers gemini /Users/tonycoon/Developer/tony-skills/plugins/readers/skills/readers/assets/fixtures/smoke-doc.md "Name the document'"'"'s deliberate gap in one sentence." send it' --output-format text < /dev/null`, the words "send it" in the invocation being the direct form's word for an outside row. Started 05:58:49 PDT, 41 s of reader time. Output verbatim:
+
+```
+READERS-PROTOCOL: 1
+
+Direct form, one call, Gemini on `starved`. Authorization taken from "send it."
+
+**raw_text:**
+> The document fails to specify which game dictates the end of happy hour, nor what happens on a night without a game.
+
+No `raw_path` named, so no copy was filed.
+
+READERS: gemini · ok · gemini-3.1-pro-high · none · <scratch>/proofs/a-gemini/runs/adhoc-gem0908a/c-gem01/sidecar.json
+
+```json
+{
+  "adapter_version": "slice-c-fix-2026-09-06",
+  "budget": {
+    "estimate_tokens": 441,
+    "limit": null
+  },
+  "budget_method": "skipped (window unknown)",
+  "call_id": "c-gem01",
+  "canned": null,
+  "diagnostics": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a/c-gem01/diagnostics",
+  "dispatch_log": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a/c-gem01/dispatch.log",
+  "duration_s": 41.0,
+  "effective_effort": "high",
+  "effective_model": "gemini-3.1-pro-high",
+  "ended_at": "2026-09-08T13:00:09+00:00",
+  "envelope": "gemini",
+  "exit_code": null,
+  "generation_id": null,
+  "isolation": "sandbox-enforced",
+  "kind": "host",
+  "mandate_hash": "fda18d3dd2bcf1337b619b9267337c8f22f15f6c7624f4f6367e8ea14da8f487",
+  "memory": "ok: /Users/tonycoon/Developer/tony-skills/plugins/readers/last-picks.json",
+  "override_source": "roster default",
+  "packet_hash": "a4b77e5176dc70aa0b5b4e74462c5287e2398b1a15e94abb1b324bb4235504ae",
+  "parity": "skip_permissions off, cwd = fresh empty dir, non-empty response",
+  "profile": "starved",
+  "protocol_version": 1,
+  "raw_file": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a/c-gem01/raw.md",
+  "raw_hash": "bd0f194dd96dbbbe3c8efa4ca22c9518208d8c67672451927ce7b52ec2f35da2",
+  "raw_path": null,
+  "raw_text": "The document fails to specify which game dictates the end of happy hour, nor what happens on a night without a game.\n",
+  "reason": null,
+  "requested_effort": null,
+  "requested_model": null,
+  "response_raw": null,
+  "row": "gemini",
+  "run_dir": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a",
+  "run_id": "adhoc-gem0908a",
+  "session_model": null,
+  "sidecar": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a/c-gem01/sidecar.json",
+  "snapshot": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a/snapshot",
+  "snapshot_fault": null,
+  "started_at": "2026-09-08T12:59:28+00:00",
+  "status": "ok",
+  "transport": "antigravity-mcp",
+  "workdir": "<scratch>/proofs/a-gemini/runs/adhoc-gem0908a/c-gem01/work",
+  "workdir_instruction_files": []
+}
+```
+```
+
+Checks after: `READERS: gemini · ok · gemini-3.1-pro-high`; the sidecar's `parity` is the roster's `starved` line verbatim, `isolation: sandbox-enforced`, `workdir` a fresh empty `<call dir>/work`, `workdir_instruction_files: []`, `effective_effort: high` (the model-name suffix, never a parameter); no `raw_path`, no `.readers/` residue, tracked memory file unchanged. One outside send, this slice's only one.
 
 ## R6 — the laptop, brought level (AC7)
 
@@ -637,17 +703,30 @@ That is a caller-level slip the readers body's Step 4 names (the final report mu
 
 ## R5 (g) — the jpb six-box smoke
 
-Not run: R5(g) runs on Tony's word only, and no word was given in this run. AC6's clause for the not-run case ("jpb smoke not run: Tony declined the spend on <date>") needs his word recorded by the session that receives it; this file says `awaiting Tony's word` until then.
+jpb smoke not run: Tony declined the spend on 2026-09-08 (his answer in the skills terminal to the R5(g) question, "Decline the spend"; the smoke stays available on a later word).
 
 ## R7 / AC8 — the deprecated MCP entry
 
-Not retired: `claude mcp remove codex` runs on Tony's word only, after R5 and R6, never in a PR. Status on each Mac at the end of this build, read-only:
+Tony's word, typed in the skills terminal 2026-09-08: "Remove on both Macs now" (R5 and R6 done first, the plan's precondition). Manual, per machine, in no PR.
 
-- Studio, `claude mcp list 2>&1 | grep -i codex` → `codex: /Users/tonycoon/.npm-global/bin/codex mcp-server - ✔ Connected`
-- Laptop (as its session reported) → `codex: /Users/tonycoon/.local/bin/codex mcp-server - ✔ Connected`
+Studio, run by this session 2026-09-08 (`claude mcp remove codex`), output verbatim:
 
-Pending Tony's call, dated 2026-09-07: awaiting his word.
+```
+== before
+codex: /Users/tonycoon/.npm-global/bin/codex mcp-server - ✔ Connected
+== remove
+Removed MCP server "codex" from user config
+File modified: /Users/tonycoon/.claude.json
+== after
+(exit 1 — 1 means no codex entry)
+```
+
+`claude mcp list 2>&1 | grep -i codex` prints nothing on the Studio afterwards; the other twenty entries are unchanged.
+
+Laptop: the hand-off file `~/Documents/claude-relay/to-laptop/2026-09-08-readers-slice-i-r7-mcp-remove.md` (record the entry with `claude mcp get`, `claude mcp remove codex`, verify with the grep and the connected-server count, stop and report) was sent to the laptop's live session; its report is quoted below when it arrives.
+
+LAPTOP-R7-PLACEHOLDER
 
 ## Live-send tally for this slice
 
-No outside model was sent anything. Reader calls, all on the Claude row of this account, all through the installed readers plugin: (a) one `starved`; (b) one `starved`; (d) four `repo-with-tools`; (e) one `starved`; (f) one `repo-with-tools`; (c) none dispatched on this plan (three lenses composed, the `repo` one refused by the session before any send, twice); (c) take 2 on the throwaway doc: three calls, two `packet-only`, one `repo`. `OPENROUTER_API_KEY`'s existence was never printed. The tracked `plugins/readers/last-picks.json` is unchanged at the end of the build (`git status --short` clean apart from the station writes committed as records).
+One outside send in this slice: the Gemini half of R5(a), on Tony's word 2026-09-08 (one `gemini-3.1-pro-high` call on the 2 KB fixture). Nothing else left the account. Reader calls, all on the Claude row of this account, all through the installed readers plugin: (a) one `starved`; (b) one `starved`; (d) four `repo-with-tools`; (e) one `starved`; (f) one `repo-with-tools`; (c) none dispatched on this plan (three lenses composed, the `repo` one refused by the session before any send, twice); (c) take 2 on the throwaway doc: three calls, two `packet-only`, one `repo`. `OPENROUTER_API_KEY`'s existence was never printed. The tracked `plugins/readers/last-picks.json` is unchanged at the end of the build (`git status --short` clean apart from the station writes committed as records).
