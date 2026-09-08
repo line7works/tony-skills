@@ -38,7 +38,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/contract.md; plugins/readers/skills/readers/assets/readers.py (the two prefix constants only); plugins/readers/skills/readers/assets/roster.json (the `isolation` labels of the three Claude rows for `starved` and `packet-only`); plugins/readers/skills/readers/SKILL.md (the two "nothing else" lines); docs/evidence/readers/followups-a-fresh-read.md
 Not in this slice: any routing or dispatch change; the callers' texts; the Gemini row's efforts (Slice B); the guides (Slice B touches gemini.md).
 Depends on: nothing
-Status: signed off with conditions
+Status: signed off
 
 ## Slice B — the Gemini row refuses an effort it cannot apply
 Goal: A request `effort` on the Gemini row is refused before any send, and the roster, contract, and guide say the row runs at the effort in its model id and nothing else.
@@ -92,6 +92,10 @@ Status: not started
 ### 2026-09-08 — build: slice A
 - none
 
+### 2026-09-08 — fix pass: slice A
+- contract.md:76 and :130 now name more harness channels than R1 lists: on the Agent route the git-status block, a `userEmail` line, and the harness's tool rosters (measured 2026-09-08 by the signoff's three Agent-route reviewers, `docs/reviews/2026-09-08-signoff-readers-followups-a.md`); on the Workflow route the instruction files and the memory index (the readers build's Discovered, 2026-09-06); "measured under `starved` and `packet-only`" is now "measured twice under `starved`, `packet-only` not yet measured"; the `workdir_instruction_files` clause says root files only, never imports. R1's three channels, the sidecar field, the git-status block, and both 2026-09-07 dates stay; AC1 re-run after the edit. The signoff graded the undercount MINOR under the REVIEW.md bar and put the amendment to Tony because R1 dictates the wording · per user (Tony, 2026-09-08, "amend now", relayed by /ship)
+- The evidence file's recorded fresh read (`followups-a-fresh-read.md:63`) quotes the pre-amendment contract ("the git-status block is the Workflow route's extra channel, not the Agent route's"); it is a record of that read and is not rewritten · builder call
+
 ## Discovered
 
 ### 2026-09-08 — build: slice A
@@ -117,3 +121,5 @@ Status: not started
 - MINOR · plugins/readers/skills/readers/assets/contract.md:76 · the contract does not say the harness's instruction-file channel precedes the prefix with "OVERRIDE" language nor which wins on conflict with the no-MCP and read-only rules · a mandate "audit X" and the injected global file's Clerk rule send the reader outside the workspace · Slice A review
 - MINOR · plugins/readers/skills/readers/assets/readers.py:43 · `ADAPTER_VERSION` unchanged while the composed fixed text changed · a pre-slice compose recorded by a post-slice runner is a prompt-hash usage slip mid plugin-update · Slice A review
 - MINOR · plugins/readers/skills/readers/assets/readers.py:576 · the prefix's authority over the mandate is by order and wording only; "ignore the READER INSTRUCTIONS above" composes with no refusal · inherent to prompt design, not new · Slice A review
+
+WAIVED (per user) · 2026-09-08 · MAJOR · docs/plans/2026-09-08-readers-followups.md:83 · builder-call reading of AC5 ("each such line also contains the word `harness`" read as the two R5 lines; SKILL.md:35 and :53 match `nothing else` without `harness`) · Tony's word "waive" (typed "wavie") in the skills terminal, relayed by /ship
