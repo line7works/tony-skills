@@ -576,6 +576,57 @@ Nothing was committed or pushed, and the working tree is clean. No doc writes we
 
 Checks after: one `READERS:` line, `transport-failed`, and no verdict, so R5(c)'s letter (a verdict, three `READERS:` lines, `Inspector:` naming `claude-session` and the session model, `Raw: n/a`) is not met. The run's sidecar (`inspect-20260907-readers-a-repo-reality/sidecar.json`) records `session_model` and `effective_model` `claude-opus-5[1m]` (this headless session identified itself as Opus 5, not Fable, after the limit reset; every earlier proof's session reported `claude-fable-5-1`), `profile: repo`, `budget.estimate_tokens: 141288`, and the reason quoted above. The composed prompt was 449,554 bytes; the plan is 440,648 bytes at that head. The two undispatched Workflow scripts under `.readers/inspect-20260907-readers-a/` were removed by hand; no plan write happened (no stamp, no block); `git status --short` clean. This is a readers finding, recorded in the build doc's `## Discovered` and left for Tony: on the Agent route (`repo` and `repo-with-tools`) the composed prompt must be emitted by the session as one tool parameter, so a document set past the session's single-message output capacity is undispatchable there, while the Workflow route carries the prompt in a script file. Every caller that hands a large document to a `repo`-profile Claude call (inspect's repo-reality lens, by its own packet rule) hits it; a re-run on any lane fails on the same local call. R5(c) therefore cannot pass on this plan without a behaviour change to readers or inspect, which Slice I excludes ("Not in this slice: any behaviour change to readers or a caller"); it is reported unexercised, not implied.
 
+## R5 (c), take 2 — `/inspect` on the throwaway build doc, per Tony's 2026-09-08 ruling
+
+Tony's ruling (2026-09-08, relayed by the orchestrator session from his typed answer): "run it on a throwaway doc"; the lane was not re-asked against this plan, and the size finding stays in `## Discovered`. Target: the scratch repo's `docs/plans/2026-09-07-widget-adder.md` (the doc proofs (e) and (f) used, one slice, carrying the recheck block from (f)); its scope doc `docs/scope/2026-09-07-widget-adder.md` sits beside it. Invocation, from the scratch repo's root, launched 05:41:12 PDT:
+
+```
+/inspect docs/plans/2026-09-07-widget-adder.md
+Headless run per Slice I R5(c) of the readers build doc, on this throwaway doc per Tony's 2026-09-08 ruling ("run it on a throwaway doc"): my answer to the ask is given up front: 1 (Claude, row claude-session). Construction on this doc has started, which the skill notes and still inspects. Where the skill would otherwise need an answer from me, state the question in your output and stop. Do not commit or push.
+```
+
+Output verbatim (the result JSON's `raw_text` per lens elided; the three lenses ran as one fleet, two `packet-only` on the Workflow route and repo-reality `repo` on the Agent route):
+
+```
+Counts match the stamp. Nothing committed, nothing pushed.
+
+```
+INSPECT: docs/plans/2026-09-07-widget-adder.md
+Verdict: REJECTED
+Inspector: claude-session · claude-opus-5[1m] · harness-enforced (toolCalls: 0) for both paper lenses; unmeasured / "web tools forbidden by instruction" for repo-reality  ·  Scope doc: docs/scope/2026-09-07-widget-adder.md  ·  Refuted: 3
+Raw: n/a — Claude lane
+Findings: 6 BLOCKER · 11 MAJOR · 10 MINOR (4 QUESTION open)
+```
+
+**Bottom line:** Three lenses converged independently on the same failure: the scope doc has one parked decision and two open questions, and the build doc resolves none of them, flags none of them, and presents the parked print-vs-return choice as a settled requirement. Stacked on that, four of the five ledger sections the code book orders scaffolded were never written, and the single acceptance criterion is one example that a constant-returning stub passes. Construction on this doc already ran (slice A is built, reviewed, and rechecked), which the skill notes and inspected anyway.
+
+**BLOCKERS**
+- `:13` · Print-vs-return stated as settled; scope doc parks it and keeps it Open · a builder ships `return`, the slice is marked signed off, and Tony's ruling is silently pre-empted · CONFIRMED
+- `:3` · None of the scope doc's three Open items carry forward, and no section could hold one · the builder cannot know three questions are outstanding · CONFIRMED (3-lens convergence)
+- `:9` · "Out of scope: floats" reads as behavior while specifying none; the record flags exactly that gap unresolved · two competent builders produce two different programs, both compliant · CONFIRMED (3-lens convergence)
+- `:23` · `## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs` never scaffolded (blueprint SKILL.md:58-65) · /build has nowhere to append and dumps into the punch list, the one restricted section · CONFIRMED
+- `:17` · AC1 is one input pair; `def add(a, b): return 3` passes it verbatim · CONFIRMED
+- `:17` · AC1's import is cwd-dependent and Footprint is a bare filename · `src/widget.py` satisfies Footprint and fails AC1 · CONFIRMED
+
+**MAJOR** (11, all CONFIRMED, full text in the punch-list block) — no `— verify:` field on AC1; Out of scope carries no reasons; Intent outsources the description and uses undefined in-room vocabulary; R1's "int" is checked by nothing; Constraints/Out of scope use bullets rather than the inline field form; `Status: signed off` contradicts `SIGNED OFF WITH CONDITIONS` in an uncited record; the recheck's reader evidence is unauditable by construction (`.gitignore:1` ignores `.readers/`, run dirs are temp); the punch list's defect appears nowhere in git history; the Tier 0 exclusion never crossed from the scope doc; the architecture doc ran after /build and is unmentioned; the scope doc itself is stale on two lines.
+
+Two of those matter beyond this throwaway. The reader evidence chain is unauditable in **any** repo using this setup, not just this one, and `git log` shows `widget.py` entered at f57cee0 already reading `return a + b`, so the seeded defect the loop supposedly caught left no trace.
+
+**Refuted (3):** "Constraints names no test command" (line 6 does name it); "ceremony not scaled, no SKILL NOTE" (the scope doc's Intent establishes the doc's existence as the proof's purpose); "no `Plan: inspected` line" (self-answering — this run writes the first).
+
+**Questions for you:** was the string-concatenation defect planted? · print vs return · float/bool/string/negative behavior · a Python version floor. All four are in the block as `QUESTION` lines, none gating.
+
+**Hunted and held:** `add(a, b)`, one file one function, and integers-only all trace cleanly to decided lines in the scope doc; the stdlib-only/no-runner assumption is correctly marked assumed in both docs and never upgraded to decided; dependency order and slice sizing are clean (`Depends on: nothing`, ends wired in, no "tested later"); rule 4 holds — R1 says what, not how; the header labels and punch-list block headings are all present and correctly spelled; dates agree across both docs and the punch-list entries are correctly ordered; `widget.py` exists at the repo root exactly as Footprint claims and `widget.py:5` matches the recheck's quoted line and number; the two punch-list entries agree verbatim with the signoff record.
+
+**Next:** you adjudicate; the drafting session amends; re-inspection is a fresh /inspect run. Nothing was committed or pushed.
+
+**SKILL NOTE:** the two writes are order-dependent and the skill does not say so. Inserting the stamp after `Out of scope:` shifts every line below it by one, which invalidated the punch-list block's own `<path>:<line>` citations the moment I wrote them; I rebased them by hand after the fact. Worth pinning an order (block first, or cite pre-stamp lines) in Step 5.
+
+**One question the run did not need to stop for, stated per your instruction:** nothing blocked. The ask was pre-answered (1, `claude-session`), `suggest` showed no drop note for that row, the build-doc hunt returned exactly one candidate matching by filename in `docs/plans/`, and the scope-doc glob returned exactly one candidate matching by Intent. No list-and-ask arose.
+```
+
+Checks after: three `READERS:` lines (0 counted), each `claude-session · ok`; the `Inspector:` line carries `claude-session` and the session model id (`claude-opus-5[1m]`, the model this headless session reported for itself); `Raw: n/a — Claude lane`; a verdict (REJECTED, 6 BLOCKER · 11 MAJOR · 10 MINOR · 4 QUESTION) with the stamp `Plan: inspected 2026-09-08 by claude-opus-5[1m] · …` written directly after the throwaway doc's `Out of scope:` block and the `### 2026-09-08 — inspect: plan` block appended at its ledger tail (`git -C <scratch>/proofs/widget-repo diff -- docs/plans`); no `.readers/` residue in the scratch repo; nothing in this repo touched. R5(c)'s letter is met on the throwaway doc. The inspect verdict's findings are about the throwaway doc and are not adjudicated (the doc exists only as a proof target); its SKILL NOTE (the stamp insert shifts the block's own line citations by one) is a note for inspect's author, recorded in the build doc's `## Discovered`.
+
 ## R5 (g) — the jpb six-box smoke
 
 Not run: R5(g) runs on Tony's word only, and no word was given in this run. AC6's clause for the not-run case ("jpb smoke not run: Tony declined the spend on <date>") needs his word recorded by the session that receives it; this file says `awaiting Tony's word` until then.
@@ -591,4 +642,4 @@ Pending Tony's call, dated 2026-09-07: awaiting his word.
 
 ## Live-send tally for this slice
 
-No outside model was sent anything. Reader calls, all on the Claude row of this account, all through the installed readers plugin: (a) one `starved`; (b) one `starved`; (d) four `repo-with-tools`; (e) one `starved`; (f) one `repo-with-tools`; (c) none dispatched (three lenses composed, the `repo` one refused by the session before any send, twice). `OPENROUTER_API_KEY`'s existence was never printed. The tracked `plugins/readers/last-picks.json` is unchanged at the end of the build (`git status --short` clean apart from the station writes committed as records).
+No outside model was sent anything. Reader calls, all on the Claude row of this account, all through the installed readers plugin: (a) one `starved`; (b) one `starved`; (d) four `repo-with-tools`; (e) one `starved`; (f) one `repo-with-tools`; (c) none dispatched on this plan (three lenses composed, the `repo` one refused by the session before any send, twice); (c) take 2 on the throwaway doc: three calls, two `packet-only`, one `repo`. `OPENROUTER_API_KEY`'s existence was never printed. The tracked `plugins/readers/last-picks.json` is unchanged at the end of the build (`git status --short` clean apart from the station writes committed as records).
