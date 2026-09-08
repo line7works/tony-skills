@@ -723,9 +723,32 @@ File modified: /Users/tonycoon/.claude.json
 
 `claude mcp list 2>&1 | grep -i codex` prints nothing on the Studio afterwards; the other twenty entries are unchanged.
 
-Laptop: the hand-off file `~/Documents/claude-relay/to-laptop/2026-09-08-readers-slice-i-r7-mcp-remove.md` (record the entry with `claude mcp get`, `claude mcp remove codex`, verify with the grep and the connected-server count, stop and report) was sent to the laptop's live session; its report is quoted below when it arrives.
+Laptop: the hand-off file `~/Documents/claude-relay/to-laptop/2026-09-08-readers-slice-i-r7-mcp-remove.md` (record the entry with `claude mcp get`, `claude mcp remove codex`, verify with the grep and the connected-server count, stop and report) was sent to the laptop's live session; its report:
 
-LAPTOP-R7-PLACEHOLDER
+Laptop, as its session reported on 2026-09-08 (removal on Tony's word typed in that laptop session, "remove"), verbatim:
+
+```
+Step 0 (before):
+codex: /Users/tonycoon/.local/bin/codex mcp-server - ✔ Connected
+claude mcp get codex:
+  Scope: User config (available in all your projects)
+  Status: ✔ Connected
+  Type: stdio
+  Command: /Users/tonycoon/.local/bin/codex
+  Args: mcp-server
+Connected count before: 11
+
+Step 1:
+Removed MCP server codex from user config
+File modified: /Users/tonycoon/.claude.json
+
+Step 2 (after):
+grep codex: (nothing)
+exit 1
+connected count: 10
+```
+
+AC8 is met: `claude mcp list` shows no `codex` entry on either Mac; the removal takes effect for new sessions on the laptop (nothing restarted). Reversal, if ever wanted, is `claude mcp add codex -- <path>/codex mcp-server` with the command each Mac recorded above.
 
 ## Live-send tally for this slice
 
