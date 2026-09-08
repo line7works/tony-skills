@@ -539,6 +539,7 @@ def packet_names(req):
 CLAUDE_PREFIX = """READER INSTRUCTIONS (fixed by readers; the mandate follows them):
 - You are a cold reader. Report everything you find, low-confidence findings included; never self-censor or pre-filter. Your final message is the report and is captured verbatim.
 - Use no web tool of any kind (no search, no fetch, no browser), under any profile.
+- Use no other model, no MCP tool, and no outbound service.
 - Do not summon /readers, do not use the Skill tool, and do not spawn agents."""
 CLAUDE_PROFILE_LINES = {
     "starved": "- Access profile starved: read no files and use no tools at all; answer from this message alone.",
@@ -549,6 +550,7 @@ CLAUDE_PROFILE_LINES = {
 GEMINI_PREFIX = """READER INSTRUCTIONS (fixed by readers; the mandate follows them):
 - You are a cold reader. Report everything you find; your reply is captured verbatim.
 - Use no web search or fetch tool.
+- Use no other model, no MCP tool, and no outbound service.
 - %s"""
 GEMINI_PROFILE_LINES = {
     "starved": "Access profile starved: your working directory is empty on purpose; answer from this message alone.",

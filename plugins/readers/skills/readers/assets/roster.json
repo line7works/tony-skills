@@ -237,8 +237,8 @@
       ],
       "eligibility": "session-dependent",
       "isolation": {
-        "starved": "harness-enforced (toolCalls: 0)",
-        "packet-only": "harness-enforced (toolCalls: 0)",
+        "starved": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
+        "packet-only": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
@@ -282,8 +282,8 @@
       ],
       "eligibility": "eligible",
       "isolation": {
-        "starved": "harness-enforced (toolCalls: 0)",
-        "packet-only": "harness-enforced (toolCalls: 0)",
+        "starved": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
+        "packet-only": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },
@@ -327,8 +327,8 @@
       ],
       "eligibility": "eligible",
       "isolation": {
-        "starved": "harness-enforced (toolCalls: 0)",
-        "packet-only": "harness-enforced (toolCalls: 0)",
+        "starved": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
+        "packet-only": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
         "repo": "unmeasured",
         "repo-with-tools": "unmeasured"
       },

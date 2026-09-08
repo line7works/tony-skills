@@ -9,7 +9,7 @@ One component, every reader. A caller hands over a mandate and documents; a fres
 
 **The spine.** Every call, host or portable, is resolved by `suggest` (the first call freezes the run), then passes the runner's pre-send checks, then runs, then is recorded by the runner. The model the checks saw is the model that ran, and a refused call spends nothing.
 
-**The one unforgivable move is a warm reader:** anything from this session (its conversation, its reasoning, its prior findings, another reader's output) reaching the reader. The reader receives the prompt `compose` wrote and nothing else.
+**The one unforgivable move is a warm reader:** anything from this session (its conversation, its reasoning, its prior findings, another reader's output) reaching the reader. The reader receives the prompt `compose` wrote and nothing else from this session, while the harness's own channels the contract names still reach it.
 
 ## Step 0 — The version line
 
@@ -48,7 +48,7 @@ READERS: <row id> · <status> · <effective model id> · <raw path | none> · <s
 
 ## The rules
 
-1. **Cold means cold.** The reader gets the prompt `compose` wrote and nothing else: no added context, no summary of the documents, no other reader's output.
+1. **Cold means cold.** The reader gets the prompt `compose` wrote and nothing else from this session (the harness's own channels the contract names do reach it): no added context, no summary of the documents, no other reader's output.
 2. **The runner decides.** Statuses, models, parity lines, and paths come from the runner's JSON; this body never restates or overrides them.
 3. **One word per outside call.** The caller's `authorized` flag, or Tony's word in the direct form; a fleet authorizes the calls it enumerates and nothing else; a retry needs the word again.
 4. **Secrets.** Never read `~/.zshrc`; never print a credential; a key's existence is checked only the way the contract says.
