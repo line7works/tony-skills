@@ -55,7 +55,7 @@ Acceptance criteria:
 Footprint: plugins/readers/skills/readers/assets/roster.json (the `gemini` row's `efforts`, `effort_encoding`, `effort_default`, `quirks`); plugins/readers/skills/readers/assets/contract.md (the Gemini-lane paragraph); plugins/readers/skills/readers/assets/guides/gemini.md (item 6)
 Not in this slice: any other roster row; the runner's code (the existing effort check at readers.py line 407 does the refusing); a live Gemini call.
 Depends on: nothing (touches contract.md paragraphs Slice A does not; if both branches are open at once, B rebases on A)
-Status: not started
+Status: built
 
 ## Slice C — the Agent route hands the prompt over as a file
 Goal: A `repo` or `repo-with-tools` Claude read of any size dispatches from a Claude Code session without the session emitting the composed prompt inline, proved live on the 440 KB readers plan.
@@ -87,6 +87,14 @@ Status: not started
 - AC6's `git diff main --stat` also lists this build doc, committed on the branch before the slice and carrying the builder's ledger and card; read as within the Footprint's intent, since the doc is the loop's record · builder call
 - The AC2 Gemini compose reports `effective_effort high` (the row's default at `946b48a`); Slice B changes that and Slice A leaves it · builder call
 
+### 2026-09-08 — build: slice B
+- Slice A is unmerged, so `feat/readers-followups-b` branches off `feat/readers-followups-a` rather than `main` (the Constraints' "off `main`" read with the handoff's seam note: off A and rebase after A merges) · builder call
+- R1's `quirks` wording: the first sentence now reads "The -high suffix in the model id IS the effort and the only one this row runs at; a request `effort` on this row is refused as invalid-request before any send, because the runner applies no suffix encoding (efforts is empty, effort_encoding unsupported; Tony 2026-09-08, \"delete the pretence\")."; the rest of the quirks text is untouched · builder call
+- R2's clause is placed inside the existing parenthetical at contract.md:80 ("the effort is encoded in its name and is never also passed; the row carries no `efforts`, so a request `effort` on this row is refused as `invalid-request` before any send, the runner applying no suffix encoding") so the sentence R2 names stays one sentence · builder call
+- R3's replacement sentence also corrects the clause earlier on the same item-6 line that said the roster row "carries the rule as `effort_encoding: suffix`" (now "carried … until 2026-09-08"), since that clause is on the line R3 owns and would contradict the new sentence; item 6's bold lead ("Effort is the model-name suffix, never also a parameter") still holds and stays · builder call
+- R4 read as reported, no text edited: jpb SKILL.md:150–153 says `gemini`'s effort is the suffix of its roster id and that row carries no `effort`; the two example requests that set `effort: high` (`jpb-box.json`, `jpb-judge.json`) are on `gpt-astra` and `claude-session`; no other caller SKILL.md pairs `gemini` with `effort` (grep across `plugins/*/skills/*/SKILL.md`) · builder call
+- AC1's "before any send" is exercised through `readers validate` (the pre-send check at readers.py:407, reason text `effort 'low' not in row gemini efforts []`), not a compose with an effort; AC4's compose carries no effort, as the criterion says · builder call
+
 ## Deviations
 
 ### 2026-09-08 — build: slice A
@@ -96,10 +104,18 @@ Status: not started
 - contract.md:76 and :130 now name more harness channels than R1 lists: on the Agent route the git-status block, a `userEmail` line, and the harness's tool rosters (measured 2026-09-08 by the signoff's three Agent-route reviewers, `docs/reviews/2026-09-08-signoff-readers-followups-a.md`); on the Workflow route the instruction files and the memory index (the readers build's Discovered, 2026-09-06); "measured under `starved` and `packet-only`" is now "measured twice under `starved`, `packet-only` not yet measured"; the `workdir_instruction_files` clause says root files only, never imports. R1's three channels, the sidecar field, the git-status block, and both 2026-09-07 dates stay; AC1 re-run after the edit. The signoff graded the undercount MINOR under the REVIEW.md bar and put the amendment to Tony because R1 dictates the wording · per user (Tony, 2026-09-08, "amend now", relayed by /ship)
 - The evidence file's recorded fresh read (`followups-a-fresh-read.md:63`) quotes the pre-amendment contract ("the git-status block is the Workflow route's extra channel, not the Agent route's"); it is a record of that read and is not rewritten · builder call
 
+### 2026-09-08 — build: slice B
+- none
+
 ## Discovered
 
 ### 2026-09-08 — build: slice A
 - none new; the old label string `harness-enforced (toolCalls: 0)` still appears in the readers build doc, its review docs, and the `docs/evidence/readers/` records as history and is left there (records, not texts)
+
+### 2026-09-08 — build: slice B
+- `readers suggest gemini` now prints `effort: null` where it printed `high` (readers.py:1483 reads `effort_default`); the OpenRouter rows already print null there, and no caller text names a suggest effort for `gemini` (jpb SKILL.md:150–153 already says the row carries none) — a consequence of R1, not built around
+- `guides/gemini.md:19-22` and `:35` still quote the pre-Slice-A prefix (A's open MINOR, outside this Footprint; Tony's invocation carried no word for it) — left
+- `docs/evidence/readers/followups-a-fresh-read.md:35` records the Slice A compose's `effective_effort high` and already says Slice B changes it — a record, left
 
 ## Handoffs
 
