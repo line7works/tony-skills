@@ -151,6 +151,8 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
   readers write-permitted worktree mode so a fresh reviewer can run the
   mutating check in an isolated copy and the session never grades its own
   fix."
+- 2026-09-08 · readers-followups slice B · ship · "SKILL NOTE: /readers' installed body names the a2e279be871a cache runner as RUNNER; every runner step in this run used the checkout's runner by path per the plan's Constraints line 7 (the cache copy predates main), as Slice A's run did."
+- 2026-09-08 · readers-followups slice C · ship · "SKILL NOTE: the installed readers body (a2e279be871a cache) predates Slices A–C and names the cache runner; every runner step ran the checkout's runner by path per the plan's Constraints line 7, as A and B did. Captures were extracted byte-exact from subagent transcripts because the Agent tool's completion notification HTML-escapes angle brackets (third run using this workaround; SKILL.md Step 3 still names no such route, a MINOR on record). The recheck kept the readers-build MAJOR off its closed list on the strength of the claim field's own charge, flagged here rather than paused."
 
 ## Dispositions
 
