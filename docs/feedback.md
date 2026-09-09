@@ -12,9 +12,7 @@ Field feedback on the four loop skills (/blueprint, /build, /signoff,
    build → signoff → recheck). Skills change only through the loop, never
    directly from a note.
 3. **Disposition** — every triaged note gets a dated line in
-   `
-
-## Dispositions`: note → what became of it (slice shipped, declined with
+   `## Dispositions`: note → what became of it (slice shipped, declined with
    reason, parked). Additive-only, so a note is never re-triaged.
 
 The skills never reference this doc (deliberate decoupling — the SKILL NOTE
@@ -154,6 +152,7 @@ SKILL NOTE: a third cold read was not offered after Rounds 6–7; those rounds a
 - 2026-09-08 · readers-followups slice B · ship · "SKILL NOTE: /readers' installed body names the a2e279be871a cache runner as RUNNER; every runner step in this run used the checkout's runner by path per the plan's Constraints line 7 (the cache copy predates main), as Slice A's run did."
 - 2026-09-08 · readers-followups slice C · ship · "SKILL NOTE: the installed readers body (a2e279be871a cache) predates Slices A–C and names the cache runner; every runner step ran the checkout's runner by path per the plan's Constraints line 7, as A and B did. Captures were extracted byte-exact from subagent transcripts because the Agent tool's completion notification HTML-escapes angle brackets (third run using this workaround; SKILL.md Step 3 still names no such route, a MINOR on record). The recheck kept the readers-build MAJOR off its closed list on the strength of the claim field's own charge, flagged here rather than paused."
 - 2026-09-09 · readers-followups slice C · handoff · "SKILL NOTE: the handoff committed the tracked docs/feedback.md into the checkpoint although /fb leaves it uncommitted, because the vertical's clean-tree precondition stops on dirt inside the boundary; the checkpoint went on a branch because a direct commit on main is barred. Decided on your behalf per Step 6; say the word if you want it undone."
+- 2026-09-09 · readers vertical · vertical · "SKILL NOTE: Four departures, each recorded in the Method line. (1) The local lenses got REVIEW.md as their only document and the build doc by workspace path in the mandate; the skill text says to pass the build doc as a document, which REVIEW.md check 14 names as a recurring defect and /signoff's law contradicts. (2) Tony's invocation typed an effort (high) for gpt-astra; the ask has no effort slot, so it went on that request as his word. (3) The appendix is verbatim except the repo's path scrub (home and per-user TMPDIR), with raw.md hashes recorded, because a verbatim commit would be the exact recurrence REVIEW.md check 17 names. (4) The spec lens's probe of a boolean protocol_version launched a real codex exec on gpt-astra despite the mandate's ban; it killed the child after two minutes and reported it."
 
 ## Dispositions
 
