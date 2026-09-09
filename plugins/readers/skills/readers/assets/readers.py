@@ -1048,6 +1048,17 @@ def pinned_model(req, row, result):
     return None
 
 
+AGENT_HANDOFF = """Your entire instructions are in the file %s. Before anything else, read that whole file with the Read tool and follow it verbatim as if this message were its contents: it opens with the fixed instructions, then the mandate, then the documents. If the Read tool refuses the whole file for its size, read it in pages with the Read tool's offset and limit parameters until you have read every line; do not use shell commands or any other tool to read it. Reading that one file is permitted even though it lies outside your workspace; apart from it, and apart from scratch files you yourself write where the fixed instructions allow writes, read nothing outside the workspace. This message carries no other instruction."""
+
+
+def agent_handoff(prompt_file):
+    """The short fixed text the Agent tool's `prompt` parameter carries on the Agent route (followups Slice C R1):
+    the composed prompt stays at <call dir>/prompt.md, whatever its size, and this text's whole job is to make
+    the reader take that file as its entire instructions and license reading it outside the workspace. The
+    same hand-off on every Agent-route call, no size threshold (Tony, 2026-09-08: "always")."""
+    return AGENT_HANDOFF % prompt_file
+
+
 def write_workflow(req, row, result, prompt, call_dir):
     """The Workflow script for a Claude call: the committed template with the composed prompt embedded in the
     script body (never via Workflow args, the recorded trap) and the agent options filled from the resolved
@@ -1133,15 +1144,19 @@ def host_compose(req, row, prompt, result, call_dir, diag, host):
                 "omit": ["args", "script"], "agent_options": opts,
                 "capture": "the `capture` the run returns; pass the run record's per-agent toolCalls count to `readers record --tool-calls`"}
     elif route == "agent":
+        # the composed prompt is handed over as the file, never inline: `prompt` carries the short fixed
+        # hand-off text and `prompt_param` is null, so the body passes `params` exactly and reads nothing
+        # into a parameter (followups Slice C R1, R2)
         params = {"subagent_type": "general-purpose",
-                  "description": "readers %s %s read (%s)" % (row["id"], req["profile"], result["call_id"])}
+                  "description": "readers %s %s read (%s)" % (row["id"], req["profile"], result["call_id"]),
+                  "prompt": agent_handoff(prompt_file)}
         pin = pinned_model(req, row, result)
         if pin is not None:
             params["model"] = pin
         if req.get("isolation") == "worktree":
             params["isolation"] = "worktree"
-        tool = {"name": "Agent", "params": params, "prompt_param": "prompt", "prompt_file": prompt_file,
-                "omit": [], "capture": "the subagent's final message"}
+        tool = {"name": "Agent", "params": params, "prompt_param": None, "prompt_file": prompt_file,
+                "omit": [], "capture": "the subagent's final message, ending where the reviewer's text ends (never the Agent tool's trailing usage footer)"}
     else:
         tool = {"name": "mcp__antigravity__ask_gemini", "params": {"model": result["effective_model"], "cwd": result["workdir"]},
                 "prompt_param": "prompt", "prompt_file": prompt_file,
