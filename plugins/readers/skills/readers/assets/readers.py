@@ -1471,6 +1471,7 @@ def suggest(argv):
         return 1
     notes = {}
     resolved = None
+    update_status = None
     frozen = os.path.isfile(os.path.join(snapshot_dir(run_dir), "meta.json"))
     if not frozen:
         # drops happen at suggest time and never after, against the live memory, before the freeze
@@ -1491,13 +1492,16 @@ def suggest(argv):
             resolved = data
         elif memory_status() == "ok":
             # the file is there but the write did not happen (a held lock, a failed write): apply the same
-            # drops to a private copy so the run freezes the dropped state, and say the record is missing
+            # drops to a private copy so the run freezes the dropped state, report the memory as unavailable
+            # (the contract: a lock not taken within 5 s is a status, never `ok`), and say the record is
+            # missing only when the private drop pass actually dropped something (vertical 2026-09-09)
+            update_status = status
             try:
                 resolved = memory_read()
-                mutate(resolved)
+                if mutate(resolved):
+                    notes["_memory"] = "drop could not be recorded in the memory file (%s); the run's snapshot carries it, the file does not" % status
             except (OSError, ValueError):
                 resolved = None
-            notes["_memory"] = "drop could not be recorded in the memory file (%s); the run's snapshot carries it, the file does not" % status
     try:
         roster, picks, mem_status, snap = resolve_sources(run_dir, create=True, picks_override=resolved)
     except OSError as e:
@@ -1505,7 +1509,7 @@ def suggest(argv):
         return 1
     rows = {x["id"]: x for x in roster["rows"]}
     out = {"run_id": run_id, "run_dir": run_dir, "snapshot": snap, "floor": floor,
-           "memory": mem_status if mem_status != "ok" else "ok: %s" % memory_path(), "suggestions": []}
+           "memory": update_status or (mem_status if mem_status != "ok" else "ok: %s" % memory_path()), "suggestions": []}
     for rid in wanted:
         row = rows.get(rid) or live_rows[rid]
         e = pick_entry(picks, row)
