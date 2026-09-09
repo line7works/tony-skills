@@ -157,7 +157,8 @@ def memory_read():
 
 class MemoryLock(object):
     """Exclusive creation of <memory>.lock beside the file: one writer at a time across processes.
-    A lock older than STALE_S is broken (a crashed writer). The lock file never outlives the write."""
+    A lock older than STALE_S is broken (a crashed writer); one that cannot be examined or broken is
+    treated as held, so the wait is bounded by WAIT_S either way. The lock file never outlives the write."""
     STALE_S = 60.0
     WAIT_S = 5.0
 
@@ -180,7 +181,10 @@ class MemoryLock(object):
                         os.remove(self.lock)
                         continue
                 except OSError:
-                    continue
+                    # a lock that cannot be examined or broken (a dangling symlink, a directory, a
+                    # permissions fault) is treated as held: fall through to the bounded wait below,
+                    # never spin on it (vertical 2026-09-09, MAJOR)
+                    pass
                 if time.time() > deadline:
                     raise OSError("memory lock %s held for over %ds; pick not remembered" % (self.lock, self.WAIT_S))
                 time.sleep(0.02)
