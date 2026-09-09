@@ -492,6 +492,22 @@ def check_floor(req, row, roster, picks=None):
         raise Refuse("floor-refused", "session model %s is below floor %s" % (sm, floor))
 
 
+AGENT_MODEL_NAMES = ("sonnet", "opus", "haiku", "fable")
+
+
+def check_harness_model(req, row, result):
+    """6a. the harness model name a Claude call would pin -> invalid-request. The Agent and Workflow tools take
+    `model` from a fixed set of harness names (the Agent tool's schema enum, measured 2026-09-08), never an API
+    id; a typed or remembered id outside that set fails the tool's input validation only after compose has
+    written the call dir and remembered the pick, so it is refused here, pre-send, with nothing written and
+    nothing remembered (readers-followups Slice C review, the pinned_model MAJOR)."""
+    if row["transport"] != "claude-subagent":
+        return
+    pin = pinned_model(req, row, result)
+    if pin is not None and pin not in AGENT_MODEL_NAMES:
+        raise Refuse("invalid-request", "model %r is not a harness model name the Agent and Workflow tools accept (%s); Claude rows pin by harness name, never an API id, and claude-session inherits the session when no model is typed" % (pin, ", ".join(AGENT_MODEL_NAMES)))
+
+
 def check_lane(req, row, dispatching):
     """6. lane availability -> lane-unavailable"""
     if row.get("available") is not True:
@@ -1314,6 +1330,7 @@ def run(req, dispatching, host=None):
         check_profile(req, row)
         check_floor(req, row, roster, picks)
         resolve_model(req, row, result, picks)
+        check_harness_model(req, row, result)
         check_lane(req, row, dispatching and host is None)
         if host is not None and row["transport"] not in HOST_TRANSPORTS:
             raise Refuse("invalid-request", "compose/record serve host rows only; dispatch row %s (%s) with `readers <request>`" % (row["id"], row["transport"]))
