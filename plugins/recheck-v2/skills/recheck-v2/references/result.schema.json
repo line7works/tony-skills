@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/recheck-v2/result.schema.json",
+  "title": "Recheck v2 result",
+  "description": "The common result every harness produces and every caller consumes unchanged. See pilot-contract.md sections 3 to 8.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "run", "status"],
+  "properties": {
+    "protocol_version": { "const": 1 },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "run_dir", "harness", "model", "skill"],
+      "properties": {
+        "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "run_dir": { "type": "string" },
+        "started": { "type": "string", "format": "date-time" },
+        "finished": { "type": "string", "format": "date-time" },
+        "harness": {
+          "type": "object", "additionalProperties": false, "required": ["name", "version"],
+          "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "entry": { "type": "string", "description": "how the skill was loaded: plugin, host skill, explicit path" } }
+        },
+        "model": {
+          "type": "object", "additionalProperties": false, "required": ["id"],
+          "properties": { "id": { "type": "string" }, "effort": { "type": "string" }, "provider_route": { "type": "string" }, "context_tokens": { "type": "integer" } }
+        },
+        "skill": {
+          "type": "object", "additionalProperties": false, "required": ["name", "commit"],
+          "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "commit": { "type": "string" }, "content_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+        },
+        "verifier": {
+          "type": "object", "additionalProperties": false, "required": ["kind", "fresh"],
+          "properties": {
+            "kind": { "type": "string", "description": "subagent, codex-exec, opencode-session, or the adapter's own name for it" },
+            "model": { "type": "string" },
+            "fresh": { "const": true },
+            "injected_channels": { "type": "array", "items": { "type": "string" }, "description": "what the harness handed the verifier on its own: instruction files, memory, profile" },
+            "raw_path": { "type": "string", "description": "the verifier's unedited output under run_dir" }
+          }
+        }
+      }
+    },
+    "status": { "enum": ["completed", "missing_input", "stale_source", "verifier_unavailable", "stopped"] },
+    "missing_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fields"],
+      "properties": {
+        "fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "ambiguity": { "type": "array", "items": { "type": "string" } },
+        "question": { "type": "string", "description": "the one question an interactive session would ask" }
+      }
+    },
+    "stop_reason": { "type": "string" },
+    "source_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actual"],
+      "properties": {
+        "expected": { "$ref": "#/$defs/source_identity" },
+        "actual": { "$ref": "#/$defs/source_identity" },
+        "matched": { "type": "boolean" }
+      }
+    },
+    "checklist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "count"],
+      "properties": {
+        "source": { "enum": ["build_doc", "items", "named_items"] },
+        "build_doc": { "type": "string" },
+        "slice": { "type": "string" },
+        "review_sheet": { "enum": ["read", "not_kit_sheet", "absent"] },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item_result" } },
+    "new_defects": { "type": "array", "items": { "$ref": "#/$defs/new_defect" } },
+    "result": { "enum": ["all_clear", "partial", "not_clear"] },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["slice", "before", "after"],
+        "properties": {
+          "slice": { "type": "string" },
+          "before": { "$ref": "#/$defs/card" },
+          "after": { "$ref": "#/$defs/card" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "records_written": { "type": "array", "items": { "$ref": "#/$defs/record_write" } },
+    "boundary_violations": { "type": "array", "items": { "type": "string" }, "description": "any write or action outside section 7 and section 10, detected after the run; empty on a clean run" },
+    "injection_attempts": { "type": "array", "items": { "type": "string" }, "description": "instruction-like text found in reviewed material and ignored" },
+    "still_open": { "type": "array", "items": { "type": "string" } },
+    "other_open_slices": { "type": "array", "items": { "type": "string" } },
+    "skill_note": { "type": ["string", "null"] }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "const": "completed" } } }, "then": { "required": ["source_identity", "checklist", "items", "result", "cards", "records_written", "boundary_violations"] } },
+    { "if": { "properties": { "status": { "const": "missing_input" } } }, "then": { "required": ["missing_input"] } },
+    { "if": { "properties": { "status": { "const": "stale_source" } } }, "then": { "required": ["source_identity"] } },
+    { "if": { "properties": { "status": { "enum": ["verifier_unavailable", "stopped"] } } }, "then": { "required": ["stop_reason"] } }
+  ],
+  "$defs": {
+    "location": {
+      "type": "object", "additionalProperties": false, "required": ["file", "line"],
+      "properties": { "file": { "type": "string" }, "line": { "type": "integer", "minimum": 1 } }
+    },
+    "card": { "enum": ["not started", "built", "rejected", "signed off with conditions", "signed off", "none"] },
+    "source_identity": {
+      "type": "object", "additionalProperties": false, "required": ["commit", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "dirty": { "type": "boolean" },
+        "untracked": { "type": "array", "items": { "type": "string" } },
+        "tracked_diff_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "detail"],
+      "properties": {
+        "kind": { "enum": ["command", "read", "diff", "artifact"] },
+        "detail": { "type": "string" },
+        "artifact_path": { "type": "string", "description": "bulk output redirected to a file under run_dir" }
+      }
+    },
+    "item_result": {
+      "type": "object", "additionalProperties": false,
+      "required": ["severity", "location", "claim", "failure_scenario", "disposition", "verification"],
+      "properties": {
+        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] },
+        "location": { "$ref": "#/$defs/location" },
+        "claim": { "type": "string" },
+        "failure_scenario": { "type": "string" },
+        "slice": { "type": "string" },
+        "disposition": { "enum": ["fixed", "not_fixed"] },
+        "reason": { "enum": ["reproduces", "missed_case", "verification_blocked"] },
+        "verification": {
+          "type": "object", "additionalProperties": false, "required": ["method", "evidence"],
+          "properties": {
+            "method": { "enum": ["executed", "static"] },
+            "blocked": { "type": ["string", "null"], "description": "what the sandbox stopped, when reason is verification_blocked" },
+            "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidence" } },
+            "location_after_fix": { "$ref": "#/$defs/location" }
+          }
+        },
+        "adjudication": {
+          "type": "object", "additionalProperties": false, "required": ["verifier_said", "driver_action"],
+          "properties": {
+            "verifier_said": { "enum": ["fixed", "not_fixed"] },
+            "driver_action": { "enum": ["confirmed", "downgraded", "disputed"] },
+            "note": { "type": "string" }
+          }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "disposition": { "const": "not_fixed" } } }, "then": { "required": ["reason"] } },
+        { "if": { "required": ["reason"], "properties": { "reason": { "const": "verification_blocked" } } }, "then": { "properties": { "verification": { "required": ["blocked"] } } } }
+      ]
+    },
+    "new_defect": {
+      "type": "object", "additionalProperties": false,
+      "required": ["severity", "location", "claim", "failure_scenario", "source"],
+      "properties": {
+        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] },
+        "location": { "$ref": "#/$defs/location" },
+        "claim": { "type": "string" },
+        "failure_scenario": { "type": "string" },
+        "source": { "const": "fix_introduced" },
+        "charged_to_slice": { "type": "string" }
+      }
+    },
+    "record_write": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "path"],
+      "properties": {
+        "kind": { "enum": ["punch_list_block", "status_line", "verdict_doc_copy", "waived_line", "reopened_line", "run_artifact"] },
+        "path": { "type": "string" },
+        "appended": { "type": "boolean" },
+        "heading": { "type": "string" }
+      }
+    }
+  }
+}

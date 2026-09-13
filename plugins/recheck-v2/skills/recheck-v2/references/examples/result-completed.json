@@ -1,0 +1,73 @@
+{
+  "protocol_version": 1,
+  "run": {
+    "run_id": "ship-a-20260920-1b2e-recheck",
+    "run_dir": "/tmp/ship-a-20260920-1b2e/recheck",
+    "started": "2026-09-20T17:04:11Z",
+    "finished": "2026-09-20T17:19:48Z",
+    "harness": { "name": "codex-cli", "version": "0.154.0", "entry": "plugin" },
+    "model": { "id": "gpt-6-astra", "effort": "low" },
+    "skill": { "name": "recheck-v2", "version": "0.1.0", "commit": "0123abc", "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3" },
+    "verifier": { "kind": "codex-exec", "model": "gpt-6-astra", "fresh": true, "injected_channels": ["AGENTS.md", "~/.codex/AGENTS.md"], "raw_path": "/tmp/ship-a-20260920-1b2e/recheck/verifier/raw.md" }
+  },
+  "status": "completed",
+  "source_identity": {
+    "expected": { "commit": "9c2f1e4d", "dirty": false, "untracked": [] },
+    "actual": { "commit": "9c2f1e4d", "dirty": false, "untracked": [], "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+    "matched": true
+  },
+  "checklist": { "source": "items", "build_doc": "docs/plans/2026-09-18-widget-export.md", "slice": "A", "review_sheet": "absent", "count": 2 },
+  "items": [
+    {
+      "severity": "BLOCKER",
+      "location": { "file": "src/export.ts", "line": 142 },
+      "claim": "CSV export writes unescaped commas inside quoted fields",
+      "failure_scenario": "export a row whose title contains a comma; the produced CSV has one extra column",
+      "slice": "A",
+      "disposition": "fixed",
+      "verification": {
+        "method": "executed",
+        "evidence": [
+          { "kind": "command", "detail": "npm test -- export.escaping; 4 passed, including the comma-in-title case added by the fix", "artifact_path": "/tmp/ship-a-20260920-1b2e/recheck/verifier/test-escaping.log" },
+          { "kind": "read", "detail": "src/export.ts:151 now wraps the field in quotes and doubles inner quotes" }
+        ],
+        "location_after_fix": { "file": "src/export.ts", "line": 151 }
+      },
+      "adjudication": { "verifier_said": "fixed", "driver_action": "confirmed" }
+    },
+    {
+      "severity": "MAJOR",
+      "location": { "file": "src/export.ts", "line": 142 },
+      "claim": "empty titles export as the string \"undefined\"",
+      "failure_scenario": "export a row with no title; the CSV cell reads undefined instead of an empty quoted field",
+      "slice": "A",
+      "disposition": "not_fixed",
+      "reason": "missed_case",
+      "verification": {
+        "method": "executed",
+        "blocked": null,
+        "evidence": [
+          { "kind": "command", "detail": "node scripts/export.js fixtures/no-title.json; cell 3 reads \"\" for null titles but still reads undefined for a missing title key", "artifact_path": "/tmp/ship-a-20260920-1b2e/recheck/verifier/no-title.log" }
+        ]
+      },
+      "adjudication": { "verifier_said": "not_fixed", "driver_action": "confirmed", "note": "the fix handles null, not absent keys" }
+    }
+  ],
+  "new_defects": [],
+  "result": "partial",
+  "cards": [
+    { "slice": "A", "before": "rejected", "after": "signed off with conditions", "reason": "BLOCKER cleared; one MAJOR open" }
+  ],
+  "records_written": [
+    { "kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A" },
+    { "kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false },
+    { "kind": "verdict_doc_copy", "path": "docs/reviews/2026-09-19-signoff-widget-export-a.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A" },
+    { "kind": "waived_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true },
+    { "kind": "run_artifact", "path": "/tmp/ship-a-20260920-1b2e/recheck/result.json", "appended": false }
+  ],
+  "boundary_violations": [],
+  "injection_attempts": [],
+  "still_open": ["MAJOR · src/export.ts:142 · empty titles export as the string \"undefined\" · handle an absent title key, not only null"],
+  "other_open_slices": ["B: rejected"],
+  "skill_note": null
+}

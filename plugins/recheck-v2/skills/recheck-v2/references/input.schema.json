@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/recheck-v2/input.schema.json",
+  "title": "Recheck v2 input",
+  "description": "The one validated input structure. Direct invocation builds it from the user's request and the workspace; a calling station passes it whole. See pilot-contract.md section 2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "invocation", "workspace", "target"],
+  "properties": {
+    "protocol_version": { "const": 1 },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "caller", "run_id", "run_dir"],
+      "properties": {
+        "mode": { "enum": ["interactive", "headless"] },
+        "caller": { "type": "string", "minLength": 1, "description": "'direct' or the calling station's name" },
+        "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "fresh and single-use" },
+        "run_dir": { "type": "string", "minLength": 1, "description": "absolute scratch path outside the repo" },
+        "harness": { "type": "string", "description": "as reported by the adapter, e.g. claude-code 2.1.268" },
+        "model": { "type": "string", "description": "the model id the session says it runs" }
+      }
+    },
+    "workspace": { "type": "string", "minLength": 1, "description": "absolute path to the repo root under test" },
+    "source_identity": { "$ref": "#/$defs/source_identity", "description": "the revision the caller expects; a mismatch stops the run as stale_source" },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["build_doc"],
+          "properties": {
+            "build_doc": { "type": "string", "minLength": 1, "description": "path to the build doc, relative to the workspace" },
+            "slice": { "type": "string", "description": "slice letter or name; omitted means resolve per the record" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items"],
+          "properties": {
+            "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/item" } }
+          }
+        }
+      ]
+    },
+    "named_items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/item_ref" },
+      "description": "the user's naming door; each must resolve to exactly one record entry"
+    },
+    "review_sheet": { "type": ["string", "null"], "description": "path to REVIEW.md when it passes the sheet test" },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "waivers": { "type": "array", "items": { "$ref": "#/$defs/grant" } },
+        "reopen": { "type": "array", "items": { "$ref": "#/$defs/grant" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_floor": { "type": "string", "default": "opus" },
+        "severity_table": {
+          "type": "object",
+          "description": "the default mapping; the review sheet's bar overrides it when present",
+          "additionalProperties": { "enum": ["BLOCKER", "MAJOR", "MINOR"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1, "description": "relative to the workspace" },
+        "line": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "location", "claim", "failure_scenario"],
+      "properties": {
+        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] },
+        "location": { "$ref": "#/$defs/location" },
+        "claim": { "type": "string", "minLength": 1 },
+        "failure_scenario": { "type": "string", "minLength": 1, "description": "the test; a scenario reconstructed from a claim needs the user's confirmation first" },
+        "origin": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "record": { "type": "string", "description": "the doc and heading the entry came from" },
+            "date": { "type": "string", "format": "date" }
+          }
+        }
+      }
+    },
+    "item_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "claim"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "claim": { "type": "string", "minLength": 1 }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "by", "quoted_words", "date"],
+      "properties": {
+        "item": { "$ref": "#/$defs/item_ref" },
+        "by": { "const": "user" },
+        "quoted_words": { "type": "string", "minLength": 1, "description": "the user's words that granted it, verbatim" },
+        "date": { "type": "string", "format": "date" },
+        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] }
+      }
+    },
+    "source_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "dirty": { "type": "boolean" },
+        "untracked": { "type": "array", "items": { "type": "string" } },
+        "tracked_diff_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}
