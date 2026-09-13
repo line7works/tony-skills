@@ -45,5 +45,17 @@
     "review_sheet": "absent",
     "count": 0
   },
-  "stop_reason": "slice B stands at signed off with no open entry; nothing to recheck, nothing written"
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-b-20260923-c0de/input.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-b-20260923-c0de/result.json",
+      "appended": false
+    }
+  ],
+  "stop_reason": "slice B stands at signed off with no open entry; nothing to recheck, no record written"
 }

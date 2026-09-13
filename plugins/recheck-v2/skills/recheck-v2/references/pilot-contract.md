@@ -4,8 +4,8 @@ Step E6 of the skills v2 execution plan. This contract is what E7's fixtures tes
 implements, E9's adapters must satisfy on every harness, and E11 qualifies. It imports nothing
 from v1 `/signoff` or v1 `/recheck`: the behaviors kept from v1 are restated here with their
 source lines, and the record grammar E8 needs is in Appendix A, so no step depends on the old
-text. Revision 3 (2026-09-13) answers the fresh completeness review and its verification
-round; Appendix B maps both.
+text. Revision 4 (2026-09-13) answers the fresh completeness review and its two verification
+rounds; Appendix B maps each.
 
 Contents: 1 Job · 2 Inputs · 3 Scope normalization · 4 Outcomes · 5 Evidence and execution
 selection · 6 Source identity · 7 Independence and the verifier · 8 Authorization and the trust
@@ -110,11 +110,20 @@ Fix-introduced defects are new items, not outcomes: reported separately with sev
 at adjudication and charged to the slice whose fix caused them. A pre-existing issue newly
 noticed is not entered; at most one line offers the initial-review station.
 
-Run level: `all_clear` when nothing is open, `not_clear` when nothing cleared, `partial`
-otherwise; open counts unfixed items and fix-introduced defects. Cards move by the mapping in
-Appendix A; MINOR items never move a card; a slice at `built` never receives a verdict from
-this skill. An empty checklist against a clear card ends the run as `nothing_open` with no
-write; an empty checklist against an open card is missing input (section 10).
+Run level, computed over the effective open set: the `not_fixed` items not waived by a grant
+accepted in this run, plus the fix-introduced defects (a defect found this run is always open
+this run; no grant can name it before it exists). `all_clear` when that set is empty;
+`not_clear` when no item is `fixed` and the set is not empty; `partial` otherwise. A waiver
+changes an item's place in the open set, never its disposition: the block line still reads
+`not fixed`, the waiver line after it is what closes the item, and the result marks the item
+`waived` with the grant's date and quoted words (a reopened item is marked `reopened` the same
+way). A waiver for an item the run found `fixed` is still written, since the user's word is
+recorded, and changes nothing else. Boundary override: a run whose transaction check found a
+violation (section 9) reports `not_clear` whatever the dispositions, and no card moves. Cards
+move by the mapping in Appendix A over the same effective open set; MINOR items never move a
+card; a slice at `built` never receives a verdict from this skill. An empty checklist against
+a clear card ends the run as `nothing_open` with no record write; an empty checklist against
+an open card is missing input (section 10).
 
 ## 5. Evidence and execution selection
 
@@ -203,15 +212,18 @@ and E9 qualifies each adapter's channel with a forged-grant test on both routes.
 Sequencing within a run:
 
 1. Reopenings take effect in the run's scope at once: a user-named cleared or waived entry is
-   treated as open and verified. Its `REOPENED (per user)` line is the first write of the
-   recording transaction, so a run that fails before recording leaves the record untouched.
+   treated as open and verified, and the result marks it `reopened`. Its `REOPENED (per user)`
+   line is the first write of the recording transaction, so a run that fails before recording
+   leaves the record untouched.
 2. Verification and adjudication.
 3. Inside the transaction, after the reopening lines: the punch-list block (a reopened item's
    block line lands after its reopening line, so the check's outcome wins that same-date
    tie), then the waivers granted for this run, so the user's word lands later in the file
-   and wins the same-date tie for a waived item; a waived item leaves the open set before the
-   card mapping runs.
-4. Cards are computed last, over everything still open, and their lines are the last writes.
+   and wins the same-date tie for a waived item; a waived checklist item leaves the open set
+   before the card mapping runs and the result marks it `waived`; a waiver for an entry outside
+   the checklist is written the same way and marks nothing.
+4. Cards are computed last, over the effective open set, and their lines are the last steps,
+   one per slice.
 
 A waiver and a reopening for the same item on the same date conflict and are missing input.
 An `extra_continuation` grant authorizes one continuation beyond the limit in section 11.
@@ -221,54 +233,88 @@ An `extra_continuation` grant authorizes one continuation beyond the limit in se
 The complete list of writes. Anything else is a boundary violation the result must report.
 
 1. The run's own artifacts under `run_dir`: the resolved input, the checklist handed to the
-   verifier, the verifier's raw text, every redirected output, `checkpoint.json`,
-   `result.json`, `receipt.json`. The verifier writes only under `run_dir/verifier/`.
+   verifier, the verifier's raw text, every redirected output, `checkpoint.json` and
+   `checkpoint.log`, `receipt.json` and `receipt.log`, `result.json`. The verifier writes only
+   under `run_dir/verifier/`.
 2. `REOPENED (per user)` lines at the ledger home's tail, the first write of the transaction.
 3. One punch-list block appended at the tail of the ledger home (Appendix A), never editing
    earlier entries.
 4. `WAIVED (per user)` lines at the ledger home's tail, after the block.
 5. A copy of the block appended to the slice's verdict doc under `docs/reviews/` when the glob
    in Appendix A finds exactly one; otherwise the result says none was found.
-6. The `Status:` line of each slice the mapping moves; untouched when nothing changed. Always
-   the last write.
+6. The `Status:` line of each slice the mapping moves, one step per slice in ascending slice
+   order; untouched when nothing changed. Always the last steps.
 
 No write to the review sheet, no source file, no git operation that changes branches or
 history, no mutation of real state to verify anything. Records are additive: the latest-dated
 block wins and file order is time order.
 
-The recording transaction. Writes 2 to 6 happen in that order inside one transaction:
+Every record write, and every rewrite of `checkpoint.json` and `receipt.json`, replaces its
+target file whole: the new content goes to a temporary file beside the target, then a rename
+over it (an append is still an append in content: the new file is the old file plus the lines
+at its tail). A target is therefore always at the hash before or the hash after some planned
+step, never in between. `records_written` lists every path once, in the order of its first write: the
+run artifacts created before the transaction (the resolved input, the checklist, the checkpoint
+and its log, the verifier's raw text and redirected outputs), then `receipt.json` and its log,
+then the transaction's steps in plan order, then `result.json`. A status that never reached a
+run directory lists nothing; every other status lists its artifacts, and only `completed` and
+`recording_failed` list project-record writes (the schema enforces the kinds).
+
+The recording transaction. Writes 2 to 6 happen in that order inside one transaction, as a
+sequence of receipted steps:
 
 - Before it: the identity is recomputed and compared with the start-of-run identity; a
   difference is `stale_source` and the transaction does not begin. Nothing in the project's
   records has been touched at that point.
-- Write-ahead receipts: before each write, `receipt.json` gains an `intent` entry (target
-  path, kind, the target's content hash before, the planned hash after); after the write it
-  gains the matching `done` entry. The receipt is rewritten at each step, never only at the end.
-- Before the status lines (write 6): the identity is recomputed and the tracked diff since the
-  pre-transaction identity must consist exactly of the receipted writes; anything else is
-  listed in `boundary_violations`, the status lines are not written, every card stays as it
-  was, and the result reports `not_clear`. A card is therefore never advanced past a violated
-  or failed transaction.
-- A failure between writes stops the run as `recording_failed`; the receipt says which writes
-  landed. A resume (section 11) classifies an `intent` without its `done` by hashing the
-  target: equal to the planned hash after, mark it done; equal to the hash before, redo it;
-  anything else is `recording_failed` again and needs the user's word. Completed writes are
-  never repeated, so a resume appends nothing twice.
+- The plan: before write 2, the core computes every step of the transaction in order (the
+  reopening lines, the block, the waiver lines, the copy when the glob matched exactly one
+  doc, one status line per slice the mapping would move), each with its target path, kind,
+  the target's content hash before, and the planned hash after, obtained by applying the
+  steps to the file contents in memory in sequence. `receipt.json` is created with that plan
+  before the first step. The plan never changes afterwards; the only later change to a step
+  is a status-line step marked `cancelled` by the boundary check.
+- Write-ahead receipts: before each step, `receipt.json` gains an `intent` entry naming the
+  step; after it, the matching `done` entry with the hash observed. The receipt is rewritten
+  at each step, never only at the end.
+- Before the first status line (write 6): the identity is recomputed and the tracked diff
+  since the pre-transaction identity must consist exactly of the steps receipted `done`;
+  anything else is listed in `boundary_violations`, every status-line step is marked
+  `cancelled`, every card stays as it was, and the result reports `not_clear`. A card is
+  therefore never advanced past a violated transaction.
+- Commit point: the `done` entry of the last plan step that is not cancelled. Before it the
+  run can end only as `recording_failed`; after it the run is `completed`, and what remains
+  (the post-run identity, `result.json`, delivery) touches no project record, so a failure
+  there is repaired by a resume that re-assembles the result from the checkpoint and the
+  receipt.
+- A failure between steps stops the run as `recording_failed`; the receipt says which steps
+  landed. A resume (section 11) classifies every plan step without a `done` entry, from the
+  first, by hashing its target: equal to the planned hash after, mark it done (this covers a
+  step whose target landed but whose `done` entry never did, the last step included); equal to
+  the hash before, redo it; anything else is an outside edit, `recording_failed` again, and
+  needs the user's word. A step whose `intent` entry never landed is classified the same way
+  from the plan. Completed steps are never repeated, so a resume appends nothing twice.
+- Status lines are separate steps, one per slice, so a failure between two of them leaves the
+  earlier cards moved and the later untouched, and every moved card stands after the block
+  and lines that justify it; the resume completes the rest. A failed transaction therefore
+  leaves every card at its before value or its mapped after value, never anything else, and
+  never a moved card ahead of its block.
 
 The semantic validator (an E8 script, `scripts/validate-result.py`) checks what the schema
 cannot: the result's items correspond one-to-one to the checklist entries and `checklist.count`
 equals their number; every item and new defect carries a slice or `none` that exists in the
 input; every record write targets an authorized destination inside the workspace or `run_dir`;
-every artifact the result names is in the write list; the still-open list equals the open
-items and new defects; the card mapping of Appendix A reproduces each `after` value; the
-receipt matches the write list; each item's disposition agrees with its adjudication (`fixed`
-only from a verifier `fixed` confirmed or a verifier `not_fixed` upgraded with evidence;
-`not_fixed` only from a verifier `not_fixed` confirmed or disputed, or a verifier `fixed`
-downgraded); `all_clear` means no open item and no new defect, `not_clear` means nothing
-cleared; a `fixed` item carries no block and no missing-evidence field; a run with boundary
-violations changed no card and reports `not_clear`. The schema encodes the item and result
-relationships it can (its description lists them); the validator closes the rest. A result
-that fails either is not delivered.
+every artifact the result names is in the write list, and the list is in write order; the
+still-open list equals the effective open set; the card mapping of Appendix A reproduces each
+`after` value over that set; every item marked `waived` or `reopened` corresponds to one
+accepted grant in the input and to one `waived_line` or `reopened_line` write, and every such
+write to an accepted grant; the receipt's plan and entries match the write list; each item's
+disposition agrees with its adjudication (`fixed` only from a verifier `fixed` confirmed or a
+verifier `not_fixed` upgraded with evidence; `not_fixed` only from a verifier `not_fixed`
+confirmed or disputed, or a verifier `fixed` downgraded); the `result` value follows section 4
+from the effective open set; a `fixed` item carries no block and no missing-evidence field; a
+run with boundary violations changed no card, cancelled its status-line steps, and reports
+`not_clear`. The schema encodes the item and result relationships it can (its description lists
+them); the validator closes the rest. A result that fails either is not delivered.
 
 ## 10. Failure handling
 
@@ -294,26 +340,68 @@ word; beyond that the run stops with its state on disk.
 
 ## 11. Continuation
 
-A run keeps its state in `run_dir/checkpoint.json`: the resolved input, the start-of-run
-identity, the normalized checklist, each item's state (`pending` or its result), the verifier
-call ids used and the retry count per item, the continuation count, and the receipts so far.
-The checkpoint is rewritten after every item and every write.
+A run keeps its state in `run_dir/checkpoint.json`: the hash of the resolved input, the
+start-of-run identity, the scope (the normalized checklist, the accepted grants, the rejected
+ones), each item's state, the fix-introduced defects found so far, the verifier call ids used
+and the retry count per item, the continuation count, and the phase (`assembling`,
+`verifying`, `adjudicating`, `recording`, `committed`). The transaction's plan and progress
+live in `receipt.json` (section 9), not in the checkpoint. The checkpoint is rewritten after
+every item and every write.
+
+Item states are a union of two shapes: `{"state": "pending", "retries": n}` and
+`{"state": "done", "retries": n, "result": <item_result>}`, where `result` validates against
+the result schema's item definition and a pending entry carries no result. A valid checkpoint
+holds both shapes at once whenever it is written mid-run;
+[`examples/checkpoint-partial.json`](examples/checkpoint-partial.json) shows one, and the
+example suite checks its item states and its integrity block. The checkpoint's own schema,
+`checkpoint.schema.json`, is written at E8 with the core (section 15) and encodes this union.
+
+Integrity. Every checkpoint carries an `integrity` block: `seq` (0 for the first write, then
+one more per write), `prev` (the `self` of the previous write; `null` at 0), and `self`, the
+SHA-256 of the canonical serialization of the checkpoint with `integrity.self` removed
+(JSON, keys sorted, separators `,` and `:` with no other whitespace, UTF-8, non-ASCII
+unescaped). Before each rename of `checkpoint.json`, the core appends one line `<seq> <self>`
+announcing the write to `run_dir/checkpoint.log`; the rename follows. The current file's
+digest is checkable on its own, the chain links each write to the one before, and the log is
+the retained comparison value: the checkpoint is corrupt when its `self` does not recompute,
+when its `(seq, self)` is not the log's last line, when its `prev` is not the line before that
+(or is not `null` when the log has one line), or when the log has a gap or a repeated `seq`.
+One state is tolerated because the order above produces it: a log whose last line announces
+`seq` one past the checkpoint's, while the checkpoint's `(seq, self)` equals the line before,
+is a rename that never landed; the core drops that last line and continues. No other
+difference is repaired, and a checkpoint ahead of its log is corrupt, so a rewritten
+checkpoint never passes as a new write. `receipt.json` carries the same block against
+`run_dir/receipt.log`. This detects truncation, partial writes, and any edit that does not
+rewrite the file, its log, and the chain together; a principal that can rewrite all three holds
+the core's own write access, and the mechanism does not claim to detect it. Only the core
+writes these files; the verifier's scratch is `run_dir/verifier/` and it has no write access to
+the rest of `run_dir`.
 
 A resume is an invocation with `resume: true` and the same `run_id` and `run_dir`; the
-single-use rule applies to new runs, not to resumes. The core validates the checkpoint: it
-parses; its run id matches; it carries the start identity; its stored hash of the resolved
-input equals the hash of the input now presented (workspace, target, named items, pin), so a
-resume cannot point the run at another target; every stored item state validates against the
-result schema's item definition; and its chain hash matches, since each checkpoint write stores
-the hash of the previous checkpoint and an edited or truncated file breaks the chain. Only the
-core writes the checkpoint; the verifier's scratch is `run_dir/verifier/` and it has no write
-access to the rest of `run_dir`. The core then recomputes the identity and compares it with the
-checkpoint's start identity plus receipted writes (a difference is `stale_source`), takes scope
-and per-item state from the checkpoint and never re-derives them from memory or conversation,
-reloads the contract (section 15), and resumes at the first pending item or the first missing
-write. Call ids stay single-use across the resume. The first continuation needs no grant; a
-second needs the user's `extra_continuation` grant. This covers both a compaction inside the
-same session and a fresh session handed the run directory.
+single-use rule applies to new runs, not to resumes. Validation runs in this order, all of it
+before any write, and any failure stops the run as `stopped` naming the step:
+
+1. `checkpoint.json` and `checkpoint.log` exist and parse, and the checkpoint validates
+   against its schema.
+2. Integrity, as above.
+3. Binding: the checkpoint's run id equals the invocation's, and its `input_sha256` equals the
+   SHA-256 of the canonical serialization of the input now presented with its `invocation`
+   object removed (workspace, target, named items, pin, review sheet, authorization, policy),
+   so a resume cannot point the run at another target or change its grants.
+4. Every `done` item's result validates against the result schema's item definition.
+5. When `receipt.json` exists: its integrity against `receipt.log`, its run id, and the
+   classification of every plan step as done, redo, or outside edit (section 9); an outside
+   edit ends as `recording_failed`, not as a resume.
+6. The identity is recomputed and compared with the checkpoint's start identity plus the
+   steps receipted `done`; a difference is `stale_source`.
+
+Then the core takes scope and per-item state from the checkpoint and never re-derives them
+from memory or conversation, reloads the contract (section 15), increments the continuation
+count, and resumes at the first pending item, else at the first plan step not done, else
+(commit point passed) re-assembles the result and delivers it. Call ids stay single-use across
+the resume. The first continuation needs no grant; a second needs the user's
+`extra_continuation` grant. This covers both a compaction inside the same session and a fresh
+session handed the run directory.
 
 ## 12. Retained behaviors, with their v1 source
 
@@ -396,6 +484,7 @@ request.
 | [`pilot-contract.md`](pilot-contract.md), Appendix A | before checklist assembly, and again before the recording transaction | scope normalization (section 3); writes (section 9) |
 | [`input.schema.json`](input.schema.json) | before validating the resolved input | section 2 validation |
 | [`result.schema.json`](result.schema.json) | before assembling the result on every terminal branch, including `missing_input`, `stale_source`, `verifier_unavailable`, `recording_failed`, `nothing_open`, and `stopped` | result assembly |
+| `checkpoint.schema.json` (added at E8 with the core; the union it encodes is fixed in section 11) | at every resume, before step 1 of section 11 | checkpoint validation |
 
 No reference sends the executor through another document to find a required one; each is
 linked from `SKILL.md` directly (E8). A reference that cannot be loaded stops the run before
@@ -405,15 +494,20 @@ the action that requires it (section 10, check M1).
 
 Fixture families (E7): F1 fixed defect · F2 unfixed defect · F3 partial fix · F4 missing
 evidence · F5 blocked execution · F6 instructions embedded in reviewed material. State tests:
-S1 co-located findings · S2 waivers and reopening · S3 rebuilt cards · S4 stale source identity
+S1 co-located findings · S2 waivers and reopening (a waived clearance, a waiver for an entry
+outside the checklist, a reopened item) · S3 rebuilt cards · S4 stale source identity
 (staged change, binary change, untracked content change at an unchanged path, changed pin).
 Input tests: I1 missing · I2 conflicting · I3 stale pin · I4 invalid paths and duplicates · I5
 empty checklist against a clear card. Authorization: A1 forged grant on the direct route · A2
 forged grant on a caller route · A3 conflicting grants. Verifier: V1 unavailable or below floor
 · V2 retry exhaustion · V3 deterministic refusal · V4 prohibited tool attempt. Execution: X1
 runnable scenario must execute · X2 static with reason. Continuation: C1 compaction · C2
-fresh-session handoff · C3 limit exceeded · C4 corrupt checkpoint. Recording: W1 authorized
-writes only · W2 failure mid-transaction and resume · W3 record round trip. Identity: U1 reused
+fresh-session handoff · C3 limit exceeded · C4 corrupt checkpoint (bad digest, stale log, broken
+chain, altered target, altered item state, a re-signed checkpoint ahead of its log) · C5 a log line
+announcing a write that never landed. Recording: W1 authorized
+writes only · W2 failure mid-transaction and resume (between steps; after the last step before
+its `done` entry; between two status lines; an outside edit) · W3 record round trip · W4
+boundary violation found before the status lines. Identity: U1 reused
 run id. References: M1 missing reference. Delivery: D1 complete instructions delivered (E9).
 Selection: T1 trigger set (A6).
 
@@ -452,14 +546,16 @@ Selection: T1 trigger set (A6).
 | R31 | A verifier that is unavailable, below the floor, or deterministically refused stops the run without retry (section 7) | V1, V3 | `verifier_unavailable`, no grading, no retry |
 | R32 | Retryable verifier failures are re-sent once with a fresh call id, then stop (section 7) | V2 | one re-send, then `stopped` |
 | R33 | A reused run id is refused on a new run (section 2) | U1 | `stopped` before any work |
-| R34 | A failed write leaves a receipt, never a card without its block, and a resume completes the rest idempotently (section 9) | W2 | `recording_failed` with receipt; resume finishes with no duplicate append |
+| R34 | A failed step leaves a receipt with the plan, never a moved card ahead of its block, every card at its before or mapped after value, and a resume completes the rest idempotently, the commit point included (section 9) | W2, all four variants | `recording_failed` with receipt; resume finishes with no duplicate append; a step whose target landed without its `done` entry is marked done, not redone |
 | R35 | The continuation limit holds without the user's grant (section 11) | C3, C4 | `stopped`; a corrupt checkpoint never writes |
 | R36 | Legacy records are parsed by the Appendix A grammar and ambiguous ones go to the user, never guessed | W3, S1 | legacy tags, separators, and embedded record syntax round-trip or stop as missing input |
 | R37 | A missing or unreadable reference stops the run before its action (section 15) | M1 | `stopped` naming the reference |
 | R38 | The run reports harness, entry, sandbox, model, and settings actually used (section 13) | every run | fields present and matching the profile |
 | R39 | A workspace with an initialized submodule is refused before any work (section 6) | S4 variant | `stopped`, reason named, no write |
-| R40 | Result relationships hold: disposition agrees with adjudication, `result` agrees with the open count, a fixed item carries no block or missing field, violations freeze cards (section 9) | every run; schema and semantic validator | both reject every counterexample in the negative suite |
-| R41 | A resume binds to the original input and rejects an altered checkpoint (section 11) | C4 variants: altered target, altered item state, broken chain | `stopped` before any write |
+| R40 | Result relationships hold: disposition agrees with adjudication, `result` agrees with the effective open set (waived items excluded), a fixed item carries no block or missing field, violations freeze cards (sections 4 and 9) | every run; schema and semantic validator; W4 | both reject every counterexample in the negative suite and accept every positive case, a waived clearance and a violation beside a verified fix included |
+| R41 | A resume binds to the original input and rejects a corrupt or altered checkpoint; the one tolerated state, an announced write that never landed, is dropped (section 11) | C4 variants, C5 | `stopped` before any write; C5 continues after dropping the announced line |
+| R42 | A waiver accepted this run removes the checklist item from the open set and the result without changing its disposition (section 4) | S2 | block line `not fixed`, waiver line after it, item marked `waived`, `all_clear` when nothing else is open, card by the mapping |
+| R43 | Every status that reached a run directory lists its artifacts; only `completed` and `recording_failed` list project-record writes (section 9) | every run; schema | a record write on any other status is rejected; every named artifact is in the list |
 
 Every mandatory requirement has at least one check; E7's answer key states the expected result
 for each check before implementation and is kept outside the verifier's evidence.
@@ -582,3 +678,22 @@ complete artifact lists, new negative cases); N1 → section 8 sequencing and se
 lines are the first write of the transaction; a failed run touches nothing); N2 → the `not
 started` card rule removed from the schema; D1 → Appendix A legacy shapes; D2 → Appendix A
 recheck line; D3 → section 6 (every write inside the guarded transaction).
+
+Revision 4, 2026-09-13, after the second verification round (same session), under the closing
+standard adopted the same day (plan ruling 17: one fix round, one verification round, then
+carry what remains short of a BLOCKER): N3 → section 4 (the effective open set, `waived` and
+`reopened` item markers, the boundary override), `result.schema.json` (summary rules computed
+over that set; the `not_clear` item rule yields to the override; `grant_mark`), the semantic
+validator list in section 9, R40, R42, and the positive cases in the suite; N4 →
+`result-recording-failed` rewritten to the revision-3 order (the copy landed as step 5, the
+status line failed as step 6) and the write-order rule in section 9; N5 → artifact-only write
+lists on every status short of `completed` and `recording_failed` (schema, section 9, R43);
+`result-stopped` and every example with a run directory now list their artifacts; 6 → section 9
+(the plan, atomic replacement, the commit point, per-slice status steps, a `done` entry that
+never landed, an `intent` that never landed, R34); 8 → closed by N3; 11 → section 11 (the
+item-state union, the integrity block, `checkpoint.log` and `receipt.log` as the retained
+comparison values, log-before-rename and the one tolerated state, the resume validation order,
+the `input_sha256` binding, `checkpoint.schema.json` deferred to E8 in section 15,
+`examples/checkpoint-partial.json`, R41, C5); 14 → the examples and the suite (write order
+everywhere, the `reopened` marker on the blocked example, the checkpoint example, new negative
+and positive cases).

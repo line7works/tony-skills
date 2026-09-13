@@ -24,7 +24,7 @@ plugins/recheck-v2/
       pilot-contract.md               # E6: the behavioral contract (this step)
       input.schema.json               # E6: the one validated input structure
       result.schema.json              # E6: the common result
-      examples/                       # E6: inputs and results that validate, plus validate-examples.py (57 negative cases)
+      examples/                       # E6: inputs, results, a checkpoint; validate-examples.py (83 negative, 8 positive, 12 checkpoint checks)
     scripts/                          # E8: deterministic helpers
   agents/openai.yaml                  # E9: Codex adapter
   evals/                              # E7 onward

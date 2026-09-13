@@ -112,6 +112,11 @@
     },
     {
       "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260924-5f5f/checkpoint.log",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
       "path": "/tmp/recheck-a-20260924-5f5f/verifier/raw.md",
       "appended": false
     },
@@ -122,7 +127,12 @@
     },
     {
       "kind": "run_artifact",
-      "path": "/tmp/recheck-a-20260924-5f5f/result.json",
+      "path": "/tmp/recheck-a-20260924-5f5f/receipt.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260924-5f5f/receipt.log",
       "appended": false
     },
     {
@@ -134,11 +144,19 @@
       "sha256_after": "2222222222222222222222222222222222222222222222222222222222222222"
     },
     {
+      "kind": "verdict_doc_copy",
+      "path": "docs/reviews/2026-09-19-signoff-widget-export-a.md",
+      "appended": true,
+      "heading": "### 2026-09-24 \u2014 recheck: Slice A",
+      "sha256_before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
       "kind": "run_artifact",
-      "path": "/tmp/recheck-a-20260924-5f5f/receipt.json",
+      "path": "/tmp/recheck-a-20260924-5f5f/result.json",
       "appended": false
     }
   ],
   "receipt_path": "/tmp/recheck-a-20260924-5f5f/receipt.json",
-  "stop_reason": "write 5 (status line) failed: docs/plans/2026-09-18-widget-export.md became read-only mid-transaction; the block landed, the card did not move; resume completes the status line and the verdict-doc copy"
+  "stop_reason": "step 6 (status line, slice A) failed: ENOSPC writing the temporary file for docs/plans/2026-09-18-widget-export.md, so the rename never ran and the target is at its hash before; steps 3 (block) and 5 (verdict-doc copy) landed and the card did not move; a resume classifies step 6 by hash and redoes it"
 }

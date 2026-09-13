@@ -68,5 +68,37 @@
     "review_sheet": "absent",
     "count": 1
   },
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260925-77aa/input.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260925-77aa/checklist.md",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260925-77aa/checkpoint.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260925-77aa/checkpoint.log",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260925-77aa/verifier/raw.md",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260925-77aa/result.json",
+      "appended": false
+    }
+  ],
   "stop_reason": "verifier call returned empty, the one re-send failed in transport; nothing graded, no card moved, state on disk in run_dir"
 }

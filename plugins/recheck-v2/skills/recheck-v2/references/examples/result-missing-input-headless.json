@@ -26,6 +26,18 @@
       "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3"
     }
   },
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/ship-b-20260921-90aa/recheck/input.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/ship-b-20260921-90aa/recheck/result.json",
+      "appended": false
+    }
+  ],
   "status": "missing_input",
   "missing_input": {
     "fields": [

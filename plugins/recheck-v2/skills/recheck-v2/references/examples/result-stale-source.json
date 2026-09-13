@@ -44,5 +44,17 @@
     },
     "matched": false
   },
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260920-7f3c/input.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-a-20260920-7f3c/result.json",
+      "appended": false
+    }
+  ],
   "stop_reason": "expected dirty=false; the workspace has staged changes in src/export.ts and an untracked src/export.ts.orig; no record written"
 }

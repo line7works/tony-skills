@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/result.schema.json",
   "title": "Recheck v2 result",
-  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); all_clear means every item fixed with no new defect, not_clear means no item fixed, partial means both kinds; boundary violations force not_clear; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries none of them; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9).",
+  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); the result is computed over the effective open set (not_fixed items without a waived marker, plus new defects): all_clear means that set is empty and every item is fixed or waived, not_clear means no item fixed and the set not empty, partial means a fixed item beside a non-empty set; a boundary violation forces not_clear whatever the items, and the not_clear item rule yields to it; a waived or reopened marker carries the grant's date and quoted words; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries no items, result, or cards, and its write list, when present, holds run artifacts only; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -270,7 +270,15 @@
           "items": false,
           "result": false,
           "cards": false,
-          "records_written": false,
+          "records_written": {
+            "items": {
+              "properties": {
+                "kind": {
+                  "const": "run_artifact"
+                }
+              }
+            }
+          },
           "new_defects": false
         }
       }
@@ -291,7 +299,15 @@
           "items": false,
           "result": false,
           "cards": false,
-          "records_written": false,
+          "records_written": {
+            "items": {
+              "properties": {
+                "kind": {
+                  "const": "run_artifact"
+                }
+              }
+            }
+          },
           "new_defects": false
         }
       }
@@ -323,7 +339,15 @@
           "items": false,
           "result": false,
           "cards": false,
-          "records_written": false,
+          "records_written": {
+            "items": {
+              "properties": {
+                "kind": {
+                  "const": "run_artifact"
+                }
+              }
+            }
+          },
           "new_defects": false
         }
       }
@@ -347,7 +371,15 @@
         "properties": {
           "result": false,
           "cards": false,
-          "records_written": false
+          "records_written": {
+            "items": {
+              "properties": {
+                "kind": {
+                  "const": "run_artifact"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -430,11 +462,20 @@
         "properties": {
           "items": {
             "items": {
-              "properties": {
-                "disposition": {
-                  "const": "fixed"
+              "anyOf": [
+                {
+                  "properties": {
+                    "disposition": {
+                      "const": "fixed"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "waived"
+                  ]
                 }
-              }
+              ]
             }
           },
           "new_defects": {
@@ -454,6 +495,9 @@
         "properties": {
           "result": {
             "const": "not_clear"
+          },
+          "boundary_violations": {
+            "maxItems": 0
           }
         }
       },
@@ -468,7 +512,32 @@
               }
             }
           }
-        }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "items": {
+                "contains": {
+                  "not": {
+                    "required": [
+                      "waived"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "required": [
+              "new_defects"
+            ],
+            "properties": {
+              "new_defects": {
+                "minItems": 1
+              }
+            }
+          }
+        ]
       }
     },
     {
@@ -503,20 +572,25 @@
                     "disposition": {
                       "const": "not_fixed"
                     }
+                  },
+                  "not": {
+                    "required": [
+                      "waived"
+                    ]
                   }
                 }
               }
             }
           },
           {
+            "required": [
+              "new_defects"
+            ],
             "properties": {
               "new_defects": {
                 "minItems": 1
               }
-            },
-            "required": [
-              "new_defects"
-            ]
+            }
           }
         ]
       }
@@ -1096,6 +1170,38 @@
         }
       ]
     },
+    "grant_mark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "quoted_words"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "quoted_words": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the user's words as written on the ledger line"
+        },
+        "turn_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "the accepted grant that waived or reopened this item this run (sections 4 and 8)"
+    },
     "item_result": {
       "type": "object",
       "additionalProperties": false,
@@ -1145,6 +1251,14 @@
         "slice": {
           "type": "string",
           "minLength": 1
+        },
+        "reopened": {
+          "$ref": "#/$defs/grant_mark",
+          "description": "the reopening accepted this run for this item (section 8)"
+        },
+        "waived": {
+          "$ref": "#/$defs/grant_mark",
+          "description": "the waiver accepted this run for this item; the item leaves the open set (section 4)"
         },
         "record": {
           "type": "object",
