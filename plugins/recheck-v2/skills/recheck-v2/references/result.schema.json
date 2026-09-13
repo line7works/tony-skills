@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/result.schema.json",
   "title": "Recheck v2 result",
-  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries none of them; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9).",
+  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); all_clear means every item fixed with no new defect, not_clear means no item fixed, partial means both kinds; boundary violations force not_clear; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries none of them; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -414,6 +414,131 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "required": [
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "const": "all_clear"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "disposition": {
+                  "const": "fixed"
+                }
+              }
+            }
+          },
+          "new_defects": {
+            "maxItems": 0
+          },
+          "still_open": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "const": "not_clear"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "disposition": {
+                  "const": "not_fixed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "const": "partial"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "items": {
+            "contains": {
+              "properties": {
+                "disposition": {
+                  "const": "fixed"
+                }
+              }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "items": {
+                "contains": {
+                  "properties": {
+                    "disposition": {
+                      "const": "not_fixed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "new_defects": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "new_defects"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "boundary_violations"
+        ],
+        "properties": {
+          "boundary_violations": {
+            "minItems": 1
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_clear"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -717,22 +842,6 @@
               }
             }
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "before": {
-                "const": "not started"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "after": {
-                "const": "not started"
-              }
-            }
-          }
         }
       ]
     },
@@ -761,6 +870,10 @@
         "untracked_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "submodules": {
+          "type": "array",
+          "maxItems": 0
         }
       }
     },
@@ -772,7 +885,8 @@
         "dirty",
         "tracked_diff_sha256",
         "untracked",
-        "untracked_sha256"
+        "untracked_sha256",
+        "submodules"
       ],
       "properties": {
         "commit": {
@@ -795,6 +909,11 @@
         "untracked_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "submodules": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "git submodule status must list nothing; the check is recorded"
         }
       }
     },
@@ -1004,11 +1123,24 @@
         "claim": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^[^\\n\\u00b7]+$"
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
         },
         "failure_scenario": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
         },
         "slice": {
           "type": "string",
@@ -1067,7 +1199,37 @@
           },
           "then": {
             "properties": {
-              "reason": false
+              "reason": false,
+              "verification": {
+                "properties": {
+                  "blocked": false,
+                  "missing": false
+                }
+              },
+              "adjudication": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "fixed"
+                      },
+                      "driver_action": {
+                        "const": "confirmed"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "not_fixed"
+                      },
+                      "driver_action": {
+                        "const": "upgraded"
+                      }
+                    }
+                  }
+                ]
+              }
             }
           }
         },
@@ -1082,7 +1244,36 @@
           "then": {
             "required": [
               "reason"
-            ]
+            ],
+            "properties": {
+              "adjudication": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "not_fixed"
+                      },
+                      "driver_action": {
+                        "enum": [
+                          "confirmed",
+                          "disputed"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "fixed"
+                      },
+                      "driver_action": {
+                        "const": "downgraded"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
           }
         },
         {
@@ -1126,29 +1317,6 @@
               }
             }
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "disposition": {
-                "const": "fixed"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "adjudication": {
-                "properties": {
-                  "driver_action": {
-                    "enum": [
-                      "confirmed",
-                      "upgraded"
-                    ]
-                  }
-                }
-              }
-            }
-          }
         }
       ]
     },
@@ -1181,11 +1349,24 @@
         "claim": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^[^\\n\\u00b7]+$"
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
         },
         "failure_scenario": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
         },
         "source": {
           "const": "fix_introduced"

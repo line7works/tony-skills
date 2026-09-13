@@ -3,10 +3,28 @@
   "run": {
     "run_id": "recheck-a-20260920-8811",
     "run_dir": "/tmp/recheck-a-20260920-8811",
-    "invocation": { "mode": "interactive", "caller": "direct", "resume": false },
-    "harness": { "name": "claude-code", "version": "2.1.268", "entry": "plugin", "sandbox": "default" },
-    "model": { "id": "claude-haiku-4-5-20251001", "floor_class": "below_floor", "effort": "low" },
-    "skill": { "name": "recheck-v2", "version": "0.1.0", "commit": "0123abc", "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3" }
+    "invocation": {
+      "mode": "interactive",
+      "caller": "direct",
+      "resume": false
+    },
+    "harness": {
+      "name": "claude-code",
+      "version": "2.1.268",
+      "entry": "plugin",
+      "sandbox": "default"
+    },
+    "model": {
+      "id": "claude-haiku-4-5-20251001",
+      "floor_class": "below_floor",
+      "effort": "low"
+    },
+    "skill": {
+      "name": "recheck-v2",
+      "version": "0.1.0",
+      "commit": "0123abc",
+      "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3"
+    }
   },
   "status": "verifier_unavailable",
   "stop_reason": "below_floor: the session model maps to a class below policy.model_floor 'opus' in the claude-code profile; nothing graded, no retry"

@@ -4,8 +4,8 @@ Step E6 of the skills v2 execution plan. This contract is what E7's fixtures tes
 implements, E9's adapters must satisfy on every harness, and E11 qualifies. It imports nothing
 from v1 `/signoff` or v1 `/recheck`: the behaviors kept from v1 are restated here with their
 source lines, and the record grammar E8 needs is in Appendix A, so no step depends on the old
-text. Revision 2 (2026-09-13) answers the fresh completeness review; Appendix B maps its
-findings to sections.
+text. Revision 3 (2026-09-13) answers the fresh completeness review and its verification
+round; Appendix B maps both.
 
 Contents: 1 Job · 2 Inputs · 3 Scope normalization · 4 Outcomes · 5 Evidence and execution
 selection · 6 Source identity · 7 Independence and the verifier · 8 Authorization and the trust
@@ -143,16 +143,22 @@ The identity of the reviewed content is a fingerprint the core computes with its
 | `untracked` | the sorted paths from `git ls-files --others --exclude-standard` |
 | `untracked_sha256` | SHA-256 over the sorted lines `<path>\0<sha256 of file content>` for those paths |
 
-Exclusions: ignored files; `run_dir` (outside the workspace by rule). Submodules are covered by
-their pinned commit in the tracked diff. The actual identity in a result carries all five
-fields.
+| `submodules` | the paths `git submodule status` lists; the pilot requires this list to be empty |
+
+Exclusions: ignored files; `run_dir` (outside the workspace by rule). Submodules: a submodule's
+working contents can change without its pinned commit changing, and the diff above sees only
+the commit, so the pilot refuses a workspace with an initialized submodule before any work
+(`stopped`, reason `unsupported: submodules`); the fingerprint records the empty list to show
+the check ran. Supporting submodules is an extension for E12 or later. The actual identity in
+a result carries all six fields.
 
 A caller may pin an expected identity with any subset of fields; `commit` is normalized with
 `git rev-parse --verify <pin>^{commit}` before comparison, an unresolvable pin is a mismatch,
 and every supplied field must be equal. The identity is computed at the start of the run,
-again after verification and before the recording transaction (section 9), and again after
-it. A change between the first two computations stops the run as `stale_source`; a stale
-result carries both identities and `matched: false`.
+again after verification and before the recording transaction (section 9), and again inside
+it before the card lines. Every record write happens inside that transaction, so no write
+precedes an identity check. A change between the first two computations stops the run as
+`stale_source`; a stale result carries both identities and `matched: false`.
 
 ## 7. Independence and the verifier
 
@@ -196,13 +202,16 @@ and E9 qualifies each adapter's channel with a forged-grant test on both routes.
 
 Sequencing within a run:
 
-1. Reopenings first: a user-named cleared or waived entry receives its `REOPENED (per user)`
-   line before verification, so the check runs against a reopened item.
+1. Reopenings take effect in the run's scope at once: a user-named cleared or waived entry is
+   treated as open and verified. Its `REOPENED (per user)` line is the first write of the
+   recording transaction, so a run that fails before recording leaves the record untouched.
 2. Verification and adjudication.
-3. Waivers granted for this run are appended after the punch-list block, so the user's word
-   lands later in the file and wins the same-date tie for that item; a waived item leaves the
-   open set before the card mapping runs.
-4. Cards are computed last, over everything still open.
+3. Inside the transaction, after the reopening lines: the punch-list block (a reopened item's
+   block line lands after its reopening line, so the check's outcome wins that same-date
+   tie), then the waivers granted for this run, so the user's word lands later in the file
+   and wins the same-date tie for a waived item; a waived item leaves the open set before the
+   card mapping runs.
+4. Cards are computed last, over everything still open, and their lines are the last writes.
 
 A waiver and a reopening for the same item on the same date conflict and are missing input.
 An `extra_continuation` grant authorizes one continuation beyond the limit in section 11.
@@ -211,35 +220,40 @@ An `extra_continuation` grant authorizes one continuation beyond the limit in se
 
 The complete list of writes. Anything else is a boundary violation the result must report.
 
-1. `REOPENED (per user)` lines at the ledger home's tail, before verification (section 8).
-2. The run's own artifacts under `run_dir`: the resolved input, the checklist handed to the
+1. The run's own artifacts under `run_dir`: the resolved input, the checklist handed to the
    verifier, the verifier's raw text, every redirected output, `checkpoint.json`,
-   `result.json`, `receipt.json`.
+   `result.json`, `receipt.json`. The verifier writes only under `run_dir/verifier/`.
+2. `REOPENED (per user)` lines at the ledger home's tail, the first write of the transaction.
 3. One punch-list block appended at the tail of the ledger home (Appendix A), never editing
    earlier entries.
 4. `WAIVED (per user)` lines at the ledger home's tail, after the block.
-5. The `Status:` line of each slice the mapping moves; untouched when nothing changed.
-6. A copy of the block appended to the slice's verdict doc under `docs/reviews/` when the glob
+5. A copy of the block appended to the slice's verdict doc under `docs/reviews/` when the glob
    in Appendix A finds exactly one; otherwise the result says none was found.
+6. The `Status:` line of each slice the mapping moves; untouched when nothing changed. Always
+   the last write.
 
 No write to the review sheet, no source file, no git operation that changes branches or
 history, no mutation of real state to verify anything. Records are additive: the latest-dated
 block wins and file order is time order.
 
-The recording transaction. Writes 3 to 6 happen in that order inside one transaction:
+The recording transaction. Writes 2 to 6 happen in that order inside one transaction:
 
-- Before it: the identity is recomputed and compared with the start-of-run identity (allowing
-  only the reopening lines of write 1, which are receipted); a difference is `stale_source` and
-  the transaction does not begin.
-- Each write is receipted in `receipt.json` with the target path, the kind, and the target's
-  content hash before and after; the receipt is written after each step, not at the end.
-- After it: the identity is recomputed and the tracked diff since the pre-transaction identity
-  must consist exactly of the receipted writes; anything else is listed in
-  `boundary_violations`, and a run with violations reports `not_clear` cards unchanged.
+- Before it: the identity is recomputed and compared with the start-of-run identity; a
+  difference is `stale_source` and the transaction does not begin. Nothing in the project's
+  records has been touched at that point.
+- Write-ahead receipts: before each write, `receipt.json` gains an `intent` entry (target
+  path, kind, the target's content hash before, the planned hash after); after the write it
+  gains the matching `done` entry. The receipt is rewritten at each step, never only at the end.
+- Before the status lines (write 6): the identity is recomputed and the tracked diff since the
+  pre-transaction identity must consist exactly of the receipted writes; anything else is
+  listed in `boundary_violations`, the status lines are not written, every card stays as it
+  was, and the result reports `not_clear`. A card is therefore never advanced past a violated
+  or failed transaction.
 - A failure between writes stops the run as `recording_failed`; the receipt says which writes
-  landed; because a block always precedes its status line, a card is never advanced without its
-  block. A resume (section 11) completes only the missing writes and skips any write whose
-  target already matches the receipted post-state.
+  landed. A resume (section 11) classifies an `intent` without its `done` by hashing the
+  target: equal to the planned hash after, mark it done; equal to the hash before, redo it;
+  anything else is `recording_failed` again and needs the user's word. Completed writes are
+  never repeated, so a resume appends nothing twice.
 
 The semantic validator (an E8 script, `scripts/validate-result.py`) checks what the schema
 cannot: the result's items correspond one-to-one to the checklist entries and `checklist.count`
@@ -247,7 +261,14 @@ equals their number; every item and new defect carries a slice or `none` that ex
 input; every record write targets an authorized destination inside the workspace or `run_dir`;
 every artifact the result names is in the write list; the still-open list equals the open
 items and new defects; the card mapping of Appendix A reproduces each `after` value; the
-receipt matches the write list. A result that fails it is not delivered.
+receipt matches the write list; each item's disposition agrees with its adjudication (`fixed`
+only from a verifier `fixed` confirmed or a verifier `not_fixed` upgraded with evidence;
+`not_fixed` only from a verifier `not_fixed` confirmed or disputed, or a verifier `fixed`
+downgraded); `all_clear` means no open item and no new defect, `not_clear` means nothing
+cleared; a `fixed` item carries no block and no missing-evidence field; a run with boundary
+violations changed no card and reports `not_clear`. The schema encodes the item and result
+relationships it can (its description lists them); the validator closes the rest. A result
+that fails either is not delivered.
 
 ## 10. Failure handling
 
@@ -263,6 +284,7 @@ receipt matches the write list. A result that fails it is not delivered.
 | Evidence or fixture the scenario needs is unobtainable | item `not_fixed`, reason `missing_evidence` | `completed` |
 | A write failed inside the recording transaction | stop; receipt names what landed; no card without its block | `recording_failed` |
 | Reused run id on a new run | refuse before any work | `stopped` |
+| The workspace has an initialized submodule | refuse before any work; reason `unsupported: submodules` | `stopped` |
 | Resume with a missing, corrupt, or mismatched checkpoint | refuse before any write | `stopped` |
 | Continuation limit exceeded without an `extra_continuation` grant | refuse; state stays on disk | `stopped` |
 | A required reference cannot be loaded | stop before the step that needs it; name it | `stopped` |
@@ -278,8 +300,14 @@ call ids used and the retry count per item, the continuation count, and the rece
 The checkpoint is rewritten after every item and every write.
 
 A resume is an invocation with `resume: true` and the same `run_id` and `run_dir`; the
-single-use rule applies to new runs, not to resumes. The core validates the checkpoint (parses,
-matches the run id, carries a start identity), recomputes the identity and compares it with the
+single-use rule applies to new runs, not to resumes. The core validates the checkpoint: it
+parses; its run id matches; it carries the start identity; its stored hash of the resolved
+input equals the hash of the input now presented (workspace, target, named items, pin), so a
+resume cannot point the run at another target; every stored item state validates against the
+result schema's item definition; and its chain hash matches, since each checkpoint write stores
+the hash of the previous checkpoint and an edited or truncated file breaks the chain. Only the
+core writes the checkpoint; the verifier's scratch is `run_dir/verifier/` and it has no write
+access to the rest of `run_dir`. The core then recomputes the identity and compares it with the
 checkpoint's start identity plus receipted writes (a difference is `stale_source`), takes scope
 and per-item state from the checkpoint and never re-derives them from memory or conversation,
 reloads the contract (section 15), and resumes at the first pending item or the first missing
@@ -419,7 +447,7 @@ Selection: T1 trigger set (A6).
 | R26 | The verdict is in chat; project documents carry only the block, the lines, and the status line | every completed run | no verdict prose in the build doc |
 | R27 | Selection: triggers on recheck requests, not on near misses; manual-only where marked (A6, D5) | T1 | activation and false-trigger rates recorded per harness |
 | R28 | Conflicting grants are missing input (section 8) | A3 | `missing_input`, no line written |
-| R29 | Reopenings land before verification; waivers after the block; cards last (section 8) | S2 | file order shows the sequence; the waived item is out of the mapping |
+| R29 | Reopenings take effect before verification and their lines open the transaction; waivers land after the block; cards last (section 8) | S2, and S2 with a failure before recording | file order shows the sequence; the waived item is out of the mapping; a failed run leaves the record untouched |
 | R30 | Runnable scenarios execute; static carries its reason; a sandbox stop is a block (RB12) | X1, X2, F5 | a runnable scenario marked static fails the check |
 | R31 | A verifier that is unavailable, below the floor, or deterministically refused stops the run without retry (section 7) | V1, V3 | `verifier_unavailable`, no grading, no retry |
 | R32 | Retryable verifier failures are re-sent once with a fresh call id, then stop (section 7) | V2 | one re-send, then `stopped` |
@@ -429,6 +457,9 @@ Selection: T1 trigger set (A6).
 | R36 | Legacy records are parsed by the Appendix A grammar and ambiguous ones go to the user, never guessed | W3, S1 | legacy tags, separators, and embedded record syntax round-trip or stop as missing input |
 | R37 | A missing or unreadable reference stops the run before its action (section 15) | M1 | `stopped` naming the reference |
 | R38 | The run reports harness, entry, sandbox, model, and settings actually used (section 13) | every run | fields present and matching the profile |
+| R39 | A workspace with an initialized submodule is refused before any work (section 6) | S4 variant | `stopped`, reason named, no write |
+| R40 | Result relationships hold: disposition agrees with adjudication, `result` agrees with the open count, a fixed item carries no block or missing field, violations freeze cards (section 9) | every run; schema and semantic validator | both reject every counterexample in the negative suite |
+| R41 | A resume binds to the original input and rejects an altered checkpoint (section 11) | C4 variants: altered target, altered item state, broken chain | `stopped` before any write |
 
 Every mandatory requirement has at least one check; E7's answer key states the expected result
 for each check before implementation and is kept outside the verifier's evidence.
@@ -451,10 +482,15 @@ whose claim would violate it is ambiguous (below).
 | Kind | Shape |
 |---|---|
 | Review finding (initial review block, heading `### <YYYY-MM-DD> — review: <slice>`) | `- <severity> · <file:line> · <claim> · <failure scenario> · <which slice's review found it>` |
-| Recheck line (heading `### <YYYY-MM-DD> — recheck: <slice>`) | `- <severity> · <file:line> · (<claim>) · fixed \| not fixed · <how verified>` |
+| Recheck line (heading `### <YYYY-MM-DD> — recheck: <slice>`) | `- <severity> · <file:line> · (<claim>) · fixed \| not fixed · <how verified>`; when the code moved, the post-fix location goes in the prose after the disposition, never inside the claim |
 | Fix-introduced defect line (same block) | `- <severity> · <file:line> · broke: <claim> — <scenario>` |
 | Waiver | `- WAIVED (per user) · <YYYY-MM-DD> · <severity> · <file:line> · <claim> · "<quoted words>"` |
 | Reopening | `- REOPENED (per user) · <YYYY-MM-DD> · <file:line> · <claim> · "<quoted words>"` |
+| Legacy waiver or reopening (read only) | the same lines without the trailing quoted words |
+| Legacy finding without a claim field (read only) | `- <severity> · <file:line> · <failure scenario> · ...`, matched on location alone where a single entry holds that location |
+
+The reader accepts every shape above, legacy included; new writes always use the full shape
+with quoted words.
 
 **Claim field rules.** The claim is its own field. Parentheses wrapping the whole field are not
 part of the claim. A parenthetical glued to the location (`file:line (tag)`) is a legacy tag,
@@ -463,9 +499,15 @@ holds that location; at a shared location it decides nothing and the ambiguity g
 user. The failure scenario of an entry is the field after its claim in the review finding; an
 entry without one is missing input until the user supplies or confirms it.
 
+**Single-line fields.** The core writes claims, failure scenarios, and quoted words as single
+lines: the input schema rejects a carriage return or line feed anywhere in them and the
+separator `·` inside them. A double quote inside quoted words is written as a single quote,
+the one normalization; the original words stay in the run artifacts.
+
 **Ambiguous legacy records** (stop as missing input, never guessed): a claim containing `·` or
-spanning lines; a line whose field count matches no shape above; two review findings with the
-same location and claim in one block; a waiver or reopening line without its date.
+spanning lines; a line whose field count matches no shape above, legacy shapes included; two
+review findings with the same location and claim in one block; a waiver or reopening line
+without its date; a claim-less finding at a location several entries share.
 
 **Status card.** One `Status:` line per slice in the build doc. Values this skill may set:
 `rejected`, `signed off with conditions`, `signed off`. Mapping over everything still open for
@@ -527,3 +569,16 @@ retryable versus deterministic); 12 → section 2 (question only for direct inte
 forces headless for station callers; envelope lists every field); 13 → section 15 (links, loads
 before assembly and on every terminal branch, reloads on both continuations, M1); 14 →
 section 16 (R28 to R38, new checks) and the examples; 15 → RB3 and RB7 citations.
+
+Revision 3, 2026-09-13, after the verification round (same session): finding 5 → section 6
+(submodules refused, six-field identity, R39); 6 → section 9 (write-ahead receipts, identity
+and boundary check before the status lines, resume classification); 7 → Appendix A and both
+schemas (no carriage return or line feed anywhere in claims, scenarios, or quoted words; quote
+normalization); 8 → `result.schema.json` (disposition and adjudication agreement, `fixed`
+without block or missing field, `result` against the items, violations force `not_clear`) and
+the semantic validator list in section 9, R40; 11 → section 11 (input hash binding, item-state
+validation, chain hash, verifier scratch isolation, R41); 14 → the examples (`result-stopped`,
+complete artifact lists, new negative cases); N1 → section 8 sequencing and section 9 (reopening
+lines are the first write of the transaction; a failed run touches nothing); N2 → the `not
+started` card rule removed from the schema; D1 → Appendix A legacy shapes; D2 → Appendix A
+recheck line; D3 → section 6 (every write inside the guarded transaction).

@@ -104,7 +104,36 @@ cases = [
     ("input: waiver without severity", caller, inp, lambda d: del_path(d, ["authorization", "waivers", 0, "severity"])),
     ("input: empty identity pin", caller, inp, lambda d: d.__setitem__("source_identity", {})),
     ("input: unknown top-level field", direct, inp, lambda d: d.__setitem__("fixer_notes", "trust me")),
+    ("fixed carrying a block explanation", completed, res, lambda d: set_path(d, ["items", 0, "verification", "blocked"], "sandbox")),
+    ("fixed carrying a missing-evidence field", completed, res, lambda d: set_path(d, ["items", 0, "verification", "missing"], "fixture")),
+    ("fixed from a verifier not_fixed merely confirmed", completed, res, lambda d: set_path(d, ["items", 0, "adjudication", "verifier_said"], "not_fixed")),
+    ("not_fixed from a verifier fixed merely confirmed", completed, res, lambda d: set_path(d, ["items", 1, "adjudication", "verifier_said"], "fixed")),
+    ("all_clear with an open item", completed, res, lambda d: d.__setitem__("result", "all_clear")),
+    ("not_clear with a fixed item", completed, res, lambda d: d.__setitem__("result", "not_clear")),
+    ("partial with every item fixed and no new defect", completed, res, lambda d: (set_path(d, ["items", 1, "disposition"], "fixed"), del_path(d, ["items", 1, "reason"]), set_path(d, ["items", 1, "adjudication", "verifier_said"], "fixed"))),
+    ("boundary violation with a promoted result", completed, res, lambda d: d.__setitem__("boundary_violations", ["wrote src/x.ts"])),
+    ("claim with a trailing line feed", completed, res, lambda d: set_path(d, ["items", 0, "claim"], "claim\n")),
+    ("claim with a carriage return", completed, res, lambda d: set_path(d, ["items", 0, "claim"], "cla\rim")),
+    ("actual identity without the submodule check", completed, res, lambda d: del_path(d, ["source_identity", "actual", "submodules"])),
+    ("actual identity with an initialized submodule", completed, res, lambda d: set_path(d, ["source_identity", "actual", "submodules"], ["vendor/lib"])),
+    ("input: claim with a trailing line feed", caller, inp, lambda d: set_path(d, ["target", "items", 0, "claim"], "claim\n")),
+    ("input: failure scenario spanning lines", caller, inp, lambda d: set_path(d, ["target", "items", 0, "failure_scenario"], "one\ntwo")),
+    ("input: quoted words spanning lines", caller, inp, lambda d: set_path(d, ["authorization", "waivers", 0, "quoted_words"], "waive\nit")),
+    ("input: pin with an initialized submodule", caller, inp, lambda d: set_path(d, ["source_identity", "submodules"], ["vendor/lib"])),
 ]
 rejected = sum(neg(*c) for c in cases)
-print(f"positive: {len(glob.glob(os.path.join(HERE, '*.json')))} files, {failures} failing; negative: {rejected}/{len(cases)} rejected")
-sys.exit(1 if failures or rejected != len(cases) else 0)
+
+# Positive mutations: documents the contract allows and the schema must accept.
+def pos(name, doc, validator, mutate):
+    d = copy.deepcopy(doc); mutate(d)
+    ok = validator.is_valid(d)
+    print(("ACCEPTED " if ok else "REJECTED (BUG) ") + name)
+    return ok
+positives = [
+    ("a not-started card moved by the mapping", completed, res, lambda d: (set_path(d, ["cards", 0, "before"], "not started"), set_path(d, ["cards", 0, "after"], "signed off with conditions"))),
+    ("an independent evidence-backed upgrade", completed, res, lambda d: (set_path(d, ["items", 1, "disposition"], "fixed"), del_path(d, ["items", 1, "reason"]), set_path(d, ["items", 1, "adjudication", "driver_action"], "upgraded"), set_path(d, ["items", 1, "adjudication", "upgrade_evidence"], "the verifier lacked fixtures/no-title.json; run with it the cell is empty for null and absent"), d.__setitem__("result", "all_clear"), d.__setitem__("still_open", []), set_path(d, ["cards", 0, "after"], "signed off"))),
+    ("a downgrade with a note", completed, res, lambda d: (set_path(d, ["items", 0, "disposition"], "not_fixed"), set_path(d, ["items", 0, "reason"], "reproduces"), set_path(d, ["items", 0, "adjudication", "verifier_said"], "fixed"), set_path(d, ["items", 0, "adjudication", "driver_action"], "downgraded"), set_path(d, ["items", 0, "adjudication", "note"], "the test the verifier ran does not cover the comma case"), d.__setitem__("result", "not_clear"), set_path(d, ["cards", 0, "after"], "rejected"))),
+]
+accepted = sum(pos(*c) for c in positives)
+print(f"positive: {len(glob.glob(os.path.join(HERE, '*.json')))} files, {failures} failing; negative: {rejected}/{len(cases)} rejected; positive mutations: {accepted}/{len(positives)} accepted")
+sys.exit(1 if failures or rejected != len(cases) or accepted != len(positives) else 0)

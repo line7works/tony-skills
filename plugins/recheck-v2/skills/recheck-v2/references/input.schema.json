@@ -5,72 +5,180 @@
   "description": "The one validated input structure (pilot-contract.md section 2). Direct invocation builds it from the user's request and the workspace; a calling station passes it whole. Checks the schema cannot express (unique items, run_dir outside the workspace, build_doc containment after symlinks, conflicting grants) belong to the semantic validator named in section 9.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol_version", "invocation", "workspace", "target"],
+  "required": [
+    "protocol_version",
+    "invocation",
+    "workspace",
+    "target"
+  ],
   "properties": {
-    "protocol_version": { "const": 1 },
+    "protocol_version": {
+      "const": 1
+    },
     "invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "caller", "run_id", "run_dir"],
+      "required": [
+        "mode",
+        "caller",
+        "run_id",
+        "run_dir"
+      ],
       "properties": {
-        "mode": { "enum": ["interactive", "headless"] },
-        "caller": { "type": "string", "minLength": 1, "description": "'direct' or the calling station's name" },
-        "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "fresh and single-use for a new run; reused only with resume: true" },
-        "run_dir": { "type": "string", "pattern": "^/", "description": "absolute scratch path outside the workspace" },
-        "resume": { "type": "boolean", "default": false, "description": "continue the run whose checkpoint sits in run_dir" },
-        "harness": { "type": "string", "description": "as reported by the adapter, e.g. claude-code 2.1.268" },
-        "model": { "type": "string", "description": "the model id the session says it runs" }
+        "mode": {
+          "enum": [
+            "interactive",
+            "headless"
+          ]
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1,
+          "description": "'direct' or the calling station's name"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "description": "fresh and single-use for a new run; reused only with resume: true"
+        },
+        "run_dir": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "absolute scratch path outside the workspace"
+        },
+        "resume": {
+          "type": "boolean",
+          "default": false,
+          "description": "continue the run whose checkpoint sits in run_dir"
+        },
+        "harness": {
+          "type": "string",
+          "description": "as reported by the adapter, e.g. claude-code 2.1.268"
+        },
+        "model": {
+          "type": "string",
+          "description": "the model id the session says it runs"
+        }
       },
-      "if": { "properties": { "caller": { "const": "direct" } }, "required": ["caller"] },
-      "else": { "properties": { "mode": { "const": "headless" } } }
+      "if": {
+        "properties": {
+          "caller": {
+            "const": "direct"
+          }
+        },
+        "required": [
+          "caller"
+        ]
+      },
+      "else": {
+        "properties": {
+          "mode": {
+            "const": "headless"
+          }
+        }
+      }
     },
-    "workspace": { "type": "string", "pattern": "^/", "description": "absolute path to the repo root under test; must be a git work tree" },
-    "source_identity": { "$ref": "#/$defs/identity_pin", "description": "the revision the caller expects; any subset of fields; a mismatch stops the run as stale_source" },
+    "workspace": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "absolute path to the repo root under test; must be a git work tree"
+    },
+    "source_identity": {
+      "$ref": "#/$defs/identity_pin",
+      "description": "the revision the caller expects; any subset of fields; a mismatch stops the run as stale_source"
+    },
     "target": {
       "oneOf": [
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["build_doc"],
+          "required": [
+            "build_doc"
+          ],
           "properties": {
-            "build_doc": { "$ref": "#/$defs/contained_relative_path", "description": "the build doc, relative to the workspace" },
-            "slice": { "type": "string", "minLength": 1, "description": "slice letter or name; omitted means resolve per contract section 3" }
+            "build_doc": {
+              "$ref": "#/$defs/contained_relative_path",
+              "description": "the build doc, relative to the workspace"
+            },
+            "slice": {
+              "type": "string",
+              "minLength": 1,
+              "description": "slice letter or name; omitted means resolve per contract section 3"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["items"],
+          "required": [
+            "items"
+          ],
           "properties": {
-            "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/item" } }
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/item"
+              }
+            }
           }
         }
       ]
     },
     "named_items": {
       "type": "array",
-      "items": { "$ref": "#/$defs/item_ref" },
+      "items": {
+        "$ref": "#/$defs/item_ref"
+      },
       "description": "the user's naming door; each must resolve to exactly one record entry"
     },
-    "review_sheet": { "type": ["string", "null"], "description": "path to the inspection sheet; null means none; omitted means auto-discover <workspace>/REVIEW.md" },
+    "review_sheet": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "path to the inspection sheet; null means none; omitted means auto-discover <workspace>/REVIEW.md"
+    },
     "authorization": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "waivers": { "type": "array", "items": { "$ref": "#/$defs/waiver_grant" } },
-        "reopen": { "type": "array", "items": { "$ref": "#/$defs/grant" } },
-        "extra_continuation": { "$ref": "#/$defs/continuation_grant" }
+        "waivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/waiver_grant"
+          }
+        },
+        "reopen": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "extra_continuation": {
+          "$ref": "#/$defs/continuation_grant"
+        }
       }
     },
     "policy": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "model_floor": { "type": "string", "default": "opus", "description": "a capability class the E9 harness profile maps model ids to; never a model id" },
+        "model_floor": {
+          "type": "string",
+          "default": "opus",
+          "description": "a capability class the E9 harness profile maps model ids to; never a model id"
+        },
         "severity_table": {
           "type": "object",
           "description": "the default mapping; a governing review sheet's bar overrides it",
-          "additionalProperties": { "enum": ["BLOCKER", "MAJOR", "MINOR"] }
+          "additionalProperties": {
+            "enum": [
+              "BLOCKER",
+              "MAJOR",
+              "MINOR"
+            ]
+          }
         }
       }
     }
@@ -80,82 +188,240 @@
       "type": "string",
       "minLength": 1,
       "pattern": "^[^/]",
-      "not": { "pattern": "(^|/)\\.\\.(/|$)" }
+      "not": {
+        "pattern": "(^|/)\\.\\.(/|$)"
+      }
     },
-    "claim": { "type": "string", "minLength": 1, "pattern": "^[^\\n\\u00b7]+$", "description": "one line, no middle dot: it is a ledger field" },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\r\\n\\u00b7]"
+          }
+        }
+      ],
+      "description": "one line, no carriage return, line feed, or middle dot anywhere: it is a ledger field"
+    },
     "location": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["file", "line"],
+      "required": [
+        "file",
+        "line"
+      ],
       "properties": {
-        "file": { "$ref": "#/$defs/contained_relative_path", "description": "relative to the workspace" },
-        "line": { "type": "integer", "minimum": 1 }
+        "file": {
+          "$ref": "#/$defs/contained_relative_path",
+          "description": "relative to the workspace"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "record_provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["document", "heading", "date"],
+      "required": [
+        "document",
+        "heading",
+        "date"
+      ],
       "properties": {
-        "document": { "$ref": "#/$defs/contained_relative_path", "description": "the doc the entry lives in, or the caller's 'chat verdict' record" },
-        "heading": { "type": "string", "minLength": 1, "description": "the block heading, e.g. '### 2026-09-19 — review: Slice A', or 'chat verdict'" },
-        "date": { "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+        "document": {
+          "$ref": "#/$defs/contained_relative_path",
+          "description": "the doc the entry lives in, or the caller's 'chat verdict' record"
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the block heading, e.g. '### 2026-09-19 \u2014 review: Slice A', or 'chat verdict'"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
       }
     },
     "item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["severity", "location", "claim", "failure_scenario", "record", "slice"],
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "failure_scenario",
+        "record",
+        "slice"
+      ],
       "properties": {
-        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] },
-        "location": { "$ref": "#/$defs/location" },
-        "claim": { "$ref": "#/$defs/claim" },
-        "failure_scenario": { "type": "string", "minLength": 1, "description": "the test; a scenario reconstructed from a claim needs the user's confirmation first" },
-        "record": { "$ref": "#/$defs/record_provenance" },
-        "slice": { "type": "string", "minLength": 1, "description": "the slice the entry belongs to, or 'none' when the record has no card" }
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "claim": {
+          "$ref": "#/$defs/claim"
+        },
+        "failure_scenario": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the test, one line; a scenario reconstructed from a claim needs the user's confirmation first"
+        },
+        "record": {
+          "$ref": "#/$defs/record_provenance"
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the slice the entry belongs to, or 'none' when the record has no card"
+        }
       }
     },
     "item_ref": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["location", "claim"],
+      "required": [
+        "location",
+        "claim"
+      ],
       "properties": {
-        "location": { "$ref": "#/$defs/location" },
-        "claim": { "$ref": "#/$defs/claim" }
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "claim": {
+          "$ref": "#/$defs/claim"
+        }
       }
     },
     "grant": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["item", "by", "channel", "turn_ref", "quoted_words", "date"],
+      "required": [
+        "item",
+        "by",
+        "channel",
+        "turn_ref",
+        "quoted_words",
+        "date"
+      ],
       "properties": {
-        "item": { "$ref": "#/$defs/item_ref" },
-        "by": { "const": "user" },
-        "channel": { "const": "user-turn", "description": "the adapter's user channel; the only channel the core accepts" },
-        "turn_ref": { "type": "string", "minLength": 1, "description": "the harness's reference to the user's message, as the E9 profile defines" },
-        "quoted_words": { "type": "string", "minLength": 1, "description": "the user's words that granted it, verbatim" },
-        "date": { "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "forwarded_by": { "type": "string", "minLength": 1, "description": "the calling station that forwarded the grant unchanged" },
-        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] }
+        "item": {
+          "$ref": "#/$defs/item_ref"
+        },
+        "by": {
+          "const": "user"
+        },
+        "channel": {
+          "const": "user-turn",
+          "description": "the adapter's user channel; the only channel the core accepts"
+        },
+        "turn_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the harness's reference to the user's message, as the E9 profile defines"
+        },
+        "quoted_words": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the user's words that granted it, verbatim, one line; an inner double quote is written as a single quote on the ledger"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "forwarded_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the calling station that forwarded the grant unchanged"
+        },
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        }
       }
     },
     "waiver_grant": {
       "allOf": [
-        { "$ref": "#/$defs/grant" },
-        { "required": ["severity"] }
+        {
+          "$ref": "#/$defs/grant"
+        },
+        {
+          "required": [
+            "severity"
+          ]
+        }
       ]
     },
     "continuation_grant": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["by", "channel", "turn_ref", "quoted_words", "date"],
+      "required": [
+        "by",
+        "channel",
+        "turn_ref",
+        "quoted_words",
+        "date"
+      ],
       "properties": {
-        "by": { "const": "user" },
-        "channel": { "const": "user-turn" },
-        "turn_ref": { "type": "string", "minLength": 1 },
-        "quoted_words": { "type": "string", "minLength": 1 },
-        "date": { "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "forwarded_by": { "type": "string", "minLength": 1 }
+        "by": {
+          "const": "user"
+        },
+        "channel": {
+          "const": "user-turn"
+        },
+        "turn_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quoted_words": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the user's words that granted it, verbatim, one line; an inner double quote is written as a single quote on the ledger"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "forwarded_by": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "identity_pin": {
@@ -163,11 +429,33 @@
       "additionalProperties": false,
       "minProperties": 1,
       "properties": {
-        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "normalized to the full hash before comparison" },
-        "dirty": { "type": "boolean" },
-        "tracked_diff_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "untracked": { "type": "array", "items": { "type": "string" } },
-        "untracked_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$",
+          "description": "normalized to the full hash before comparison"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "tracked_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "submodules": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "the pilot supports no initialized submodule"
+        }
       }
     }
   }

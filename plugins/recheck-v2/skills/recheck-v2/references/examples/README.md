@@ -17,4 +17,5 @@ into `scripts/`) also runs the negative suite: documents that must fail. Run fro
 | `result-stale-source.json` | pin mismatch: both identities, `matched: false`, no write |
 | `result-verifier-unavailable.json` | below the floor: nothing graded, no retry |
 | `result-nothing-open.json` | empty checklist against a clear card: no write |
+| `result-stopped.json` | retryable verifier failure twice: nothing graded, no write |
 | `result-recording-failed.json` | a write failed mid-transaction: receipt, block landed, no card |
