@@ -7,13 +7,13 @@ description: >-
   asks what the project is before executing. Creates a local repo and kit.
   Adopts staged scope and architecture docs, pushes new private GitHub repo,
   links Vercel auto-deploys, provisions Supabase or Neon, and creates
-  Obsidian, memory, and Notion tracker and roadmap records. The repo uses its
-  archetype and Tier 0 doc kit. Database provisioning uses the Vercel
-  Marketplace and wires its environment. Creates the Obsidian project folder
-  and index, CLI/Claude-Code memory note, and per-project Notion task tracker
-  and roadmap board. Ends with a live deployment, a verified green baseline,
-  and a copy-paste handoff prompt telling a browser/app LLM the project is
-  active.
+  Obsidian, memory, and Notion tracker and roadmap records. The repo is
+  scaffolded under ~/Developer by archetype with the repo doc kit's Tier 0;
+  the staged docs come from ~/Documents; the database comes through the Vercel
+  Marketplace with its env wired; the Notion board mirrors Project Knight.
+  Ends by deploying once to a live URL at a verified green baseline and
+  generating a copy-paste handoff prompt that tells a browser/app LLM the
+  project is now active.
 ---
 
 # Sunrise a project

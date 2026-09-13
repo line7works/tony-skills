@@ -757,3 +757,84 @@ fatal: Unable to create '/Users/tonycoon/Developer/tony-skills/.git/worktrees/to
 ```
 
 The worktree Git metadata is outside the writable sandbox. Approval is unavailable in this session. No commit was created, no push occurred, and all repairs and this report remain in the working tree.
+
+## Addendum 2026-09-13 (E4 fixes)
+
+Commit `364d4ea` was made by the driving Claude session because this sandbox could not write the worktree's Git index. That commit includes the contract file. This corrects the earlier commit-status and contract-exclusion statements; this fixing session made no commit.
+
+The "psych alone" waiver came from the driving session's launch prompt, not the contract. The driving session will run PyYAML separately and append its output below this addendum.
+
+F1 (amended item 5): fixed the repository field in all 19 manifests that retained the old owner URL. All 21 now use `https://github.com/line7works/tony-skills` for repository. Key order and 2-space formatting are unchanged. Correction to item 5 and the earlier "Left alone and authorities" paragraph: repository fields were fixed under amended item 5 and are no longer left alone.
+
+F2 (item 2): preserved the parsed first 500 characters exactly and replaced the entire suffix with the supplied verbatim text, retaining folded block form.
+
+F3 (amended item 10): replaced only the tag-step parenthetical with the supplied `<Name>` and `--keep-local` wording.
+
+Remaining reviewer notes not acted on: none were supplied beyond F1–F4. PyYAML verification remains assigned to the driving session. The existing contract amendment was left unchanged. Earlier report text is preserved as requested.
+
+### E4 fix verification output
+
+```text
+PASS python3 -m json.tool plugins/arcade/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/architect/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/blueprint/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/build/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/digest/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/fb/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/forge/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/handoff/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/huh/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/inspect/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/jpb/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/precon/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/print-tune/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/readers/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/recheck/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/ship/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/shutdown/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/signoff/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/sun/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/vertical/.claude-plugin/plugin.json
+PASS python3 -m json.tool plugins/wargame/.claude-plugin/plugin.json
+$ claude plugin validate .
+Validating marketplace manifest: /Users/tonycoon/Developer/tony-skills-maint/.claude-plugin/marketplace.json
+
+✔ Validation passed
+Exit code: 0
+PASS Ruby psych: sunrise description length 901 <= 1024
+PASS Ruby psych: first 500 characters unchanged
+PASS Ruby psych: suffix equals F2 text verbatim
+First 500: Bootstrap a new project across every layer. Use to start, spin up, kick off, bootstrap, scaffold, formalize, or "sunrise" a project. Never clobbers what exists; the inverse of the sunset skill. Always previews every change and asks what the project is before executing. Creates a local repo and kit. Adopts staged scope and architecture docs, pushes new private GitHub repo, links Vercel auto-deploys, provisions Supabase or Neon, and creates Obsidian, memory, and Notion tracker and roadmap records.
+PASS F3: exact amended parenthetical; no other sunset change
+PASS git diff --check
+```
+
+### PyYAML verification (driving session, 2026-09-13, `uvx --with pyyaml python3`)
+
+```text
+Installed 1 package in 1ms
+PASS pyyaml: plugins/arcade/skills/arcade/SKILL.md 815 chars
+PASS pyyaml: plugins/architect/skills/architect/SKILL.md 362 chars
+PASS pyyaml: plugins/blueprint/skills/blueprint/SKILL.md 342 chars
+PASS pyyaml: plugins/build/skills/build/SKILL.md 309 chars
+PASS pyyaml: plugins/digest/skills/digest/SKILL.md 360 chars
+PASS pyyaml: plugins/fb/skills/fb/SKILL.md 404 chars
+PASS pyyaml: plugins/forge/skills/forge/SKILL.md 917 chars
+PASS pyyaml: plugins/handoff/skills/handoff/SKILL.md 708 chars
+PASS pyyaml: plugins/huh/skills/huh/SKILL.md 415 chars
+PASS pyyaml: plugins/inspect/skills/inspect/SKILL.md 262 chars
+PASS pyyaml: plugins/jpb/skills/jpb/SKILL.md 608 chars
+PASS pyyaml: plugins/precon/skills/precon/SKILL.md 304 chars
+PASS pyyaml: plugins/print-tune/skills/print-tune/SKILL.md 353 chars
+PASS pyyaml: plugins/readers/skills/readers/SKILL.md 641 chars
+PASS pyyaml: plugins/recheck/skills/recheck/SKILL.md 369 chars
+PASS pyyaml: plugins/ship/skills/ship/SKILL.md 359 chars
+PASS pyyaml: plugins/shutdown/skills/shutdown/SKILL.md 829 chars
+PASS pyyaml: plugins/signoff/skills/signoff/SKILL.md 361 chars
+PASS pyyaml: plugins/sun/skills/sunrise/SKILL.md 893 chars
+PASS pyyaml: plugins/sun/skills/sunset/SKILL.md 747 chars
+PASS pyyaml: plugins/vertical/skills/vertical/SKILL.md 506 chars
+PASS pyyaml: plugins/wargame/skills/wargame/SKILL.md 348 chars
+frontmatters parsed: 22
+readers description identical to tag text: True ( 641 chars )
+```

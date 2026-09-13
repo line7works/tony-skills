@@ -50,8 +50,11 @@ Plan of record: `~/ObsidianVault/03-projects/tony-skills/skills-v2-execution-pla
    doc wins and the conflict goes to Tony." Keep the precedence rule exactly. Grep the file
    for any other `jpb-vision` mention and repoint it the same way.
 5. **Plugin manifests.** `plugins/*/.claude-plugin/plugin.json`, 21 files.
-   - 19 carry `"homepage": "https://github.com/tiny-tunnel-dot/tony-skills"`. Set every
-     homepage to `https://github.com/line7works/tony-skills` (the remote and the README).
+   - 19 carry `"homepage": "https://github.com/tiny-tunnel-dot/tony-skills"` and the same
+     19 carry `"repository": "https://github.com/tiny-tunnel-dot/tony-skills"`. Set both
+     fields in every manifest to `https://github.com/line7works/tony-skills` (the remote
+     and the README). *(Amended 2026-09-13 after the E4 validators: the first version of
+     this item named only `homepage`; the `repository` field carries the same stale URL.)*
    - Add `"version": "1.0.0"` to all 21 (the first versioned v1 release). Keep each file's
      key order and its 2-space formatting.
    - Validate: `claude plugin validate .` must pass with zero warnings;
@@ -96,7 +99,9 @@ Plan of record: `~/ObsidianVault/03-projects/tony-skills/skills-v2-execution-pla
     - Line 197: the tag step says "(run before the repo move and before GitHub archive)" but
       sits in Phase 5, after the Phase 4 move. Change the parenthetical to "(run before
       GitHub archive; after Phase 4, `<repo path>` is the archived location
-      `~/Developer/_archive/<name>`)". Move no step.
+      `~/Developer/_archive/<Name>`, or `~/Developer/<Name>` under `--keep-local`)". Move
+      no step. *(Amended 2026-09-13 after the E4 review: the placeholder is `<Name>`, the
+      form the rest of the file uses, and the `--keep-local` case is named.)*
     - Lines 40, 127, 159, 296: the memory placeholder `project_<slug>.md` becomes
       `project_<slug_>.md`, matching sunrise and the underscored filenames on disk.
 11. **forge pointer.** `plugins/forge/skills/forge/SKILL.md` line 44: "point Tony to

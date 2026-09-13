@@ -194,7 +194,7 @@ migration — which is why this step exists.
 ## Phase 5 — GitHub (skip if --keep-github)
 
 Order matters: push everything BEFORE archiving, because an archived repo is read-only and rejects pushes.
-1. Optional final marker (run before GitHub archive; after Phase 4, `<repo path>` is the archived location `~/Developer/_archive/<name>`): `git -C <repo path> tag sunset-<today> && git -C <repo path> push origin sunset-<today>`.
+1. Optional final marker (run before GitHub archive; after Phase 4, `<repo path>` is the archived location `~/Developer/_archive/<Name>`, or `~/Developer/<Name>` under `--keep-local`): `git -C <repo path> tag sunset-<today> && git -C <repo path> push origin sunset-<today>`.
 2. `gh repo archive <owner>/<repo> --yes`
 
 ## Phase 6 — Vercel (skip if --keep-vercel)
