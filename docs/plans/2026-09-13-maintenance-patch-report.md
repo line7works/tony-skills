@@ -838,3 +838,10 @@ PASS pyyaml: plugins/wargame/skills/wargame/SKILL.md 348 chars
 frontmatters parsed: 22
 readers description identical to tag text: True ( 641 chars )
 ```
+
+Re-run after F2 (driving session, 2026-09-13):
+
+```text
+re-run after F2 at HEAD 0f8e8f6: frontmatters parsed 22 / 22
+sunrise description: 901 chars
+```
