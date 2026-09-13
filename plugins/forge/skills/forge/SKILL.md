@@ -41,7 +41,7 @@ Pass `--json` on any command to read structured results back.
 1. `python3 --version` must be 3.8+. If `python3` is missing, stop and tell Tony
    to install it; the CLI is load-bearing and cannot run without it.
 2. For live renders, `FAL_KEY` must be set (check `echo "${FAL_KEY:+set}"`). If it
-   is empty, point Tony to IMPLEMENTATION.md section 10 (sign up at fal.ai, enable
+   is empty, point Tony to `${CLAUDE_PLUGIN_ROOT}/IMPLEMENTATION.md` section 10 (sign up at fal.ai, enable
    billing, `export FAL_KEY=...`). `estimate`, `models`, and `gen --dry-run` all
    work without it.
 3. Run inside the target project so assets land there, e.g. `cd ~/Developer/commish`

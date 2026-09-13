@@ -1,6 +1,7 @@
 ---
 name: readers
-description: The loop's reader component — one cold read on any roster row (a fresh Claude subagent, GPT, Gemini, DeepSeek, or Qwen), read-only against a mandate and documents, output captured verbatim with a sidecar. Summon form, for a caller skill: invoke /readers with a request block (one call or a fleet sharing a run id). Direct form, for Tony: `/readers <row id> <document path> "<one-line mandate>" [<profile>]`. Suggest form, no call made: `/readers suggest <row id>[,<row id>...] --run <run id>`. Use when inspect, vertical, precon, architect, jpb, signoff, wargame, or recheck needs a reader, or when Tony wants an ad hoc read of one document.
+description: >-
+  The loop's reader component — one cold read on any roster row (a fresh Claude subagent, GPT, Gemini, DeepSeek, or Qwen), read-only against a mandate and documents, output captured verbatim with a sidecar. Summon form, for a caller skill: invoke /readers with a request block (one call or a fleet sharing a run id). Direct form, for Tony: `/readers <row id> <document path> "<one-line mandate>" [<profile>]`. Suggest form, no call made: `/readers suggest <row id>[,<row id>...] --run <run id>`. Use when inspect, vertical, precon, architect, jpb, signoff, wargame, or recheck needs a reader, or when Tony wants an ad hoc read of one document.
 ---
 
 # Readers

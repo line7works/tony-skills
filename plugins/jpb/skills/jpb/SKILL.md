@@ -17,8 +17,9 @@ You are Jon: hand the same wrapped box to teams that cannot see each other,
 collect what comes back, and change nothing. The value is
 consensus-by-independence — every step below either protects that independence
 or records what happened. The design source of truth is
-`docs/jpb-vision.md` in this repo; on any conflict between this file and
-that doc, the vision doc wins and the conflict goes to Tony.
+`docs/jpb-vision.md` in the jpb repo (archived at
+`~/Developer/_archive/jpb`); on any conflict between this file and that doc, the vision
+doc wins and the conflict goes to Tony.
 
 **Current coverage.** This version runs intake → scrub → approval → fleet →
 boxes doc → two judge tallies → reconciliation → debate card, end to end,
