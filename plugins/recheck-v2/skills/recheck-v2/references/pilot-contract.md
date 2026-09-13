@@ -5,7 +5,9 @@ implements, E9's adapters must satisfy on every harness, and E11 qualifies. It i
 from v1 `/signoff` or v1 `/recheck`: the behaviors kept from v1 are restated here with their
 source lines, and the record grammar E8 needs is in Appendix A, so no step depends on the old
 text. Revision 4 (2026-09-13) answers the fresh completeness review and its two verification
-rounds; Appendix B maps each.
+rounds; Appendix B maps each. The contract closed under plan ruling 17 after the fourth round
+(no BLOCKER open); the four items that remained are carried to E8 with their fixes named, at
+the end of Appendix B.
 
 Contents: 1 Job · 2 Inputs · 3 Scope normalization · 4 Outcomes · 5 Evidence and execution
 selection · 6 Source identity · 7 Independence and the verifier · 8 Authorization and the trust
@@ -697,3 +699,26 @@ the `input_sha256` binding, `checkpoint.schema.json` deferred to E8 in section 1
 `examples/checkpoint-partial.json`, R41, C5); 14 → the examples and the suite (write order
 everywhere, the `reopened` marker on the blocked example, the checkpoint example, new negative
 and positive cases).
+
+Closed 2026-09-13 under ruling 17 after the fourth verification round (same session, output
+`e6-astra-verify3.md` in the audit packet): no BLOCKER open; 8, N3, N4, N5 verified fixed.
+Carried to E8, to be implemented with the core and closed by E8's review, each with the fix the
+round named:
+
+- 6 (MAJOR), resume classification of two pending steps on the same target: classify against
+  the virtual state, not the file at rest. Walk the plan in order keeping a virtual hash per
+  target (starting at the pre-transaction hash); for each step not `done`, compare the file's
+  current hash with that step's planned after-hash (mark done, advance the virtual hash) or
+  with the virtual before-hash (redo, then advance); only a hash matching neither is an outside
+  edit. Section 9's classification bullet is reworded that way at E8.
+- 11 (MAJOR), the tolerated state must also check the predecessor link: a log one line ahead
+  is accepted only when the checkpoint's `prev` equals the hash of the line before its own, and
+  the combined negative case (a corrupted earlier line plus an announced next write) joins the
+  suite; `validate-examples.py` takes the same check.
+- 14 (MINOR), section 9 wording: run artifacts are listed once at their first write;
+  project-record steps are listed once per step, so one document appears once per operation.
+- N6 (MAJOR), an `extra_continuation` grant that arrives after the run started must not break
+  input binding: `input_sha256` is computed over the input with `invocation` and
+  `authorization.extra_continuation` removed, and the continuation grant is evaluated on the
+  user channel after the binding check; section 11 step 3 and the input schema's description
+  change together.
