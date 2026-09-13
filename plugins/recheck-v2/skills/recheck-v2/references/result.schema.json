@@ -2,184 +2,1277 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/result.schema.json",
   "title": "Recheck v2 result",
-  "description": "The common result every harness produces and every caller consumes unchanged. See pilot-contract.md sections 3 to 8.",
+  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries none of them; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol_version", "run", "status"],
+  "required": [
+    "protocol_version",
+    "status"
+  ],
   "properties": {
-    "protocol_version": { "const": 1 },
-    "run": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["run_id", "run_dir", "harness", "model", "skill"],
-      "properties": {
-        "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
-        "run_dir": { "type": "string" },
-        "started": { "type": "string", "format": "date-time" },
-        "finished": { "type": "string", "format": "date-time" },
-        "harness": {
-          "type": "object", "additionalProperties": false, "required": ["name", "version"],
-          "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "entry": { "type": "string", "description": "how the skill was loaded: plugin, host skill, explicit path" } }
-        },
-        "model": {
-          "type": "object", "additionalProperties": false, "required": ["id"],
-          "properties": { "id": { "type": "string" }, "effort": { "type": "string" }, "provider_route": { "type": "string" }, "context_tokens": { "type": "integer" } }
-        },
-        "skill": {
-          "type": "object", "additionalProperties": false, "required": ["name", "commit"],
-          "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "commit": { "type": "string" }, "content_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
-        },
-        "verifier": {
-          "type": "object", "additionalProperties": false, "required": ["kind", "fresh"],
-          "properties": {
-            "kind": { "type": "string", "description": "subagent, codex-exec, opencode-session, or the adapter's own name for it" },
-            "model": { "type": "string" },
-            "fresh": { "const": true },
-            "injected_channels": { "type": "array", "items": { "type": "string" }, "description": "what the harness handed the verifier on its own: instruction files, memory, profile" },
-            "raw_path": { "type": "string", "description": "the verifier's unedited output under run_dir" }
-          }
-        }
-      }
+    "protocol_version": {
+      "const": 1
     },
-    "status": { "enum": ["completed", "missing_input", "stale_source", "verifier_unavailable", "stopped"] },
+    "run": {
+      "$ref": "#/$defs/run"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "nothing_open",
+        "missing_input",
+        "stale_source",
+        "verifier_unavailable",
+        "recording_failed",
+        "stopped"
+      ]
+    },
     "missing_input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["fields"],
+      "required": [
+        "fields"
+      ],
       "properties": {
-        "fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-        "ambiguity": { "type": "array", "items": { "type": "string" } },
-        "question": { "type": "string", "description": "the one question an interactive session would ask" }
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "every missing or invalid field, by path"
+        },
+        "ambiguity": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the one question; present only for a direct interactive run"
+        }
       }
     },
-    "stop_reason": { "type": "string" },
+    "stop_reason": {
+      "type": "string",
+      "minLength": 1
+    },
     "source_identity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["actual"],
+      "required": [
+        "actual",
+        "matched"
+      ],
       "properties": {
-        "expected": { "$ref": "#/$defs/source_identity" },
-        "actual": { "$ref": "#/$defs/source_identity" },
-        "matched": { "type": "boolean" }
+        "expected": {
+          "$ref": "#/$defs/identity_pin"
+        },
+        "actual": {
+          "$ref": "#/$defs/identity_full"
+        },
+        "at_transaction": {
+          "$ref": "#/$defs/identity_full",
+          "description": "recomputed before the recording transaction"
+        },
+        "after_run": {
+          "$ref": "#/$defs/identity_full",
+          "description": "recomputed after the recording transaction"
+        },
+        "matched": {
+          "type": "boolean"
+        }
       }
     },
     "checklist": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "count"],
+      "required": [
+        "source",
+        "count",
+        "review_sheet"
+      ],
       "properties": {
-        "source": { "enum": ["build_doc", "items", "named_items"] },
-        "build_doc": { "type": "string" },
-        "slice": { "type": "string" },
-        "review_sheet": { "enum": ["read", "not_kit_sheet", "absent"] },
-        "count": { "type": "integer", "minimum": 0 }
+        "source": {
+          "enum": [
+            "build_doc",
+            "items",
+            "named_items"
+          ]
+        },
+        "build_doc": {
+          "type": "string"
+        },
+        "slice": {
+          "type": "string"
+        },
+        "review_sheet": {
+          "enum": [
+            "read",
+            "not_kit_sheet",
+            "absent"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
-    "items": { "type": "array", "items": { "$ref": "#/$defs/item_result" } },
-    "new_defects": { "type": "array", "items": { "$ref": "#/$defs/new_defect" } },
-    "result": { "enum": ["all_clear", "partial", "not_clear"] },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item_result"
+      }
+    },
+    "new_defects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/new_defect"
+      }
+    },
+    "result": {
+      "enum": [
+        "all_clear",
+        "partial",
+        "not_clear"
+      ]
+    },
     "cards": {
       "type": "array",
       "items": {
-        "type": "object", "additionalProperties": false, "required": ["slice", "before", "after"],
-        "properties": {
-          "slice": { "type": "string" },
-          "before": { "$ref": "#/$defs/card" },
-          "after": { "$ref": "#/$defs/card" },
-          "reason": { "type": "string" }
-        }
+        "$ref": "#/$defs/card_change"
       }
     },
-    "records_written": { "type": "array", "items": { "$ref": "#/$defs/record_write" } },
-    "boundary_violations": { "type": "array", "items": { "type": "string" }, "description": "any write or action outside section 7 and section 10, detected after the run; empty on a clean run" },
-    "injection_attempts": { "type": "array", "items": { "type": "string" }, "description": "instruction-like text found in reviewed material and ignored" },
-    "still_open": { "type": "array", "items": { "type": "string" } },
-    "other_open_slices": { "type": "array", "items": { "type": "string" } },
-    "skill_note": { "type": ["string", "null"] }
+    "records_written": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/record_write"
+      }
+    },
+    "receipt_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "run_dir/receipt.json"
+    },
+    "boundary_violations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "any write or action outside sections 7, 9, and 13, found after the run; empty on a clean run"
+    },
+    "injection_attempts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "instruction-like text found in reviewed material and ignored"
+    },
+    "rejected_grants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "grants refused because they did not arrive on the user channel, with why"
+    },
+    "still_open": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "other_open_slices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skill_note": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
   },
   "allOf": [
-    { "if": { "properties": { "status": { "const": "completed" } } }, "then": { "required": ["source_identity", "checklist", "items", "result", "cards", "records_written", "boundary_violations"] } },
-    { "if": { "properties": { "status": { "const": "missing_input" } } }, "then": { "required": ["missing_input"] } },
-    { "if": { "properties": { "status": { "const": "stale_source" } } }, "then": { "required": ["source_identity"] } },
-    { "if": { "properties": { "status": { "enum": ["verifier_unavailable", "stopped"] } } }, "then": { "required": ["stop_reason"] } }
-  ],
-  "$defs": {
-    "location": {
-      "type": "object", "additionalProperties": false, "required": ["file", "line"],
-      "properties": { "file": { "type": "string" }, "line": { "type": "integer", "minimum": 1 } }
-    },
-    "card": { "enum": ["not started", "built", "rejected", "signed off with conditions", "signed off", "none"] },
-    "source_identity": {
-      "type": "object", "additionalProperties": false, "required": ["commit", "dirty"],
-      "properties": {
-        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
-        "dirty": { "type": "boolean" },
-        "untracked": { "type": "array", "items": { "type": "string" } },
-        "tracked_diff_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
-      }
-    },
-    "evidence": {
-      "type": "object", "additionalProperties": false, "required": ["kind", "detail"],
-      "properties": {
-        "kind": { "enum": ["command", "read", "diff", "artifact"] },
-        "detail": { "type": "string" },
-        "artifact_path": { "type": "string", "description": "bulk output redirected to a file under run_dir" }
-      }
-    },
-    "item_result": {
-      "type": "object", "additionalProperties": false,
-      "required": ["severity", "location", "claim", "failure_scenario", "disposition", "verification"],
-      "properties": {
-        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] },
-        "location": { "$ref": "#/$defs/location" },
-        "claim": { "type": "string" },
-        "failure_scenario": { "type": "string" },
-        "slice": { "type": "string" },
-        "disposition": { "enum": ["fixed", "not_fixed"] },
-        "reason": { "enum": ["reproduces", "missed_case", "verification_blocked"] },
-        "verification": {
-          "type": "object", "additionalProperties": false, "required": ["method", "evidence"],
-          "properties": {
-            "method": { "enum": ["executed", "static"] },
-            "blocked": { "type": ["string", "null"], "description": "what the sandbox stopped, when reason is verification_blocked" },
-            "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidence" } },
-            "location_after_fix": { "$ref": "#/$defs/location" }
-          }
-        },
-        "adjudication": {
-          "type": "object", "additionalProperties": false, "required": ["verifier_said", "driver_action"],
-          "properties": {
-            "verifier_said": { "enum": ["fixed", "not_fixed"] },
-            "driver_action": { "enum": ["confirmed", "downgraded", "disputed"] },
-            "note": { "type": "string" }
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
           }
         }
       },
+      "then": {
+        "required": [
+          "run",
+          "source_identity",
+          "checklist",
+          "items",
+          "result",
+          "cards",
+          "records_written",
+          "receipt_path",
+          "boundary_violations",
+          "rejected_grants"
+        ],
+        "properties": {
+          "run": {
+            "required": [
+              "verifier",
+              "session_wrote_fix"
+            ]
+          },
+          "checklist": {
+            "properties": {
+              "count": {
+                "minimum": 1
+              }
+            }
+          },
+          "items": {
+            "minItems": 1
+          },
+          "source_identity": {
+            "required": [
+              "at_transaction",
+              "after_run"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "nothing_open"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "run",
+          "source_identity",
+          "checklist"
+        ],
+        "properties": {
+          "checklist": {
+            "properties": {
+              "count": {
+                "const": 0
+              }
+            }
+          },
+          "items": false,
+          "result": false,
+          "cards": false,
+          "records_written": false,
+          "new_defects": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "missing_input"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "missing_input"
+        ],
+        "properties": {
+          "items": false,
+          "result": false,
+          "cards": false,
+          "records_written": false,
+          "new_defects": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "stale_source"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "run",
+          "source_identity"
+        ],
+        "properties": {
+          "source_identity": {
+            "required": [
+              "expected"
+            ],
+            "properties": {
+              "matched": {
+                "const": false
+              }
+            }
+          },
+          "items": false,
+          "result": false,
+          "cards": false,
+          "records_written": false,
+          "new_defects": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "verifier_unavailable",
+              "stopped"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "run",
+          "stop_reason"
+        ],
+        "properties": {
+          "result": false,
+          "cards": false,
+          "records_written": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "recording_failed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "run",
+          "source_identity",
+          "checklist",
+          "items",
+          "records_written",
+          "receipt_path",
+          "stop_reason"
+        ],
+        "properties": {
+          "result": false,
+          "cards": false
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "run"
+        ],
+        "properties": {
+          "run": {
+            "required": [
+              "invocation"
+            ],
+            "properties": {
+              "invocation": {
+                "required": [
+                  "mode",
+                  "caller"
+                ],
+                "properties": {
+                  "mode": {
+                    "const": "interactive"
+                  },
+                  "caller": {
+                    "const": "direct"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {},
+      "else": {
+        "properties": {
+          "missing_input": {
+            "properties": {
+              "question": false
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_dir",
+        "invocation",
+        "harness",
+        "model",
+        "skill"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "run_dir": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "invocation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "caller",
+            "resume"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "interactive",
+                "headless"
+              ]
+            },
+            "caller": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resume": {
+              "type": "boolean"
+            },
+            "continuations": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "started": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "harness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "version",
+            "entry",
+            "sandbox"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "entry": {
+              "type": "string",
+              "minLength": 1,
+              "description": "how the skill was loaded: plugin, host skill, explicit path"
+            },
+            "sandbox": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the permission or sandbox mode in force"
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "floor_class"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "floor_class": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the capability class the adapter asserted from the id, per the E9 profile"
+            },
+            "effort": {
+              "type": "string"
+            },
+            "provider_route": {
+              "type": "string"
+            },
+            "context_tokens": {
+              "type": "integer"
+            },
+            "settings": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "description": "the adapter configuration actually in force: sampling, thinking, tool schema version, and the like"
+            }
+          }
+        },
+        "skill": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "commit",
+            "content_sha256"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string"
+            },
+            "content_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "hash of the delivered skill body"
+            }
+          }
+        },
+        "verifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "model",
+            "fresh",
+            "injected_channels",
+            "restrictions_declared",
+            "raw_path"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "description": "subagent, codex-exec, opencode-session, or the adapter's own name for it"
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fresh": {
+              "const": true
+            },
+            "injected_channels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "what the harness handed the verifier on its own"
+            },
+            "restrictions_declared": {
+              "const": true,
+              "description": "the mandate carried the section 7 restrictions"
+            },
+            "raw_path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the verifier's unedited output under run_dir"
+            },
+            "calls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "call_id",
+                  "status"
+                ],
+                "properties": {
+                  "call_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "session_wrote_fix": {
+          "type": "boolean",
+          "description": "whether the driving session authored any fix under review"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "line"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "card": {
+      "enum": [
+        "not started",
+        "built",
+        "rejected",
+        "signed off with conditions",
+        "signed off",
+        "none"
+      ]
+    },
+    "card_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slice",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "slice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "before": {
+          "$ref": "#/$defs/card"
+        },
+        "after": {
+          "$ref": "#/$defs/card"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
       "allOf": [
-        { "if": { "properties": { "disposition": { "const": "not_fixed" } } }, "then": { "required": ["reason"] } },
-        { "if": { "required": ["reason"], "properties": { "reason": { "const": "verification_blocked" } } }, "then": { "properties": { "verification": { "required": ["blocked"] } } } }
+        {
+          "if": {
+            "properties": {
+              "before": {
+                "const": "built"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "after": {
+                "const": "built"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "before": {
+                "const": "none"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "after": {
+                "const": "none"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "before": {
+                "const": "not started"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "after": {
+                "const": "not started"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "identity_pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "tracked_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "identity_full": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "dirty",
+        "tracked_diff_sha256",
+        "untracked",
+        "untracked_sha256"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "tracked_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "detail"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "command",
+            "read",
+            "diff",
+            "artifact"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "what was run or read and what was observed"
+        },
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "bulk output redirected to a file under run_dir; must appear in records_written"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "evidence"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "executed",
+            "static"
+          ]
+        },
+        "static_reason": {
+          "enum": [
+            "mutates_real_state",
+            "non_executable_artifact"
+          ]
+        },
+        "blocked": {
+          "type": "string",
+          "minLength": 1,
+          "description": "what the sandbox or environment stopped"
+        },
+        "missing": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the evidence or fixture the run could not obtain"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "location_after_fix": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "static"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "static_reason"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "executed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "static_reason": false
+            }
+          }
+        }
+      ]
+    },
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verifier_said",
+        "driver_action",
+        "session_wrote_fix"
+      ],
+      "properties": {
+        "verifier_said": {
+          "enum": [
+            "fixed",
+            "not_fixed"
+          ]
+        },
+        "driver_action": {
+          "enum": [
+            "confirmed",
+            "downgraded",
+            "upgraded",
+            "disputed"
+          ]
+        },
+        "session_wrote_fix": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        },
+        "upgrade_evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "evidence the verifier lacked; required for an upgrade"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "driver_action": {
+                "const": "upgraded"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "upgrade_evidence"
+            ],
+            "properties": {
+              "session_wrote_fix": {
+                "const": false
+              },
+              "verifier_said": {
+                "const": "not_fixed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "driver_action": {
+                "const": "downgraded"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "note"
+            ],
+            "properties": {
+              "verifier_said": {
+                "const": "fixed"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "item_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "failure_scenario",
+        "slice",
+        "disposition",
+        "verification",
+        "adjudication"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\n\\u00b7]+$"
+        },
+        "failure_scenario": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "document",
+            "heading",
+            "date"
+          ],
+          "properties": {
+            "document": {
+              "type": "string"
+            },
+            "heading": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "disposition": {
+          "enum": [
+            "fixed",
+            "not_fixed"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "reproduces",
+            "missed_case",
+            "verification_blocked",
+            "missing_evidence"
+          ]
+        },
+        "verification": {
+          "$ref": "#/$defs/verification"
+        },
+        "adjudication": {
+          "$ref": "#/$defs/adjudication"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "fixed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "not_fixed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "const": "verification_blocked"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verification": {
+                "required": [
+                  "blocked"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "const": "missing_evidence"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verification": {
+                "required": [
+                  "missing"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "fixed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "adjudication": {
+                "properties": {
+                  "driver_action": {
+                    "enum": [
+                      "confirmed",
+                      "upgraded"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "new_defect": {
-      "type": "object", "additionalProperties": false,
-      "required": ["severity", "location", "claim", "failure_scenario", "source"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "failure_scenario",
+        "source",
+        "charged_to_slice"
+      ],
       "properties": {
-        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR"] },
-        "location": { "$ref": "#/$defs/location" },
-        "claim": { "type": "string" },
-        "failure_scenario": { "type": "string" },
-        "source": { "const": "fix_introduced" },
-        "charged_to_slice": { "type": "string" }
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "severity_basis": {
+          "type": "string",
+          "description": "the sheet's bar line or the default table row that placed it"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\n\\u00b7]+$"
+        },
+        "failure_scenario": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "const": "fix_introduced"
+        },
+        "charged_to_slice": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "record_write": {
-      "type": "object", "additionalProperties": false, "required": ["kind", "path"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "appended"
+      ],
       "properties": {
-        "kind": { "enum": ["punch_list_block", "status_line", "verdict_doc_copy", "waived_line", "reopened_line", "run_artifact"] },
-        "path": { "type": "string" },
-        "appended": { "type": "boolean" },
-        "heading": { "type": "string" }
-      }
+        "kind": {
+          "enum": [
+            "reopened_line",
+            "punch_list_block",
+            "waived_line",
+            "status_line",
+            "verdict_doc_copy",
+            "run_artifact"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "appended": {
+          "type": "boolean"
+        },
+        "heading": {
+          "type": "string"
+        },
+        "sha256_before": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sha256_after": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "appended": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "status_line"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "appended": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

@@ -1,0 +1,17 @@
+{
+  "protocol_version": 1,
+  "run": {
+    "run_id": "recheck-a-20260920-7f3c",
+    "run_dir": "/tmp/recheck-a-20260920-7f3c",
+    "invocation": { "mode": "interactive", "caller": "direct", "resume": false },
+    "harness": { "name": "claude-code", "version": "2.1.268", "entry": "plugin", "sandbox": "default" },
+    "model": { "id": "claude-fable-5-1", "floor_class": "opus", "effort": "low" },
+    "skill": { "name": "recheck-v2", "version": "0.1.0", "commit": "0123abc", "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3" }
+  },
+  "status": "missing_input",
+  "missing_input": {
+    "fields": ["target.slice"],
+    "ambiguity": ["slices A and B both stand at rejected with punch-list blocks dated 2026-09-19"],
+    "question": "Which slice should this recheck cover, A or B?"
+  }
+}

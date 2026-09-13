@@ -5,11 +5,12 @@
     "caller": "ship-v2",
     "run_id": "ship-a-20260920-1b2e-recheck",
     "run_dir": "/tmp/ship-a-20260920-1b2e/recheck",
+    "resume": false,
     "harness": "codex-cli 0.154.0",
     "model": "gpt-6-astra"
   },
   "workspace": "/Users/example/Developer/widget",
-  "source_identity": { "commit": "9c2f1e4d", "dirty": false, "untracked": [] },
+  "source_identity": { "commit": "9c2f1e4d", "dirty": false },
   "target": {
     "items": [
       {
@@ -17,25 +18,31 @@
         "location": { "file": "src/export.ts", "line": 142 },
         "claim": "CSV export writes unescaped commas inside quoted fields",
         "failure_scenario": "export a row whose title contains a comma; the produced CSV has one extra column",
-        "origin": { "record": "docs/plans/2026-09-18-widget-export.md ### 2026-09-19 — review: Slice A", "date": "2026-09-19" }
+        "record": { "document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19" },
+        "slice": "A"
       },
       {
         "severity": "MAJOR",
         "location": { "file": "src/export.ts", "line": 142 },
         "claim": "empty titles export as the string \"undefined\"",
         "failure_scenario": "export a row with no title; the CSV cell reads undefined instead of an empty quoted field",
-        "origin": { "record": "docs/plans/2026-09-18-widget-export.md ### 2026-09-19 — review: Slice A", "date": "2026-09-19" }
+        "record": { "document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19" },
+        "slice": "A"
       }
     ]
   },
+  "review_sheet": null,
   "authorization": {
     "waivers": [
       {
         "item": { "location": { "file": "src/export.ts", "line": 201 }, "claim": "no progress indicator during long exports" },
         "by": "user",
+        "channel": "user-turn",
+        "turn_ref": "codex:thread 01a0a1b2:turn 7",
         "quoted_words": "waive the progress bar one, ship without it",
         "date": "2026-09-20",
-        "severity": "MINOR"
+        "severity": "MINOR",
+        "forwarded_by": "ship-v2"
       }
     ]
   }

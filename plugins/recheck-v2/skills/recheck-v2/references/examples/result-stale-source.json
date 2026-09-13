@@ -3,15 +3,16 @@
   "run": {
     "run_id": "recheck-a-20260920-7f3c",
     "run_dir": "/tmp/recheck-a-20260920-7f3c",
-    "harness": { "name": "claude-code", "version": "2.1.268", "entry": "plugin" },
-    "model": { "id": "claude-fable-5-1", "effort": "low" },
-    "skill": { "name": "recheck-v2", "version": "0.1.0", "commit": "0123abc" }
+    "invocation": { "mode": "interactive", "caller": "direct", "resume": false },
+    "harness": { "name": "claude-code", "version": "2.1.268", "entry": "plugin", "sandbox": "default" },
+    "model": { "id": "claude-fable-5-1", "floor_class": "opus", "effort": "low" },
+    "skill": { "name": "recheck-v2", "version": "0.1.0", "commit": "0123abc", "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3" }
   },
   "status": "stale_source",
   "source_identity": {
     "expected": { "commit": "9c2f1e4d", "dirty": false },
-    "actual": { "commit": "9c2f1e4d", "dirty": true, "untracked": ["src/export.ts.orig"], "tracked_diff_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90" },
+    "actual": { "commit": "9c2f1e4d0b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d", "dirty": true, "tracked_diff_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90", "untracked": ["src/export.ts.orig"], "untracked_sha256": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1" },
     "matched": false
   },
-  "stop_reason": "the workspace changed after the run started: tracked diff differs from the identity recorded at start; no record written"
+  "stop_reason": "expected dirty=false; the workspace has staged changes in src/export.ts and an untracked src/export.ts.orig; no record written"
 }
