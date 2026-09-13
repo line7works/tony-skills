@@ -4,7 +4,6 @@
     "plugins/readers/skills/readers/assets/fixtures/smoke-doc.md"
   ],
   "floor": "opus",
-  "isolation": "worktree",
   "mandate": "Senior reviewer, correctness lens: try to break the slice in this workspace; run its tests; report every finding as claim, file:line, failure scenario, severity, confidence, and what you tried to break and could not.",
   "profile": "repo-with-tools",
   "protocol_version": 1,

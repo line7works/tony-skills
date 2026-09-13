@@ -5,6 +5,7 @@
     "name": "Tony Coon",
     "email": "tonycoon@gmail.com"
   },
-  "homepage": "https://github.com/tiny-tunnel-dot/tony-skills",
-  "repository": "https://github.com/tiny-tunnel-dot/tony-skills"
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "1.0.0"
 }

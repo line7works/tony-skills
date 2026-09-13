@@ -1,22 +1,19 @@
 ---
 name: sunrise
 description: >-
-  Bootstrap ("sunrise") a new project Tony is ready to make real, across every
-  layer at once: scaffold a local repo in ~/Developer by archetype (web app /
-  monorepo / static / Electron / library / script), seed the repo doc kit's Tier 0
-  (README, AGENTS.md as the instruction body, CLAUDE.md as a one-line `@AGENTS.md`
-  stub, .gitignore, .env.example, docs/), adopt any scope or architecture docs
-  staged in ~/Documents before the repo existed, create + push a private GitHub repo,
-  link Vercel with auto-deploys, provision a Supabase (or Neon) database through
-  the Vercel Marketplace and wire its env, create the Obsidian project folder +
-  index, create the CLI/Claude-Code memory note, and provision a per-project
-  Notion task tracker + roadmap board (mirroring Project Knight). Ends by deploying once to a
-  live URL and generating a copy-paste handoff prompt that tells a browser/app
-  LLM the project is now active. Use when Tony wants to start, spin up, kick off,
-  bootstrap, scaffold, formalize, or "sunrise" a new project he is committing to.
-  ALWAYS previews every change first and asks what the project is before
-  executing. Never clobbers anything that already exists; ends at a verified
-  green baseline. The inverse of the `sunset` skill.
+  Bootstrap a new project across every layer. Use to start, spin up, kick off,
+  bootstrap, scaffold, formalize, or "sunrise" a project. Never clobbers what
+  exists; the inverse of the sunset skill. Always previews every change and
+  asks what the project is before executing. Creates a local repo and kit.
+  Adopts staged scope and architecture docs, pushes new private GitHub repo,
+  links Vercel auto-deploys, provisions Supabase or Neon, and creates
+  Obsidian, memory, and Notion tracker and roadmap records. The repo is
+  scaffolded under ~/Developer by archetype with the repo doc kit's Tier 0;
+  the staged docs come from ~/Documents; the database comes through the Vercel
+  Marketplace with its env wired; the Notion board mirrors Project Knight.
+  Ends by deploying once to a live URL at a verified green baseline and
+  generating a copy-paste handoff prompt that tells a browser/app LLM the
+  project is now active.
 ---
 
 # Sunrise a project
@@ -119,7 +116,7 @@ that scaffolds a repo but writes its vault docs into a phantom vault is worse th
 sunrise at all. Tell Tony which machine he appears to be on and that canonical lives on
 the Mac Studio.
 
-0. **Play the sunrise cue** (cosmetic, non-blocking, best-effort): the FIRST thing the skill does. The moment a sunrise begins, fire the sound and a compact one-line terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
+0. **Play the sunrise cue** (cosmetic, non-blocking, best-effort): the first thing after the vault gate. The moment a sunrise begins, fire the sound and a compact one-line terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
    - `afplay ${CLAUDE_PLUGIN_ROOT}/assets/rise.wav >/dev/null 2>&1 &`
    - `python3 ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py rise`
    - Keep it to the **ONE-LINE** `sun_bar.py rise` output (gold→blue half-block bar, sun on the left, "☀ S U N R I S E"). Claude Code collapses taller output behind a "+N lines" fold and captures in-place ANSI animation as raw escape codes, so one line is the only reliable in-flow cue — do not attempt terminal motion. A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#rise"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (Assets are shared with `sunset`; do not rebuild them. The `${CLAUDE_PLUGIN_ROOT}/assets` form resolves to the plugin's bundled `assets/` at its install location.)
@@ -130,8 +127,8 @@ the Mac Studio.
 2. **Derive the four name variants and show them for confirmation.** Tony's local-dir casing is inconsistent (`Helix`, `PGL`, `belgariad-codex`), so always confirm.
    - `<Name>` — repo + local dir under `~/Developer/` (spaces → hyphens; keep his casing).
    - `<slug>` — kebab-case, lowercase (Vercel project name + vault folder + frontmatter `name` + handoff).
-   - `<slug_>` — the slug with hyphens → underscores (memory filename only, matching existing `project_pour_guys.md` / `project_belgariad_codex.md`).
-   - `<shortcut>` — the terminal shortcut he'll type to `cd` into the repo. **Propose a default, don't ask open-endedly:** the shortest unambiguous token from the name, 2–5 characters, lowercase, matching the existing set (`pk`, `haul`, `inky`, `pour`, `jpb`, `robo`, `smart`). Show it with the other three and let him override. If he wants none, accept that and skip the shortcut everywhere below.
+   - `<slug_>` — the slug with hyphens → underscores (memory filename only, matching existing `project_pour_guys_website.md` / `project_project_knight.md`).
+   - `<shortcut>` — the terminal shortcut he'll type to `cd` into the repo. **Propose a default, don't ask open-endedly:** the shortest unambiguous token from the name, 2–5 characters, lowercase, matching the existing set (`pk`, `haul`, `inky`, `pour`, `robo`, `dj`, `sit`). Show it with the other three and let him override. If he wants none, accept that and skip the shortcut everywhere below.
 
 3. **Collision check across all layers (never clobber).** Each must be clear, unless `--promote` points at it:
    - Local: `ls -d ~/Developer/*<Name>* 2>/dev/null`
@@ -303,7 +300,7 @@ appends land below them. Sunrise owns only the sourced file.
 
 ### 7b — Memory
 
-1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + pointers to the repo `AGENTS.md` (canonical detail) and the vault folder (durable notes). Mirror the shape of `project_knight.md`.
+1. **Home summary note:** write `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` with memory frontmatter (`name: <slug>`, a one-line `description`, `metadata: { type: project }`) and a short body: what it is (Tony's one-liner) + pointers to the repo `AGENTS.md` (canonical detail) and the vault folder (durable notes). Mirror the shape of `project_project_knight.md`.
 2. Add a one-line entry to that store's `MEMORY.md` under the active list: `- [<Project>](project_<slug_>.md) — <hook>`.
 3. **The project's own per-directory memory store** auto-creates the first time Claude Code runs in `~/Developer/<Name>` — nothing to pre-create. (This is the inverse of sunset archiving that store.)
 

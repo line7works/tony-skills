@@ -37,7 +37,7 @@ If no project name is given, ask which one.
 | Layer | Location | Sunset action |
 |---|---|---|
 | Vault docs | `~/ObsidianVault/03-projects/<slug>/` | move to `~/ObsidianVault/90-archive/<slug>/` |
-| CLI memory (home summary) | `~/.claude/projects/-Users-tonycoon/memory/project_<slug>.md` (+ `MEMORY.md` line) | mark `status: archived`, de-index |
+| CLI memory (home summary) | `~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md` (+ `MEMORY.md` line) | mark `status: archived`, de-index |
 | CLI memory (project's own store) | `~/.claude/projects/*<Name>*/memory/` | archive contents into `_archive/<Name>/.claude-memory/` |
 | Scheduled agents / crons | `/schedule` routines, `crontab -l`, `~/Library/LaunchAgents` | cancel/disable anything tied to the project |
 | Local repo | `~/Developer/<Name>` | move to `~/Developer/_archive/<Name>` |
@@ -94,7 +94,7 @@ which machine he appears to be on and that canonical lives on the Mac Studio.
 0. **Play the sunset cue** (cosmetic, non-blocking, best-effort): the moment a sunset begins, fire the sound and a compact terminal stamp. Run both, ignore any failure, and never let this block or fail the flow:
    - `afplay ${CLAUDE_PLUGIN_ROOT}/assets/set.wav >/dev/null 2>&1 &`
    - `python3 ${CLAUDE_PLUGIN_ROOT}/assets/sun_bar.py set`
-   - Use the 3-line `sun_bar.py` stamp so it renders above Claude Code's output fold (taller scenes get collapsed; in-place animation gets captured as raw escape codes). A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#set"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (The matching `rise` cue belongs to the sunrise/revive skill.)
+   - Use the 1-line `sun_bar.py` stamp so it renders above Claude Code's output fold (taller scenes get collapsed; in-place animation gets captured as raw escape codes). A richer browser animation exists (`open "file://${CLAUDE_PLUGIN_ROOT}/assets/sun.html#set"`) but it pops a window, so use it only if Tony asks. If `afplay`/`python3` are unavailable, skip silently. (The matching `rise` cue belongs to the sunrise skill.)
 
 1. **Resolve the project across all layers.** Match case/hyphen/underscore variants.
    - Vault: `ls -d ~/ObsidianVault/03-projects/*<slug>*/`
@@ -124,7 +124,7 @@ which machine he appears to be on and that canonical lives on the Mac Studio.
    ─────────────────────────────────────────────────────────
    Vault     move  03-projects/<slug>/  ->  90-archive/<slug>/      (N files)
              flip  _index.md  status -> archived; tombstone; fix root index
-   Memory    flip  home note project_<slug>.md  status: archived + de-index
+   Memory    flip  home note project_<slug_>.md  status: archived + de-index
              archive  project store (M notes)  ->  _archive/<Name>/.claude-memory/
    Schedules cancel  <list of routines/crons tied to the project>   (none = skip)
    Repo      move  ~/Developer/<Name>  ->  ~/Developer/_archive/<Name>   (git clean + pushed: yes)
@@ -156,7 +156,7 @@ which machine he appears to be on and that canonical lives on the Mac Studio.
 
 Claude Code memory is per launch-directory, so a sunset project has up to two stores.
 
-1. **Home summary note** (`~/.claude/projects/-Users-tonycoon/memory/project_<slug>.md`): set frontmatter `status: archived`, add `archived: <today>`, keep the file, and move its bullet in that store's `MEMORY.md` under an `## Archived` heading (create it if missing).
+1. **Home summary note** (`~/.claude/projects/-Users-tonycoon/memory/project_<slug_>.md`): set frontmatter `status: archived`, add `archived: <today>`, keep the file, and move its bullet in that store's `MEMORY.md` under an `## Archived` heading (create it if missing).
 2. **The project's own store** (`~/.claude/projects/*<Name>*/memory/`): Claude Code keys it to the launch directory, so it is orphaned the moment `~/Developer/<Name>` moves. Nothing is copied here. The copy happens in Phase 4, after the repo has moved, into the moved repo at `~/Developer/_archive/<Name>/.claude-memory/`, so that no step creates `~/Developer/_archive/<Name>` before the repo arrives (a pre-made archive folder turned Phase 4's `mv` into a nest on 2026-09-05). Under `--keep-local` the repo stays where it is, the store is not orphaned, and no copy is made anywhere.
 
 ## Phase 3 — Scheduled agents and crons (cancel)
@@ -194,7 +194,7 @@ migration — which is why this step exists.
 ## Phase 5 — GitHub (skip if --keep-github)
 
 Order matters: push everything BEFORE archiving, because an archived repo is read-only and rejects pushes.
-1. Optional final marker (run before the repo move and before GitHub archive): `git -C <repo path> tag sunset-<today> && git -C <repo path> push origin sunset-<today>`.
+1. Optional final marker (run before GitHub archive; after Phase 4, `<repo path>` is the archived location `~/Developer/_archive/<Name>`, or `~/Developer/<Name>` under `--keep-local`): `git -C <repo path> tag sunset-<today> && git -C <repo path> push origin sunset-<today>`.
 2. `gh repo archive <owner>/<repo> --yes`
 
 ## Phase 6 — Vercel (skip if --keep-vercel)
@@ -293,7 +293,7 @@ tags: [meta, archived]
 
 ## Where everything went
 - Vault docs: `90-archive/<slug>/`
-- CLI memory (home note): `project_<slug>.md` (status: archived)
+- CLI memory (home note): `project_<slug_>.md` (status: archived)
 - CLI memory (project store): copied to `_archive/<Name>/.claude-memory/` (M notes, from `<source path>`); under `--keep-local`: left in place at `<source path>` because the repo was kept local
 - Scheduled agents/crons: cancelled -> <list, or none>
 - Local repo: `~/Developer/_archive/<Name>`
