@@ -27,8 +27,9 @@ fd=os.open(str(home/'auth.json'),os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
 with os.fdopen(fd,'wb') as f: f.write((source/'auth.json').read_bytes())
 os.chmod(home/'auth.json',0o600)
 # E9-26(c): replace retained comparison/trial copies without reading credentials.
-for auth in home.parent.rglob('auth.json'):
- if auth==home/'auth.json':continue
+for auth in list((home.parent/'homes').rglob('auth.json'))+[child/'auth.json']:
+ if ('plugins','cache') in zip(auth.parts,auth.parts[1:]):continue
+ if not (auth.exists() or auth.is_symlink()):continue
  auth.unlink()
  auth.symlink_to(home/'auth.json')
 if not (child/'auth.json').is_symlink():(child/'auth.json').symlink_to(home/'auth.json')

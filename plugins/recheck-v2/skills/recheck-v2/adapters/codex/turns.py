@@ -5,7 +5,6 @@ import json
 import os
 import re
 from pathlib import Path
-import subprocess
 import sys
 
 
@@ -37,40 +36,26 @@ def locate(workspace):
         if os.environ.get('RECHECK_ADAPTER_TEST')!='1':
             raise ValueError('record override outside test')
         return Path(override).resolve()
-    # E9-31: the tool shell carries CODEX_THREAD_ID, the executor's own thread id, which names its
-    # rollout file; the executor's sessions live beside the child home (E9-25) or in CODEX_HOME itself.
+    # E9-31/E9-36: exactly one root; the writable child home is never a source.
     thread=os.environ.get('CODEX_THREAD_ID','').strip()
-    if thread:
-        if not re.fullmatch(r'[A-Za-z0-9-]+',thread):raise ValueError('invalid CODEX_THREAD_ID')
-        home=Path(os.environ.get('CODEX_HOME','')).resolve() if os.environ.get('CODEX_HOME') else None
-        roots=[]
-        if home is not None and home.name=='child':roots.append(home.parent/'sessions')
-        if home is not None:roots.append(home/'sessions')
-        roots.append(Path.home()/'.codex'/'sessions')
-        found=set()
-        for root in roots:
-            if root.is_dir():found.update(p.resolve() for p in root.rglob('rollout-*'+thread+'.jsonl'))
-        if len(found)==1:return next(iter(found))
-        if len(found)>1:raise Missing('ambiguous executor rollout for thread '+thread)
-        raise Missing('absent harness record: no rollout named by CODEX_THREAD_ID '+thread+' under '+', '.join(str(r) for r in roots)+' (E9-31)')
-    # Fallback without a thread id: the executor parent's open file identifies its rollout (E9-25).
-    # A shell or Python wrapper may intervene; inspect parents, never a home scan.
-    pid=os.getppid()
-    for _ in range(6):
-        try:
-            probe=subprocess.run(['lsof','-p',str(pid),'-Fn'],capture_output=True,text=True)
-        except FileNotFoundError:
-            raise Missing('missing binary: lsof; executor rollout unavailable')
-        paths={Path(line[1:]).resolve() for line in probe.stdout.splitlines()
-               if line.startswith('n') and '/sessions/' in line and '/rollout-' in line and line.endswith('.jsonl')}
-        if len(paths)==1:return next(iter(paths))
-        if paths:raise Missing('ambiguous executor rollout open files on parent process')
-        try:
-            parent=subprocess.run(['ps','-o','ppid=','-p',str(pid)],capture_output=True,text=True)
-            pid=int(parent.stdout.strip())
-        except (ValueError,OSError):break
-        if pid<=1:break
-    raise Missing('absent harness record: no CODEX_THREAD_ID in the environment and no executor rollout open on parent process (E9-25, E9-31)')
+    if not thread:raise Missing('absent harness record: no CODEX_THREAD_ID (E9-31/E9-36)')
+    if not re.fullmatch(r'[A-Za-z0-9-]+',thread):raise ValueError('invalid CODEX_THREAD_ID')
+    home=Path(os.environ['CODEX_HOME']).expanduser() if os.environ.get('CODEX_HOME') else None
+    root=home.parent/'sessions' if home is not None and home.name=='child' else Path.home()/'.codex'/'sessions'
+    resolved_home=home.resolve() if home is not None else None
+    def outside_home(path):
+        resolved=path.resolve()
+        if resolved_home is not None and (resolved==resolved_home or resolved_home in resolved.parents):
+            raise Missing('refused executor rollout path under CODEX_HOME: '+str(resolved)+' (E9-36)')
+        return resolved
+    root=outside_home(root)
+    found=set()
+    if root.is_dir():
+        for path in root.rglob('rollout-*'+thread+'.jsonl'):
+            found.add(outside_home(path))
+    if len(found)==1:return next(iter(found))
+    if len(found)>1:raise Missing('ambiguous executor rollout for thread '+thread+' under '+str(root))
+    raise Missing('absent harness record: no rollout named by CODEX_THREAD_ID '+thread+' under '+str(root)+'; paths under CODEX_HOME '+str(resolved_home)+' are refused (E9-31/E9-36)')
 
 
 def facts(records):

@@ -35,6 +35,9 @@ def main():
     if a.run_id is not None and not re.fullmatch(r'[A-Za-z0-9._-]+',a.run_id):p.error('invalid run-id')
     ws=Path(a.workspace).resolve();records=read_records(locate(ws));meta,ctx=facts(records)
     if Path(meta.get('cwd','')).resolve()!=ws:raise ValueError('rollout cwd differs from workspace')
+    originator=meta.get('originator')
+    mode={'codex_exec':'headless','codex_cli_rs':'interactive'}.get(originator)
+    if mode is None:raise Missing('unknown session_meta.originator: '+repr(originator))
     mapping=attribution(records)
     rid=a.run_id or 'recheck-{}-{}-{}'.format(a.target_token.lower(),date.strftime('%Y%m%d'),os.urandom(2).hex())
     rd=Path(a.run_dir).resolve() if a.run_dir else Path(os.environ.get('TMPDIR','/tmp')).resolve()/'recheck-v2'/rid
@@ -49,7 +52,7 @@ def main():
     if ctx.get('sandbox_policy',{}).get('network_access') is True:sandbox+=', network on'
     # The installed helper location is the installation surface, not a model-supplied flag.
     entry='plugin' if '/plugins/cache/' in str(Path(__file__).resolve()) else 'host skill' if '/skills/recheck-v2/' in str(Path(__file__).resolve()) and str(home/'skills')+'/' in str(Path(__file__).resolve()) else 'explicit path'
-    return dict(run_id=rid,run_dir=str(rd),harness=dict(name='codex-cli',version=meta['cli_version'],entry=entry,sandbox=sandbox),model=model_facts(meta,ctx,records),run_date=a.run_date,session_wrote_fix=a.session_wrote_fix,turn_attribution=mapping)
+    return dict(mode=mode,caller=a.caller or 'direct',resume=False,run_id=rid,run_dir=str(rd),harness=dict(name='codex-cli',version=meta['cli_version'],entry=entry,sandbox=sandbox),model=model_facts(meta,ctx,records),run_date=a.run_date,session_wrote_fix=a.session_wrote_fix,turn_attribution=mapping)
 
 
 if __name__=='__main__':sys.exit(run(main))

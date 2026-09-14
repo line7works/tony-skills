@@ -21,7 +21,7 @@ import verifier
 class AdapterTests(unittest.TestCase):
     def call(self,name,*args,**extra):
         with tempfile.TemporaryDirectory() as tmp:
-            env=dict(os.environ,CODEX_HOME=tmp,PYTHONDONTWRITEBYTECODE='1',**extra)
+            env=dict(os.environ,CODEX_HOME=str(Path(tmp)/'child'),PYTHONDONTWRITEBYTECODE='1',**extra)
             return subprocess.run([sys.executable,str(ROOT/name),*args],cwd=tmp,env=env,capture_output=True,text=True)
 
     def test_help_json(self):
@@ -154,10 +154,33 @@ class AdapterTests(unittest.TestCase):
             c=self.call('verifier.py','--brief',str(brief),'--workspace',tmp,'--scratch',str(Path(tmp)/'verifier'),'--raw',str(Path(tmp)/'verifier/raw.md'))
             self.assertEqual(c.returncode,2,c.stderr)
 
-    def test_locator_uses_open_parent_not_child_home(self):
-        with mock.patch.dict(os.environ,{'CODEX_HOME':'/tmp/child-home'},clear=True), mock.patch.object(turns.subprocess,'run',return_value=subprocess.CompletedProcess([],0,'n/tmp/executor/sessions/rollout-native.jsonl\n','')) as command:
-            self.assertEqual(turns.locate(Path('/tmp/ws')),Path('/tmp/executor/sessions/rollout-native.jsonl').resolve())
-            self.assertEqual(command.call_args[0][0],['lsof','-p',str(os.getppid()),'-Fn'])
+    def test_locator_requires_thread_and_single_root(self):
+        with mock.patch.dict(os.environ,{},clear=True):
+            with self.assertRaisesRegex(turns.Missing,'no CODEX_THREAD_ID'):
+                turns.locate(Path('/tmp/ws'))
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)/'default'
+            with mock.patch.dict(os.environ,{'CODEX_HOME':str(home),'CODEX_THREAD_ID':'absent'},clear=True), mock.patch.object(Path,'home',return_value=home.parent):
+                with self.assertRaisesRegex(turns.Missing,str(home.parent/'.codex/sessions')):
+                    turns.locate(Path('/tmp/ws'))
+
+    def test_invocation_originator(self):
+        fixture=ROOT/'tests/fixtures/real-rollout.jsonl'
+        c=self.call('invocation.py','--workspace','/tmp/neutral-workspace',RECHECK_ADAPTER_TEST='1',RECHECK_ADAPTER_RECORD=str(fixture))
+        self.assertEqual(c.returncode,0,c.stderr)
+        d=json.loads(c.stdout)
+        self.assertEqual((d['mode'],d['caller'],d['resume']),('headless','direct',False))
+        with tempfile.TemporaryDirectory() as tmp:
+            rows=turns.read_records(fixture)
+            for origin,expected in [('codex_cli_rs',0),('unrecognized-origin',3)]:
+                rows[0]['payload']['originator']=origin
+                record=Path(tmp)/'record.jsonl';record.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+                c=self.call('invocation.py','--workspace','/tmp/neutral-workspace','--caller','ship-v2','--run-id','caller-run','--run-dir',str(Path(tmp)/'run'),RECHECK_ADAPTER_TEST='1',RECHECK_ADAPTER_RECORD=str(record))
+                self.assertEqual(c.returncode,expected,c.stderr)
+                if expected:self.assertIn(origin,c.stderr)
+                else:
+                    d=json.loads(c.stdout)
+                    self.assertEqual((d['mode'],d['caller'],d['resume']),('interactive','ship-v2',False))
 
     def test_network_policy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,6 +276,37 @@ class ThreadIdLocator(unittest.TestCase):
         missing = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': 'no-such-thread'}, cwd)
         self.assertEqual(missing.returncode, 3, missing.stderr)
         self.assertIn('E9-31', missing.stderr)
+
+    def test_child_rollout_refused_executor_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)/'home';child=home/'child'
+            child_sessions=child/'sessions/2026/09/14';child_sessions.mkdir(parents=True)
+            sessions=home/'sessions/2026/09/14';sessions.mkdir(parents=True)
+            rows=turns.read_records(ROOT/'tests/fixtures/real-rollout.jsonl')
+            meta=turns.facts(rows)[0];thread=meta['id'];workspace=meta['cwd']
+            executor=sessions/('rollout-executor-'+thread+'.jsonl')
+            executor.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+            child_thread='child-thread'
+            forged=child_sessions/('rollout-child-'+child_thread+'.jsonl')
+            child_rows=json.loads(json.dumps(rows))
+            child_rows[0]['payload']['id']=child_thread
+            forged.write_text(''.join(json.dumps(r)+'\n' for r in child_rows))
+            missing=self._run({'CODEX_HOME':str(child),'CODEX_THREAD_ID':child_thread},workspace)
+            self.assertEqual(missing.returncode,3,missing.stderr)
+            self.assertIn(str(child.resolve()),missing.stderr)
+            # A candidate in the only permitted root resolving into child must name the refused file.
+            (sessions/forged.name).symlink_to(forged)
+            for helper in ['turns.py','invocation.py']:
+                env=dict(os.environ,CODEX_HOME=str(child),CODEX_THREAD_ID=child_thread,PYTHONDONTWRITEBYTECODE='1')
+                env.pop('RECHECK_ADAPTER_RECORD',None);env.pop('RECHECK_ADAPTER_TEST',None)
+                bad=subprocess.run([sys.executable,str(ROOT/helper),'--workspace',workspace],env=env,capture_output=True,text=True)
+                self.assertEqual(bad.returncode,3,bad.stderr);self.assertIn(str(forged.resolve()),bad.stderr)
+                env['CODEX_THREAD_ID']=thread
+                ok=subprocess.run([sys.executable,str(ROOT/helper),'--workspace',workspace],env=env,capture_output=True,text=True)
+                self.assertEqual(ok.returncode,0,ok.stderr)
+                mapping=json.loads(ok.stdout)
+                if helper=='invocation.py':mapping=mapping['turn_attribution']
+                self.assertEqual(mapping,turns.attribution(rows))
 
 
 if __name__=='__main__':unittest.main()
