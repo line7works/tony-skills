@@ -560,6 +560,25 @@ been said.
   instructions forbid the model repurposing `$CODEX_HOME`; the outer probe run refused the
   command on that rule). E9-18's condition is resolved: the Codex verifier capability is
   available under this launch.
+- **E9-21 (after the control room's second measurement), the Codex verifier runs under the
+  executor's seatbelt, not its own.** Measured 2026-09-14 with `codex sandbox` and no model in
+  the loop, the outer policy workspace-write with the isolated home writable (E9-20): a nested
+  `codex exec` launched with `-s read-only` or `-s workspace-write` initializes but every shell
+  command it runs fails at `sandbox-exec: sandbox_apply: Operation not permitted` (exit 71 on
+  `cat README.md`); launched with `-s danger-full-access` its commands run and its process
+  stays confined by the outer seatbelt (evidence under the lane's scratch
+  `control-room/nested-sandbox/variant-nested-shell-*`). Ruling: `adapters/codex/verifier.py`
+  launches the verifier with `-s danger-full-access`, `-c approval_policy=never`, and
+  `-c web_search=disabled`; `setups/codex/launch.sh` launches the executor session with
+  `-c sandbox_workspace_write.network_access=true` (the nested verifier reaches the model
+  through the executor's sandbox and cannot otherwise). The verifier's containment is
+  therefore the executor's seatbelt: `harness-enforced` for everything outside the workspace,
+  the isolated home, and the temp roots; `instruction-bound` for writes inside the workspace,
+  where the mandate forbids them and the core's boundary check catches a tracked-file edit
+  (E9-7's fallback, one level further); the executor's own commands gain network for the
+  session, recorded in `harness.sandbox`. The profile says all of this in those words, and
+  E11 weighs it: on Codex 0.154.0 a skill that summons the harness as a subprocess pays for it
+  in containment.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
