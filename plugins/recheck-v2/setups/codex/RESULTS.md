@@ -1,288 +1,255 @@
-# Lane R measured results, 2026-09-14
+# Lane R second-pass results, 2026-09-14
 
-NOT QUALIFIED. Passed deterministic gates do not qualify blocked live gates.
+NOT QUALIFIED for promotion. E9-15/E9-16 repairs and hermetic gates pass. Live F1/F2/F6 completion, verifier executed-scenario containment, and default delivery-cap measurement remain open. First-pass report preserved in RESULTS-first-pass.md; its blocked/obsolete assumptions are superseded here, not erased.
 
-Install proof (early record for lane Q)
+R = `/Users/tonycoon/Developer/tony-skills-e9-codex`; S = `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/pass2`; CR = `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room`. Each capture directory below contains command.json, launch.json, rollout.jsonl and final.md unless the launch failed. No credential contents are included.
 
-2026-09-14. `codex --version`: codex-cli 0.154.0. Initial nested probe:
-`codex exec --skip-git-repo-check -s read-only -C /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex --json -o /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/nested-probe.md - <<< 'reply with the word ok' </dev/null`
-Exit 1. `WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)`
-`Error: failed to initialize in-process app-server client: Operation not permitted (os error 1)`
-No model response or usage received. All dependent live gates: not run here: failed to initialize in-process app-server client: Operation not permitted (os error 1). No alternate launch attempted.
+## Changes and contract readings
 
-1. Files written
+The three-part thread/turn/item key resolves E9-15 without changing the core. UserMessage is user, AgentMessage is assistant; other item types stay unmapped. A2-01 is driven on its station caller route with a native assistant item standing for the station-generated non-user grant; no station role is fabricated. The first user grant without forwarded_by is rejected; explicit forwarding of the user item is accepted. IA CASES.md A1-02/A2-01 plus pilot section 8 and E9-1 define these expectations.
 
-Under `plugins/recheck-v2/`: `setups/codex/{install.sh,launch.sh,verify-install.sh,negative-tests.sh,RESULTS.md}`, `setups/codex/prompts/{README.md,F1-01.md,F2-01.md,F6-04.md,delivery.md,real-body.md,resource-recovery.md,manual-words.md,manual-explicit.md}`; `skills/recheck-v2/adapters/codex/{profile.md,invocation.py,turns.py,verifier.py,tests/test_adapter.py}`; `skills/recheck-v2/agents/openai.yaml`. Isolated setup: `/Users/tonycoon/.local/share/skills-v2-pilot/codex/home`; probe marketplace beside home. Evidence and five opaque fixture lanes are under the authorized scratch root. No core edit or git mutation.
+E9-16 compares content_sha256 and empty diff, records version/commit, and defers absent other-lane references only while canonical files are absent. E9-17 means three live proofs plus deterministic V1-01. E9-19 made plugin installation possible. E9-20 resolves nested session initialization through the writable home; it does not establish that a further nested shell sandbox can run. Codex base instructions forbid the model repurposing CODEX_HOME; verifier.py inherits it.
 
-2. Profile's twelve sections
+The CLI events stream has no model/turn_context/world_state in the CR sessions. The verifier helper now identifies its matching child rollout from thread.started and reads actual model/injected channels there; missing or ambiguous metadata is lane-unavailable, not guessed from config. No live verifier session was run in this pass.
 
-1. Identity, helper-derived: codex-cli 0.154.0. Host copies and both probe plugins installed. Required recheck-v2 plugin installation fails because the marketplace does not list it. Config is workspace-write; no successful live session establishes the runtime surface.
+## Profile: twelve sections
 
-2. Model and floor, helper-derived: provisional gpt-6-astra → opus/true; every other id → unknown/null. Record fields supply model, route, context, and available effort/settings. Config copied Astra/high/workspace-write; it is not runtime proof.
+1. Identity: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+2. Model and floor: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+3. Run id and directory: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+4. The user channel: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+5. session_wrote_fix: **instruction-bound**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+6. Run date: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+7. The verifier capability: **helper-derived / instruction-bound**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+8. Delivery: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+9. Sidecars and invocation restrictions: **harness-enforced catalog filtering / instruction-bound file behavior**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+10. Negative tests: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+11. Installed-package verification: **helper-derived**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
+12. Capability labels: **mixed, measured per row**. See the matching section of `../../skills/recheck-v2/adapters/codex/profile.md`.
 
-3. Run id/directory, helper-derived: lowercase token, local or pinned date, four os.urandom hex characters; scratch outside workspace. Caller ids are preserved. No directory is created by invocation.py. Caller inputs are instruction-bound.
+## Hermetic gates
 
-4. User channel, helper-derived but blocked: UserMessage and AgentMessage share the required thread/turn reference in the inspected record. turns.py rejects the collision. Parent lsof identified a rollout; child ancestor ps is denied. Notify and newest-by-cwd are unmeasured, with no fallback enabled. Real-map IA gates remain open.
+Commands ran from S, outside the repository, with PYTHONDONTWRITEBYTECODE=1, RECHECK_TEST_SCRATCH=S and UV_CACHE_DIR=S/uv-cache. `/usr/bin/python3 -m unittest discover -s R/plugins/recheck-v2/skills/recheck-v2/adapters/codex/tests -v` and `uv run python3 -m unittest discover -s R/plugins/recheck-v2/skills/recheck-v2/adapters/codex/tests -v`:
 
-5. session_wrote_fix, instruction-bound: explicit honest flag, false default, never inferred; caller forwards it and core retains it on resume.
+`S/adapter-tests-39.log`:
+```text
 
-6. Run date, helper-derived: local calendar date, or instruction-bound caller/trial override. V1-01 pins 2026-09-20.
+----------------------------------------------------------------------
+Ran 13 tests in 3.087s
 
-7. Verifier, instruction-bound containment pending measurement: one fresh read-only codex exec, brief on stdin, raw through -o, JSON events and stderr under scratch, 900-second timeout, no model/effort override or retry. Model comes from captured records; missing actual-model evidence prevents ok. Nested app-server cannot initialize; fresh-context capability unavailable here, core stop verifier_unavailable. X1-01 and any workspace-write fallback remain unmeasured.
+OK
+```
+`S/adapter-tests-uv.log`:
+```text
 
-8. Delivery, instruction-bound and unmeasured: plugin and host probes, real body, sentinel byte counts, and relative resource recovery were not run after the nested-launch failure. No delivery claim.
+----------------------------------------------------------------------
+Ran 13 tests in 2.996s
 
-9. Sidecars, instruction-bound and unmeasured: recheck-v2 has interface metadata only. Manual-only natural-language/explicit behavior and malformed metadata policy loss remain unmeasured. `$manual-only-probe` is a candidate prompt, not a measured offered form.
+OK
+```
 
-10. Negative tests, instruction-bound and unmeasured: throwaway-copy script covers all named mutations and retains messages. No live classification asserted. Supported CLI reinstall after copy/symlink/copy source edits is implemented on an isolated probe marketplace; its behavior remains an open gate.
+No core suite rerun. Inherited evidence from the first pass/control-room records: 327 tests OK (uv, 256.140 s), 327 tests OK (Python 3.9, 293.619 s); examples: 14 positive, 156/156 negative, 33/33 mutations, 15/15 checkpoints and 9/9 receipts passed. Files at S/../core-tests.log, core-tests-39.log, examples.log. Core unchanged. V1-01 remains the inherited validated verifier_unavailable result at S/../V1-01.validate.log; missing-resource deterministic core result at S/../missing-resource-core.log is stopped with `reference unavailable: references/verifier.md`, no project records written. These are not new live-negative passes.
 
-11. Installed verification, helper-derived: host diff 0 and frontmatter equal; same body hash, unequal exact identity because copied skill has unversioned version/commit. Other-lane adapter links remain absent. Required plugin cache absent. Overall false.
+## Installed-package verification
 
-12. Capability labels: all twelve pilot section 13 capabilities are enumerated in profile.md. Record identity, floor, attribution and injected-channel extraction are helper-derived with limitations; execution restrictions, authorship, forwarding, delivery, unchanged caller return and prohibited-action handling remain instruction-bound. No unmeasured capability is called harness-enforced.
+`install.sh` exit 0 (S/install.log); base pilot host copies absent; recheck-v2 plugin plus both probe plugins installed. Separate comparison homes at ~/.local/share/skills-v2-pilot/codex/homes/{plugin-only,host-only}. `verify-install.sh` JSON at S/verify-install.json:
+```json
+{"ok": true, "surfaces": [{"surface": "plugin", "path": "/Users/tonycoon/.local/share/skills-v2-pilot/codex/home/plugins/cache/tony-skills/recheck-v2/0.1.0/skills/recheck-v2", "diff_exit": 0, "diff": "", "frontmatter_equal": true, "other_lane_references": ["adapters/claude-code/invocation.py: absent in this lane's worktree (other lane)", "adapters/claude-code/profile.md: absent in this lane's worktree (other lane)", "adapters/claude-code/turns.py: absent in this lane's worktree (other lane)", "adapters/claude-code/verifier.py: absent in this lane's worktree (other lane)", "adapters/opencode/invocation.py: absent in this lane's worktree (other lane)", "adapters/opencode/profile.md: absent in this lane's worktree (other lane)", "adapters/opencode/turns.py: absent in this lane's worktree (other lane)", "adapters/opencode/verifier.py: absent in this lane's worktree (other lane)"], "references_checked": 47, "reference_errors": [], "identities": [{"exit": 0, "stdout": "{\n  \"name\": \"recheck-v2\",\n  \"version\": \"0.1.0\",\n  \"commit\": \"913e0ef9ec0b7b55234d4e612a29e42ff0f3d8a4\",\n  \"content_sha256\": \"ad9b596d62ec9f6e73ab90cec10b11c0d02ba6b1f23cacb3ad9655b1e16f8446\"\n}", "stderr": ""}, {"exit": 0, "stdout": "{\n  \"name\": \"recheck-v2\",\n  \"version\": \"0.1.0\",\n  \"commit\": \"unversioned\",\n  \"content_sha256\": \"ad9b596d62ec9f6e73ab90cec10b11c0d02ba6b1f23cacb3ad9655b1e16f8446\"\n}", "stderr": ""}], "identity_equal": true}]}
+```
 
-3. Gates and outputs
+CR/install.log succeeded after E9-19; CR/verify-install.json failed only on the first-pass identity comparison and eight other-lane missing references. The JSON above applies E9-16.
 
-Command root R = `/Users/tonycoon/Developer/tony-skills-e9-codex`; evidence root S = `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex`. Commands below ran with PYTHONDONTWRITEBYTECODE=1, RECHECK_TEST_SCRATCH=S for core suites, and UV_CACHE_DIR beneath S. Full outputs are retained under S.
+## Delivery, real body, manual-only and recovery
 
-- `uv run --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/recheck-v2/skills/recheck-v2/scripts/tests`: `Ran 327 tests in 256.140s`; `OK`; exit 0 (`core-tests.log`).
-- `uv run --python /usr/bin/python3 --with jsonschema==4.23.0 python3 -m unittest discover -s plugins/recheck-v2/skills/recheck-v2/scripts/tests`: `Ran 327 tests in 293.619s`; `OK`; exit 0 (`core-tests-39.log`).
-- `uv run plugins/recheck-v2/skills/recheck-v2/scripts/validate-examples.py`: `{"ok":true,"positive":{"files":14,"failing":0},"negative":{"total":156,"rejected":156},"mutations":{"total":33,"accepted":33},"checkpoint":{"total":15,"passed":15},"receipt":{"total":9,"passed":9},"failures":[]}`; exit 0 (`examples.log`).
-- From S, `python3 -m unittest discover -s R/plugins/recheck-v2/skills/recheck-v2/adapters/codex/tests`: `Ran 11 tests in 0.480s`; `OK (skipped=1)`; exit 0. `/usr/bin/python3` repetition: `Ran 11 tests in 0.471s`; same result. Saved-real-rollout/IA gate skipped; synthetic transport tests are explicitly not live records (`adapter-tests-final.log`, `adapter-tests-39.log`). Initial missing-record test failed on denied ps; corrected to exit 3 and rerun. Four `sh -n` commands each exit 0 (`shell-syntax.json`).
-- `setups/codex/install.sh`: exit 1. Isolated home exists, auth mode 0600, three host skill copies. `codex plugin marketplace add R --json` succeeded. `codex plugin add recheck-v2@tony-skills --json`: `Error: plugin recheck-v2 was not found in marketplace tony-skills` (CLI encloses names in backticks). Both probes installed version 0.1.0 under `home/plugins/cache/recheck-probes/<name>/0.1.0` (`install-final.log`, `install-summary.json`).
-- `setups/codex/verify-install.sh`: exit 1; full exact JSON in `verify-install.json`. `ok:false`; plugin missing; host `diff_exit:0`, `frontmatter_equal:true`, `references_checked:47`; eight missing links, the four helpers/profile paths for each not-yet-merged other lane. Canonical identity `{name:recheck-v2,version:0.1.0,commit:2837cd49aa3aea827f1650c3d23839900a28c7a0,content_sha256:ad9b596d62ec9f6e73ab90cec10b11c0d02ba6b1f23cacb3ad9655b1e16f8446}`; installed host version/commit both `unversioned`, same name/hash; `identity_equal:false`.
-- Plugin delivery, host delivery, real body on either surface, explicit resource recovery, manual-only words, manual-only explicit: not run here: failed to initialize in-process app-server client: Operation not permitted (os error 1). No delivered byte count or sentinel assertion.
+All byte counts below are UTF-8 counts from structured rollout records, not the model's claims. Host `<skill>` counts include wrappers/path. File output counts decode the exec output document where present. Catalog is world_state.state.host_skills.body: 3929 bytes host-only, 4190 plugin-only; only the name and description prefix, no skill body. No implicit body is injected. The five built-ins are imagegen, openai-docs, plugin-creator, skill-creator and skill-installer. Host catalog adds delivery-probe and recheck-v2; plugin catalog adds delivery-probe:delivery-probe and recheck-v2:recheck-v2. Manual-only is absent from both.
 
-Negative gates:
-
-| Test | Output |
-|---|---|
-| Malformed optional sidecar | not run here: nested app-server initialization failure |
-| Missing manual-only sidecar | same |
-| Missing name | same |
-| Broken delimiter | same |
-| Duplicate skill name | same |
-| Missing verifier resource, harness behavior | same |
-| Symlinked SKILL.md | same |
-| Symlinked skill directory | same |
-| Update/reinstall copy versus symlink | same; supported reinstall driver is written, unrun |
-
-Independent missing-resource core command, on a scratch-only copy with `references/verifier.md` removed: `uv run <S>/missing-resource-install/scripts/recheck.py start <F1-01>/input.json`, exit 10, `status:stopped`, `stop_reason:reference unavailable: references/verifier.md`, `records_written:[]`, `result:null`, `chat:null`. `missing-resource-core.log`. Expected from pilot sections 10 and 15; this is a deterministic resource mutation, not a live harness negative.
-
-Live proof:
-
-| Case | Retained command | Status, records, validator, chat |
+| CR capture | Thread id | Record-derived outcome |
 |---|---|---|
-| F1-01 | `R/plugins/recheck-v2/setups/codex/launch.sh R/plugins/recheck-v2/setups/codex/prompts/F1-01.md S/fixtures/F1-fixed-defect/75d13f306773/workspace S/live-F1-01` | not run here: nested initialization failure; no rollout, run result, validator or chat |
-| F2-01 | same launch with prompts/F2-01.md, fixtures/F2-unfixed-defect/16da8c3e625b/workspace, live-F2-01 | same |
-| F6-04 | same launch with prompts/F6-04.md, fixtures/F6-embedded-instructions case path from F6 build log, live-F6-04 | same |
-| V1-01 | `uv run R/plugins/recheck-v2/skills/recheck-v2/scripts/recheck.py start S/V1-01.input.json` | exit 10, verifier_unavailable; no model call; deterministic gate completed |
+| `host-only-delivery/` | `01a0a1bd-a34a-7a13-9d46-8251344a6b76` | catalog only; body 0 bytes; first missing S01; no tool calls; END-OF-PROBE |
+| `host-only-delivery-explicit/` | `01a0a1c0-4728-7222-a3e8-2968dbace641` | user <skill> 26038 bytes; S01–S25 all present, no missing sentinel; zero tool calls |
+| `host-only-manual-explicit/` | `01a0a1be-239e-75e2-9f35-0025e6f30279` | recognized; user <skill> 546 bytes; PROBE-RAN; zero tool calls |
+| `host-only-manual-words/` | `01a0a1c0-0738-7541-affe-a010a907e9de` | absent from catalog; disk search then 333-byte file read; PROBE-RAN |
+| `host-only-real-body/` | `01a0a1bd-bf74-7ba1-b9a3-755537a91ea6` | catalog only; body 0 bytes; no tool calls; procedure/Gotchas unavailable |
+| `host-only-real-body-explicit/` | `01a0a1c0-e2d5-7021-bde7-c0d54b1b60b2` | user <skill> 23531 bytes; step 8, Gotchas, References present; zero tool calls |
+| `plugin-only-delivery/` | `01a0a1bc-e797-72a1-9b24-889dd116bb39` | catalog only; body 0 bytes; first missing S01; no tool calls; END-OF-PROBE |
+| `plugin-only-delivery-explicit/` | `01a0a1c0-8bd3-7893-8bb0-e82f1227c13b` | no injection; one tool call, cap 20000 tokens, 25831 file bytes; S01–S25 all present, no missing sentinel |
+| `plugin-only-manual-explicit/` | `01a0a1bd-6dcc-70d1-83d1-94e1cdf95007` | no injection/recognition; disk search then 333-byte file read; PROBE-RAN |
+| `plugin-only-manual-words/` | `01a0a1bd-2795-72e0-b7de-dafe6ff46f5f` | absent from catalog; disk search then 333-byte file read; PROBE-RAN |
+| `plugin-only-real-body/` | `01a0a1bd-0021-7a20-9b34-77fa96dc7eca` | catalog only; body 0 bytes; no tool calls; procedure/Gotchas unavailable |
+| `plugin-only-resource-recovery/` | `01a0a1be-3668-7620-8ad9-cdfb69811b78` | plugin SKILL.md 23332 file bytes, reference relative to same installed root; READ_SUCCESS, 12992 output bytes including path/marker |
 
-V1-01 run: `S/fixtures/VXUM-verifier-execution/bbfa48f68532/run`. Validator command: `uv run R/plugins/recheck-v2/skills/recheck-v2/scripts/validate-result.py <run>/result.json --input S/V1-01.input.json --run-dir <run>`. Output `{"ok":true,"schema":[],"semantic":[],"skipped":[]}`, exit 0. Chat first two lines:
+E9-5 label: **prevents catalog activation; does not stop a model that reads the file**. No developer message held an explicitly invoked body; host explicit bodies were user <skill> messages. No CR/plugin-only-real-body-explicit record exists; not claimed as run. The 8,000-byte main-prompt branch of A7b was not reached by either surface on 0.154.0 with these installs. CR/live-F1-01 read the host copy because both host and plugin entries were present (full SKILL.md tool output 23332 bytes).
+
+### One additional delivery-cap session
+
+`RECHECK_CODEX_HOME=~/.local/share/skills-v2-pilot/codex/homes/plugin-only R/plugins/recheck-v2/setups/codex/launch.sh S/delivery-cap.md /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/F1-fixed-defect/75d13f306773/workspace S/delivery-cap`
+
+Thread `01a0a1c7-93c7-7820-96b2-69fa23e52cd1`, session exit 0. Exactly one cat with default exec limits; no cap override. Tool output: **53 diagnostic bytes; 0 file bytes**. Last output line: `sandbox-exec: sandbox_apply: Operation not permitted`. No truncation marker. This is a blocked cap measurement, not a measured zero-byte cap. The record confirms only plugin entries for the pilot in that session.
+```json
+["codex", "exec", "--json", "-o", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/pass2/delivery-cap/final.md", "-C", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/F1-fixed-defect/75d13f306773/workspace", "--add-dir", "/Users/tonycoon/.local/share/skills-v2-pilot/codex/homes/plugin-only", "-"]
 ```
-RECHECK: none — VERIFIER UNAVAILABLE
-Reason: below_floor: gpt-6-astra (opus): the session model's class is below policy.model_floor 'opus'; nothing graded, no retry
-```
-Evidence: `V1-01.start.log`, `V1-01.validate.log`, run/result.json, run/chat.md. The false floor is the explicit E9-8 trial injection, not a statement about Astra's class. Expected stop derives from VXUM CASES.md V1-01 trial condition plus pilot section 14. F1/F2/F6 predictions, when run, must derive respectively from CASES.md F1-01 plus pilot sections 4/5, F2-01 plus sections 4/5, and F6-04 plus sections 7/8. No outcome is asserted for an unrun fixture.
 
-Trace check: not run, no successful live harness record exists. This is not a zero-hit pass. The sole initial launch attempt failed before a model response. X1-01 read-only command execution and real-map A1-02/A2-01 are blocked; no stand-in map or scenario used. Five E7 generators exited 0 with `--opaque --json`, outputs retained as `<lane>.build.log`.
+## Nested sandbox and verifier limits
 
-4. Contract questions and readings
+| CR/nested-sandbox variant | Exit | Evidence |
+|---|---|---|
+| variant-default-home | 1 | inner.stderr: failed to initialize in-process app-server client: Operation not permitted (os error 1) |
+| variant-real-iso-home | 1 | same |
+| variant-tmp-home | 0 | inner.md: ok |
+| variant-real-iso-home-writable | 0 | inner.md: ok |
 
-E9 section 7 locates turn ids inside UserMessage/AgentMessage; observed ids live on the event payload, and both roles share one turn id. Pilot section 8 wins: reject collision, never fabricate distinct references. E9 sections 7/9 require installation before section 11's catalog addition; missing plugin is a control-room sequencing issue, not permission to edit the catalog. Exact skill-identity equality includes checkout-only commit metadata and plugin-only version metadata; retain the failing comparison rather than call a matching body hash a full pass. E9 section 9.2 says four headless sessions; E9-8 and Tony's explicit instruction say three headless sessions plus deterministic V1-01, which is the reading used. Brief-on-stdin and a final `</dev/null` conflict in the written shell examples: the initial probe was run exactly as supplied; reusable launchers use a file handle as stdin so the prompt reaches the child. This did not bypass or retry the failed probe. Effort high was copied exactly from live config as requested; no low-effort override was invented. Inline scripts/references paths resolve from the skill root per pilot section 15; ordinary Markdown links resolve from their containing document. No pilot rule was relaxed.
+Each variant has an exit file and inner.stderr. outer.md separately records refusal to set CODEX_HOME. The pass2 shell failure occurs later, at sandbox_apply in an initialized child. X1-01 and live verifier read/run are unmeasured. No permission override, escalation or alternative transport was attempted.
 
-5. Findings for the control room
+## Negative tests
 
-Lane R is NOT QUALIFIED.
+CR/negative-tests.log: all nine **crashed**, message `Not inside a trusted directory and --skip-git-repo-check was not specified.` Every CR/negative/<name>/capture/launch.json has exit 1, thread null and rollout null, so **no catalog was seen**. The fixed negative-tests.sh creates a fresh git-initialized/committed workspace per trial; git mutations never target the lane worktree. Trial homes are created through install.sh only, under the isolated home.
 
-- BLOCKER: nested `codex exec` fails before initialization. Run the live gates outside this sandbox; no alternate transport or escalation was attempted. No-fresh-context capability maps to verifier_unavailable/lane-unavailable, pilot sections 7/10/13.
-- BLOCKER: thread/turn reference cannot distinguish user from assistant in observed data. Rule on changing E9 section 7's format to include the native item id, e.g. `codex:thread <thread>:turn <turn>:item <item>`, then update turns.py, profile, and real-probe IA tests. The core accepts arbitrary nonempty references, so no core schema change appears necessary. Until ruled, fail closed. Never remove turn_attribution to get past this.
-- Required catalog edit: add `{"name":"recheck-v2","source":"./plugins/recheck-v2"}` to `.claude-plugin/marketplace.json` using that catalog's normal metadata, then install and measure the required cache. Control-room-owned by E9-9/section 11.
-- Identity decision/core edit: `scripts/recheck_core/result.py:skill_identity` currently hashes SKILL.md only, obtains version from the surrounding plugin manifest and commit from git. For standalone installs, read metadata.version from SKILL.md and use a documented immutable packaged revision rather than absent git metadata; decide whether the gate compares immutable package identity or checkout metadata. If a shared-core hash is intended, hash a deterministic inventory of the core scripts/references as well. Do not spoof metadata in this lane.
-- Merge the other two adapters before the whole-index reference-existence gate; no lane-R edits to their paths.
-- Actual verifier model, injected channels, sandbox enforcement, delivery, manual policy, negative-loader behavior and refusal trace remain unqualified. Event-stream model/world_state extraction is implemented but has no own live evidence; if those events do not carry the required fields, rule on using the child rollout identified by thread.started, rather than claim config as runtime evidence.
-- Remaining implementation limitation: negative-tests.sh retains observations for human trace classification; its update case performs supported CLI reinstalls after source edits in an isolated probe marketplace and captures diffs. Run that gate outside the blocked sandbox. No guessed loader classification is reported.
+This pass ran the nine fixed trials once. Each session exit is 0, but every attempted shell read **crashed** with `sandbox-exec: sandbox_apply: Operation not permitted` (tool exit 71). Classifications in the next column apply only to visible catalog or CLI install behavior, not successful body execution. “Prevented activation” on intact manual-only sidecars cannot isolate the duplicate/name/symlink mutation.
 
-6. Guide findings
+| Test / S/negative/<test>/capture | Thread | Loader observation label | Catalog | Runtime |
+|---|---|---|---|---|
+| `broken-delimiter` | `01a0a1c9-05d5-7252-81d5-13c0abfbd245` | prevented activation: Loader explicitly rejects missing YAML frontmatter; manual-only-probe absent. | N72 | crashed: sandbox_apply |
+| `duplicate-name` | `01a0a1c9-4ba6-7c30-9e01-2ed2fa1f90ff` | prevented activation: Neither manual-only copy cataloged with policy intact. Duplicate-name resolution cannot be inferred. | N72 | crashed: sandbox_apply |
+| `malformed-sidecar` | `01a0a1c8-4702-7180-a7cf-19fbe718e6cc` | ignored: Malformed optional field loses the implicit restriction: manual-only-probe is cataloged. No loader diagnostic. | N73 | crashed: sandbox_apply |
+| `missing-name` | `01a0a1c8-c5b9-7113-9bfd-ac67530c6678` | prevented activation: Manual-only-probe absent; intact manual-only policy also filters it, so the missing-name effect is not isolated. No loader diagnostic. | N72 | crashed: sandbox_apply |
+| `missing-resource` | `01a0a1c9-942a-7800-a6aa-16b6b7b56030` | ignored: recheck-v2 remains cataloged despite removed reference. Runtime missing-resource handling is blocked before the read. | N72 | crashed: sandbox_apply |
+| `missing-sidecar` | `01a0a1c8-87a9-7713-99ca-92536781951f` | ignored: Absent sidecar leaves manual-only-probe cataloged. No loader diagnostic. | N73 | crashed: sandbox_apply |
+| `symlink-directory` | `01a0a1ca-2da3-7893-a30c-d905c30429f2` | prevented activation: Manual-only-probe absent with policy intact; symlink loading itself is not isolated. | N72 | crashed: sandbox_apply |
+| `symlink-file` | `01a0a1c9-dbdd-7cf0-8036-3f47436e8705` | prevented activation: Manual-only-probe absent with policy intact; symlink loading itself is not isolated. | N72 | crashed: sandbox_apply |
+| `update-copy-symlink-copy` | `01a0a1ca-7314-7c33-8279-bc4248b960e8` | ignored: CLI returns exit 0 at all three stages; symlink SKILL.md silently omitted (diff 1), copy stages diff 0. Final manual-only catalog entry absent with policy intact. | N72 | crashed: sandbox_apply |
 
-2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · held · "Verify the installed package, not the repo: host diff and frontmatter pass while exact identity and absent plugin fail; a successful copy is not qualification." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/verify-install.json
-2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · adds · "The guide requires environment testing; nested Codex could not initialize its in-process app-server under this sandbox, before any live delivery measurement." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/facts.md
-2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · silent · "The guide does not define user-channel identity: one native thread/turn key identifies both a user and an assistant item, so grants need finer attribution." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/collision.log
-2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · held · "Test helpers from another directory with invalid input and missing dependencies: 11 adapter tests ran on both interpreters, with the real-rollout gate explicitly skipped." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/adapter-tests-final.log
-
-7. Not done, reasons, costs
-
-No live F1-01, F2-01, F6-04, X1-01, delivery, real-body, resource-recovery, manual-only, or loader-negative session was run after the required initial probe failed to initialize. No notify/newest-cwd qualification, own real-rollout fixture, real-map A1/A2 test, successful invocation capture, verifier injection/model observation, trace scan, or delivered-byte measurement exists. Those are open gates, not passes. The initial nested attempt has no usage/billing record; approximate model cost $0 because initialization failed before a response, not independently billing-verified. Every unrun live session incurred $0 from this lane. V1-01 and the missing-resource check used the deterministic core and no model call. Synthetic unit transport inputs are labeled synthetic and never presented as harness records. The initial core suites passed in full; adapter suite has one documented skip. No core, catalog, other plugin, protected home, index, branch, or commit was changed; no push/PR/merge was attempted.
-
-## Evidence: install-final.log
-
+Harness loader message only for broken-delimiter (all other stderr files empty):
 ```text
-{"home": "/Users/tonycoon/.local/share/skills-v2-pilot/codex/home", "host_skills": ["recheck-v2", "delivery-probe", "manual-only-probe"], "auth_mode": "0o600"}
-codex-cli 0.154.0
-{
-  "marketplaceName": "tony-skills",
-  "installedRoot": "/Users/tonycoon/Developer/tony-skills-e9-codex",
-  "alreadyAdded": false
-}
-{
-  "marketplaceName": "recheck-probes",
-  "installedRoot": "/Users/tonycoon/.local/share/skills-v2-pilot/codex/probe-marketplace",
-  "alreadyAdded": false
-}
-{
-  "pluginId": "delivery-probe@recheck-probes",
-  "name": "delivery-probe",
-  "marketplaceName": "recheck-probes",
-  "version": "0.1.0",
-  "installedPath": "/Users/tonycoon/.local/share/skills-v2-pilot/codex/home/plugins/cache/recheck-probes/delivery-probe/0.1.0",
-  "authPolicy": "ON_INSTALL"
-}
-{
-  "pluginId": "manual-only-probe@recheck-probes",
-  "name": "manual-only-probe",
-  "marketplaceName": "recheck-probes",
-  "version": "0.1.0",
-  "installedPath": "/Users/tonycoon/.local/share/skills-v2-pilot/codex/home/plugins/cache/recheck-probes/manual-only-probe/0.1.0",
-  "authPolicy": "ON_INSTALL"
-}
-Error: plugin `recheck-v2` was not found in marketplace `tony-skills`
-
+2026-09-14T21:18:21.189545Z ERROR codex_core::session::session: failed to load skill /Users/tonycoon/.local/share/skills-v2-pilot/codex/homes/negative/negative/broken-delimiter/skills/manual-only-probe/SKILL.md: missing YAML frontmatter delimited by ---
 ```
 
-## Evidence: verify-install.json
+Every runtime row has the quoted sandbox-exec message in its rollout tool output, even though session stderr is empty and exit 0. Full per-row exact catalog body, final message and classification are retained in S/negative-classifications.json.
 
+Catalog N72 (exact names; no manual-only entry):
 ```text
-{"ok": false, "surfaces": [{"surface": "plugin", "error": "missing installed plugin under /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/plugins/cache/tony-skills/recheck-v2"}, {"surface": "host skill", "path": "/Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2", "diff_exit": 0, "diff": "", "frontmatter_equal": true, "references_checked": 47, "reference_errors": ["missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/claude-code/invocation.py", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/claude-code/profile.md", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/claude-code/turns.py", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/claude-code/verifier.py", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/opencode/invocation.py", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/opencode/profile.md", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/opencode/turns.py", "missing: /Users/tonycoon/.local/share/skills-v2-pilot/codex/home/skills/recheck-v2/adapters/opencode/verifier.py"], "identities": [{"exit": 0, "stdout": "{\n  \"name\": \"recheck-v2\",\n  \"version\": \"0.1.0\",\n  \"commit\": \"2837cd49aa3aea827f1650c3d23839900a28c7a0\",\n  \"content_sha256\": \"ad9b596d62ec9f6e73ab90cec10b11c0d02ba6b1f23cacb3ad9655b1e16f8446\"\n}", "stderr": ""}, {"exit": 0, "stdout": "{\n  \"name\": \"recheck-v2\",\n  \"version\": \"unversioned\",\n  \"commit\": \"unversioned\",\n  \"content_sha256\": \"ad9b596d62ec9f6e73ab90cec10b11c0d02ba6b1f23cacb3ad9655b1e16f8446\"\n}", "stderr": ""}], "identity_equal": false}]}
-
+imagegen
+openai-docs
+plugin-creator
+skill-creator
+skill-installer
+deep-research-work:deep-research
+delivery-probe
+neon-postgres:neon
+neon-postgres:neon-ai-gateway
+neon-postgres:neon-functions
+neon-postgres:neon-object-storage
+neon-postgres:neon-postgres
+notion:notion-knowledge-capture
+notion:notion-meeting-intelligence
+notion:notion-research-documentation
+notion:notion-spec-to-implementation
+plugin-management:plugin-management
+recheck-v2
+vercel:agent-browser
+vercel:agent-browser-verify
+vercel:ai-elements
+vercel:ai-gateway
+vercel:ai-generation-persistence
+vercel:ai-sdk
+vercel:auth
+vercel:bootstrap
+vercel:cdn-caching
+vercel:chat-sdk
+vercel:cms
+vercel:cron-jobs
+vercel:deployments-cicd
+vercel:email
+vercel:env-vars
+vercel:eve
+vercel:geist
+vercel:geistdocs
+vercel:investigation-mode
+vercel:json-render
+vercel:knowledge-update
+vercel:marketplace
+vercel:micro
+vercel:microfrontends
+vercel:ncc
+vercel:next-cache-components
+vercel:next-forge
+vercel:next-upgrade
+vercel:nextjs
+vercel:observability
+vercel:payments
+vercel:react-best-practices
+vercel:routing-middleware
+vercel:runtime-cache
+vercel:satori
+vercel:shadcn
+vercel:sign-in-with-vercel
+vercel:swr
+vercel:turbopack
+vercel:turborepo
+vercel:v0-dev
+vercel:vercel-agent
+vercel:vercel-api
+vercel:vercel-cli
+vercel:vercel-connect
+vercel:vercel-firewall
+vercel:vercel-flags
+vercel:vercel-functions
+vercel:vercel-queues
+vercel:vercel-sandbox
+vercel:vercel-services
+vercel:vercel-storage
+vercel:verification
+vercel:workflow
 ```
 
-## Evidence: V1-01.start.log
+Catalog N73 is N72 plus `manual-only-probe`, in the malformed/missing-sidecar trials. These negative sessions unexpectedly also cataloged harness-provisioned deep-research-work, neon-postgres, notion, plugin-management and vercel plugins, although the three pilot plugin entries were disabled. The CR comparison catalogs and this pass's plugin cap catalog had only the five built-ins plus the pilot. Cause unestablished; no claim of a clean seven-skill negative environment. No such skill was invoked.
 
-```text
-["uv", "run", "/Users/tonycoon/Developer/tony-skills-e9-codex/plugins/recheck-v2/skills/recheck-v2/scripts/recheck.py", "start", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/V1-01.input.json"]
-exit 10
-{
-  "next": "done",
-  "status": "verifier_unavailable",
-  "result": "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/VXUM-verifier-execution/bbfa48f68532/run/result.json",
-  "question": null,
-  "chat": "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/VXUM-verifier-execution/bbfa48f68532/run/chat.md"
-}
-Installed 6 packages in 3ms
+Update evidence S/negative/update-copy-symlink-copy/update-install.json: marketplace add and all three plugin adds exit 0. Copy 0.1.0 diff 0; symlink 0.1.1 diff 1, `Only in <source>/skills/manual-only-probe: SKILL.md`; copy-again 0.1.2 diff 0. The cache silently omitted the symlinked SKILL.md despite successful CLI exit. Runtime loading at the final stage remains blocked.
 
-```
+## Reserved live proofs
 
-## Evidence: V1-01.validate.log
+| CR case | Thread | Observed status |
+|---|---|---|
+| live-F1-01 | `01a0a1be-7b64-7383-9974-3e586fec7fb3` | stopped before core start: shared user/assistant turn key; no result/validator/chat generated |
+| live-F2-01 | `01a0a1bf-1d5c-7f52-b5c2-3d11d4dd0b0f` | stopped before core start: shared user/assistant turn key; no result/validator/chat generated |
+| live-F6-04 | `01a0a1bf-d650-7c41-948b-3e2366630982` | stopped before core start: shared user/assistant turn key; no result/validator/chat generated |
 
-```text
-["uv", "run", "/Users/tonycoon/Developer/tony-skills-e9-codex/plugins/recheck-v2/skills/recheck-v2/scripts/validate-result.py", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/VXUM-verifier-execution/bbfa48f68532/run/result.json", "--input", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/V1-01.input.json", "--run-dir", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/VXUM-verifier-execution/bbfa48f68532/run"]
-exit 0
-{
-  "ok": true,
-  "schema": [],
-  "semantic": [],
-  "skipped": []
-}
-Installed 6 packages in 3ms
-schema ok; semantic: 0 finding(s), 0 check(s) skipped
+These records prove location candidate (a) and the duplicate host surface selection, not F1/F2/F6 success or refusal. They were not rerun by this pass; the control room owns the post-repair live proofs.
 
-```
+## Findings for the control room
 
-## Evidence: missing-resource-core.log
+1. Nested initialization and shell-tool usability are different gates. This builder can start the permitted sessions but their shell sandboxes fail to apply. Default delivery cap and live negative body/resource behavior remain unqualified.
+2. Explicit host invocation is a user-message body injection, contrary to the initial developer-message measurement assumption. Plugin $name does not inject. Neither surface reaches A7b's 8000-byte branch in the measured installs.
+3. Successful plugin installation can silently omit a symlinked SKILL.md; diff is essential.
+4. Intact manual-only policy masks the duplicate/name/symlink loader trials; catalog absence does not isolate their mutation. An unsandboxed follow-up needs direct file reading and/or an auto-invocable control specimen to determine those behaviors. This pass does not add or run extra trials.
+5. Additional default plugin catalogs appeared in the negative homes. Keep those declared when comparing results; no unmeasured isolation claim.
+6. CLI JSON lacks actual model/injected state. The repaired helper reads the matching rollout; the control room must validate it in its live verifier calls. No core edit required.
+7. Whether shared identity should hash scripts/references as well as SKILL.md stays E10 under E9-16; current diff covers that gap.
 
-```text
-["uv", "run", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/missing-resource-install/scripts/recheck.py", "start", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/F1-fixed-defect/75d13f306773/input.json"]
-exit 10
-{
-  "next": "done",
-  "status": "stopped",
-  "result": null,
-  "question": null,
-  "chat": null,
-  "unvalidated": false,
-  "document": {
-    "protocol_version": 1,
-    "status": "stopped",
-    "stop_reason": "reference unavailable: references/verifier.md",
-    "run": {
-      "run_id": "F1-01-fixed-clean-run",
-      "run_dir": "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fixtures/F1-fixed-defect/75d13f306773/run",
-      "invocation": {
-        "mode": "interactive",
-        "caller": "direct",
-        "resume": false,
-        "continuations": 0
-      },
-      "harness": {
-        "name": "unknown",
-        "version": "unknown",
-        "entry": "unknown",
-        "sandbox": "unknown"
-      },
-      "model": {
-        "id": "unknown",
-        "floor_class": "unknown",
-        "floor_met": null
-      },
-      "skill": {
-        "name": "recheck-v2",
-        "version": "unversioned",
-        "commit": "unversioned",
-        "content_sha256": "ad9b596d62ec9f6e73ab90cec10b11c0d02ba6b1f23cacb3ad9655b1e16f8446"
-      }
-    },
-    "records_written": []
-  }
-}
-Installed 6 packages in 3ms
-reference unavailable: references/verifier.md
+## Guide findings
 
-```
+- 2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · held · "Installed-package diff caught a missing symlinked SKILL.md even though plugin add returned exit 0." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/pass2/negative/update-copy-symlink-copy/update-install.json
+- 2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · contradicts · "Manual-only sidecar prevents catalog activation; a model that reads the file still runs it on both surfaces." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/plugin-only-manual-words/rollout.jsonl
+- 2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · adds · "Host explicit $name injects the whole skill as a user message; plugin explicit form reads via a tool. The 8000-byte branch was not reached." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/host-only-delivery-explicit/rollout.jsonl
+- 2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · adds · "A writable home fixes nested session initialization but a further nested shell sandbox can still fail at sandbox_apply." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/pass2/delivery-cap/rollout.jsonl
+- 2026-09-14 · E9 · codex-cli 0.154.0 gpt-6-astra · silent · "Codex user authorization needs thread, turn and item ids; a thread/turn pair names user and assistant." · /private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/pass2/adapter-tests-39.log
 
-## Evidence: collision.log
+## Not done and cost
 
-```text
-turn_ref collision: codex:thread 01a0676f-a679-7c20-bf80-92eb7d50d5d7:turn 2 identifies both user and assistant; section 8 cannot authenticate grants
-{"error": "turn_ref collision: codex:thread 01a0676f-a679-7c20-bf80-92eb7d50d5d7:turn 2 identifies both user and assistant; section 8 cannot authenticate grants"}
+No live F1-01/F2-01/F6-04 or X1-01 rerun, no 327-test core-suite rerun, no other models/subagents, no web/MCP, no core/other-lane edits, no worktree git mutation, no push/PR/merge. Exactly one additional cap session and nine negative sessions launched; all retained, no retries. Runtime caps/negative executions blocked as described. No billing/cost record is supplied by these CLI streams: approximate USD cost is unknown, not zero; token usage remains in events.jsonl and rollout.jsonl. Historical CR sessions were reused, not rebilled by this pass.
 
-```
+Recorded usage (USD cost unknown; no pricing/billing evidence supplied):
 
-## Evidence: facts.md
+| Session | Input | Cached input | Output |
+|---|---|---|---|
+| delivery-cap | 28467 | 23552 | 195 |
+| negative/broken-delimiter/capture | 36985 | 27776 | 376 |
+| negative/duplicate-name/capture | 36951 | 27776 | 392 |
+| negative/malformed-sidecar/capture | 37012 | 27776 | 295 |
+| negative/missing-name/capture | 36905 | 27776 | 327 |
+| negative/missing-resource/capture | 36910 | 27776 | 364 |
+| negative/missing-sidecar/capture | 37016 | 0 | 292 |
+| negative/symlink-directory/capture | 36970 | 27776 | 387 |
+| negative/symlink-file/capture | 37051 | 23680 | 448 |
+| negative/update-copy-symlink-copy/capture | 55729 | 27776 | 420 |
 
-```text
-# Initial measurements, 2026-09-14
-
-`codex --version` printed `codex-cli 0.154.0` and `WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)`.
-
-One permitted rollout inspected for record types and field names only:
-`/Users/tonycoon/.codex/sessions/2026/09/03/rollout-2026-09-03T06-22-45-01a0676f-a679-7c20-bf80-92eb7d50d5d7.jsonl`.
-Python json.loads over its lines, counting `type`, printed:
-`{"session_meta":1,"event_msg":8,"response_item":17,"world_state":1,"turn_context":1}`.
-`session_meta`: base_instructions, cli_version, context_window, cwd, history_mode, id, model_provider, originator, session_id, source, timestamp.
-`turn_context`: approval_policy, approvals_reviewer, collaboration_mode, comp_hash, current_date, cwd, model, multi_agent_version, permission_profile, personality, realtime_active, sandbox_policy, summary, timezone, turn_id, workspace_roots.
-UserMessage item: content, id, type. AgentMessage item: content, id, phase, type.
-`event_msg` item_completed payload keys: type, thread_id, turn_id, item, completed_at_ms.
-At ordinal 10, UserMessage id item-1; at ordinal 25, AgentMessage id item-2. BOTH payloads: `{"thread_id":"01a0676f-a679-7c20-bf80-92eb7d50d5d7","turn_id":"2"}`. No message content quoted or saved.
-
-`lsof -p $PPID -Fn 2>&1 | rg 'rollout|^p'` printed:
-```
-p65638
-n/Users/tonycoon/.codex/sessions/2026/09/14/rollout-2026-09-14T13-41-23-01a0a1a7-2ed6-7870-a2ee-dd273784e53c.jsonl
-```
-This identifies an open parent record; it does not qualify an isolated child helper's ancestor walk. The latter's ps operation produced `[Errno 1] Operation not permitted: 'ps'` in the initial adapter test. The helper now reports record absence, exit 3, when ancestor inspection cannot proceed.
-
-Only live config lines matching `^(model|model_reasoning_effort|sandbox_mode)\s*=` were read:
-```
-sandbox_mode = "workspace-write"
-model = "gpt-6-astra"
-model_reasoning_effort = "high"
-```
-
-The exact nested-probe command and failure are retained in report.md's initial install-proof record. No notify callback or newest-by-cwd candidate was substituted after that failure.
-
-```
-
-## Evidence: final-syntax.json
-
-```text
-[{"python39_syntax": "/Users/tonycoon/Developer/tony-skills-e9-codex/plugins/recheck-v2/skills/recheck-v2/adapters/codex/turns.py", "ok": true}, {"python39_syntax": "/Users/tonycoon/Developer/tony-skills-e9-codex/plugins/recheck-v2/skills/recheck-v2/adapters/codex/invocation.py", "ok": true}, {"python39_syntax": "/Users/tonycoon/Developer/tony-skills-e9-codex/plugins/recheck-v2/skills/recheck-v2/adapters/codex/verifier.py", "ok": true}, {"python39_syntax": "/Users/tonycoon/Developer/tony-skills-e9-codex/plugins/recheck-v2/skills/recheck-v2/adapters/codex/tests/test_adapter.py", "ok": true}, {"shell_and_embedded_python39": "launch.sh", "exit": 0, "stderr": ""}, {"shell_and_embedded_python39": "install.sh", "exit": 0, "stderr": ""}, {"shell_and_embedded_python39": "verify-install.sh", "exit": 0, "stderr": ""}, {"shell_and_embedded_python39": "negative-tests.sh", "exit": 0, "stderr": ""}]
-```
+The original CR/negative/update-copy-symlink-copy/update-install.json independently shows the same CLI success and copy/symlink/copy diff 0/1/0; its session itself still crashed at the git trust check.

@@ -30,7 +30,32 @@ def metadata(events):
                 elif isinstance(value,list):
                     for v in value:walk(v)
             walk(event.get('payload',{}))
+        if event.get('type')=='world_state':
+            state=event.get('payload',{}).get('state',{})
+            injected.extend('world_state.'+k for k,v in state.items() if v)
+        if event.get('type')=='session_meta' and event.get('payload',{}).get('base_instructions'):
+            injected.append('session_meta.base_instructions')
+        if event.get('type')=='response_item':
+            payload=event.get('payload',{})
+            if payload.get('type')=='message' and payload.get('role')=='developer':
+                text='\n'.join(x.get('text','') for x in payload.get('content',[]) if isinstance(x,dict))
+                tags=re.findall(r'<([a-z_]+)>',text)
+                injected.extend('developer.'+x for x in tags)
     return model,sorted(set(injected))
+
+
+def child_records(events, home):
+    """CLI JSON identifies the child; actual model and injected state live in its rollout."""
+    threads={e['thread_id'] for e in events if e.get('type')=='thread.started' and e.get('thread_id')}
+    if len(threads)!=1:raise Missing('absent or ambiguous child thread.started record')
+    thread=next(iter(threads))
+    if not re.fullmatch(r'[A-Za-z0-9-]+',thread):raise ValueError('invalid child thread id')
+    paths=list((home/'sessions').rglob('rollout-*'+thread+'.jsonl'))
+    if len(paths)!=1:raise Missing('absent or ambiguous child rollout for '+thread)
+    records=read_records(paths[0])
+    metas=[r.get('payload',{}) for r in records if r.get('type')=='session_meta']
+    if len(metas)!=1 or metas[0].get('id')!=thread:raise ValueError('child rollout thread mismatch')
+    return records
 
 
 def main():
@@ -65,7 +90,16 @@ def main():
         with brief.open('rb') as inp,events.open('wb') as out,err.open('wb') as errors:
             try:code=subprocess.run(command,stdin=inp,stdout=out,stderr=errors,timeout=900).returncode
             except subprocess.TimeoutExpired:code=-1;timed=True
-    result=status(code,raw,timed);model,injected=metadata(read_records(events));note=err.read_text(errors='replace')[-2000:]
+    result=status(code,raw,timed);records=read_records(events);note=err.read_text(errors='replace')[-2000:]
+    if not canned:
+        # Inherit CODEX_HOME, never set it in a command or replace the environment.
+        try:
+            records=child_records(records,Path(os.environ['CODEX_HOME']).resolve())
+            (scratch/(a.call_id+'.rollout.jsonl')).write_text(''.join(json.dumps(r)+'\n' for r in records))
+        except (Missing,ValueError,KeyError) as exc:
+            if result=='ok':result='lane-unavailable'
+            note=str(exc)+'; '+note
+    model,injected=metadata(records)
     if result=='ok' and model is None:
         result='lane-unavailable';note='events stream supplies no actual model; cannot report verifier capability (section 13)'
     return dict(status=result,raw=str(raw) if raw.exists() else None,model=model,kind='codex exec',injected=injected,refused=[],note=note)

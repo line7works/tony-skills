@@ -7,12 +7,17 @@ import sys
 from turns import Missing, attribution, facts, locate, parser, read_records, run
 
 
-def model_facts(meta,ctx):
+def model_facts(meta,ctx,records=()):
     name=ctx.get('model')
     if not name:raise Missing('absent model in turn_context')
     model={'id':name,'floor_class':'opus' if name=='gpt-6-astra' else 'unknown','floor_met':True if name=='gpt-6-astra' else None}
     if meta.get('model_provider'):model['provider_route']=meta['model_provider']
     if isinstance(meta.get('context_window'),int):model['context_tokens']=meta['context_window']
+    for record in records:
+        payload=record.get('payload',{})
+        if record.get('type')=='event_msg' and payload.get('type')=='token_count':
+            window=(payload.get('info') or {}).get('model_context_window')
+            if isinstance(window,int):model['context_tokens']=window
     effort=ctx.get('effort') or ctx.get('collaboration_mode',{}).get('settings',{}).get('reasoning_effort')
     if effort:model['effort']=effort
     model['settings']={k:v for k,v in ctx.items() if k in ['approval_policy','personality'] and isinstance(v,(str,bool,int,float))}
@@ -36,9 +41,13 @@ def main():
     if not a.caller and rd.exists():raise ValueError('run directory already exists; retry minting')
     sandbox=ctx.get('sandbox_policy',{}).get('type')
     if not sandbox or not meta.get('cli_version'):raise Missing('absent sandbox or cli_version')
+    home=Path(os.environ.get('CODEX_HOME','/absent')).resolve()
+    roots=[Path(x).resolve() for x in ctx.get('sandbox_policy',{}).get('writable_roots',[])]
+    if sandbox=='workspace-write' and any(home==r or r in home.parents for r in roots):
+        sandbox='workspace-write plus the isolated home'
     # The installed helper location is the installation surface, not a model-supplied flag.
-    entry='plugin' if '/plugins/cache/' in str(Path(__file__).resolve()) else 'host skill' if '/skills/recheck-v2/' in str(Path(__file__).resolve()) and '/home/skills/' in str(Path(__file__).resolve()) else 'explicit path'
-    return dict(run_id=rid,run_dir=str(rd),harness=dict(name='codex-cli',version=meta['cli_version'],entry=entry,sandbox=sandbox),model=model_facts(meta,ctx),run_date=a.run_date,session_wrote_fix=a.session_wrote_fix,turn_attribution=mapping)
+    entry='plugin' if '/plugins/cache/' in str(Path(__file__).resolve()) else 'host skill' if '/skills/recheck-v2/' in str(Path(__file__).resolve()) and str(home/'skills')+'/' in str(Path(__file__).resolve()) else 'explicit path'
+    return dict(run_id=rid,run_dir=str(rd),harness=dict(name='codex-cli',version=meta['cli_version'],entry=entry,sandbox=sandbox),model=model_facts(meta,ctx,records),run_date=a.run_date,session_wrote_fix=a.session_wrote_fix,turn_attribution=mapping)
 
 
 if __name__=='__main__':sys.exit(run(main))

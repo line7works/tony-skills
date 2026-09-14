@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -69,6 +70,12 @@ def facts(records):
     return meta,context
 
 
+def validate_ref(ref):
+    if not re.fullmatch(r'codex:thread [^\s:]+:turn [^\s:]+:item [^\s:]+',ref):
+        raise ValueError('invalid turn_ref: thread, turn and item segments required (E9-15)')
+    return ref
+
+
 def attribution(records, find=None):
     meta,_=facts(records); thread=meta.get('id'); roles={};matches=[]
     for record in records:
@@ -80,7 +87,9 @@ def attribution(records, find=None):
         tid=p.get('turn_id');th=p.get('thread_id',thread)
         if not tid or not th:raise Missing('absent item_completed thread_id/turn_id')
         if th!=thread:continue
-        ref='codex:thread {}:turn {}'.format(th,tid)
+        item_id=i.get('id')
+        if not item_id:raise Missing('absent item_completed item id; item segment is required (E9-15)')
+        ref=validate_ref('codex:thread {}:turn {}:item {}'.format(th,tid,item_id))
         if ref in roles and roles[ref]!=role:
             raise ValueError('turn_ref collision: {} identifies both user and assistant; section 8 cannot authenticate grants'.format(ref))
         roles[ref]=role
@@ -101,7 +110,7 @@ def run(main):
 
 
 def main():
-    p=parser('Read native thread/turn roles; mixed-role references fail closed.');p.add_argument('--workspace',default=os.getcwd());p.add_argument('--find');p.add_argument('--json',action='store_true',help='JSON is always emitted')
+    p=parser('Read native thread/turn/item roles; missing item ids fail closed.');p.add_argument('--workspace',default=os.getcwd());p.add_argument('--find');p.add_argument('--json',action='store_true',help='JSON is always emitted')
     a=p.parse_args();return attribution(read_records(locate(Path(a.workspace).resolve())),a.find)
 
 
