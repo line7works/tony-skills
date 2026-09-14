@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/checkpoint.schema.json",
   "title": "Recheck v2 checkpoint",
-  "description": "The run state the core keeps in run_dir/checkpoint.json, rewritten after every item and every write (pilot-contract.md section 11; lane contract E8-7, E8-10, E8-13, E8-25, E8-29). Item states are exactly the union of {state: pending, retries} and {state: done, retries, result}, the result validating against the result schema's item definition. scope holds the normalized checklist in the input schema's item shape (record provenance required), the accepted grants (waivers and reopenings) with the rejected list, the review-sheet verdict, and session_wrote_fix; no continuation grant is stored, that grant is read from the presented input at each resume (E8-10). verifier_calls records each call with its status, the item indexes it covered, and, once a report is retained, its path and SHA-256 (E8-7). run_date pins the date on every record the run writes (E8-25); artifacts is the ordered artifact ledger in first-write order (E8-29); a checkpoint without either is completed from the presented input, the clock, or a scan of the run directory. integrity carries seq, prev, and self; the core checks it against run_dir/checkpoint.log (the chain, the log's last line, the one tolerated state with its predecessor link, E8-15), this schema checks the shape only. The definitions under $defs are copies: the input schema's under the prefix input_ with their references rewritten, the result schema's under their own names; the file resolves no cross-file reference and the test suite holds each copy to its source.",
+  "description": "The run state the core keeps in run_dir/checkpoint.json, rewritten after every item and every write (pilot-contract.md section 11; lane contract E8-7, E8-10, E8-13, E8-25, E8-29). Item states are exactly the union of {state: pending, retries} and {state: done, retries, result}, the result validating against the result schema's item definition. scope holds the normalized checklist in the input schema's item shape (record provenance required), the accepted grants (waivers and reopenings) with the rejected list, the review-sheet verdict, and session_wrote_fix; no continuation grant is stored, that grant is read from the presented input at each resume (E8-10). verifier_calls records each call with its status, the item indexes it covered, and, once a report is retained, its path and SHA-256 (E8-7). run_date pins the date on every record the run writes (E8-25); artifacts is the ordered artifact ledger in first-write order (E8-29); a checkpoint without either is completed from the presented input, the clock, or a scan of the run directory. integrity carries seq, prev, and self; the core checks it against run_dir/checkpoint.log (the chain, the log's last line, the one tolerated state with its predecessor link, E8-15), this schema checks the shape only. The definitions under $defs are copies: the input schema's under the prefix input_ with their references rewritten, the result schema's under their own names; the file resolves no cross-file reference and the test suite holds each copy to its source. E8-A34: seq 0 requires prev null and seq above 0 requires a string.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -39,8 +39,72 @@
         "verifying",
         "adjudicating",
         "recording",
-        "committed"
-      ]
+        "committed",
+        "stopped"
+      ],
+      "description": "stopped once a phase command delivered a terminal status other than completed or recording_failed; the terminal object says which (E8-A20)"
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "stop_reason",
+        "resumable"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "stopped",
+            "verifier_unavailable",
+            "stale_source",
+            "missing_input"
+          ]
+        },
+        "stop_reason": {
+          "type": "string"
+        },
+        "resumable": {
+          "type": "boolean",
+          "description": "true only for a stop after two verifier failures and for verifier_unavailable (section 10's bounded recovery); a resume of any other terminal is refused at section 11 step 1"
+        }
+      },
+      "description": "the terminal status a phase command delivered, kept beside phase stopped (E8-A20)"
+    },
+    "continuation_grants_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "the turn_ref of every extra_continuation grant a resume consumed, in order; a presented grant whose turn_ref is listed is not a grant for this resume (E8-A23); never the grant object"
+    },
+    "transaction_guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "nontarget_diff_sha256",
+        "targets"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/identity_full",
+          "description": "the pre-transaction identity"
+        },
+        "nontarget_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of `git diff HEAD --binary` with the plan's targets excluded, at the moment the transaction began"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the plan's targets, workspace-relative"
+        }
+      },
+      "description": "stored when the transaction begins (phase recording, before the receipt); section 11 step 6 compares against it instead of the start identity (E8-A45)"
     },
     "input_sha256": {
       "type": "string",
@@ -820,6 +884,7 @@
       "additionalProperties": false,
       "required": [
         "severity",
+        "severity_basis",
         "location",
         "claim",
         "failure_scenario",
@@ -836,7 +901,8 @@
         },
         "severity_basis": {
           "type": "string",
-          "description": "the sheet's bar line or the default table row that placed it"
+          "description": "the sheet's bar line or the default table row that placed it; required and non-empty (E8-A34)",
+          "minLength": 1
         },
         "location": {
           "$ref": "#/$defs/location"
@@ -932,7 +998,7 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{64}$",
-          "description": "the self of the previous write; null at seq 0"
+          "description": "the self of the previous write; null exactly at seq 0 and a string above it (E8-A34)"
         },
         "self": {
           "type": "string",
@@ -940,7 +1006,47 @@
           "description": "SHA-256 of the canonical serialization of the document with integrity.self removed (keys sorted, separators , and :, UTF-8, non-ASCII unescaped)"
         }
       },
-      "description": "pilot-contract.md section 11: checked against the run directory's log by the core (self recomputes; (seq, self) is the log's last line; prev is the line before, or null when the log has one line; no gap or repeated seq), never by this schema"
+      "description": "pilot-contract.md section 11: checked against the run directory's log by the core (self recomputes; (seq, self) is the log's last line; prev is the line before, or null when the log has one line; no gap or repeated seq), never by this schema",
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "seq"
+            ],
+            "properties": {
+              "seq": {
+                "const": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "seq"
+            ],
+            "properties": {
+              "seq": {
+                "minimum": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
     },
     "item_state": {
       "oneOf": [

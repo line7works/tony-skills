@@ -203,19 +203,99 @@ class ResultSchemaRevision5(unittest.TestCase):
         other = self.mutated(stopped, lambda d: d.__setitem__("stop_reason", "reference unavailable: references/verifier.md"))
         self.assertEqual(self.errors(other), [], "a stopped result with another reason keeps its identity")
 
-    # E8-A2: run.model.floor_met, optional, boolean or null
+    # E8-A2: run.model.floor_met, optional, boolean or null; E8-A34: true when present on a graded result
     def test_model_floor_met(self):
         self.assertNotIn("floor_met", self.completed["run"]["model"])
-        self.assertEqual(self.errors(self.completed), [], "a result without floor_met stays valid")
+        self.assertEqual(self.errors(self.completed), [], "a result without floor_met stays valid (E8-A2)")
+        d = self.mutated(self.completed, lambda d: d["run"]["model"].__setitem__("floor_met", True))
+        self.assertEqual(self.errors(d), [], "floor_met true rejected")
+        for value in (False, None):
+            errs = self.errors(self.mutated(self.completed, lambda d, v=value: d["run"]["model"].__setitem__("floor_met", v)))
+            self.assertTrue(errs and errs[0]["path"] == "/run/model/floor_met", "E8-A34: a completed result with floor_met %r accepted (%r)" % (value, errs))
+        failed = testlib.load_json(testlib.EX + "/result-recording-failed.json")
+        errs = self.errors(self.mutated(failed, lambda d: d["run"]["model"].__setitem__("floor_met", False)))
+        self.assertTrue(errs and errs[0]["path"] == "/run/model/floor_met", "E8-A34: a recording_failed result with floor_met false accepted")
+        self.assertEqual(self.errors(self.mutated(failed, lambda d: d["run"]["model"].__setitem__("floor_met", True))), [])
+        unavailable = testlib.load_json(testlib.EX + "/result-verifier-unavailable.json")
         for value in (True, False, None):
-            d = self.mutated(self.completed, lambda d, v=value: d["run"]["model"].__setitem__("floor_met", v))
-            self.assertEqual(self.errors(d), [], "floor_met %r rejected" % (value,))
+            d = self.mutated(unavailable, lambda d, v=value: d["run"]["model"].__setitem__("floor_met", v))
+            self.assertEqual(self.errors(d), [], "a verifier_unavailable result may echo floor_met %r" % (value,))
         for bad in ("yes", 1, "null"):
             errs = self.errors(self.mutated(self.completed, lambda d, v=bad: d["run"]["model"].__setitem__("floor_met", v)))
             self.assertTrue(errs and errs[0]["path"] == "/run/model/floor_met", (bad, errs))
         schema = self.schemas.docs["result"]["$defs"]["run"]["properties"]["model"]
         self.assertEqual(schema["properties"]["floor_met"]["type"], ["boolean", "null"])
         self.assertNotIn("floor_met", schema["required"])
+
+    # E8-A34: the five statuses that grade nothing forbid items, cards, new_defects, still_open, and result
+    def test_ungraded_statuses_forbid_graded_fields(self):
+        for name in ("result-stopped.json", "result-verifier-unavailable.json", "result-stale-source.json",
+                     "result-missing-input-headless.json", "result-nothing-open.json"):
+            base = testlib.load_json(testlib.EX + "/" + name)
+            self.assertEqual(self.errors(base), [], name)
+            for field, value in (("items", []), ("cards", []), ("new_defects", []), ("still_open", []), ("result", "not_clear")):
+                errs = self.errors(self.mutated(base, lambda d, f=field, v=value: d.__setitem__(f, v)))
+                self.assertTrue(errs and errs[0]["path"] == "/" + field, "%s carrying %s accepted (%r)" % (name, field, errs))
+
+    # E8-A34: new_defect.severity_basis required and non-empty
+    def test_new_defect_severity_basis(self):
+        self.assertEqual(self.errors(self.blocked), [])
+        errs = self.errors(self.mutated(self.blocked, lambda d: d["new_defects"][0].pop("severity_basis")))
+        self.assertTrue(errs and errs[0]["path"] == "/new_defects/0" and "severity_basis" in errs[0]["message"], errs)
+        errs = self.errors(self.mutated(self.blocked, lambda d: d["new_defects"][0].__setitem__("severity_basis", "")))
+        self.assertTrue(errs and errs[0]["path"] == "/new_defects/0/severity_basis", errs)
+        self.assertIn("severity_basis", self.schemas.docs["result"]["$defs"]["new_defect"]["required"])
+        self.assertIn("severity_basis", self.schemas.docs["checkpoint"]["$defs"]["new_defect"]["required"], "the checkpoint's copy follows its source")
+
+    # E8-A34: every validator carries the FormatChecker, so format: date rejects a non-calendar date
+    def test_format_checker_rejects_non_calendar_dates(self):
+        for bad in ("2026-99-99", "2026-02-30", "2026-13-01"):
+            errs = self.errors(self.mutated(self.completed, lambda d, v=bad: d["run"]["invocation"].__setitem__("run_date", v)))
+            self.assertTrue(errs and errs[0]["path"] == "/run/invocation/run_date", (bad, errs))
+            errs = validate.validate_input(self.mutated(testlib.load_json(testlib.EX + "/input-caller.json"),
+                                                        lambda d, v=bad: d["authorization"]["waivers"][0].__setitem__("date", v)), self.schemas)
+            self.assertTrue(errs and errs[0]["path"] == "/authorization/waivers/0/date", (bad, errs))
+            cp = testlib.load_json(testlib.EX + "/checkpoint-partial.json")
+            cp["run_date"] = bad
+            self.assertTrue(any(e["path"] == "/run_date" for e in validate.validate_checkpoint(cp, self.schemas)), bad)
+        for good in ("2026-02-28", "2028-02-29", "2026-12-31"):
+            self.assertEqual(self.errors(self.mutated(self.completed, lambda d, v=good: d["run"]["invocation"].__setitem__("run_date", v))), [], good)
+
+
+class CheckpointIntegrityPrev(unittest.TestCase):
+    """E8-A34: seq 0 requires prev null and seq above 0 requires a string, in the checkpoint schema and the
+    receipt schema's copy of the same block (section 11)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.schemas = validate.load_schemas()
+        cls.cp = testlib.load_json(testlib.EX + "/checkpoint-partial.json")
+        cls.rc = testlib.load_json(testlib.EX + "/receipt-partial.json")
+
+    def test_prev_follows_seq(self):
+        for name, doc, fn in (("checkpoint", self.cp, validate.validate_checkpoint), ("receipt", self.rc, validate.validate_receipt)):
+            self.assertEqual(fn(doc, self.schemas), [], name)
+            d = copy.deepcopy(doc); d["integrity"]["prev"] = None
+            self.assertTrue(any(e["path"] == "/integrity/prev" for e in fn(d, self.schemas)), "%s: seq %d with prev null accepted" % (name, d["integrity"]["seq"]))
+            d = copy.deepcopy(doc); d["integrity"]["seq"] = 0; d["integrity"]["prev"] = "0" * 64
+            self.assertTrue(any(e["path"] == "/integrity/prev" for e in fn(d, self.schemas)), "%s: seq 0 with a prev string accepted" % name)
+            d = copy.deepcopy(doc); d["integrity"]["seq"] = 0; d["integrity"]["prev"] = None
+            self.assertEqual([e for e in fn(d, self.schemas) if e["path"].startswith("/integrity")], [], "%s: seq 0 with prev null rejected" % name)
+
+
+class ReceiptStatusLineValue(unittest.TestCase):
+    """E8-A34: a status_line step's value is one of the three card values this skill may set (Appendix A)."""
+
+    def test_value_enum(self):
+        schemas = validate.load_schemas()
+        rc = testlib.load_json(testlib.EX + "/receipt-partial.json")
+        for good in ("rejected", "signed off with conditions", "signed off"):
+            d = copy.deepcopy(rc); d["plan"][2]["value"] = good
+            self.assertEqual(validate.validate_receipt(d, schemas), [], good)
+        for bad in ("built", "not started", "none", "", "Signed off"):
+            d = copy.deepcopy(rc); d["plan"][2]["value"] = bad
+            errs = validate.validate_receipt(d, schemas)
+            self.assertTrue(errs and errs[0]["path"] == "/plan/2/value", (bad, errs))
 
 
 class ReceiptSchemaPlanStep(unittest.TestCase):

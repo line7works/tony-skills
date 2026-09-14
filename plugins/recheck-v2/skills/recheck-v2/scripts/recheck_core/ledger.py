@@ -93,8 +93,8 @@ def _grant_record(fields, line_no, text, heading):
         loc = parse_location(fields[3])
         if loc is None:
             return _ambiguous(line_no, text, heading, "waiver line's location field is %r" % fields[3])
-        claim = fields[4].strip()
-        if "·" in claim:
+        claim = strip_parens(fields[4])  # E8-A28: one claim normalization for every shape
+        if claim is not None and "·" in claim:
             return _ambiguous(line_no, text, heading, "claim contains the separator character")
         words = _unquote(fields[5]) if n == 6 else None
         return _record("waiver", line_no, text, heading, date=fields[1].strip(), severity=fields[2],
@@ -106,8 +106,8 @@ def _grant_record(fields, line_no, text, heading):
     loc = parse_location(fields[2])
     if loc is None:
         return _ambiguous(line_no, text, heading, "reopening line's location field is %r" % fields[2])
-    claim = fields[3].strip()
-    if "·" in claim:
+    claim = strip_parens(fields[3])  # E8-A28
+    if claim is not None and "·" in claim:
         return _ambiguous(line_no, text, heading, "claim contains the separator character")
     words = _unquote(fields[4]) if n == 5 else None
     return _record("reopening", line_no, text, heading, date=fields[1].strip(), severity=None,
@@ -136,15 +136,28 @@ def _block_record(fields, line_no, text, heading):
         if claim is not None and "·" in claim:
             return _ambiguous(line_no, text, heading, "claim contains the separator character")
         return _record("recheck", line_no, text, heading, claim=claim, disposition=fields[3].strip(), how=fields[4], **base)
-    if n == 3 and fields[2].startswith("broke:"):
+    if n in (3, 4) and fields[2].startswith("broke:"):
         m = BROKE_RE.match(fields[2])
         if not m:
             return _ambiguous(line_no, text, heading, "fix-introduced defect line lacks `broke: <claim> — <scenario>`")
-        return _record("defect", line_no, text, heading, claim=m.group(1), scenario=m.group(2), **base)
+        # E8-A25: under a heading naming more than one slice the fourth field names the slice charged;
+        # under a single-slice heading the line keeps its three fields (the heading's slice is the charge)
+        multi = len(heading.get("slices") or []) > 1
+        if multi and n == 3:
+            return _ambiguous(line_no, text, heading, "fix-introduced defect line under a multi-slice heading lacks its slice field")
+        if not multi and n == 4:
+            return _ambiguous(line_no, text, heading, "field count 4 matches no Appendix A shape under a single-slice heading (a fix-introduced defect line names its slice only under a heading naming more than one slice)")
+        slice_field = None
+        if n == 4:
+            named = heading_slices(fields[3])
+            if len(named) != 1:
+                return _ambiguous(line_no, text, heading, "fix-introduced defect line's slice field %r names no single slice" % fields[3])
+            slice_field = named[0]
+        return _record("defect", line_no, text, heading, claim=m.group(1), scenario=m.group(2), slice=slice_field, **base)
     if kind == "review":
         if n == 5:
-            claim = fields[2].strip()
-            if "·" in claim:
+            claim = strip_parens(fields[2])  # E8-A28
+            if claim is not None and "·" in claim:
                 return _ambiguous(line_no, text, heading, "claim contains the separator character")
             return _record("finding", line_no, text, heading, claim=claim, scenario=fields[3], found_by=fields[4], **base)
         if n == 4:
@@ -252,6 +265,8 @@ def entry_slice(rec, document=None):
     h = rec.get("heading")
     if not h or not h.get("slices"):
         return "none"
+    if rec.get("kind") == "defect" and rec.get("slice") is not None and len(h["slices"]) > 1:
+        return rec["slice"]  # E8-A25: the fourth field is the charge under a multi-slice heading
     return h["slices"][0]
 
 
@@ -322,7 +337,10 @@ def open_set(parsed):
 
 
 def find_entries(entries, file, line, claim):
-    """Resolve a (location, claim) reference against the whole record (legacy rules)."""
+    """Resolve a (location, claim) reference against the whole record (legacy rules). The reference's
+    claim is normalized like every record's (E8-A28: outer parentheses are not part of the claim)."""
+    if isinstance(claim, str):
+        claim = strip_parens(claim)
     same = [e for e in entries if e["file"] == file and e["line"] == line]
     exact = [e for e in same if e["claim"] == claim]
     if exact:
@@ -498,8 +516,17 @@ def render_recheck_line(severity, file, line, claim, disposition_text, how):
     return "- " + SEP.join([severity, render_location(file, line), field, disposition_text, _single_line(how)])
 
 
-def render_defect_line(severity, file, line, claim, scenario):
-    return "- " + SEP.join([severity, render_location(file, line), "broke: %s — %s" % (_single_line(claim), _single_line(scenario))])
+def defect_slice_field(heading_slices, charged_to_slice):
+    """E8-A25: the slice a rendered defect line names, only when the block heading names more than
+    one slice; None otherwise (the heading's slice is the charge and the line keeps three fields)."""
+    return charged_to_slice if len(set(heading_slices)) > 1 else None
+
+
+def render_defect_line(severity, file, line, claim, scenario, slice=None):
+    fields = [severity, render_location(file, line), "broke: %s — %s" % (_single_line(claim), _single_line(scenario))]
+    if slice is not None:
+        fields.append(PUNCH_LIST_LABEL if slice == "none" else _single_line(str(slice)))
+    return "- " + SEP.join(fields)
 
 
 def render_heading(date, slices):

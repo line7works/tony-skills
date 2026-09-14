@@ -1,6 +1,7 @@
-"""recheck.py as an A7a helper: every subcommand from another working directory, an invalid
-argument (exit 2), a missing input file (exit 2), jsonschema unavailable (exit 3), --help
-content, and the read-only commands identity, ledger, skill-identity."""
+"""recheck.py as an A7a helper: every subcommand from another working directory (a scratch
+directory outside the worktree, never the home directory), an invalid argument (exit 2), a
+missing input file (exit 2), jsonschema unavailable (exit 3), --help content, and the read-only
+commands identity, ledger, skill-identity."""
 import json
 import os
 import unittest
@@ -16,6 +17,7 @@ class CommandLine(unittest.TestCase):
         cls.dir = testlib.make_scratch("e8-slice2-cli-")
         cls.cdir = testlib.build_case("W-recording", "W3-01-legacy-round-trip", os.path.join(cls.dir, "W"))
         testlib.prepare_input(cls.cdir)
+        cls.other = testlib.other_cwd(cls.dir)  # "from another working directory": outside the worktree, not the home directory
 
     @classmethod
     def tearDownClass(cls):
@@ -82,7 +84,7 @@ class CommandLine(unittest.TestCase):
 
     def test_identity_command(self):
         ws = os.path.join(self.cdir, "workspace")
-        code, out, err = self.run_cli("identity", ws, cwd=os.path.expanduser("~"))
+        code, out, err = self.run_cli("identity", ws, cwd=self.other)
         self.assertEqual(code, 0, err)
         got = json.loads(out)
         self.assertEqual(got, testlib.load_json(os.path.join(self.cdir, "manifest.json"))["identity"])
@@ -117,7 +119,7 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(code, 2)
 
     def test_skill_identity_command(self):
-        code, out, err = self.run_cli("skill-identity", cwd=os.path.expanduser("~"))
+        code, out, err = self.run_cli("skill-identity", cwd=self.other)
         self.assertEqual(code, 0, err)
         got = json.loads(out)
         self.assertEqual(sorted(got), ["commit", "content_sha256", "name", "version"])
@@ -139,7 +141,7 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(json.loads(out)["content_sha256"], canon.sha256_file(os.path.join(copy, "references", "pilot-contract.md")), "the contract's hash only when SKILL.md is absent")
 
     def test_stdout_is_json_only(self):
-        code, out, err = self.run_cli("start", os.path.join(self.cdir, "input.json"), cwd=os.path.expanduser("~"))
+        code, out, err = self.run_cli("start", os.path.join(self.cdir, "input.json"), cwd=self.other)
         self.assertEqual(code, 0, err)
         self.assertTrue(out.strip().startswith("{") and out.strip().endswith("}"))
         json.loads(out)

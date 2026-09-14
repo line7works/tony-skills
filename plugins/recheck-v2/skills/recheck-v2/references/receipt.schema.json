@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/receipt.schema.json",
   "title": "Recheck v2 receipt",
-  "description": "The recording transaction's plan and write-ahead entries in run_dir/receipt.json (pilot-contract.md section 9; lane contract E8-14, E8-16, E8-28; E7 lane contract 5.8). The plan is computed in memory before the first step and never changes afterwards, except a status-line step marked cancelled by the boundary check; each step carries its kind (the result schema's project-record write kinds), its workspace-relative target, the target's hash before and the planned hash after, and, for the core's own runs, the exact content it appends (content) or the status value it sets (value) so a redo replays bytes (E8-28); a plan without them (seeded or legacy) is regenerated from the checkpoint by the same renderer and the planned after-hash decides whether the regeneration matched. Entries are appended in order, intent before a step and done with the observed hash after it, and the receipt is rewritten at each entry; a resume classifies every step against the virtual state of its target (E8-14). integrity carries seq, prev, and self, checked by the core against run_dir/receipt.log exactly as the checkpoint's.",
+  "description": "The recording transaction's plan and write-ahead entries in run_dir/receipt.json (pilot-contract.md section 9; lane contract E8-14, E8-16, E8-28; E7 lane contract 5.8). The plan is computed in memory before the first step and never changes afterwards, except a status-line step marked cancelled by the boundary check; each step carries its kind (the result schema's project-record write kinds), its workspace-relative target, the target's hash before and the planned hash after, and, for the core's own runs, the exact content it appends (content) or the status value it sets (value) so a redo replays bytes (E8-28); a plan without them (seeded or legacy) is regenerated from the checkpoint by the same renderer and the planned after-hash decides whether the regeneration matched. Entries are appended in order, intent before a step and done with the observed hash after it, and the receipt is rewritten at each entry; a resume classifies every step against the virtual state of its target (E8-14). integrity carries seq, prev, and self, checked by the core against run_dir/receipt.log exactly as the checkpoint's. E8-A34: a status_line step's value is one of the three card values the skill may set; integrity's prev is null exactly at seq 0.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -96,7 +96,7 @@
         },
         "value": {
           "type": "string",
-          "description": "the new text after 'Status: ' for a status_line step (E8-28); forbidden on every other kind"
+          "description": "the new text after 'Status: ' for a status_line step (E8-28): rejected, signed off with conditions, or signed off (E8-A34); forbidden on every other kind"
         },
         "heading": {
           "type": "string",
@@ -118,7 +118,15 @@
           },
           "then": {
             "properties": {
-              "content": false
+              "content": false,
+              "value": {
+                "enum": [
+                  "rejected",
+                  "signed off with conditions",
+                  "signed off"
+                ],
+                "description": "the card values this skill may set (Appendix A, E8-A34)"
+              }
             }
           }
         },
@@ -215,7 +223,7 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{64}$",
-          "description": "the self of the previous write; null at seq 0"
+          "description": "the self of the previous write; null exactly at seq 0 and a string above it (E8-A34)"
         },
         "self": {
           "type": "string",
@@ -223,7 +231,47 @@
           "description": "SHA-256 of the canonical serialization of the document with integrity.self removed (keys sorted, separators , and :, UTF-8, non-ASCII unescaped)"
         }
       },
-      "description": "pilot-contract.md section 11: the same block as the checkpoint's, checked by the core against run_dir/receipt.log, never by this schema"
+      "description": "pilot-contract.md section 11: the same block as the checkpoint's, checked by the core against run_dir/receipt.log, never by this schema",
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "seq"
+            ],
+            "properties": {
+              "seq": {
+                "const": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "seq"
+            ],
+            "properties": {
+              "seq": {
+                "minimum": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

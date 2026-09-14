@@ -100,6 +100,55 @@ class Pins(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class UntrackedSymlinks(unittest.TestCase):
+    """E8-A46: an untracked symlink (to a directory or to a file) contributes the hash of its link target text
+    and is never followed; identity_of neither crashes nor opens a directory as a file."""
+
+    def setUp(self):
+        self.dir = testlib.make_scratch("e8-fix4-identity-")
+        self.ws = os.path.join(self.dir, "ws")
+        os.makedirs(self.ws)
+        cfg = ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"]
+        testlib.git(self.ws, "init", "-q")
+        with open(os.path.join(self.ws, ".gitignore"), "w", encoding="utf-8") as fh:
+            fh.write(".venv/\n")  # a trailing-slash pattern: it matches a directory, never a symlink to one
+        with open(os.path.join(self.ws, "README.md"), "w", encoding="utf-8") as fh:
+            fh.write("# ws\n")
+        testlib.git(self.ws, "add", ".")
+        testlib.git(self.ws, *(cfg + ["commit", "-q", "-m", "base"]))
+        self.target_dir = os.path.join(self.dir, "elsewhere")
+        os.makedirs(self.target_dir)
+        self.target_file = os.path.join(self.dir, "elsewhere.txt")
+        with open(self.target_file, "w", encoding="utf-8") as fh:
+            fh.write("file content\n")
+
+    def tearDown(self):
+        testlib.rmtree(self.dir)
+
+    def test_symlinks_hash_by_link_text_and_never_crash(self):
+        os.symlink(self.target_dir, os.path.join(self.ws, ".venv"))
+        os.symlink(self.target_file, os.path.join(self.ws, "link.txt"))
+        got = identity.identity_of(self.ws)
+        self.assertEqual(got["untracked"], [".venv", "link.txt"], "git lists both links as untracked paths")
+        self.assertTrue(got["dirty"])
+        # the fingerprint is the link text: changing the target's content changes nothing
+        with open(self.target_file, "a", encoding="utf-8") as fh:
+            fh.write("more\n")
+        self.assertEqual(identity.identity_of(self.ws)["untracked_sha256"], got["untracked_sha256"], "a symlink is never followed")
+        # changing the link target text changes the fingerprint while the path list stays the same
+        other = os.path.join(self.dir, "elsewhere-2")
+        os.makedirs(other)
+        os.remove(os.path.join(self.ws, ".venv"))
+        os.symlink(other, os.path.join(self.ws, ".venv"))
+        again = identity.identity_of(self.ws)
+        self.assertEqual(again["untracked"], got["untracked"])
+        self.assertNotEqual(again["untracked_sha256"], got["untracked_sha256"])
+        # the bytes hashed are exactly the link text
+        self.assertEqual(identity.untracked_bytes(os.path.join(self.ws, ".venv")), other.encode("utf-8"))
+        self.assertEqual(identity.untracked_bytes(os.path.join(self.ws, "link.txt")), self.target_file.encode("utf-8"))
+        self.assertEqual(identity.untracked_bytes(self.target_dir), b"", "a directory is never opened as a file")
+
+
 class WorkTree(unittest.TestCase):
     def test_root_and_not_root(self):
         cdir = testlib.lane_cases("F1-fixed-defect")[0][1]

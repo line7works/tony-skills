@@ -214,6 +214,100 @@ class RenderAndApply(unittest.TestCase):
         self.assertEqual(p3["lines"][ledger.ledger_home(p3)[0]], "## Later")
 
 
+class ClaimNormalization(unittest.TestCase):
+    """E8-A28: outer parentheses are not part of the claim in any shape the reader accepts (review finding,
+    recheck line, waiver, reopening) nor in the join key, so a review claim written `(text)` matches its
+    recheck, waiver, and reopening lines."""
+    HEAD = "# T\n\n## Slice A — x\nStatus: rejected\n\n## Punch list\n\n### 2026-09-19 — review: Slice A\n- BLOCKER · a.py:1 · (the claim) · a scenario · Slice A\n"
+
+    def entries(self, text):
+        o = ledger.open_set(ledger.parse_document(text, DOC))
+        self.assertEqual(o["ambiguities"], [])
+        return o["entries"]
+
+    def test_parenthesized_review_claim(self):
+        entries = self.entries(self.HEAD)
+        self.assertEqual([(e["claim"], e["state"]) for e in entries], [("the claim", "open")])
+        self.assertEqual(ledger.render_recheck_line("BLOCKER", "a.py", 1, entries[0]["claim"], "fixed", "how"),
+                         "- BLOCKER · a.py:1 · (the claim) · fixed · how", "the rendered recheck line wraps the claim once")
+        # (a) a prior recheck line marking it fixed: the open set has one entry, state fixed
+        fixed = self.HEAD + "\n### 2026-09-20 — recheck: Slice A\n- BLOCKER · a.py:1 · (the claim) · fixed · executed x\n"
+        self.assertEqual([(e["claim"], e["state"]) for e in self.entries(fixed)], [("the claim", "fixed")])
+        # (b) a waiver line for it, the claim bare: waived
+        waived = self.HEAD + "- WAIVED (per user) · 2026-09-20 · BLOCKER · a.py:1 · the claim · \"w\"\n"
+        self.assertEqual([(e["claim"], e["state"]) for e in self.entries(waived)], [("the claim", "waived")])
+        # (c) a reopening line after the fix: open again
+        reopened = fixed + "- REOPENED (per user) · 2026-09-21 · a.py:1 · the claim · \"r\"\n"
+        self.assertEqual([(e["claim"], e["state"]) for e in self.entries(reopened)], [("the claim", "open")])
+        # the grant lines written with parentheses match the same entry (one normalization for every shape)
+        waived2 = self.HEAD + "- WAIVED (per user) · 2026-09-20 · BLOCKER · a.py:1 · (the claim) · \"w\"\n"
+        self.assertEqual([e["state"] for e in self.entries(waived2)], ["waived"])
+        reopened2 = fixed + "- REOPENED (per user) · 2026-09-21 · a.py:1 · (the claim) · \"r\"\n"
+        self.assertEqual([e["state"] for e in self.entries(reopened2)], ["open"])
+
+    def test_join_key_strips_the_reference(self):
+        """Named-item matching normalizes the reference's claim the same way."""
+        entries = self.entries(self.HEAD)
+        self.assertEqual(len(ledger.find_entries(entries, "a.py", 1, "(the claim)")), 1)
+        self.assertEqual(len(ledger.find_entries(entries, "a.py", 1, "the claim")), 1)
+        self.assertEqual(ledger.find_entries(entries, "a.py", 1, "another claim"), [])
+        self.assertEqual(ledger.strip_parens("(x)"), "x")
+        self.assertEqual(ledger.strip_parens("()"), None)
+        self.assertEqual(ledger.strip_parens("x"), "x")
+
+
+class DefectSlice(unittest.TestCase):
+    """E8-A25: a fix-introduced defect line names its slice in a fourth field only under a heading naming more
+    than one slice; the reader takes that field as the charge; the single-slice line keeps three fields."""
+    MULTI = {"kind": "recheck", "line_no": 1, "date": "2026-09-20", "slices": ["A", "B"], "text": ""}
+    SINGLE = {"kind": "recheck", "line_no": 1, "date": "2026-09-20", "slices": ["A"], "text": ""}
+
+    def test_render(self):
+        base = ledger.render_defect_line("MAJOR", "a.py", 2, "c", "s")
+        self.assertEqual(base, "- MAJOR · a.py:2 · broke: c — s", "a single-slice block's bytes are unchanged")
+        self.assertIsNone(ledger.defect_slice_field(["A"], "A"))
+        self.assertEqual(ledger.defect_slice_field(["A", "B"], "B"), "B")
+        self.assertEqual(ledger.render_defect_line("MAJOR", "a.py", 2, "c", "s", ledger.defect_slice_field(["A"], "A")), base)
+        self.assertEqual(ledger.render_defect_line("MAJOR", "a.py", 2, "c", "s", ledger.defect_slice_field(["A", "B"], "B")), base + " · B")
+        self.assertEqual(ledger.render_defect_line("MAJOR", "a.py", 2, "c", "s", ledger.defect_slice_field(["A", "none"], "none")), base + " · punch list")
+
+    def test_reader(self):
+        rec = ledger._block_record(["MAJOR", "a.py:2", "broke: c — s", "B"], 1, "", self.MULTI)
+        self.assertEqual((rec["kind"], rec["claim"], rec["slice"]), ("defect", "c", "B"))
+        self.assertEqual(ledger.entry_slice(rec), "B")
+        rec = ledger._block_record(["MAJOR", "a.py:2", "broke: c — s", "Slice B"], 1, "", self.MULTI)
+        self.assertEqual((rec["kind"], rec["slice"]), ("defect", "B"))
+        rec = ledger._block_record(["MAJOR", "a.py:2", "broke: c — s"], 1, "", self.MULTI)
+        self.assertEqual(rec["kind"], "ambiguous")
+        self.assertEqual(rec["reason"], "fix-introduced defect line under a multi-slice heading lacks its slice field")
+        rec = ledger._block_record(["MAJOR", "a.py:2", "broke: c — s", "A"], 1, "", self.SINGLE)
+        self.assertEqual(rec["kind"], "ambiguous")
+        self.assertIn("field count 4 matches no Appendix A shape", rec["reason"])
+        rec = ledger._block_record(["MAJOR", "a.py:2", "broke: c — s"], 1, "", self.SINGLE)
+        self.assertEqual((rec["kind"], rec["slice"]), ("defect", None))
+        self.assertEqual(ledger.entry_slice(rec), "A")
+
+    def test_document_round_trip(self):
+        head = "# T\n\n## Slice A — x\nStatus: rejected\n\n## Slice B — y\nStatus: rejected\n\n## Punch list\n\n### 2026-09-20 — recheck: Slice A, Slice B\n"
+        text = head + ledger.render_defect_line("MAJOR", "b.py", 3, "c", "s", ledger.defect_slice_field(["A", "B"], "B")) + "\n"
+        p = ledger.parse_document(text, DOC)
+        o = ledger.open_set(p)
+        self.assertEqual(o["ambiguities"], [])
+        self.assertEqual([(e["line"], e["slice"], e["state"]) for e in o["entries"]], [(3, "B", "open")])
+        # the cards are computed from that charge: B holds the open MAJOR, A holds nothing
+        self.assertEqual(ledger.card_after("rejected", [e for e in o["entries"] if e["slice"] == "B" and e["state"] == "open"]), "signed off with conditions")
+        self.assertEqual(ledger.card_after("rejected", [e for e in o["entries"] if e["slice"] == "A" and e["state"] == "open"]), "signed off")
+        # the same line without its field under the same heading is missing input
+        o = ledger.open_set(ledger.parse_document(head + ledger.render_defect_line("MAJOR", "b.py", 3, "c", "s") + "\n", DOC))
+        self.assertEqual(len(o["ambiguities"]), 1)
+        self.assertEqual(o["ambiguities"][0]["reason"], "fix-introduced defect line under a multi-slice heading lacks its slice field")
+        # under a single-slice heading a fourth field is ambiguous too
+        single = head.replace("Slice A, Slice B", "Slice A") + ledger.render_defect_line("MAJOR", "b.py", 3, "c", "s", "A") + "\n"
+        o = ledger.open_set(ledger.parse_document(single, DOC))
+        self.assertEqual(len(o["ambiguities"]), 1)
+        self.assertIn("field count 4", o["ambiguities"][0]["reason"])
+
+
 class Cards(unittest.TestCase):
     def test_mapping(self):
         e = lambda sev: {"severity": sev, "state": "open"}  # noqa: E731

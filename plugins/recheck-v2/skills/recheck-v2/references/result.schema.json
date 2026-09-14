@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/result.schema.json",
   "title": "Recheck v2 result",
-  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); the result is computed over the effective open set (not_fixed items without a waived marker, plus new defects): all_clear means that set is empty and every item is fixed or waived, not_clear means no item fixed and the set not empty, partial means a fixed item beside a non-empty set; a boundary violation forces not_clear whatever the items, and the not_clear item rule yields to it; a waived or reopened marker carries the grant's date and quoted words; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries no items, result, or cards, and its write list, when present, holds run artifacts only; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. A stopped result whose stop_reason begins unsupported: submodules: carries no source_identity block (E8-2). run.model may echo the adapter's floor_met (boolean or null, E8-A2). Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9). Revision 5 (2026-09-13) implements rulings E8-2 to E8-5, E8-25, E8-27, and amendment E8-A2 of the E8 lane contract, docs/plans/2026-09-13-recheck-v2-e8-core.md: run.verifier.refused_actions, raw_path and raw_sha256 on every verifier call, run.invocation.run_date, and the reporting-slot descriptions of rejected_grants, injection_attempts, boundary_violations, cards, and submodules.",
+  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); the result is computed over the effective open set (not_fixed items without a waived marker, plus new defects): all_clear means that set is empty and every item is fixed or waived, not_clear means no item fixed and the set not empty, partial means a fixed item beside a non-empty set; a boundary violation forces not_clear whatever the items, and the not_clear item rule yields to it; a waived or reopened marker carries the grant's date and quoted words; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries no items, result, or cards, and its write list, when present, holds run artifacts only; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. A stopped result whose stop_reason begins unsupported: submodules: carries no source_identity block (E8-2). run.model may echo the adapter's floor_met (boolean or null, E8-A2). Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9). Revision 5 (2026-09-13) implements rulings E8-2 to E8-5, E8-25, E8-27, and amendment E8-A2 of the E8 lane contract, docs/plans/2026-09-13-recheck-v2-e8-core.md: run.verifier.refused_actions, raw_path and raw_sha256 on every verifier call, run.invocation.run_date, and the reporting-slot descriptions of rejected_grants, injection_attempts, boundary_violations, cards, and submodules. E8-A34 (2026-09-14): stopped, verifier_unavailable, stale_source, missing_input, and nothing_open forbid items, cards, new_defects, still_open, and result; a completed or recording_failed result whose run.model carries floor_met requires it true (a result without it stays valid, E8-A2); new_defect.severity_basis is required and non-empty; the validator loads this schema with a FormatChecker, so format: date rejects a non-calendar date.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -280,7 +280,8 @@
               }
             }
           },
-          "new_defects": false
+          "new_defects": false,
+          "still_open": false
         }
       }
     },
@@ -309,7 +310,8 @@
               }
             }
           },
-          "new_defects": false
+          "new_defects": false,
+          "still_open": false
         }
       }
     },
@@ -349,7 +351,8 @@
               }
             }
           },
-          "new_defects": false
+          "new_defects": false,
+          "still_open": false
         }
       }
     },
@@ -380,7 +383,10 @@
                 }
               }
             }
-          }
+          },
+          "items": false,
+          "new_defects": false,
+          "still_open": false
         }
       }
     },
@@ -632,7 +638,50 @@
       },
       "then": {
         "properties": {
-          "source_identity": false
+          "source_identity": false,
+          "items": false,
+          "cards": false,
+          "new_defects": false,
+          "still_open": false,
+          "result": false
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "completed",
+              "recording_failed"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run": {
+            "properties": {
+              "model": {
+                "if": {
+                  "required": [
+                    "floor_met"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "floor_met": {
+                      "const": true,
+                      "description": "a graded run's adapter assertion was true by construction: false or null stopped the run as verifier_unavailable (E8-A34)"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -1491,6 +1540,7 @@
       "additionalProperties": false,
       "required": [
         "severity",
+        "severity_basis",
         "location",
         "claim",
         "failure_scenario",
@@ -1507,7 +1557,8 @@
         },
         "severity_basis": {
           "type": "string",
-          "description": "the sheet's bar line or the default table row that placed it"
+          "description": "the sheet's bar line or the default table row that placed it; required and non-empty (E8-A34)",
+          "minLength": 1
         },
         "location": {
           "$ref": "#/$defs/location"

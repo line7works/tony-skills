@@ -536,7 +536,8 @@ class Runs(unittest.TestCase):
         self.assertEqual(result["cards"], [{"slice": "A", "before": "built", "after": "built", "reason": "a boundary violation froze the card"}])
         self.assertEqual(self.kinds(result), ["punch_list_block"])
         run_dir = os.path.join(cdir, "run")
-        self.assertEqual(testlib.load_json(os.path.join(run_dir, "boundary.json")), result["boundary_violations"])
+        # E8-A44: boundary.json carries the step the check preceded; with no status step, the last step's done entry
+        self.assertEqual(testlib.load_json(os.path.join(run_dir, "boundary.json")), {"before_step": 1, "violations": result["boundary_violations"]})
         paths = [w["path"] for w in result["records_written"]]
         self.assertIn(os.path.join(run_dir, "boundary.json"), paths)
         self.assertEqual(paths.index(os.path.join(run_dir, "boundary.json")), paths.index(os.path.join(run_dir, "receipt.log")) + 1, "after receipt.log, before the transaction steps (E8-29)")

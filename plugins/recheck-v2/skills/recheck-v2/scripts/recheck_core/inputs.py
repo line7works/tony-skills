@@ -116,6 +116,15 @@ def path_rules(doc, is_work_tree_root):
             out.append(("target.build_doc", "build_doc must be relative with no .. segment"))
         elif ws_ok and not is_under(os.path.join(ws, bd), ws):
             out.append(("target.build_doc", "build_doc %s resolves outside the workspace after symlinks" % bd))
+    # E8-A19: every explicit item's record.document is contained exactly like build_doc
+    items = target.get("items") if isinstance(target.get("items"), list) else []
+    for i, it in enumerate(items):
+        rd = (it.get("record") or {}).get("document") if isinstance(it, dict) else None
+        field = "target.items[%d].record.document" % i
+        if not isinstance(rd, str) or os.path.isabs(rd) or any(seg == ".." for seg in rd.split("/")):
+            out.append((field, "record.document must be relative with no .. segment"))
+        elif ws_ok and not is_under(os.path.join(ws, rd), ws):
+            out.append((field, "record.document %s resolves outside the workspace after symlinks" % rd))
     return out
 
 
@@ -138,12 +147,45 @@ def is_direct_interactive(doc):
     return inv.get("caller") == "direct" and inv.get("mode") == "interactive"
 
 
-def envelope(doc, fields, ambiguity, question=None, run=None):
+GRANT_LISTS = ("waivers", "reopen")
+
+
+def schema_rejected_grants(errors, doc):
+    """E8-A35: the grant objects among a schema failure's invalid fields, one entry per object:
+    `<JSON path>: <file:line or -> · <the validator's message>` (the E8-A12 shape)."""
+    auth = (doc.get("authorization") if isinstance(doc, dict) else None) or {}
+    by_path = {}
+    for err in errors:
+        parts = [p for p in err["path"].split("/") if p != ""]
+        if len(parts) < 2 or parts[0] != "authorization":
+            continue
+        if parts[1] in GRANT_LISTS and len(parts) >= 3 and parts[2].isdigit():
+            idx = int(parts[2])
+            path = "authorization.%s[%d]" % (parts[1], idx)
+            lst = auth.get(parts[1]) if isinstance(auth, dict) else None
+            grant = lst[idx] if isinstance(lst, list) and idx < len(lst) else None
+        elif parts[1] == "extra_continuation":
+            path = "authorization.extra_continuation"
+            grant = auth.get("extra_continuation") if isinstance(auth, dict) else None
+        else:
+            continue
+        by_path.setdefault(path, (grant, []))[1].append(err["message"])
+    out = []
+    for path, (grant, messages) in by_path.items():
+        item = grant.get("item") if isinstance(grant, dict) else None
+        loc = item.get("location") if isinstance(item, dict) else None
+        ref = "%s:%s" % (loc.get("file"), loc.get("line")) if isinstance(loc, dict) and loc.get("file") is not None else "-"
+        out.append("%s: %s%s%s" % (path, ref, ledger.SEP, "; ".join(messages)))
+    return out
+
+
+def envelope(doc, fields, ambiguity, question=None, run=None, schema_errors=None):
     """The missing_input result. The run block is omitted when the payload failed the schema; a
     schema-valid payload that fails a path rule gets the block from the presented invocation
     (passed as `run`) with an empty write list and no run directory (section 2, E8-A6); the caller
     adds the block itself once a run directory exists. The question rides only on a direct
-    interactive run."""
+    interactive run. On a schema failure (`schema_errors` given) a grant object among the invalid
+    fields is also listed under `rejected_grants` (E8-A35)."""
     out = {"protocol_version": 1}
     if run is not None:
         out["run"] = run
@@ -151,6 +193,10 @@ def envelope(doc, fields, ambiguity, question=None, run=None):
     out["missing_input"] = {"fields": list(fields) or ["$"], "ambiguity": list(ambiguity)}
     if question and is_direct_interactive(doc):
         out["missing_input"]["question"] = question
+    if schema_errors:
+        rejected = schema_rejected_grants(schema_errors, doc)
+        if rejected:
+            out["rejected_grants"] = rejected
     if run is not None:
         out["records_written"] = []
     return out
@@ -313,10 +359,12 @@ def resolve_scope(doc, workspace, accepted_reopenings):
     entries = opened["entries"]
     slice_name = target.get("slice")
     candidates = []
+    deferred = None  # E8-A29: an empty automatic selection is nothing_open only after the named entries and reopenings
     if slice_name is None:
         slice_name, candidates, problem = _select_slice(parsed, entries)
-        if problem:
+        if problem and problem["status"] != "nothing_open":
             return problem
+        deferred = problem
     elif slice_name not in ledger.slice_names(parsed) and os.path.normpath(rel) != ledger.PUNCH_LIST_DOC:
         return {"status": "missing_input", "fields": ["target.slice"],
                 "ambiguity": ["slice %s has no heading in %s (slices: %s)" % (slice_name, rel, ", ".join(ledger.slice_names(parsed)) or "none")],
@@ -363,7 +411,19 @@ def resolve_scope(doc, workspace, accepted_reopenings):
     selected.sort(key=lambda e: e["origin"]["line_no"])
     for e in selected:
         checklist.append(_checklist_item(e))
+    if slice_name is None and selected:
+        # E8-A29: named entries and reopenings on a doc with no automatic candidate: the scope's slice is
+        # theirs when they share one, else the run spans slices and names none
+        shared = ledger.sort_slices(e["slice"] for e in selected)
+        slice_name = shared[0] if len(shared) == 1 else None
+    # E8-A32: the normalized checklist is checked before the brief and the checkpoint are written
+    no_scenario = [e for e in selected if not (e.get("scenario") or "").strip()]
+    if no_scenario:
+        amb = ["the record at %s:%d has no failure scenario; supply or confirm it" % (rel, e["origin"]["line_no"]) for e in no_scenario]
+        return {"status": "missing_input", "fields": ["target.build_doc"], "ambiguity": amb, "question": amb[0]}
     if not checklist:
+        if deferred is not None:
+            return deferred
         card = ledger.slice_card(parsed, slice_name)
         if card in ("rejected", "signed off with conditions"):
             return {"status": "missing_input", "fields": ["target.build_doc"],
@@ -380,8 +440,11 @@ def resolve_scope(doc, workspace, accepted_reopenings):
 
 def _same_item(item, entry):
     loc = item.get("location") or {}
+    claim = item.get("claim")
+    if isinstance(claim, str):
+        claim = ledger.strip_parens(claim)  # E8-A28: the join key normalizes the claim
     return loc.get("file") == entry["file"] and loc.get("line") == entry["line"] and (
-        item.get("claim") == entry["claim"] or entry["claim"] is None or item.get("claim") == ledger.NO_CLAIM)
+        claim == entry["claim"] or entry["claim"] is None or claim is None)
 
 
 def _select_slice(parsed, entries):

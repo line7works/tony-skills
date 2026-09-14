@@ -187,6 +187,17 @@ class Resumes(unittest.TestCase):
         self.assertEqual({e["line"]: e["state"] for e in o["entries"]}, {16: "fixed", 11: "open", 21: "fixed"}, "the ledger round-trips")
         names = [os.path.basename(w["path"]) for w in result["records_written"] if w["kind"] == "run_artifact"]
         self.assertEqual(names[:4], ["resolved-input.json", "checklist.json", "checkpoint.json", "checkpoint.log"], "a seeded checkpoint's artifacts are completed by the scan (E8-29)")
+        # E8-A30: the resume replaced the resolved input with the presented one (resume true, the adapter's harness and
+        # model objects, no continuation grant), so record reports the resumed session's invocation and the checkpoint's count
+        presented = testlib.load_json(os.path.join(cdir, "input.json"))
+        active = testlib.load_json(os.path.join(run_dir, "input.json"))
+        self.assertTrue(active["invocation"]["resume"]); self.assertNotIn("extra_continuation", json.dumps(active.get("authorization", {})))
+        self.assertEqual(active["invocation"]["model"], presented["invocation"]["model"])
+        self.assertTrue(result["run"]["invocation"]["resume"], "run.invocation.resume is true after the resume (E8-A30)")
+        self.assertEqual(result["run"]["model"], presented["invocation"]["model"])
+        self.assertEqual(result["run"]["harness"], presented["invocation"]["harness"])
+        self.assertEqual(result["run"]["invocation"]["continuations"], 1)
+        self.assertIn(os.path.join(run_dir, "input.json"), [w["path"] for w in result["records_written"]], "input.json is a listed artifact once written")
 
     def test_c2_01_handoff(self):
         self.drive_c("C2-01-handoff-run-dir")

@@ -22,6 +22,7 @@ SKILL = os.path.dirname(SCRIPTS)
 REF = os.path.join(SKILL, "references")
 EX = os.path.join(REF, "examples")
 PLUGIN = os.path.dirname(os.path.dirname(SKILL))
+REPO = os.path.dirname(os.path.dirname(PLUGIN))  # the worktree root (plugins/<plugin> sits two levels down)
 EVALS = os.path.join(PLUGIN, "evals")
 FIXTURES = os.path.join(EVALS, "fixtures")
 FIXTURE_LIB = os.path.join(FIXTURES, "_lib")
@@ -57,6 +58,18 @@ def scratch_base():
 
 def make_scratch(prefix):
     return tempfile.mkdtemp(prefix=prefix, dir=scratch_base())
+
+
+def other_cwd(parent, name="elsewhere"):
+    """A working directory for the "from another working directory" tests: a subdirectory of a
+    scratch directory under the scratch base, never the home directory and never inside the
+    worktree (Astra's check G, E8 fix round). Refuses a parent that resolves inside the worktree."""
+    path = os.path.join(parent, name)
+    os.makedirs(path, exist_ok=True)
+    real, repo = os.path.realpath(path), os.path.realpath(REPO)
+    if real == repo or real.startswith(repo + os.sep):
+        raise AssertionError("the other working directory %s is inside the worktree %s" % (real, repo))
+    return path
 
 
 def build_lane(lane, out):

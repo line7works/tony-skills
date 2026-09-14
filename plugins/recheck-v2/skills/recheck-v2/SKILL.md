@@ -8,8 +8,9 @@ description: >-
   landed, when the card still says rejected and the user wants the fixes verified and the
   card moved, when the majors from the signoff are fixed and the user wants each one
   checked without hunting for new findings, or when the user reopens a named finding and
-  wants it rechecked. Never for re-running tests for the fixer, never for a recheck of
-  anything that is not a build doc's punch list, and not the bare /recheck command, which
+  wants it rechecked. Takes recorded findings from a build doc's punch list, a caller-held
+  verdict's named findings, or docs/punch-list.md. Never for re-running tests for the
+  fixer, never for findings nobody recorded, and not the bare /recheck command, which
   belongs to the v1 station.
 metadata:
   version: "0.1.0"
@@ -71,7 +72,9 @@ terminal status), 2 (a usage slip of yours: read stderr, fix the command, rerun;
 run file), 3 (the `jsonschema` dependency is missing: run through `uv run`, which reads the
 dependency the script declares), or 1 (a defect or a failure inside the workspace: report it,
 never work around it). Repeating a command is safe: a completed command reports the current
-phase and changes nothing.
+phase and changes nothing. A phase command on a run that already ended answers `next: done`
+(exit 10) with the recorded `status`, the existing `result` path, and `reason` `the run
+ended as <status>: <reason>`; it writes nothing and issues no call id.
 
 ### 1. Load the references
 
@@ -158,14 +161,15 @@ as `lane-unavailable` in step 5 and say so; never grade from this context.
 ### 5. Record the call
 
 ```
-uv run scripts/recheck.py record-call --run-dir <run_dir> --call-id <call_id> --status <status> --raw <report> --model <model> --kind <kind> --injected <channels>
+uv run scripts/recheck.py record-call --run-dir <run_dir> --call-id <call_id> --status <status> --raw <report> --model <model> --kind <kind> --injected <channel>
 ```
 
 Pass the status exactly as the transport reported it. `--raw` is the report file (required
-with `--status ok`; on another status only when the transport left one); `--injected` takes
-the channel names the harness declared (omit the flag when there are none); add `--refused
-"<text>"` for each prohibited action the transport refused with no side effect and `--note
-"<text>"` with the transport's reason on any status other than `ok`.
+with `--status ok`; on another status only when the transport left one). Repeat a flag per
+value: one `--injected "<channel>"` per channel the harness declared (omit the flag when
+there are none) and one `--refused "<text>"` per prohibited action the transport refused
+with no side effect; every value lands. Add `--note "<text>"` with the transport's reason on
+any status other than `ok`.
 
 - `next: adjudicate` (exit 0): the report was accepted. The document lists each item with
   `verifier_said`, `reason`, `method`, and `evidence`, the `new_defects` candidates, and the
@@ -191,8 +195,11 @@ uv run scripts/recheck.py adjudicate --run-dir <run_dir> --item <index> --action
 - `confirmed`: accept the verifier's disposition. The default; take it unless evidence in
   the report contradicts it.
 - `downgraded`: the verifier said `fixed` and its own evidence shows the scenario still
-  holds. Add `--reason <reason> --note "<the evidence>"`, the reason one of `reproduces`,
-  `missed_case`, `verification_blocked`, `missing_evidence`.
+  holds. The executor reads the report's prose and evidence for every item and downgrades a
+  `fixed` whose observations or command output show the scenario still holds; whether every
+  command the scenario names was run is the executor's judgment here (the core checks the
+  block's shape, not the observations). Add `--reason <reason> --note "<the evidence>"`, the
+  reason one of `reproduces`, `missed_case`, `verification_blocked`, `missing_evidence`.
 - `upgraded`: the verifier said `not_fixed` and you hold evidence the verifier lacked. Add
   `--upgrade-evidence "<that evidence>"`. Never when this session wrote the fix: the script
   records it as `disputed` and the item stays open.
@@ -236,13 +243,17 @@ Re-read Appendix A of `references/pilot-contract.md`. Then hold these until the 
 uv run scripts/recheck.py record --run-dir <run_dir>
 ```
 
-The script recomputes the identity, plans the transaction, writes the receipt, appends the
-reopening lines, the punch-list block, the waiver lines, the verdict-doc copy, and the status
-lines in that order with a write-ahead entry per step, runs the boundary check, assembles and
-validates the result, and writes `chat.md`.
+The script re-proves every retained report against its recorded hash, recomputes the
+identity, plans the transaction, stores the transaction guard in the checkpoint, writes the
+receipt, appends the reopening lines, the punch-list block, the waiver lines, the verdict-doc
+copy, and the status lines in that order with a write-ahead entry per step, assembles and
+validates the result, and writes `chat.md`. The boundary check runs before every status-line
+step: a violation found before a step cancels that step and every later one and forces
+`not_clear`, while a card moved before a later violation stays moved and is listed with the
+reason `moved before the violation was found`.
 
-- `next: done` (exit 10) with `status` `completed`, `recording_failed`, or `stale_source`: go
-  to step 8.
+- `next: done` (exit 10) with `status` `completed`, `recording_failed`, `stale_source`, or
+  `stopped` (a retained report changed, `evidence changed: <path>`): go to step 8.
 - `next: resume` (exit 0): the transaction started and was interrupted; go to Resume.
 
 ### 8. Deliver
@@ -254,8 +265,9 @@ hand the document to a caller unchanged. Write no verdict prose into any project
 
 ### Resume
 
-After a compaction, in a fresh session handed the run directory, or after a
-`recording_failed` result, present the same input document with `invocation.resume: true`
+After a compaction, in a fresh session handed the run directory, after a `recording_failed`
+result, or after a stop the run can recover from (two verifier failures, or an unavailable
+verifier), present the same input document with `invocation.resume: true`
 (and, when the user granted a second continuation in their own words, that grant under
 `authorization.extra_continuation`: `by: user`, `channel: user-turn`, the harness's
 `turn_ref`, the user's `quoted_words` verbatim, and the `date`; no item, no severity):
@@ -267,7 +279,14 @@ uv run scripts/recheck.py resume <input.json>
 Continue at the step `next` names: `verify` (step 4 with the `call_id` and `brief` given;
 the brief lists the pending items only, under their original numbers), `adjudicate` (step 6
 for the `pending` indexes), `record` (step 7), `done` (step 8). A resume refused at a
-section 11 step is `stopped` naming the step; report it.
+section 11 step is `stopped` naming the step; report it. A resume continues a run that
+ended only after two verifier failures or an unavailable verifier, as a continuation (a
+fresh call under the next id, the retry counters standing); every other ended run is refused
+at section 11 step 1 (`the run ended as <status>: <reason>; start a new run`) and needs a
+new run id and directory. Once recording began, the resume compares the identity against
+the transaction guard the checkpoint stored as the transaction began (the pre-transaction
+identity, the digest of the non-target diff, the plan's targets) plus the steps receipted
+`done`, else against the start identity; a difference is `stale_source`.
 
 ## Output
 
@@ -332,13 +351,18 @@ relay it.
 | `nothing_open` | an empty checklist against a clear card | say so; nothing was written |
 | `stale_source` | the pin did not match, or the identity changed before the transaction | report both identities; nothing was written; the user decides |
 | `verifier_unavailable` | no fresh context, the model below the floor or of unknown class, or a deterministic refusal | report the refusal; nothing graded; no retry |
-| `stopped` | a retryable verifier failure twice, a reused run id, a refused resume, a missing reference, or the continuation limit | report the `stop_reason`; state stays on disk |
+| `stopped` | a retryable verifier failure twice, a retained report that changed before recording (`evidence changed`), a reused run id, a refused resume, a missing reference, or the continuation limit | report the `stop_reason`; state stays on disk |
 | `recording_failed` | a write failed inside the transaction, or an outside edit was found on resume | report what the receipt says landed; a resume completes the rest; an outside edit needs the user's word |
-| `completed` | the transaction committed | print the block; `not_clear` beside `boundary_violations` means the cards were frozen |
+| `completed` | the transaction committed | print the block; `not_clear` beside `boundary_violations` means the status steps after the violation were cancelled and their cards frozen (`a boundary violation froze the card`), while a card moved before it stays moved (`moved before the violation was found`) |
 
-One re-send of the verifier, then stop. One continuation without the user's word; a second
-needs `extra_continuation` in the presented input. A command that exits 2 is your slip; exit
-3 is the missing dependency; exit 1 is a defect to report.
+A run that ended (`stopped`, `verifier_unavailable`, `stale_source`, `missing_input`)
+answers every later phase command with the recorded outcome (`next: done` (exit 10),
+`reason` `the run ended as <status>: <reason>`) and writes nothing; a resume continues a
+stopped run only after two verifier failures or an unavailable verifier, as a continuation;
+every other ended run needs a new run id. One re-send of the verifier, then stop. One
+continuation without the user's word; a second needs `extra_continuation` in the presented
+input. A command that exits 2 is your slip; exit 3 is the missing dependency; exit 1 is a
+defect to report.
 
 ## References
 

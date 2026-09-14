@@ -18,18 +18,30 @@ section 8 runs when what it needs was supplied (the input for cardinality, slice
 the run-block rule; the run directory for the receipt, the checkpoint, the retained report, and
 artifact containment; the workspace for the ledger, the cards, and the round trip); a check that
 needs something not supplied reports "skipped: needs input" / "needs run directory" / "needs
-workspace" and nothing else is ever skipped.
+workspace" and nothing else is ever skipped (the one other skip, V13's legacy report without a
+structured tail, applies only to a call record that carries no raw_sha256, E8-A26).
+
+After Astra's review (section 12 of the lane contract): every validator carries jsonschema's
+FormatChecker (E8-A34); V3 tests resolved containment and the run directory's inventory (E8-A19,
+E8-A31); V7 and V14 recompute each grant's channel verdict with the core's own rule (E8-A24); V8
+holds the receipt's entries to the state they prove and fully-done targets to their resting hash
+(E8-A21); V12 admits a card moved before the violation was found only against boundary.json's
+before_step (E8-A44); V13 re-proves every complete call's retained report (E8-A26, E8-A40); V17
+compares a written defect line's slice with charged_to_slice (E8-A25); V18 holds a refused resume
+to a checkpoint that fails at the named step (E8-A33).
 """
 import json
 import os
+import re
 import sys
 
 MISSING_DEPENDENCY = "missing dependency: jsonschema==4.25.1 (run through uv run, or install it)"
 
 try:  # the guarded import: a missing jsonschema is reported once, at the first use
-    from jsonschema import Draft202012Validator as _Validator
+    from jsonschema import Draft202012Validator as _Validator, FormatChecker as _FormatChecker
 except ImportError:  # pragma: no cover - exercised by the exit-3 tests through a subprocess
     _Validator = None
+    _FormatChecker = None
 
 SCHEMA_FILES = {
     "input": "input.schema.json",
@@ -39,6 +51,7 @@ SCHEMA_FILES = {
 }
 SEP = " · "
 RECORD_KINDS = ("reopened_line", "punch_list_block", "waived_line", "verdict_doc_copy", "status_line")
+MOVED_BEFORE_VIOLATION = "moved before the violation was found"  # E8-A44: the card reason the core writes
 CHECK_IDS = ["V%d" % i for i in range(1, 19)]
 
 
@@ -107,13 +120,22 @@ class Schemas:
                 V.check_schema(self.docs[key])
             except Exception as exc:  # noqa: BLE001 - a file that parses but is not a schema is the same stop
                 raise ReferenceUnavailable(rel, "not a valid schema: %s" % exc)
-        self.input = V(self.docs["input"])
-        self.result = V(self.docs["result"])
-        self.checkpoint = V(self.docs["checkpoint"])
-        self.receipt = V(self.docs["receipt"])
+        # E8-A34: every validator carries jsonschema's FormatChecker, so `format: date` rejects a
+        # non-calendar date (2026-99-99, 2026-02-30); in 4.25.1 the date checker is datetime.date.fromisoformat,
+        # stdlib only (date-time stays unchecked without rfc3339-validator, as before)
+        fc = format_checker()
+        self.input = V(self.docs["input"], format_checker=fc)
+        self.result = V(self.docs["result"], format_checker=fc)
+        self.checkpoint = V(self.docs["checkpoint"], format_checker=fc)
+        self.receipt = V(self.docs["receipt"], format_checker=fc)
         # the result schema's item definition on its own (section 11 step 4)
         self.item = V({"$schema": self.docs["result"]["$schema"], "$defs": self.docs["result"]["$defs"],
-                       "$ref": "#/$defs/item_result"})
+                       "$ref": "#/$defs/item_result"}, format_checker=fc)
+
+
+def format_checker():
+    """A fresh jsonschema FormatChecker (E8-A34); require_jsonschema() has run by the time it is called."""
+    return _FormatChecker()
 
 
 _CACHE = {}
@@ -371,26 +393,34 @@ def check_v11(result, ctx):
     return findings, None
 
 
+def _moved_before(result):
+    """[(index, card)] of the cards listed as moved before the violation was found (E8-A44), in order."""
+    return [(i, c) for i, c in enumerate(result.get("cards") or []) if c.get("before") != c.get("after") and c.get("reason") == MOVED_BEFORE_VIOLATION]
+
+
 def check_v12(result, ctx):
     """A run with boundary violations changed no card and cancelled its status-line steps.
 
-    The result-only part (no card moved, no status line written, result not_clear) runs here;
-    check_v12_full adds the cancelled flags read from the receipt when the run directory is
-    supplied."""
+    E8-A44: the one exception is a card whose status-line step was receipted done before the violation
+    was found, listed with the reason `moved before the violation was found`. The result-only part runs
+    here: any other moved card is a finding, a status line written beyond those cards is a finding, and
+    the result must be not_clear. check_v12_full holds the exception to boundary.json's before_step and
+    the receipt when the run directory is supplied."""
     findings = []
-    skip = None
     if not result.get("boundary_violations"):
-        return findings, skip
+        return findings, None
+    moved_before = _moved_before(result)
     for i, card in enumerate(result.get("cards") or []):
-        if card.get("before") != card.get("after"):
+        if card.get("before") != card.get("after") and card.get("reason") != MOVED_BEFORE_VIOLATION:
             findings.append(_f("V12", "/cards/%d" % i, "card moved from %r to %r beside a boundary violation"
                                % (card.get("before"), card.get("after"))))
-    for i, w in enumerate(result.get("records_written") or []):
-        if w.get("kind") == "status_line":
+    status_writes = [i for i, w in enumerate(result.get("records_written") or []) if w.get("kind") == "status_line"]
+    for n, i in enumerate(status_writes):
+        if n >= len(moved_before):
             findings.append(_f("V12", "/records_written/%d" % i, "a status line was written beside a boundary violation"))
     if result.get("result") not in (None, "not_clear"):
         findings.append(_f("V12", "/result", "boundary violations force not_clear, found %r" % result.get("result")))
-    return findings, skip
+    return findings, None
 
 
 def check_v15(result, ctx):
@@ -460,11 +490,63 @@ def _grant_named_rejected(result, path):
     return any(r.startswith(prefix) for r in result.get("rejected_grants") or [])
 
 
-def _accepted_grants(result, inp):
+OTHER_REASONS = ("no entry", "matched no", "conflict", "already used")  # a rejection the channel rule does not decide
+
+
+def _rejected_why(result, path):
+    """The `why` field of the rejected_grants entry listed under this JSON path (E8-A12 shape), or None."""
+    prefix = path + ":"
+    for r in result.get("rejected_grants") or []:
+        if r.startswith(prefix):
+            return r.split(SEP)[-1] if SEP in r else r[len(prefix):].strip()
+    return None
+
+
+def _other_reason(why):
+    return why is not None and any(w in why for w in OTHER_REASONS)
+
+
+def grant_verdicts(result, inp):
+    """E8-A24: every grant object of the input with the channel rule's own verdict, recomputed here with
+    inputs.grant_channel_ok (continuation_grant_ok for extra_continuation) from the input's turn_attribution
+    and route rules. Returns [{path, kind, grant, ok, why, named, listed_why}] where `named` says whether
+    rejected_grants lists the grant under its JSON path and `listed_why` is that entry's reason."""
+    from . import inputs
     auth = (inp or {}).get("authorization") or {}
-    waivers = [g for i, g in enumerate(auth.get("waivers") or []) if not _grant_named_rejected(result, "authorization.waivers[%d]" % i)]
-    reopenings = [g for i, g in enumerate(auth.get("reopen") or []) if not _grant_named_rejected(result, "authorization.reopen[%d]" % i)]
+    out = []
+    for key, kind in (("waivers", "waived"), ("reopen", "reopened")):
+        for i, g in enumerate(auth.get(key) or []):
+            path = "authorization.%s[%d]" % (key, i)
+            ok, why = inputs.grant_channel_ok(g, inp)
+            out.append({"path": path, "kind": kind, "grant": g, "ok": ok, "why": why,
+                        "named": _grant_named_rejected(result, path), "listed_why": _rejected_why(result, path)})
+    present, ok, why = inputs.continuation_grant_ok(inp)
+    if present:
+        path = "authorization.extra_continuation"
+        out.append({"path": path, "kind": "continuation", "grant": auth.get("extra_continuation"), "ok": ok, "why": why,
+                    "named": _grant_named_rejected(result, path), "listed_why": _rejected_why(result, path)})
+    return out
+
+
+def _accepted_grants(result, inp):
+    """The grants that count (E8-A24): the channel rule accepts them (the result's own rejected_grants is
+    never the proof) and rejected_grants does not list them for another reason (no entry, a conflict)."""
+    waivers, reopenings = [], []
+    for v in grant_verdicts(result, inp):
+        if v["kind"] == "continuation" or not v["ok"]:
+            continue
+        if v["named"] and _other_reason(v["listed_why"]):
+            continue
+        (waivers if v["kind"] == "waived" else reopenings).append(v["grant"])
     return waivers, reopenings
+
+
+def _marker_matches(item, marker, g):
+    """The item's marker derives from grant g: same item (location and claim, or location alone for a
+    claim-less entry) and the grant's date and words in the ledger form (E8-A16)."""
+    from . import ledger
+    same = _item_key(g["item"]) == _item_key(item) or (item["claim"] == "()" and (g["item"]["location"]["file"], g["item"]["location"]["line"]) == (item["location"]["file"], item["location"]["line"]))
+    return same and g.get("date") == marker.get("date") and ledger.ledger_words(g.get("quoted_words") or "") == marker.get("quoted_words")
 
 
 def _build_doc(result, ctx):
@@ -542,13 +624,24 @@ def check_v1_full(result, ctx):
 
 
 def check_v3(result, ctx):
-    """Every record write targets an authorized destination; the list is in write order."""
+    """Every record write targets an authorized destination; the list is in write order.
+
+    E8-A19: with the workspace, every project-record path must resolve (realpath, symlinks followed)
+    inside the workspace's real path, not only be relative and existing. E8-A31: with the run
+    directory supplied, every regular file under it (recursively) appears in the write list exactly
+    once and every listed run artifact exists under it; a file present but unlisted, a path listed
+    twice, and a listed artifact that does not exist are findings. The inventory runs only for a
+    result that lists writes: a status that never reached the run directory lists nothing (section 9,
+    E8-A42; a refused resume's envelope beside its untouched run directory is the case), and V15
+    holds that list empty."""
     run_dir = _run_dir(result, ctx)
     if run_dir is None:
         return [], _skip("run_dir")
     findings = []
     writes = result.get("records_written") or []
+    workspace = ctx.get("workspace")
     seen_record, seen_result = False, False
+    listed = {}
     for i, w in enumerate(writes):
         path, kind = w.get("path", ""), w.get("kind")
         if kind == "run_artifact":
@@ -561,16 +654,44 @@ def check_v3(result, ctx):
                 findings.append(_f("V3", "/records_written/%d" % i, "a run artifact is listed after result.json"))
             elif seen_record:
                 findings.append(_f("V3", "/records_written/%d" % i, "a run artifact is listed after a project-record write (E8-29 order)"))
+            real = os.path.realpath(path) if os.path.isabs(path) else path
+            if real in listed:
+                findings.append(_f("V3", "/records_written/%d" % i, "run artifact %r is listed twice (first at /records_written/%d)" % (path, listed[real])))
+            else:
+                listed[real] = i
         elif kind in RECORD_KINDS:
             if os.path.isabs(path) or any(seg == ".." for seg in path.split("/")):
                 findings.append(_f("V3", "/records_written/%d/path" % i, "project record %r is not a workspace-relative path" % path))
-            elif ctx.get("workspace") is not None and not os.path.isfile(os.path.join(ctx["workspace"], path)):
-                findings.append(_f("V3", "/records_written/%d/path" % i, "project record %r does not exist under the workspace" % path))
+            elif workspace is not None:
+                full = os.path.join(workspace, path)
+                if not _under(full, workspace):
+                    findings.append(_f("V3", "/records_written/%d/path" % i, "project record %r resolves outside the workspace's real path (E8-A19)" % path))
+                elif not os.path.isfile(full):
+                    findings.append(_f("V3", "/records_written/%d/path" % i, "project record %r does not exist under the workspace" % path))
             if kind == "verdict_doc_copy" and not path.startswith("docs/reviews/"):
                 findings.append(_f("V3", "/records_written/%d/path" % i, "a verdict-doc copy outside docs/reviews/"))
             if seen_result:
                 findings.append(_f("V3", "/records_written/%d" % i, "a project record is listed after result.json"))
             seen_record = True
+    if ctx.get("run_dir") is not None and writes:
+        # E8-A31: the inventory of the supplied run directory against the listed run artifacts. result.json and
+        # chat.md are listed at their first write, which follows this validation (result.deliver validates the
+        # assembled result before writing either), so their absence is not a finding.
+        deferred = {os.path.realpath(os.path.join(ctx["run_dir"], n)) for n in ("result.json", "chat.md")}
+        for i, w in enumerate(writes):
+            path = w.get("path", "")
+            if w.get("kind") == "run_artifact" and os.path.isabs(path) and not os.path.isfile(path) and os.path.realpath(path) not in deferred:
+                findings.append(_f("V3", "/records_written/%d/path" % i, "run artifact %r does not exist under run_dir" % path))
+        present = []
+        for root, dirs, files in os.walk(ctx["run_dir"]):
+            dirs.sort()
+            for name in sorted(files):
+                full = os.path.join(root, name)
+                if os.path.isfile(full):
+                    present.append(full)
+        for full in present:
+            if os.path.realpath(full) not in listed:
+                findings.append(_f("V3", "/records_written", "%s is under run_dir but not in the write list (E8-A31: every file once)" % full))
     return findings, None
 
 
@@ -626,10 +747,12 @@ def check_v6(result, ctx):
         open_here = [e for e in opened["entries"] if e["slice"] == c["slice"] and e["state"] == "open"]
         mapped = ledger.card_after(c["before"], open_here)
         current = ledger.slice_card(parsed, c["slice"])
-        if violated:
-            if c["after"] != c["before"]:
-                findings.append(_f("V6", "/cards/%d" % i, "a card moved beside a boundary violation"))
+        if violated and c["after"] == c["before"]:
+            pass  # frozen beside the violation: the mapping does not apply (V12 holds the cards)
+        elif violated and c.get("reason") != MOVED_BEFORE_VIOLATION:
+            pass  # any other card moved beside a violation is V12's finding (E8-A44)
         elif c["after"] != mapped:
+            # E8-A44: a card that moved before the violation was found moved by the mapping, so it is held to it
             findings.append(_f("V6", "/cards/%d/after" % i, "after is %r; the mapping over the slice's open set gives %r" % (c["after"], mapped)))
         if c["after"] != current and c["before"] in ledger.MOVABLE_CARDS:
             findings.append(_f("V6", "/cards/%d/after" % i, "after is %r but the document's status line reads %r" % (c["after"], current)))
@@ -637,25 +760,34 @@ def check_v6(result, ctx):
 
 
 def check_v7(result, ctx):
-    """Markers correspond to accepted grants and to waived_line / reopened_line writes."""
+    """Markers correspond to accepted grants and to waived_line / reopened_line writes.
+
+    E8-A24: "accepted" is the channel rule's own verdict recomputed from the input (grant_verdicts), never
+    the result's rejected_grants; a marker that derives from a grant the rule rejects, and a waiver or
+    reopening line beyond the accepted count (a line a rejected grant would have produced), are findings."""
     if "input" not in ctx:
         return [], _skip("input")
     from . import ledger
     findings = []
     waivers, reopenings = _accepted_grants(result, ctx["input"])
+    rejected = [v for v in grant_verdicts(result, ctx["input"]) if not v["ok"] and v["kind"] != "continuation"]
     writes = result.get("records_written") or []
     n_waived = len([w for w in writes if w.get("kind") == "waived_line"])
     n_reopened = len([w for w in writes if w.get("kind") == "reopened_line"])
     if result.get("status") == "completed":
         if n_waived != len(waivers):
-            findings.append(_f("V7", "/records_written", "%d waived_line writes for %d accepted waivers" % (n_waived, len(waivers))))
+            findings.append(_f("V7", "/records_written", "%d waived_line writes for %d accepted waivers (the channel rule's verdict, E8-A24)" % (n_waived, len(waivers))))
         if n_reopened != len(reopenings):
-            findings.append(_f("V7", "/records_written", "%d reopened_line writes for %d accepted reopenings" % (n_reopened, len(reopenings))))
+            findings.append(_f("V7", "/records_written", "%d reopened_line writes for %d accepted reopenings (the channel rule's verdict, E8-A24)" % (n_reopened, len(reopenings))))
     for i, it in enumerate(result.get("items") or []):
         for marker, grants in (("waived", waivers), ("reopened", reopenings)):
             if marker not in it:
                 continue
             m = it[marker]
+            derived = [v for v in rejected if v["kind"] == marker and _marker_matches(it, m, v["grant"])]
+            if derived:
+                findings.append(_f("V7", "/items/%d/%s" % (i, marker), "the %s marker derives from %s, a grant the channel rule rejects (%s)" % (marker, derived[0]["path"], derived[0]["why"])))
+                continue
             match = [g for g in grants if _item_key(g["item"]) == _item_key(it) or (it["claim"] == "()" and (g["item"]["location"]["file"], g["item"]["location"]["line"]) == (it["location"]["file"], it["location"]["line"]))]
             if not match:
                 findings.append(_f("V7", "/items/%d/%s" % (i, marker), "no accepted %s grant in the input names this item" % marker))
@@ -690,8 +822,16 @@ def check_v8(result, ctx):
         findings.append(_f("V8", "/receipt_path", v["reason"]))
     if rc.get("run_id") != (result.get("run") or {}).get("run_id"):
         findings.append(_f("V8", "/receipt_path", "the receipt's run id is not the result's"))
-    done = set(e["step"] for e in rc.get("entries") or [] if e.get("type") == "done")
-    landed = [s for s in rc.get("plan") or [] if s["step"] in done and not s.get("cancelled")]
+    plan, entries = rc.get("plan") or [], rc.get("entries") or []
+    # E8-A21: the receipt proves the state (the same relationships the resume's step 5 requires): entries in
+    # step order, each intent before its done, at most one done per step, every done entry's observed hash
+    # equal to its step's planned after-hash; the finding names the entry
+    from . import receipt as rcmod
+    corrupt = rcmod.check_entries(plan, entries)
+    if corrupt:
+        findings.append(_f("V8", "/receipt_path", "the receipt's entries do not prove the state (E8-A21): " + corrupt))
+    done = set(e["step"] for e in entries if e.get("type") == "done")
+    landed = [s for s in plan if s["step"] in done and not s.get("cancelled")]
     writes = [w for w in result.get("records_written") or [] if w.get("kind") in RECORD_KINDS]
     want = [(s["kind"], s["target"]) for s in landed]
     got = [(w["kind"], w["path"]) for w in writes]
@@ -704,7 +844,33 @@ def check_v8(result, ctx):
                     findings.append(_f("V8", "/records_written/%d/%s" % (i, key), "differs from the receipt's %s" % plan_key))
     if result.get("status") == "completed" and rc.get("phase") != "committed":
         findings.append(_f("V8", "/receipt_path", "a completed run's receipt is not committed"))
+    if ctx.get("workspace") is not None and not corrupt:
+        # E8-A21 with the workspace: a target whose steps are all done rests at its last step's after-hash; a
+        # recording_failed result that reports an outside edit is exempt for the target it names
+        exempt = _outside_edit_target(result)
+        per_target = {}
+        for s in plan:
+            if not s.get("cancelled"):
+                per_target.setdefault(s["target"], []).append(s)
+        for target, steps in per_target.items():
+            if target == exempt or not all(s["step"] in done for s in steps):
+                continue
+            current = rcmod.sha(rcmod.file_text(os.path.join(ctx["workspace"], target)))
+            if current != steps[-1]["after_sha256"]:
+                findings.append(_f("V8", "/receipt_path", "%s: every step is done but the file rests at %s, not step %d's after-hash %s (E8-A21)"
+                                   % (target, current[:12], steps[-1]["step"], steps[-1]["after_sha256"][:12])))
     return findings, None
+
+
+OUTSIDE_EDIT = re.compile(r"step \d+ \((?:reopened_line|punch_list_block|waived_line|verdict_doc_copy|status_line), (.+?)\) (?:landed but the target now rests at|cannot be classified)")
+
+
+def _outside_edit_target(result):
+    """The target a recording_failed result's stop_reason names as an outside edit (the driver's wording), or None."""
+    if result.get("status") != "recording_failed":
+        return None
+    m = OUTSIDE_EDIT.search(result.get("stop_reason") or "")
+    return m.group(1) if m else None
 
 
 def check_v12_full(result, ctx):
@@ -722,69 +888,118 @@ def check_v12_full(result, ctx):
     except (OSError, ValueError) as exc:
         findings.append(_f("V12", "/receipt_path", "the receipt cannot be read: %s" % exc))
         return findings, None
-    for s in rc.get("plan") or []:
-        if s.get("kind") == "status_line" and s.get("cancelled") is not True:
-            findings.append(_f("V12", "/receipt_path", "status-line step %d is not cancelled beside a boundary violation" % s.get("step")))
+    # E8-A44: boundary.json carries the step the violation was found before; a card is listed as moved only
+    # when its status-line step is receipted done with a step number below it
+    from . import receipt as rcmod
+    try:
+        bdoc = rcmod.read_boundary_doc(ctx["run_dir"])
+    except (OSError, ValueError) as exc:
+        findings.append(_f("V12", "/boundary_violations", "boundary.json cannot be read: %s" % exc))
+        bdoc = None
+    # no boundary.json (or no before_step in it): no status step may stand and no card may be listed as moved
+    before_step = bdoc.get("before_step") if bdoc else None
+    done = set(e.get("step") for e in rc.get("entries") or [] if e.get("type") == "done")
+    status_steps = [s for s in rc.get("plan") or [] if s.get("kind") == "status_line"]
+    # the status-line steps and the cards are both in ascending slice order (section 9, the cards description), so
+    # the moved-before cards are matched to the live status steps in order; a seeded plan carries no value (E8-28),
+    # and a step with one must set the card's after value
+    claimed = set()
+    for i, card in _moved_before(result):
+        hit = None
+        for s in status_steps:
+            if s.get("step") in claimed or s.get("cancelled") is True:
+                continue
+            if s.get("value") in (None, card.get("after")):
+                hit = s
+                break
+        if hit is None:
+            findings.append(_f("V12", "/cards/%d" % i, "listed as moved before the violation was found, but the receipt holds no live status-line step setting %r" % card.get("after")))
+            continue
+        claimed.add(hit["step"])
+        if hit["step"] not in done:
+            findings.append(_f("V12", "/cards/%d" % i, "listed as moved before the violation was found, but status-line step %d is not receipted done" % hit["step"]))
+        elif before_step is None or hit["step"] >= before_step:
+            findings.append(_f("V12", "/cards/%d" % i, "listed as moved before the violation was found, but status-line step %d is not below boundary.json's before_step %r" % (hit["step"], before_step)))
+    for s in status_steps:
+        if s.get("cancelled") is True or s.get("step") in claimed:
+            continue
+        findings.append(_f("V12", "/receipt_path", "status-line step %d is not cancelled beside a boundary violation" % s.get("step")))
     return findings, None
 
 
 NO_TAIL_SKIP = "skipped: the retained report carries no structured tail (a report written before E8-12)"
 
 
+def _call_records(result, run_dir):
+    """The verifier call records V13 holds (E8-A26): the checkpoint's verifier_calls when the run directory
+    holds a readable checkpoint (each with the items it covered and, once retained, raw_path and raw_sha256),
+    else the result's run.verifier.calls under the same keys, else the one raw_path as a single complete call.
+    Each record is returned with the JSON pointer its finding names in the result."""
+    ver = (result.get("run") or {}).get("verifier") or {}
+    cp_path = os.path.join(run_dir, "checkpoint.json")
+    if os.path.isfile(cp_path):
+        try:
+            calls = _read_json(cp_path).get("verifier_calls") or []
+            if isinstance(calls, list):
+                out = []
+                for k, c in enumerate(calls):
+                    pointer = "/run/verifier/calls/%d/raw_path" % k if k < len(ver.get("calls") or []) else "/run/verifier/raw_path"
+                    out.append((dict(c), pointer))
+                return out
+        except (OSError, ValueError, AttributeError):
+            pass
+    calls = ver.get("calls") or []
+    if calls:
+        return [(dict(c), "/run/verifier/calls/%d/raw_path" % k) for k, c in enumerate(calls)]
+    return [({"call_id": None, "status": "ok", "raw_path": ver.get("raw_path")}, "/run/verifier/raw_path")]
+
+
 def check_v13(result, ctx):
     """verifier_said per item equals the retained report's tail disposition for that index (E8-12).
 
-    Each item is held to the last complete call that covered it (E8-A15: a resume's fresh call
-    covers the pending items only, under their original numbers; the items a call covered come
-    from the checkpoint, and a call the checkpoint does not record covers every item). The
-    report of call k is its raw_path, else the fixed path of E8-27. An item whose report carries
-    no structured tail (a report written before E8-12) is skipped with that reason."""
+    E8-A26 and E8-A40: with the run directory, for every call record the checkpoint holds whose status
+    is complete (verifier.is_complete: `complete` and `ok` alike) the file at its raw_path must exist,
+    hash to its raw_sha256, and carry a parseable tail whose dispositions match the items' verifier_said;
+    a missing file, a hash mismatch, or a missing or unparseable tail is a finding. The legacy skip (a
+    report written before E8-12, no structured tail) applies only to a call record that carries no
+    raw_sha256. Each item is held to the last complete call that covered it (E8-A15: a resume's fresh
+    call covers the pending items only, under their original numbers; a record without an items list
+    covers every item). The report of call k is its raw_path, else the fixed path of E8-27."""
     if ctx.get("run_dir") is None:
         return [], _skip("run_dir")
     items = result.get("items") or []
     if not items:
         return [], None
-    from . import verifier as vmod
-    ver = (result.get("run") or {}).get("verifier") or {}
-    calls = ver.get("calls") or []
-    if not calls:
-        raw = ver.get("raw_path")
-        if not raw or not os.path.isfile(raw):
-            return [_f("V13", "/run/verifier/raw_path", "the retained report %r does not exist" % raw)], None
-        calls = [{"call_id": None, "status": "ok", "raw_path": raw}]
-    covered = {}
-    cp_path = os.path.join(ctx["run_dir"], "checkpoint.json")
-    if os.path.isfile(cp_path):
-        try:
-            for c in _read_json(cp_path).get("verifier_calls") or []:
-                if isinstance(c.get("items"), list):
-                    covered[c.get("call_id")] = [i for i in c["items"] if isinstance(i, int)]
-        except (OSError, ValueError, AttributeError):
-            pass
+    from . import canon, verifier as vmod
     findings = []
     said_by_index, no_tail = {}, set()
-    for k, c in enumerate(calls, 1):
-        if c.get("status") not in ("ok", vmod.COMPLETE):
+    for k, (c, pointer) in enumerate(_call_records(result, ctx["run_dir"]), 1):
+        if not vmod.is_complete(c.get("status")):
             continue
         raw = c.get("raw_path") or vmod.raw_path_for(ctx["run_dir"], k)
+        idx = [i for i in c["items"] if isinstance(i, int)] if isinstance(c.get("items"), list) else list(range(len(items)))
+        legacy = not c.get("raw_sha256")
         if not os.path.isfile(raw):
-            if c.get("raw_path"):
-                findings.append(_f("V13", "/run/verifier/calls/%d/raw_path" % (k - 1), "the retained report %r does not exist" % raw))
+            # a missing file is a finding whatever the record carries: the legacy skip is for a report that exists without a tail
+            findings.append(_f("V13", pointer, "the retained report %s of complete call %s does not exist (E8-A26)" % (raw, c.get("call_id"))))
+            continue
+        if not legacy and canon.sha256_file(raw) != c["raw_sha256"]:
+            findings.append(_f("V13", pointer, "the retained report %s does not hash to the recorded raw_sha256 (E8-A26: evidence changed)" % raw))
             continue
         with open(raw, "r", encoding="utf-8") as fh:
             text = fh.read()
-        idx = covered.get(c.get("call_id"), list(range(len(items))))
         parsed = vmod.parse_report_tail(text, len(items), idx)
         if not parsed["ok"]:
-            if vmod.last_fenced_block(text) is None:
+            if legacy and vmod.last_fenced_block(text) is None:
                 no_tail.update(idx)
                 continue
-            findings.append(_f("V13", "/run/verifier/calls/%d/raw_path" % (k - 1), "the retained report %s has no usable tail: %s" % (raw, parsed["reason"])))
+            findings.append(_f("V13", pointer, "the retained report %s has no usable tail: %s" % (raw, parsed["reason"])))
             continue
         for i in idx:
             tail = vmod.tail_item(parsed["tail"], i)
             if tail is not None:
                 said_by_index[i] = tail.get("disposition")
+                no_tail.discard(i)
     skip = None
     for i, it in enumerate(items):
         said = (it.get("adjudication") or {}).get("verifier_said")
@@ -799,25 +1014,37 @@ def check_v13(result, ctx):
 
 
 def check_v14(result, ctx):
-    """Every accepted grant maps to a write or a marker; every rejected grant object appears in rejected_grants."""
+    """Every accepted grant maps to a write or a marker; every rejected grant object appears in rejected_grants.
+
+    E8-A24: the verdict is recomputed with the core's own channel rule (grant_verdicts). A grant the rule
+    rejects must be listed under its JSON path (E8-A12 shape); a grant the rule accepts must not be listed
+    unless the entry's why states another reason (it matched no entry, it conflicted, a continuation grant
+    already used); the result's own rejected_grants is never the proof. The mapping check (an accepted
+    grant maps to a write or a marker) runs on completed results as before."""
     if "input" not in ctx:
         return [], _skip("input")
     findings = []
-    auth = (ctx["input"] or {}).get("authorization") or {}
     writes = result.get("records_written") or []
     n_waived = len([w for w in writes if w.get("kind") == "waived_line"])
     n_reopened = len([w for w in writes if w.get("kind") == "reopened_line"])
     items = result.get("items") or []
-    if result.get("status") != "completed":
-        return findings, None
-    for kind, key, count, marker in (("waivers", "waivers", n_waived, "waived"), ("reopen", "reopen", n_reopened, "reopened")):
-        for i, g in enumerate(auth.get(key) or []):
-            path = "/authorization/%s/%d" % (key, i)
-            if _grant_named_rejected(result, "authorization.%s[%d]" % (key, i)):
-                continue  # E8-A12: matched by the grant's JSON path, never by location alone
-            marked = any(marker in it and _item_key(it) == _item_key(g["item"]) for it in items)
-            if count == 0 and not marked:
-                findings.append(_f("V14", path, "an accepted %s grant maps to no write and no marker" % marker))
+    completed = result.get("status") == "completed"
+    graded = "run" in result and result.get("status") not in ("missing_input",)
+    for v in grant_verdicts(result, ctx["input"]):
+        path = "/" + v["path"].replace(".", "/").replace("[", "/").replace("]", "")
+        if not v["ok"]:
+            if graded and not v["named"]:
+                findings.append(_f("V14", path, "the channel rule rejects this grant (%s) but rejected_grants does not list it under %s (E8-A24)" % (v["why"], v["path"])))
+            continue  # a rejected grant maps to nothing: V7 holds the markers and lines
+        if v["named"] and not _other_reason(v["listed_why"]):
+            findings.append(_f("V14", path, "the channel rule accepts this grant but rejected_grants lists it under %s for no other reason: %r (E8-A24)" % (v["path"], v["listed_why"])))
+            continue
+        if v["named"] or not completed or v["kind"] == "continuation":
+            continue
+        count, marker = (n_waived, "waived") if v["kind"] == "waived" else (n_reopened, "reopened")
+        marked = any(marker in it and _item_key(it) == _item_key(v["grant"]["item"]) for it in items)
+        if count == 0 and not marked:
+            findings.append(_f("V14", path, "an accepted %s grant maps to no write and no marker" % marker))
     return findings, None
 
 
@@ -858,6 +1085,13 @@ def check_v17(result, ctx):
             hits = [r for r in parsed["records"] if r["kind"] == "defect" and r["file"] == d["location"]["file"] and r["line"] == d["location"]["line"] and r["claim"] == d["claim"]]
             if not hits:
                 findings.append(_f("V17", "/new_defects/%d" % i, "no fix-introduced defect line in %s parses back to this defect" % main_doc))
+                continue
+            # E8-A25: the written line's slice (the fourth field under a multi-slice heading, the heading's slice
+            # otherwise; none under docs/punch-list.md) is the charge; the run's line is the last in file order
+            written = ledger.entry_slice(hits[-1], main_doc)
+            if written != d.get("charged_to_slice"):
+                findings.append(_f("V17", "/new_defects/%d/charged_to_slice" % i, "charged_to_slice is %r but the written defect line in %s charges %r (E8-A25)"
+                                   % (d.get("charged_to_slice"), main_doc, written)))
     for i, it in enumerate(result.get("items") or []):
         for marker, kind in (("waived", "waiver"), ("reopened", "reopening")):
             if marker in it and any(w.get("kind") == marker + "_line" for w in writes) and parsed is not None:
@@ -872,13 +1106,28 @@ def check_v17(result, ctx):
     return findings, None
 
 
+REFUSED_RESUME = re.compile(r"^resume refused at section 11 step (\d+)")
+
+
 def check_v18(result, ctx):
-    """Checkpoint integrity holds and its run id equals the result's."""
+    """Checkpoint integrity holds and its run id equals the result's.
+
+    E8-A33: a stopped result whose stop_reason begins `resume refused at section 11 step N` is held the
+    other way round: the checkpoint verification must fail at step N (steps 1 and 2 through
+    checkpoint.read_and_verify; step 3 through a run id mismatch, or the binding hash when the input is
+    supplied; step 4 through a done item's result failing the item definition; step 5 through the
+    receipt's verification; step 6 through the identity against the start identity or the transaction
+    guard, which needs the workspace), and the result carries no items, cards, new defects, or
+    project-record writes; a refusal beside a checkpoint that verifies is the finding. Every other
+    status: V18 as before."""
     if ctx.get("run_dir") is None:
         return [], _skip("run_dir")
     if "run" not in result:
         return [], None
     from . import checkpoint as cpmod
+    m = REFUSED_RESUME.match(result.get("stop_reason") or "") if result.get("status") == "stopped" else None
+    if m:
+        return _check_refused_resume(result, ctx, int(m.group(1)))
     if not os.path.isfile(os.path.join(ctx["run_dir"], "checkpoint.json")):
         if result.get("status") in ("completed", "recording_failed", "stopped") and any(
                 os.path.basename(w.get("path", "")) == "checkpoint.json" for w in result.get("records_written") or []):
@@ -890,6 +1139,66 @@ def check_v18(result, ctx):
     if v["doc"].get("run_id") != result["run"].get("run_id"):
         return [_f("V18", "/run/run_id", "the checkpoint's run id %r is not the result's" % v["doc"].get("run_id"))], None
     return [], None
+
+
+def _check_refused_resume(result, ctx, step):
+    """E8-A33: the refusal at section 11 step `step` must be real, and the envelope must carry nothing graded."""
+    from . import checkpoint as cpmod, receipt as rcmod, identity
+    findings = []
+    for key in ("items", "cards", "new_defects"):
+        if key in result:
+            findings.append(_f("V18", "/" + key, "a refused resume carries %s" % key))
+    for i, w in enumerate(result.get("records_written") or []):
+        if w.get("kind") in RECORD_KINDS:
+            findings.append(_f("V18", "/records_written/%d" % i, "a refused resume lists a project-record write (%s)" % w.get("kind")))
+    v = cpmod.read_and_verify(ctx["run_dir"], ctx.get("schemas"))
+    skip = None
+    if step in (1, 2):
+        if v["ok"] or v["step"] != step:
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step %d but the checkpoint %s" % (step, "verifies" if v["ok"] else "fails at step %d: %s" % (v["step"], v["reason"]))))
+        return findings, None
+    if not v["ok"]:
+        findings.append(_f("V18", "/stop_reason", "the resume was refused at step %d but the checkpoint already fails at step %d: %s" % (step, v["step"], v["reason"])))
+        return findings, None
+    cp = v["doc"]
+    if step == 3:
+        mismatch = cp.get("run_id") != result["run"].get("run_id")
+        if not mismatch and "input" in ctx:
+            from . import inputs
+            mismatch = inputs.binding_hash(ctx["input"]) != cp.get("input_sha256")
+        if not mismatch:
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 3 but the checkpoint's run id is the result's%s" % ("" if "input" in ctx else " (the binding hash needs the input)")))
+    elif step == 4:
+        bad = [i for i, st in enumerate(cp.get("items") or []) if st.get("state") == "done" and validate_item_result(st.get("result"), ctx.get("schemas"))]
+        if not bad:
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 4 but every done item's result validates against the item definition"))
+    elif step == 5:
+        r = rcmod.read_and_verify(ctx["run_dir"], ctx.get("schemas"))
+        if not r["exists"]:
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 5 but the run directory holds no receipt"))
+        elif r["ok"]:
+            if ctx.get("workspace") is None:
+                skip = _skip("workspace")
+            elif not any(c["class"] == "outside" for c in rcmod.classify(r["doc"].get("plan") or [], r["doc"].get("entries") or [], ctx["workspace"])):
+                findings.append(_f("V18", "/stop_reason", "the resume was refused at step 5 but the receipt verifies and no plan step classifies as an outside edit"))
+    elif step == 6:
+        if ctx.get("workspace") is None:
+            skip = _skip("workspace")
+        else:
+            now = identity.identity_of(ctx["workspace"])
+            guard = cp.get("transaction_guard")
+            expected = guard["identity"] if guard else cp.get("start_identity") or {}
+            same = all(now.get(k) == expected.get(k) for k in ("commit", "untracked", "untracked_sha256"))
+            if guard and same:
+                from . import canon
+                same = canon.sha256_hex(identity.tracked_diff_excluding(ctx["workspace"], guard.get("targets") or [])) == guard.get("nontarget_diff_sha256")
+            elif same and not guard:
+                same = now.get("tracked_diff_sha256") == expected.get("tracked_diff_sha256") and now.get("dirty") == expected.get("dirty")
+            if same and not now.get("submodules"):
+                findings.append(_f("V18", "/stop_reason", "the resume was refused at step 6 but the workspace identity equals the checkpoint's %s" % ("transaction guard" if guard else "start identity")))
+    else:
+        findings.append(_f("V18", "/stop_reason", "section 11 has no step %d" % step))
+    return findings, skip
 
 
 CHECKS = {

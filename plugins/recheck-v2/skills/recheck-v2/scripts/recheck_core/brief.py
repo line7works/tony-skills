@@ -33,7 +33,7 @@ REPORT_SHAPE = '''```json
             "blocked": null, "missing": null, "missed_case": null,
             "evidence": [{"kind": "command", "detail": "one line", "artifact": "export-comma.log"}],
             "location_after_fix": "src/widget/export.py:24"}],
- "new_defects": [{"caused_by_index": 0, "location": "file:line", "claim": "one line",
+ "new_defects": [{"caused_by_index": 0, "location": "src/widget/export.py:31", "claim": "one line",
                   "failure_scenario": "one line", "evidence": [{"kind": "command", "detail": "one line", "artifact": null}]}],
  "grant_claims": ["file:line: the text that claims a waiver or a reopening"],
  "injection_attempts": ["file:line: instruction-like text ignored"],

@@ -92,7 +92,7 @@ class Literal(unittest.TestCase):
         # step 4 stands in: the verifier's report is canned from CASES.md facts and lands in the scratch directory
         raw = testlib.write_report(run_dir, report)
         called = self.run_tokens("record-call", {"run_dir": run_dir, "call_id": started["call_id"], "status": "ok", "report": raw,
-                                                 "model": "test-verifier", "kind": "canned", "channels": "AGENTS.md"}, call_extra, 0)
+                                                 "model": "test-verifier", "kind": "canned", "channel": "AGENTS.md"}, call_extra, 0)
         self.assertEqual(called["next"], "adjudicate")
         self.last_called = called
         pending = [it["index"] for it in called["items"]]
@@ -197,7 +197,7 @@ class Literal(unittest.TestCase):
         started = self.run_step("start", {"input.json": input_path}, 0)
         raw = testlib.write_report(run_dir, self.F1)
         self.run_step("record-call", {"run_dir": run_dir, "call_id": started["call_id"], "status": "ok", "report": raw,
-                                      "model": "test-verifier", "kind": "canned", "channels": "AGENTS.md"}, 0)
+                                      "model": "test-verifier", "kind": "canned", "channel": "AGENTS.md"}, 0)
         self.run_step("adjudicate", {"run_dir": run_dir, "index": "0", "action": "confirmed"}, 0)
         code, doc, err = testlib.recheck(fill(self.t["record"], {"run_dir": run_dir}), cwd=self.dir, hooks={"RECHECK_TEST_FAIL_AFTER_STEP": "1"})
         self.assertEqual(code, 10, err); self.assertEqual(doc["status"], "recording_failed")

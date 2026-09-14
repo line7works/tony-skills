@@ -95,7 +95,7 @@ def verifier_block(checkpoint_doc, sidecar, run_dir):
     kind, model, injected, refused = "unknown", "unknown", [], []
     raw_path = None
     for c in calls:
-        entry = {"call_id": c["call_id"], "status": "ok" if c["status"] == vmod.COMPLETE else c["status"]}
+        entry = {"call_id": c["call_id"], "status": "ok" if vmod.is_complete(c["status"]) else c["status"]}
         if c.get("raw_path"):
             entry["raw_path"] = c["raw_path"]
         if c.get("raw_sha256"):
@@ -104,9 +104,12 @@ def verifier_block(checkpoint_doc, sidecar, run_dir):
         m = meta.get(c["call_id"], {})
         kind = m.get("kind") or kind
         model = m.get("model") or model
-        injected = m.get("injected") or injected
+        # E8-A35: every value lands; channels accumulate across calls, each once
+        for name in m.get("injected") or []:
+            if name not in injected:
+                injected.append(name)
         refused = refused + list(m.get("refused") or [])
-        if c["status"] == vmod.COMPLETE and c.get("raw_path"):
+        if vmod.is_complete(c["status"]) and c.get("raw_path"):
             raw_path = c["raw_path"]
     if raw_path is None:
         with_raw = [c for c in calls if c.get("raw_path")]
@@ -345,7 +348,12 @@ def chat_block(result, extra=None):
     waived = len([it for it in items if "waived" in it])
     bottom = "%d of %d items fixed, %d still open, %d waived, %d fix-introduced defect(s)." % (fixed, len(items), open_count, waived, len(defects))
     if result.get("boundary_violations"):
-        bottom += " A boundary violation froze every card; the run is not clear whatever the dispositions."
+        moved = [c["slice"] for c in cards if c.get("before") != c.get("after")]
+        if moved:
+            bottom += (" A boundary violation froze every remaining card; %s moved before it was found (E8-A44); "
+                       "the run is not clear whatever the dispositions." % ", ".join(moved))
+        else:
+            bottom += " A boundary violation froze every card; the run is not clear whatever the dispositions."
     else:
         bottom += " Cards: %s." % status_text
     lines += ["Bottom line: %s" % bottom, ""]

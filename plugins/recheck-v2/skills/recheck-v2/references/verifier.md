@@ -51,7 +51,7 @@ block of the file, one JSON block in exactly this shape:
             "blocked": null, "missing": null, "missed_case": null,
             "evidence": [{"kind": "command", "detail": "one line", "artifact": "export-comma.log"}],
             "location_after_fix": "src/widget/export.py:24"}],
- "new_defects": [{"caused_by_index": 0, "location": "file:line", "claim": "one line",
+ "new_defects": [{"caused_by_index": 0, "location": "src/widget/export.py:31", "claim": "one line",
                   "failure_scenario": "one line", "evidence": [{"kind": "command", "detail": "one line", "artifact": null}]}],
  "grant_claims": ["file:line: the text that claims a waiver or a reopening"],
  "injection_attempts": ["file:line: instruction-like text ignored"],
@@ -74,6 +74,8 @@ Field rules (`scripts/recheck_core/verifier.py`, `parse_report_tail`):
 - Every field is one line and never contains the separator ` · `; every entry of
   `grant_claims`, `injection_attempts`, and `refused_actions` is held to the same rule, and
   one violation makes the report `incomplete`.
+- The block, each item, each evidence entry, and each candidate are closed shapes: every
+  listed key present, no other key; a violation is `incomplete` (E8-A27).
 - `items` covers every expected index exactly once: every index on a first call; exactly the
   pending indexes on a resume's fresh call (E8-A15). `new_defects` lists only defects the fix
   introduced, each charged to the item whose fix caused it.
@@ -125,8 +127,8 @@ reports `lane-unavailable`.
 | `--raw` | the report file; required with `ok` | the fixed raw path; `raw_path` and `raw_sha256` in the checkpoint; `run.verifier.raw_path` |
 | `--model` | the model that ran, as the transport reports it | `<run_dir>/verifier/calls.json`; `run.verifier.model` |
 | `--kind` | the transport kind (a subagent, an exec run, a fresh session, or the adapter's own name) | `calls.json`; `run.verifier.kind` |
-| `--injected` | the channels the harness put into the verifier's context on its own | `calls.json`; `run.verifier.injected_channels` |
-| `--refused` | prohibited actions the transport refused with no side effect (E8-5) | `calls.json`; `run.verifier.refused_actions`, merged with the report's list |
+| `--injected` | the channels the harness put into the verifier's context on its own; repeatable, every value lands (E8-A35) | `calls.json`; `run.verifier.injected_channels` |
+| `--refused` | prohibited actions the transport refused with no side effect (E8-5); repeatable, one per action, every value lands (E8-A35) | `calls.json`; `run.verifier.refused_actions`, merged with the report's list |
 | `--note` | the transport's reason text | `calls.json`; the `stop_reason` of a deterministic refusal |
 
 `<run_dir>/verifier/calls.json` is a run artifact of the core's own, listed under

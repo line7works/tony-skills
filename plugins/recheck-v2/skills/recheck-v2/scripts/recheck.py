@@ -59,10 +59,19 @@ Partial effects a failed command may leave: `start` interrupted after validation
 directory with input.json and possibly checklist.md and a seq-0 checkpoint (a new run under the
 same id is then refused as reused; use resume). `record` interrupted inside the transaction
 leaves receipt.json naming what landed (status recording_failed when the failure was caught;
-otherwise the checkpoint says recording) and the workspace at a receipted step hash; `resume`
-classifies every step against the virtual state and completes the rest without a duplicate
-append. A checkpoint or receipt rewrite interrupted between the log line and the rename leaves
-the one tolerated state (section 11), dropped at the next resume.
+otherwise the checkpoint says recording) and the workspace at a receipted step hash; the
+checkpoint carries the transaction guard from the moment the transaction began (E8-A45), so a
+resume compares the identity and the non-target diff with it rather than with the start;
+`resume` classifies every step against the virtual state and completes the rest without a
+duplicate append. A checkpoint or receipt rewrite interrupted between the log line and the
+rename leaves the one tolerated state (section 11), dropped at the next resume.
+
+The stopped phase (E8-A20): a phase command that delivers stopped, verifier_unavailable,
+stale_source, or missing_input rewrites the checkpoint at phase `stopped` with a `terminal`
+block (status, stop_reason, resumable) before result.json; every later phase command returns
+{"next": "done", "status", "result", "chat", "reason"} with exit 10, writes nothing, and issues
+no call id; `resume` continues only a resumable stop (two verifier failures, an unavailable
+verifier) as a continuation with a fresh call and refuses every other at section 11 step 1.
 
 Every phase command is idempotent against the checkpoint: repeating a completed command reports
 the current phase and changes nothing (a call id already recorded, an item already done, a
@@ -81,6 +90,7 @@ Test hooks (honored only with RECHECK_TEST=1 in the environment):
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -232,10 +242,36 @@ class Run:
 
     # ---- terminal deliveries ----
 
+    def artifact_inventory(self, extra=()):
+        """E8-A31: every file under run_dir exactly once, result.json and chat.md excluded: the artifacts
+        the core wrote by name in their order (extra appended), then every other regular file in sorted
+        relative-path order."""
+        final = {os.path.realpath(self.path("result.json")), os.path.realpath(self.path("chat.md"))}
+        out, seen = [], set()
+        for p in list(self.artifacts) + list(extra):
+            rp = os.path.realpath(p)
+            if rp in seen or rp in final:
+                continue
+            seen.add(rp)
+            out.append(p)
+        others = []
+        if self.run_dir and os.path.isdir(self.run_dir):
+            for root, dirs, files in os.walk(self.run_dir):
+                dirs.sort()
+                for name in files:
+                    p = os.path.join(root, name)
+                    rp = os.path.realpath(p)
+                    if rp in seen or rp in final:
+                        continue
+                    seen.add(rp)
+                    others.append(p)
+        others.sort(key=lambda p: os.path.relpath(p, self.run_dir))
+        return out + others
+
     def deliver(self, doc, chat_extra=None, extra_artifacts=None, keep_existing=False):
         """Write result.json and chat.md, validating first; return (document, path, chat).
         keep_existing: a re-assembly never overwrites a valid result.json with a stopped one."""
-        arts = list(self.artifacts) + list(extra_artifacts or [])
+        arts = self.artifact_inventory(extra_artifacts or [])
         doc["records_written"] = rmod.artifact_writes(arts + [self.path("result.json"), self.path("chat.md")]) \
             if "records_written" not in doc else doc["records_written"]
         final, path, chat = rmod.deliver(doc, self.run_dir, self.schemas, input_doc=self.doc, workspace=self.workspace,
@@ -248,11 +284,23 @@ class Run:
             out = {"protocol_version": 1, "run": self.run_block(), "status": "stopped", "stop_reason": reason}
             if self.identity is not None and not reason.startswith("unsupported: submodules:"):
                 out["source_identity"] = self.source_identity()
-            out["records_written"] = rmod.artifact_writes(arts + list(extra) + [self.path("result.json"), self.path("chat.md")])
+            out["records_written"] = rmod.artifact_writes(self.artifact_inventory(list(arts) + list(extra)) + [self.path("result.json"), self.path("chat.md")])
             return out
         return build
 
-    def terminal(self, status, stop_reason=None, with_identity=True, checklist_count=None, extra=None, chat_extra=None, verifier=None):
+    def mark_terminal(self, status, stop_reason, resumable):
+        """E8-A20: a phase command that holds a checkpoint ends the phases before result.json is written:
+        the checkpoint is rewritten with phase stopped and the terminal block. completed and
+        recording_failed are outcomes, not stops, and a run without a checkpoint has nothing to mark."""
+        if self.cp is None or status in ("completed", "recording_failed"):
+            return
+        self.cp.doc["phase"] = "stopped"
+        self.cp.doc["terminal"] = {"status": status, "stop_reason": stop_reason or "", "resumable": bool(resumable)}
+        self.cp.save()
+
+    def terminal(self, status, stop_reason=None, with_identity=True, checklist_count=None, extra=None, chat_extra=None, verifier=None,
+                 resumable=None):
+        """resumable (E8-A20): true only for the two-verifier-failures stop and for verifier_unavailable."""
         doc = {"protocol_version": 1, "run": self.run_block(verifier=verifier, with_session=verifier is not None), "status": status}
         if with_identity and self.identity is not None:
             doc["source_identity"] = self.source_identity()
@@ -264,12 +312,14 @@ class Run:
             doc["stop_reason"] = stop_reason
         if extra:
             doc.update(extra)
+        self.mark_terminal(status, stop_reason, status == "verifier_unavailable" if resumable is None else resumable)
         final, path, chat = self.deliver(doc, chat_extra)
         raise Stop({"next": "done", "status": final["status"], "result": path, "question": None, "chat": chat}, EXIT_TERMINAL)
 
     def missing(self, fields, ambiguity, question=None):
         doc = inputs.envelope(self.doc, fields, ambiguity, question)
         doc["run"] = self.run_block()
+        self.mark_terminal("missing_input", "missing: %s%s" % (", ".join(fields), ("; " + "; ".join(ambiguity)) if ambiguity else ""), False)
         final, path, chat = self.deliver(doc)
         raise Stop({"next": "done", "status": "missing_input", "result": path,
                     "question": final.get("missing_input", {}).get("question"), "chat": chat}, EXIT_TERMINAL)
@@ -323,7 +373,7 @@ def validate_or_envelope(doc, schemas, root):
     if errors:
         fields = inputs.schema_fields(errors, doc, schemas)
         amb = ["the payload failed schema validation: " + "; ".join("%s: %s" % (e["path"] or "$", e["message"]) for e in errors[:6])]
-        env = inputs.envelope(doc if isinstance(doc, dict) else {}, fields, amb)
+        env = inputs.envelope(doc if isinstance(doc, dict) else {}, fields, amb, schema_errors=errors)
         env["missing_input"].pop("question", None)
         raise Stop({"next": "done", "status": "missing_input", "result": None, "question": None, "chat": None, "document": env}, EXIT_TERMINAL)
     violations = inputs.path_rules(doc, identity.is_work_tree_root)
@@ -455,7 +505,13 @@ def cmd_start(args):
                         "review_sheet": sheet["verdict"], "session_wrote_fix": run.session_wrote_fix},
               "items": [{"state": "pending", "retries": 0} for _ in checklist], "new_defects": [], "verifier_calls": [],
               "continuations": 0, "artifacts": list(run.artifacts) + [run.path("checkpoint.json"), run.path("checkpoint.log")]}
-    run.cp = cpmod.Checkpoint.new(run.run_dir, cp_doc, schemas)
+    try:
+        run.cp = cpmod.Checkpoint.new(run.run_dir, cp_doc, schemas)
+    except cpmod.CheckpointError as exc:
+        # E8-A32: a first checkpoint that would not validate is missing input naming the field, never exit 1
+        field = checkpoint_error_field(str(exc))
+        run.missing([field], ["the first checkpoint would not validate: %s" % exc],
+                    "The record produces a checkpoint that does not validate at %s (%s); supply or confirm the record" % (field, exc))
     run.artifacts = list(run.cp.doc["artifacts"])
     run.cp.doc["phase"] = "verifying"
     run.cp.save()
@@ -465,7 +521,27 @@ def cmd_start(args):
                  "review_sheet": sheet["verdict"], "severity_bar": sheet["bar"], "rejected_grants": rejected}, 0)
 
 
+def checkpoint_error_field(message):
+    """The dotted field a CheckpointError's `checkpoint would not validate: <path> <message>` names
+    (E8-A32); `$` for the root."""
+    m = re.search(r"checkpoint would not validate: (\S*) ", message)
+    path = m.group(1) if m else ""
+    parts = [int(p) if p.isdigit() else p for p in path.split("/") if p]
+    return inputs.field_path(parts) or "$"
+
+
 # ---- loading a run from its directory (phase commands) --------------------------------------------
+
+def stopped_run_document(run_dir, cp_doc):
+    """E8-A20: every phase command on a stopped run returns the recorded outcome, writes nothing,
+    and issues no call id."""
+    term = cp_doc.get("terminal") or {}
+    status = term.get("status", "stopped")
+    result, chat = os.path.join(run_dir, "result.json"), os.path.join(run_dir, "chat.md")
+    return {"next": "done", "status": status, "result": result if os.path.isfile(result) else None,
+            "chat": chat if os.path.isfile(chat) else None,
+            "reason": "the run ended as %s: %s" % (status, term.get("stop_reason", ""))}
+
 
 def load_run(args, need_phase=None):
     root = validate.skill_root(args.skill_root)
@@ -484,6 +560,9 @@ def load_run(args, need_phase=None):
         cp, verdict = cpmod.load(run_dir, schemas)
     except cpmod.CheckpointError as exc:
         raise Usage("the checkpoint in %s cannot be used (%s)" % (run_dir, exc))
+    if cp.doc.get("phase") == "stopped":
+        # E8-A20: before any write, the tolerated-state drop included
+        raise Stop(stopped_run_document(run_dir, cp.doc), EXIT_TERMINAL)
     if verdict.get("tolerated"):
         cpmod.drop_last_log_line(cp.log_path)
     run = Run(root, schemas, doc, raw)
@@ -525,6 +604,13 @@ def verifier_block(run):
     return rmod.verifier_block(run.cp.doc, vmod.load_sidecar(run.run_dir), run.run_dir)
 
 
+def list_capture(run, capture, fixed):
+    """E8-A31: the adapter's original capture is a listed artifact when --raw pointed at a file under
+    run_dir/verifier/ other than the fixed raw path."""
+    if capture and os.path.realpath(capture) != os.path.realpath(fixed) and inputs.is_under(capture, vmod.scratch_dir(run.run_dir)):
+        run.add_artifact(capture)
+
+
 def cmd_record_call(args):
     run = load_run(args)
     cp = run.cp.doc
@@ -556,25 +642,28 @@ def cmd_record_call(args):
     run.add_artifact(vmod.sidecar_path(run.run_dir))
     call = {"call_id": args.call_id, "status": vmod.stored_status(args.status), "items": covered}
     reason = None
+    capture = os.path.abspath(args.raw) if args.raw and os.path.isfile(args.raw) else None
     if kind != vmod.COMPLETE:
         fixed = vmod.raw_path_for(run.run_dir, k)
         os.makedirs(os.path.dirname(fixed), exist_ok=True)
-        if args.raw and os.path.isfile(args.raw):
-            if os.path.realpath(args.raw) != os.path.realpath(fixed):
-                shutil.copyfile(args.raw, fixed)
+        if capture:
+            if os.path.realpath(capture) != os.path.realpath(fixed):
+                shutil.copyfile(capture, fixed)
         else:
             canon.atomic_write(fixed, ("call %s: status %s%s; no report retained by the transport\n" % (args.call_id, args.status, (": " + args.note) if args.note else "")).encode("utf-8"))
         call["raw_path"] = fixed
         call["raw_sha256"] = canon.sha256_file(fixed)
         run.add_artifact(fixed)
+        list_capture(run, capture, fixed)
     if kind == vmod.COMPLETE:
         fixed = vmod.raw_path_for(run.run_dir, k)
         os.makedirs(os.path.dirname(fixed), exist_ok=True)
-        if os.path.realpath(args.raw) != os.path.realpath(fixed):
-            shutil.copyfile(args.raw, fixed)
+        if os.path.realpath(capture) != os.path.realpath(fixed):
+            shutil.copyfile(capture, fixed)
         call["raw_path"] = fixed
         call["raw_sha256"] = canon.sha256_file(fixed)
         run.add_artifact(fixed)
+        list_capture(run, capture, fixed)
         with open(fixed, "r", encoding="utf-8") as fh:
             text = fh.read()
         # E8-A15: the tail must cover exactly the items this call was asked about (the pending ones)
@@ -606,9 +695,10 @@ def cmd_record_call(args):
         if any(cp["items"][i]["retries"] > 1 for i in covered):
             calls = cp["verifier_calls"]
             first, second = calls[-2] if len(calls) >= 2 else calls[-1], calls[-1]
+            # E8-A20: the two-failures stop is resumable (section 10's bounded recovery)
             run.terminal("stopped", "verifier call %s returned %s, the one re-send %s returned %s%s; nothing graded, no card moved, state on disk in run_dir"
                          % (first["call_id"], first["status"], second["call_id"], second["status"], (": " + reason) if reason else ""),
-                         checklist_count=len(cp["items"]), verifier=verifier_block(run))
+                         checklist_count=len(cp["items"]), verifier=verifier_block(run), resumable=True)
         next_id, _ = vmod.next_call_id(run.run_id, [c["call_id"] for c in cp["verifier_calls"]])
         return emit({"next": "verify", "run_dir": run.run_dir, "phase": "verifying", "call_id": next_id, "brief": run.path("checklist.md"),
                      "reason": "call %s returned %s%s; one re-send under a fresh call id" % (args.call_id, args.status, (": " + reason) if reason else "")}, 0)
@@ -812,9 +902,11 @@ def regen_for(run):
             for it, res in zip(checklist, results):
                 disp = "fixed" if res["disposition"] == "fixed" else "not fixed"
                 lines.append(ledger.render_recheck_line(it["severity"], it["location"]["file"], it["location"]["line"], it["claim"], disp, ledger.render_how(res["verification"])))
+            slices = ledger.sort_slices(it["slice"] for it in checklist)
             for d in cp["new_defects"]:
-                lines.append(ledger.render_defect_line(d["severity"], d["location"]["file"], d["location"]["line"], d["claim"], d["failure_scenario"]))
-            return ledger.render_block(run.run_date, ledger.sort_slices(it["slice"] for it in checklist), lines)
+                lines.append(ledger.render_defect_line(d["severity"], d["location"]["file"], d["location"]["line"], d["claim"], d["failure_scenario"],
+                                                       ledger.defect_slice_field(slices, d["charged_to_slice"])))
+            return ledger.render_block(run.run_date, slices, lines)
         # status_line: the mapping over the virtual state before the step
         before = _state_before(run, step)
         parsed = ledger.parse_document(before, document)
@@ -845,10 +937,21 @@ def slice_of_status_step(run, step):
     raise rcmod.ReceiptError("status-line step %d matches no slice's status line" % step["step"])
 
 
-def run_transaction(run, rc, plan, classes, pre_nontarget_diff):
+def cancel_status_steps(plan, rc, k):
+    """E8-A44: status step k and every later status-line step are cancelled; steps already done stand."""
+    for s in plan:
+        if s["kind"] == "status_line" and s["step"] >= k:
+            s["cancelled"] = True
+    for s in rc.doc["plan"]:
+        if s["kind"] == "status_line" and s["step"] >= k:
+            s["cancelled"] = True
+
+
+def run_transaction(run, rc, plan, classes, pre_nontarget_diff, pre_nontarget_sha256=None):
     """Apply the plan's pending steps in order with write-ahead entries (section 9).
     plan is the working copy (content, value, slice, landed live here); rc.doc["plan"] is the
-    receipt's stored plan, which only ever gains `cancelled`.
+    receipt's stored plan, which only ever gains `cancelled`. pre_nontarget_sha256 is the
+    transaction guard's digest of the pre-transaction non-target diff on a resume (E8-A45).
     Returns {"status": completed | recording_failed, "stop_reason", "violations", "cancelled"}."""
     cp = run.cp.doc
     run.plan = plan
@@ -884,22 +987,17 @@ def run_transaction(run, rc, plan, classes, pre_nontarget_diff):
             inject = os.path.join(run.workspace, os.environ.get("RECHECK_TEST_INJECT_FILE", ""))
             with open(inject, "w", encoding="utf-8") as fh:
                 fh.write(os.environ.get("RECHECK_TEST_INJECT_TEXT", ""))
-        # the boundary check before the first status-line step (section 9); a violation it finds, or one an
-        # earlier pass of this transaction recorded in boundary.json, cancels every status-line step
+        # E8-A44: the boundary check before EVERY status-line step (section 9); a violation it finds before
+        # step k, or one an earlier pass of this transaction recorded in boundary.json, cancels step k and
+        # every later status-line step; a status line already receipted done stands
         if step["kind"] == "status_line" and not cancelled:
-            if not violations and not getattr(run, "_boundary_checked", False):
-                run._boundary_checked = True
-                found, now = rcmod.boundary_violations(run.workspace, run.pre_transaction, plan, virtual, pre_nontarget_diff)
+            if not violations:
+                found, now = rcmod.boundary_violations(run.workspace, run.pre_transaction, plan, virtual, pre_nontarget_diff, pre_nontarget_sha256)
                 if found:
                     violations = found
-                    record_boundary(run, found)
+                    record_boundary(run, found, step["step"])
             if violations:
-                for s in plan:
-                    if s["kind"] == "status_line":
-                        s["cancelled"] = True
-                for s in rc.doc["plan"]:
-                    if s["kind"] == "status_line":
-                        s["cancelled"] = True
+                cancel_status_steps(plan, rc, step["step"])
                 rc.save()
                 cp["phase"] = "recording"
                 run.cp.save()
@@ -919,13 +1017,13 @@ def run_transaction(run, rc, plan, classes, pre_nontarget_diff):
         virtual[target] = observed
         step["landed"] = True
         last = rcmod.last_plan_step(rc.doc["plan"])
-        # E8-A11: a plan with no status-line step runs the boundary check before the done entry of its last step
-        if step["step"] == last and not has_status and not violations and not getattr(run, "_boundary_checked", False):
-            run._boundary_checked = True
-            found, now = rcmod.boundary_violations(run.workspace, run.pre_transaction, plan, virtual, pre_nontarget_diff)
+        # E8-A11 / E8-A44: a plan with no status-line step runs the boundary check before the done entry of its
+        # last step, the just-applied step's after-hash inside the allowed state
+        if step["step"] == last and not has_status and not violations:
+            found, now = rcmod.boundary_violations(run.workspace, run.pre_transaction, plan, virtual, pre_nontarget_diff, pre_nontarget_sha256)
             if found:
                 violations = found
-                record_boundary(run, found)
+                record_boundary(run, found, step["step"])
         if step["step"] == last:
             rc.doc["phase"] = "committed"
         rc.entry(step["step"], "done", observed)
@@ -938,11 +1036,12 @@ def run_transaction(run, rc, plan, classes, pre_nontarget_diff):
     return {"status": "completed", "stop_reason": None, "violations": violations, "cancelled": cancelled}
 
 
-def record_boundary(run, violations):
-    """Write run_dir/boundary.json and list it as a run artifact (E8-A11)."""
-    path = rcmod.write_boundary(run.run_dir, violations)
+def record_boundary(run, violations, before_step):
+    """Write run_dir/boundary.json with the step the check preceded and list it as a run artifact
+    (E8-A11, E8-A44)."""
+    path = rcmod.write_boundary(run.run_dir, violations, before_step)
     run.add_artifact(path)
-    log("boundary violation: " + "; ".join(violations))
+    log("boundary violation before step %d: %s" % (before_step, "; ".join(violations)))
 
 
 def assemble_and_deliver(run, rc, outcome, at_transaction, pre_cards, keep_existing=False):
@@ -976,8 +1075,8 @@ def assemble_and_deliver(run, rc, outcome, at_transaction, pre_cards, keep_exist
                 refused.append(r)
         if refused:
             ver["refused_actions"] = refused
-    writes = rmod.artifact_writes(list(run.artifacts) + [run.path("receipt.json"), run.path("receipt.log")]
-                                  if run.path("receipt.json") not in run.artifacts else list(run.artifacts))
+    # E8-A31: the named artifacts (receipt.json and receipt.log among them), then every other file under run_dir
+    writes = rmod.artifact_writes(run.artifact_inventory([run.path("receipt.json"), run.path("receipt.log")]))
     writes += rmod.step_writes(plan)
     writes += rmod.artifact_writes([run.path("result.json"), run.path("chat.md")])
     doc = {"protocol_version": 1, "run": run.run_block(verifier=ver, with_session=True), "status": outcome["status"]}
@@ -1005,7 +1104,8 @@ def assemble_and_deliver(run, rc, outcome, at_transaction, pre_cards, keep_exist
             after = ledger.slice_card(parsed_after, s)
             entry = {"slice": s, "before": before, "after": after}
             if before != after:
-                entry["reason"] = "the mapping of Appendix A over the slice's open set after this run"
+                # E8-A44: beside a violation, a card can have moved only through a status step done before it was found
+                entry["reason"] = "moved before the violation was found" if outcome["violations"] else "the mapping of Appendix A over the slice's open set after this run"
             elif outcome["violations"]:
                 entry["reason"] = "a boundary violation froze the card"
             cards.append(entry)
@@ -1038,18 +1138,44 @@ def cmd_record(args):
     plan_and_record(run)
 
 
+def reprove_retained_reports(run):
+    """E8-A26: before the plan, every retained report a done item was adjudicated from (a call recorded
+    complete, E8-A40, covering a done item) must exist at raw_path, hash to raw_sha256, and parse with
+    a tail; otherwise the run stops as `evidence changed: <path>` with no project write. A call record
+    without raw_sha256 (a checkpoint written before E8-12) retained nothing to re-prove."""
+    cp = run.cp.doc
+    done = set(i for i, it in enumerate(cp["items"]) if it["state"] == "done")
+    for call in cp["verifier_calls"]:
+        if not vmod.is_complete(call.get("status")) or not call.get("raw_path") or not call.get("raw_sha256"):
+            continue
+        if not any(i in done for i in call.get("items") or []):
+            continue
+        path = call["raw_path"]
+        ok = os.path.isfile(path) and canon.sha256_file(path) == call["raw_sha256"]
+        if ok:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+            ok = vmod.parse_report_tail(text, len(cp["items"]), call["items"])["ok"]
+        if not ok:
+            run.terminal("stopped", "evidence changed: %s" % path, checklist_count=len(cp["items"]), verifier=verifier_block(run))
+
+
 def plan_and_record(run):
-    """The planning path of `record` (section 9): the identity check, the plan, receipt.json,
-    the transaction, assembly. Raises Stop with the terminal document."""
+    """The planning path of `record` (section 9): the retained reports re-proved (E8-A26), the identity
+    check, the plan and its containment (E8-A19), the transaction guard (E8-A45), receipt.json, the
+    transaction, assembly. Raises Stop with the terminal document."""
     cp = run.cp.doc
     reread_appendix_a(run.root)
+    reprove_retained_reports(run)
     at_transaction = identity.identity_of(run.workspace)
     if identity.reported(at_transaction) != cp["start_identity"]:
         run.matched = False
         run.identity = cp["start_identity"]
+        reason = "the identity changed between the start of the run and the recording transaction; no record written"
         doc = {"protocol_version": 1, "run": run.run_block(verifier=verifier_block(run), with_session=True), "status": "stale_source",
                "source_identity": {"expected": _pin_from(cp["start_identity"]), "actual": identity.reported(at_transaction), "matched": False},
-               "stop_reason": "the identity changed between the start of the run and the recording transaction; no record written"}
+               "stop_reason": reason}
+        run.mark_terminal("stale_source", reason, False)  # E8-A20: the phases end before result.json is written
         final, path, chat = run.deliver(doc)
         raise Stop({"next": "done", "status": "stale_source", "result": path, "chat": chat, "question": None}, EXIT_TERMINAL)
     document = target_document(cp)
@@ -1058,9 +1184,16 @@ def plan_and_record(run):
     results = [it["result"] for it in cp["items"]]
     plan, states, cards_after, verdicts = rcmod.plan_transaction(run.workspace, document, run.run_date, cp["scope"]["checklist"], results,
                                                                  cp["new_defects"], waivers, reopenings, pre_cards)
+    # E8-A19: every target resolves inside the workspace when the plan is made; a violation ends the run as
+    # recording_failed with no project write (the receipt holds the plan and no entry: result.schema.json and V8
+    # require a receipt beside a recording_failed result, so it is created; nothing lands)
+    violation = rcmod.plan_containment(run.workspace, plan)
     targets = sorted(set(s["target"] for s in plan))
     pre_nontarget_diff = identity.tracked_diff_excluding(run.workspace, targets)
     run.pre_transaction = at_transaction
+    # E8-A45: the transaction guard, stored as the transaction begins (phase recording, before the receipt)
+    cp["transaction_guard"] = {"identity": identity.reported(at_transaction), "nontarget_diff_sha256": canon.sha256_hex(pre_nontarget_diff),
+                               "targets": targets}
     cp["phase"] = "recording"
     run.cp.save()
     rc = rcmod.Receipt.new(run.run_dir, run.run_id, plan, run.schemas)
@@ -1068,7 +1201,11 @@ def plan_and_record(run):
     run.add_artifact(run.path("receipt.log"))
     run.cp.save()
     classes = [{"step": s["step"], "class": "redo"} for s in plan]
-    outcome = run_transaction(run, rc, plan, classes, pre_nontarget_diff)
+    if violation is not None:
+        run.plan = plan
+        outcome = {"status": "recording_failed", "stop_reason": violation, "violations": [], "cancelled": False}
+    else:
+        outcome = run_transaction(run, rc, plan, classes, pre_nontarget_diff)
     if outcome["status"] == "completed":
         cp["phase"] = "committed"
         run.cp.save()
@@ -1081,6 +1218,102 @@ def _pin_from(start_identity):
 
 
 # ---- resume (section 11) --------------------------------------------------------------------------
+
+EMPTY_SHA256 = canon.sha256_hex(b"")
+
+
+def dirty_start(start):
+    """E8-A45: the start identity's fields say tracked or untracked content differed from the commit."""
+    return bool(start.get("dirty")) or bool(start.get("untracked")) or start.get("tracked_diff_sha256") != EMPTY_SHA256
+
+
+def active_input(doc):
+    """E8-A30: the presented input minus authorization.extra_continuation, authorization dropped when
+    that leaves it empty (the binding hash is unchanged by construction; the grant is never stored)."""
+    out = dict(doc)
+    auth = out.get("authorization")
+    if isinstance(auth, dict):
+        auth = {k: v for k, v in auth.items() if k != "extra_continuation"}
+        if auth:
+            out["authorization"] = auth
+        else:
+            out.pop("authorization", None)
+    return out
+
+
+def attach_unsaved(run, cp, schemas):
+    """The verified checkpoint as the run's state without a write (E8-A22: a refused or ended resume
+    changes no byte of the checkpoint or the receipt)."""
+    run.cp = cpmod.Checkpoint(run.run_dir, cp, schemas)
+    run.artifacts = cpmod.artifacts(cp, run.run_dir)
+    run.continuations = cp.get("continuations", 0)
+    run.run_date = cp.get("run_date") or run.run_date
+    run.session_wrote_fix = cp["scope"].get("session_wrote_fix", run.session_wrote_fix)
+    run.identity = cp["start_identity"]
+    run.matched = True
+
+
+def outside_reason(step, c):
+    if c.get("resting"):
+        return ("step %d (%s, %s) landed but the target now rests at %s, not the step's after hash %s (an outside edit after the step; needs the user's word)"
+                % (step["step"], step["kind"], step["target"], c["current"][:12], c["expected_after"][:12]))
+    return ("step %d (%s, %s) cannot be classified: the target is at %s, neither its planned after hash %s nor the virtual before hash %s (an outside edit; needs the user's word)"
+            % (step["step"], step["kind"], step["target"], c["current"][:12], c["expected_after"][:12], c["expected_before"][:12]))
+
+
+def deliver_outside_edit(run, rc_doc, classes, c, now):
+    """Section 11 step 5's outside edit: recording_failed re-assembled from the checkpoint and the receipt,
+    both left byte-identical (E8-A21, E8-A22). Raises Stop."""
+    rc = rcmod.Receipt(run.run_dir, rc_doc, run.schemas)
+    step = rc_doc["plan"][c["step"] - 1]
+    outcome = {"status": "recording_failed", "violations": [], "cancelled": False, "stop_reason": outside_reason(step, c)}
+    work = [dict(s) for s in rc_doc["plan"]]
+    for s, cl in zip(work, classes):
+        # a resting outside edit (E8-A21) sits on a step that did land: its write is listed as the receipt says
+        if cl["class"] == "done" or cl.get("resting"):
+            s["landed"] = True
+    run.plan = work
+    pre_cards = reconstruct_cards_before(run, work, classes)
+    assemble_and_deliver(run, rc, outcome, now, pre_cards)
+
+
+def resume_identity_check(workspace, cp, rc_doc, classes, now):
+    """Section 11 step 6 (E8-A45): the current identity against the transaction guard when the checkpoint
+    holds one (its identity and the digest of the non-target diff; the targets are held by step 5's
+    classification), else against the start identity plus the steps classified done. Returns
+    (stale reasons, the expected identity)."""
+    start = cp["start_identity"]
+    guard = cp.get("transaction_guard")
+    stale = []
+    if now["submodules"]:
+        stale.append("submodules present: %s" % ", ".join(now["submodules"]))
+    if guard is not None:
+        g = guard["identity"]
+        if now["commit"] != g["commit"]:
+            stale.append("HEAD is %s, the transaction began at %s" % (now["commit"], g["commit"]))
+        if now["untracked"] != g["untracked"] or now["untracked_sha256"] != g["untracked_sha256"]:
+            stale.append("untracked content differs from the transaction's start")
+        digest = canon.sha256_hex(identity.tracked_diff_excluding(workspace, guard["targets"]))
+        if digest != guard["nontarget_diff_sha256"]:
+            stale.append("tracked files outside the transaction's targets changed since the transaction began")
+        return stale, g
+    landed_targets = set()
+    if rc_doc is not None:
+        for s, c in zip(rc_doc["plan"], classes):
+            if c["class"] == "done":
+                landed_targets.add(s["target"])
+    diff_now = identity.tracked_diff_excluding(workspace, sorted(landed_targets)) if landed_targets else None
+    if now["commit"] != start["commit"]:
+        stale.append("HEAD is %s, the run started at %s" % (now["commit"], start["commit"]))
+    if now["untracked"] != start["untracked"] or now["untracked_sha256"] != start["untracked_sha256"]:
+        stale.append("untracked content differs from the start of the run")
+    if not landed_targets:
+        if now["tracked_diff_sha256"] != start["tracked_diff_sha256"]:
+            stale.append("tracked content differs from the start of the run")
+    elif not start["dirty"] and diff_now:
+        stale.append("tracked files outside the receipted steps changed since the clean start")
+    return stale, start
+
 
 def cmd_resume(args):
     root = validate.skill_root(args.skill_root)
@@ -1102,6 +1335,10 @@ def cmd_resume(args):
     if not v["ok"]:
         stopped(v["step"], v["reason"])
     cp = v["doc"]
+    # E8-A20: a stopped run continues only when its terminal block says so (section 11 step 1)
+    terminal = cp.get("terminal") or {}
+    if cp["phase"] == "stopped" and not terminal.get("resumable"):
+        stopped(1, "the run ended as %s: %s; start a new run" % (terminal.get("status", "stopped"), terminal.get("stop_reason", "")))
     if cp["run_id"] != run.run_id:
         stopped(3, "the checkpoint's run id %s is not the invocation's %s" % (cp["run_id"], run.run_id))
     if cp["input_sha256"] != inputs.binding_hash(doc):
@@ -1120,42 +1357,44 @@ def cmd_resume(args):
         if rc_doc["run_id"] != run.run_id:
             stopped(5, "the receipt's run id %s is not the invocation's" % rc_doc["run_id"])
         classes = rcmod.classify(rc_doc["plan"], rc_doc["entries"], run.workspace)
-    # step 6: the identity against the start identity plus the steps receipted (or classified) done
     now = identity.identity_of(run.workspace)
     start = cp["start_identity"]
-    landed_targets = set()
-    if rc_doc is not None:
-        for s, c in zip(rc_doc["plan"], classes):
-            if c["class"] == "done":
-                landed_targets.add(s["target"])
-    diff_now = identity.tracked_diff_excluding(run.workspace, sorted(landed_targets)) if landed_targets else None
-    stale = []
-    if now["commit"] != start["commit"]:
-        stale.append("HEAD is %s, the run started at %s" % (now["commit"], start["commit"]))
-    if now["submodules"]:
-        stale.append("submodules present: %s" % ", ".join(now["submodules"]))
-    if now["untracked"] != start["untracked"] or now["untracked_sha256"] != start["untracked_sha256"]:
-        stale.append("untracked content differs from the start of the run")
-    if not landed_targets:
-        if now["tracked_diff_sha256"] != start["tracked_diff_sha256"]:
-            stale.append("tracked content differs from the start of the run")
-    elif not start["dirty"] and diff_now:
-        stale.append("tracked files outside the receipted steps changed since the clean start")
+    guard = cp.get("transaction_guard")
+    # E8-A22: the outside classification of step 5 is delivered before step 6 and before the continuation
+    # count moves; neither the checkpoint nor the receipt is rewritten (result.json and chat.md only)
     outside = [c for c in (classes or []) if c["class"] == "outside"]
+    if outside:
+        attach_unsaved(run, cp, schemas)
+        deliver_outside_edit(run, rc_doc, classes, outside[0], now)
+    # step 6 (E8-A45): a checkpoint inside a transaction without a guard is refused when the run started dirty;
+    # otherwise the identity against the guard when the checkpoint holds one, else the start identity plus the
+    # steps classified done
+    if guard is None and cp["phase"] in ("recording", "committed") and dirty_start(start):
+        stopped(6, "the checkpoint carries no transaction guard and the run started dirty; start a new run")
+    stale, expected = resume_identity_check(run.workspace, cp, rc_doc, classes, now)
     if stale:
-        run.identity = start
+        # E8-A22: delivered with the checkpoint and the receipt byte-identical
+        attach_unsaved(run, cp, schemas)
+        run.identity = expected
         run.matched = False
-        run.run_dir = inv["run_dir"]
-        run.continuations = cp.get("continuations", 0)
-        env = {"protocol_version": 1, "run": run.run_block(), "status": "stale_source",
-               "source_identity": {"expected": _pin_from(start), "actual": identity.reported(now), "matched": False},
-               "stop_reason": "; ".join(stale) + "; no record written",
-               "records_written": rmod.artifact_writes(cpmod.artifacts(cp, run.run_dir))}
-        raise Stop({"next": "done", "status": "stale_source", "result": None, "question": None, "chat": None, "document": env}, EXIT_TERMINAL)
-    # continuation limit (section 11, E8-10): the first resume needs no grant, a second needs it
+        doc_out = {"protocol_version": 1, "run": run.run_block(verifier=verifier_block(run), with_session=True), "status": "stale_source",
+                   "source_identity": {"expected": _pin_from(expected), "actual": identity.reported(now), "matched": False},
+                   "stop_reason": "; ".join(stale) + "; no record written"}
+        final, path, chat = run.deliver(doc_out)
+        raise Stop({"next": "done", "status": "stale_source", "result": path, "question": None, "chat": chat}, EXIT_TERMINAL)
+    # continuation limit (section 11, E8-10): the first resume needs no grant, a second needs it; a grant whose
+    # turn_ref the checkpoint already consumed is not a grant (E8-A23)
     count = cp.get("continuations", 0) + 1
+    grant_ref = None
     if count > 1:
         present, ok, why = inputs.continuation_grant_ok(doc)
+        if present and ok:
+            ref = doc["authorization"]["extra_continuation"]["turn_ref"]
+            used = cp.get("continuation_grants_used") or []
+            if ref in used:
+                ok, why = False, "extra_continuation: turn_ref '%s' already used for continuation %d" % (ref, used.index(ref) + 2)
+            else:
+                grant_ref = ref
         if not present or not ok:
             stopped(6, "continuation limit exceeded: this would be continuation %d and %s; state stays on disk" % (count, why))
     # E8-18 on a resume that may grade: after section 11's validation, before any write
@@ -1169,35 +1408,33 @@ def cmd_resume(args):
         cpmod.drop_last_log_line(os.path.join(run.run_dir, cpmod.LOG))
     if rv.get("tolerated"):
         cpmod.drop_last_log_line(os.path.join(run.run_dir, rcmod.LOG))
+    # E8-A30: the resolved input becomes the presented input minus the continuation grant, so every later
+    # phase command reports the resumed session's invocation
+    canon.atomic_write(run.path("input.json"), (json.dumps(active_input(doc), indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
     run.cp = cpmod.Checkpoint(run.run_dir, cp, schemas)
-    run.artifacts = cpmod.artifacts(cp, run.run_dir)
+    # the ledger is the pre-write inventory (a seeded checkpoint's scan, E8-29); input.json joins it at its first write
     run.cp.doc["artifacts"] = list(run.artifacts)
+    run.add_artifact(run.path("input.json"))
     run.continuations = count
     run.run_date = cp.get("run_date") or run.run_date
     run.session_wrote_fix = cp["scope"].get("session_wrote_fix", run.session_wrote_fix)
     run.identity = start
     run.matched = True
     cp["continuations"] = count
+    if grant_ref is not None:
+        cp.setdefault("continuation_grants_used", []).append(grant_ref)
+    was_stopped = cp["phase"] == "stopped"
+    if was_stopped:
+        # E8-A20: a resumable stop continues at the first pending item with a fresh call; the per-item retry
+        # counters stand
+        cp.pop("terminal", None)
+        cp["phase"] = "verifying"
     cp.setdefault("run_date", run.run_date)
     cp["scope"].setdefault("session_wrote_fix", run.session_wrote_fix)
     run.cp.save()
-    if outside:
-        rc = rcmod.Receipt(run.run_dir, rc_doc, schemas)
-        c = outside[0]
-        step = rc_doc["plan"][c["step"] - 1]
-        outcome = {"status": "recording_failed", "violations": [], "cancelled": False,
-                   "stop_reason": "step %d (%s, %s) cannot be classified: the target is at %s, neither its planned after hash %s nor the virtual before hash %s (an outside edit; needs the user's word)"
-                   % (step["step"], step["kind"], step["target"], c["current"][:12], c["expected_after"][:12], c["expected_before"][:12])}
-        work = [dict(s) for s in rc_doc["plan"]]
-        for s, cl in zip(work, classes):
-            if cl["class"] == "done":
-                s["landed"] = True
-        run.plan = work
-        pre_cards = reconstruct_cards_before(run, work, classes)
-        assemble_and_deliver(run, rc, outcome, now, pre_cards)
     pend = cpmod.pending(cp)
     if pend and cp["phase"] in ("assembling", "verifying", "adjudicating"):
-        call, text = vmod.retained_report(run.run_dir, cp)
+        call, text = (None, None) if was_stopped else vmod.retained_report(run.run_dir, cp)
         usable = False
         if call is not None and all(i in call["items"] for i in pend):
             parsed = vmod.parse_report_tail(text, len(cp["items"]), call["items"])
@@ -1232,14 +1469,14 @@ def cmd_resume(args):
         plan_and_record(run)
     if rc_doc is not None and rc_doc["phase"] != "committed":
         rc = rcmod.Receipt(run.run_dir, rc_doc, schemas)
-        run.pre_transaction = start
+        run.pre_transaction = guard["identity"] if guard else start
         work = [dict(s) for s in rc_doc["plan"]]
         for s, cl in zip(work, classes):
             if cl["class"] == "done":
                 s["landed"] = True
         run.plan = work
         pre_cards = reconstruct_cards_before(run, work, classes)
-        outcome = run_transaction(run, rc, work, classes, None)
+        outcome = run_transaction(run, rc, work, classes, None, guard["nontarget_diff_sha256"] if guard else None)
         if outcome["status"] == "completed":
             cp["phase"] = "committed"
             run.cp.save()
@@ -1252,7 +1489,7 @@ def cmd_resume(args):
                 s["landed"] = True
         run.plan = work
         pre_cards = reconstruct_cards_before(run, work, [{"step": s["step"], "class": "cancelled" if s.get("cancelled") else "done"} for s in work])
-        run.pre_transaction = start
+        run.pre_transaction = guard["identity"] if guard else start
         cp["phase"] = "committed"
         run.cp.save()
         # E8-A11: a violation the transaction recorded is read back, so the re-assembly keeps not_clear with the cards frozen
@@ -1312,7 +1549,9 @@ class Parser(argparse.ArgumentParser):
 
 def build_parser():
     p = Parser(prog="recheck.py", description="The recheck-v2 phase driver: one CLI the executor drives through "
-               "assembling, verifying, adjudicating, recording, committed (E8 lane contract section 6).",
+               "assembling, verifying, adjudicating, recording, committed (E8 lane contract section 6); a terminal status other "
+               "than completed or recording_failed leaves the checkpoint at phase stopped with its terminal block, and every "
+               "phase command on a stopped run returns the recorded outcome (exit 10) and writes nothing (E8-A20).",
                epilog=EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--skill-root", metavar="DIR", default=None,
                    help="test only: load references from DIR instead of the script's own skill root (E8-A4)")
@@ -1337,17 +1576,23 @@ def build_parser():
     sp = add("record-call", "register a verifier call and, on ok, retain and parse its report",
              "record-call: registers the call (E8-27); on ok retains the report at run_dir/verifier/raw.md (raw-<k>.md), parses "
              "the tail (E8-12), records raw_sha256, moves to adjudicating; a retryable status asks for one re-send under a fresh "
-             "call id; a second failure stops the run; a deterministic refusal is verifier_unavailable.\nside effects: writes "
-             "verifier/raw*.md and verifier/calls.json, rewrites the checkpoint; on a stop writes result.json and chat.md.\n"
-             "example: uv run recheck.py record-call --run-dir /tmp/r --call-id r-verify --status ok --raw /tmp/r/verifier/raw.md")
+             "call id; a second failure stops the run (resumable: `resume` continues it as a continuation with a fresh call, the "
+             "retry counters standing); a deterministic refusal is verifier_unavailable (resumable the same way).\nside effects: "
+             "writes verifier/raw*.md and verifier/calls.json (a --raw under run_dir/verifier/ other than the fixed path is listed "
+             "as the adapter's capture, E8-A31), rewrites the checkpoint; on a stop rewrites it at phase stopped with the terminal "
+             "block, then writes result.json and chat.md.\npartial effects: an interruption after verifier/raw*.md landed and "
+             "before the checkpoint rewrite leaves the report copy unrecorded; repeating the command with the same call id "
+             "records it.\nexample: uv run recheck.py record-call --run-dir /tmp/r --call-id r-verify --status ok --raw /tmp/r/verifier/raw.md")
     sp.add_argument("--run-dir", required=True, metavar="D")
     sp.add_argument("--call-id", required=True, metavar="ID", help="the call id start or the previous record-call handed out")
     sp.add_argument("--status", required=True, choices=vmod.STATUSES, metavar="S", help="the transport status in the readers vocabulary: %s" % ", ".join(vmod.STATUSES))
     sp.add_argument("--raw", metavar="FILE", default=None, help="the verifier's report (required with --status ok); copied to its fixed path when elsewhere")
     sp.add_argument("--model", metavar="ID", default=None, help="the verifier's effective model id (default: unknown)")
     sp.add_argument("--kind", metavar="K", default=None, help="subagent, codex-exec, opencode-session, or the adapter's name (default: unknown)")
-    sp.add_argument("--injected", metavar="NAME", nargs="*", default=None, help="channels the harness injected into the verifier (default: none)")
-    sp.add_argument("--refused", metavar="TEXT", nargs="*", default=None, help="prohibited actions refused with no side effect (E8-5)")
+    sp.add_argument("--injected", metavar="NAME", nargs="+", action="extend", default=None,
+                    help="channels the harness injected into the verifier; repeatable, every value lands (default: none, E8-A35)")
+    sp.add_argument("--refused", metavar="TEXT", nargs="+", action="extend", default=None,
+                    help="prohibited actions refused with no side effect; repeatable, one per action, every value lands (E8-5, E8-A35)")
     sp.add_argument("--note", metavar="TEXT", default=None, help="the transport's reason text (used in stop_reason on a refusal)")
 
     sp = add("adjudicate", "adjudicate one item from the retained report",
@@ -1376,16 +1621,29 @@ def build_parser():
     sp.add_argument("--caused-by", type=int, metavar="N", default=None, help="the checklist index whose fix caused it (driver-supplied defects)")
 
     sp = add("record", "run the recording transaction, assemble and validate the result",
-             "record: the identity check, the plan, receipt.json, the receipted steps (reopening lines, the block, waiver lines, the "
-             "verdict-doc copy, the status lines), the boundary check before the first status line, the commit point, result.json "
-             "and chat.md.\npartial effects: a failure between steps ends recording_failed with the receipt naming what landed; "
-             "resume completes the rest.\nexample: uv run recheck.py record --run-dir /tmp/r")
+             "record: the retained reports re-proved against their recorded SHA-256 and tail (a mismatch stops the run as "
+             "`evidence changed: <path>`, no project write, E8-A26), the identity check, the plan with every target's containment "
+             "(E8-A19), the transaction guard stored in the checkpoint as the transaction begins (the pre-transaction identity, the "
+             "digest of the non-target diff, the targets, E8-A45), receipt.json, the receipted steps (reopening lines, the block, "
+             "waiver lines, the verdict-doc copy, the status lines), the boundary check before every status line (a violation "
+             "found before status step k cancels step k and every later one; a status line already done stands and its card is "
+             "listed as moved before the violation was found, E8-A44), the commit point, result.json and chat.md.\npartial effects: "
+             "a failure between steps ends recording_failed with the receipt naming what landed (a target outside the workspace "
+             "ends the same way with nothing landed); a stale identity or changed evidence leaves the checkpoint at phase stopped; "
+             "resume completes the rest of a recording_failed run.\nexample: uv run recheck.py record --run-dir /tmp/r")
     sp.add_argument("--run-dir", required=True, metavar="D")
 
     sp = add("resume", "continue a run from its checkpoint (section 11)",
-             "resume <input.json>: the validation order of section 11 (checkpoint, integrity, binding, item states, receipt, "
-             "identity), the continuation limit, then the first pending item (report reuse or a fresh call), else the first plan "
-             "step not done (replay), else re-assembly.\nexample: uv run recheck.py resume /tmp/r/input.json")
+             "resume <input.json>: the validation order of section 11 (checkpoint and its terminal block: a stopped run continues "
+             "only when resumable, else refused at step 1; integrity; binding; item states; receipt, whose entries must prove the "
+             "state and whose fully-done targets must rest at their final hash, else refused at step 5 or ended recording_failed "
+             "as an outside edit; identity against the transaction guard when one is stored, else the start identity, a "
+             "guard-less checkpoint inside a transaction from a dirty start refused), the continuation limit (a grant's turn_ref is "
+             "consumed once, E8-A23), then the first pending item (report reuse or a fresh call), else the first plan step not "
+             "done (replay), else re-assembly.\nside effects: a refused or ended resume changes no byte of the checkpoint or the "
+             "receipt (an outside edit or a stale identity delivers result.json and chat.md only); a continuing resume rewrites "
+             "run_dir/input.json as the presented input minus the continuation grant (E8-A30) and increments the count.\n"
+             "example: uv run recheck.py resume /tmp/r/input.json")
     sp.add_argument("input", help="the presented input with resume: true")
 
     sp = add("identity", "the six-field identity of a workspace (real submodule list)", "identity <workspace>")

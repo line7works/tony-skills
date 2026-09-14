@@ -3,14 +3,20 @@ with content and hashes computed in memory, write-ahead entries with integrity a
 rename, atomic step application, the boundary check, the commit point, classification against
 the virtual state, and replay.
 
-The boundary check (section 9 as amended by E8-A11) runs once per transaction: before the first
-status-line step's intent entry, or, when the plan holds no live status-line step, before the
-done entry of its last step. The violations it finds are written to `run_dir/boundary.json` (a
-JSON list of strings), a run artifact of the core's own: it joins the checkpoint's artifact
-ledger at its first write, so `records_written` lists it in the E8-29 order after `receipt.log`
-and before the transaction's steps (it is written during the transaction), and a re-assembly
-after the commit point reads it back so the result keeps `not_clear` with the cards frozen. The
-file is written only when a violation was found; a clean transaction leaves none.
+The boundary check (section 9 as amended by E8-A11 and E8-A44) runs before every status-line
+step's intent entry, or, when the plan holds no live status-line step, before the done entry of
+its last step. The violations it finds are written to `run_dir/boundary.json` as
+`{"before_step": k, "violations": [...]}` (k the step the check preceded), a run artifact of the
+core's own: it joins the checkpoint's artifact ledger at its first write, so `records_written`
+lists it in the E8-29 order after `receipt.log` and before the transaction's steps (it is
+written during the transaction), and a re-assembly after the commit point reads it back so the
+result keeps `not_clear`; status step k and every later status-line step are cancelled, a status
+line receipted done before k stands. The file is written only when a violation was found; a
+clean transaction leaves none.
+
+Containment (E8-A19): every plan target must resolve inside the workspace's real path, checked
+when the plan is made (`plan_containment`) and again inside `apply` immediately before the
+atomic replacement.
 
 Test hooks (honored only with RECHECK_TEST=1): RECHECK_TEST_FAIL_AFTER_STEP=<n> raises after
 step n's target landed and before its done entry; RECHECK_TEST_FAIL_BEFORE_STEP=<n> raises
@@ -30,23 +36,61 @@ def boundary_path(run_dir):
     return os.path.join(run_dir, BOUNDARY)
 
 
-def read_boundary(run_dir):
-    """The violations a boundary check recorded in this run directory, or [] when none."""
+def read_boundary_doc(run_dir):
+    """{"before_step": k or None, "violations": [...]} from run_dir/boundary.json, or None when the
+    file is absent (E8-A44). The pre-E8-A44 shape (a bare list) reads with before_step None."""
     path = boundary_path(run_dir)
     if not os.path.isfile(path):
-        return []
+        return None
     with open(path, "rb") as fh:
         doc = json.loads(fh.read().decode("utf-8"))
-    return [str(v) for v in doc] if isinstance(doc, list) else []
+    if isinstance(doc, list):
+        return {"before_step": None, "violations": [str(v) for v in doc]}
+    if isinstance(doc, dict):
+        before = doc.get("before_step")
+        return {"before_step": before if isinstance(before, int) and not isinstance(before, bool) else None,
+                "violations": [str(v) for v in doc.get("violations") or []]}
+    return {"before_step": None, "violations": []}
 
 
-def write_boundary(run_dir, violations):
-    canon.atomic_write(boundary_path(run_dir), (json.dumps(list(violations), indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+def read_boundary(run_dir):
+    """The violations a boundary check recorded in this run directory, or [] when none."""
+    doc = read_boundary_doc(run_dir)
+    return doc["violations"] if doc else []
+
+
+def write_boundary(run_dir, violations, before_step):
+    """E8-A44: the violations with the step they were found before."""
+    doc = {"before_step": before_step, "violations": list(violations)}
+    canon.atomic_write(boundary_path(run_dir), (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
     return boundary_path(run_dir)
 
 
 class ReceiptError(RuntimeError):
     pass
+
+
+class ContainmentError(ReceiptError):
+    """E8-A19: a plan target resolves outside the workspace's real path."""
+
+
+def contained(workspace, target):
+    """E8-A19: the real path of workspace/target lies under the real path of the workspace."""
+    root = os.path.realpath(workspace)
+    real = os.path.realpath(os.path.join(workspace, target))
+    return real == root or real.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def containment_reason(step, target):
+    return "step %d target %s resolves outside the workspace; no write" % (step, target)
+
+
+def plan_containment(workspace, plan):
+    """The stop reason of the first plan step whose target resolves outside the workspace, or None."""
+    for s in plan:
+        if not contained(workspace, s["target"]):
+            return containment_reason(s["step"], s["target"])
+    return None
 
 
 class TestHookFailure(RuntimeError):
@@ -114,7 +158,8 @@ def plan_transaction(workspace, document, run_date, checklist, item_results, new
         disp = "fixed" if res["disposition"] == "fixed" else "not fixed"
         lines.append(ledger.render_recheck_line(it["severity"], it["location"]["file"], it["location"]["line"], it["claim"], disp, ledger.render_how(res["verification"])))
     for d in new_defects:
-        lines.append(ledger.render_defect_line(d["severity"], d["location"]["file"], d["location"]["line"], d["claim"], d["failure_scenario"]))
+        lines.append(ledger.render_defect_line(d["severity"], d["location"]["file"], d["location"]["line"], d["claim"], d["failure_scenario"],
+                                               ledger.defect_slice_field(slices, d["charged_to_slice"])))
     heading = ledger.render_heading(run_date, slices)
     block = ledger.render_block(run_date, slices, lines)
     add("punch_list_block", document, block, heading=heading)
@@ -214,7 +259,45 @@ def read_and_verify(run_dir, schemas):
     v = cpmod.verify_integrity(doc, rows, "receipt")
     if not v["ok"]:
         return {"exists": True, "ok": False, "reason": v["reason"], "doc": doc}
+    corrupt = check_entries(doc.get("plan") or [], doc.get("entries") or [])
+    if corrupt:
+        return {"exists": True, "ok": False, "reason": "the receipt is corrupt: " + corrupt, "doc": doc}
     return {"exists": True, "ok": True, "reason": v["reason"], "doc": doc, "tolerated": v["tolerated"]}
+
+
+def check_entries(plan, entries):
+    """E8-A21: the receipt proves the state. Entries in sequence order (a step number never falls),
+    each intent before its done, at most one intent and one done per step, every done entry's
+    observed hash equal to the step's planned after-hash, every entry naming a plan step. Returns
+    the reason naming the offending entry, or None."""
+    steps = {s["step"]: s for s in plan}
+    last_step = 0
+    intents, dones = set(), set()
+    for n, e in enumerate(entries):
+        step, kind = e.get("step"), e.get("type")
+        label = "entry %d (%s, step %s)" % (n, kind, step)
+        if step not in steps:
+            return "%s names no plan step" % label
+        if step < last_step:
+            return "%s is out of sequence after step %d" % (label, last_step)
+        if kind == "intent":
+            if step in intents:
+                return "%s repeats the step's intent" % label
+            if step in dones:
+                return "%s follows the step's done entry" % label
+            intents.add(step)
+        elif kind == "done":
+            if step not in intents:
+                return "%s precedes the step's intent" % label
+            if step in dones:
+                return "%s repeats the step's done entry (one done per step)" % label
+            if e.get("observed_sha256") != steps[step]["after_sha256"]:
+                return "%s observed %s, not the step's planned after-hash %s" % (label, (e.get("observed_sha256") or "")[:12], steps[step]["after_sha256"][:12])
+            dones.add(step)
+        else:
+            return "%s has an unknown type" % label
+        last_step = step
+    return None
 
 
 def last_plan_step(plan):
@@ -229,11 +312,13 @@ def classify(plan, entries, workspace):
     done | redo | outside | cancelled, and the virtual before-hash the redo must start from."""
     done = set(e["step"] for e in entries if e["type"] == "done")
     virtual, pending_redo = {}, set()
-    out = []
+    out, before_of, per_target = [], [], {}
     for s in plan:
         target = s["target"]
         if target not in virtual:
             virtual[target] = s["before_sha256"]
+        before_of.append(virtual[target])
+        per_target.setdefault(target, []).append(len(out))
         if s.get("cancelled"):
             out.append({"step": s["step"], "class": "cancelled"})
             continue
@@ -254,6 +339,16 @@ def classify(plan, entries, workspace):
         else:
             out.append({"step": s["step"], "class": "outside", "current": current, "expected_before": virtual[target], "expected_after": s["after_sha256"]})
             virtual[target] = s["after_sha256"]
+    # E8-A21: a target whose steps are all done must rest at its final virtual hash; otherwise its
+    # last step is an outside edit
+    for target, idxs in per_target.items():
+        if not all(out[i]["class"] == "done" for i in idxs):
+            continue
+        current = sha(file_text(os.path.join(workspace, target)))
+        if current != virtual[target]:
+            last = idxs[-1]
+            out[last] = {"step": plan[last]["step"], "class": "outside", "current": current, "expected_before": before_of[last],
+                         "expected_after": plan[last]["after_sha256"], "resting": True}
     return out
 
 
@@ -271,6 +366,9 @@ def regenerate(step, regen):
 # ---- applying steps ------------------------------------------------------------------------
 
 def apply(workspace, step):
+    # E8-A19: the containment test again, immediately before the replacement
+    if not contained(workspace, step["target"]):
+        raise ContainmentError(containment_reason(step["step"], step["target"]))
     target = os.path.join(workspace, step["target"])
     before = file_text(target)
     if sha(before) != step["before_sha256"]:
@@ -283,12 +381,13 @@ def apply(workspace, step):
     return step["after_sha256"]
 
 
-def boundary_violations(workspace, pre, plan, virtual, pre_nontarget_diff):
-    """Section 9's check before the first status line (or before the last step's done entry when
-    the plan has no status line, E8-A11). pre: the pre-transaction identity;
+def boundary_violations(workspace, pre, plan, virtual, pre_nontarget_diff, pre_nontarget_sha256=None):
+    """Section 9's check before every status line (or before the last step's done entry when
+    the plan has no status line, E8-A11, E8-A44). pre: the pre-transaction identity;
     virtual: {target: expected sha256 now}; pre_nontarget_diff: the pre-transaction
-    `git diff HEAD --binary` with the plan targets excluded, or None when unknown (a resume
-    from a dirty start; then only a clean start's expectation of no other change is checked)."""
+    `git diff HEAD --binary` with the plan targets excluded, or None when unknown; then
+    pre_nontarget_sha256, the transaction guard's digest of that diff (E8-A45), is compared when
+    given, else only a clean start's expectation of no other change is checked."""
     now = identity.identity_of(workspace)
     out = []
     if now["commit"] != pre["commit"]:
@@ -303,8 +402,9 @@ def boundary_violations(workspace, pre, plan, virtual, pre_nontarget_diff):
             out.append("%s is at %s, not the receipted state %s" % (t, current[:12], (virtual.get(t) or "")[:12]))
     changed = [p for p in identity.changed_tracked_paths(workspace) if p not in targets]
     diff_now = identity.tracked_diff_excluding(workspace, targets)
-    if pre_nontarget_diff is not None:
-        if diff_now != pre_nontarget_diff:
+    if pre_nontarget_diff is not None or pre_nontarget_sha256 is not None:
+        same = diff_now == pre_nontarget_diff if pre_nontarget_diff is not None else canon.sha256_hex(diff_now) == pre_nontarget_sha256
+        if not same:
             out.append("tracked files outside the plan changed during the transaction: %s" % (", ".join(changed) or "(diff differs)"))
     elif not pre["dirty"]:
         if changed:

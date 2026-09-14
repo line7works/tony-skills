@@ -1,17 +1,19 @@
-"""scripts/validate-examples.py: passes from another directory, prints every count, exits 3 without jsonschema."""
+"""scripts/validate-examples.py (A7a, E8-A37): JSON on stdout, the per-check lines on stderr under --verbose,
+--help, --skill-root, exit 2 on an unknown argument, 3 without jsonschema, 4 when a check fails."""
+import json
 import os
-import re
+import shutil
 import unittest
 
 import testlib
 
-COUNTS = re.compile(r"positive: (\d+) files, (\d+) failing; negative: (\d+)/(\d+) rejected; positive mutations: (\d+)/(\d+) accepted; "
-                    r"checkpoint checks: (\d+)/(\d+); receipt checks: (\d+)/(\d+)")
-# the cases the suite defines after the fix round that followed slice 1's check; a suite that
-# lost cases would still report counts equal to totals, so the floor catches that
-NEGATIVE_FLOOR = 124
-POSITIVE_FLOOR = 24
-# the case names the fix round added: finding 1 (E8-2), finding 4 (E8-A2), finding 5 (receipt plan steps)
+# the cases the suite defines after the fix round that followed Astra's review; a suite that lost cases
+# would still report counts equal to totals, so the floor catches that
+NEGATIVE_FLOOR = 155
+POSITIVE_FLOOR = 32
+CHECKPOINT_FLOOR = 15
+RECEIPT_FLOOR = 9
+# the case names earlier fix rounds added: finding 1 (E8-2), finding 4 (E8-A2), finding 5 (receipt plan steps)
 NEW_NEGATIVE_CASES = (
     "stopped submodule result carrying source_identity (E8-2)",
     "run.model with floor_met as a string (E8-A2)",
@@ -19,6 +21,15 @@ NEW_NEGATIVE_CASES = (
     "receipt: a cancelled flag on a punch-list step",
     "receipt: a value on a punch-list step",
     "receipt: content on a status-line step",
+    # E8-A34
+    "stopped result carrying items (E8-A34)",
+    "a completed result with floor_met false (E8-A34)",
+    "a completed result with floor_met null (E8-A34)",
+    "a new defect without severity_basis (E8-A34)",
+    "checkpoint: seq 0 with a prev string (E8-A34)",
+    "receipt: a status_line value of built (E8-A34)",
+    "input: a waiver dated 2026-02-30 (E8-A34, FormatChecker)",
+    "input: a run_date of 2026-99-99 (E8-A34, FormatChecker)",
 )
 NEW_POSITIVE_CASES = (
     "a stopped submodule result without source_identity (E8-2)",
@@ -26,7 +37,12 @@ NEW_POSITIVE_CASES = (
     "a receipt plan target whose segment merely starts with two dots",
     "a receipt status-line step carrying cancelled false beside its value",
     "a receipt reopened-line step carrying content",
+    # E8-A34
+    "a verifier_unavailable run.model carrying floor_met null (unknown capability, E8-A2, E8-A34)",
+    "a new defect carrying its severity_basis (E8-A34)",
+    "a receipt status_line value of signed off with conditions (E8-A34)",
 )
+KEYS = ["checkpoint", "failures", "mutations", "negative", "ok", "positive", "receipt"]
 
 
 class ValidateExamples(unittest.TestCase):
@@ -38,34 +54,92 @@ class ValidateExamples(unittest.TestCase):
     def tearDownClass(cls):
         testlib.rmtree(cls.dir)
 
-    def test_passes_from_another_directory(self):
-        code, out, err = testlib.run_script("validate-examples.py", [], cwd=self.dir)
+    def run_cli(self, *args, **kw):
+        return testlib.run_script("validate-examples.py", args, cwd=kw.get("cwd", self.dir), env=kw.get("env"))
+
+    def assert_report(self, doc):
+        self.assertEqual(sorted(doc), KEYS, "the fixed stdout shape")
+        self.assertTrue(doc["ok"])
+        self.assertEqual(doc["failures"], [])
+        self.assertEqual(doc["positive"]["failing"], 0)
+        self.assertEqual(doc["positive"]["files"], len([f for f in os.listdir(testlib.EX) if f.endswith(".json")]))
+        self.assertEqual(doc["negative"]["rejected"], doc["negative"]["total"])
+        self.assertEqual(doc["mutations"]["accepted"], doc["mutations"]["total"])
+        self.assertEqual(doc["checkpoint"]["passed"], doc["checkpoint"]["total"])
+        self.assertEqual(doc["receipt"]["passed"], doc["receipt"]["total"])
+        self.assertGreaterEqual(doc["negative"]["total"], NEGATIVE_FLOOR, "the negative suite lost cases")
+        self.assertGreaterEqual(doc["mutations"]["total"], POSITIVE_FLOOR, "the positive mutations lost cases")
+        self.assertGreaterEqual(doc["checkpoint"]["total"], CHECKPOINT_FLOOR)
+        self.assertGreaterEqual(doc["receipt"]["total"], RECEIPT_FLOOR)
+
+    def test_passes_from_another_directory_with_json_on_stdout(self):
+        code, out, err = self.run_cli()
         self.assertEqual(code, 0, err + out[-2000:])
-        last = out.strip().splitlines()[-1]
-        m = COUNTS.match(last)
-        self.assertTrue(m, last)
-        files, failing, rej, rej_n, acc, acc_n, cp, cp_n, rc, rc_n = (int(x) for x in m.groups())
-        self.assertEqual(failing, 0)
-        self.assertEqual(rej, rej_n); self.assertEqual(acc, acc_n); self.assertEqual(cp, cp_n); self.assertEqual(rc, rc_n)
-        self.assertGreaterEqual(rej_n, NEGATIVE_FLOOR, "the negative suite lost cases")
-        self.assertGreaterEqual(acc_n, POSITIVE_FLOOR, "the positive mutations lost cases")
-        self.assertEqual(files, len([f for f in os.listdir(testlib.EX) if f.endswith(".json")]))
-        self.assertNotIn("(BUG)", out); self.assertNotIn("FAIL ", out)
+        self.assertTrue(out.strip().startswith("{") and out.strip().endswith("}"), "stdout is JSON and nothing else")
+        doc = json.loads(out)
+        self.assert_report(doc)
+        self.assertNotIn("(BUG)", err); self.assertNotIn("FAIL ", err)
+        self.assertNotIn("REJECTED ", err, "the per-file lines appear only under --verbose")
+        self.assertIn("positive:", err, "the summary line is a diagnostic on stderr")
+
+    def test_verbose_prints_every_check_on_stderr(self):
+        code, out, err = self.run_cli("--verbose")
+        self.assertEqual(code, 0, err[-2000:])
+        self.assert_report(json.loads(out))
+        self.assertNotIn("(BUG)", err); self.assertNotIn("FAIL ", err)
         for needle in ("receipt-partial.json", "checkpoint-partial.json", "E8-15", "harness given as a string",
                        "model without floor_met", "turn_attribution", "refused_actions", "raw_sha256", "every new invocation field"):
-            self.assertIn(needle, out, needle)
-        lines = out.splitlines()
+            self.assertIn(needle, err, needle)
+        lines = err.splitlines()
         for name in NEW_NEGATIVE_CASES:
             self.assertIn("REJECTED " + name, lines, name)
         for name in NEW_POSITIVE_CASES:
             self.assertIn("ACCEPTED " + name, lines, name)
+        self.assertEqual(len([l for l in lines if l.startswith("PASS ")]), json.loads(out)["positive"]["files"])
 
     def test_exit_3_without_jsonschema(self):
         env = dict(os.environ, PYTHONPATH=testlib.stub_without_jsonschema(self.dir))
-        code, out, err = testlib.run_script("validate-examples.py", [], cwd=self.dir, env=env)
+        code, out, err = self.run_cli(env=env)
         self.assertEqual(code, 3)
         self.assertEqual(out, "")
         self.assertEqual(err.strip(), testlib.MISSING_DEPENDENCY)
+
+    def test_exit_2_on_an_unknown_argument(self):
+        code, out, err = self.run_cli("--bogus")
+        self.assertEqual(code, 2); self.assertEqual(out, ""); self.assertIn("usage", err)
+        code, out, err = self.run_cli("--skill-root", os.path.join(self.dir, "nowhere"))
+        self.assertEqual(code, 2); self.assertEqual(out, ""); self.assertIn("not a directory", err)
+
+    def test_help(self):
+        code, out, _ = self.run_cli("--help")
+        self.assertEqual(code, 0)
+        flat = " ".join(out.split())
+        for phrase in ("--skill-root", "--verbose", "test only", "example", "side effects", "exit status", "4 a check failed", "2 usage", "3 jsonschema missing"):
+            self.assertIn(phrase, flat, phrase)
+
+    def test_skill_root_override_and_exit_4(self):
+        """A copied skill root with one example broken: exit 4, the JSON names the failure, --verbose prints FAIL."""
+        root = os.path.join(self.dir, "skill-root")
+        shutil.copytree(testlib.SKILL, root, ignore=shutil.ignore_patterns("tests", "__pycache__"))
+        code, out, err = self.run_cli("--skill-root", root)
+        self.assertEqual(code, 0, err)
+        self.assert_report(json.loads(out))
+        broken = os.path.join(root, "references", "examples", "result-stopped.json")
+        doc = testlib.load_json(broken)
+        doc["items"] = []  # E8-A34: a stopped result may not carry items
+        with open(broken, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh)
+        code, out, err = self.run_cli("--skill-root", root, "--verbose")
+        self.assertEqual(code, 4)
+        got = json.loads(out)
+        self.assertFalse(got["ok"])
+        self.assertEqual(got["positive"]["failing"], 1)
+        self.assertTrue(any("result-stopped.json" in f for f in got["failures"]), got["failures"])
+        self.assertIn("FAIL result-stopped.json", err)
+        # a missing schema under the override is exit 1 (reference unavailable), nothing on stdout
+        os.remove(os.path.join(root, "references", "receipt.schema.json"))
+        code, out, err = self.run_cli("--skill-root", root)
+        self.assertEqual(code, 1); self.assertEqual(out, ""); self.assertIn("reference unavailable: references/receipt.schema.json", err)
 
     def test_old_location_is_gone(self):
         self.assertFalse(os.path.exists(os.path.join(testlib.EX, "validate-examples.py")))

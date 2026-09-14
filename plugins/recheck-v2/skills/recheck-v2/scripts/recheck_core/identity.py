@@ -63,8 +63,22 @@ def is_work_tree_root(path):
     return True, ""
 
 
+def untracked_bytes(full):
+    """The bytes an untracked path contributes to the fingerprint (E8-A46). A symlink contributes its link
+    target text, as git stores a symlink, and is never followed (a gitignore pattern with a trailing slash
+    does not match a symlink, so `.venv -> /somewhere` is an untracked path); a directory is never opened as
+    a file (git lists no directory, but nothing here may crash on one); a regular file contributes its content."""
+    if os.path.islink(full):
+        return os.readlink(full).encode("utf-8", "surrogateescape")
+    if os.path.isdir(full):
+        return b""
+    with open(full, "rb") as fh:
+        return fh.read()
+
+
 def identity_of(workspace):
-    """The six-field fingerprint of pilot contract section 6 (byte-compatible with fixturelib)."""
+    """The six-field fingerprint of pilot contract section 6 (byte-compatible with fixturelib for regular
+    files; a symlink is hashed by its link target text, E8-A46, where fixturelib would follow it)."""
     commit = git(workspace, ["rev-parse", "HEAD"]).strip()
     status = git(workspace, ["status", "--porcelain", "--untracked-files=all"])
     diff = git(workspace, ["diff", "HEAD", "--binary"], binary=True)
@@ -72,8 +86,7 @@ def identity_of(workspace):
     untracked = sorted(p.decode("utf-8") for p in raw.split(b"\0") if p)
     lines = []
     for path in untracked:
-        with open(os.path.join(workspace, path), "rb") as fh:
-            lines.append(path + "\0" + canon.sha256_hex(fh.read()) + "\n")
+        lines.append(path + "\0" + canon.sha256_hex(untracked_bytes(os.path.join(workspace, path))) + "\n")
     lines.sort()
     submodules = []
     for line in git(workspace, ["submodule", "status"]).splitlines():

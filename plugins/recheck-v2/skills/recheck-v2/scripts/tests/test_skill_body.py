@@ -6,7 +6,10 @@ flags; no harness, tool, model, or reasoning-level word in the shared body; the 
 boundaries appear in Contract and again immediately before the record step; every section 15
 reference is linked with a load condition; verifier.md matches the code it documents;
 skill-identity reports the SKILL.md hash and plugin.json's version; a skill root without
-verifier.md stops naming it (M1, E8-17)."""
+verifier.md stops naming it (M1, E8-17). The E8 fix round (Astra's review) pins the description's
+input routes (E8-A36), step 5's one-flag-per-value form (E8-A35), the adjudication wording
+(E8-A43), the ended-run and resume rules (E8-A20), the boundary and transaction-guard sentences
+(E8-A44, E8-A45), verifier.md's repeatable flags, and the README's suite output (E8-A37)."""
 import json
 import os
 import re
@@ -40,6 +43,11 @@ TRIGGER = "Use when"
 EXCLUSION = "Not an initial review"
 EXCLUSION_SENTENCE = "Not an initial review or signoff, a whole-build review, or a plan check."
 V1_EXCLUSION = "not the bare /recheck command, which belongs to the v1 station"
+# E8-A36: every input route named; the old exclusion shut the explicit-items route out
+ROUTES = "Takes recorded findings from a build doc's punch list, a caller-held verdict's named findings, or docs/punch-list.md"
+UNRECORDED = "never for findings nobody recorded"
+OLD_EXCLUSION = "not a build doc's punch list"
+README_MD = os.path.join(testlib.PLUGIN, "README.md")
 # the exit code the body must print beside every `next: <value>` bullet (contract section 6 of the E8 lane doc)
 NEXT_EXIT = {"done": "10", "verify": "0", "adjudicate": "0", "record": "0", "resume": "0"}
 # the E8-A17 sentence, as SKILL.md and verifier.md both carry it
@@ -177,8 +185,20 @@ class SkillBody(unittest.TestCase):
                        "majors from the signoff", "hunting for new findings", "reopens a named finding"):
             self.assertIn(phrase, d, phrase)
         for phrase in ("initial review", "signoff", "whole-build review", "plan check", "re-running tests for the fixer",
-                       "not a build doc's punch list", V1_EXCLUSION):
+                       UNRECORDED, V1_EXCLUSION):
             self.assertIn(phrase, d, phrase)
+
+    def test_description_names_every_input_route(self):
+        """E8-A36: the exclusion that shut out the explicit-items route is gone; the description names the three
+        routes of contract sections 2 and 3 (a build doc's punch list, a caller-held verdict's findings,
+        docs/punch-list.md) and excludes only findings nobody recorded. The route sentence follows the trigger
+        phrasings and precedes the closing exclusion, so the first 300 characters keep capability, trigger, and
+        the core exclusion (E8-A18)."""
+        d = self.fields["description"]
+        self.assertNotIn(OLD_EXCLUSION, d)
+        self.assertIn(ROUTES, d); self.assertIn(UNRECORDED, d)
+        self.assertLess(d.index("reopens a named finding"), d.index(ROUTES)); self.assertLess(d.index(ROUTES), d.index(V1_EXCLUSION))
+        self.assertLess(d.index(UNRECORDED), d.index(V1_EXCLUSION), "the unrecorded exclusion sits in the closing sentence")
 
     def test_description_never_claims_the_bare_v1_command(self):
         """E8-A18: T-12 is the bare v1 command `/recheck slice A`, which the pilot must not claim; the description never
@@ -201,6 +221,8 @@ class SkillBody(unittest.TestCase):
         print("\n[body] %d lines, %d characters, ~%d tokens (characters / 4)" % (lines, len(self.text), tokens))
         self.assertLess(lines, 500)
         self.assertLess(tokens, 6000, "about 5,000 tokens")
+        # the boundaries block (Contract) sits inside the first 5,000 tokens, the span a harness re-attaches after a compaction
+        self.assertLess(self.text.index("\n## Procedure") / 4.0, 5000, "the Contract section ends inside the first 5,000 tokens")
 
     def test_sections_in_order(self):
         positions = [self.body.index("\n" + h + "\n") if not h.startswith("# ") else self.body.index(h) for h in SECTION_ORDER]
@@ -320,6 +342,77 @@ class SkillBody(unittest.TestCase):
         for phrase in ("choose no model, reasoning setting, or authorization", "`session_model`", "`authorized`", "reports of fact", "never as your picks"):
             self.assertIn(phrase, step4, phrase)
 
+    def test_record_call_form_repeats_a_flag_per_value(self):
+        """E8-A35: the body's form is one --refused per action and one --injected per channel, every value landing;
+        the driver test that sends two of each is test_driver_fix4.test_a35_repeated_refused_and_injected_flags."""
+        proc = sections(self.body)["Procedure"]
+        step5 = re.sub(r"\s+", " ", proc[proc.index("\n### 5. "):proc.index("\n### 6. ")])
+        for phrase in ('one `--injected "<channel>"` per channel the harness declared', 'one `--refused "<text>"` per prohibited action',
+                       "every value lands", "Repeat a flag per value"):
+            self.assertIn(phrase, step5, phrase)
+        self.assertNotIn("--injected <channels>", step5, "the fenced command shows one channel per flag")
+        self.assertIn("--injected <channel>", step5)
+
+    def test_adjudication_names_the_executor_judgment(self):
+        """E8-A43: step 6 says in those words that the executor reads the report's prose and evidence for every item,
+        downgrades a fixed whose observations or command output show the scenario still holds, and that whether every
+        command the scenario names was run is the executor's judgment (the core checks the block's shape)."""
+        proc = sections(self.body)["Procedure"]
+        step6 = re.sub(r"\s+", " ", proc[proc.index("\n### 6. "):proc.index("\n### Before recording")])
+        for phrase in ("The executor reads the report's prose and evidence for every item",
+                       "downgrades a `fixed` whose observations or command output show the scenario still holds",
+                       "whether every command the scenario names was run is the executor's judgment here",
+                       "the core checks the block's shape, not the observations"):
+            self.assertIn(phrase, step6, phrase)
+        self.assertEqual(len(re.findall(r"\n### \d+\. ", proc)), 8, "no new step")
+
+    def test_ended_run_and_resume_rules(self):
+        """E8-A20: an ended run answers every later phase command with the recorded outcome and writes nothing; a
+        resume continues only a stop after two verifier failures or an unavailable verifier, as a continuation; every
+        other ended run needs a new run id. Stated in the Procedure intro (the outputs), Failure handling, and Resume."""
+        fold = lambda t: re.sub(r"\s+", " ", t)
+        secs = sections(self.body)
+        proc, fail = fold(secs["Procedure"]), fold(secs["Failure handling"])
+        intro = proc[:proc.index("### 1. ")]
+        for phrase in ("A phase command on a run that already ended answers `next: done` (exit 10)", "`the run ended as <status>: <reason>`",
+                       "it writes nothing and issues no call id"):
+            self.assertIn(phrase, intro, phrase)
+        for phrase in ("A run that ended (`stopped`, `verifier_unavailable`, `stale_source`, `missing_input`)",
+                       "answers every later phase command with the recorded outcome", "and writes nothing",
+                       "a resume continues a stopped run only after two verifier failures or an unavailable verifier, as a continuation",
+                       "every other ended run needs a new run id"):
+            self.assertIn(phrase, fail, phrase)
+        resume = proc[proc.index("### Resume"):]
+        for phrase in ("after a stop the run can recover from (two verifier failures, or an unavailable verifier)",
+                       "A resume continues a run that ended only after two verifier failures or an unavailable verifier, as a continuation",
+                       "refused at section 11 step 1 (`the run ended as <status>: <reason>; start a new run`)", "needs a new run id and directory"):
+            self.assertIn(phrase, resume, phrase)
+
+    def test_boundary_check_and_transaction_guard_sentences(self):
+        """E8-A44: step 7 says the boundary check runs before every status-line step and a card moved before a later
+        violation stays moved, listed with its reason; the completed row carries both card reasons the core writes.
+        E8-A45: the Resume section says the resume compares against the transaction guard once recording began."""
+        fold = lambda t: re.sub(r"\s+", " ", t)
+        secs = sections(self.body)
+        proc = fold(secs["Procedure"])
+        step7 = proc[proc.index("### 7. "):proc.index("### 8. ")]
+        for phrase in ("The boundary check runs before every status-line step", "cancels that step and every later one",
+                       "a card moved before a later violation stays moved and is listed with the reason `moved before the violation was found`",
+                       "stores the transaction guard in the checkpoint", "re-proves every retained report", "`evidence changed: <path>`"):
+            self.assertIn(phrase, step7, phrase)
+        completed = [l for l in secs["Failure handling"].split("\n") if l.startswith("| `completed` |")][0]
+        self.assertIn("`a boundary violation froze the card`", completed); self.assertIn("`moved before the violation was found`", completed)
+        self.assertNotIn("the cards were frozen", completed)
+        resume = proc[proc.index("### Resume"):]
+        for phrase in ("Once recording began, the resume compares the identity against the transaction guard",
+                       "plus the steps receipted `done`, else against the start identity; a difference is `stale_source`"):
+            self.assertIn(phrase, resume, phrase)
+        # the reasons are the strings the core writes
+        from recheck_core import validate
+        self.assertEqual(validate.MOVED_BEFORE_VIOLATION, "moved before the violation was found")
+        with open(os.path.join(testlib.SCRIPTS, "recheck.py"), encoding="utf-8") as fh:
+            self.assertIn('"a boundary violation froze the card"', fh.read())
+
     def test_gotchas_and_failure_handling(self):
         secs = sections(self.body)
         g = secs["Gotchas"]
@@ -376,6 +469,19 @@ class VerifierReference(unittest.TestCase):
         for word in ("retryable", "deterministic", "complete"):
             self.assertIn(word, self.text)
         self.assertIn("`%s`" % vmod.COMPLETE, self.text)
+
+    def test_repeatable_flags_are_documented(self):
+        """Section 5 (E8-A35): --injected and --refused are repeatable and every value lands, matching argparse
+        (nargs + and action extend) in record-call's help."""
+        rows = [l for l in self.text.split("\n") if l.startswith("| `--injected` |") or l.startswith("| `--refused` |")]
+        self.assertEqual(len(rows), 2)
+        for row in rows:
+            self.assertIn("repeatable", row); self.assertIn("every value lands", row); self.assertIn("E8-A35", row)
+        self.assertIn("one per action", [r for r in rows if "--refused" in r][0])
+        code, out, err = testlib.run_script("recheck.py", ["record-call", "--help"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("--injected NAME [NAME ...]", out); self.assertIn("--refused TEXT [TEXT ...]", out)
+        self.assertIn("The block, each item, each evidence entry, and each candidate are closed shapes", re.sub(r"\s+", " ", self.text), "E8-A27 sentence")
 
     def test_names_the_flags_paths_and_request_fields(self):
         for phrase in ("--status", "--raw", "--model", "--kind", "--injected", "--refused", "--note", "calls.json", "run.verifier",
@@ -476,9 +582,31 @@ class Manifest(unittest.TestCase):
         self.assertEqual(sorted(meta["author"]), ["email", "name"])
         fields, _, _ = parse_frontmatter(read(SKILL_MD))
         self.assertTrue(fields["description"].startswith(CAPABILITY), "the same capability sentence as SKILL.md")
+        # E8-A36: the manifest names the same input routes as SKILL.md, in the same words
+        self.assertIn(ROUTES, meta["description"]); self.assertIn(UNRECORDED, meta["description"]); self.assertNotIn(OLD_EXCLUSION, meta["description"])
+
+    def test_readme_names_the_suite_commands_and_their_output(self):
+        """E8-A37: the README keeps "From the repository root", the three suite commands, and quotes the JSON object
+        validate-examples.py prints with exactly its top-level keys."""
+        readme = read(README_MD)
+        self.assertIn("From the repository root", readme)
+        for cmd in ("uv run --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/recheck-v2/skills/recheck-v2/scripts/tests -v",
+                    "uv run plugins/recheck-v2/skills/recheck-v2/scripts/validate-examples.py",
+                    "cd plugins/recheck-v2/evals && uvx --with jsonschema python3 checks/run-checks.py --out /tmp/recheck-v2-runner --json"):
+            self.assertIn(cmd, readme, cmd)
+        folded = re.sub(r"\s+", " ", readme)
+        m = re.search(r"`(\{\"ok\": true, .*?\"failures\": \[\]\})`", folded)
+        self.assertIsNotNone(m, "the README quotes the JSON object validate-examples.py prints")
+        self.assertEqual(sorted(json.loads(m.group(1))), ["checkpoint", "failures", "mutations", "negative", "ok", "positive", "receipt"])
+        for phrase in ("exit 4", "--verbose", "--skill-root DIR", "--help", "stderr", "Ran <N> tests", '{"steps": ['):
+            self.assertIn(phrase, readme, phrase)
 
     def test_skill_identity_reports_the_body_hash_and_the_manifest_version(self):
-        code, out, err = testlib.run_script("recheck.py", ["skill-identity"], cwd=os.path.expanduser("~"))
+        scratch = testlib.make_scratch("e8-fix4-elsewhere-")
+        try:
+            code, out, err = testlib.run_script("recheck.py", ["skill-identity"], cwd=testlib.other_cwd(scratch))
+        finally:
+            testlib.rmtree(scratch)
         self.assertEqual(code, 0, err)
         got = json.loads(out)
         self.assertEqual(got["name"], "recheck-v2"); self.assertEqual(got["version"], "0.1.0")

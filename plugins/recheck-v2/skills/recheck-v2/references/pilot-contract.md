@@ -45,7 +45,7 @@ account, not a guess at "the lone doc on disk".
 | `invocation.resume` | `true` only when continuing a run from its checkpoint | default `false` |
 | `invocation.harness`, `invocation.model` | the adapter's report of the harness (`name`, `version`, `entry`, `sandbox`) and of the model (`id`, `floor_class`, `floor_met`, settings) actually in force (section 13) | optional in the schema; the model object is required before anything is graded (section 14) |
 | `invocation.session_wrote_fix` | whether the driving session authored any fix under review (section 7) | default `false`; stored in the checkpoint, a resume uses the stored value |
-| `invocation.run_date` | the calendar date every record this run writes carries | optional; absent means the machine's local date; stored in the checkpoint |
+| `invocation.run_date` | the calendar date the block heading and the run's own artifacts carry; a waiver or reopening line carries its grant's date (section 8, E8-A41) | optional; absent means the machine's local date; stored in the checkpoint |
 | `invocation.turn_attribution` | the adapter's map from `turn_ref` to `user`, `assistant`, or `station` (section 8) | optional; a grant whose reference is not the user's is rejected |
 | `workspace` | absolute path to the repo root under test | required; must exist and be a git work tree |
 | `target` | either `build_doc` (relative to the workspace, contained in it, plus optional `slice`) or an explicit `items` list | required; exactly one form |
@@ -62,10 +62,14 @@ Questions and envelopes:
   then wait. Never proceed on a guess.
 - Every other invocation (headless, or any station caller) receives a result with
   `status: missing_input`: the complete list of missing or invalid fields, the ambiguities, no
-  question, and no write. A question into a channel nobody reads is a failure.
+  question, and no project-record write (a run directory that exists holds the resolved input,
+  the result, and the chat block, section 9; E8-A42). A question into a channel nobody reads
+  is a failure.
 - A payload that fails schema validation returns the same envelope with the `run` block
   omitted, every invalid field named (the validator's own error path and, where the core can
-  refine a `oneOf` failure to a leaf, that leaf as well), and nothing written anywhere. A
+  refine a `oneOf` failure to a leaf, that leaf as well), a grant object among the invalid
+  fields also listed under `rejected_grants` as `<JSON path>: <item> · <why>` (E8-A35), and
+  nothing written anywhere. A
   schema-valid payload that fails the path rules below gets its `run` block from the presented
   invocation and, on a direct interactive run, the one question, but no run directory and an
   empty write list; the run directory is created only after the path rules pass. A semantic
@@ -76,8 +80,9 @@ Questions and envelopes:
   more than one entry; a failure scenario the record lacks and the user has not confirmed; a
   waiver and a reopening for the same item on the same date.
 - Path rules: `workspace` and `run_dir` are absolute; `run_dir` is not inside the workspace;
-  `build_doc` is relative, contains no `..` segment, and resolves inside the workspace after
-  symlinks; a violation is invalid input.
+  `build_doc` and every explicit item's `record.document` are relative, contain no `..`
+  segment, and resolve inside the workspace after symlinks; a violation is invalid input
+  (E8-A19).
 - A calling station's payload is validated exactly like a direct request; a station cannot
   widen scope past the record any more than the user can.
 
@@ -102,7 +107,10 @@ Selection rules:
   BLOCKER or MAJOR entries; more than one candidate is missing input. Other open slices are
   named in the result, never absorbed.
 - `named_items`: each resolves against the whole record, whatever slice or card it sits under;
-  one run may take entries from several slices; a run may consist of named entries only. Naming
+  one run may take entries from several slices; a run may consist of named entries only; the
+  core resolves every named entry and every reopening before it decides whether anything is
+  open, so `nothing_open` needs an empty automatic selection and no named entry or reopening
+  adding to scope (E8-A29). Naming
   a cleared or waived entry reopens it, with the sequencing of section 8, through the reopening
   grant that carries the user's words (the direct route's executor builds that grant from the
   request); a named cleared entry with no such grant is missing input naming the grant it
@@ -192,7 +200,9 @@ list. Supporting submodules is an extension for E12 or later. The actual identit
 a result carries all six fields.
 
 A caller may pin an expected identity with any subset of fields; `commit` is normalized with
-`git rev-parse --verify <pin>^{commit}` before comparison, an unresolvable pin is a mismatch,
+`git rev-parse --verify <pin>^{commit}` before comparison (the input schema takes the forty-hex
+form; a symbolic selector is the adapter's to resolve that way before the input is built,
+E8-A34), an unresolvable pin is a mismatch,
 and every supplied field must be equal. The identity is computed at the start of the run,
 again after verification and before the recording transaction (section 9), and again inside
 it before the card lines. Every record write happens inside that transaction, so no write
@@ -274,7 +284,10 @@ Sequencing within a run:
    one per slice.
 
 A waiver and a reopening for the same item on the same date conflict and are missing input.
-An `extra_continuation` grant authorizes one continuation beyond the limit in section 11. The
+An `extra_continuation` grant authorizes one continuation beyond the limit in section 11 and is
+consumed by it: the checkpoint keeps the `turn_ref` of every continuation grant it used, a grant
+with a used `turn_ref` is not a grant for a later resume, and each further continuation needs a
+fresh user turn (E8-A23). The
 waiver and reopening lines the core writes carry the grant's date; the block heading carries
 the run date; file order decides what is open (Appendix A).
 
@@ -286,7 +299,10 @@ The complete list of writes. Anything else is a boundary violation the result mu
    (the brief handed to the verifier), the verifier's raw text (`verifier/raw.md`,
    `verifier/raw-2.md` for a re-send) and every redirected output under `verifier/`,
    `checkpoint.json` and `checkpoint.log`, `receipt.json` and `receipt.log`, `result.json`,
-   `chat.md`. The verifier writes only under `run_dir/verifier/`.
+   `chat.md`. The verifier writes only under `run_dir/verifier/`. Every file under `run_dir`
+   at delivery is listed: the artifacts the core wrote by name in their order, then every
+   other file (the adapter's capture under another name, a redirected output no evidence
+   entry named) in sorted path order, each once, before `result.json` and `chat.md` (E8-A31).
 2. `REOPENED (per user)` lines at the ledger home's tail, the first write of the transaction.
 3. One punch-list block appended at the tail of the ledger home (Appendix A), never editing
    earlier entries.
@@ -295,6 +311,11 @@ The complete list of writes. Anything else is a boundary violation the result mu
    in Appendix A finds exactly one; otherwise the result says none was found.
 6. The `Status:` line of each slice the mapping moves, one step per slice in ascending slice
    order; untouched when nothing changed. Always the last steps.
+
+Every project-record target the plan names (the ledger home, a verdict-doc copy, a status
+line's document) resolves inside the workspace's real path, checked when the plan is made and
+again immediately before each replacement; a target that does not ends the transaction as
+`recording_failed` before that write (E8-A19).
 
 No write to the review sheet, no source file, no git operation that changes branches or
 history, no mutation of real state to verify anything. Records are additive and file order is
@@ -316,8 +337,11 @@ The recording transaction. Writes 2 to 6 happen in that order inside one transac
 sequence of receipted steps:
 
 - Before it: the identity is recomputed and compared with the start-of-run identity; a
-  difference is `stale_source` and the transaction does not begin. Nothing in the project's
-  records has been touched at that point.
+  difference is `stale_source` and the transaction does not begin. Every retained report a
+  done item was adjudicated from is re-hashed against the checkpoint's recorded SHA-256 and
+  re-parsed for its structured block; a mismatch or a missing block stops the run as `stopped`
+  (`evidence changed: <path>`) and the transaction does not begin (E8-A26). Nothing in the
+  project's records has been touched at that point.
 - The plan: before write 2, the core computes every step of the transaction in order (the
   reopening lines, the block, the waiver lines, the copy when the glob matched exactly one
   doc, one status line per slice the mapping would move), each with its target path, kind,
@@ -329,13 +353,18 @@ sequence of receipted steps:
 - Write-ahead receipts: before each step, `receipt.json` gains an `intent` entry naming the
   step; after it, the matching `done` entry with the hash observed. The receipt is rewritten
   at each step, never only at the end.
-- Before the first status line (write 6), or, when the plan holds no status-line step, before
+- Before every status-line step (write 6), or, when the plan holds no status-line step, before
   the `done` entry of its last step: the identity is recomputed and the tracked diff since the
-  pre-transaction identity must consist exactly of the steps receipted `done`; the violations
-  found are kept in `run_dir/boundary.json` so a later re-assembly reports them;
-  anything else is listed in `boundary_violations`, every status-line step is marked
-  `cancelled`, every card stays as it was, and the result reports `not_clear`. A card is
-  therefore never advanced past a violated transaction. A boundary violation is an action
+  pre-transaction identity must consist exactly of the steps receipted `done` (plus, in the
+  no-status-step case, the step just applied); the violations found are kept in
+  `run_dir/boundary.json` with the step they were found before, so a later re-assembly
+  reports them; anything else is listed in `boundary_violations`, that status-line step and
+  every later one are marked `cancelled`, the cards they would have moved stay as they were,
+  and the result reports `not_clear`. A status line already receipted `done` when a later
+  check finds the violation stands (records are additive; there is no rollback) and its card
+  is listed as moved with the reason `moved before the violation was found`. A card is
+  therefore never advanced past a violation found before its own step (E8-A44). A boundary
+  violation is an action
   found to have happened outside sections 7, 9, and 13; a prohibited action refused or
   surfaced with no side effect is not one (section 7).
 - Commit point: the `done` entry of the last plan step that is not cancelled. Before it the
@@ -388,14 +417,15 @@ them); the validator closes the rest. A result that fails either is not delivere
 | Required input missing, ambiguous, or conflicting | direct interactive: one question, wait; otherwise structured envelope, stop | `missing_input` |
 | Empty checklist against a card at `rejected` or `signed off with conditions` | a record gap, never a clean slate: ask for the findings (direct interactive) or return the envelope | `missing_input` |
 | Empty checklist against a clear card, or no open item anywhere in scope | stop with no write; say so | `nothing_open` |
-| Expected identity mismatch, or identity changed before the transaction | stop before any write; report both identities | `stale_source` |
+| Expected identity mismatch, or identity changed before the transaction | stop before any project-record write (the run directory holds the resolved input, the result, and the chat block); report both identities | `stale_source` |
 | No fresh verifier context, session or verifier below the floor or of unknown capability (the model object missing or `floor_met` unknown), deterministic refusal | stop; nothing graded; no retry | `verifier_unavailable` |
 | Verifier transport failed, empty, or incomplete | one re-send with a fresh call id; a second failure stops the run | `stopped` |
 | Sandbox or environment stopped an execution an item needed | item `not_fixed`, reason `verification_blocked` | `completed` |
 | Evidence or fixture the scenario needs is unobtainable | item `not_fixed`, reason `missing_evidence` | `completed` |
 | A write failed inside the recording transaction | stop; receipt names what landed; no card without its block | `recording_failed` |
 | Reused run id on a new run (its run directory already holds a checkpoint, a receipt, or a result) | refuse before any work; nothing written | `stopped` |
-| The workspace has an initialized submodule | refuse before any work; `stop_reason` `unsupported: submodules: <paths>`; no fingerprint reported | `stopped` |
+| The workspace has an initialized submodule | refuse before any grading or project-record write; `stop_reason` `unsupported: submodules: <paths>`; no fingerprint reported; the run directory holds the resolved input and the result | `stopped` |
+| A phase command on a run that already ended | the recorded outcome, nothing written, no call id issued; a resume continues only a stop the run can recover from (two verifier failures, an unavailable verifier), as a continuation (E8-A20) | the status already recorded |
 | Resume with a missing, corrupt, or mismatched checkpoint | refuse before any write | `stopped` |
 | Continuation limit exceeded without an `extra_continuation` grant | refuse; state stays on disk | `stopped` |
 | A required reference cannot be loaded (every reference is loaded at run start, section 15) | stop before any work; `stop_reason` `reference unavailable: <path>`; when the missing reference is the result schema the stopped envelope is delivered unvalidated and says so | `stopped` |
@@ -409,12 +439,18 @@ A run keeps its state in `run_dir/checkpoint.json`: the hash of the resolved inp
 start-of-run identity, the scope (the normalized checklist, the accepted grants, the rejected
 ones), each item's state, the fix-introduced defects found so far, the verifier call ids used
 and the retry count per item, the continuation count, and the phase (`assembling`,
-`verifying`, `adjudicating`, `recording`, `committed`). It also stores the run date
+`verifying`, `adjudicating`, `recording`, `committed`, and `stopped` once a phase command
+delivered a terminal status other than `completed` or `recording_failed`, with that status,
+its reason, and whether a resume may continue it kept beside the phase; every phase command
+on a stopped run returns the recorded outcome and writes nothing, E8-A20). It also stores the run date
 (`run_date`), whether the session wrote the fix (`scope.session_wrote_fix`), each verifier
 call's retained report path and SHA-256, and the ordered list of run artifacts; a checkpoint
 written without these optional fields is completed from the presented input, the clock, or a
 scan of the run directory. It never stores an `extra_continuation` grant: that grant is read
-from the presented input at each resume. The transaction's plan and progress live in
+from the presented input at each resume; it does keep the `turn_ref` of each continuation
+grant it consumed (E8-A23) and, once the transaction begins, the transaction guard: the
+pre-transaction identity, the SHA-256 of the tracked non-target diff at that moment, and the
+plan's targets (E8-A45). The transaction's plan and progress live in
 `receipt.json` (section 9), not in the checkpoint. The checkpoint is rewritten after
 every item and every write.
 
@@ -465,17 +501,30 @@ before any write, and any failure stops the run as `stopped` naming the step:
    evaluated on the user channel after this check.
 4. Every `done` item's result validates against the result schema's item definition.
 5. When `receipt.json` exists: its integrity against `receipt.log`, its run id, and the
-   classification of every plan step as done, redo, or outside edit (section 9); an outside
-   edit ends as `recording_failed`, not as a resume.
-6. The identity is recomputed and compared with the checkpoint's start identity plus the
-   steps receipted `done`; a difference is `stale_source`.
+   classification of every plan step as done, redo, or outside edit (section 9): entries in
+   sequence order, each `intent` before its `done`, one `done` per step, every `done` entry's
+   observed hash equal to the step's planned after-hash (else the receipt is corrupt and the
+   resume is refused here), and, after the walk, every target whose steps are all done at its
+   final virtual hash (else an outside edit); an outside edit ends as `recording_failed`, not
+   as a resume, and no checkpoint or receipt byte changes (E8-A21, E8-A22).
+6. The identity is recomputed and compared with the checkpoint's start identity when no
+   transaction began, else with its transaction guard (the pre-transaction identity and the
+   non-target diff digest), plus the steps receipted `done`; a difference is `stale_source`.
+   A checkpoint inside a transaction that carries no guard is refused when its start identity
+   shows a dirty start (E8-A45). Nothing in steps 1 to 6 changes a byte of the checkpoint or
+   the receipt; the continuation count moves only after every step passed (E8-A22).
 
 Then the core takes scope, the run date, `session_wrote_fix`, and per-item state from the
-checkpoint and never re-derives them from memory or conversation, reloads every reference
+checkpoint and never re-derives them from memory or conversation; the invocation (harness,
+model, mode, caller, the resume flag) is the one presented at the resume, and the resolved
+input in the run directory is replaced by the presented input minus
+`authorization.extra_continuation`, so every later phase command reports it (E8-A30). It
+reloads every reference
 (section 15), increments the continuation count, and resumes at the first pending item, else
 at the first plan step not done, else (commit point passed) re-assembles the result and
 delivers it. A pending item is adjudicated from a retained report only when the checkpoint
-records a call with status `complete` covering it whose retained file still hashes to the
+records a call with status `complete` (the readers spelling `ok` reads as the same state,
+E8-A40) covering it whose retained file still hashes to the
 recorded SHA-256 and carries the structured block of section 7; otherwise a fresh call goes
 out under the next unused call id and the retry rule of section 7 applies. Items already done
 are never re-adjudicated. Call ids stay single-use across
@@ -605,8 +654,8 @@ Selection: T1 trigger set (A6).
 | Req | Requirement | Check | Passes when |
 |---|---|---|---|
 | R1 | Every route resolves into the validated input (A5a) | I1, I2, I4 on both routes | invalid or incomplete input never reaches verification |
-| R2 | Any non-direct or non-interactive caller gets the structured envelope (A5b) | I1, I2 with `mode: headless`, and with a station caller | `status: missing_input`, all fields listed, no question, no write |
-| R3 | A direct interactive session asks one question and waits (A5b) | I1 with `caller: direct`, `mode: interactive` | exactly one question naming the missing field; no write |
+| R2 | Any non-direct or non-interactive caller gets the structured envelope (A5b) | I1, I2 with `mode: headless`, and with a station caller | `status: missing_input`, all fields listed, no question, no project-record write |
+| R3 | A direct interactive session asks one question and waits (A5b) | I1 with `caller: direct`, `mode: interactive` | exactly one question naming the missing field; no project-record write |
 | R4 | A stale pin or a changed identity stops the run before any write (section 6) | I3, S4 (four variants) | `status: stale_source`, both identities present, `matched: false`, records untouched |
 | R5 | A fixed item is `fixed` with evidence of the scenario no longer holding | F1 | disposition `fixed`, no reason, method and evidence present |
 | R6 | An unfixed item is `not_fixed`, reason `reproduces` | F2 | as named |
@@ -642,7 +691,7 @@ Selection: T1 trigger set (A6).
 | R36 | Legacy records are parsed by the Appendix A grammar and ambiguous ones go to the user, never guessed | W3, S1 | legacy tags, separators, and embedded record syntax round-trip or stop as missing input |
 | R37 | A missing or unreadable reference stops the run before its action (section 15) | M1 | `stopped` naming the reference |
 | R38 | The run reports harness, entry, sandbox, model, and settings actually used (section 13) | every run | fields present and matching the profile |
-| R39 | A workspace with an initialized submodule is refused before any work (section 6) | S4 variant | `stopped`, reason named, no write |
+| R39 | A workspace with an initialized submodule is refused before any work (section 6) | S4 variant | `stopped`, reason named, no project-record write; the run directory holds the resolved input and the result |
 | R40 | Result relationships hold: disposition agrees with adjudication, `result` agrees with the effective open set (waived items excluded), a fixed item carries no block or missing field, violations freeze cards (sections 4 and 9) | every run; schema and semantic validator; W4 | both reject every counterexample in the negative suite and accept every positive case, a waived clearance and a violation beside a verified fix included |
 | R41 | A resume binds to the original input and rejects a corrupt or altered checkpoint; the one tolerated state, an announced write that never landed, is dropped (section 11) | C4 variants, C5 | `stopped` before any write; C5 continues after dropping the announced line |
 | R42 | A waiver accepted this run removes the checklist item from the open set and the result without changing its disposition (section 4) | S2 | block line `not fixed`, waiver line after it, item marked `waived`, `all_clear` when nothing else is open, card by the mapping |
@@ -670,7 +719,7 @@ whose claim would violate it is ambiguous (below).
 |---|---|
 | Review finding (initial review block, heading `### <YYYY-MM-DD> — review: <slice>`) | `- <severity> · <file:line> · <claim> · <failure scenario> · <which slice's review found it>` |
 | Recheck line (heading `### <YYYY-MM-DD> — recheck: <slice>`; `Slice A, Slice B` in ascending order when the run's checklist spans slices) | `- <severity> · <file:line> · (<claim>) · fixed \| not fixed · <how verified>`; when the code moved, the post-fix location goes in the prose after the disposition, never inside the claim; a legacy entry with no claim writes `()` |
-| Fix-introduced defect line (same block) | `- <severity> · <file:line> · broke: <claim> — <scenario>` |
+| Fix-introduced defect line (same block) | `- <severity> · <file:line> · broke: <claim> — <scenario>`; under a heading naming more than one slice a fourth field ` · <slice>` names the slice charged, and a defect line under such a heading without it is ambiguous (E8-A25) |
 | Waiver | `- WAIVED (per user) · <YYYY-MM-DD> · <severity> · <file:line> · <claim> · "<quoted words>"` |
 | Reopening | `- REOPENED (per user) · <YYYY-MM-DD> · <file:line> · <claim> · "<quoted words>"` |
 | Legacy waiver or reopening (read only) | the same lines without the trailing quoted words |
@@ -690,7 +739,9 @@ method, the first evidence, the block or missing text, the post-fix location) an
 contains the separator or a line break.
 
 **Claim field rules.** The claim is its own field. Parentheses wrapping the whole field are not
-part of the claim. A parenthetical glued to the location (`file:line (tag)`) is a legacy tag,
+part of the claim, in every shape the reader accepts (review finding, recheck line, waiver,
+reopening) and in the join key, so a review claim written in parentheses matches its recheck,
+waiver, and reopening lines (E8-A28). A parenthetical glued to the location (`file:line (tag)`) is a legacy tag,
 not a claim, and not part of the join key: the location is `file:line`, a recheck line written
 for the entry omits the tag, and the open filter matches the tagged finding against the
 untagged line. `()` in a recheck line's claim field means no claim. A record with no claim field matches on location alone only where a single entry
@@ -724,8 +775,10 @@ and never dead under the open filter. One home per doc. Appends land at the home
 **Open filter.** An item is open when its last record in file order (block line, waiver,
 reopening), matched on location plus claim, leaves it neither fixed nor waived. Records are
 ordered by their position in the document, later wins; dates are informational for the filter.
-The core appends in date order at the ledger home's tail, so for records the core wrote the two
-orders agree; a hand-edited ledger follows file order, which section 9 names as time order.
+The core appends in transaction order (section 8) at the ledger home's tail; a block heading
+carries the run date and a waiver or reopening line carries its grant's date, so the dates on
+core-written records need not increase down the file; file position alone decides, which
+section 9 names as time order (E8-A41).
 
 **Verdict doc copy.** Glob `docs/reviews/*-signoff-<feature>-<slice>.md`, where `<feature>` is
 the build doc's `<topic>` (from `docs/plans/<YYYY-MM-DD>-<topic>.md`, else the filename minus
@@ -845,3 +898,23 @@ attribution (section 8, E8-24); the run date (sections 2 and 11, E8-25); `checkl
 and Appendix A, E8-28); the artifact names (section 9, E8-29). The schemas, the examples, and
 the scripts implement revision 5 at E8; `checkpoint.schema.json`, `receipt.schema.json`, and
 `verifier.md` join section 15.
+
+Revision 5, amended 2026-09-14 after Astra's review of the built core (rulings E8-A19 to E8-A45
+in the E8 lane contract, section 12): path containment for every project-record target
+(sections 2 and 9, E8-A19); a terminal status ends the phases (sections 10 and 11, E8-A20);
+the receipt proves the state and a refused or ended resume changes nothing (section 11,
+E8-A21, E8-A22); a continuation grant is consumed once (sections 8 and 11, E8-A23); a defect
+line under a multi-slice heading names its slice and one claim normalization for every shape
+(Appendix A, E8-A25, E8-A28); retained reports re-proved before recording (section 9, E8-A26);
+named entries before `nothing_open` (section 3, E8-A29); the active invocation on a resume
+(section 11, E8-A30); the complete artifact inventory (section 9, E8-A31); the forty-hex pin
+(section 6, E8-A34); schema-rejected grants listed (section 2, E8-A35); dates (section 2 and
+Appendix A, E8-A41); "no write" read as no project-record write (sections 2, 10, 16, E8-A42);
+the boundary check before every status step (section 9, E8-A44); the transaction guard
+(section 11, E8-A45). The claim above that E8-12 settles gaps 14 and 16 is withdrawn (E8-A43):
+E8-12 makes the structured block the graded value and the brief demands every scenario
+command; whether the prose observations agree with the block (gap 14) and whether every named
+command ran (gap 16) are the executor's judgment at adjudication (section 7) until E10's trial
+measures them, carried to E10 with the fix named: a structured `commands_run` list and an
+`observed` line per item in the report block, checked against the scenario's named commands
+by the validator.

@@ -397,7 +397,9 @@ current phase and changes nothing). Partial effects are documented in `--help` (
 failed command may leave). Paths in arguments are absolute or resolved from the current
 working directory; bundled files are resolved from the script's own directory.
 
-`scripts/recheck.py` subcommands (stdout JSON always carries `"next"`):
+`scripts/recheck.py` subcommands (the stdout JSON of the phase commands `start`, `record-call`,
+`adjudicate`, `new-defect`, `record`, and `resume` always carries `"next"`; `identity`,
+`ledger`, and `skill-identity` return their objects, E8-A38):
 
 | Command | Does | stdout on success |
 |---|---|---|
@@ -418,7 +420,10 @@ report, and artifact containment); stdout `{"ok": bool, "schema": [...errors], "
 [...findings]}`; exit 0 when ok, 4 when not, 2/3 as above.
 
 `scripts/validate-examples.py`: the moved suite; run from any directory; resolves the
-references directory from its own location; adds the E8-15 checks, checkpoint and receipt
+references directory from its own location (`--skill-root DIR` overrides it for tests); an
+argument parser with `--help`, JSON on stdout (`{"ok", "positive", "negative", "mutations",
+"checkpoint", "receipt", "failures"}`), the per-file lines on stderr under `--verbose`, exit 2
+on an unknown argument, 3 on the missing dependency, 4 when any check fails (E8-A37); adds the E8-15 checks, checkpoint and receipt
 schema validation of the example checkpoint and receipt, and the negative cases the schema
 changes of revision 5 introduce (a `refused_actions` entry that is not a string, a
 `turn_attribution` value outside the enum, a `model` without `floor_met`, a stopped submodule
@@ -490,7 +495,8 @@ adapter.
 
 ## 8. The semantic validator (section 9 of the contract, closed here)
 
-Checks, each with an id the validator prints:
+Checks, each with an id the validator prints (V3, V7, V8, V12, V13, V14, V17, and V18 as amended
+by E8-A19, E8-A21, E8-A24, E8-A25, E8-A26, E8-A31, E8-A33, and E8-A44 in section 12):
 
 - V1 items correspond one-to-one to the checklist entries (`checklist.count` equals their
   number; same keys, same order as the checkpoint scope).
@@ -684,3 +690,224 @@ this document with a section 12 "Amendments" naming any ruling issued while the 
   set T-12, which the pilot must not claim); it names the v2 command and the user's phrasings,
   and carries an exclusion for the bare v1 slash command. E10 scores the twelve and the sealed
   eight.
+
+### Amendments after Astra's review (lane R, 2026-09-14; verdict CORE REJECTED, 15 BLOCKER, 10 MAJOR, 2 MINOR)
+
+Astra's findings are numbered 1 to 27 in `astra-outputs/e8/e8-astra-review.md` of the Clerk
+packet; each amendment names the finding it answers. The pilot contract outranks this document;
+where an amendment changes contract text, the section is named and the change is made there.
+
+- **E8-A19 (finding 1, BLOCKER), every project-record target is contained.** Section 2's path
+  rules cover every explicit item's `record.document` exactly as they cover `build_doc`
+  (relative, no `..` segment, resolves inside the workspace after symlinks; a violation is
+  invalid input). Section 9: every project-record target the plan names (the ledger home, a
+  verdict-doc copy, a status line's document) must resolve inside the workspace's real path,
+  checked when the plan is made and again immediately before each replacement; a target that
+  does not ends the transaction as `recording_failed` before that write. V3 applies the same
+  resolved-containment test to every project-record path when the workspace is supplied.
+  Sections 2 and 9 amended.
+- **E8-A20 (finding 2, BLOCKER), a terminal status ends the phases.** The checkpoint's phase
+  set gains `stopped`. When a phase command delivers a terminal status other than `completed`
+  or `recording_failed` (`stopped`, `verifier_unavailable`, `stale_source`, `missing_input`),
+  the checkpoint is rewritten with `phase: stopped` and `terminal: {status, stop_reason,
+  resumable}` before `result.json` is written. Every phase command (`record-call`,
+  `adjudicate`, `new-defect`, `record`) on a stopped run returns `{"next": "done"}` with the
+  recorded status and the existing result path, writes nothing, and issues no call id. `resume`
+  continues a stopped run only when `terminal.resumable` is true: a stop after two verifier
+  failures and a `verifier_unavailable` stop are resumable (section 10's bounded recovery: the
+  resume counts as a continuation, a fresh call goes out under the next id, and the per-item
+  retry counters stand); every other terminal is refused at section 11 step 1 ("the run ended
+  as <status>: <reason>; start a new run"). `checkpoint.schema.json` gains the phase value and
+  the optional `terminal` object. Section 11's phase list and section 10's table amended.
+- **E8-A21 (finding 3, BLOCKER), the receipt proves the state.** Classification (E8-14) also
+  requires: entries in `seq` order, each `intent` before its `done`, at most one `done` per
+  step, and every `done` entry's `observed_sha256` equal to the step's planned after-hash; a
+  receipt that breaks one of these is corrupt and the resume is refused at step 5. After the
+  walk, every target whose steps are all done must sit at its final virtual hash; a target
+  that does not is an outside edit (`recording_failed`). V8 checks the same relationships from
+  the receipt and, with the workspace, the resting hashes of fully-done targets. Section 11
+  step 5 amended.
+- **E8-A22 (finding 4, BLOCKER), a refused or ended resume changes no state.** Section 11's
+  six steps run before any write: the outside-edit ending of step 5 and the `stale_source`
+  ending of step 6 are delivered (a re-assembled result and chat block) with the checkpoint and
+  the receipt byte-identical, and the continuation count moves only after every step passed.
+  The driver handles the outside classification right after step 5, before step 6 and before
+  the count. Section 11 amended.
+- **E8-A23 (finding 5, BLOCKER), a continuation grant is consumed once.** The checkpoint keeps
+  `continuation_grants_used`, the list of `turn_ref` values of the `extra_continuation` grants
+  it consumed (never the grant object, section 11's rule stands). A presented grant whose
+  `turn_ref` is in that list is not a grant for this resume ("already used for continuation
+  N"), so each continuation beyond the first needs a fresh user turn. `checkpoint.schema.json`
+  gains the optional list. Sections 8 and 11 amended.
+- **E8-A24 (finding 6, BLOCKER), V7 and V14 recompute.** With the input supplied, the
+  validator recomputes each grant object's channel verdict by the core's own rule (the
+  `channel`, `turn_ref`, `turn_attribution`, and `forwarded_by` rules of section 8) and
+  requires: every grant the rule rejects appears in `rejected_grants` under its JSON path and
+  no `waived` or `reopened` marker, waiver line, or reopening line derives from it; every grant
+  the rule accepts is absent from `rejected_grants` unless the entry states another reason
+  (it matched no entry, it conflicted). The result's own `rejected_grants` is never the proof.
+- **E8-A25 (finding 7, BLOCKER), a defect line under a multi-slice heading names its slice.**
+  Appendix A's fix-introduced defect line gains a fourth field ` · <slice>` when the block
+  heading names more than one slice (under a single-slice heading the heading's slice is the
+  charge and the line keeps its three fields, so no single-slice fixture byte changes); the
+  reader takes the fourth field as the slice, a defect line under a multi-slice heading
+  without it is ambiguous (missing input), and the cards are computed from that charge. V17
+  compares the written line's slice with `charged_to_slice`. Appendix A amended.
+- **E8-A26 (finding 8, BLOCKER), retained reports are re-proved before recording.** Before the
+  transaction's plan, every retained report a done item was adjudicated from is re-hashed
+  against the checkpoint's recorded `raw_sha256` and re-parsed for its structured block; a
+  mismatch or a missing block stops the run as `stopped` (`evidence changed: <path>`) with no
+  project write. V13, with the run directory, requires the report of every call recorded with
+  the complete status to hash to the recorded SHA-256 and to carry the block; the legacy skip
+  applies only to a call record that carries no `raw_sha256` (a checkpoint written before
+  E8-12). Section 9's "before it" bullet amended.
+- **E8-A27 (finding 9, BLOCKER), the report block is a closed shape.** `parse_report_tail`
+  requires every key of section 2 of `verifier.md` present with the stated type, rejects
+  unknown keys in the block, the items, the candidates, and the evidence entries (closed
+  shapes), requires `recheck_verifier_report` to be the integer 1, integer indexes, `file:line`
+  locations, non-empty candidate evidence with an integer `caused_by_index` in range, and the
+  nullable fields exactly as stated; any violation makes the report `incomplete`. The
+  post-fix location handling (E8-8, E8-A10 b) stands. One negative test per omitted required
+  key and per malformed candidate. `verifier.md` section 2 says so.
+- **E8-A28 (finding 10, BLOCKER), one claim normalization.** Appendix A's rule that outer
+  parentheses are not part of the claim applies to every shape the reader accepts (review
+  finding, recheck line, waiver, reopening) and to the join key, so a review claim written in
+  parentheses matches its recheck, waiver, and reopening lines. Appendix A amended.
+- **E8-A29 (finding 11, MAJOR), named entries resolve before `nothing_open`.** With
+  `named_items` or reopening grants present, the core resolves each (to exactly one record
+  entry, else missing input) and adds it to scope before deciding whether anything is open;
+  `nothing_open` is reached only when the automatic selection finds no candidate and no named
+  entry or reopening adds one. Section 3 amended.
+- **E8-A30 (finding 12, MAJOR), the active invocation.** After section 11's validation, the
+  resume replaces `run_dir/input.json` with the presented input minus
+  `authorization.extra_continuation` (the binding hash is unchanged by construction; the grant
+  is never stored), so every later phase command reports the resumed session's harness, model,
+  mode, caller, and `resume: true`, with `continuations` from the checkpoint; scope, the run
+  date, `session_wrote_fix`, and item state still come from the checkpoint. Tests compare the
+  result against the presented invocation; `test_driver_inputs.py`'s self-comparison is
+  replaced by the real assertion. Section 11 amended.
+- **E8-A31 (finding 13, MAJOR), the artifact inventory is complete.** At every delivery with a
+  run directory, the core lists every file under `run_dir` (recursively, `verifier/`
+  included): the artifacts it wrote by name in the E8-29 order, then every other file (the
+  adapter's capture under a different name, a redirected output no evidence entry named) in
+  sorted path order, each once, before `result.json` and `chat.md`. V3, with the run
+  directory, requires every file under `run_dir` to appear exactly once. Section 9 amended.
+- **E8-A32 (finding 14, MAJOR), the normalized checklist is checked before the brief.** A
+  record entry whose failure-scenario field is empty is missing input naming the document and
+  line (Appendix A: an entry without one is missing input until the user supplies or confirms
+  it), checked on the normalized checklist before `checklist.md` and the checkpoint are
+  written; a checkpoint schema failure at `start` is never exit 1.
+- **E8-A33 (finding 15, MAJOR), V18 is status-aware.** For a result whose status is `stopped`
+  and whose `stop_reason` begins `resume refused at section 11 step N`, V18 requires the
+  checkpoint verification to fail at that step (or the run id to mismatch at step 3) and the
+  result to carry no items, cards, new defects, or project-record writes; a refusal beside a
+  checkpoint that verifies is the finding. For every other status V18 stands as written.
+- **E8-A34 (finding 16, MAJOR), schema tightening.** `result.schema.json`: `stopped`,
+  `verifier_unavailable`, `stale_source`, `missing_input`, and `nothing_open` forbid `items`,
+  `cards`, `new_defects`, `still_open`, and `result`; a `completed` or `recording_failed`
+  result whose run block carries a `model` object with `floor_met` present requires it `true`;
+  `new_defect.severity_basis` is required and non-empty. `checkpoint.schema.json`: `seq` 0
+  requires `prev` null and `seq` above 0 requires a string. `receipt.schema.json`: a
+  `status_line` step's `value` is one of the three writable card values. The validator loads
+  every schema with jsonschema's `FormatChecker` so `format: date` rejects a non-calendar date
+  (`2026-99-99`, `2026-02-30`); the example suite gains those negative cases. Section 6 of the
+  contract says the input's `commit` pin is the forty-hex form and a symbolic selector is the
+  adapter's to resolve before the input is built.
+- **E8-A35 (finding 17, MAJOR), refused actions accumulate and schema-rejected grants are
+  listed.** `--refused` and `--injected` accept repetition (`action="extend"`), the body's
+  form (one `--refused` per action) is what the test drives, and every value lands. A payload
+  whose schema failures include a grant object lists that grant under `rejected_grants` in the
+  missing-input envelope (`<JSON path>: <item> · <why>`, E8-A12) beside `missing_input.fields`;
+  the envelope still has no run directory and an empty write list. Section 2 amended.
+- **E8-A36 (finding 18, MAJOR), the description names every input route.** The exclusion
+  "never for a recheck of anything that is not a build doc's punch list" is replaced by one that
+  keeps the explicit-items route (a caller's verdict findings, `docs/punch-list.md`) inside:
+  the skill takes recorded findings from a build doc's punch list, a caller-held verdict's
+  named findings, or `docs/punch-list.md`, and is never for findings nobody recorded. Length
+  and first-300 rules of E8-A18 stand.
+- **E8-A37 (finding 19, MAJOR), `validate-examples.py` implements A7a.** An argument parser
+  (`--help`, `--skill-root DIR` for a test-only references directory, `--verbose` for the
+  per-file lines on stderr), JSON on stdout (`{"ok", "positive", "negative", "mutations",
+  "checkpoint", "receipt", "failures"}`), diagnostics on stderr, exit 2 on an unknown argument,
+  3 on the missing dependency, 4 when any check fails; the suite that reads its prose output
+  reads the JSON. Section 6 of this document amended.
+- **E8-A38 (finding 20, MINOR), `next` on phase commands only.** Section 6's "stdout JSON
+  always carries `next`" is restricted to `start`, `record-call`, `adjudicate`, `new-defect`,
+  `record`, and `resume`; `identity`, `ledger`, and `skill-identity` return their objects.
+  Section 6 amended.
+- **E8-A39 (finding 21, MINOR), E8-A3's premise corrected.** `jsonschema==4.25.1` installs and
+  runs under `/usr/bin/python3` 3.9.6 (measured by the slice 1 fix round and by Astra:
+  `3.9.6` / `4.25.1`); it is 4.26.0 that needs Python 3.10 or newer. The pin stands at 4.25.1
+  and every PEP 723 block, message, and test carries it. E8-A3 is read with this correction.
+- **E8-A40 (question 22, MAJOR), the complete-call spelling.** The checkpoint stores `complete`
+  (E8-A1's storage rule); one shared function decides "is this call complete" and accepts
+  `complete` and `ok` alike wherever a call record is read (`retained_report`, V13, the
+  resume). Section 11 says so.
+- **E8-A41 (question 23, BLOCKER), dates.** Appendix A's sentence claiming that date order and
+  file order agree for core-written records is replaced: the core appends in transaction order
+  (section 8) at the ledger home's tail; a block heading carries the run date and a waiver or
+  reopening line carries its grant's date, so dates on core-written records need not increase
+  down the file; file position alone decides. Section 2's `run_date` row names the block
+  heading and the run's own artifacts, not every record. E8-25 is read the same way.
+- **E8-A42 (question 24, BLOCKER), "no write" means no project-record write.** Section 2's
+  envelope sentence, section 10's `stale_source` and submodule rows, and R2, R3, and R39 say
+  "no project-record write" where the run directory, once the path rules passed, holds the
+  resolved input, the result, and the chat block (section 9 lists them for every status that
+  reached a run directory). "Nothing written anywhere" is reserved for the branches that never
+  reach a run directory: a schema failure, a path-rule failure, a reused id, a missing
+  reference at start, and a refused resume validation. Sections 2, 10, and 16 amended.
+- **E8-A43 (question 25, BLOCKER), gaps 14 and 16 carried honestly.** Appendix B's claim that
+  E8-12 settles gaps 14 and 16 is withdrawn. E8-12 makes the structured block the graded value
+  and makes the brief demand every scenario command; whether the prose observations agree with
+  the block (gap 14) and whether every named command ran (gap 16) are the executor's judgment
+  at adjudication (section 7: read the evidence; `downgraded` when it contradicts the
+  disposition), which the body states in those words, and E10's trial measures it. Carried to
+  E10 with the fix named: a structured `commands_run` list (`{command, exit, stdout_tail}`)
+  and an `observed` line per item in the report block, checked against the scenario's named
+  commands by the validator. Appendix B amended.
+- **E8-A44 (question 26, BLOCKER), the boundary check runs before every status step.** Section
+  9's check runs before every status-line step (not only the first) and, when the plan holds
+  no status-line step, before the `done` entry of its last step with that step's own after-hash
+  inside the allowed state. A violation found before status step k is written to
+  `boundary.json` with `before_step: k`, cancels step k and every later status-line step, and
+  forces `not_clear`; a status line already receipted `done` when a later check finds the
+  violation stands (records are additive; there is no rollback) and its card is listed as moved
+  with the reason `moved before the violation was found`. V12: a card may move beside a
+  boundary violation only when its status step's `done` entry precedes `before_step`. Section
+  9 amended.
+- **E8-A45 (question 27, BLOCKER), the transaction guard.** When the transaction begins
+  (phase `recording`, before the plan is written), the checkpoint stores `transaction_guard`:
+  the pre-transaction identity, the SHA-256 of the tracked non-target diff at that moment (the
+  dirty-start diff), and the plan's targets. Section 11 step 6 compares the current identity
+  and non-target diff with the start identity when no transaction began, else with the guard,
+  plus the steps receipted `done`; a difference is `stale_source`. A checkpoint inside a
+  transaction that carries no guard is refused when its start identity shows a dirty start
+  (tracked or untracked content differing from the commit). E8-A10 (c) is superseded; nothing
+  is carried. `checkpoint.schema.json` gains the optional object. Section 11 amended.
+
+- **E8-A46 (found by fix agent 2), symlinks in the untracked fingerprint.** `identity_of`
+  crashed (exit 1, `IsADirectoryError`) when an untracked path was a symlink to a directory (a
+  gitignore pattern with a trailing slash does not match a symlink). A symlink contributes the
+  hash of its link target text, as git stores symlinks, and is never followed; a directory is
+  never opened as a file.
+
+Readings the fix agents recorded (each flagged in its report): E8-A19's plan-time containment
+failure ends `recording_failed` with the receipt created (the plan, no entry) because the result
+schema requires `receipt_path` on that status; the contract's "before that write" holds (no
+project write). E8-A27's closed shape made the candidate placeholder `"location": "file:line"`
+in `verifier.md` section 2 and `brief.REPORT_SHAPE` concrete (`src/widget/export.py:31`), since
+the example must parse. E8-A46 diverges from `fixturelib`'s untracked hashing for a symlink
+(the fixture library follows the link; the core hashes the link text as git does); no fixture
+holds a symlink, so every manifest identity still matches, and the alignment of `fixturelib`
+is carried to E10 with the fix named (read the link text). V3's inventory check (E8-A31) runs
+only for a result whose write list is non-empty (a refused resume lists nothing beside its
+untouched run directory, E8-A42) and exempts `result.json` and `chat.md` from the existence
+check because the validator runs before those two writes. V12 (E8-A44) matches moved cards to
+live status-line steps in ascending slice order, since a seeded E8-28 plan carries no `value`.
+V13's legacy skip (E8-A26) covers a call record without `raw_sha256` whose report exists
+without a block; a missing report file is a finding for every record.
+
+The fix round after this review is one round (plan ruling 17): four fresh Fable low agents in
+sequence (scope and ledger; driver and transaction; schemas and validators; skill body and
+tests), the suites rerun after each, one commit, then Astra's verification round on a fresh
+copy.

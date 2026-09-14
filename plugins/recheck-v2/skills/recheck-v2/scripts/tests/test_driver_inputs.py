@@ -40,14 +40,18 @@ class Driver(unittest.TestCase):
         self.assertNotIn("question", env["missing_input"])
         self.assertIsNone(doc["result"])
 
-    def assert_envelope_path_rule(self, doc, fields, question):
+    def assert_envelope_path_rule(self, doc, fields, question, cdir):
         """E8-A6: a schema-valid payload that fails a path rule: the run block from the presented invocation,
         the one question on a direct interactive run only, an empty write list, nothing written."""
         env = doc["document"]
         self.assertEqual(doc["status"], "missing_input")
         self.assertEqual(env["status"], "missing_input")
         self.assertIn("run", env, "the run block comes from the presented invocation (E8-A6)")
-        self.assertEqual(env["run"]["invocation"]["mode"], env["run"]["invocation"]["mode"])
+        # E8-A30: the run block reports the presented invocation, compared against the input itself
+        presented = testlib.load_json(os.path.join(cdir, "input.json"))["invocation"]
+        self.assertEqual(env["run"]["invocation"]["mode"], presented["mode"])
+        self.assertEqual(env["run"]["invocation"]["caller"], presented["caller"])
+        self.assertEqual(env["run"]["run_id"], presented["run_id"])
         self.assertEqual(env["missing_input"]["fields"], fields)
         self.assertEqual(env["records_written"], [])
         if question:
@@ -264,7 +268,7 @@ class Driver(unittest.TestCase):
             cdir = self.case("I2I4-conflicts-paths", cid)
             code, doc, err = self.start(cdir)
             self.assertEqual(code, 10, (cid, err))
-            self.assert_envelope_path_rule(doc, fields, question)
+            self.assert_envelope_path_rule(doc, fields, question, cdir)
             self.assertEqual(doc["document"]["run"]["run_id"], cid + "-run", cid)
             self.assertFalse(os.path.exists(os.path.join(cdir, "workspace", ".recheck-run")), cid)
             self.assertEqual(os.listdir(os.path.join(cdir, "run")), [], "%s: no run directory is created" % cid)
@@ -460,6 +464,133 @@ class Driver(unittest.TestCase):
         run_dir = os.path.join(cdir, "run")
         self.assertEqual(brief.count(run_dir), brief.count(os.path.join(run_dir, "verifier")), "the run dir appears only as the scratch prefix")
         self.assertEqual([it["slice"] for it in doc["checklist"]], ["A"], "Slice B's entry stays out of the checklist")
+
+    # ---- the fix round after Astra's review (E8-A19, E8-A29, E8-A32, E8-A35) ----
+
+    ITEM = {"severity": "BLOCKER", "location": {"file": "src/widget/export.py", "line": 17},
+            "claim": "CSV export writes a title containing a comma without quoting",
+            "failure_scenario": "run PYTHONPATH=src python3 -m widget.export 'Bolt, hex' 3; the data line has three columns instead of two",
+            "record": {"document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19"},
+            "slice": "A"}
+
+    def test_explicit_item_record_document_symlink_escape(self):
+        """E8-A19: an explicit item's record.document whose parent directory is a symlink to a directory outside
+        the workspace fails the path rules exactly like build_doc (section 2): invalid input, the run block from
+        the presented invocation, no run directory, nothing written."""
+        cdir = self.case("F1-fixed-defect", "F1-01-fixed-clean", raw=True)
+        ws = os.path.join(cdir, "workspace")
+        outside = os.path.join(self.dir, "outside-docs")
+        os.makedirs(outside)
+        shutil.copyfile(os.path.join(ws, "docs", "plans", "2026-09-18-widget-export.md"), os.path.join(outside, "2026-09-18-widget-export.md"))
+        os.symlink(outside, os.path.join(ws, "docs", "linked"))
+        item = dict(self.ITEM, record=dict(self.ITEM["record"], document="docs/linked/2026-09-18-widget-export.md"))
+        testlib.prepare_input(cdir, mutate=lambda d: d.__setitem__("target", {"items": [item]}))
+        run_dir = os.path.join(cdir, "run")
+        before = sorted(os.listdir(run_dir)) if os.path.isdir(run_dir) else None
+        code, doc, err = self.start(cdir)
+        self.assertEqual(code, 10, err)
+        self.assert_envelope_path_rule(doc, ["target.items[0].record.document"], True, cdir)
+        self.assertIn("docs/linked/2026-09-18-widget-export.md resolves outside the workspace after symlinks", doc["document"]["missing_input"]["ambiguity"][0])
+        self.assertEqual(sorted(os.listdir(run_dir)) if os.path.isdir(run_dir) else None, before, "no run directory is created")
+        self.assertTrue(before in (None, []), before)
+        from recheck_core import inputs
+        self.assertEqual(inputs.path_rules({"workspace": ws, "invocation": {"run_dir": run_dir}, "target": {"items": [dict(item, record={"document": "../x.md"})]}}, lambda p: (True, "")),
+                         [("target.items[0].record.document", "record.document must be relative with no .. segment")])
+        self.assertEqual(inputs.path_rules({"workspace": ws, "invocation": {"run_dir": run_dir}, "target": {"items": [dict(self.ITEM)]}}, lambda p: (True, "")), [])
+
+    def test_named_entries_resolve_before_nothing_open(self):
+        """E8-A29: the S2-03 shape (a cleared entry, a user reopening naming it, target.build_doc without slice)
+        resolves to a one-item scope, not nothing_open; named_items naming nothing on a clear doc is missing
+        input; nothing named on the clear doc is nothing_open."""
+        from recheck_core import inputs
+        cdir = self.case("S2-waivers-reopening", "S2-03-reopened", mutate=lambda d: d["target"].pop("slice"))
+        doc = testlib.load_json(os.path.join(cdir, "input.json"))
+        grants = inputs.collect_grants(doc)
+        scope = inputs.resolve_scope(doc, os.path.join(cdir, "workspace"), grants["reopenings"])
+        self.assertEqual(scope["status"], "ok", scope)
+        self.assertEqual(len(scope["checklist"]), 1); self.assertEqual(scope["source"], "named_items"); self.assertEqual(scope["slice"], "A")
+        code, started, err = self.start(cdir)
+        self.assertEqual(code, 0, err); self.assertEqual(started["next"], "verify")
+        self.assertEqual([(it["location"]["line"], it["slice"]) for it in started["checklist"]], [(11, "A")])
+
+        def name_nothing(d):
+            d["target"].pop("slice")
+            d.pop("authorization")
+            d["named_items"] = [{"location": {"file": "src/widget/export.py", "line": 99}, "claim": "no such entry"}]
+        cdir = self.case("S2-waivers-reopening", "S2-03-reopened", mutate=name_nothing)
+        code, doc, err = self.start(cdir)
+        self.assertEqual(code, 10, err)
+        res = testlib.load_json(doc["result"])
+        self.assertEqual(res["status"], "missing_input"); self.assertEqual(res["missing_input"]["fields"], ["named_items[0]"])
+
+        def name_none(d):
+            d["target"].pop("slice")
+            d.pop("authorization")
+            d.pop("named_items")
+        cdir = self.case("S2-waivers-reopening", "S2-03-reopened", mutate=name_none)
+        code, doc, err = self.start(cdir)
+        self.assertEqual(code, 10, err)
+        self.assertEqual(testlib.load_json(doc["result"])["status"], "nothing_open")
+
+    def test_empty_failure_scenario_is_missing_input(self):
+        """E8-A32: a review finding with five fields and an empty fourth (the failure scenario) is missing input
+        naming target.build_doc and the record's line, from resolve_scope and before checklist.md or the
+        checkpoint is written; exit 10, status missing_input, the question on the direct interactive route."""
+        from recheck_core import inputs
+        cdir = self.case("F1-fixed-defect", "F1-01-fixed-clean")
+        ws = os.path.join(cdir, "workspace")
+        rel = "docs/plans/2026-09-18-widget-export.md"
+        path = os.path.join(ws, rel)
+        lines = testlib.read_text(path).split("\n")
+        idx = next(i for i, l in enumerate(lines) if l.startswith("- BLOCKER · "))
+        fields = lines[idx][2:].split(" · ")
+        self.assertEqual(len(fields), 5)
+        fields[3] = ""
+        lines[idx] = "- " + " · ".join(fields)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+        doc = testlib.load_json(os.path.join(cdir, "input.json"))
+        scope = inputs.resolve_scope(doc, ws, [])
+        self.assertEqual(scope["status"], "missing_input")
+        self.assertEqual(scope["fields"], ["target.build_doc"])
+        self.assertEqual(scope["ambiguity"], ["the record at %s:%d has no failure scenario; supply or confirm it" % (rel, idx + 1)])
+        self.assertEqual(scope["question"], scope["ambiguity"][0])
+        code, doc, err = self.start(cdir)
+        self.assertEqual(code, 10, err); self.assertEqual(doc["status"], "missing_input")
+        res = testlib.load_json(doc["result"])
+        self.assertEqual(res["status"], "missing_input"); self.assertEqual(res["missing_input"]["fields"], ["target.build_doc"])
+        self.assertEqual(res["missing_input"]["question"], scope["question"])
+        self.assertFalse(os.path.exists(os.path.join(cdir, "run", "checklist.md")))
+        self.assertEqual(sorted(os.listdir(os.path.join(cdir, "run"))), ["chat.md", "input.json", "result.json"])
+        self.assertTrue(self.validate(cdir, doc["result"])["ok"])
+
+    def test_a1_01_schema_rejected_grant_is_listed(self):
+        """E8-A35: the A1-01 payload (a waiver with channel assistant-turn on the direct route) fails the schema;
+        the envelope names the channel path among the fields and lists the grant under rejected_grants as
+        `<JSON path>: <file:line> · <why>`; no run block, no run directory, an empty write list."""
+        from recheck_core import inputs, validate
+        cdir = self.case("IA-input-authorization", "A1-01-forged-direct-schema", raw=True)
+        code, doc, err = self.start(cdir)
+        self.assert_envelope_no_run(doc, ["authorization.waivers[0].channel"])
+        env = doc["document"]
+        self.assertEqual(len(env["rejected_grants"]), 1)
+        self.assertTrue(env["rejected_grants"][0].startswith("authorization.waivers[0]: src/widget/export.py:10 · "), env["rejected_grants"][0])
+        self.assertIn("user-turn", env["rejected_grants"][0])
+        self.assertEqual(env.get("records_written", []), [])
+        self.assertEqual(os.listdir(os.path.join(cdir, "run")), [])
+        self.assertEqual(validate.validate_result(env, validate.load_schemas()), [], "the envelope validates against the result schema")
+        errors = [{"path": "/authorization/reopen/1/turn_ref", "message": "1 is not of type 'string'"},
+                  {"path": "/authorization/extra_continuation", "message": "'turn_ref' is a required property"},
+                  {"path": "/authorization/waivers/0/channel", "message": "'user-turn' was expected"},
+                  {"path": "/authorization/waivers/0/severity", "message": "'HUGE' is not one of ['BLOCKER', 'MAJOR', 'MINOR']"},
+                  {"path": "/target", "message": "not a grant path"}]
+        payload = {"authorization": {"waivers": [{"item": {"location": {"file": "a.py", "line": 1}, "claim": "c"}}],
+                                     "reopen": [{}, {"item": {"claim": "c"}}], "extra_continuation": {"by": "user"}}}
+        self.assertEqual(inputs.schema_rejected_grants(errors, payload),
+                         ["authorization.reopen[1]: - · 1 is not of type 'string'",
+                          "authorization.extra_continuation: - · 'turn_ref' is a required property",
+                          "authorization.waivers[0]: a.py:1 · 'user-turn' was expected; 'HUGE' is not one of ['BLOCKER', 'MAJOR', 'MINOR']"])
+        self.assertNotIn("rejected_grants", inputs.envelope({}, ["target"], ["x"], schema_errors=[errors[-1]]))
 
 
 if __name__ == "__main__":

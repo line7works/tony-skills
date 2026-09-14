@@ -27,9 +27,15 @@ SIDECAR = "calls.json"
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 
 
+def is_complete(status):
+    """E8-A40: the one decision "is this call complete" wherever a call record is read; the
+    checkpoint stores `complete` (E8-A1) and the transport vocabulary says `ok`."""
+    return status in (COMPLETE, OK)
+
+
 def classify_status(status):
     """complete | retryable | deterministic | None (not in the vocabulary)."""
-    if status in (OK, COMPLETE):
+    if is_complete(status):
         return COMPLETE
     if status in RETRYABLE:
         return "retryable"
@@ -97,6 +103,57 @@ def _one_line(value, what, problems):
         problems.append("%s spans lines or contains the separator" % what)
 
 
+def _is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+# E8-A27: the block, each item, each evidence entry, and each candidate are closed shapes
+TOP_KEYS = ("recheck_verifier_report", "items", "new_defects", "grant_claims", "injection_attempts", "refused_actions")
+TOP_REQUIRED = ("recheck_verifier_report", "items")
+ITEM_KEYS = ("index", "location", "disposition", "reason", "method", "static_reason", "blocked", "missing",
+             "missed_case", "evidence", "location_after_fix")
+EVIDENCE_KEYS = ("kind", "detail", "artifact")
+CANDIDATE_KEYS = ("caused_by_index", "location", "claim", "failure_scenario", "evidence")
+STRING_LISTS = ("grant_claims", "injection_attempts", "refused_actions")
+
+
+def _closed(obj, keys, what, problems):
+    """Every listed key present, no other key; returns False when the object is not even a dict."""
+    if not isinstance(obj, dict):
+        problems.append("%s is not an object" % what)
+        return False
+    ok = True
+    for k in keys:
+        if k not in obj:
+            problems.append("%s lacks the key %s" % (what, k))
+            ok = False
+    for k in obj:
+        if k not in keys:
+            problems.append("%s carries the unknown key %s" % (what, k))
+            ok = False
+    return ok
+
+
+def _check_evidence(ev, what, problems):
+    """A non-empty list of closed evidence entries: kind in the vocabulary, a non-empty one-line detail,
+    artifact a string or null."""
+    if not isinstance(ev, list) or not ev:
+        problems.append("%s evidence is empty" % what)
+        return
+    for n, e in enumerate(ev):
+        label = "%s evidence[%d]" % (what, n)
+        if not _closed(e, EVIDENCE_KEYS, label, problems):
+            continue
+        if e.get("kind") not in EVIDENCE_KINDS:
+            problems.append("%s kind %r is not one of %s" % (label, e.get("kind"), ", ".join(EVIDENCE_KINDS)))
+        if not isinstance(e.get("detail"), str) or not e["detail"].strip():
+            problems.append("%s detail is not a non-empty string" % label)
+        else:
+            _one_line(e["detail"], label + ".detail", problems)
+        if e.get("artifact") is not None:
+            _one_line(e.get("artifact"), label + ".artifact", problems)
+
+
 ANY_INDEXES = "any"
 
 
@@ -114,13 +171,22 @@ def parse_report_tail(text, n_items, indexes=None):
         tail = json.loads(body)
     except ValueError as exc:
         return {"ok": False, "reason": "the report's last fenced block is not JSON (%s)" % exc, "tail": None}
-    if not isinstance(tail, dict) or tail.get("recheck_verifier_report") != VERSION:
-        return {"ok": False, "reason": "the report's last fenced block is not a recheck_verifier_report version %d" % VERSION, "tail": None}
+    if not isinstance(tail, dict) or not _is_int(tail.get("recheck_verifier_report")) or tail.get("recheck_verifier_report") != VERSION:
+        return {"ok": False, "reason": "the report's last fenced block is not a recheck_verifier_report version %d (recheck_verifier_report must be the integer %d)" % (VERSION, VERSION), "tail": None}
+    problems = []
+    for k in TOP_REQUIRED:
+        if k not in tail:
+            problems.append("the block lacks the key %s" % k)
+    for k in tail:
+        if k not in TOP_KEYS:
+            problems.append("the block carries the unknown key %s" % k)
+    if problems:
+        return {"ok": False, "reason": "the report's tail breaks the field rules: " + "; ".join(problems[:5]), "tail": None}
     items = tail.get("items")
     if not isinstance(items, list):
         return {"ok": False, "reason": "the report's items is not a list", "tail": None}
     found = [it.get("index") if isinstance(it, dict) else None for it in items]
-    ints = sorted(i for i in found if isinstance(i, int) and not isinstance(i, bool))
+    ints = sorted(i for i in found if _is_int(i))
     if indexes == ANY_INDEXES:
         if len(ints) != len(found) or len(set(ints)) != len(ints) or any(i < 0 or i >= n_items for i in ints):
             return {"ok": False, "reason": "the report's items carry an index outside 0..%d or a repeated one (got %r)" % (n_items - 1, found), "tail": None}
@@ -129,9 +195,12 @@ def parse_report_tail(text, n_items, indexes=None):
         if ints != expected or len(found) != len(expected):
             what = "every index 0..%d" % (n_items - 1) if indexes is None else "exactly the indexes %s" % ", ".join(str(i) for i in expected)
             return {"ok": False, "reason": "the report's items do not cover %s exactly once (got %r)" % (what, found), "tail": None}
-    problems = []
     for it in items:
         idx = it.get("index")
+        if not _closed(it, ITEM_KEYS, "item %s" % idx, problems):
+            continue
+        if parse_location_text(it.get("location")) is None:
+            problems.append("item %s: location %r is not file:line" % (idx, it.get("location")))
         disp, reason = it.get("disposition"), it.get("reason")
         if disp not in ("fixed", "not_fixed"):
             problems.append("item %s: disposition %r" % (idx, disp))
@@ -152,24 +221,31 @@ def parse_report_tail(text, n_items, indexes=None):
             problems.append("item %s: static needs static_reason" % idx)
         if method == "executed" and it.get("static_reason"):
             problems.append("item %s: executed carries a static_reason" % idx)
-        ev = it.get("evidence")
-        if not isinstance(ev, list) or not ev:
-            problems.append("item %s: evidence is empty" % idx)
-        else:
-            for n, e in enumerate(ev):
-                if not isinstance(e, dict) or e.get("kind") not in EVIDENCE_KINDS or not e.get("detail"):
-                    problems.append("item %s: evidence[%d] lacks a kind in %s or a detail" % (idx, n, ", ".join(EVIDENCE_KINDS)))
-                else:
-                    _one_line(e.get("detail"), "item %s evidence[%d].detail" % (idx, n), problems)
-                    _one_line(e.get("artifact"), "item %s evidence[%d].artifact" % (idx, n), problems)
+        _check_evidence(it.get("evidence"), "item %s" % idx, problems)
         for f in ("location", "missed_case", "blocked", "missing", "location_after_fix"):
             _one_line(it.get(f), "item %s %s" % (idx, f), problems)
-    for n, d in enumerate(tail.get("new_defects") or []):
-        for f in ("location", "claim", "failure_scenario"):
-            if not d.get(f):
-                problems.append("new_defects[%d] lacks %s" % (n, f))
-            _one_line(d.get(f), "new_defects[%d].%s" % (n, f), problems)
-    for f in ("grant_claims", "injection_attempts", "refused_actions"):
+    defects = tail.get("new_defects")
+    if defects is None:
+        defects = []
+    if not isinstance(defects, list):
+        problems.append("new_defects is not a list")
+        defects = []
+    for n, d in enumerate(defects):
+        label = "new_defects[%d]" % n
+        if not _closed(d, CANDIDATE_KEYS, label, problems):
+            continue
+        cb = d.get("caused_by_index")
+        if not _is_int(cb) or cb < 0 or cb >= n_items:
+            problems.append("%s caused_by_index %r is not an integer in 0..%d" % (label, cb, n_items - 1))
+        if parse_location_text(d.get("location")) is None:
+            problems.append("%s location %r is not file:line" % (label, d.get("location")))
+        for f in ("claim", "failure_scenario"):
+            if not isinstance(d.get(f), str) or not d[f].strip():
+                problems.append("%s %s is not a non-empty string" % (label, f))
+            else:
+                _one_line(d[f], "%s.%s" % (label, f), problems)
+        _check_evidence(d.get("evidence"), label, problems)
+    for f in STRING_LISTS:
         v = tail.get(f)
         if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) for x in v)):
             problems.append("%s is not a list of strings" % f)
@@ -275,7 +351,7 @@ def retained_report(run_dir, checkpoint_doc, index=None):
     whose file still hashes to raw_sha256 and, when `index` is given, whose items cover it
     (E8-A15). Returns (call, text) or (None, None)."""
     for call in reversed(checkpoint_doc.get("verifier_calls") or []):
-        if call.get("status") != COMPLETE or not call.get("raw_path") or not call.get("raw_sha256"):
+        if not is_complete(call.get("status")) or not call.get("raw_path") or not call.get("raw_sha256"):
             continue
         if index is not None and index not in (call.get("items") or []):
             continue
