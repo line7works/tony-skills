@@ -558,8 +558,11 @@ with `floor_class` and `floor_met`. The core checks it right after input validat
 scope: a missing model object or `floor_met` `null` makes the run `verifier_unavailable` with
 `stop_reason` `unknown_capability: …`; `floor_met` `false` makes it `verifier_unavailable`
 with `below_floor: <id> (<class>)`; nothing is graded, and no run artifact beyond the resolved
-input, the result, and the chat block is written. The core never types a model id, effort, or authorization into a verifier
-request.
+input, the result, and the chat block is written. The core never chooses a model, a reasoning
+setting, or an authorization for a verifier request: the executor composes no such value. What
+the adapter reports as fact (the id the session already runs, the user's word for an outside
+row, forwarded unchanged) may travel in the request as the adapter's fields, never as the
+executor's pick.
 
 ## 15. References and load conditions
 

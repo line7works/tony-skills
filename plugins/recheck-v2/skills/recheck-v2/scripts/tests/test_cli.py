@@ -124,7 +124,8 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(got["name"], "recheck-v2")
         self.assertTrue(len(got["content_sha256"]) == 64)
         self.assertTrue(got["commit"] == "unversioned" or len(got["commit"]) == 40)
-        # from a copied skill root outside any work tree, with no plugin.json: unversioned name and commit
+        # from a copied skill root outside any work tree, with no plugin.json beside it: unversioned version and
+        # commit; content_sha256 is SKILL.md's (slice 3 wrote it; the contract's hash was the stand-in before)
         import shutil
         copy = os.path.join(self.dir, "root-copy")
         shutil.copytree(testlib.SKILL, copy, ignore=shutil.ignore_patterns("tests", "__pycache__", "examples"))
@@ -132,7 +133,10 @@ class CommandLine(unittest.TestCase):
         got = json.loads(out)
         self.assertEqual((got["name"], got["version"], got["commit"]), ("recheck-v2", "unversioned", "unversioned"))
         from recheck_core import canon
-        self.assertEqual(got["content_sha256"], canon.sha256_file(os.path.join(copy, "references", "pilot-contract.md")), "content_sha256 of the contract when SKILL.md is absent")
+        self.assertEqual(got["content_sha256"], canon.sha256_file(os.path.join(copy, "SKILL.md")), "content_sha256 of SKILL.md")
+        os.remove(os.path.join(copy, "SKILL.md"))
+        code, out, err = self.run_cli("--skill-root", copy, "skill-identity")
+        self.assertEqual(json.loads(out)["content_sha256"], canon.sha256_file(os.path.join(copy, "references", "pilot-contract.md")), "the contract's hash only when SKILL.md is absent")
 
     def test_stdout_is_json_only(self):
         code, out, err = self.run_cli("start", os.path.join(self.cdir, "input.json"), cwd=os.path.expanduser("~"))

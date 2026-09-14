@@ -89,11 +89,10 @@ sys.path.insert(0, HERE)
 from recheck_core import canon, checkpoint as cpmod, identity, inputs, ledger, receipt as rcmod  # noqa: E402
 from recheck_core import result as rmod, validate, verifier as vmod  # noqa: E402
 
+# every section 15 reference, in the order a missing one is named (E8-17); verifier.md joined the list
+# at slice 3, when it was written
 REQUIRED_REFERENCES = ["references/pilot-contract.md", "references/input.schema.json", "references/result.schema.json",
-                       "references/checkpoint.schema.json", "references/receipt.schema.json"]
-# section 15 lists verifier.md too; slice 3 writes it. It is loaded when present; slice 3 moves it
-# into REQUIRED_REFERENCES (recorded in the slice 2 report).
-OPTIONAL_REFERENCES = ["references/verifier.md"]
+                       "references/checkpoint.schema.json", "references/receipt.schema.json", "references/verifier.md"]
 RUN_FILES = ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log", "result.json")
 EXIT_TERMINAL = 10
 
@@ -147,14 +146,6 @@ def load_references(root):
                 json.loads(data.decode("utf-8"))
         except (OSError, ValueError):
             return rel
-    for rel in OPTIONAL_REFERENCES:
-        path = os.path.join(root, rel)
-        if os.path.exists(path):
-            try:
-                with open(path, "rb") as fh:
-                    fh.read()
-            except OSError:
-                return rel
     return None
 
 

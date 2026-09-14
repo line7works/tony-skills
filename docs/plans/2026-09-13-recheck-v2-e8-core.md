@@ -671,3 +671,16 @@ this document with a section 12 "Amendments" naming any ruling issued while the 
   heading in that document and is not `none` is missing input naming `target.items[i].slice`.
   Marker `quoted_words` carry the ledger form (double quotes written as single quotes), as the
   result schema says.
+- **E8-A17 (after slice 3's check), what the executor may not type.** Section 14's rule is
+  about choosing: the executor never picks a model, a reasoning setting, or an authorization
+  for the verifier. Two request fields the readers component requires are the adapter's
+  reports of fact, not picks: `session_model` on the `claude-session` row carries the id the
+  session already runs (the harness reports it; the E9 adapter fills it), and `authorized` on
+  an outside row carries the user's word forwarded unchanged from the caller or the user's own
+  turn. `SKILL.md` and `verifier.md` say so in those words, and the literal request block
+  shows both as adapter-filled placeholders. Section 14 amended; E8-30 reads the same way.
+- **E8-A18 (after slice 3's check), the description and the blocked v1 command.** The
+  description's trigger words never reproduce the bare v1 command `/recheck slice A` (trigger
+  set T-12, which the pilot must not claim); it names the v2 command and the user's phrasings,
+  and carries an exclusion for the bare v1 slash command. E10 scores the twelve and the sealed
+  eight.

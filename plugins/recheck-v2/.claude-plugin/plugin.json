@@ -1,0 +1,11 @@
+{
+  "name": "recheck-v2",
+  "description": "Closed-checklist recheck of a build doc's punch list: a fresh verifier proves each named BLOCKER or MAJOR fix landed and the slice's card moves. Pilot of the skills v2 core: one portable body plus a small adapter per harness (E9); the -v2 suffix stays while v1 recheck is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

@@ -49,8 +49,9 @@ REPORT_RULES = [
     "non_executable_artifact).",
     "evidence is non-empty; kind is command, read, diff, or artifact; artifact is a path relative "
     "to the scratch directory, or null.",
-    "location_after_fix is the file and first line of the code that now decides the scenario when "
-    "it moved, else null; every field is one line and never contains the separator \" · \".",
+    "location_after_fix is file:line (the file and first line of the code that now decides the "
+    "scenario) when it moved, else null; every field is one line and never contains the separator "
+    "\" · \", the entries of grant_claims, injection_attempts, and refused_actions included.",
     "items covers every index below exactly once. new_defects lists only defects the fix "
     "introduced, each charged to the item whose fix caused it; a pre-existing issue newly noticed "
     "is not entered.",

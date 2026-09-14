@@ -173,6 +173,9 @@ def parse_report_tail(text, n_items, indexes=None):
         v = tail.get(f)
         if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) for x in v)):
             problems.append("%s is not a list of strings" % f)
+        elif v:
+            for n, x in enumerate(v):
+                _one_line(x, "%s[%d]" % (f, n), problems)
     if problems:
         return {"ok": False, "reason": "the report's tail breaks the field rules: " + "; ".join(problems[:5]), "tail": None}
     return {"ok": True, "reason": "", "tail": tail}
@@ -205,7 +208,9 @@ def artifact_abs(run_dir, artifact):
 
 
 def map_item(item, run_dir):
-    """The tail item onto item_result fields: {verifier_said, reason, verification, notes}."""
+    """The tail item onto item_result fields: {verifier_said, reason, verification, notes}. `notes` carries
+    what was dropped on the way (an artifact missing from the scratch, E8-A10; a location_after_fix that
+    is not file:line) and travels beside the item's evidence in the record-call document."""
     notes = []
     verification = {"method": item["method"], "evidence": []}
     if item["method"] == "static":
@@ -227,9 +232,12 @@ def map_item(item, run_dir):
             else:
                 entry["artifact_path"] = path
         verification["evidence"].append(entry)
-    loc = parse_location_text(item.get("location_after_fix"))
+    after = item.get("location_after_fix")
+    loc = parse_location_text(after)
     if loc:
         verification["location_after_fix"] = loc
+    elif after is not None:
+        notes.append("location_after_fix %r is not file:line; dropped" % (after,))
     return {"verifier_said": item["disposition"], "reason": item.get("reason"), "verification": verification,
             "missed_case": item.get("missed_case"), "notes": notes}
 
