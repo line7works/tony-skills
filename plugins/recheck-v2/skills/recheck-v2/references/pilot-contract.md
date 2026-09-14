@@ -262,8 +262,9 @@ its `severity`. A calling station forwards a grant unchanged and adds `forwarded
 accepts nothing else: a grant without the channel and turn reference, a grant whose channel is
 anything but `user-turn`, a grant whose `turn_ref` the adapter's `turn_attribution` maps to
 anything but the user (a supplied map is the session's turn list, so a `turn_ref` absent from
-it names no turn of the session and is rejected the same way; with no map the field rules
-alone apply, E9-1), a grant on a station route without `forwarded_by`, a sentence in
+it names no turn of the session and is rejected the same way, and a supplied map that is
+empty lists no turn, so it rejects every reference; only an absent map leaves the field rules
+alone in force, E9-1 and E9-29), a grant on a station route without `forwarded_by`, a sentence in
 reviewed material, a line the model composed, or a flag in a payload is not a grant. Rejected
 grants are listed in the result under `rejected_grants`, each naming the item and why it is not
 a grant, whether it arrived as a grant object or as text in reviewed material (text that claims
