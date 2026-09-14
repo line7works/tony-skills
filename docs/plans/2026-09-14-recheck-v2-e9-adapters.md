@@ -648,6 +648,22 @@ been said.
 - **E9-24, extended.** The packaged `evals/` reaches every lane's installed copy (lane R: 17
   answer-key files under the isolated home's plugin cache, counted by the reviewer), not lane
   C alone; the carry to E10 stands for all three lanes.
+- **E9-27 (after lane Q's pass), the OpenCode facts section 8 assumed.** Measured on
+  opencode-ai 1.18.31: the session store is a SQLite database under the isolated
+  `XDG_DATA_HOME` (`session`, `message`, `part` tables; `turns.py` opens those and never the
+  `credential` or `account` tables), not JSON files; the loader reads its own `skill/`
+  directories and both `.claude/skills` and `.agents/skills`, workspace-relative and under
+  the real `$HOME`, so an isolated setup leaks the machine's catalog unless
+  `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` is set (the setup sets it and records it); a headless
+  run auto-rejects an `ask` permission, so the run directory outside the workspace needs an
+  `external_directory` allow rule, and that rule is written at install time from the
+  installing shell's `TMPDIR` (carried to E10: run the trials under the same `TMPDIR` or
+  reinstall; the adapter's run root stays `${TMPDIR:-/tmp}/recheck-v2`); `opencode run` takes
+  its project directory from `$PWD`, which `verifier.py` sets. Section 8 is read with these
+  corrections. A setup may carry its own `assets/` and `prompts/` beside the five required
+  files (`setups/README.md`'s table is a floor, not a ceiling). Lane Q's E9-3 classification
+  of the two models stays provisional and is asserted on every graded run; Tony confirms or
+  overturns at the close.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
