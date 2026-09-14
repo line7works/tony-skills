@@ -607,6 +607,47 @@ been said.
   build the trial package from a copy without `evals/`; until then the wall is procedural and
   recorded. Tony's call at the close whether the move happens before E10 or the package is
   built without it.
+- **E9-25 (after the Fable review of lane R, its BLOCKER), the executor's rollout is never a
+  writable root.** Under E9-20 the isolated home, which holds the executor session's own
+  rollout under `sessions/`, became a writable root of the executor's sandbox, so a line the
+  executor's tool shell appends to that rollout reads as a user turn to `turns.py` (the
+  reviewer proved it hermetically: an appended `UserMessage` item was found by `--find` and
+  its grant accepted by the core). Ruling: the verifier gets a child home. `setups/codex/
+  install.sh` creates `<home>/child/` holding `config.toml` (the model, effort, approval, and
+  web lines) and `auth.json` as a symlink to `<home>/auth.json` (one credential file, E9-26);
+  `launch.sh` passes `--add-dir "<home>/child"` instead of the home itself and sets the tool
+  shells' `CODEX_HOME` to the child home through the isolated config's
+  `[shell_environment_policy] set` (measured, not assumed: the fix round records the config
+  key that works on 0.154.0); the executor process keeps writing its own session under
+  `<home>/sessions` outside its tools' writable roots; `verifier.py` inherits the child home
+  and finds the child rollout there; `turns.py` and `invocation.py` locate the executor's own
+  rollout through the open file of the parent process (`lsof -p $PPID`), never through
+  `CODEX_HOME`. The control room measures that a tool shell can no longer append to the
+  executor's rollout (the reviewer's live check 3 must print `DENIED`) before the profile's
+  section 4 may read `helper-derived`; until then it reads `instruction-bound under E9-20`
+  with the failure mode named, and a test records the limit either way.
+- **E9-26 (after the Fable review of lane R), guards and copies.** (a) `verifier.py` checks
+  `CODEX_HOME` before any launch (exit 3 when unset or not a directory) and refuses to launch
+  `-s danger-full-access` unless the tool shell carries the harness's sandbox marker (the
+  variable Codex sets in its tool shells, measured by the control room's live check 2 and
+  named in the profile), so the command can never run with full access from an unsandboxed
+  shell; the canned path is exempt. (b) `launch.sh` exports `UV_CACHE_DIR` inside the child
+  home so `uv run` needs no unscripted recovery. (c) Every comparison and trial home carries
+  `auth.json` as a symlink to the base home's file; one credential file exists under the E9-4
+  root after install and after the negatives, and `RESULTS.md` records the count. (d)
+  `harness.sandbox` carries `network on` when the policy says so. (e) The injected-channel
+  declaration scans tags with attributes and the harness-written user messages too. (f)
+  `verifier.py` accepts only `<run_dir>/checklist.md` as the brief; an empty `--find` is a
+  usage error; a caller's `run_id` is validated against the schema pattern; a whitespace-only
+  raw file is `empty`. (g) `negative-tests.sh` classifies each row from the capture's catalog
+  and the harness's message, and the five loader mutations move to `delivery-probe` (E9's
+  earlier note). (h) The fix round rewrites profile sections 1, 4, 7, and 12 and `RESULTS.md`
+  to the E9-21 launch and the live3 records, and states E9-22's Codex reading (a `$name`
+  injection arrives as a `response_item` user message with no `UserMessage` item and stays
+  unmapped).
+- **E9-24, extended.** The packaged `evals/` reaches every lane's installed copy (lane R: 17
+  answer-key files under the isolated home's plugin cache, counted by the reviewer), not lane
+  C alone; the carry to E10 stands for all three lanes.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
