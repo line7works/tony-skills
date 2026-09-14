@@ -3,6 +3,9 @@
 Every helper: `--help`; JSON on stdout and nothing else; exit 2 on an unknown argument; exit 3
 with the record or binary absent; run from another working directory (testlib.run always runs
 them from the system temp directory, never from the adapter folder).
+
+Ruling E9-34, Astra finding 13: an absent binary is a missing dependency and exits 3 naming
+it, never a reported status.
 """
 
 import json
@@ -15,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import testlib  # noqa: E402
 
 HELPERS = ("invocation.py", "turns.py", "verifier.py")
+TEST_ENV = {"RECHECK_ADAPTER_TEST": "1"}
 
 
 class HelpAndUsage(unittest.TestCase):
@@ -60,6 +64,27 @@ class HelpAndUsage(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("--run-id", err)
 
+    def test_an_empty_find_is_a_usage_error(self):
+        code, out, err = testlib.run("turns.py", ["--find", "   "])
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("needs words", err)
+
+    def test_the_test_only_arguments_are_refused_at_run_time(self):
+        """Ruling E9-32: the fixture interface is not a run-time override."""
+        for helper, args in (
+            ("turns.py", ["--session", "ses_x"]),
+            ("turns.py", ["--workspace", "/tmp"]),
+            ("turns.py", ["--db", "/tmp/x.db"]),
+            ("invocation.py", ["--session", "ses_x"]),
+            ("invocation.py", ["--opencode", "/bin/true"]),
+            ("verifier.py", ["--session", "ses_x"]),
+        ):
+            code, out, err = testlib.run(helper, args)
+            self.assertEqual(code, 2, "%s %s" % (helper, args))
+            self.assertEqual(out, "")
+            self.assertIn("test-only argument", err)
+
 
 class MissingRecordOrBinary(unittest.TestCase):
     def test_turns_exits_three_when_the_store_is_absent(self):
@@ -79,7 +104,8 @@ class MissingRecordOrBinary(unittest.TestCase):
         try:
             setup = testlib.make_setup(root, testlib.load_record(), directory="/nowhere/at/all")
             code, out, err = testlib.run(
-                "turns.py", ["--setup", setup, "--workspace", os.path.join(root, "elsewhere")])
+                "turns.py", ["--setup", setup, "--workspace", os.path.join(root, "elsewhere")],
+                env=TEST_ENV)
             self.assertEqual(code, 3)
             self.assertEqual(out, "")
             self.assertIn("no session in the store", err)
@@ -90,63 +116,99 @@ class MissingRecordOrBinary(unittest.TestCase):
         root = tempfile.mkdtemp()
         try:
             setup = testlib.make_setup(root, testlib.load_record())
-            code, out, err = testlib.run("turns.py", ["--setup", setup, "--session", "ses_nope"])
+            code, out, err = testlib.run(
+                "turns.py", ["--setup", setup, "--session", "ses_nope"], env=TEST_ENV)
             self.assertEqual(code, 3)
             self.assertEqual(out, "")
             self.assertIn("no session ses_nope", err)
         finally:
             testlib.cleanup(root)
 
-    def test_invocation_exits_three_when_the_binary_is_absent(self):
+    def test_invocation_exits_three_when_the_setup_has_no_binary(self):
         root = tempfile.mkdtemp()
         try:
             setup = testlib.make_setup(root, testlib.load_record())
-            code, out, err = testlib.run(
-                "invocation.py",
-                ["--setup", setup, "--session", testlib.load_record()["session"]["id"],
-                 "--opencode", os.path.join(root, "no-such-binary")],
-                env={"PATH": os.path.join(root, "empty-path")},
-            )
+            env = testlib.write_pointer(root, 5150, testlib.load_record()["session"]["id"])
+            env["PATH"] = os.path.join(root, "empty-path")
+            code, out, err = testlib.run("invocation.py", ["--setup", setup], env=env)
             self.assertEqual(code, 3)
             self.assertEqual(out, "")
-            self.assertIn("opencode binary was not found", err)
+            self.assertIn("no opencode binary at", err)
+            self.assertIn("no PATH fallback", err)
+        finally:
+            testlib.cleanup(root)
+
+    def test_invocation_exits_three_when_the_setup_is_absent(self):
+        root = tempfile.mkdtemp()
+        try:
+            code, out, err = testlib.run(
+                "invocation.py", ["--setup", os.path.join(root, "no-such-setup")])
+            self.assertEqual(code, 3)
+            self.assertEqual(out, "")
+            self.assertIn("no isolated pilot setup at", err)
         finally:
             testlib.cleanup(root)
 
     def test_verifier_exits_three_when_the_brief_is_absent(self):
         root = tempfile.mkdtemp()
         try:
+            run_dir = os.path.join(root, "run")
+            os.makedirs(run_dir)
+            setup = testlib.make_setup(root, testlib.load_record(), binary=True)
             code, out, err = testlib.run(
                 "verifier.py",
-                ["--brief", os.path.join(root, "no-brief.md"), "--workspace", root,
-                 "--scratch", os.path.join(root, "scratch"),
-                 "--raw", os.path.join(root, "scratch", "raw.md")])
+                ["--brief", os.path.join(run_dir, "checklist.md"), "--workspace", root,
+                 "--setup", setup,
+                 "--scratch", os.path.join(run_dir, "verifier"),
+                 "--raw", os.path.join(run_dir, "verifier", "raw.md")])
             self.assertEqual(code, 3)
             self.assertEqual(out, "")
             self.assertIn("no brief at", err)
         finally:
             testlib.cleanup(root)
 
-    def test_verifier_reports_lane_unavailable_when_the_binary_is_absent(self):
-        """A missing harness is a reported status, not a helper failure (verifier.md section 7)."""
+    def test_verifier_exits_three_when_the_binary_is_absent(self):
+        """Astra finding 13 / ruling E9-34: A7a's dependency exit, not `lane-unavailable`."""
         root = tempfile.mkdtemp()
         try:
-            setup = testlib.make_setup(root)
-            brief = os.path.join(root, "checklist.md")
+            setup = testlib.make_setup(root, testlib.load_record())   # no binary
+            run_dir = os.path.join(root, "run")
+            os.makedirs(run_dir)
+            brief = os.path.join(run_dir, "checklist.md")
             with open(brief, "w", encoding="utf-8") as handle:
                 handle.write("the brief\n")
-            code, out, _err = testlib.run(
+            code, out, err = testlib.run(
                 "verifier.py",
                 ["--brief", brief, "--workspace", root, "--setup", setup,
-                 "--scratch", os.path.join(root, "scratch"),
-                 "--raw", os.path.join(root, "scratch", "raw.md"),
-                 "--opencode", os.path.join(root, "no-such-binary")],
+                 "--scratch", os.path.join(run_dir, "verifier"),
+                 "--raw", os.path.join(run_dir, "verifier", "raw.md")],
                 env={"PATH": os.path.join(root, "empty-path")},
             )
-            self.assertEqual(code, 0)
-            document = json.loads(out)
-            self.assertEqual(document["status"], "lane-unavailable")
-            self.assertIsNone(document["raw"])
+            self.assertEqual(code, 3)
+            self.assertEqual(out, "")
+            self.assertIn("no opencode binary at", err)
+            self.assertFalse(os.path.isdir(os.path.join(run_dir, "verifier")))
+        finally:
+            testlib.cleanup(root)
+
+    def test_verifier_exits_three_when_the_setup_is_absent(self):
+        """Finding 9: an absent setup stops before any launch, never on the live home."""
+        root = tempfile.mkdtemp()
+        try:
+            run_dir = os.path.join(root, "run")
+            os.makedirs(run_dir)
+            brief = os.path.join(run_dir, "checklist.md")
+            with open(brief, "w", encoding="utf-8") as handle:
+                handle.write("the brief\n")
+            code, out, err = testlib.run(
+                "verifier.py",
+                ["--brief", brief, "--workspace", root,
+                 "--setup", os.path.join(root, "no-such-setup"),
+                 "--scratch", os.path.join(run_dir, "verifier"),
+                 "--raw", os.path.join(run_dir, "verifier", "raw.md")])
+            self.assertEqual(code, 3)
+            self.assertEqual(out, "")
+            self.assertIn("no isolated pilot setup at", err)
         finally:
             testlib.cleanup(root)
 
@@ -157,12 +219,12 @@ class JsonOnStdoutOnly(unittest.TestCase):
         try:
             record = testlib.load_record()
             setup = testlib.make_setup(root, record, directory=root)
-            code, out, err = testlib.run(
-                "turns.py", ["--setup", setup, "--workspace", root])
-            self.assertEqual(code, 0)
+            env = testlib.write_pointer(root, 5151, record["session"]["id"])
+            code, out, err = testlib.run("turns.py", ["--setup", setup], env=env)
+            self.assertEqual(code, 0, err)
             document = json.loads(out)          # parses whole: nothing else on stdout
             self.assertEqual(document["harness"], "opencode")
-            self.assertEqual(document["resolved_by"], "newest-in-directory")
+            self.assertEqual(document["resolved_by"], "pointer")
             self.assertNotIn("{", err)
         finally:
             testlib.cleanup(root)
@@ -172,9 +234,9 @@ class JsonOnStdoutOnly(unittest.TestCase):
         try:
             record = testlib.load_record()
             setup = testlib.make_setup(root, record, directory=root)
-            code, out, err = testlib.run("turns.py", ["--setup", setup, "--workspace", root,
-                                                      "--raw"])
-            self.assertEqual(code, 0)
+            env = testlib.write_pointer(root, 5152, record["session"]["id"])
+            code, out, err = testlib.run("turns.py", ["--setup", setup, "--raw"], env=env)
+            self.assertEqual(code, 0, err)
             self.assertNotIn("a-value-no-test-may-print", out)
             self.assertNotIn("a-value-no-test-may-print", err)
         finally:

@@ -1,7 +1,7 @@
 {
   "_comment": "A real opencode 1.18.31 session record captured by lane Q on 2026-09-14 and committed for the adapter tests. The rows are the store's own `session`, `message` and `part` rows verbatim except that the user's prompt text and the assistant's reply text were replaced with a neutral token (ALPHA-TOKEN), which both turns carry so `turns.py --find` can be held to returning the user's turn only. No credential-looking string is present; the store's credential and account tables were never read.",
   "constructed": {
-    "_comment": "Two rows this lane's own captures do not contain, added so the unmapped cases are covered: a message with a role the map does not carry, and one written by the harness's own internal `summary` agent. Both are constructed, not captured.",
+    "_comment": "Four rows this lane's own captures do not contain, added so the unmapped cases are covered: a message with a role the map does not carry; one written by the harness's own internal `summary` agent; a `user` row whose only part is a tool result (tool-only); and a `user` row whose only text part is marked `synthetic`. The last two are ruling E9-22's OpenCode reading: measured over the 26 sessions this lane's store held on 2026-09-14, opencode 1.18.31 wrote no such row itself (every `user` row carried exactly one non-synthetic text part and no `synthetic` key appears anywhere in the store), so these are constructed, not captured.",
     "messages": [
       {
         "data": "{\"role\": \"system\", \"time\": {\"created\": 1789419425900}, \"agent\": \"build\"}",
@@ -16,6 +16,20 @@
         "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
         "time_created": 1789419425950,
         "time_updated": 1789419425950
+      },
+      {
+        "data": "{\"role\": \"user\", \"time\": {\"created\": 1789419426000}, \"agent\": \"build\"}",
+        "id": "msg_constructed_tool_only_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426000,
+        "time_updated": 1789419426000
+      },
+      {
+        "data": "{\"role\": \"user\", \"time\": {\"created\": 1789419426100}, \"agent\": \"build\"}",
+        "id": "msg_constructed_synthetic_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426100,
+        "time_updated": 1789419426100
       }
     ],
     "parts": [
@@ -26,6 +40,22 @@
         "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
         "time_created": 1789419425950,
         "time_updated": 1789419425950
+      },
+      {
+        "data": "{\"type\": \"tool\", \"tool\": \"read\", \"callID\": \"call_constructed\", \"state\": {\"status\": \"completed\", \"input\": {\"filePath\": \"README.md\"}, \"output\": \"ALPHA-TOKEN\"}}",
+        "id": "prt_constructed_tool_only_user",
+        "message_id": "msg_constructed_tool_only_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426000,
+        "time_updated": 1789419426000
+      },
+      {
+        "data": "{\"type\": \"text\", \"synthetic\": true, \"text\": \"ALPHA-TOKEN written by the harness, not the user.\"}",
+        "id": "prt_constructed_synthetic_user",
+        "message_id": "msg_constructed_synthetic_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426100,
+        "time_updated": 1789419426100
       }
     ]
   },

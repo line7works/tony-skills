@@ -16,8 +16,12 @@
 #   diff_empty          diff -r installed vs canonical, excluding __pycache__
 #   frontmatter         name, description and metadata.version of the installed SKILL.md equal
 #                       the canonical ones
-#   links_contained     every relative link in the installed SKILL.md, adapters/README.md and
-#                       references/*.md resolves inside the installed skill root
+#   links_contained     every relative link AND every backticked relative path in the
+#                       installed SKILL.md, adapters/README.md, references/*.md and each
+#                       adapters/*/profile.md resolves inside the installed skill root after
+#                       every symlink; a reference reached through a symlink, and any symlink
+#                       anywhere in the installed tree, is a finding (identical bytes behind a
+#                       symlink pass `diff -r`)
 #   identity            skill-identity from the installed copy; content_sha256 is compared
 #                       with the canonical checkout's, version and commit are recorded only
 #                       (E9-16: they come from the packaging, not the content)
@@ -116,30 +120,108 @@ for field in ("name", "description", "metadata.version"):
         findings.append("frontmatter field %s differs or is missing" % field)
 
 link = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+# Astra finding 10: SKILL.md and the adapter index name their references in backticks, not in
+# Markdown links, so a link-only check verified none of the paths that actually matter. A
+# backticked token is a candidate reference when it is a plain relative path; it is resolved
+# against the file's own directory first, then against the installed root (SKILL.md spells
+# them from the skill root, adapters/README.md from its own directory).
+code_path = re.compile(r"`([^`\s]+)`")
+plain_path = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 outside = []
+unresolved = []
+symlinked = []
 checked = 0
+paths_checked = 0
 targets = [os.path.join(installed, "SKILL.md"),
            os.path.join(installed, "adapters", "README.md")]
 refs = os.path.join(installed, "references")
 if os.path.isdir(refs):
     targets += [os.path.join(refs, n) for n in sorted(os.listdir(refs)) if n.endswith(".md")]
+adapters = os.path.join(installed, "adapters")
+if os.path.isdir(adapters):
+    for name in sorted(os.listdir(adapters)):
+        profile = os.path.join(adapters, name, "profile.md")
+        if os.path.isfile(profile):
+            targets.append(profile)
 root = os.path.realpath(installed)
+
+
+def contained(resolved):
+    return resolved == root or resolved.startswith(root + os.sep)
+
+
+def any_link(path):
+    """True when `path`, or any component of it below the installed root, is a symlink."""
+    path = os.path.abspath(path)
+    while True:
+        if os.path.islink(path):
+            return True
+        parent = os.path.dirname(path)
+        if parent == path or os.path.realpath(parent) == root or len(parent) <= len(installed):
+            return False
+        path = parent
+
+
 for path in targets:
     if not os.path.isfile(path):
         outside.append("%s: missing" % os.path.relpath(path, installed))
         continue
-    for href in link.findall(open(path, encoding="utf-8").read()):
+    text = open(path, encoding="utf-8").read()
+    here = os.path.dirname(path)
+    for href in link.findall(text):
         href = href.split("#", 1)[0].strip()
         if not href or "://" in href or href.startswith("mailto:"):
             continue
         checked += 1
-        resolved = os.path.realpath(os.path.join(os.path.dirname(path), href))
-        if not (resolved == root or resolved.startswith(root + os.sep)):
-            outside.append("%s -> %s" % (os.path.relpath(path, installed), href))
+        candidate = os.path.join(here, href)
+        resolved = os.path.realpath(candidate)
+        if not contained(resolved):
+            outside.append("%s -> %s (link, resolves to %s)"
+                           % (os.path.relpath(path, installed), href, resolved))
         elif not os.path.exists(resolved):
-            outside.append("%s -> %s (does not exist)" % (os.path.relpath(path, installed), href))
+            outside.append("%s -> %s (link, does not exist)"
+                           % (os.path.relpath(path, installed), href))
+        elif any_link(candidate):
+            symlinked.append("%s -> %s (link target is reached through a symlink)"
+                             % (os.path.relpath(path, installed), href))
+    for token in code_path.findall(text):
+        token = token.split("#", 1)[0]
+        if (not plain_path.match(token) or "://" in token
+                or not re.search(r"\.(md|py|json|sh|js|yaml|yml|toml)$", token)):
+            continue
+        candidates = [os.path.join(here, token), os.path.join(installed, token)]
+        found = None
+        for candidate in candidates:
+            if os.path.lexists(candidate):
+                found = candidate
+                break
+        if found is None:
+            # a run artifact or an example path, not a reference into the package
+            unresolved.append("%s: `%s`" % (os.path.relpath(path, installed), token))
+            continue
+        paths_checked += 1
+        resolved = os.path.realpath(found)
+        if not contained(resolved):
+            outside.append("%s -> `%s` (backticked path, resolves to %s)"
+                           % (os.path.relpath(path, installed), token, resolved))
+        elif any_link(found):
+            symlinked.append("%s -> `%s` (backticked path is reached through a symlink)"
+                             % (os.path.relpath(path, installed), token))
 if outside:
-    findings.append("relative links that do not resolve inside the installed root: %s" % outside)
+    findings.append("references that do not resolve inside the installed root: %s" % outside)
+if symlinked:
+    findings.append("references reached through a symlink: %s" % symlinked)
+
+# Astra finding 10 again: identical bytes behind a symlink pass `diff -r`, so the whole
+# installed tree is swept for symlinks rather than only the folder and its SKILL.md.
+tree_symlinks = []
+for base, dirs, names in os.walk(installed):
+    for name in list(dirs) + names:
+        candidate = os.path.join(base, name)
+        if os.path.islink(candidate):
+            tree_symlinks.append(os.path.relpath(candidate, installed))
+if tree_symlinks:
+    findings.append("symlinks inside the installed package: %s" % sorted(tree_symlinks))
 
 
 def load(text):
@@ -176,7 +258,11 @@ print(json.dumps({
     "diff": diff_text.strip().split("\n") if diff_text.strip() else [],
     "frontmatter": fm_fields,
     "links_checked": checked,
+    "backticked_paths_checked": paths_checked,
+    "backticked_tokens_not_package_paths": sorted(unresolved),
     "links_outside_root": outside,
+    "references_through_symlinks": symlinked,
+    "symlinks_in_package": sorted(tree_symlinks),
     "identity": {"canonical": cid, "installed": iid,
                  "content_sha256_equal": same_content,
                  "note": "E9-16: version and commit come from the packaging and are recorded, never compared"},

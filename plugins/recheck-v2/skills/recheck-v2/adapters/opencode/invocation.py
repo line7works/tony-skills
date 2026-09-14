@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """The invocation facts for the OpenCode adapter (recheck-v2, E9 lane Q).
 
-Prints the object the executor copies under ``invocation`` in the input document:
-``run_id``, ``run_dir``, ``harness``, ``model``, ``run_date``, ``session_wrote_fix`` and
-``turn_attribution`` and nothing else, so the result validates against
-``references/input.schema.json`` (``invocation`` is a closed object). The executor still adds
-``mode``, ``caller`` and ``resume`` itself.
+Prints one JSON document with two objects::
+
+    {"invocation": {...}, "measurement": {...}}
+
+``invocation`` is the object the executor copies **whole** under ``invocation`` in the input
+document: ``run_id``, ``run_dir``, ``harness``, ``model``, ``run_date``, ``mode``,
+``session_wrote_fix`` and ``turn_attribution`` and nothing else, so the result validates
+against ``references/input.schema.json`` (``invocation`` is a closed object). The executor
+still adds ``caller`` and ``resume`` itself, and types no other invocation field: ``mode`` is
+a harness fact here, not the executor's reading of its own situation (ruling E9-33 — on the
+first pass all four completed live inputs said ``interactive`` inside a headless run).
+
+``measurement`` says, per field, which harness record or command produced the value, so a
+reviewer can check every one against the record rather than against this helper's word.
 
 Every value is a fact read from a harness record or a harness command, or a flag the profile
-names as instruction-bound. This helper composes no model id, no version, no attribution and
-no ``floor_met``. How each field was obtained is written to stderr.
+names as instruction-bound. This helper composes no model id, no version, no attribution, no
+``mode`` and no ``floor_met``.
 
 Arguments
 ---------
 --workspace DIR        the repo root under test (default: the current working directory).
-                       Used to resolve the session when nothing else does.
+                       Compared against the bound session's own directory; a mismatch is
+                       reported on stderr and in ``measurement``.
 --target-token T       the slice or target token in the run id (default ``run``).
 --session-wrote-fix    report ``session_wrote_fix`` true (E9-14: the executor's honest
                        answer about its own session; default false, never guessed).
@@ -24,12 +34,20 @@ Arguments
 --run-dir DIR          the caller's absolute run directory.
 --floor CLASS          the capability class to assert against (default ``opus``, the
                        contract's ``policy.model_floor`` default).
---session ID           use this session id instead of resolving one.
 --setup DIR            the isolated pilot setup (default $RECHECK_OPENCODE_SETUP, else
                        ~/.local/share/skills-v2-pilot/opencode).
---opencode PATH        the opencode binary (default: $OPENCODE_BIN, else the setup's own,
-                       else ``opencode`` on PATH).
 --help                 this text.
+
+Test-only, accepted only with ``RECHECK_ADAPTER_TEST=1``:
+
+--session ID           bind to this session instead of the one the harness's pointer names.
+--opencode PATH        the binary to run the non-model commands with.
+
+The session is bound exactly as ``turns.py`` binds it (ruling E9-32): through the harness's
+own session pointer, keyed by ``$OPENCODE_PID``. There is no ``--session`` at run time and no
+newest-session fallback; an absent pointer is exit 3 naming it. The pinned binary inside the
+isolated setup is the only one this helper runs, and the four XDG roots are set
+unconditionally once the setup has been validated (ruling E9-32, finding 9).
 
 The floor map (E9 lane contract ruling E9-3, **provisional for the pilot**: the control room
 made it because ruling D3a fixes these two models and an unclassified id would stop every
@@ -47,14 +65,14 @@ Example::
 
     python3 invocation.py --workspace /Users/x/Developer/widget --target-token A
 
-prints ``{"run_id": "recheck-a-20260920-4f1c", "run_dir": "/tmp/recheck-v2/recheck-a-...",
-"harness": {"name": "opencode", "version": "1.18.31", "entry": "...", "sandbox": "..."},
-"model": {"id": "qwen/qwen3.8-flash", "floor_class": "opus", "floor_met": true, ...},
-"run_date": "2026-09-20", "session_wrote_fix": false, "turn_attribution": {...}}``.
+prints ``{"invocation": {"run_id": "recheck-a-20260920-4f1c", "run_dir": "...",
+"harness": {...}, "model": {...}, "run_date": "2026-09-20", "mode": "headless",
+"session_wrote_fix": false, "turn_attribution": {...}}, "measurement": {...}}``.
 
 Exit status: 0 success; 2 a usage slip; 3 a record or binary this helper needs is absent (the
-session store, a session for the workspace, the opencode binary); 1 anything else.
-Side effects: none. It creates no run directory: ``recheck.py start`` does that.
+session pointer, the session store, the bound session, the isolated setup, the pinned
+binary); 1 anything else. Side effects: none. It creates no run directory: ``recheck.py
+start`` does that.
 """
 
 import datetime
@@ -78,6 +96,16 @@ FLOOR_MAP = {
 }
 CLASS_RANK = {"haiku": 1, "sonnet": 2, "opus": 3}
 UNKNOWN_CLASS = "unknown"
+XDG_LEAVES = (
+    ("XDG_CONFIG_HOME", "xdg-config"),
+    ("XDG_DATA_HOME", "xdg-data"),
+    ("XDG_CACHE_HOME", "xdg-cache"),
+    ("XDG_STATE_HOME", "xdg-state"),
+)
+# Ruling E9-33: `opencode run` is headless, the TUI interactive. The plugin records which CLI
+# command started the harness process the tool shell belongs to; nothing else in the session
+# store carries it.
+MODE_OF_COMMAND = {"run": "headless", "tui": "interactive"}
 
 SAFE_TOKEN = re.compile(r"[^a-z0-9]+")
 
@@ -109,36 +137,40 @@ def default_run_dir(run_id):
 
 
 def find_opencode(explicit, setup):
-    for candidate in (explicit, os.environ.get("OPENCODE_BIN")):
-        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
+    """The pinned binary inside the isolated setup. No PATH fallback (finding 9)."""
+    if explicit:
+        if os.environ.get("RECHECK_ADAPTER_TEST") != "1":
+            raise Usage("--opencode is a test-only argument (RECHECK_ADAPTER_TEST=1)")
+        if os.path.isfile(explicit) and os.access(explicit, os.X_OK):
+            return explicit
+        raise Missing("no opencode binary at %s" % explicit)
+    if not os.path.isdir(setup):
+        raise Missing(
+            "no isolated pilot setup at %s (run setups/opencode/install.sh)" % setup)
+    for _name, leaf in XDG_LEAVES[:2]:
+        if not os.path.isdir(os.path.join(setup, leaf)):
+            raise Missing(
+                "the isolated setup %s has no %s directory (run setups/opencode/install.sh)"
+                % (setup, leaf))
     in_setup = os.path.join(setup, "npm", "node_modules", ".bin", "opencode")
     if os.path.isfile(in_setup) and os.access(in_setup, os.X_OK):
         return in_setup
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = os.path.join(directory, "opencode")
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
-    raise Missing("the opencode binary was not found (tried --opencode, $OPENCODE_BIN, %s, PATH)" % in_setup)
+    raise Missing(
+        "no opencode binary at %s; the pinned binary inside the isolated setup is the only "
+        "one this helper runs, and there is no PATH fallback (run setups/opencode/install.sh)"
+        % in_setup)
 
 
 def run_opencode(binary, args, setup):
     """Run a non-model opencode command inside the isolated setup.
 
-    The XDG homes are pinned to the setup unless the caller's environment already points at
-    it, so a helper run from outside a session still reports the setup's own configuration
-    and never the machine's live ~/.config/opencode.
+    The four XDG roots are set unconditionally, so a helper run from any shell reports the
+    setup's own configuration and never the machine's live ~/.config/opencode (finding 9).
     """
     env = dict(os.environ)
-    for name, leaf in (
-        ("XDG_CONFIG_HOME", "xdg-config"),
-        ("XDG_DATA_HOME", "xdg-data"),
-        ("XDG_CACHE_HOME", "xdg-cache"),
-        ("XDG_STATE_HOME", "xdg-state"),
-    ):
-        wanted = os.path.join(setup, leaf)
-        if os.path.isdir(wanted):
-            env[name] = wanted
+    for name, leaf in XDG_LEAVES:
+        env[name] = os.path.join(setup, leaf)
+    env["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
     # Measured on opencode 1.18.31: a debug/list command cuts its stdout at 65,536 bytes when
     # stdout is a pipe and writes all of it to a file, so stdout is captured by redirection.
     handle, path = tempfile.mkstemp(prefix="recheck-v2-opencode-", suffix=".out")
@@ -265,6 +297,31 @@ def model_from_messages(con, session_id):
     return None, None
 
 
+def mode_from_pointer(pointer):
+    """`invocation.mode` as the harness reports it (ruling E9-33).
+
+    The session-pointer plugin runs inside the opencode process and records which CLI command
+    started it. `run` is headless; the TUI is interactive. Nothing is guessed: a pointer
+    written by an older plugin, or by a command that is neither, is a missing harness record.
+    """
+    if not pointer:
+        raise Missing(
+            "no session pointer to read the interaction mode from; `invocation.mode` is a "
+            "harness fact on this lane (ruling E9-33)")
+    command = pointer.get("cli_command")
+    recorded = pointer.get("mode")
+    if recorded in ("headless", "interactive"):
+        return recorded, "the session pointer's mode, from the harness command `opencode %s`" % command
+    mapped = MODE_OF_COMMAND.get(command)
+    if mapped:
+        return mapped, "the session pointer's cli_command `%s`" % command
+    raise Missing(
+        "the session pointer at %s records cli_command %r, which is neither `run` (headless) "
+        "nor `tui` (interactive); the interaction mode is a harness fact and is never guessed "
+        "(ruling E9-33). Reinstall the setup so the pointer plugin records it."
+        % (pointer.get("_path"), command))
+
+
 def classify(model_id, floor):
     if not model_id:
         return UNKNOWN_CLASS, None
@@ -305,7 +362,10 @@ def parse_args(argv):
         if arg.startswith("--") and arg[2:] in opts:
             if index + 1 >= len(argv):
                 raise Usage("%s needs a value" % arg)
-            opts[arg[2:]] = argv[index + 1]
+            name = arg[2:]
+            if name in ("session", "opencode") and os.environ.get("RECHECK_ADAPTER_TEST") != "1":
+                raise Usage("--%s is a test-only argument (RECHECK_ADAPTER_TEST=1)" % name)
+            opts[name] = argv[index + 1]
             index += 2
             continue
         raise Usage("unknown argument %s" % arg)
@@ -317,6 +377,8 @@ def parse_args(argv):
         raise Usage("--run-id needs --run-dir")
     if opts["run-dir"] and not os.path.isabs(opts["run-dir"]):
         raise Usage("--run-dir must be absolute")
+    if opts["run-id"] and not re.match(r"^[A-Za-z0-9._-]+$", opts["run-id"]):
+        raise Usage("--run-id must match the schema's pattern [A-Za-z0-9._-]+")
     return opts
 
 
@@ -333,23 +395,45 @@ def main(argv):
             or turns_helper.DEFAULT_SETUP
         )
         binary = find_opencode(opts["opencode"], setup)
-        store = turns_helper.store_path(opts["setup"], None)
+        store = turns_helper.store_path(opts["setup"])
         con = turns_helper.connect(store)
-        session_id, directory, resolved_by, candidates = turns_helper.resolve_session(
-            con, opts["session"], opts["workspace"]
+        session_id, directory, resolved_by, pointer = turns_helper.resolve_session(
+            con, opts["session"], None
         )
-        note("session %s resolved by %s (%d candidate(s) in %s)"
-             % (session_id, resolved_by, candidates, directory))
+        note("session %s bound by %s (directory %s)" % (session_id, resolved_by, directory))
+        workspace = os.path.abspath(opts["workspace"])
+        workspace_matches = (
+            bool(directory) and os.path.realpath(directory) == os.path.realpath(workspace)
+        )
+        if not workspace_matches:
+            note("WARNING: the bound session ran in %s, not the --workspace %s"
+                 % (directory, workspace))
         facts = session_facts(con, session_id)
         model_id, provider = model_from_messages(con, session_id)
         if model_id:
-            note("model id read from this session's own message records")
+            model_source = "this session's own assistant message record (modelID/providerID)"
         else:
             model_id, provider = facts["model_id"], facts["provider"]
-            note("no message record yet; model id read from the session record")
+            model_source = "the session record's model column (no assistant message yet)"
+        note("model id read from %s" % model_source)
         provider = provider or "openrouter"
-        _turns, _unmapped, attribution, _raw = turns_helper.collect(con, session_id, False)
+        _turns, unmapped, attribution, _raw = turns_helper.collect(con, session_id, False)
         con.close()
+        if not attribution:
+            raise Missing(
+                "the record of session %s holds no turn this helper can attribute; an unusable "
+                "session record is a failure, never an empty map (ruling E9-29)" % session_id)
+
+        if pointer:
+            mode, mode_source = mode_from_pointer(pointer)
+        elif opts["session"]:
+            mode, mode_source = (
+                "headless",
+                "a test-only --session override, with no harness pointer to read "
+                "(RECHECK_ADAPTER_TEST=1); never reached at run time",
+            )
+        else:
+            mode, mode_source = mode_from_pointer(None)
 
         floor_class, floor_met = classify(model_id, opts["floor"])
         if floor_class == UNKNOWN_CLASS:
@@ -373,7 +457,8 @@ def main(argv):
         settings = {
             "variant": variant or "default",
             "tool_call_format": "structured tool calls over the provider's OpenAI-compatible endpoint",
-            "external_skills_disabled": os.environ.get("OPENCODE_DISABLE_EXTERNAL_SKILLS") == "1",
+            "external_skills_disabled":
+                os.environ.get("OPENCODE_DISABLE_EXTERNAL_SKILLS") == "1",
         }
         if catalog:
             limit = catalog.get("limit") or {}
@@ -396,14 +481,16 @@ def main(argv):
         if opts["run-id"]:
             run_id, run_dir = opts["run-id"], opts["run-dir"]
             note("caller route: keeping the caller's run id and run directory")
+            id_source = "the caller's own ids, kept unchanged"
         else:
             run_id = mint_run_id(opts["target-token"], run_date)
             run_dir = default_run_dir(run_id)
+            id_source = "minted here: recheck-<token>-<YYYYMMDD>-<4 hex from os.urandom>"
         if os.path.exists(run_dir) and os.listdir(run_dir):
             note("WARNING: %s already exists and is not empty; a run directory that holds a "
                  "checkpoint, a receipt or a result is spent" % run_dir)
 
-        document = {
+        invocation = {
             "run_id": run_id,
             "run_dir": run_dir,
             "harness": {
@@ -414,9 +501,42 @@ def main(argv):
             },
             "model": model,
             "run_date": run_date,
+            "mode": mode,
             "session_wrote_fix": bool(opts["session-wrote-fix"]),
             "turn_attribution": attribution,
         }
+        measurement = {
+            "session_id": session_id,
+            "bound_by": resolved_by,
+            "session_directory": directory,
+            "workspace_matches_session_directory": workspace_matches,
+            "run_id": id_source,
+            "run_dir": id_source,
+            "harness.version": "the session record's version column",
+            "harness.entry": "this helper's own installed path",
+            "harness.sandbox": "opencode debug agent %s, as the harness resolves it" % facts["agent"],
+            "model.id": model_source,
+            "model.floor_class": "ruling E9-3's map (provisional for the pilot)",
+            "model.floor_met": "the class ranked against policy.model_floor %r" % opts["floor"],
+            "model.context_tokens": (
+                "opencode models %s --verbose, the installed catalog" % provider
+                if catalog else "omitted: the installed catalog holds no record for this id"),
+            "run_date": ("pinned by --run-date" if opts["run-date"]
+                         else "the machine's local calendar date"),
+            "mode": mode_source,
+            "session_wrote_fix": "instruction-bound (E9-14): the executor's --session-wrote-fix flag",
+            "turn_attribution": "turns.py over the bound session's own message rows",
+            "unmapped_rows": unmapped,
+            "store": store,
+            "binary": binary,
+        }
+        document = {"invocation": invocation, "measurement": measurement}
+    except turns_helper.Usage as exc:
+        sys.stderr.write("invocation.py: %s\n" % exc)
+        return 2
+    except Usage as exc:
+        sys.stderr.write("invocation.py: %s\n" % exc)
+        return 2
     except turns_helper.Missing as exc:
         sys.stderr.write("invocation.py: %s\n" % exc)
         return 3

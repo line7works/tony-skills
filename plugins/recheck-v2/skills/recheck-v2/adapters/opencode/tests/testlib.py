@@ -48,7 +48,31 @@ def load_record():
         return json.load(handle)
 
 
-def make_setup(root, record=None, include_constructed=False, directory=None):
+STANDIN = """#!/bin/sh
+# A stand-in for the pinned opencode binary. It calls no model: it records its arguments and
+# emits whatever the test put in $RECHECK_STANDIN_TRACE, then exits $RECHECK_STANDIN_RC.
+printf '%s\\n' "$*" >> "${RECHECK_STANDIN_ARGS:-/dev/null}"
+if [ -n "${RECHECK_STANDIN_SLEEP:-}" ]; then sleep "$RECHECK_STANDIN_SLEEP"; fi
+if [ -n "${RECHECK_STANDIN_TRACE:-}" ] && [ -f "$RECHECK_STANDIN_TRACE" ]; then
+  cat "$RECHECK_STANDIN_TRACE"
+fi
+exit "${RECHECK_STANDIN_RC:-0}"
+"""
+
+
+def standin_binary(setup):
+    """Install an executable stand-in at the pinned binary's path and return it."""
+    path = os.path.join(setup, "npm", "node_modules", ".bin", "opencode")
+    directory = os.path.dirname(path)
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(STANDIN)
+    os.chmod(path, 0o755)
+    return path
+
+
+def make_setup(root, record=None, include_constructed=False, directory=None, binary=False):
     """Build a fake isolated setup holding a session store, and return its path.
 
     The store is created with the real schema and filled from the committed session record, so
@@ -59,6 +83,10 @@ def make_setup(root, record=None, include_constructed=False, directory=None):
     data = os.path.join(setup, "xdg-data", "opencode")
     os.makedirs(data)
     os.makedirs(os.path.join(setup, "xdg-config", "opencode"))
+    os.makedirs(os.path.join(setup, "xdg-cache"))
+    os.makedirs(os.path.join(setup, "xdg-state"))
+    if binary:
+        standin_binary(setup)
     con = sqlite3.connect(os.path.join(data, "opencode.db"))
     for statement in SCHEMA:
         con.execute(statement)
@@ -98,12 +126,92 @@ def make_setup(root, record=None, include_constructed=False, directory=None):
     return setup
 
 
+def store_of(setup):
+    return os.path.join(setup, "xdg-data", "opencode", "opencode.db")
+
+
+def add_session(setup, session_id, directory, message_id, text, model=None):
+    """Put a second, complete session in a fake setup's store (the other-session case)."""
+    record = load_record()
+    session = dict(record["session"])
+    session["id"] = session_id
+    session["directory"] = directory
+    session["slug"] = session_id
+    if model is not None:
+        session["model"] = json.dumps(model)
+    con = sqlite3.connect(store_of(setup))
+    columns = ",".join(session.keys())
+    marks = ",".join("?" for _ in session)
+    con.execute("insert into session (%s) values (%s)" % (columns, marks),
+                list(session.values()))
+    con.execute(
+        "insert into message (id, session_id, time_created, time_updated, data) values (?,?,?,?,?)",
+        (message_id, session_id, 1, 1,
+         json.dumps({"role": "user", "time": {"created": 1}, "agent": "build"})),
+    )
+    con.execute(
+        "insert into part (id, message_id, session_id, time_created, time_updated, data) "
+        "values (?,?,?,?,?,?)",
+        (message_id + "-part", message_id, session_id, 1, 1,
+         json.dumps({"type": "text", "text": text})),
+    )
+    con.commit()
+    con.close()
+    return "opencode:session %s:message %s" % (session_id, message_id)
+
+
+def append_user_row(setup, session_id, message_id, text, when=10 ** 13):
+    """Append a `user` row to an existing session, the way the session itself could.
+
+    Ruling E9-32: OpenCode applies no sandbox to the executor's own tools, so the store stays
+    writable by the session. This is the limit the profile declares, not a defect the adapter
+    can close; the test records it.
+    """
+    con = sqlite3.connect(store_of(setup))
+    con.execute(
+        "insert into message (id, session_id, time_created, time_updated, data) values (?,?,?,?,?)",
+        (message_id, session_id, when, when,
+         json.dumps({"role": "user", "time": {"created": when}, "agent": "build"})),
+    )
+    con.execute(
+        "insert into part (id, message_id, session_id, time_created, time_updated, data) "
+        "values (?,?,?,?,?,?)",
+        (message_id + "-part", message_id, session_id, when, when,
+         json.dumps({"type": "text", "text": text})),
+    )
+    con.commit()
+    con.close()
+    return "opencode:session %s:message %s" % (session_id, message_id)
+
+
+def write_pointer(root, pid, session_id, command="run", opencode_pid=None):
+    """The harness's own session pointer, as `session-pointer.js` writes it."""
+    pointer_dir = os.path.join(root, "tmp", "recheck-v2", "opencode")
+    if not os.path.isdir(pointer_dir):
+        os.makedirs(pointer_dir)
+    record = {
+        "session_id": session_id,
+        "message_id": "msg_x",
+        "role": "user",
+        "agent": "build",
+        "opencode_pid": pid if opencode_pid is None else opencode_pid,
+        "cli_command": command,
+        "mode": {"run": "headless", "tui": "interactive"}.get(command, "unknown"),
+        "written_at": "2026-09-14T00:00:00.000Z",
+    }
+    with open(os.path.join(pointer_dir, "%s.json" % pid), "w", encoding="utf-8") as handle:
+        json.dump(record, handle)
+    return {"OPENCODE_PID": str(pid), "TMPDIR": os.path.join(root, "tmp")}
+
+
 def run(helper, args, cwd=None, env=None):
     """Run an adapter helper from another working directory and capture both streams."""
     environment = dict(os.environ)
     environment.pop("OPENCODE_PID", None)
     environment.pop("RECHECK_OPENCODE_SETUP", None)
     environment.pop("XDG_DATA_HOME", None)
+    environment.pop("RECHECK_ADAPTER_TEST", None)
+    environment.pop("RECHECK_ADAPTER_CANNED", None)
     if env:
         environment.update(env)
     proc = subprocess.Popen(

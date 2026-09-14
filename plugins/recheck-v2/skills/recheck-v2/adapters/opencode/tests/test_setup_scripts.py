@@ -1,0 +1,146 @@
+"""The setup scripts, exercised with a stand-in `opencode` that calls no model.
+
+Astra finding 14: `launch.sh` watched for the appearance of `rc.txt` rather than its own
+child, so a reused output directory disabled the timeout entirely (a three-second child under
+`RECHECK_OPENCODE_TIMEOUT=1` returned exit 0 after 3.28 s), and its `pkill -f` pattern could
+reach another launch. These tests hold the rewrite to: a used output directory is refused; the
+timeout fires on this launch's own child; and a process whose command line matches the old
+`pkill` pattern survives.
+
+`sh -n` over every setup script is the hermetic syntax gate of E9 section 9.1.
+"""
+
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import testlib  # noqa: E402
+
+SETUPS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(testlib.ADAPTER)))), "setups", "opencode")
+SCRIPTS = ("install.sh", "launch.sh", "verify-install.sh", "negative-tests.sh",
+           "scan-secrets.sh")
+MODEL = "openrouter/qwen/qwen3.8-flash"
+
+
+class Syntax(unittest.TestCase):
+    def test_every_setup_script_parses(self):
+        for name in SCRIPTS:
+            path = os.path.join(SETUPS, name)
+            self.assertTrue(os.path.isfile(path), path)
+            proc = subprocess.Popen(["sh", "-n", path], stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            _out, err = proc.communicate()
+            self.assertEqual(proc.returncode, 0,
+                             "%s: %s" % (name, err.decode("utf-8", "replace")))
+
+
+class Launch(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.setup = testlib.make_setup(self.root, testlib.load_record(), binary=True)
+        self.binary = os.path.join(self.setup, "npm", "node_modules", ".bin", "opencode")
+        self.workspace = os.path.join(self.root, "ws")
+        os.makedirs(self.workspace)
+        self.prompt = os.path.join(self.root, "prompt.txt")
+        with open(self.prompt, "w", encoding="utf-8") as handle:
+            handle.write("say something\n")
+        self.decoys = []
+
+    def tearDown(self):
+        for proc in self.decoys:
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:       # noqa: BLE001 - cleanup only
+                pass
+        testlib.cleanup(self.root)
+
+    def launch(self, out_dir, env=None, timeout="900"):
+        environment = dict(os.environ)
+        environment.update({
+            "RECHECK_OPENCODE_SETUP": self.setup,
+            "RECHECK_OPENCODE_TIMEOUT": timeout,
+            "OPENROUTER_API_KEY": "not-a-real-key-this-is-a-test",
+            "TMPDIR": os.path.join(self.root, "tmp"),
+        })
+        if not os.path.isdir(environment["TMPDIR"]):
+            os.makedirs(environment["TMPDIR"])
+        if env:
+            environment.update(env)
+        proc = subprocess.Popen(
+            ["sh", os.path.join(SETUPS, "launch.sh"), "qwen", self.prompt,
+             self.workspace, out_dir],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
+        out, err = proc.communicate()
+        return (proc.returncode, out.decode("utf-8", "replace"),
+                err.decode("utf-8", "replace"))
+
+    def test_a_used_output_directory_is_refused(self):
+        out_dir = os.path.join(self.root, "out")
+        os.makedirs(out_dir)
+        with open(os.path.join(out_dir, "rc.txt"), "w", encoding="utf-8") as handle:
+            handle.write("0\n")
+        code, out, err = self.launch(out_dir)
+        self.assertEqual(code, 2)
+        self.assertIn("spent output directory", err)
+        self.assertEqual(out, "")
+
+    def test_a_missing_binary_is_exit_three(self):
+        os.remove(self.binary)
+        code, _out, err = self.launch(os.path.join(self.root, "out2"))
+        self.assertEqual(code, 3)
+        self.assertIn("no opencode binary", err)
+
+    def test_a_clean_launch_records_its_own_child_and_its_exit(self):
+        out_dir = os.path.join(self.root, "out3")
+        trace = os.path.join(self.root, "canned-trace.json")
+        with open(trace, "w", encoding="utf-8") as handle:
+            handle.write('{"type":"step_start","sessionID":"ses_x"}\n')
+        code, out, err = self.launch(
+            out_dir, env={"RECHECK_STANDIN_TRACE": trace, "RECHECK_STANDIN_RC": "0"})
+        self.assertEqual(code, 0, err)
+        with open(os.path.join(out_dir, "rc.txt"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read().strip(), "0")
+        with open(os.path.join(out_dir, "child.pid"), encoding="utf-8") as handle:
+            self.assertTrue(handle.read().strip().isdigit())
+        self.assertIn("pid=", out)
+
+    def test_the_timeout_fires_on_this_launchs_own_child(self):
+        out_dir = os.path.join(self.root, "out4")
+        started = time.time()
+        code, _out, err = self.launch(
+            out_dir, env={"RECHECK_STANDIN_SLEEP": "30"}, timeout="1")
+        elapsed = time.time() - started
+        self.assertEqual(code, 124, err)
+        with open(os.path.join(out_dir, "rc.txt"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read().strip(), "124")
+        self.assertLess(elapsed, 20, "the timeout did not fire promptly")
+
+    def test_the_timeout_leaves_another_matching_launch_alone(self):
+        """The old `pkill -9 -f "<binary> run --model <model>"` could reach any launch."""
+        decoy = subprocess.Popen(
+            [self.binary, "run", "--model", MODEL, "--format", "json", "a decoy prompt"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=dict(os.environ, RECHECK_STANDIN_SLEEP="30"),
+            preexec_fn=os.setsid)
+        self.decoys.append(decoy)
+        time.sleep(0.5)
+        self.assertIsNone(decoy.poll(), "the decoy did not start")
+        out_dir = os.path.join(self.root, "out5")
+        code, _out, err = self.launch(
+            out_dir, env={"RECHECK_STANDIN_SLEEP": "30"}, timeout="1")
+        self.assertEqual(code, 124, err)
+        time.sleep(0.5)
+        self.assertIsNone(decoy.poll(),
+                          "the timeout killed a process outside this launch's group")
+        os.killpg(os.getpgid(decoy.pid), signal.SIGKILL)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -2,10 +2,14 @@
 # Negative installation tests for the OpenCode pilot setup (E9 lane contract section 9.2,
 # amendment A7b; guide "The harness layer", the silent-failure list).
 #
-# Usage:  sh negative-tests.sh [--setup DIR] [--keep]
-#   --setup DIR  the installed isolated setup to copy from
-#                (default ~/.local/share/skills-v2-pilot/opencode)
-#   --keep       do not delete the throwaway setups (they land under ${TMPDIR}/recheck-v2-neg)
+# Usage:  sh negative-tests.sh [--setup DIR] [--keep] [--skip-reinstall]
+#   --setup DIR       the installed isolated setup to copy from
+#                     (default ~/.local/share/skills-v2-pilot/opencode)
+#   --keep            do not delete the throwaway setups (they land under
+#                     ${TMPDIR}/recheck-v2-neg)
+#   --skip-reinstall  skip the update row, which runs the real install.sh (npm, from the
+#                     setup's pinned cache). The row is then reported with behavior `n/a` and
+#                     ok false, never as a pass
 #
 # Each test runs in its own throwaway copy of the isolated setup: the config tree is copied,
 # a fresh empty data/cache/state tree is made, and the binary is reused from the real setup by
@@ -13,29 +17,32 @@
 # ~/.config/opencode, or any repository.
 #
 # Prints one JSON object per line on stdout: {"test", "expectation", "observed", "behavior",
-# "message"}. `behavior` is one of enforced | prevented activation | ignored | crashed | n/a.
-# Diagnostics go to stderr. Exit 0 when every test produced an observation, 2 on a usage slip,
-# 3 when the source setup is missing.
+# "message", "exit_status", "catalog", "ok"}. `behavior` is one of enforced | prevented
+# activation | ignored | crashed | check failed | n/a, and it is derived from the check's exit
+# status, the harness's own catalog and its diagnostics — never assumed (Astra finding 11: a
+# loader that exited 1 was reported as `ignored` seven times). `ok` is false whenever the check
+# itself did not produce a real observation, and the script then exits 4 rather than 0.
 #
-# What "observed" means: for a loader test it is what `opencode debug skill` reports for the
-# skill (its listing is the harness's own record of what it loaded); for the missing-resource
-# test it is the core's status from `recheck.py start` plus what the harness did with the
-# folder.
+# Diagnostics go to stderr. Exit 0 when every test produced a real observation, 4 when any did
+# not, 2 on a usage slip, 3 when the source setup is missing.
 set -eu
 
 SETUP="${HOME}/.local/share/skills-v2-pilot/opencode"
 KEEP=0
+SKIP_REINSTALL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --setup) SETUP="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    --skip-reinstall) SKIP_REINSTALL=1; shift ;;
+    -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
     *) echo "negative-tests.sh: unknown argument $1" >&2; exit 2 ;;
   esac
 done
 
 [ -d "$SETUP/xdg-config/opencode/skill" ] || {
   echo "negative-tests.sh: no installed setup at $SETUP (run install.sh)" >&2; exit 3; }
+SETUP=$(cd "$SETUP" && pwd)
 OC="$SETUP/npm/node_modules/.bin/opencode"
 [ -x "$OC" ] || { echo "negative-tests.sh: no opencode binary at $OC" >&2; exit 3; }
 
@@ -44,24 +51,86 @@ PLUGIN_ROOT=$(cd "$HERE/../.." && pwd)
 ROOT="${TMPDIR:-/tmp}/recheck-v2-neg"
 rm -rf "$ROOT"; mkdir -p "$ROOT"
 NEUTRAL="$ROOT/cwd"; mkdir -p "$NEUTRAL"
+FAILED="$ROOT/failed"
 
-# LIST <case dir> <skill name>  ->  the harness's own listing line for that skill, or "absent"
-LIST_PY="$ROOT/list.py"
-cat > "$LIST_PY" <<'PY'
-import json, sys
-want = sys.argv[1]
+# The classifier: one row, derived from the harness's own exit status, catalog and stderr.
+EMIT_PY="$ROOT/emit.py"
+cat > "$EMIT_PY" <<'PY'
+import json, os, sys
+
+case, want, test, expectation, expect_state = sys.argv[1:6]
+failed_marker = sys.argv[6]
+
+
+def read(name, default=""):
+    try:
+        with open(os.path.join(case, name), encoding="utf-8", errors="replace") as handle:
+            return handle.read()
+    except (IOError, OSError):
+        return default
+
+
+status = read("skills.rc").strip() or "missing"
+err = " ".join(read("skills.err").split())[:200]
+raw = read("skills.json")
+catalog = None
+parse_error = None
 try:
-    skills = json.load(sys.stdin)
-except Exception as exc:
-    print("UNPARSEABLE: %s" % exc)
-    raise SystemExit(0)
-names = sorted(s.get("name") for s in skills)
-for s in skills:
-    if s.get("name") == want:
-        print("listed name=%s location=%s description=%s"
-              % (s.get("name"), s.get("location"), (s.get("description") or "")[:60]))
-        raise SystemExit(0)
-print("absent (catalog: %s)" % ",".join(n for n in names if n))
+    skills = json.loads(raw)
+    if not isinstance(skills, list):
+        raise ValueError("the listing is not a list")
+    catalog = sorted(s.get("name") for s in skills if s.get("name"))
+except Exception as exc:          # noqa: BLE001 - the failure itself is the observation
+    skills = None
+    parse_error = str(exc)
+
+entry = None
+if skills is not None:
+    for skill in skills:
+        if skill.get("name") == want:
+            entry = skill
+            break
+
+ok = True
+if status != "0" or skills is None:
+    behavior = "check failed"
+    ok = False
+    observed = ("the harness's own listing did not produce a catalog: `opencode debug skill` "
+                "exited %s%s" % (status, ("; " + parse_error) if parse_error else ""))
+elif entry is not None:
+    behavior = "ignored"
+    observed = ("listed name=%s location=%s description=%s"
+                % (entry.get("name"), entry.get("location"),
+                   (entry.get("description") or "")[:60]))
+else:
+    behavior = "prevented activation"
+    observed = "absent from the catalog"
+
+if ok and expect_state in ("present", "absent"):
+    seen = "present" if entry is not None else "absent"
+    if seen != expect_state:
+        ok = False
+        observed += " (expected the skill %s, found it %s)" % (expect_state, seen)
+
+print(json.dumps({"test": test, "expectation": expectation, "observed": observed,
+                  "behavior": behavior, "message": err or parse_error or "",
+                  "exit_status": status, "catalog": catalog, "ok": ok}))
+if not ok:
+    open(failed_marker, "a").write(test + "\n")
+PY
+
+# A row whose observation is not a loader listing (the core row, the update row) emits here.
+PLAIN_PY="$ROOT/plain.py"
+cat > "$PLAIN_PY" <<'PY'
+import json, sys
+test, expectation, observed, behavior, message, status, ok = sys.argv[1:8]
+failed_marker = sys.argv[8]
+ok = ok == "1"
+print(json.dumps({"test": test, "expectation": expectation, "observed": observed,
+                  "behavior": behavior, "message": message, "exit_status": status,
+                  "catalog": None, "ok": ok}))
+if not ok:
+    open(failed_marker, "a").write(test + "\n")
 PY
 
 make_case () {   # make_case <name> -> echoes the case dir
@@ -73,35 +142,35 @@ make_case () {   # make_case <name> -> echoes the case dir
   echo "$d"
 }
 
-run_list () {   # run_list <case dir> <skill name>
-  d="$1"; want="$2"
-  out="$d/skills.json"
+run_list () {   # run_list <case dir>: leaves skills.json, skills.err and skills.rc in it
+  d="$1"
+  set +e
   ( cd "$NEUTRAL" && env XDG_CONFIG_HOME="$d/xdg-config" XDG_DATA_HOME="$d/xdg-data" \
       XDG_CACHE_HOME="$d/xdg-cache" XDG_STATE_HOME="$d/xdg-state" \
-      OPENCODE_DISABLE_EXTERNAL_SKILLS=1 "$OC" debug skill > "$out" 2> "$d/skills.err" ) || true
-  /usr/bin/python3 "$LIST_PY" "$want" < "$out" 2>/dev/null || echo "UNPARSEABLE"
+      OPENCODE_DISABLE_EXTERNAL_SKILLS=1 "$OC" debug skill > "$d/skills.json" 2> "$d/skills.err" )
+  echo $? > "$d/skills.rc"
+  set -e
 }
 
-emit () {  # emit <test> <expectation> <observed> <behavior> <message>
-  /usr/bin/python3 -c '
-import json, sys
-print(json.dumps({"test": sys.argv[1], "expectation": sys.argv[2], "observed": sys.argv[3],
-                  "behavior": sys.argv[4], "message": sys.argv[5]}))
-' "$1" "$2" "$3" "$4" "$5"
+emit () {   # emit <case dir> <skill> <test> <expectation> <expected state>
+  /usr/bin/python3 "$EMIT_PY" "$1" "$2" "$3" "$4" "$5" "$FAILED"
 }
 
 # 1. a malformed agents/openai.yaml (guide silent failure 2)
 D=$(make_case malformed-sidecar)
 printf 'interface:\n  display_name: "Manual-only probe\npolicy:\n  allow_implicit_invocation: [\n' \
   > "$D/xdg-config/opencode/skill/manual-only-probe/agents/openai.yaml"
-O=$(run_list "$D" manual-only-probe)
-emit "malformed agents/openai.yaml" "OpenCode never reads the Codex sidecar, so the skill stays loadable and the policy was never in force here" "$O" "ignored" "$(head -c 200 "$D/skills.err" 2>/dev/null | tr '\n' ' ')"
+run_list "$D"
+emit "$D" manual-only-probe "malformed agents/openai.yaml" \
+  "OpenCode never reads the Codex sidecar, so the skill stays loadable and the policy was never in force here" \
+  present
 
 # 2. a missing agents/openai.yaml on the manual-only probe
 D=$(make_case missing-sidecar)
 rm -rf "$D/xdg-config/opencode/skill/manual-only-probe/agents"
-O=$(run_list "$D" manual-only-probe)
-emit "missing agents/openai.yaml" "unchanged: the sidecar is not an OpenCode surface" "$O" "ignored" "$(head -c 200 "$D/skills.err" 2>/dev/null | tr '\n' ' ')"
+run_list "$D"
+emit "$D" manual-only-probe "missing agents/openai.yaml" \
+  "unchanged: the sidecar is not an OpenCode surface" present
 
 # 3. SKILL.md with the name field removed
 D=$(make_case no-name)
@@ -112,9 +181,9 @@ text = open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(
     "\n".join(l for l in text.split("\n") if not l.startswith("name: ")))
 PY
-O=$(run_list "$D" delivery-probe)
-B="ignored"; case "$O" in absent*) B="prevented activation" ;; esac
-emit "SKILL.md with no name field" "the loader either refuses the skill or falls back to the folder name" "$O" "$B" "$(head -c 200 "$D/skills.err" 2>/dev/null | tr '\n' ' ')"
+run_list "$D"
+emit "$D" delivery-probe "SKILL.md with no name field" \
+  "the loader either refuses the skill or falls back to the folder name" any
 
 # 4. a broken frontmatter delimiter (guide silent failure 4)
 D=$(make_case broken-delimiter)
@@ -124,27 +193,24 @@ p = sys.argv[1]
 text = open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write("a stray line before the delimiter\n" + text.replace("---\n", "--\n", 1))
 PY
-O=$(run_list "$D" delivery-probe)
-B="ignored"; case "$O" in absent*) B="prevented activation" ;; esac
-emit "broken frontmatter delimiter" "the loader skips the skill or loads it with no description" "$O" "$B" "$(head -c 200 "$D/skills.err" 2>/dev/null | tr '\n' ' ')"
+run_list "$D"
+emit "$D" delivery-probe "broken frontmatter delimiter" \
+  "the loader skips the skill or loads it with no description" any
 
 # 5. a duplicate skill name: the probe installed under two surfaces at once
 D=$(make_case duplicate-name)
 mkdir -p "$D/xdg-config/opencode/skills"
 cp -R "$SETUP/xdg-config/opencode/skill/delivery-probe" "$D/xdg-config/opencode/skills/delivery-probe"
-O=$(run_list "$D" delivery-probe)
-N=$(/usr/bin/python3 -c '
-import json, sys
-try: skills = json.load(open(sys.argv[1]))
-except Exception: print("unparseable"); raise SystemExit
-print(sum(1 for s in skills if s.get("name") == "delivery-probe"))
-' "$D/skills.json")
-emit "duplicate skill name on two surfaces" "the loader resolves the duplicate one way or lists it twice; which copy wins is recorded" "$O (copies listed: $N)" "ignored" "silently resolved: the skill/ copy wins over the skills/ copy and no message names the dropped one"
+run_list "$D"
+emit "$D" delivery-probe "duplicate skill name on two surfaces" \
+  "the loader resolves the duplicate one way or lists it twice; which copy wins is recorded" any
 
 # 6. a missing resource: references/verifier.md deleted from the installed copy
 D=$(make_case missing-resource)
 rm -f "$D/xdg-config/opencode/skill/recheck-v2/references/verifier.md"
-O=$(run_list "$D" recheck-v2)
+run_list "$D"
+emit "$D" recheck-v2 "references/verifier.md deleted: what the harness does" \
+  "the harness itself still lists the skill and would still deliver it; nothing at this layer notices" present
 WS="$D/ws"; mkdir -p "$WS"; ( cd "$WS" && git init -q . && echo x > README.md \
   && git -c user.email=p@p -c user.name=p add -A && git -c user.email=p@p -c user.name=p commit -qm base ) >/dev/null 2>&1
 IN="$D/in.json"
@@ -161,55 +227,110 @@ json.dump({"protocol_version": 1,
            "target": {"build_doc": "docs/plan.md", "slice": "A"}},
           open(sys.argv[1], "w"), indent=2)
 PY
-CORE=$(cd "$PLUGIN_ROOT" && uv run "$D/xdg-config/opencode/skill/recheck-v2/scripts/recheck.py" start "$IN" 2>"$D/core.err" || true)
-STATUS=$(/usr/bin/python3 -c '
-import json, os, sys
+set +e
+CORE=$(cd "$PLUGIN_ROOT" && uv run "$D/xdg-config/opencode/skill/recheck-v2/scripts/recheck.py" start "$IN" 2>"$D/core.err")
+CORE_RC=$?
+set -e
+/usr/bin/python3 - "$CORE" "$D/core.err" "$CORE_RC" "$PLAIN_PY" "$FAILED" <<'PY'
+import json, os, subprocess, sys
+raw, err_path, rc, plain, failed = sys.argv[1:6]
+reason = None
+status = None
+ok = False
 try:
-    d = json.loads(sys.argv[1])
+    d = json.loads(raw)
+    status = d.get("status")
+    reason = d.get("stop_reason")
+    if not reason and d.get("result") and os.path.isfile(d["result"]):
+        try:
+            reason = json.load(open(d["result"])).get("stop_reason")
+        except Exception:
+            reason = None
 except Exception:
-    print("no JSON on stdout")
-    raise SystemExit
-reason = d.get("stop_reason")
-if not reason and d.get("result") and os.path.isfile(d["result"]):
-    try:
-        reason = json.load(open(d["result"])).get("stop_reason")
-    except Exception:
-        reason = None
+    d = None
+err = open(err_path, encoding="utf-8", errors="replace").read()
 if not reason:
-    for line in open(sys.argv[2], encoding="utf-8", errors="replace"):
+    for line in err.split("\n"):
         if "reference unavailable" in line:
             reason = line.strip()
             break
-print("%s: %s" % (d.get("status"), reason))
-' "$CORE" "$D/core.err")
-emit "references/verifier.md deleted from the installed copy" "the core stops as stopped with reference unavailable; the harness itself still lists the skill" "core: $STATUS | harness: $O" "enforced" "$(head -c 200 "$D/core.err" 2>/dev/null | tr '\n' ' ')"
+# The row claims enforcement only when the core actually stopped on the missing reference.
+if d is not None and status == "stopped" and reason and "reference unavailable" in str(reason):
+    behavior, ok = "enforced", True
+    observed = "core: %s: %s" % (status, reason)
+elif d is None:
+    behavior, observed = "check failed", "the core printed no JSON on stdout (exit %s)" % rc
+else:
+    behavior = "check failed"
+    observed = "core: %s: %s (the core did not stop on the missing reference)" % (status, reason)
+subprocess.call([sys.executable, plain,
+                 "references/verifier.md deleted: what the core does",
+                 "the core stops as stopped with reference unavailable",
+                 observed, behavior, " ".join(err.split())[:200], str(rc),
+                 "1" if ok else "0", failed])
+PY
 
 # 7a. a symlinked SKILL.md file
 D=$(make_case symlink-file)
 rm -f "$D/xdg-config/opencode/skill/delivery-probe/SKILL.md"
 ln -s "$SETUP/xdg-config/opencode/skill/delivery-probe/SKILL.md" "$D/xdg-config/opencode/skill/delivery-probe/SKILL.md"
-O=$(run_list "$D" delivery-probe)
-B="ignored"; case "$O" in absent*) B="prevented activation" ;; esac
-emit "symlinked SKILL.md file" "a loader may skip a symlinked SKILL.md (Codex does); OpenCode's behaviour is measured here" "$O" "$B" "$(head -c 200 "$D/skills.err" 2>/dev/null | tr '\n' ' ')"
+run_list "$D"
+emit "$D" delivery-probe "symlinked SKILL.md file" \
+  "a loader may skip a symlinked SKILL.md (Codex does); OpenCode's behaviour is measured here" any
 
 # 7b. a symlinked skill directory
 D=$(make_case symlink-dir)
 rm -rf "$D/xdg-config/opencode/skill/delivery-probe"
 ln -s "$SETUP/xdg-config/opencode/skill/delivery-probe" "$D/xdg-config/opencode/skill/delivery-probe"
-O=$(run_list "$D" delivery-probe)
-B="ignored"; case "$O" in absent*) B="prevented activation" ;; esac
-emit "symlinked skill directory" "as above, for the whole folder" "$O" "$B" "$(head -c 200 "$D/skills.err" 2>/dev/null | tr '\n' ' ')"
+run_list "$D"
+emit "$D" delivery-probe "symlinked skill directory" "as above, for the whole folder" any
 
-# 8. an update that changes a copied install into a symlink, then back: reinstall and diff again
-D=$(make_case update-copy-symlink)
-rm -rf "$D/xdg-config/opencode/skill/recheck-v2"
-ln -s "$PLUGIN_ROOT/skills/recheck-v2" "$D/xdg-config/opencode/skill/recheck-v2"
-BEFORE=$([ -L "$D/xdg-config/opencode/skill/recheck-v2" ] && echo symlink || echo copy)
-rm -rf "$D/xdg-config/opencode/skill/recheck-v2"
-cp -R "$PLUGIN_ROOT/skills/recheck-v2" "$D/xdg-config/opencode/skill/recheck-v2"
-find "$D/xdg-config/opencode/skill/recheck-v2" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
-AFTER=$([ -L "$D/xdg-config/opencode/skill/recheck-v2" ] && echo symlink || echo copy)
-DIFF=$(diff -r -x '__pycache__' "$PLUGIN_ROOT/skills/recheck-v2" "$D/xdg-config/opencode/skill/recheck-v2" 2>&1 | head -c 200 || true)
-emit "update from symlink back to a copy, then diff" "the reinstall leaves a real copy and the diff against the canonical folder is empty" "before=$BEFORE after=$AFTER diff=$([ -z "$DIFF" ] && echo empty || echo "$DIFF")" "enforced" "install.sh removes the installed folder before copying, so neither form survives a reinstall"
+# 8. an update over an edited install: the REAL installer runs, then the package is verified.
+# Astra finding 11: the old row performed its own remove/copy and reported what install.sh
+# supposedly proved. This one edits the installed copy, runs install.sh against the throwaway
+# setup, and then runs verify-install.sh against it.
+if [ "$SKIP_REINSTALL" -eq 1 ]; then
+  /usr/bin/python3 "$PLAIN_PY" "update over an edited install: install.sh then verify-install.sh" \
+    "the installer replaces the edited copy and the package verifies clean" \
+    "not run (--skip-reinstall)" "n/a" "" "n/a" "0" "$FAILED"
+else
+  D=$(make_case update-over-edit)
+  EDITED="$D/xdg-config/opencode/skill/recheck-v2/SKILL.md"
+  printf '\n<!-- a local edit the update must replace -->\n' >> "$EDITED"
+  rm -rf "$D/xdg-config/opencode/skill/recheck-v2/references"
+  ln -s "$PLUGIN_ROOT/skills/recheck-v2/references" "$D/xdg-config/opencode/skill/recheck-v2/references"
+  BEFORE="edited SKILL.md + references/ replaced by a symlink"
+  set +e
+  sh "$HERE/install.sh" --setup "$D" --npm-cache "$SETUP/npm-cache" > "$D/install.out" 2> "$D/install.err"
+  INSTALL_RC=$?
+  sh "$HERE/verify-install.sh" --setup "$D" > "$D/verify.json" 2> "$D/verify.err"
+  VERIFY_RC=$?
+  set -e
+  /usr/bin/python3 - "$D" "$BEFORE" "$INSTALL_RC" "$VERIFY_RC" "$PLAIN_PY" "$FAILED" <<'PY'
+import json, subprocess, sys
+case, before, install_rc, verify_rc, plain, failed = sys.argv[1:7]
+try:
+    verify = json.load(open(case + "/verify.json"))
+except Exception as exc:          # noqa: BLE001
+    verify = {"ok": False, "findings": ["verify-install.sh printed no JSON: %s" % exc]}
+ok = install_rc == "0" and verify_rc == "0" and verify.get("ok") is True
+observed = ("before=%s | install.sh exit %s | verify-install.sh exit %s, ok=%s, diff_empty=%s, "
+            "symlinks_in_package=%s, findings=%s"
+            % (before, install_rc, verify_rc, verify.get("ok"), verify.get("diff_empty"),
+               verify.get("symlinks_in_package"), verify.get("findings")))
+err = open(case + "/install.err", encoding="utf-8", errors="replace").read()
+subprocess.call([sys.executable, plain,
+                 "update over an edited install: install.sh then verify-install.sh",
+                 "the installer replaces the edited copy and the symlink, and the package verifies clean",
+                 observed, "enforced" if ok else "check failed",
+                 " ".join(err.split())[:200], install_rc, "1" if ok else "0", failed])
+PY
+fi
 
+if [ -f "$FAILED" ]; then
+  echo "negative-tests.sh: $(wc -l < "$FAILED" | tr -d ' ') row(s) did not produce a real observation:" >&2
+  sed 's/^/  /' "$FAILED" >&2
+  [ "$KEEP" -eq 1 ] || rm -rf "$ROOT"
+  exit 4
+fi
 [ "$KEEP" -eq 1 ] || rm -rf "$ROOT"

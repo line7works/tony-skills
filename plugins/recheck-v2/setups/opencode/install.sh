@@ -7,30 +7,38 @@
 # folder, and the two shared probes. Touches nothing under ~/.config/opencode,
 # ~/.local/share/opencode, ~/.claude, or any repository.
 #
-# Usage:  sh install.sh [--setup DIR] [--model MODEL]
-#   --setup DIR   the isolated pilot home (default ~/.local/share/skills-v2-pilot/opencode)
-#   --model M     the default model written into opencode.json
-#                 (default openrouter/qwen/qwen3.8-flash)
+# Usage:  sh install.sh [--setup DIR] [--model MODEL] [--npm-cache DIR]
+#   --setup DIR      the isolated pilot home (default ~/.local/share/skills-v2-pilot/opencode)
+#   --model M        the default model written into opencode.json
+#                    (default openrouter/qwen/qwen3.8-flash)
+#   --npm-cache DIR  npm's cache and log directory (default <setup>/npm-cache). Pinned so npm
+#                    writes nothing under ~/.npm or ~/.npm/_logs (E9 section 3; Astra finding 9)
 #
 # Requires OPENROUTER_API_KEY in the environment. The key is never written to disk, never
-# copied into the config, and never printed: install.sh only checks that it is set.
+# copied into the config, and never printed: install.sh only checks that it is set, and the
+# last step scans the setup's own records for credential-SHAPED values and refuses to report
+# success when one is present (Astra finding 1). No credential value appears in this script.
 #
-# Side effects: creates <setup>/{npm,xdg-config,xdg-data,xdg-cache,xdg-state}; runs
-# `npm install --prefix <setup>/npm opencode-ai@<pinned>`; writes
-# <setup>/xdg-config/opencode/{opencode.json,plugin/session-pointer.js} and the skill folders
-# under <setup>/xdg-config/opencode/skill/. Rerunning replaces those files and leaves the
-# session store (<setup>/xdg-data/opencode/opencode.db) alone.
+# Side effects: creates <setup>/{npm,npm-cache,records,xdg-config,xdg-data,xdg-cache,xdg-state};
+# runs `npm install --prefix <setup>/npm opencode-ai@<pinned>` with its cache and logs pinned;
+# writes <setup>/xdg-config/opencode/{opencode.json,plugin/session-pointer.js}, the skill
+# folders under <setup>/xdg-config/opencode/skill/, and <setup>/records/providers.txt (the
+# harness's own provider listing, with any credential-shaped token replaced by its shape
+# name). Rerunning replaces those files and leaves the session store
+# (<setup>/xdg-data/opencode/opencode.db) alone.
 set -eu
 
 OPENCODE_VERSION="1.18.31"   # pinned 2026-09-14 from `npm view opencode-ai version`
 SETUP="${HOME}/.local/share/skills-v2-pilot/opencode"
 MODEL="openrouter/qwen/qwen3.8-flash"
+NPM_CACHE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --setup) SETUP="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    --npm-cache) NPM_CACHE="$2"; shift 2 ;;
+    -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -46,10 +54,18 @@ if [ -z "${OPENROUTER_API_KEY:-}" ]; then
 fi
 echo "credential: OPENROUTER_API_KEY set"
 
-mkdir -p "$SETUP/npm" "$SETUP/xdg-config/opencode" "$SETUP/xdg-data" "$SETUP/xdg-cache" "$SETUP/xdg-state"
+mkdir -p "$SETUP/npm" "$SETUP/records" "$SETUP/xdg-config/opencode" \
+         "$SETUP/xdg-data" "$SETUP/xdg-cache" "$SETUP/xdg-state"
+SETUP=$(cd "$SETUP" && pwd)
+[ -n "$NPM_CACHE" ] || NPM_CACHE="$SETUP/npm-cache"
+mkdir -p "$NPM_CACHE" "$NPM_CACHE/_logs"
+NPM_CACHE=$(cd "$NPM_CACHE" && pwd)
 
-echo "installing opencode-ai@$OPENCODE_VERSION into $SETUP/npm"
-npm install --prefix "$SETUP/npm" "opencode-ai@$OPENCODE_VERSION" >/dev/null
+# npm's cache and logs stay inside the permitted roots: without these it writes ~/.npm and
+# ~/.npm/_logs, outside the setup and against section 3's isolation rule (Astra finding 9).
+echo "installing opencode-ai@$OPENCODE_VERSION into $SETUP/npm (npm cache $NPM_CACHE)"
+npm_config_cache="$NPM_CACHE" npm_config_logs_dir="$NPM_CACHE/_logs" \
+  npm install --prefix "$SETUP/npm" "opencode-ai@$OPENCODE_VERSION" >/dev/null
 OC="$SETUP/npm/node_modules/.bin/opencode"
 [ -x "$OC" ] || { echo "install.sh: opencode binary missing at $OC" >&2; exit 3; }
 
@@ -70,6 +86,8 @@ sed -e "s|__MODEL__|$MODEL|g" -e "s|__RUNROOT__|$RUNROOT|g" \
 echo "run root allowed: $RUNROOT"
 
 # The session pointer plugin (the user channel; see adapters/opencode/profile.md section 4).
+# It also records which CLI command started the harness process, which is where
+# `invocation.mode` comes from (ruling E9-33).
 mkdir -p "$SETUP/xdg-config/opencode/plugin"
 cp "$HERE/assets/session-pointer.js" "$SETUP/xdg-config/opencode/plugin/session-pointer.js"
 
@@ -85,13 +103,46 @@ cp -R "$FIXTURES/delivery-probe/skills/delivery-probe" "$SKILLDIR/delivery-probe
 cp -R "$FIXTURES/manual-only-probe/skills/manual-only-probe" "$SKILLDIR/manual-only-probe"
 find "$SKILLDIR" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
-XDG_CONFIG_HOME="$SETUP/xdg-config" XDG_DATA_HOME="$SETUP/xdg-data" \
-XDG_CACHE_HOME="$SETUP/xdg-cache" XDG_STATE_HOME="$SETUP/xdg-state" \
-OPENCODE_DISABLE_EXTERNAL_SKILLS=1 \
-  "$OC" --version
+export XDG_CONFIG_HOME="$SETUP/xdg-config"
+export XDG_DATA_HOME="$SETUP/xdg-data"
+export XDG_CACHE_HOME="$SETUP/xdg-cache"
+export XDG_STATE_HOME="$SETUP/xdg-state"
+export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
+"$OC" --version
+
+# The provider proof, read from the harness's own listing with the credential column left out
+# (Astra finding 1). `opencode providers list` prints the credential FILE and a count, never a
+# value, on 1.18.31; the filter below is the guard, not the measurement: it strips terminal
+# colour codes and replaces any credential-shaped token with the shape's name, so no value can
+# reach the record even if a later version starts printing one.
+"$OC" providers list > "$SETUP/records/providers.raw" 2>/dev/null || true
+/usr/bin/python3 - "$SETUP/records/providers.raw" "$SETUP/records/providers.txt" <<'PY'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src, encoding="utf-8", errors="replace").read()
+text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+for shape, pattern in (("openrouter-key", r"sk-or-v1-[0-9a-f]{64}"),
+                       ("provider-key", r"sk-[A-Za-z0-9_-]{40,}"),
+                       ("jwt", r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")):
+    text = re.sub(pattern, "<%s omitted>" % shape, text)
+open(dst, "w", encoding="utf-8").write(text)
+PY
+rm -f "$SETUP/records/providers.raw"
+echo "providers: $SETUP/records/providers.txt (credential column omitted)"
 
 echo "setup:   $SETUP"
 echo "binary:  $OC"
 echo "model:   $MODEL"
 echo "skills:  $(ls "$SKILLDIR" | tr '\n' ' ')"
-echo "install.sh: done"
+
+# The last step of the report: scan the setup's own records for credential-shaped values. A
+# hit means this install must not be reported as done (Astra finding 1).
+SCAN="$SETUP/records/secret-scan.json"
+if sh "$HERE/scan-secrets.sh" --setup "$SETUP" --quiet > "$SCAN"; then
+  echo "secret scan: clean ($(/usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("%d files, 0 hits" % d["files_scanned"])' "$SCAN"))"
+  echo "install.sh: done"
+else
+  echo "install.sh: FAILED — the setup's records hold credential-shaped values; see $SCAN" >&2
+  /usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); [sys.stderr.write("  %s shape=%s offset=%d length=%d\n" % (h["file"], h["shape"], h["offset"], h["length"])) for h in d["hits"]]' "$SCAN" >&2
+  exit 5
+fi

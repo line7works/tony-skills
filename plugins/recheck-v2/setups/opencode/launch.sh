@@ -4,11 +4,14 @@
 # Usage:  sh launch.sh <model> <prompt-file> <workspace> <out-dir> [--agent NAME]
 #   <model>        the model sub-setup: qwen | deepseek, or a full provider/model id
 #   <prompt-file>  the prompt, read from the file (never interpolated into a shell string)
+#   <out-dir>      created, and it must be unused: a directory that already holds a launch's
+#                  rc.txt or trace.json is refused (Astra finding 14 — reusing one disabled the
+#                  timeout). It receives trace.json (the --format json event stream),
+#                  stderr.txt, child.pid (the opencode process id of THIS launch), rc.txt (the
+#                  exit status, written once this launch's own child has ended), session.json
+#                  (the harness's own record of the session, its messages and its parts, from
+#                  the session store) and pointer.json (this launch's own session-pointer file)
 #   <workspace>    the directory the session runs in
-#   <out-dir>      created; receives trace.json (the --format json event stream),
-#                  stderr.txt, rc.txt (the exit status), session.json (the harness's own
-#                  record of the session, its messages and its parts, from the session
-#                  store) and pointer.json (the session-pointer plugin's file, when present)
 #   --agent NAME   run under a configured agent instead of the default
 #
 # Environment: OPENROUTER_API_KEY must be set; it is passed through and never written down.
@@ -16,15 +19,18 @@
 # setup installed (E9-4: a clean catalog for the trace check); measured: without it the
 # binary also scans ~/.claude/skills and ~/.agents/skills in the real home.
 #
+# The timeout (default 900s, RECHECK_OPENCODE_TIMEOUT) watches THIS launch's own child by its
+# process id, not by the appearance of a result file, and kills only that child's process
+# group: no `pkill -f` pattern that could reach another launch (Astra finding 14). rc.txt
+# records 124 when it fires.
+#
 # Side effects: writes only under <out-dir>, the isolated setup, and ${TMPDIR}/recheck-v2/.
-# A run that exceeds the timeout (default 900s, RECHECK_OPENCODE_TIMEOUT) is killed and
-# rc.txt records 124.
 set -eu
 
 SETUP="${RECHECK_OPENCODE_SETUP:-$HOME/.local/share/skills-v2-pilot/opencode}"
 TIMEOUT="${RECHECK_OPENCODE_TIMEOUT:-900}"
 
-[ $# -ge 4 ] || { sed -n '2,22p' "$0"; exit 2; }
+[ $# -ge 4 ] || { sed -n '2,29p' "$0"; exit 2; }
 MODEL_ARG="$1"; PROMPT_FILE="$2"; WORKSPACE="$3"; OUT_DIR="$4"; shift 4
 AGENT=""
 while [ $# -gt 0 ]; do
@@ -47,6 +53,14 @@ OC="$SETUP/npm/node_modules/.bin/opencode"
 [ -x "$OC" ] || { echo "launch.sh: no opencode binary at $OC (run install.sh)" >&2; exit 3; }
 [ -n "${OPENROUTER_API_KEY:-}" ] || { echo "launch.sh: OPENROUTER_API_KEY is not set" >&2; exit 3; }
 
+# A used output directory is refused rather than reused: its rc.txt would make the monitor
+# below skip its own loop and the timeout would never fire (Astra finding 14).
+for spent in rc.txt trace.json child.pid; do
+  if [ -e "$OUT_DIR/$spent" ]; then
+    echo "launch.sh: $OUT_DIR is a spent output directory (it holds $spent); give this launch a fresh one" >&2
+    exit 2
+  fi
+done
 mkdir -p "$OUT_DIR"
 OUT_DIR=$(cd "$OUT_DIR" && pwd)
 PROMPT_FILE=$(cd "$(dirname "$PROMPT_FILE")" && pwd)/$(basename "$PROMPT_FILE")
@@ -58,49 +72,68 @@ export XDG_CACHE_HOME="$SETUP/xdg-cache"
 export XDG_STATE_HOME="$SETUP/xdg-state"
 export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
 
+PROMPT=$(cat "$PROMPT_FILE")
+
+# Job control puts the child in its own process group, so the timeout can terminate exactly
+# this launch and nothing else. `exec` makes the child the opencode process itself, so
+# $CHILD is both the process id the pointer plugin records and the group to signal.
 set +e
-(
-  cd "$WORKSPACE"
-  if [ -n "$AGENT" ]; then
-    "$OC" run --model "$MODEL" --agent "$AGENT" --format json "$(cat "$PROMPT_FILE")" \
+set -m
+if [ -n "$AGENT" ]; then
+  (
+    cd "$WORKSPACE"
+    exec "$OC" run --model "$MODEL" --agent "$AGENT" --format json "$PROMPT" \
       < /dev/null > "$OUT_DIR/trace.json" 2> "$OUT_DIR/stderr.txt"
-  else
-    "$OC" run --model "$MODEL" --format json "$(cat "$PROMPT_FILE")" \
+  ) &
+else
+  (
+    cd "$WORKSPACE"
+    exec "$OC" run --model "$MODEL" --format json "$PROMPT" \
       < /dev/null > "$OUT_DIR/trace.json" 2> "$OUT_DIR/stderr.txt"
-  fi
-  echo $? > "$OUT_DIR/rc.txt"
-) &
+  ) &
+fi
 CHILD=$!
+set +m
+echo "$CHILD" > "$OUT_DIR/child.pid"
+
 WAITED=0
-while [ ! -f "$OUT_DIR/rc.txt" ]; do
-  sleep 2
-  WAITED=$((WAITED + 2))
+TIMED_OUT=0
+while kill -0 "$CHILD" 2>/dev/null; do
+  sleep 1
+  WAITED=$((WAITED + 1))
   if [ "$WAITED" -ge "$TIMEOUT" ]; then
-    kill -9 "$CHILD" 2>/dev/null || true
-    pkill -9 -f "$OC run --model $MODEL" 2>/dev/null || true
-    echo 124 > "$OUT_DIR/rc.txt"
+    kill -TERM -"$CHILD" 2>/dev/null || kill -TERM "$CHILD" 2>/dev/null || true
+    sleep 2
+    kill -9 -"$CHILD" 2>/dev/null || kill -9 "$CHILD" 2>/dev/null || true
+    TIMED_OUT=1
     break
   fi
 done
-wait "$CHILD" 2>/dev/null || true
+wait "$CHILD"
+RC=$?
 set -e
+[ "$TIMED_OUT" -eq 1 ] && RC=124
+echo "$RC" > "$OUT_DIR/rc.txt"
 
-RC=$(cat "$OUT_DIR/rc.txt")
-
-# The harness's own record of the session, read out of the session store.
+# The harness's own record of the session, read out of the session store. This is a capture of
+# a finished session by its id, not a run-time binding, so it goes through turns.py's fixture
+# interface (RECHECK_ADAPTER_TEST=1 + --session, ruling E9-32); no helper resolves a session
+# this way at run time.
 SESSION_ID=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$OUT_DIR/trace.json" 2>/dev/null | head -1 || true)
-HELPERS=$(cd "$SETUP" 2>/dev/null && pwd)
 ADAPTER_DIR=$(cd "$(dirname "$0")/../../skills/recheck-v2/adapters/opencode" && pwd)
 if [ -n "$SESSION_ID" ]; then
-  /usr/bin/python3 "$ADAPTER_DIR/turns.py" --session "$SESSION_ID" --setup "$SETUP" --raw \
+  RECHECK_ADAPTER_TEST=1 /usr/bin/python3 "$ADAPTER_DIR/turns.py" \
+    --session "$SESSION_ID" --setup "$SETUP" --raw \
     > "$OUT_DIR/session.json" 2> "$OUT_DIR/session.stderr" || true
 fi
-POINTER_DIR="${TMPDIR:-/tmp}/recheck-v2/opencode"
-if [ -d "$POINTER_DIR" ]; then
-  # the newest pointer file, if the plugin wrote one for this run
-  NEWEST=$(ls -t "$POINTER_DIR"/*.json 2>/dev/null | head -1 || true)
-  [ -n "$NEWEST" ] && cp "$NEWEST" "$OUT_DIR/pointer.json" || true
+
+# This launch's own pointer file, named by the child's process id (never "the newest one").
+POINTER="${TMPDIR:-/tmp}/recheck-v2/opencode/$CHILD.json"
+if [ -f "$POINTER" ]; then
+  cp "$POINTER" "$OUT_DIR/pointer.json"
+else
+  echo "launch.sh: no session pointer at $POINTER for this launch" >&2
 fi
 
-echo "model=$MODEL agent=${AGENT:-<default>} exit=$RC session=${SESSION_ID:-<none>} out=$OUT_DIR"
+echo "model=$MODEL agent=${AGENT:-<default>} exit=$RC pid=$CHILD session=${SESSION_ID:-<none>} out=$OUT_DIR"
 exit "$RC"
