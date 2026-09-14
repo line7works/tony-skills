@@ -37,7 +37,23 @@ def locate(workspace):
         if os.environ.get('RECHECK_ADAPTER_TEST')!='1':
             raise ValueError('record override outside test')
         return Path(override).resolve()
-    # E9-25: only the executor parent's open file identifies its rollout.
+    # E9-31: the tool shell carries CODEX_THREAD_ID, the executor's own thread id, which names its
+    # rollout file; the executor's sessions live beside the child home (E9-25) or in CODEX_HOME itself.
+    thread=os.environ.get('CODEX_THREAD_ID','').strip()
+    if thread:
+        if not re.fullmatch(r'[A-Za-z0-9-]+',thread):raise ValueError('invalid CODEX_THREAD_ID')
+        home=Path(os.environ.get('CODEX_HOME','')).resolve() if os.environ.get('CODEX_HOME') else None
+        roots=[]
+        if home is not None and home.name=='child':roots.append(home.parent/'sessions')
+        if home is not None:roots.append(home/'sessions')
+        roots.append(Path.home()/'.codex'/'sessions')
+        found=set()
+        for root in roots:
+            if root.is_dir():found.update(p.resolve() for p in root.rglob('rollout-*'+thread+'.jsonl'))
+        if len(found)==1:return next(iter(found))
+        if len(found)>1:raise Missing('ambiguous executor rollout for thread '+thread)
+        raise Missing('absent harness record: no rollout named by CODEX_THREAD_ID '+thread+' under '+', '.join(str(r) for r in roots)+' (E9-31)')
+    # Fallback without a thread id: the executor parent's open file identifies its rollout (E9-25).
     # A shell or Python wrapper may intervene; inspect parents, never a home scan.
     pid=os.getppid()
     for _ in range(6):
@@ -54,7 +70,7 @@ def locate(workspace):
             pid=int(parent.stdout.strip())
         except (ValueError,OSError):break
         if pid<=1:break
-    raise Missing('absent harness record: no executor rollout open on parent process; lsof -p $PPID required (E9-25); parent inspection may be denied')
+    raise Missing('absent harness record: no CODEX_THREAD_ID in the environment and no executor rollout open on parent process (E9-25, E9-31)')
 
 
 def facts(records):

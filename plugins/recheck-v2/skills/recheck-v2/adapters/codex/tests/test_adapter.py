@@ -225,4 +225,34 @@ class AdapterTests(unittest.TestCase):
                 self.assertEqual(len(cp['scope']['grants']['waivers']),1 if kind in ['user','forwarded'] else 0)
 
 
+
+class ThreadIdLocator(unittest.TestCase):
+    """E9-31: CODEX_THREAD_ID names the executor's rollout under the sessions directory beside the child home;
+    an absent file is a missing record (exit 3), never a fallback to another session."""
+
+    def _run(self, env, workspace):
+        import subprocess, sys, os
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        e = dict(os.environ); e.pop('RECHECK_ADAPTER_RECORD', None); e.pop('RECHECK_ADAPTER_TEST', None); e.update(env)
+        return subprocess.run([sys.executable, os.path.join(here, 'turns.py'), '--workspace', workspace], capture_output=True, text=True, env=e)
+
+    def test_thread_id_names_the_rollout(self):
+        import json, os, shutil, tempfile
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        fixture = os.path.join(here, 'tests', 'fixtures', 'real-rollout.jsonl')
+        with open(fixture) as f:
+            meta = [json.loads(l) for l in f if l.strip() and '"session_meta"' in l][0]['payload']
+        thread = meta['id']; cwd = meta['cwd']
+        tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
+        home = os.path.join(tmp, 'home'); child = os.path.join(home, 'child'); os.makedirs(child)
+        sessions = os.path.join(home, 'sessions', '2026', '09', '14'); os.makedirs(sessions)
+        shutil.copyfile(fixture, os.path.join(sessions, 'rollout-2026-09-14T00-00-00-' + thread + '.jsonl'))
+        ok = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': thread}, cwd)
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertIn('codex:thread ' + thread, ok.stdout)
+        missing = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': 'no-such-thread'}, cwd)
+        self.assertEqual(missing.returncode, 3, missing.stderr)
+        self.assertIn('E9-31', missing.stderr)
+
+
 if __name__=='__main__':unittest.main()
