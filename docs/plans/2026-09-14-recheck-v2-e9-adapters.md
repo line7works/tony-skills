@@ -664,6 +664,31 @@ been said.
   files (`setups/README.md`'s table is a floor, not a ceiling). Lane Q's E9-3 classification
   of the two models stays provisional and is asserted on every graded run; Tony confirms or
   overturns at the close.
+- **E9-28 (after Astra's review of lane C, its BLOCKER 2), the Claude user channel binds to
+  the harness's session id.** `turns.py` and `invocation.py` locate the session's transcript
+  only through the `CLAUDE_CODE_SESSION_ID` the harness puts in the tool shell (the file under
+  the config dir's `projects/` named by it) or, when absent, refuse (exit 3 naming it); no
+  fallback to another workspace's transcript; `--transcript` and `--session-id` are accepted
+  only under `RECHECK_ADAPTER_TEST=1` (the fixture interface), never at run time. Claude Code
+  applies no sandbox to the executor's tools, so the transcript on disk stays writable by the
+  session itself; the profile's section 4 and the section 12 row therefore read
+  `instruction-bound` with that failure mode named in the reviewer's words (a rewritten role,
+  a substituted record), and a test records the limit. A harness-enforced channel on Claude
+  Code is carried to E11 as a capability question (a hook-written hash chain, or a harness
+  record the session cannot write).
+- **E9-29 (after Astra's review of lane C, its BLOCKER 4), an empty supplied map.** The core
+  treated a supplied `turn_attribution` that is empty as no map. Ruling: a supplied map, empty
+  or not, is the session's turn list; empty, it rejects every reference; only an absent
+  property leaves the field rules alone in force. Made at the integration branch in
+  `recheck_core/inputs.py` (`grant_channel_ok` tests the property's presence), one test,
+  contract section 8. Each adapter's `turns.py` reports an unusable session record as a
+  failure (exit 3) rather than printing an empty map.
+- **E9-30 (after Astra's review of lane C), the trace gate.** The plan's E9 reads "the trace
+  shows no invocation of a prohibited v1 station" and E9-8 asked for every textual hit to be
+  reported. Ruling: the gate is invocation. A hit is classified as a path segment, the shared
+  core's own sentence about v1, the description's exclusion, the fixture's planted text, or an
+  invocation (a `Skill` call, a slash command, a `codex` or `opencode` skill call naming a v1
+  station); only an invocation fails the gate, and every hit is still listed with its class.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's

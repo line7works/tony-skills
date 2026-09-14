@@ -206,6 +206,18 @@ class Driver(unittest.TestCase):
         cp = testlib.load_json(os.path.join(cdir, "run", "checkpoint.json"))
         self.assertEqual(cp["scope"]["grants"]["waivers"], []); self.assertEqual(len(cp["scope"]["grants"]["rejected"]), 1)
 
+    def test_e9_29_empty_supplied_map_rejects(self):
+        """IA CASES.md, A1-02 with turn_attribution supplied as an empty map: the map is the session's turn list and lists
+        no turn, so the waiver's reference names no turn of the session and is rejected (rulings E9-1 and E9-29); an
+        absent map still leaves the field rules alone in force (E8-24)."""
+        cdir = self.case("IA-input-authorization", "A1-02-forged-direct-channel",
+                         mutate=lambda d: d["invocation"].__setitem__("turn_attribution", {}))
+        code, doc, err = self.start(cdir)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(len(doc["rejected_grants"]), 1)
+        self.assertIn("no turn of this session", doc["rejected_grants"][0])
+        self.assertEqual(len(doc["checklist"]), 1)
+
     def test_a2_01_station_route(self):
         """IA CASES.md, A2-01: grant 1 lacks forwarded_by (rejected, ruling E7-13); grant 2's turn_ref maps to the
         station (rejected, E8-24); both BLOCKER and MAJOR stay in scope."""
