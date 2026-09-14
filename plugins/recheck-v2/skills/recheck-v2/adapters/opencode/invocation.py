@@ -6,12 +6,14 @@ Prints one JSON document with two objects::
     {"invocation": {...}, "measurement": {...}}
 
 ``invocation`` is the object the executor copies **whole** under ``invocation`` in the input
-document: ``run_id``, ``run_dir``, ``harness``, ``model``, ``run_date``, ``mode``,
-``session_wrote_fix`` and ``turn_attribution`` and nothing else, so the result validates
-against ``references/input.schema.json`` (``invocation`` is a closed object). The executor
-still adds ``caller`` and ``resume`` itself, and types no other invocation field: ``mode`` is
-a harness fact here, not the executor's reading of its own situation (ruling E9-33 — on the
-first pass all four completed live inputs said ``interactive`` inside a headless run).
+document: ``run_id``, ``run_dir``, ``caller``, ``resume``, ``harness``, ``model``,
+``run_date``, ``mode``, ``session_wrote_fix`` and ``turn_attribution`` and nothing else, so
+the result validates against ``references/input.schema.json`` (``invocation`` is a closed
+object). **The executor types no invocation field at all** (ruling E9-35, and `SKILL.md`
+step 2): ``caller`` is ``direct`` unless ``--caller`` names a station, ``resume`` is
+``false`` and only the Resume step flips it, and ``mode`` is a harness fact rather than the
+executor's reading of its own situation (ruling E9-33 — on the first pass all four completed
+live inputs said ``interactive`` inside a headless run).
 
 ``measurement`` says, per field, which harness record or command produced the value, so a
 reviewer can check every one against the record rather than against this helper's word.
@@ -67,7 +69,8 @@ Example::
 
 prints ``{"invocation": {"run_id": "recheck-a-20260920-4f1c", "run_dir": "...",
 "harness": {...}, "model": {...}, "run_date": "2026-09-20", "mode": "headless",
-"session_wrote_fix": false, "turn_attribution": {...}}, "measurement": {...}}``.
+"session_wrote_fix": false, "caller": "direct", "resume": false,
+"turn_attribution": {...}}, "measurement": {...}}``.
 
 Exit status: 0 success; 2 a usage slip; 3 a record or binary this helper needs is absent (the
 session pointer, the session store, the bound session, the isolated setup, the pinned
@@ -499,6 +502,8 @@ def main(argv):
                 "entry": entry,
                 "sandbox": sandbox,
             },
+            "caller": opts["caller"] or "direct",
+            "resume": False,
             "model": model,
             "run_date": run_date,
             "mode": mode,
@@ -524,6 +529,9 @@ def main(argv):
             "run_date": ("pinned by --run-date" if opts["run-date"]
                          else "the machine's local calendar date"),
             "mode": mode_source,
+            "caller": ("the station named by --caller" if opts["caller"]
+                       else "direct: no --caller was given (ruling E9-35)"),
+            "resume": "false: a fresh run; only SKILL.md's Resume step flips it (ruling E9-35)",
             "session_wrote_fix": "instruction-bound (E9-14): the executor's --session-wrote-fix flag",
             "turn_attribution": "turns.py over the bound session's own message rows",
             "unmapped_rows": unmapped,

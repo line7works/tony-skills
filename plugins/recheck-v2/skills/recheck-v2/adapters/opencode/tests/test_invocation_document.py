@@ -8,9 +8,14 @@ opencode process — records which CLI command started that process, and `invoca
 the mode from there. `opencode run` is headless; the TUI is interactive; anything else is a
 missing harness record and stops the helper.
 
+Ruling E9-35 closed the last gap: `SKILL.md` step 2 now says to take the whole `invocation`
+object as the helper prints it and to type **none** of its fields, `resume` flipped to true by
+the Resume step being the one exception. So the helper prints `caller` (`direct` unless
+`--caller` names a station) and `resume: false` too.
+
 These tests hold the helper to that, and to the shape the executor must be able to copy
 without typing anything: the printed `invocation` object, put into a real input document with
-only `caller` and `resume` added, validates through the core.
+nothing added, validates through the core.
 """
 
 import json
@@ -27,8 +32,8 @@ import testlib  # noqa: E402
 LANE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(testlib.ADAPTER)))), "evals", "fixtures", "IA-input-authorization")
 HAS_UV = shutil.which("uv") is not None
-EXPECTED_FIELDS = sorted(["run_id", "run_dir", "harness", "model", "run_date", "mode",
-                          "session_wrote_fix", "turn_attribution"])
+EXPECTED_FIELDS = sorted(["run_id", "run_dir", "caller", "resume", "harness", "model",
+                          "run_date", "mode", "session_wrote_fix", "turn_attribution"])
 
 
 class InvocationDocument(unittest.TestCase):
@@ -86,12 +91,35 @@ class InvocationDocument(unittest.TestCase):
         self.assertIn("E9-33", err)
         self.assertIn("never guessed", err)
 
+    def test_caller_and_resume_come_from_the_helper_not_the_executor(self):
+        """Ruling E9-35: the executor types no invocation field at all."""
+        code, out, err = self.helper()
+        self.assertEqual(code, 0, err)
+        document = json.loads(out)
+        self.assertEqual(document["invocation"]["caller"], "direct")
+        self.assertIs(document["invocation"]["resume"], False)
+        self.assertIn("E9-35", document["measurement"]["caller"])
+        self.assertIn("E9-35", document["measurement"]["resume"])
+        self.made.append(document["invocation"]["run_dir"])
+
+    def test_a_station_route_carries_the_callers_name(self):
+        run_dir = os.path.join(self.root, "caller-run")
+        code, out, err = self.helper(extra=["--caller", "ship-v2", "--run-id",
+                                            "ship-v2-run-1", "--run-dir", run_dir],
+                                     pid=8103)
+        self.assertEqual(code, 0, err)
+        invocation = json.loads(out)["invocation"]
+        self.assertEqual(invocation["caller"], "ship-v2")
+        self.assertIs(invocation["resume"], False)
+        self.assertEqual(invocation["run_id"], "ship-v2-run-1")
+
     def test_the_measurement_names_a_record_for_every_field_it_reports(self):
         code, out, err = self.helper()
         self.assertEqual(code, 0, err)
         document = json.loads(out)
         measurement = document["measurement"]
-        for field in ("run_id", "run_date", "mode", "turn_attribution", "model.id",
+        for field in ("run_id", "run_date", "mode", "caller", "resume",
+                      "turn_attribution", "model.id",
                       "model.floor_class", "model.floor_met", "harness.version",
                       "harness.entry", "harness.sandbox", "session_wrote_fix"):
             self.assertIn(field, measurement)
@@ -114,12 +142,8 @@ class InvocationDocument(unittest.TestCase):
         case_dir = os.path.join(out_dir, case)
         with open(os.path.join(case_dir, "input.json"), encoding="utf-8") as handle:
             document = json.load(handle)
-        # everything under `invocation` is the helper's, except the two fields the profile
-        # says the executor types
-        composed = dict(invocation)
-        composed["caller"] = "direct"
-        composed["resume"] = False
-        document["invocation"] = composed
+        # everything under `invocation` is the helper's; the executor adds nothing (E9-35)
+        document["invocation"] = dict(invocation)
         document["authorization"]["waivers"][0]["turn_ref"] = sorted(
             ref for ref, who in invocation["turn_attribution"].items() if who == "user")[0]
         path = os.path.join(self.root, "composed.input.json")

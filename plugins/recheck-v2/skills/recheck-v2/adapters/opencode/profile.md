@@ -13,17 +13,21 @@ The helpers live beside this file and are resolved from this directory, never fr
 or a cache. They are Python 3.9, standard library only, and each answers `--help`.
 
 **What the executor types, and what it never types** (lane contract section 5.3, as amended by
-ruling E9-33). `invocation.py` prints `{"invocation": {...}, "measurement": {...}}`; the
-executor **copies the `invocation` object whole** and types no field inside it. It adds exactly
-two fields of its own, `caller` and `resume`, and passes `--session-wrote-fix` to the helper as
-its honest answer about its own session (section 5). Outside the invocation block it types the
-target it was asked for and the named items, spelled as the record spells them, and each
-grant's `quoted_words` verbatim beside the `turn_ref` that `turns.py --find` returned for those
-words.
+rulings E9-33 and E9-35). `invocation.py` prints `{"invocation": {...}, "measurement": {...}}`;
+the executor **copies the `invocation` object whole and types none of its fields** — not one,
+`caller` and `resume` included, which the helper now prints as well. `SKILL.md` step 2 says the
+same, and names the single exception: the Resume step flips `resume` to true. The executor
+passes `--session-wrote-fix` to the helper as its honest answer about its own session
+(section 5), and `--caller`/`--run-id`/`--run-dir` on a station route; outside the invocation
+block it types the target it was asked for and the named items, spelled as the record spells
+them, and each grant's `quoted_words` verbatim beside the `turn_ref` that `turns.py --find`
+returned for those words.
 
-It never types `mode`, a `turn_ref`, a model id, a harness version, an entry, a sandbox, an
-attribution map, a `floor_class`, a `floor_met`, a `run_id`, a `run_dir`, a `context_tokens` or
-any `settings` value. **`mode` is a harness fact here** (ruling E9-33): on the first pass all
+It never types `mode`, `caller`, `resume`, a `turn_ref`, a model id, a harness version, an
+entry, a sandbox, an attribution map, a `floor_class`, a `floor_met`, a `run_id`, a `run_dir`,
+a `context_tokens` or any `settings` value. `caller` is `direct` unless `--caller` names a
+station, and `resume` is `false` on every run this helper is called for (ruling E9-35).
+**`mode` is a harness fact here** (ruling E9-33): on the first pass all
 four completed live inputs said `interactive` inside a headless `opencode run`, because the
 executor answered from its own reading of its situation. Nothing in the session store carries
 the interaction mode, so the setup's `session-pointer.js` plugin — which runs inside the
@@ -170,7 +174,11 @@ quoted words must be matched against the stored text, which `--find` does as a s
 
 Forwarding on a station route is the caller's: it forwards the user's grant unchanged and adds
 `forwarded_by`, and the core rejects a station-route grant without it (ruling E7-13). The
-adapter adds nothing to a forwarded grant.
+adapter adds nothing to a forwarded grant. What the executor types in this channel is the
+grant's `quoted_words`, verbatim, beside the `turn_ref` the helper returned for them; it types
+**no invocation field at all** (ruling E9-35), `caller` and `resume` included — the helper
+prints those too, `caller` from `--caller` (else `direct`) and `resume` always `false`, with
+`SKILL.md`'s Resume step the one thing that flips it.
 
 ## 5. `session_wrote_fix`
 
@@ -426,7 +434,7 @@ equals the installed folder; `diff -r` of the installed folder against the canon
 excluding `__pycache__`, is empty; the installed `SKILL.md`'s `name`, `description` and
 `metadata.version` equal the canonical ones; **every referenced path resolves inside the
 installed skill root after every symlink** — the Markdown links *and* the backticked paths that
-SKILL.md, the adapter index and each `adapters/*/profile.md` actually use (12 links and 83
+SKILL.md, the adapter index and each `adapters/*/profile.md` actually use (12 links and 85
 backticked paths on this branch, none outside, none reached through a symlink); **no symlink
 anywhere in the installed tree**, because identical bytes behind a symlink pass `diff -r`
 (Astra finding 10: an installed `adapters/opencode/profile.md` symlink pointing outside the
@@ -449,7 +457,7 @@ One row per capability of pilot contract section 13.
 | Run commands in the workspace with writes confined to scratch and ignored caches | instruction-bound for the confinement, harness-enforced for the running | `bash` is allowed and ran the scenario command. Nothing in the harness confines a `bash` write under the verifier's agent: `bash *=allow` is the last matching rule, so `external_directory` does not classify a bash path at all (measured in the fix round's refusal probe, `ses_f5dc422daffe3bQhkCng7GM9FX`: a write outside the workspace and outside every allowed root completed with exit 0). Confinement is the mandate's discipline and the core's post-run tracked-diff check is the actual guard: `boundary_violations` is `[]` on all four completed runs, and the verifier's own scratch writes are listed in section 7 |
 | Create exactly one fresh verifier context per call, with the same read-and-run capability, the mandate's restrictions, and no access to the driving conversation | harness-enforced for the fresh context and the denied tools; **unmeasured** for "no access to the driving conversation" | one `opencode run --agent recheck-verifier` per call, a separate process with its own session id, and the denied tools are absent from its roster (`opencode debug agent recheck-verifier`); each child's first `user` row is the fixed hand-off constant and nothing else (seven child sessions, `fix/child-rows/`). Separate-process creation does **not** establish that the child cannot read the shared driving-session store; that boundary is the control room's live check, and until it is run this row claims no protection for it |
 | Declare what the harness injects into that context on its own | helper-derived | `verifier.py` lists the system prompt plus the instruction files that exist, by the rule measured with sentinel files (section 7, `RESULTS.md` section 3) |
-| Supply the user channel for grants: `turn_ref` for the user's message, and forwarding for station callers | **instruction-bound** (ruling E9-32) | `turns.py` binds to the session only through the harness's own pointer, keyed by `$OPENCODE_PID`, with no `--session` at run time and no newest-session fallback; ambiguity and an absent record are exit 3. But OpenCode applies no sandbox to the executor's own tools, so the pointer file and the SQLite store both stay writable by the session: a rewritten pointer selects another session and a newly written `user` row is accepted as the user's. Both failure modes are named in section 4 and recorded by `tests/test_turns.py` and `tests/test_core_authorization.py`. Forwarding is the caller's |
+| Supply the user channel for grants: `turn_ref` for the user's message, and forwarding for station callers | **instruction-bound** (ruling E9-32) | `turns.py` binds to the session only through the harness's own pointer, keyed by `$OPENCODE_PID`, with no `--session` at run time and no newest-session fallback; ambiguity and an absent record are exit 3. But OpenCode applies no sandbox to the executor's own tools, so the pointer file and the SQLite store both stay writable by the session: a rewritten pointer selects another session and a newly written `user` row is accepted as the user's. Both failure modes are named in section 4 and recorded by `tests/test_turns.py` and `tests/test_core_authorization.py`. Forwarding is the caller's, and the executor types no invocation field at all, `caller` and `resume` included (ruling E9-35) |
 | Assert whether the running model satisfies `policy.model_floor` | helper-derived, on a provisional map | the id from the session's own message record, the class from ruling E9-3's map, `floor_met` by rank. This harness cannot present a below-floor id under D3a; the core's stop is proved by driving it with such an input (`RESULTS.md` section 8, V1-01, validator `ok: true`) |
 | Report the harness name, version, entry path, sandbox, and the model id and settings actually used | helper-derived | version from the session record, entry from the adapter's own path, sandbox from `opencode debug agent`, model and settings from the message record and `opencode models --verbose`; `invocation.py`'s `measurement` object names the record behind every field |
 | State whether the driving session authored any fix under review | instruction-bound | `--session-wrote-fix`, default false; no harness record answers it |

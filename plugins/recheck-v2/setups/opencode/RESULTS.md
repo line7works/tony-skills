@@ -254,7 +254,7 @@ $ sh setups/opencode/verify-install.sh   # exit 0
   "loaded_from": "<setup>/xdg-config/opencode/skill/recheck-v2/SKILL.md",
   "is_copy_not_symlink": true,
   "links_checked": 12, "links_outside_root": [],
-  "backticked_paths_checked": 83, "references_through_symlinks": [],
+  "backticked_paths_checked": 85, "references_through_symlinks": [],
   "symlinks_in_package": [],
   "ok": true
 }
@@ -265,7 +265,7 @@ Markdown links only, and SKILL.md and the adapter index name their references in
 an installed `adapters/opencode/profile.md` symlink pointing outside the installed root, with
 identical bytes, passed with `diff_empty: true`, `links_checked: 12` and
 `links_outside_root: []`. The script now also resolves every backticked relative path in
-SKILL.md, `adapters/README.md`, `references/*.md` and each `adapters/*/profile.md` (83 of them
+SKILL.md, `adapters/README.md`, `references/*.md` and each `adapters/*/profile.md` (85 of them
 on this lane-only branch), fails on any reference that leaves the root after symlinks or is
 reached through one, and sweeps the whole installed tree for symlinks, since identical bytes
 behind a symlink pass `diff -r`. Backticked tokens that name no file in the package
@@ -396,6 +396,13 @@ headless** (Astra finding 6, BLOCKER; ruling E9-33). Read back from the retained
 `interactive` in all four, inside `opencode run`. The executor typed the field. `invocation.py`
 now supplies it from the harness's own record and the executor copies the whole object; the
 control room's fresh proofs re-run these four and check the recorded mode.
+
+**Under ruling E9-35 the executor types no invocation field at all.** `SKILL.md` step 2 says to
+take the whole `invocation` object as the adapter's helper prints it and to type none of its
+fields, the Resume step flipping `resume` to true being the one exception. `invocation.py`
+therefore prints `caller` (`direct` unless `--caller` names a station) and `resume: false`
+inside the object as well, so the executor adds nothing to it: `tests/test_invocation_document.py`
+composes the printed object into a real input with nothing added and drives it through the core.
 
 | Case | Model | Prompt | Session (the harness's record) | Status | `validate-result.py --input --run-dir` | `chat.md`, first two lines |
 |---|---|---|---|---|---|---|
