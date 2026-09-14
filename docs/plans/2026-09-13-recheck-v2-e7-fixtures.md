@@ -643,3 +643,23 @@ Every lane ends with a structured report: files written (absolute paths), cases 
 covered, checks and requirements served, open questions (a contract ambiguity you hit, with the
 section), guide findings (`held` / `contradicts` / `adds` with one line each), and anything you
 could not do with why. Never claim a check passed that you did not run.
+
+## 10. Amendments (control-room rulings, 2026-09-13)
+
+The rulings the control room issued while the lanes ran live in
+`plugins/recheck-v2/evals/README.md` ("Rulings issued while E7 ran") and bind this contract
+where the two differ. The ones that change text above:
+
+- Section 8 step 1: the runner proves determinism by building twice into the *same* path
+  (E7-1), not two fresh directories.
+- Section 3 tell scan: whole words or phrases, case-insensitive (E7-5).
+- Section 5.3: the trailing-newline rule applies to non-empty files (E7-6).
+- Section 8 step 2: an `invalid_fields` entry matches a validator error at its path or a
+  parent path, narrowed for `required` and `additionalProperties` errors (E7-7, E7-9).
+- Section 5.9: `records_after`, `must_not`, `rationale`, `open` are free-form (E7-8);
+  `runs_at` may be the list `["E7", "E10"]` (E7-11); R27 is served by the trigger set (E7-9).
+- Section 7 catalog: `M1-02-missing-input-schema` added (E7-2); `C1-01-compaction` added and
+  `V4-01` carries a pointer comment (E7-4); `W4-01` is the live form (E7-15); `C3-03` is
+  `C3-03-grant-dropped-at-resume` (E7-17).
+- Section 11 of the pilot contract, step 3: fixtures and the key follow carried item N6
+  (E7-3, E7-10).

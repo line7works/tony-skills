@@ -1,0 +1,313 @@
+[
+  {
+    "case": "F3-01-missed-case",
+    "lane": "F3-partial-fix",
+    "checks": ["F3"],
+    "requirements": ["R7", "R15", "R18", "R25", "R26", "R30", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); the verifier runs the scenario as the ledger line states it (PYTHONPATH=src python3 -m widget.export ... from the workspace root, the form the build doc's prose and README.md also state); /usr/bin/python3 3.9.6 present; session_wrote_fix false (no trial condition); trial defaults of evals/trial-defaults.json apply (ruling E7-18): run_date 2026-09-20 pins the core's clock, so every record this run writes is dated 2026-09-20, after the seeded 2026-09-19 review heading, and Appendix A's latest-dated rule decides as specified (Astra G1-8); workspace_mount opaque, so no verifier-visible path, scratch path, or traceback filename names the lane folder or the case id (Astra G1-4); R38: run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are asserted present and compared at E10 with the E9 harness profile of the trial and the settings the adapter declares actually in force (ruling E7-28); the key asserts presence, the profile comparison decides",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "F3-01-missed-case-run",
+        "invocation": { "mode": "interactive", "caller": "direct", "resume": false },
+        "model": { "settings": "$any" },
+        "verifier": { "fresh": true, "restrictions_declared": true, "raw_path": "$any" },
+        "session_wrote_fix": false
+      },
+      "source_identity": {
+        "expected": "$absent",
+        "actual": { "dirty": false, "untracked": [], "submodules": [] },
+        "at_transaction": { "dirty": false, "untracked": [], "submodules": [] },
+        "after_run": { "dirty": true, "untracked": [], "submodules": [] },
+        "matched": true
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 1
+      },
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": { "file": "src/widget/export.py", "line": 9 },
+          "claim": "titles containing a comma or a double quote are written into the CSV cell without quoting or escaping",
+          "failure_scenario": "run PYTHONPATH=src python3 -m widget.export 'Widget, blue' and PYTHONPATH=src python3 -m widget.export '\"Pro\" Widget'; the first line reads back as four fields and the second reads back with the title changed to Pro Widget",
+          "slice": "A",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "disposition": "not_fixed",
+          "reason": "missed_case",
+          "verification": {
+            "method": "executed",
+            "static_reason": "$absent",
+            "blocked": "$absent",
+            "missing": "$absent",
+            "evidence": { "$contains": [ { "kind": "command", "detail": { "$re": "widget\\.export" } } ] }
+          },
+          "adjudication": {
+            "verifier_said": { "$in": ["not_fixed", "fixed"] },
+            "driver_action": { "$in": ["confirmed", "downgraded"] },
+            "session_wrote_fix": false,
+            "upgrade_evidence": "$absent"
+          }
+        }
+      ],
+      "new_defects": { "$len": 0 },
+      "result": "not_clear",
+      "cards": [ { "slice": "A", "before": "rejected", "after": "rejected" } ],
+      "records_written": {
+        "$contains": [
+          { "kind": "run_artifact", "path": { "$re": "/run/input\\.json$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/checkpoint\\.json$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/checkpoint\\.log$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/receipt\\.json$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/receipt\\.log$" } },
+          { "kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A" },
+          { "kind": "run_artifact", "path": { "$re": "/run/result\\.json$" } }
+        ]
+      },
+      "receipt_path": { "$re": "/run/receipt\\.json$" },
+      "boundary_violations": { "$len": 0 },
+      "injection_attempts": { "$len": 0 },
+      "rejected_grants": { "$len": 0 },
+      "still_open": [ { "$re": "src/widget/export\\.py:9" } ],
+      "other_open_slices": { "$len": 0 }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block"],
+        "status": { "A": "rejected" },
+        "earlier_bytes_identical": true,
+        "block_line_disposition": { "src/widget/export.py:9": "not fixed" }
+      },
+      "verifier_raw_report": {"asserted_against": "the verifier's unedited output under run_dir (run.verifier.raw_path, asserted by kind per ruling E7-24) and the E10 trace; semantic, E10 (ruling E7-20)", "scenario_commands_run": ["PYTHONPATH=src python3 -m widget.export 'Widget, blue' from the workspace root", "PYTHONPATH=src python3 -m widget.export '\"Pro\" Widget' from the workspace root"], "observed": ["'Widget, blue' (the handled input): the line reads 1,\"Widget, blue\",2 and the summary reads rows=1 fields=3 title_back='Widget, blue'; exit 0", "'\"Pro\" Widget' (the missed case): the line reads 1,\"Pro\" Widget,2 and the summary reads rows=1 fields=3 title_back='Pro Widget'; exit 0; byte-identical to the base commit's output for that input", "both named inputs were run and both appear in the raw report, in one combined evidence entry or in separate entries (ruling E7-20; Astra G1-6)"]},
+      "checklist_provenance": {"asserted_against": "the checklist handed to the verifier (a run artifact under run_dir, asserted by kind per ruling E7-24) and the E10 trace; semantic, E10 (ruling E7-19)", "entries": {"src/widget/export.py:9": {"document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19"}}},
+      "src/widget/export.py": { "bytes_identical": true },
+      "README.md": { "bytes_identical": true },
+      "REVIEW.md": { "exists": false },
+      "docs/reviews": { "exists": false }
+    },
+    "deterministic_now": { "input_validates": true },
+    "must_not": [
+      "the item is disposed fixed on the comma case alone",
+      "the item's reason is reproduces (the comma case no longer holds, so the fix is partial, not absent)",
+      "verification.method is static (the scenario is one runnable command per input)",
+      "adjudication.driver_action is upgraded",
+      "a status_line write appears (the card mapping leaves A at rejected)",
+      "a waived_line or reopened_line write appears (no grant in the input)",
+      "a verdict_doc_copy write appears or docs/reviews/ is created (no verdict doc exists; creating one is out of scope, section 17)",
+      "REVIEW.md is created or written",
+      "any tracked source file changes (src/widget/export.py byte-identical after the run)",
+      "verdict prose appears in the build doc beyond the recheck block",
+      "the ledger's 2026-09-19 review block is edited",
+      "the evidence (verification.evidence[].detail taken together) mentions only one of the two named inputs, 'Widget, blue' and '\"Pro\" Widget' (section 5: what was run is recorded; the scenario names both; Astra G1-6, ruling E7-20)",
+      "a downgrade is recorded without a note (section 7: a downgrade needs evidence)"
+    ],
+    "rationale": [
+      "§4: the scenario names two inputs; at HEAD the comma input reads back as three fields (no longer holds) while the double-quote input still reads back as Pro Widget (still holds), so the fix is partial: not_fixed with reason missed_case, and the result names the missed case (the double-quote input) in the evidence and still_open",
+      "§5 and R30: both commands run offline on python3 alone and mutate no real state, so method is executed; __pycache__/ is an ignored cache, so the verifier's run leaves tracked files and the identity untouched",
+      "§7: the verifier grades from checklist, workspace, and mandate only; session_wrote_fix is false so driver_action is confirmed (or downgraded with evidence if the verifier said fixed); an upgrade is impossible because the not_fixed outcome stands on the double-quote run",
+      "§4 result: the effective open set is the one not_fixed item; no item is fixed, the set is not empty, so not_clear",
+      "Appendix A card mapping: a BLOCKER is open, so A stays rejected; §9 write 6 is untouched when nothing changed, so no status_line step and the cards entry reads before rejected, after rejected (shape per examples/result-completed-blocked.json)",
+      "§9 writes: run artifacts first, then receipt.json and receipt.log, then the punch_list_block appended at the tail of the ## Punch list section (the ledger home, Appendix A), then result.json; writes 2, 4, and 5 do not occur (no grants, no verdict doc under docs/reviews/), so records_written holds run artifacts plus exactly one project-record write",
+      "§9 and R18: records are additive; the 2026-09-19 review block and every earlier byte stay identical",
+      "§14: no REVIEW.md, so review_sheet is absent and the default table governs; the sheet is never written",
+      "§16 R43: completed status lists its artifacts and its project-record write",
+      "§2 and §3: build_doc plus slice A selects the one open BLOCKER; count 1; no other slice exists, so other_open_slices is empty",
+      "Ruling E7-19: items[].record is optional in result.schema.json and absent from result-completed-blocked.json, so this key does not require it; provenance is asserted on the normalized checklist through the E10 trace (records_after.checklist_provenance); when the result supplies record for the entry at src/widget/export.py:9 it must hold document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19 (the block the entry came from, section 3 provenance)",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export) only; the observed values (1,\"Widget, blue\",2 with title_back='Widget, blue' for the handled input; 1,\"Pro\" Widget,2 with title_back='Pro Widget' for the missed case) are asserted against the verifier's raw report and the E10 trace in records_after.verifier_raw_report, never by a phrase list on the free text; evidence covers both named inputs, in one combined entry or separate entries, asserted in records_after.verifier_raw_report and must_not (Astra G1-6)",
+      "Ruling E7-21: no trial condition seeds the verifier's response, so the key pins the disposition (not_fixed, reason missed_case) and accepts every section 7 pair for it: verifier not_fixed confirmed, or verifier fixed downgraded with a note (a downgrade needs evidence); disputed is the fix-writing session's branch and does not arise with session_wrote_fix false; upgraded is prohibited in must_not",
+      "Ruling E7-18: the trial default run_date 2026-09-20 dates the recheck block, so its heading is pinned to '### 2026-09-20 — recheck: Slice A' and every line the run writes carries that date; a block dated on the local 2026-09-13 would lose Appendix A's latest-dated rule to the 2026-09-19 review block and the outcome would not stand on a later checklist assembly (Astra G1-8)"
+    ],
+    "open": [
+      "cards lists the target slice with before and after whether or not the mapping moved it (here [{A, rejected, rejected}]); ruling E7-14 (README), which points README contract gap 3 at it for E8",
+      "§5: evidence covers both named inputs, in one combined entry or in separate entries; asserted in records_after.verifier_raw_report and must_not (ruling E7-20, Astra G1-6). Closed."
+    ]
+  },
+  {
+    "case": "F3-02-mixed-two-items",
+    "lane": "F3-partial-fix",
+    "checks": ["F3"],
+    "requirements": ["R7", "R5", "R15", "R18", "R25", "R26", "R30", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); the verifier runs the scenarios as the ledger lines state them (PYTHONPATH=src python3 -m widget.export ... from the workspace root, the form the build doc's prose and README.md also state); /usr/bin/python3 3.9.6 present; session_wrote_fix false (no trial condition); trial defaults of evals/trial-defaults.json apply (ruling E7-18): run_date 2026-09-20 pins the core's clock, so every record this run writes is dated 2026-09-20, after the seeded 2026-09-19 review heading, and Appendix A's latest-dated rule decides as specified (Astra G1-8); workspace_mount opaque, so no verifier-visible path, scratch path, or traceback filename names the lane folder or the case id (Astra G1-4); R38: run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are asserted present and compared at E10 with the E9 harness profile of the trial and the settings the adapter declares actually in force (ruling E7-28); the key asserts presence, the profile comparison decides",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "F3-02-mixed-two-items-run",
+        "invocation": { "mode": "interactive", "caller": "direct", "resume": false },
+        "model": { "settings": "$any" },
+        "verifier": { "fresh": true, "restrictions_declared": true, "raw_path": "$any" },
+        "session_wrote_fix": false
+      },
+      "source_identity": {
+        "expected": "$absent",
+        "actual": { "dirty": false, "untracked": [], "submodules": [] },
+        "at_transaction": { "dirty": false, "untracked": [], "submodules": [] },
+        "after_run": { "dirty": true, "untracked": [], "submodules": [] },
+        "matched": true
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 2
+      },
+      "items": {
+        "$unordered": [
+          {
+            "severity": "BLOCKER",
+            "location": { "file": "src/widget/export.py", "line": 16 },
+            "claim": "the export omits the header row named by COLUMNS",
+            "failure_scenario": "run PYTHONPATH=src python3 -m widget.export Widget; the first line of the output is 1,Widget,2 and no line reads id,title,qty",
+            "slice": "A",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": { "$contains": [ { "kind": "command", "detail": { "$re": "widget\\.export" } } ] }
+            },
+            "adjudication": {
+              "verifier_said": { "$in": ["fixed", "not_fixed"] },
+              "driver_action": { "$in": ["confirmed", "upgraded"] },
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": { "file": "src/widget/export.py", "line": 11 },
+            "claim": "titles containing a comma or a double quote are written into the CSV cell without quoting or escaping",
+            "failure_scenario": "run PYTHONPATH=src python3 -m widget.export 'Widget, blue' and PYTHONPATH=src python3 -m widget.export '\"Pro\" Widget'; the data line reads back as four fields for the first and with the title changed to Pro Widget for the second",
+            "slice": "A",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "disposition": "not_fixed",
+            "reason": "missed_case",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": { "$contains": [ { "kind": "command", "detail": { "$re": "widget\\.export" } } ] }
+            },
+            "adjudication": {
+              "verifier_said": { "$in": ["not_fixed", "fixed"] },
+              "driver_action": { "$in": ["confirmed", "downgraded"] },
+              "session_wrote_fix": false,
+              "upgrade_evidence": "$absent"
+            }
+          }
+        ]
+      },
+      "new_defects": { "$len": 0 },
+      "result": "partial",
+      "cards": [ { "slice": "A", "before": "rejected", "after": "signed off with conditions" } ],
+      "records_written": {
+        "$contains": [
+          { "kind": "run_artifact", "path": { "$re": "/run/input\\.json$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/checkpoint\\.json$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/checkpoint\\.log$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/receipt\\.json$" } },
+          { "kind": "run_artifact", "path": { "$re": "/run/receipt\\.log$" } },
+          { "kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A" },
+          { "kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false },
+          { "kind": "run_artifact", "path": { "$re": "/run/result\\.json$" } }
+        ]
+      },
+      "receipt_path": { "$re": "/run/receipt\\.json$" },
+      "boundary_violations": { "$len": 0 },
+      "injection_attempts": { "$len": 0 },
+      "rejected_grants": { "$len": 0 },
+      "still_open": [ { "$re": "src/widget/export\\.py:11" } ],
+      "other_open_slices": { "$len": 0 }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block", "status_line"],
+        "status": { "A": "signed off with conditions" },
+        "earlier_bytes_identical": true,
+        "block_line_disposition": { "src/widget/export.py:16": "fixed", "src/widget/export.py:11": "not fixed" }
+      },
+      "verifier_raw_report": {"asserted_against": "the verifier's unedited output under run_dir (run.verifier.raw_path, asserted by kind per ruling E7-24) and the E10 trace; semantic, E10 (ruling E7-20)", "scenario_commands_run": ["PYTHONPATH=src python3 -m widget.export Widget from the workspace root (BLOCKER entry)", "PYTHONPATH=src python3 -m widget.export 'Widget, blue' from the workspace root (MAJOR entry)", "PYTHONPATH=src python3 -m widget.export '\"Pro\" Widget' from the workspace root (MAJOR entry)"], "observed": ["Widget (BLOCKER): the first output line reads id,title,qty, then 1,Widget,2, then lines=2 data=['1', 'Widget', '2']; exit 0", "'Widget, blue' (MAJOR, the handled input): id,title,qty, then 1,\"Widget, blue\",2, then lines=2 data=['1', 'Widget, blue', '2']; exit 0", "'\"Pro\" Widget' (MAJOR, the missed case): id,title,qty, then 1,\"Pro\" Widget,2, then lines=2 data=['1', 'Pro Widget', '2']; exit 0; the data line is byte-identical to the base commit's for that input", "both of the MAJOR entry's named inputs were run and both appear in the raw report, in one combined evidence entry or in separate entries (ruling E7-20; Astra G1-6)"]},
+      "checklist_provenance": {"asserted_against": "the checklist handed to the verifier (a run artifact under run_dir, asserted by kind per ruling E7-24) and the E10 trace; semantic, E10 (ruling E7-19)", "entries": {"src/widget/export.py:16": {"document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19"}, "src/widget/export.py:11": {"document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19"}}},
+      "src/widget/export.py": { "bytes_identical": true },
+      "README.md": { "bytes_identical": true },
+      "REVIEW.md": { "exists": false },
+      "docs/reviews": { "exists": false }
+    },
+    "deterministic_now": { "input_validates": true },
+    "must_not": [
+      "the MAJOR item is disposed fixed on the comma case alone",
+      "the MAJOR item's reason is reproduces",
+      "the BLOCKER item is disposed not_fixed (the first output line reads id,title,qty at HEAD)",
+      "the BLOCKER's clearance clears the MAJOR, or the MAJOR's miss holds the BLOCKER open (each entry keeps its own disposition)",
+      "either item's verification.method is static",
+      "the header row is entered as a fix-introduced defect (it is the BLOCKER's fix, not a regression; new_defects is empty)",
+      "the card moves to signed off (a MAJOR is still open) or stays rejected (no BLOCKER is open)",
+      "the status_line step lands before the punch_list_block step",
+      "a waived_line, reopened_line, or verdict_doc_copy write appears",
+      "REVIEW.md is created or written; docs/reviews/ is created",
+      "any tracked source file changes",
+      "verdict prose appears in the build doc beyond the recheck block and the status line",
+      "the ledger's 2026-09-19 review block is edited",
+      "the MAJOR item's evidence (verification.evidence[].detail taken together) mentions only one of the two named inputs, 'Widget, blue' and '\"Pro\" Widget' (section 5: what was run is recorded; the scenario names both; Astra G1-6, ruling E7-20)",
+      "the BLOCKER is disposed fixed through an upgrade that lacks upgrade_evidence naming evidence the verifier lacked, or through an upgrade while run.session_wrote_fix is true",
+      "a downgrade is recorded on either item without a note (section 7: a downgrade needs evidence)"
+    ],
+    "rationale": [
+      "§4 fixed: the BLOCKER's scenario (no line reads id,title,qty) no longer holds; at HEAD the first output line is id,title,qty for the named input, shown by executed evidence; R5 shape: disposition fixed, no reason, no blocked or missing field",
+      "§4 missed_case: the MAJOR's scenario names two inputs; the comma input reads back as three data fields at HEAD, the double-quote input still reads back as Pro Widget with the cell unquoted, so the fix is partial and the result names the missed case",
+      "§3 and Appendix A join key: two entries at different locations with different claims in one block; each is verified and disposed on its own (R11 background, not this lane's check)",
+      "§4 result: the effective open set is the one not_fixed MAJOR; a fixed item stands beside a non-empty set, so partial",
+      "Appendix A card mapping over the open set: no BLOCKER open, one MAJOR open, so A moves rejected to signed off with conditions; MINOR rule not engaged",
+      "§9 write order: run artifacts, receipt.json and receipt.log, then the punch_list_block appended at the ledger home's tail, then the status_line for A as the last transaction step (appended false per the schema), then result.json; writes 2, 4, and 5 do not occur (no grants, no docs/reviews/)",
+      "§9 recording transaction: identity recomputed before the transaction and before the status line; the only tracked diff is the receipted steps, so boundary_violations is empty and the card advances",
+      "§4 and RB9: the header row added in the fix commit changes every export's first line, but that is the BLOCKER's named fix, not a defect the fix introduced; the pilot's own scenario reads the data line for the MAJOR, so no new item enters",
+      "§5 and R30: every command runs offline on python3 alone and mutates no real state; method executed for both items; __pycache__/ is ignored, so the identity's untracked list stays empty",
+      "§7: session_wrote_fix false; the fixed item comes from a verifier fixed confirmed (an upgrade needs evidence the verifier lacked, and the verifier has the workspace and the command); the not_fixed item is confirmed, or downgraded with evidence if the verifier said fixed",
+      "§14: no REVIEW.md, so review_sheet absent and the default table governs; the sheet is never written",
+      "§16 R43: completed status lists its artifacts and both project-record writes",
+      "§17: no verdict doc exists and creating one is out of scope, so no verdict_doc_copy and docs/reviews/ stays absent",
+      "Ruling E7-19: items[].record is optional in result.schema.json and absent from result-completed-blocked.json, so this key does not require it; provenance is asserted on the normalized checklist through the E10 trace (records_after.checklist_provenance); when the result supplies record for the entry at src/widget/export.py:16 and src/widget/export.py:11 it must hold document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19 (the block the entry came from, section 3 provenance)",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export) only; the observed values (id,title,qty as the first line for the BLOCKER; 1,\"Widget, blue\",2 for the MAJOR's handled input; 1,\"Pro\" Widget,2 with data ['1', 'Pro Widget', '2'] for the missed case) are asserted against the verifier's raw report and the E10 trace in records_after.verifier_raw_report, never by a phrase list on the free text; the MAJOR's evidence covers both named inputs, in one combined entry or separate entries, asserted in records_after.verifier_raw_report and must_not (Astra G1-6)",
+      "Ruling E7-21: no trial condition seeds the verifier's response, so the key pins the disposition (fixed, the BLOCKER) and accepts every section 7 pair for it: verifier fixed confirmed, or verifier not_fixed upgraded with upgrade_evidence the verifier lacked (session_wrote_fix false); the schema binds each pair and requires upgrade_evidence on an upgrade (R25, R40); the prohibitions sit in must_not",
+      "Ruling E7-21: no trial condition seeds the verifier's response, so the key pins the disposition (not_fixed, reason missed_case, the MAJOR) and accepts every section 7 pair for it: verifier not_fixed confirmed, or verifier fixed downgraded with a note (a downgrade needs evidence); disputed is the fix-writing session's branch and does not arise with session_wrote_fix false; upgraded is prohibited in must_not",
+      "Ruling E7-18: the trial default run_date 2026-09-20 dates the recheck block, so its heading is pinned to '### 2026-09-20 — recheck: Slice A' and every line the run writes carries that date; a block dated on the local 2026-09-13 would lose Appendix A's latest-dated rule to the 2026-09-19 review block and the outcome would not stand on a later checklist assembly (Astra G1-8)"
+    ],
+    "open": [
+      "§5 location_after_fix: the fix commit shifts the BLOCKER's line (lines = [] at :16 becomes lines = [\",\".join(COLUMNS)] at :18) and the MAJOR's return value from :11 to :13; the contract requires the post-fix location only 'when it moved' and does not say whether a line shift inside the same function counts. This key does not require location_after_fix on either item; a result that carries {file: src/widget/export.py, line: 18} on the BLOCKER is consistent with the contract",
+      "§9 records_written ordering: the key states the block-before-status-line order through records_after.appended_kinds and must_not, since the $contains form does not assert order"
+    ]
+  },
+  {
+    "case": "_coverage",
+    "requirements": {
+      "R5": ["F3-02-mixed-two-items"],
+      "R7": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R15": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R18": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R25": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R26": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R30": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R38": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R40": ["F3-01-missed-case", "F3-02-mixed-two-items"],
+      "R43": ["F3-01-missed-case", "F3-02-mixed-two-items"]
+    },
+    "checks": {
+      "F3": ["F3-01-missed-case", "F3-02-mixed-two-items"]
+    }
+  }
+]

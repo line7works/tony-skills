@@ -1,0 +1,124 @@
+{
+  "set": "held-out",
+  "profile": "v2-test",
+  "sealed": true,
+  "requests": [
+    {
+      "id": "H-01-slash-v2-doc-path",
+      "text": "/recheck-v2 docs/plans/2026-09-18-widget-export.md slice B",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "Explicit slash command with the build doc path and slice inline."
+    },
+    {
+      "id": "H-02-dictated-did-they-take",
+      "text": "ok the export fixes are in, did they take? go item by item off the punch list and flip B if it's clean",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "Dictated, no 'recheck' keyword. 'item by item off the punch list' plus 'flip B' is the closed-checklist job and the card move."
+    },
+    {
+      "id": "H-03-verify-blockers-not-my-word",
+      "text": "don't take my word for it, verify the three blockers on slice A against what's on disk now and record it",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "readers",
+        "signoff (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "Names the independence rule in Tony's words (the fixer's account is never evidence) and asks for the record write. Section 7 fresh verifier, section 9 record writes."
+    },
+    {
+      "id": "H-04-fb-capture-mentions-recheck",
+      "text": "fb: recheck missed that the function moved to a new file and graded the old line. log it",
+      "expected": {
+        "activate": false,
+        "target": "fb"
+      },
+      "competitors": [
+        "fb",
+        "recheck-v2",
+        "digest"
+      ],
+      "exclusion": "A feedback capture about a past recheck run, not a request to run one. The fb skill appends the note verbatim; nothing is verified and no card moves.",
+      "notes": "Near miss: the word 'recheck' inside a loop-skill note. The 'fb:' prefix and 'log it' name the capture job."
+    },
+    {
+      "id": "H-05-v1-slash-describes-job",
+      "text": "/recheck the fixes on slice B, check each blocker from the signoff landed and flip the card",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "The v1 slash command followed by a full description of recheck-v2's job. Per the lane instruction the v1 name alone is a near miss (T-12), but a request that otherwise describes the job activates the pilot. Sealed pair with T-12; E10 reports the two side by side."
+    },
+    {
+      "id": "H-06-cold-read-of-doc",
+      "text": "get a fresh set of eyes on the widget export build doc, one cold read, tell me what's unclear",
+      "expected": {
+        "activate": false,
+        "target": "readers"
+      },
+      "competitors": [
+        "readers",
+        "recheck-v2",
+        "inspect (blocked)"
+      ],
+      "exclusion": "An ad hoc cold read of one document is the readers skill's direct form. No findings, no fixes, no card.",
+      "notes": "Near miss on 'fresh eyes' and the build doc name. The loop's reader component, not a station."
+    },
+    {
+      "id": "H-07-signoff-then-fix",
+      "text": "sign off slice B and if it comes back rejected fix the blockers",
+      "expected": {
+        "activate": false,
+        "target": "none: v1 station blocked in this profile"
+      },
+      "competitors": [
+        "signoff (blocked)",
+        "ship (blocked)",
+        "build",
+        "recheck-v2"
+      ],
+      "exclusion": "An initial review followed by repair. Recheck-v2 neither reviews fresh work nor repairs (section 17); the chain described is signoff plus fixing, and signoff is blocked in this profile.",
+      "notes": "Near miss: 'rejected' and 'blockers' are recheck vocabulary, but the sequence starts with the initial review, which does not exist yet."
+    },
+    {
+      "id": "H-08-recheck-everyday",
+      "text": "can you recheck my math on the tee sheet, 68 players over 17 groups doesn't come out even",
+      "expected": {
+        "activate": false,
+        "target": "none"
+      },
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "exclusion": "'Recheck' in the everyday sense over a golf league tee sheet. No repo, no build doc, no findings.",
+      "notes": "Near miss on the keyword. Plain conversation, no skill."
+    }
+  ]
+}

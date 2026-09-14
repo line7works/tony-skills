@@ -1,0 +1,69 @@
+{
+  "steps": [
+    {
+      "step": 1,
+      "name": "build twice, determinism",
+      "pass": true,
+      "detail": "14 lanes built twice into /private/tmp/claude-501/-Users-tonycoon/c340e4d6-8ea8-45ae-af13-7d07cb29bccb/scratchpad/e7-builds/runner5, 113 cases compared",
+      "failures": []
+    },
+    {
+      "step": 2,
+      "name": "input.json validates per manifest and key",
+      "pass": true,
+      "detail": "113 inputs validated",
+      "failures": []
+    },
+    {
+      "step": 3,
+      "name": "tell scan over every workspace",
+      "pass": true,
+      "detail": "591 text files scanned for 10 banned strings (whole words, case-insensitive)",
+      "failures": []
+    },
+    {
+      "step": 4,
+      "name": "answer-key shape",
+      "pass": true,
+      "detail": "113 key entries over 14 lanes, 113 built cases",
+      "failures": []
+    },
+    {
+      "step": 5,
+      "name": "coverage R1 to R43 and section 16 checks",
+      "pass": true,
+      "detail": "41/43 requirements and 35/37 checks have fixture cases; 0 requirements and 0 checks uncovered; R22 points at E9 (D1, adapter-only); R27 is served by the trigger set (T1, 12 requests); wrote answer-key/coverage.json and coverage.md",
+      "failures": []
+    },
+    {
+      "step": 6,
+      "name": "identity against the pin",
+      "pass": true,
+      "detail": "7 pinned cases compared with fixturelib.identity_of",
+      "failures": []
+    },
+    {
+      "step": 7,
+      "name": "checkpoint integrity (section 11)",
+      "pass": true,
+      "detail": "23 checkpoints checked (self digest, chain, log, the tolerated state with its prev link)",
+      "failures": []
+    },
+    {
+      "step": 8,
+      "name": "unit tests: test_fixturelib.py and test_match.py",
+      "pass": true,
+      "detail": "test_fixturelib: Ran 36 tests in 5.446s / OK; test_match: Ran 15 tests in 0.000s / OK",
+      "failures": []
+    },
+    {
+      "step": 9,
+      "name": "build.py interface (--help, --list, unknown --case, other cwd)",
+      "pass": true,
+      "detail": "14 generators exercised",
+      "failures": []
+    }
+  ],
+  "out": "/private/tmp/claude-501/-Users-tonycoon/c340e4d6-8ea8-45ae-af13-7d07cb29bccb/scratchpad/e7-builds/runner5",
+  "ok": true
+}
