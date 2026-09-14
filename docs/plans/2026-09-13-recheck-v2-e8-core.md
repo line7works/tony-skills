@@ -615,3 +615,59 @@ this document with a section 12 "Amendments" naming any ruling issued while the 
   V2 (for an explicit-items input, each result item's slice equals the input item's, and every
   `charged_to_slice` is one of those slices); the rest of V2 and all of V6 are slice 2's, and
   the slice-1 row of section 9 reads that way.
+- **E8-A6 (after slice 2), the run block on a path-rule failure.** Amends E8-6 and section 2:
+  the `run` block is omitted only when the payload fails schema validation. A schema-valid
+  payload that fails a path rule (an absolute `run_dir` inside the workspace, a `build_doc`
+  escaping through a symlink, a relative `workspace`) gets its `run` block from the presented
+  invocation and, on a direct interactive run, the one question; no run directory is created
+  and the write list is empty. E7-27's reading of I4-02 and I4-04 stands. V16 is unchanged
+  (the run block is present exactly when the payload validated against the schema).
+- **E8-A7 (after slice 2), verifier call metadata.** The checkpoint schema is closed and has
+  no slot for a call's kind, model, injected channels, or refused actions; the core keeps
+  them in `run_dir/verifier/calls.json`, a run artifact of its own (listed under `verifier/`
+  in the E8-29 order), and re-reads `injection_attempts`, grant claims, and refused actions
+  from the retained report's tail at assembly. `calls.json` gates nothing and is not chained.
+- **E8-A8 (after slice 2), `not started` cards.** A slice at `not started` with open entries
+  moves by the Appendix A mapping like any other card; only `built` stays and `none` has no
+  card. The example suite's positive mutation "a not-started card moved by the mapping" is the
+  precedent (contract revision 3, finding N2). The core's "never moved" reading is corrected
+  in the slice 2 fix round.
+- **E8-A9 (after slice 2), the envelope's field paths.** `missing_input.fields` lists the
+  validator's own error path (a `oneOf` failure lands on its parent, `target`) and, where the
+  core refines it to a leaf (`target.items[0].record`), the leaf as a second entry; a key
+  matching either under ruling E7-7 holds. Corrected in the slice 2 fix round.
+- **E8-A10 (after slice 2), two readings accepted and one limit carried.** (a) A missing
+  reference (E8-17) stops the run before any run directory exists, so the stopped envelope is
+  delivered on stdout and nothing is written; "written" in E8-17 means produced. (b) A
+  verifier evidence entry naming an artifact that does not exist under the scratch keeps its
+  detail, loses the path, and gains a note saying so. (c) Section 11 step 6 is exact when the
+  run started clean; on a dirty start the pre-transaction non-target diff has no slot in the
+  checkpoint, so the resume checks the commit, the untracked set, and the plan targets, while
+  the live boundary check before the status lines stays exact in both cases. Carried to E9
+  and E10 as a known limit; a checkpoint slot for the pre-transaction identity is the fix.
+- **E8-A11 (after slice 2's check), the boundary check always runs.** Section 9's check runs
+  before the first status-line step or, when the plan has none (a `built` card, a card the
+  mapping leaves), before the `done` entry of the last step; its violations are written to
+  `run_dir/boundary.json` (a run artifact, listed) so a re-assembly after the commit point
+  reports them and keeps `not_clear` with the cards frozen. Section 9 amended.
+- **E8-A12 (after slice 2's check), rejected grant entries.** A rejected grant that arrived as
+  a grant object is listed as `<its JSON path in the input>: <item> · <why>` (for example
+  `authorization.reopen[0]: src/widget/export.py:11 · turn_ref maps to assistant`); a claim
+  found in reviewed material is listed as `<file:line>: <the text> · <why>`. The validator's
+  V7 and V14 match grant objects by their path, never by location alone.
+- **E8-A13 (after slice 2's check), the ledger home under file order.** Appendix A's home rule
+  follows E8-1: when records sit in more than one place, the home is the place whose tail comes
+  last in the file, so the run's own line is never dead. Appendix A amended.
+- **E8-A14 (after slice 2's check), `chat.md` on every terminal delivery.** The chat block is
+  written on every terminal status that has a run directory, `verifier_unavailable` included;
+  section 14 amended to name it.
+- **E8-A15 (after slice 2's check), the resume brief.** A fresh call made by a resume covers the
+  pending items only: the brief lists them with their original indexes and says so, and the
+  report's block must cover exactly those indexes; done items are neither re-verified nor
+  overwritten.
+- **E8-A16 (after slice 2's check), readings kept.** An explicit item whose `record.document`
+  does not exist in the workspace is missing input (section 3's `docs/punch-list.md` is the
+  document the review wrote, not one the run creates); an explicit item whose slice has no
+  heading in that document and is not `none` is missing input naming `target.items[i].slice`.
+  Marker `quoted_words` carry the ledger form (double quotes written as single quotes), as the
+  result schema says.

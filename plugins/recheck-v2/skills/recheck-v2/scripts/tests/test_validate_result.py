@@ -16,8 +16,8 @@ INPUT_FOR = {
     "result-missing-input-interactive.json": "input-direct.json",
     "result-stale-source.json": "input-direct.json",
 }
-SLICE1_CHECKS = {"V1", "V2", "V5", "V9", "V10", "V11", "V12", "V15", "V16"}
-V12_SKIP = "skipped: cancelled flags on the receipt's status-line steps: slice 2"
+RUN_DIR_CHECKS = ("V1", "V3", "V4", "V7", "V8", "V13", "V14", "V18")  # V3, V4 also run from the result's own run.run_dir
+WORKSPACE_CHECKS = ("V2", "V6", "V17")
 
 
 def example(name):
@@ -150,22 +150,20 @@ class CommandLine(unittest.TestCase):
         got = json.loads(out)
         self.assertFalse(got["ok"]); self.assertEqual(got["semantic"], []); self.assertTrue(got["skipped"])
 
-    def test_strict_with_run_dir_never_passes_a_violated_run(self):
-        """Finding 3: with --run-dir supplied, V12's cancelled-flags part is still a skip, so --strict exits 4."""
+    def test_run_dir_supplied_runs_the_checks(self):
+        """With --run-dir supplied the run-directory checks run (slice 2): a violated result beside an empty run
+        directory fails V4 (its artifacts are not under that directory) and V12 (no receipt to read the cancelled
+        flags from), so --strict is not needed to reject it."""
         doc = violated(testlib.load_json(example("result-completed.json")))
         path = os.path.join(self.dir, "violated.json")
         with open(path, "w") as fh:
             json.dump(doc, fh)
         code, out, _ = self.run_cli(path, "--run-dir", self.dir)
-        self.assertEqual(code, 0, "the result-only part of V12 holds: no card moved, no status line, not_clear")
-        got = json.loads(out)
-        self.assertEqual(got["semantic"], [])
-        self.assertIn({"id": "V12", "reason": V12_SKIP}, got["skipped"])
-        code, out, _ = self.run_cli(path, "--run-dir", self.dir, "--strict")
         self.assertEqual(code, 4)
         got = json.loads(out)
-        self.assertFalse(got["ok"])
-        self.assertIn({"id": "V12", "reason": V12_SKIP}, got["skipped"])
+        ids = {f["id"] for f in got["semantic"]}
+        self.assertIn("V12", ids); self.assertIn("V4", ids)
+        self.assertTrue(all("not implemented" not in s["reason"] for s in got["skipped"]), got["skipped"])
 
     def test_help(self):
         code, out, _ = self.run_cli("--help")
@@ -225,37 +223,23 @@ class SemanticChecks(unittest.TestCase):
         self.assertEqual(self.ids(self.completed, input_doc=self.caller), [])
         self.assertEqual(self.ids(self.blocked), [])
 
-    def test_stubs_report_their_reason(self):
-        """Finding 7: each stub's skip reason is worded by what was supplied."""
+    def test_skips_are_worded_by_what_was_not_supplied(self):
+        """A check skips only for what was not supplied (input, run directory, workspace); once supplied it runs."""
         reasons = self.skips(self.completed)
-        for cid in validate.CHECK_IDS:
-            if cid not in SLICE1_CHECKS:
-                self.assertIn(reasons.get(cid), ("skipped: needs run directory", "skipped: needs workspace"), cid)
         self.assertEqual(reasons["V16"], "skipped: needs input")
         self.assertEqual(reasons["V2"], "skipped: needs input")
         self.assertEqual(reasons["V1"], "skipped: needs run directory", "V1 without the input: key order against the checkpoint scope")
-        self.assertEqual(reasons["V12"], V12_SKIP)
-        run_dir_stubs, workspace_stubs = ("V3", "V4", "V7", "V8", "V13", "V14", "V18"), ("V6", "V17")
-        self.assertEqual(set(run_dir_stubs) | set(workspace_stubs), set(validate.CHECK_IDS) - SLICE1_CHECKS)
-        for cid in run_dir_stubs:
-            self.assertEqual(reasons[cid], "skipped: needs run directory", cid)
-        for cid in workspace_stubs:
-            self.assertEqual(reasons[cid], "skipped: needs workspace", cid)
-        # with the run directory and the workspace supplied, a stub says it is not implemented and what it would read
-        reasons = self.skips(self.completed, run_dir=self.dir, workspace=self.dir)
-        for cid in run_dir_stubs + ("V1",):
-            self.assertRegex(reasons[cid], r"^skipped: not implemented until slice 2 \(needs the run directory's [^()]+\)$", (cid, reasons[cid]))
-        for cid in workspace_stubs:
-            self.assertRegex(reasons[cid], r"^skipped: not implemented until slice 2 \(needs the workspace's [^()]+\)$", (cid, reasons[cid]))
-        self.assertEqual(reasons["V1"], "skipped: not implemented until slice 2 (needs the run directory's checkpoint scope for the key order)")
-        self.assertEqual(reasons["V12"], V12_SKIP, "finding 3: the cancelled-flags part is a skip with the run directory too")
-        # only the thing the stub needs changes its wording
-        reasons = self.skips(self.completed, run_dir=self.dir)
-        for cid in workspace_stubs:
-            self.assertEqual(reasons[cid], "skipped: needs workspace", cid)
-        reasons = self.skips(self.completed, workspace=self.dir)
-        for cid in run_dir_stubs:
-            self.assertEqual(reasons[cid], "skipped: needs run directory", cid)
+        for cid in ("V1", "V7", "V8", "V13", "V14", "V17", "V18"):
+            self.assertIn(reasons.get(cid), ("skipped: needs run directory", "skipped: needs input"), cid)
+        self.assertEqual(reasons["V6"], "skipped: needs workspace")
+        self.assertNotIn("V12", reasons, "no violation: nothing to hold, nothing to skip")
+        self.assertEqual(self.skips(violated(self.completed))["V12"], "skipped: needs run directory")
+        self.assertNotIn("V3", reasons, "V3 runs from the result's own run.run_dir")
+        self.assertNotIn("V4", reasons, "V4 runs from the result's own run.run_dir")
+        reasons = self.skips(self.completed, run_dir=self.dir, workspace=self.dir, input_doc=self.caller)
+        self.assertTrue(all("not implemented" not in r for r in reasons.values()), reasons)
+        for cid in RUN_DIR_CHECKS + WORKSPACE_CHECKS:
+            self.assertNotIn(cid, reasons, "%s runs once its inputs are supplied (%r)" % (cid, reasons.get(cid)))
 
     def test_v1(self):
         self.assertEqual(self.ids(self.mutated(self.completed, lambda d: d["checklist"].__setitem__("count", 3))), ["V1"])
@@ -297,10 +281,9 @@ class SemanticChecks(unittest.TestCase):
         renamed = self.mutated(self.completed, lambda d: d["items"][1].__setitem__("claim", "another claim"))
         self.assertIn("V1", self.ids(renamed, input_doc=self.caller))
         self.assertEqual(self.paths(renamed, "V2", input_doc=self.caller), [])
-        # a build_doc input needs the workspace (slice 2)
+        # a build_doc input needs the workspace; with one, the document's slices are checked
         self.assertEqual(self.skips(self.completed, input_doc=self.direct)["V2"], "skipped: needs workspace")
-        self.assertEqual(self.skips(self.completed, input_doc=self.direct, workspace=self.dir)["V2"],
-                         "skipped: not implemented until slice 2 (needs the workspace's build doc and its slices)")
+        self.assertEqual(self.paths(self.completed, "V2", input_doc=self.direct, workspace=self.dir), ["/checklist/build_doc"], "the example's build doc is not under the scratch workspace")
 
     def test_v5(self):
         self.assertIn("V5", self.ids(self.mutated(self.completed, lambda d: d.__setitem__("still_open", []))))
@@ -345,16 +328,24 @@ class SemanticChecks(unittest.TestCase):
         clean = self.mutated(self.completed, lambda d: d.__setitem__("boundary_violations", []))
         self.assertEqual(self.paths(clean, "V12"), [], "no violation, nothing to hold")
 
-    def test_v12_cancelled_flags_always_skipped(self):
-        """Finding 3: until slice 2 reads the receipt, the cancelled-flags part is a skip whether or not a run directory was given."""
-        for doc in (self.completed, violated(self.completed)):
-            for kw in ({}, {"run_dir": self.dir}, {"run_dir": self.dir, "workspace": self.dir}):
-                self.assertEqual(self.skips(doc, **kw).get("V12"), V12_SKIP, kw)
-        # the result-only part keeps running beside the skip
-        moved = self.mutated(violated(self.completed), lambda d: d["cards"][0].__setitem__("after", "signed off"))
-        got = self.run_checks(moved, run_dir=self.dir)
-        self.assertEqual([f["path"] for f in got["semantic"] if f["id"] == "V12"], ["/cards/0"])
-        self.assertIn({"id": "V12", "reason": V12_SKIP}, got["skipped"])
+    def test_v12_cancelled_flags_from_the_receipt(self):
+        """The cancelled-flags part reads the receipt: a skip without the run directory; a finding when the receipt
+        is missing or a status-line step is not cancelled; clean when every status step is cancelled."""
+        frozen = violated(self.completed)
+        self.assertEqual(self.skips(frozen).get("V12"), "skipped: needs run directory")
+        self.assertEqual(self.skips(self.completed).get("V12"), None, "no violation, nothing to hold or skip")
+        run_dir = os.path.join(self.dir, "v12")
+        os.makedirs(run_dir, exist_ok=True)
+        self.assertTrue(any("receipt.json is missing" in f["message"] for f in self.run_checks(frozen, run_dir=run_dir)["semantic"] if f["id"] == "V12"))
+        rc = testlib.load_json(example("receipt-partial.json"))
+        rc["plan"][2]["cancelled"] = False
+        with open(os.path.join(run_dir, "receipt.json"), "w") as fh:
+            json.dump(rc, fh)
+        self.assertEqual([f["path"] for f in self.run_checks(frozen, run_dir=run_dir)["semantic"] if f["id"] == "V12"], ["/receipt_path"])
+        rc["plan"][2]["cancelled"] = True
+        with open(os.path.join(run_dir, "receipt.json"), "w") as fh:
+            json.dump(rc, fh)
+        self.assertEqual([f for f in self.run_checks(frozen, run_dir=run_dir)["semantic"] if f["id"] == "V12"], [])
 
     def test_v15(self):
         stopped = testlib.load_json(example("result-stopped.json"))

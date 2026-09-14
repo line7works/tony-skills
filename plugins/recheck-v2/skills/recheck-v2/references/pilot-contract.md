@@ -63,11 +63,14 @@ Questions and envelopes:
 - Every other invocation (headless, or any station caller) receives a result with
   `status: missing_input`: the complete list of missing or invalid fields, the ambiguities, no
   question, and no write. A question into a channel nobody reads is a failure.
-- A payload that fails schema validation or the path rules below returns the same envelope
-  with the `run` block omitted and every invalid field named, and nothing is written anywhere:
-  the run directory is created only after both pass. A schema-valid payload with a semantic
-  fault found later (a conflict, a duplicate, a missing scenario or document) gets its `run`
-  block and its run directory, and its write list holds the resolved input and the result.
+- A payload that fails schema validation returns the same envelope with the `run` block
+  omitted, every invalid field named (the validator's own error path and, where the core can
+  refine a `oneOf` failure to a leaf, that leaf as well), and nothing written anywhere. A
+  schema-valid payload that fails the path rules below gets its `run` block from the presented
+  invocation and, on a direct interactive run, the one question, but no run directory and an
+  empty write list; the run directory is created only after the path rules pass. A semantic
+  fault found after that (a conflict, a duplicate, a missing scenario or document) keeps the
+  run block and the run directory, and the write list holds the resolved input and the result.
 - Conflicts are missing input: two build docs match the invocation; an item whose location is
   shared by several entries with no claim to separate them; a named item that matches nothing or
   more than one entry; a failure scenario the record lacks and the user has not confirmed; a
@@ -326,8 +329,10 @@ sequence of receipted steps:
 - Write-ahead receipts: before each step, `receipt.json` gains an `intent` entry naming the
   step; after it, the matching `done` entry with the hash observed. The receipt is rewritten
   at each step, never only at the end.
-- Before the first status line (write 6): the identity is recomputed and the tracked diff
-  since the pre-transaction identity must consist exactly of the steps receipted `done`;
+- Before the first status line (write 6), or, when the plan holds no status-line step, before
+  the `done` entry of its last step: the identity is recomputed and the tracked diff since the
+  pre-transaction identity must consist exactly of the steps receipted `done`; the violations
+  found are kept in `run_dir/boundary.json` so a later re-assembly reports them;
   anything else is listed in `boundary_violations`, every status-line step is marked
   `cancelled`, every card stays as it was, and the result reports `not_clear`. A card is
   therefore never advanced past a violated transaction. A boundary violation is an action
@@ -553,7 +558,7 @@ with `floor_class` and `floor_met`. The core checks it right after input validat
 scope: a missing model object or `floor_met` `null` makes the run `verifier_unavailable` with
 `stop_reason` `unknown_capability: …`; `floor_met` `false` makes it `verifier_unavailable`
 with `below_floor: <id> (<class>)`; nothing is graded, and no run artifact beyond the resolved
-input and the result is written. The core never types a model id, effort, or authorization into a verifier
+input, the result, and the chat block is written. The core never types a model id, effort, or authorization into a verifier
 request.
 
 ## 15. References and load conditions
@@ -709,9 +714,9 @@ it, still-open BLOCKER or MAJOR entries this run never verified): any BLOCKER op
 `docs/punch-list.md` has no card.
 
 **Ledger home.** Where the doc's punch-list blocks already live; the `## Punch list` section
-when none exist yet (created then); when blocks sit in more than one place, the latest-dated
-block's location, and on a date tie the later in the file. One home per doc. Appends land at
-the home's tail.
+when none exist yet (created then); when records sit in more than one place, the place whose
+tail comes last in the file, so that a record the run appends is the last record in file order
+and never dead under the open filter. One home per doc. Appends land at the home's tail.
 
 **Open filter.** An item is open when its last record in file order (block line, waiver,
 reopening), matched on location plus claim, leaves it neither fixed nor waived. Records are
