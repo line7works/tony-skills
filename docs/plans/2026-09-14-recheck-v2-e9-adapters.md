@@ -689,6 +689,16 @@ been said.
   core's own sentence about v1, the description's exclusion, the fixture's planted text, or an
   invocation (a `Skill` call, a slash command, a `codex` or `opencode` skill call naming a v1
   station); only an invocation fails the gate, and every hit is still listed with its class.
+- **E9-31 (after the fresh live proofs), the executor's rollout is located by its thread id.**
+  The fix round located the executor's own rollout through the parent process's open file
+  (`lsof -p $PPID`), which is open only while Codex is writing: the fresh F1-01 session
+  stopped honestly with `absent harness record: no executor rollout open on parent process`
+  while F2-01 on the same code found it. The tool shell carries `CODEX_THREAD_ID` (measured,
+  `livecheck/marker`), which names the rollout file. Ruling, applied by the control room as a
+  targeted change: `turns.py` locates the executor's rollout by `CODEX_THREAD_ID` under the
+  sessions directory beside the child home (E9-25), else under `CODEX_HOME`, else the default
+  home, requiring exactly one match and refusing otherwise (exit 3 naming the thread and the
+  roots searched); the open-file walk stays as the fallback when no thread id is set; one test.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
