@@ -1,14 +1,24 @@
 #!/bin/sh
 # One headless Claude Code session of the pilot setup (E9 lane C).
 #
-# Usage: launch.sh <prompt-file> <workspace> <out-dir> [--plugin NAME]... [--bypass]
+# Usage: launch.sh <prompt-file> <workspace> <out-dir> [--plugin NAME]...
+#                  [--plugin-dir DIR]... [--bypass]
+#
+# --plugin NAME loads that plugin from the pilot's own install cache;
+# --plugin-dir DIR loads an installed copy anywhere (the negative tests' own
+# throwaway installs). Giving either one replaces the default pair
+# (recheck-v2 readers).
 #
 # Copies to <out-dir>: trace.jsonl (the stream-json trace), transcript.jsonl
 # (the harness's own record of the session), result.txt (the final text),
-# launch.json (the command line, the session id, the catalog, the cost).
+# launch.json (the command line, the session id, the catalog, the cost, and the
+# claude process's own exit status).
 # Prints one JSON object on stdout; the harness's own output goes to the files.
-# Exit 0 the session ended, 2 usage, 3 claude or the installed plugin is
-# missing, 1 anything else.
+# Exit 0 the session ended with a usable result, 2 usage (an unknown argument,
+# a missing prompt or workspace, or an output directory that already holds a
+# launch: a record is never overwritten), 3 claude or the installed plugin is
+# missing, 1 the claude process failed or the session produced no result and no
+# session id (the records written so far are kept and named).
 #
 # Sign-in: the isolated CLAUDE_CONFIG_DIR does NOT keep the machine's sign-in
 # (measured 2026-09-14: `claude -p 'say ok'` there answers "Not logged in ·
@@ -28,29 +38,50 @@ CONFIG_DIR="$PILOT_HOME/config"
 CACHE="$CONFIG_DIR/plugins/cache"
 BYPASS=0
 PLUGINS=""
+PLUGIN_DIRS=""
 
-[ $# -ge 3 ] || { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -ge 3 ] || { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 PROMPT_FILE="$1"; WORKSPACE="$2"; OUT_DIR="$3"; shift 3
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugin) PLUGINS="$PLUGINS $2"; shift 2 ;;
+    --plugin-dir)
+      [ -d "$2" ] || { echo "launch.sh: no plugin directory: $2" >&2; exit 3; }
+      PLUGIN_DIRS="$PLUGIN_DIRS $2"; shift 2 ;;
     --bypass) BYPASS=1; shift ;;
     *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$PLUGINS" ] || PLUGINS="recheck-v2 readers"
+[ -n "$PLUGINS" ] || [ -n "$PLUGIN_DIRS" ] || PLUGINS="recheck-v2 readers"
 
 command -v claude >/dev/null 2>&1 || { echo "launch.sh: claude is not on PATH" >&2; exit 3; }
 [ -f "$PROMPT_FILE" ] || { echo "launch.sh: no prompt file: $PROMPT_FILE" >&2; exit 2; }
 [ -d "$WORKSPACE" ] || { echo "launch.sh: no workspace: $WORKSPACE" >&2; exit 2; }
+# A reused output directory is refused rather than overwritten (E9-34): the
+# records of a live session are the evidence.
+for kept in trace.jsonl launch.json transcript.jsonl result.txt; do
+  [ -e "$OUT_DIR/$kept" ] && {
+    echo "launch.sh: $OUT_DIR already holds $kept; name a fresh output directory" >&2
+    exit 2
+  }
+done
 mkdir -p "$OUT_DIR"
 OUT_DIR=$(CDPATH= cd -- "$OUT_DIR" && pwd -P)
 WORKSPACE=$(CDPATH= cd -- "$WORKSPACE" && pwd -P)
+# The session starts in the workspace, so a relative prompt path is resolved
+# here, before the cd: read from there it would be empty, and the harness would
+# be handed no prompt at all (measured 2026-09-14, exit 1 "Input must be
+# provided either through stdin or as a prompt argument when using --print").
+PROMPT_FILE=$(CDPATH= cd -- "$(dirname -- "$PROMPT_FILE")" && pwd -P)/$(basename -- "$PROMPT_FILE")
+[ -s "$PROMPT_FILE" ] || { echo "launch.sh: the prompt file is empty: $PROMPT_FILE" >&2; exit 2; }
 
 set -- claude
 for name in $PLUGINS; do
   dir=$(find "$CACHE" -maxdepth 3 -mindepth 3 -type d -path "*/$name/*" 2>/dev/null | sort | tail -1)
   [ -n "$dir" ] || { echo "launch.sh: $name is not installed under $CACHE" >&2; exit 3; }
+  set -- "$@" --plugin-dir "$dir"
+done
+for dir in $PLUGIN_DIRS; do
   set -- "$@" --plugin-dir "$dir"
 done
 
@@ -73,18 +104,25 @@ fi
 printf '%s\n' "$*" > "$OUT_DIR/command.txt"
 START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cd "$WORKSPACE"
+CLAUDE_STATUS=0
 RECHECK_HARNESS_SANDBOX="$SANDBOX" READERS_CHECKOUT="$PILOT_HOME/readers-checkout" "$@" "$(cat "$PROMPT_FILE")" \
-  < /dev/null > "$OUT_DIR/trace.jsonl" 2> "$OUT_DIR/trace.err" || true
+  < /dev/null > "$OUT_DIR/trace.jsonl" 2> "$OUT_DIR/trace.err" || CLAUDE_STATUS=$?
 END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+if [ "$CLAUDE_STATUS" -ne 0 ]; then
+  echo "launch.sh: claude exited $CLAUDE_STATUS; its stderr:" >&2
+  cat "$OUT_DIR/trace.err" >&2
+fi
 
-python3 - "$OUT_DIR" "$WORKSPACE" "$PROMPT_FILE" "$SANDBOX" "$START" "$END" "$CONFIG_DIR" <<'PY'
+python3 - "$OUT_DIR" "$WORKSPACE" "$PROMPT_FILE" "$SANDBOX" "$START" "$END" "$CONFIG_DIR" \
+  "$CLAUDE_STATUS" <<'PY'
 import glob
 import json
 import os
 import shutil
 import sys
 
-out_dir, workspace, prompt_file, sandbox, start, end, config_dir = sys.argv[1:8]
+(out_dir, workspace, prompt_file, sandbox, start, end, config_dir,
+ claude_status) = sys.argv[1:9]
 trace = os.path.join(out_dir, "trace.jsonl")
 init = {}
 result = {}
@@ -117,7 +155,18 @@ if transcript:
 with open(os.path.join(out_dir, "result.txt"), "w", encoding="utf-8") as handle:
     handle.write((result.get("result") or "") + "\n")
 
+problems = []
+if int(claude_status) != 0:
+    problems.append("the claude process exited %s" % claude_status)
+if not session_id:
+    problems.append("the session produced no session id")
+if not result:
+    problems.append("the trace holds no result event")
+
 document = {
+    "ok": not problems,
+    "problems": problems,
+    "claude_exit": int(claude_status),
     "session_id": session_id,
     "workspace": workspace,
     "prompt_file": os.path.abspath(prompt_file),
@@ -143,4 +192,11 @@ with open(os.path.join(out_dir, "launch.json"), "w", encoding="utf-8") as handle
     json.dump(document, handle, indent=2)
     handle.write("\n")
 sys.stdout.write(json.dumps(document, indent=2) + "\n")
+if problems:
+    # A null session result is not a measurement: it is a failed launch, and a
+    # caller that reads only the exit status must see it (Astra's finding 9).
+    sys.stderr.write(
+        "launch.sh: %s; the records written are under %s\n" % ("; ".join(problems), out_dir)
+    )
+    sys.exit(1)
 PY

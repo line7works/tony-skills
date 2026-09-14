@@ -21,21 +21,29 @@ import _common  # noqa: E402
 EPILOG = """\
 turn_ref shape: claude-code:session <sessionId>:msg <uuid>
 
-Roles (E9 lane contract section 6): a `user` record whose message.content is a
-string or text blocks is the user's turn; a `user` record carrying tool results
-is not a turn and stays out of the map; an `isSidechain` record is a subagent's
-and stays out of the map; every other `assistant` record is `assistant`. A
-station reference passed with --station-ref is mapped `station`; those values
-come from the calling station's payload, never from the executor.
+Roles (E9 lane contract section 6, ruling E9-22): a `user` record whose
+message.content is a string or text blocks is the user's turn; a `user` record
+carrying tool results is not a turn and stays out of the map; a `user` record
+carrying any of the keys isMeta, turnCompanion, sourceToolUseID or
+toolUseResult is one the harness wrote itself and stays out of the map,
+whatever the key's value is ({}, false and null are marks too); an isSidechain
+record is a subagent's and stays out of the map; every other `assistant` record
+is `assistant`. A station reference passed with --station-ref is mapped
+`station`; those values come from the calling station's payload, never from the
+executor.
 
-Discovery, in order: --transcript, --session-id, the harness's own
-CLAUDE_CODE_SESSION_ID in the tool shell's environment, a hook payload keyed by
-CLAUDE_PID, then the newest transcript under the config directory whose records
-name --workspace as their cwd (ambiguous with two sessions in one directory:
-the `note` field says how many matched).
+Discovery (ruling E9-28), one route: the harness's own CLAUDE_CODE_SESSION_ID
+in the tool shell's environment, resolved to <config>/projects/*/<id>.jsonl and
+bound to this session (every turn record's sessionId, and a record whose cwd is
+--workspace). Unset, ambiguous or mismatched: exit 3 naming it. There is no
+fallback to the newest transcript, to another workspace's record, or to a hook
+payload. --transcript and --session-id are the fixture interface and are
+accepted only under RECHECK_ADAPTER_TEST=1 (default: off; a usage error at run
+time). A session record with no user or assistant turns is unusable and is
+reported as exit 3, never as an empty map (ruling E9-29).
 
 Example:
-  turns.py --find "waive the comma one, ship it"
+  turns.py --workspace /Users/x/Developer/widget --find "waive the comma one, ship it"
 
 Side effects: none. Nothing is written, no network, no model call. The user's
 text is never printed: --find answers with turn references and timestamps only.
@@ -61,10 +69,16 @@ def build_parser():
         help="accepted for compatibility; stdout is always JSON (default: on)",
     )
     parser.add_argument(
-        "--transcript", default=None, help="an explicit transcript path (default: discovered)"
+        "--transcript",
+        default=None,
+        help="fixture interface, RECHECK_ADAPTER_TEST=1 only: an explicit transcript path "
+        "(default: the session's own record through CLAUDE_CODE_SESSION_ID)",
     )
     parser.add_argument(
-        "--session-id", default=None, help="an explicit session id (default: discovered)"
+        "--session-id",
+        default=None,
+        help="fixture interface, RECHECK_ADAPTER_TEST=1 only: an explicit session id "
+        "(default: the harness's CLAUDE_CODE_SESSION_ID)",
     )
     parser.add_argument(
         "--config-dir",
@@ -74,7 +88,8 @@ def build_parser():
     parser.add_argument(
         "--workspace",
         default=None,
-        help="the workspace, for the last discovery candidate (default: none)",
+        help="the workspace the session's record must name as a cwd, ruling E9-28's binding "
+        "(default: none, and the binding is reported as not run)",
     )
     parser.add_argument(
         "--station-ref",
@@ -101,6 +116,12 @@ def main(argv):
         workspace=args.workspace,
     )
     session = _common.read_session(path, session_id, args.station_ref)
+    if not session["counts"]["user_turns"] and not session["counts"]["assistant_turns"]:
+        # Ruling E9-29: an empty map is a supplied turn list that rejects every
+        # reference, so the adapter never prints one in place of a failure.
+        raise _common.HelperError(
+            "unusable session record: no user or assistant turns in %s" % path, 3
+        )
 
     document = {
         "harness": _common.HARNESS,
@@ -108,6 +129,7 @@ def main(argv):
         "session_id": session_id,
         "transcript": path,
         "discovery": discovery,
+        "workspace_binding": note,
         "note": note,
         "turn_ref_shape": "claude-code:session <sessionId>:msg <uuid>",
         "counts": session["counts"],

@@ -6,7 +6,10 @@
 #
 # Usage: install.sh [--pilot-home DIR]
 # Prints one JSON object on stdout; every command's own output goes to stderr.
-# Exit 0 success, 2 usage, 3 the claude binary is missing, 1 anything else.
+# Exit 0 every command succeeded, 2 usage, 3 the claude binary is missing, 1 a
+# marketplace or install command failed or reported an outcome other than ok
+# (the record still lands on stdout and in <pilot home>/install.json, with
+# `ok: false` and the failing commands named).
 #
 # Measured facts this script records for RESULTS.md land in
 # <pilot home>/install.json.
@@ -60,7 +63,23 @@ cat > "$MARKET/.claude-plugin/marketplace.json" <<JSON
 }
 JSON
 
-run() { echo "\$ $*" >&2; "$@" >&2 2>&1 || echo "  (exit $?)" >&2; }
+# Every child's status is kept: a failed marketplace or install command must
+# never leave this script exiting 0 with a record that reads like a success
+# (Astra's finding 9). The failures are collected in a file because the install
+# commands run inside command substitutions, whose variables do not travel.
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/recheck-install.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT INT TERM
+: > "$WORK/failures"
+run() {
+  echo "\$ $*" >&2
+  status=0
+  "$@" >&2 2>&1 || status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "  (exit $status)" >&2
+    echo "$1 $2 $3: exit $status" >> "$WORK/failures"
+  fi
+  return 0
+}
 
 run claude plugin marketplace add "$REPO_ROOT"
 run claude plugin marketplace update tony-skills
@@ -75,14 +94,25 @@ for plugin in recheck-v2@tony-skills readers@tony-skills \
               delivery-probe@skills-v2-pilot manual-only-probe@skills-v2-pilot; do
   claude plugin uninstall "$plugin" >/dev/null 2>&1 || true
 done
-RECHECK_RESULT=$(claude plugin install recheck-v2@tony-skills --json -y 2>&1 | head -1 || true)
-READERS_RESULT=$(claude plugin install readers@tony-skills --json -y 2>&1 | head -1 || true)
-DELIVERY_RESULT=$(claude plugin install delivery-probe@skills-v2-pilot --json -y 2>&1 | head -1 || true)
-MANUAL_RESULT=$(claude plugin install manual-only-probe@skills-v2-pilot --json -y 2>&1 | head -1 || true)
-echo "recheck-v2@tony-skills: $RECHECK_RESULT" >&2
-echo "readers@tony-skills: $READERS_RESULT" >&2
-echo "delivery-probe@skills-v2-pilot: $DELIVERY_RESULT" >&2
-echo "manual-only-probe@skills-v2-pilot: $MANUAL_RESULT" >&2
+# Each install keeps its own exit status and its own outcome; `| head -1`
+# hides the command's status behind the pipe, so the status is captured first.
+install_plugin() {  # install_plugin <spec>
+  spec="$1"
+  status=0
+  claude plugin install "$spec" --json -y > "$WORK/out" 2>&1 || status=$?
+  line=$(head -1 "$WORK/out")
+  echo "$spec: exit $status: $line" >&2
+  if [ "$status" -ne 0 ]; then
+    echo "install $spec: exit $status" >> "$WORK/failures"
+  elif ! printf '%s' "$line" | grep -q '"outcome":"ok"'; then
+    echo "install $spec: outcome is not ok" >> "$WORK/failures"
+  fi
+  printf '%s' "$line"
+}
+RECHECK_RESULT=$(install_plugin recheck-v2@tony-skills)
+READERS_RESULT=$(install_plugin readers@tony-skills)
+DELIVERY_RESULT=$(install_plugin delivery-probe@skills-v2-pilot)
+MANUAL_RESULT=$(install_plugin manual-only-probe@skills-v2-pilot)
 
 # The allow list the executor needs, so no prompt blocks a headless run, and the
 # web tools denied at the harness so the mandate's "no web tool" is enforced and
@@ -144,11 +174,13 @@ mkdir -p "$PILOT_HOME/readers-checkout/plugins/readers"
 INSTALLED=$(find "$CONFIG_DIR/plugins/cache" -maxdepth 3 -mindepth 3 -type d 2>/dev/null | sort | tr '\n' ' ')
 
 python3 - "$PILOT_HOME" "$CLAUDE_VERSION" "$REPO_ROOT" "$PLUGIN_ROOT" "$INSTALLED" \
-  "$RECHECK_RESULT" "$READERS_RESULT" "$DELIVERY_RESULT" "$MANUAL_RESULT" <<'PY'
+  "$RECHECK_RESULT" "$READERS_RESULT" "$DELIVERY_RESULT" "$MANUAL_RESULT" \
+  "$(cat "$WORK/failures")" <<'PY'
 import json, os, subprocess, sys
 
 (pilot, version, repo, plugin_root, installed,
- recheck, readers, delivery, manual) = sys.argv[1:10]
+ recheck, readers, delivery, manual, failures) = sys.argv[1:11]
+failed = [line for line in failures.splitlines() if line.strip()]
 document = {
     "pilot_home": pilot,
     "config_dir": os.path.join(pilot, "config"),
@@ -167,9 +199,16 @@ document = {
         "manual-only-probe@skills-v2-pilot": manual,
     },
     "launch_settings": os.path.join(pilot, "launch-settings.json"),
+    "ok": not failed,
+    "failed_commands": failed,
 }
 with open(os.path.join(pilot, "install.json"), "w", encoding="utf-8") as handle:
     json.dump(document, handle, indent=2)
     handle.write("\n")
 sys.stdout.write(json.dumps(document, indent=2) + "\n")
+if failed:
+    sys.stderr.write(
+        "install.sh: the setup is not installed: %s\n" % "; ".join(failed)
+    )
+    sys.exit(1)
 PY

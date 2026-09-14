@@ -82,7 +82,7 @@ class MissingRecordTest(unittest.TestCase):
         )
         self.assertEqual(code, 3)
         self.assertEqual(out, "")
-        self.assertIn("no session transcript reachable", err)
+        self.assertIn("CLAUDE_CODE_SESSION_ID is not set", err)
 
     def test_turns_with_a_session_id_that_has_no_transcript(self):
         code, _out, err = testlib.run(
@@ -95,7 +95,7 @@ class MissingRecordTest(unittest.TestCase):
             },
         )
         self.assertEqual(code, 3)
-        self.assertIn("no transcript for it", err)
+        self.assertIn("no transcript named 0000-not-a-session.jsonl", err)
 
     def test_invocation_without_any_record(self):
         code, out, err = testlib.run(
@@ -103,7 +103,35 @@ class MissingRecordTest(unittest.TestCase):
         )
         self.assertEqual(code, 3)
         self.assertEqual(out, "")
-        self.assertIn("no session transcript reachable", err)
+        self.assertIn("CLAUDE_CODE_SESSION_ID is not set", err)
+
+    def test_every_helper_refuses_the_fixture_flags_at_run_time(self):
+        """Ruling E9-28: `--transcript` and `--session-id` exist for the tests
+        and are a usage error without RECHECK_ADAPTER_TEST=1."""
+        calls = (
+            ("turns.py", ["--transcript", testlib.TRANSCRIPT]),
+            ("invocation.py", ["--transcript", testlib.TRANSCRIPT]),
+            (
+                "verifier.py",
+                [
+                    "--brief", os.path.join(self.home, "checklist.md"),
+                    "--workspace", self.home,
+                    "--scratch", os.path.join(self.home, "verifier"),
+                    "--raw", os.path.join(self.home, "verifier", "raw.md"),
+                    "--call-id", "r-verify",
+                    "--transcript", testlib.TRANSCRIPT,
+                ],
+            ),
+        )
+        for helper, args in calls:
+            code, out, err = testlib.run(
+                helper,
+                args,
+                env={"RECHECK_ADAPTER_TEST": None, "CLAUDE_CONFIG_DIR": self.home},
+            )
+            self.assertEqual(code, 2, helper)
+            self.assertEqual(out, "", helper)
+            self.assertIn("fixture interface", err, helper)
 
     def test_invocation_without_the_claude_binary(self):
         empty = tempfile.mkdtemp(prefix="recheck-adapter-path-")
@@ -154,7 +182,7 @@ class AnotherWorkingDirectoryTest(unittest.TestCase):
         document = testlib.run_json(
             "turns.py", ["--transcript", "session-transcript.jsonl"], cwd=testlib.FIXTURES
         )
-        self.assertEqual(document["counts"]["user_turns"], 1)
+        self.assertEqual(document["counts"]["user_turns"], 2)
 
 
 if __name__ == "__main__":

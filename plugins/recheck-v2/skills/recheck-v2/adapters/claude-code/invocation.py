@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """The Claude Code invocation facts for a recheck-v2 run.
 
-Prints the `invocation` values the executor copies into the input document:
-run id and directory, the harness object, the model object with `floor_met`,
-the run date, `session_wrote_fix`, and the turn attribution map. Every value is
-read from a harness record, a command, or an explicit flag; none is composed.
+Prints two objects. `invocation` holds exactly the fields
+`references/input.schema.json` allows under `invocation` and nothing else (run
+id and directory, the harness object, the model object with `floor_met`, the
+run date, `session_wrote_fix`, the turn attribution map): the executor copies
+it whole and adds `mode`, `caller` and `resume`. `measurement` holds everything
+that is a fact about the measurement rather than an input field (`mode_hint`,
+which the executor types `mode` from, and `_sources`); the schema closes
+`invocation` with `additionalProperties: false`, so a key that lands there
+makes the document invalid. Every value is read from a harness record, a
+command, or an explicit flag; none is composed.
 
 Prints one JSON document on stdout and nothing else; diagnostics go to stderr.
 Exit 0 success, 2 usage, 3 a harness record or binary this helper needs is
@@ -35,11 +41,23 @@ opus; claude-sonnet-* sonnet; claude-haiku-* haiku; anything else is unknown
 with floor_met null.
 
 session_wrote_fix is the executor's honest answer (ruling E9-14): this helper
-never guesses it and defaults it to false. mode_hint is a fact, not a pick: a
-headless `claude -p` session's tool shell carries
-CLAUDE_CODE_SESSION_ATTENDED=0, an interactive one carries 1. The executor
-types `invocation.mode` from it, so a headless run never asks a question into a
-channel nobody reads (contract section 2).
+never guesses it and defaults it to false.
+
+Output shape: {"invocation": {...}, "measurement": {...}}. Copy `invocation`
+whole into the input document and type no field of it; copy nothing from
+`measurement`, whose keys the input schema does not allow under `invocation`.
+
+`mode` is a harness fact, not a pick (ruling E9-33): a headless `claude -p`
+session's tool shell carries CLAUDE_CODE_SESSION_ATTENDED=0 and its transcript
+records `entrypoint: sdk-cli`, an interactive one carries 1 and `cli`. The
+helper reads it and exits 3 when neither record is reachable, so a headless run
+never asks a question into a channel nobody reads (contract section 2). A
+station route (`--caller NAME`) is always `headless`, which contract section 2
+and the schema both fix.
+
+The session's own record is found through the harness's CLAUDE_CODE_SESSION_ID
+alone (ruling E9-28); --transcript and --session-id are the fixture interface
+and work only under RECHECK_ADAPTER_TEST=1.
 
 Example:
   invocation.py --workspace /Users/x/Developer/widget --target-token A \\
@@ -98,8 +116,17 @@ def build_parser():
         default="opus",
         help="policy.model_floor the floor is asserted against (default: opus)",
     )
-    parser.add_argument("--transcript", default=None, help="an explicit transcript path")
-    parser.add_argument("--session-id", default=None, help="an explicit session id")
+    parser.add_argument(
+        "--transcript",
+        default=None,
+        help="fixture interface, RECHECK_ADAPTER_TEST=1 only: an explicit transcript path "
+        "(default: this session's own record through CLAUDE_CODE_SESSION_ID)",
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="fixture interface, RECHECK_ADAPTER_TEST=1 only: an explicit session id",
+    )
     parser.add_argument(
         "--config-dir",
         default=None,
@@ -155,7 +182,7 @@ def main(argv):
     model_id = models[-1] if models else None
     distinct = sorted(set(models))
     floor_class, floor_met = _common.floor_for(model_id, args.model_floor)
-    sandbox, sandbox_source = _common.sandbox_mode()
+    sandbox, sandbox_source = _common.sandbox_mode(session)
     entry = _common.entry_kind(__file__, cfg)
 
     settings = {"entrypoint": os.environ.get("CLAUDE_CODE_ENTRYPOINT") or "unknown"}
@@ -187,34 +214,66 @@ def main(argv):
         run_dir = os.path.join(tmp, "recheck-v2", run_id)
         ids_source = "minted by this helper"
 
-    mode, mode_source = _common.mode_hint()
+    mode, mode_source = _common.mode_hint(session)
+    caller = args.caller or "direct"
+    if caller != "direct":
+        # Contract section 2 and the schema: a station caller is always
+        # headless, whatever this session's own channel is.
+        mode_source = (
+            "%s; the caller route fixes mode headless (contract section 2)" % mode_source
+        )
+        mode = "headless"
+    if mode not in ("interactive", "headless"):
+        raise _common.HelperError(
+            "the interaction mode is a harness fact (ruling E9-33) and no record of it is "
+            "reachable: %s. Nothing is guessed; rerun where the harness states it." % mode_source,
+            3,
+        )
+    recorded_versions = sorted(set(session["versions"]))
     document = {
-        "run_id": run_id,
-        "run_dir": run_dir,
-        "harness": {
-            "name": _common.HARNESS,
-            "version": version,
-            "entry": entry,
-            "sandbox": sandbox,
+        # Exactly the keys input.schema.json allows under `invocation`
+        # (additionalProperties: false); the executor copies this object whole
+        # and types none of its fields (ruling E9-33).
+        "invocation": {
+            "mode": mode,
+            "caller": caller,
+            "resume": False,
+            "run_id": run_id,
+            "run_dir": run_dir,
+            "harness": {
+                "name": _common.HARNESS,
+                "version": version,
+                "entry": entry,
+                "sandbox": sandbox,
+            },
+            "model": model,
+            "run_date": run_date,
+            "session_wrote_fix": bool(args.session_wrote_fix),
+            "turn_attribution": session["attribution"],
         },
-        "model": model,
-        "run_date": run_date,
-        "mode_hint": mode,
-        "session_wrote_fix": bool(args.session_wrote_fix),
-        "turn_attribution": session["attribution"],
-        "_sources": {
-            "ids": ids_source,
-            "version": "claude --version",
-            "entry": "the helper's own path under %s" % cfg,
-            "sandbox": sandbox_source or "no record reachable",
-            "model_id": "the last non-sidechain assistant record's message.model in %s" % path,
-            "model_ids_seen": distinct,
-            "run_date": date_source,
-            "mode_hint": mode_source,
-            "session_wrote_fix": "the executor's flag (ruling E9-14); never guessed",
-            "turn_attribution": discovery,
-            "turn_attribution_note": note,
-            "counts": session["counts"],
+        # Measurement facts, never copied into the input document.
+        "measurement": {
+            "mode_hint": mode,
+            "_sources": {
+                "schema": "invocation carries only the keys references/input.schema.json "
+                "allows; the executor copies it whole and types none of them (ruling E9-33)",
+                "mode": mode_source,
+                "resume": "false: a resume presents the stored document again with resume "
+                "true (SKILL.md, Resume), which is the one field a resume flips",
+                "ids": ids_source,
+                "version": "claude --version",
+                "version_records_in_transcript": recorded_versions,
+                "entry": "the helper's own path under %s" % cfg,
+                "sandbox": sandbox_source or "no record reachable",
+                "model_id": "the last non-sidechain assistant record's message.model in %s" % path,
+                "model_ids_seen": distinct,
+                "run_date": date_source,
+                "mode_hint": mode_source,
+                "session_wrote_fix": "the executor's flag (ruling E9-14); never guessed",
+                "turn_attribution": discovery,
+                "turn_attribution_note": note,
+                "counts": session["counts"],
+            },
         },
     }
     sys.stdout.write(json.dumps(document, indent=2, sort_keys=False) + "\n")

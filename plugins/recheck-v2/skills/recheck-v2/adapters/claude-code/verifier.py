@@ -21,6 +21,7 @@ helper needs is missing, 1 anything else. Python 3.9, standard library only.
 import argparse
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -73,6 +74,13 @@ when only --call-id is given. The block's `row` is claude-session and its
 `output_budget`, and `isolation` are never written (isolation: worktree is not
 requested, the scenario runs in the real checkout).
 
+The request is bound to the core-issued call before anything is printed
+(verifier.md sections 3 and 6): --scratch must be <run_dir>/verifier, --brief
+must be that run directory's own checklist.md, and --raw must be
+<run_dir>/verifier/raw.md for call 1 or raw-<k>.md for call k, k read from the
+call id's -verify[-k] suffix. A mismatch is a usage error (exit 2) and no
+request is printed, so a brief from outside the run can never reach a verifier.
+
 Record mode (--sidecar FILE) maps readers' sidecar onto the record-call flags.
 `ok` only when the raw file exists and is non-empty; `oversize` becomes
 `invalid-request` with the estimate and the limit in the note.
@@ -113,18 +121,39 @@ def build_parser():
     parser.add_argument(
         "--sidecar", default=None, help="record mode: the readers sidecar to map (default: none)"
     )
-    parser.add_argument("--transcript", default=None, help="an explicit transcript path")
-    parser.add_argument("--session-id", default=None, help="an explicit session id")
+    parser.add_argument(
+        "--transcript",
+        default=None,
+        help="fixture interface, RECHECK_ADAPTER_TEST=1 only: an explicit transcript path "
+        "(default: this session's own record through CLAUDE_CODE_SESSION_ID)",
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="fixture interface, RECHECK_ADAPTER_TEST=1 only: an explicit session id",
+    )
     parser.add_argument("--config-dir", default=None, help="the Claude Code config directory")
     return parser
 
 
+CALL_ID_RE = re.compile(r"^(?P<run>.+)-verify(?:-(?P<k>[1-9][0-9]*))?$")
+
+
+def split_call_id(call_id):
+    """(run_id, k) from `<run_id>-verify` / `<run_id>-verify-<k>` (verifier.md section 3)."""
+    match = CALL_ID_RE.match(call_id or "")
+    if not match:
+        return None, None
+    k = int(match.group("k")) if match.group("k") else 1
+    return match.group("run"), k
+
+
+def resolved(path):
+    return os.path.realpath(os.path.abspath(os.path.expanduser(path)))
+
+
 def run_id_from_call(call_id):
-    for suffix in ("-verify",):
-        index = call_id.rfind(suffix)
-        if index > 0:
-            return call_id[:index]
-    return None
+    return split_call_id(call_id)[0]
 
 
 def request_mode(args):
@@ -141,17 +170,57 @@ def request_mode(args):
     if missing:
         sys.stderr.write("verifier.py: request mode needs %s\n" % ", ".join(missing))
         return 2, None
+    _common.assert_fixture_allowed(args.transcript, args.session_id)
     if not args.call_id and not args.run_id:
         sys.stderr.write("verifier.py: request mode needs --call-id or --run-id\n")
         return 2, None
-    run_id = args.run_id or run_id_from_call(args.call_id)
-    if not run_id:
+    if args.call_id:
+        run_id, call_index = split_call_id(args.call_id)
+        if not run_id:
+            sys.stderr.write(
+                "verifier.py: --call-id %r carries no -verify suffix; pass --run-id\n"
+                % args.call_id
+            )
+            return 2, None
+        if args.run_id and args.run_id != run_id:
+            sys.stderr.write(
+                "verifier.py: --call-id %r belongs to run %r, not to --run-id %r\n"
+                % (args.call_id, run_id, args.run_id)
+            )
+            return 2, None
+    else:
+        run_id, call_index = args.run_id, 1
+    call_id = args.call_id or ("%s-verify" % run_id)
+
+    # The request is the core's call, not a document the executor chose: the
+    # scratch directory fixes the run directory, the run directory fixes the
+    # brief, and the call id fixes the raw path (verifier.md sections 3 and 6;
+    # Astra's finding 5, an outside brief reaching a verifier).
+    scratch = resolved(args.scratch)
+    if os.path.basename(scratch) != "verifier":
         sys.stderr.write(
-            "verifier.py: --call-id %r carries no -verify suffix; pass --run-id\n" % args.call_id
+            "verifier.py: --scratch must be <run_dir>/verifier, got %s\n" % scratch
         )
         return 2, None
-    call_id = args.call_id or ("%s-verify" % run_id)
-    brief = os.path.abspath(args.brief)
+    run_dir = os.path.dirname(scratch)
+    expected_brief = os.path.join(run_dir, "checklist.md")
+    brief = resolved(args.brief)
+    if brief != expected_brief:
+        sys.stderr.write(
+            "verifier.py: the brief must be this run's own checklist: expected %s, got %s\n"
+            % (expected_brief, brief)
+        )
+        return 2, None
+    expected_raw = os.path.join(
+        scratch, "raw.md" if call_index == 1 else "raw-%d.md" % call_index
+    )
+    raw = resolved(args.raw)
+    if raw != expected_raw:
+        sys.stderr.write(
+            "verifier.py: call %s retains its report at %s, got %s\n"
+            % (call_id, expected_raw, raw)
+        )
+        return 2, None
     if not os.path.isfile(brief):
         raise _common.HelperError("the brief is not a file: %s" % brief, 3)
 
@@ -174,12 +243,12 @@ def request_mode(args):
             "protocol_version": PROTOCOL_VERSION,
             "run_id": run_id,
             "call_id": call_id,
-            "run_dir": os.path.abspath(args.scratch),
+            "run_dir": scratch,
             "row": ROW,
             "mandate": brief,
             "workspace": os.path.abspath(args.workspace),
             "profile": PROFILE,
-            "raw_path": os.path.abspath(args.raw),
+            "raw_path": raw,
             "floor": args.floor,
             "session_model": session_model,
         },
@@ -190,6 +259,16 @@ def request_mode(args):
             "authorized": "omitted: row claude-session is an anthropic row and needs no word",
             "row_and_profile": "fixed by the E9 Claude Code profile, not chosen by the executor",
             "never_written": ["model", "effort", "output_budget", "isolation"],
+            "binding": "call %d of run %s: scratch %s, brief %s, raw %s (verifier.md sections "
+            "3 and 6; a mismatch is exit 2 and no request)"
+            % (call_index, run_id, scratch, brief, raw),
+            "run_dir_name": (
+                "the run directory's name equals the run id"
+                if os.path.basename(os.path.dirname(scratch)) == run_id
+                else "the run directory is named %r, not %r; a caller route's run directory "
+                "need not carry the run id, so this is recorded, not refused"
+                % (os.path.basename(os.path.dirname(scratch)), run_id)
+            ),
         },
     }
     return 0, document
@@ -214,6 +293,29 @@ def map_sidecar(sidecar, raw_override=None):
         if not raw or not os.path.isfile(raw) or os.path.getsize(raw) == 0:
             status = "capture-failed"
             note = "readers reported ok but the raw file is missing or empty: %s" % raw
+
+    if status == "ok":
+        # A successful call names the verifier that ran: `record-call --model`
+        # and `--kind` land in run.verifier.model and .kind (verifier.md
+        # section 5), and contract sections 7 and 13 make the identity of the
+        # fresh context part of what the adapter supplies. An `ok` that cannot
+        # name it is a usage slip in the readers call, repaired under the same
+        # call id (verifier.md section 6), never recorded as a good call.
+        blank = [
+            name
+            for name, value in (
+                ("effective_model", sidecar.get("effective_model")),
+                ("transport", sidecar.get("transport")),
+            )
+            if not (isinstance(value, str) and value.strip())
+        ]
+        if blank:
+            raise _common.HelperError(
+                "the sidecar reports ok but names no %s, so the call cannot say which verifier "
+                "ran; repair the readers call under the same call id before record-call "
+                "(verifier.md sections 5 and 6)" % " and no ".join(blank),
+                2,
+            )
 
     injected = []
     for name in sidecar.get("workdir_instruction_files") or []:
@@ -262,8 +364,10 @@ def record_mode(args):
         raise _common.HelperError("sidecar is not a JSON object: %s" % path, 1)
     status = sidecar.get("status")
     if status not in KNOWN_STATUSES and status not in READERS_ONLY_STATUSES:
+        # verifier.md section 4 calls a status outside the vocabulary a usage
+        # error, which E9 section 5.2 gives exit 2 (Astra's finding 16).
         raise _common.HelperError(
-            "sidecar status %r is outside the verifier.md section 4 vocabulary" % (status,), 1
+            "sidecar status %r is outside the verifier.md section 4 vocabulary" % (status,), 2
         )
     return 0, map_sidecar(sidecar, args.raw)
 
