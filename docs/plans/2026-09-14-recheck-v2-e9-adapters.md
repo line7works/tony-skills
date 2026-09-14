@@ -737,6 +737,32 @@ been said.
   own launch. Every lane's packet keeps the originals the reviewer could not find (the run
   directories, the installed snapshot, the raw catalogs, the child's initial rows), preserved
   by the control room under the lane's `preserved/`.
+- **E9-35 (after lane C's fix round), `SKILL.md` step 2 follows E9-33.** Step 2 told the
+  executor to type `mode` (from whether the user can answer), `caller: direct` and
+  `resume: false`. It now says to take the whole `invocation` object as the adapter's helper
+  prints it and to type none of its fields, `resume` flipped to true by the Resume step being
+  the one exception. Applied on the integration branch and merged into every lane; each
+  lane's helper supplies `mode`, `caller` and `resume` (lane C's does after its fix round;
+  lanes R and Q apply it in their next pass where theirs do not).
+- **E9-36 (after Fable's verification of lane R), the locator never reads under `CODEX_HOME`.**
+  N1: with `CODEX_HOME=<home>/child` the E9-31 locator also searched `<home>/child/sessions`,
+  a root the tool shell can write, so a rollout written there was a source for the map and
+  the core accepted a waiver citing it (hermetic proof in the verifier's scratch). Ruling:
+  `turns.py` searches `<home>/sessions` when `CODEX_HOME` names the child home, else
+  `~/.codex/sessions`, never any path under `CODEX_HOME`, and refuses (exit 3, path named) a
+  located rollout that lies under `CODEX_HOME`; E9-31's "else under `CODEX_HOME`" is
+  withdrawn. The remaining limit is named in profile section 4 (the shell can set
+  `CODEX_THREAD_ID` to another real session's id under the unwritable `<home>/sessions`,
+  yielding only that session's real user turns); with the test in place the section reads
+  `helper-derived`. N2: `install.sh`'s auth walk covers `homes/**` and `home/child` only and
+  skips `plugins/cache/`. Finding 7's update row keeps its mutation on `manual-only-probe`
+  and its label names the cause: the intact sidecar prevented activation; the update's
+  measured effect is the symlink-omission diff. E9-33 applies to lane R in the same pass:
+  `invocation.py` supplies `mode` from `session_meta.originator` (`codex_exec` is headless,
+  `codex_cli_rs` interactive, any other value exit 3 naming it), `caller` (`direct` unless a
+  caller route names one) and `resume: false`. Documents follow the fresh records (findings
+  2, 8, 9, N3). After the pass: reinstall (remove, install, diff), one fresh live proof
+  checking the recorded mode and the locator, then a targeted Fable re-check of a closed list.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
