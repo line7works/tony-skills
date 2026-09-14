@@ -201,6 +201,16 @@
         "build-loop",
         "readers"
       ]
+    },
+    {
+      "name": "recheck-v2",
+      "source": "./plugins/recheck-v2",
+      "description": "Pilot of the skills v2 core: closed-checklist recheck of a build doc's punch list, one portable body plus a small adapter per harness (Claude Code, Codex, OpenCode). The -v2 suffix stays while v1 recheck is installed; both are renamed at cutover.",
+      "tags": [
+        "review",
+        "quality-gate",
+        "skills-v2-pilot"
+      ]
     }
   ]
 }
