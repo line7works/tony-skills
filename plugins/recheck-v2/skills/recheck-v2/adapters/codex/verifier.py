@@ -59,7 +59,7 @@ def child_records(events, home):
 
 
 def main():
-    p=parser('Launch one fresh codex exec with the brief on stdin, read-only, no model/effort override. Timeout 900 seconds; never retries.')
+    p=parser('Launch one fresh codex exec with the brief on stdin under the executor sandbox (no second seatbelt, E9-21), no model/effort override. Timeout 900 seconds; never retries.')
     for arg in ['brief','workspace','scratch','raw']:p.add_argument('--'+arg,required=True)
     p.add_argument('--call-id',default='verify')
     a=p.parse_args()
@@ -86,7 +86,8 @@ def main():
         if (source/'raw.md').exists():shutil.copyfile(source/'raw.md',raw)
         err.write_text(fixture.get('stderr',''))
     else:
-        command=['codex','exec','-s','read-only','-C',str(ws),'-c','web_search=disabled','--json','-o',str(raw),'-']
+        # E9-21: no second seatbelt (it cannot nest); the executor's own sandbox confines this child.
+        command=['codex','exec','-s','danger-full-access','-c','approval_policy=never','-C',str(ws),'-c','web_search=disabled','--json','-o',str(raw),'-']
         with brief.open('rb') as inp,events.open('wb') as out,err.open('wb') as errors:
             try:code=subprocess.run(command,stdin=inp,stdout=out,stderr=errors,timeout=900).returncode
             except subprocess.TimeoutExpired:code=-1;timed=True
