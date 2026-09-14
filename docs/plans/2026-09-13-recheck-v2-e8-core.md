@@ -955,6 +955,14 @@ examples' `expected.commit` with E8-A50 (forty hex), since a result echoes a pin
 admitted. Carried to E10 as a text note: `evals/fixtures/IA-input-authorization/CASES.md` quotes
 the old `{7,40}` pattern (no fixture pin is short; `evals/` is outside E8's write scope).
 
+Astra's targeted re-check (`e8-astra-recheck.md`, 11:25 AM) cleared 9, 26, 16, and 29 and left
+28 and 19 partly open, both in the tooling around the core: the new standalone-copy test rejected
+a nested suite whose last line read `OK (skipped=1)` (a documented dependency skip), and an empty
+`result-completed.json` still reached the mutation-base index lookup unguarded. The control room
+made both changes itself (the test accepts a last line starting with `OK`; `write_index` records a
+malformed base as a failure), under E8-A48 and E8-A51 as written, and Astra re-checks the two
+(`mandate-recheck2.md`).
+
 The fix round after this review is one round (plan ruling 17): four fresh Fable low agents in
 sequence (scope and ledger; driver and transaction; schemas and validators; skill body and
 tests), the suites rerun after each, one commit, then Astra's verification round on a fresh

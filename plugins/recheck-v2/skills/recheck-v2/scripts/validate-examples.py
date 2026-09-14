@@ -240,8 +240,15 @@ class Suite:
         rc = load("receipt-partial.json")
 
         def write_index(d, kind):
-            idx = [i for i, w in enumerate(d["records_written"]) if w["kind"] == kind]
-            assert len(idx) == 1, (kind, idx)
+            # E8-A51: a mutation base that lacks the write is a recorded failure, never a crash
+            try:
+                idx = [i for i, w in enumerate(d.get("records_written") or []) if isinstance(w, dict) and w.get("kind") == kind]
+            except Exception as exc:  # noqa: BLE001
+                idx = []
+                self.fail("result-completed.json: mutation base is malformed: %s: %s" % (type(exc).__name__, exc))
+            if len(idx) != 1:
+                self.fail("result-completed.json: mutation base has %d %s writes, expected 1" % (len(idx), kind))
+                return None
             return idx[0]
 
         BLOCK = write_index(completed, "punch_list_block")
