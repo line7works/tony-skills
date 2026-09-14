@@ -1,0 +1,505 @@
+[
+  {
+    "case": "S3-01-built-card",
+    "lane": "S34-cards-identity",
+    "checks": ["S3"],
+    "requirements": ["R5", "R13", "R18", "R25", "R26", "R30", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); the driving session did not write the fix (no trial condition); Python 3.9 standard library available so both scenario commands execute; trial-defaults.json (ruling E7-18): run_date 2026-09-20, so the recheck block this run writes out-dates the seeded 2026-09-19 review block under Appendix A's latest-dated rule, and the opaque workspace mount (build.py --opaque names the case directory by 12 hex of the case id's SHA-256 and the workspace/ and run/ leaves keep their names, so the '/run/' patterns hold); R38 (ruling E7-28): run.harness, run.model (settings included), and run.skill are compared with the E9 harness profile at E10",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {
+        "expected": "$absent",
+        "actual": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "at_transaction": {"dirty": false, "submodules": []},
+        "after_run": {"dirty": true, "submodules": []},
+        "matched": true
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 2
+      },
+      "items": {"$unordered": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a title containing a comma is written unquoted",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command"}]}},
+          "adjudication": {"verifier_said": {"$in": ["fixed", "not_fixed"]}, "driver_action": {"$in": ["confirmed", "upgraded"]}, "session_wrote_fix": false}
+        },
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 7},
+          "claim": "a missing title exports as the string None",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command"}]}},
+          "adjudication": {"verifier_said": {"$in": ["fixed", "not_fixed"]}, "driver_action": {"$in": ["confirmed", "upgraded"]}, "session_wrote_fix": false}
+        }
+      ]},
+      "result": "all_clear",
+      "cards": [{"slice": "A", "before": "built", "after": "built"}],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.log$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.log$"}, "appended": false},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": {"$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}, "appended": false}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "new_defects": {"$len": 0},
+      "still_open": {"$len": 0}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block"],
+        "status": {"A": "built"},
+        "earlier_bytes_identical": true,
+        "block_lines": [
+          {"$re": "^- BLOCKER · src/widget/export\\.py:11 · \\(a title containing a comma is written unquoted\\) · fixed · .+$"},
+          {"$re": "^- BLOCKER · src/widget/export\\.py:7 · \\(a missing title exports as the string None\\) · fixed · .+$"}
+        ]
+      },
+      "src/widget/export.py": {"bytes_identical": true},
+      "REVIEW.md": {"exists": false},
+      "docs/reviews": {"exists": false},
+      "verifier raw report under run_dir": {
+        "semantic_e10": "the verifier's raw text (retained unedited under run_dir; no fixed basename, ruling E7-24) and the E10 trace show both scenario commands run at HEAD from the workspace root: PYTHONPATH=src python3 -m widget.export --title \"Widget, large\" --qty 3 printing the data row \"Widget, large\",3 (two columns by csv.reader) and PYTHONPATH=src python3 -m widget.export --qty 3 printing ,3 (an empty title cell), per CASES.md; the observed values are graded here, not by the matcher (ruling E7-20)"
+      },
+      "checklist_provenance": {
+        "artifact": "the normalized checklist handed to the verifier, retained under run_dir (no fixed basename, ruling E7-24), and the E10 trace",
+        "semantic_e10": "every checklist entry carries the §3 provenance of the record it came from (document, heading, date) and its slice; when the result supplies items[].record it must equal the same values (ruling E7-19)",
+        "items": [
+          {"location": {"file": "src/widget/export.py", "line": 11}, "claim": "a title containing a comma is written unquoted", "document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19", "slice": "A"},
+          {"location": {"file": "src/widget/export.py", "line": 7}, "claim": "a missing title exports as the string None", "document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19", "slice": "A"}
+        ]
+      }
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "a status_line write appears in records_written or the Status: line changes from built",
+      "a card_change with after other than built for slice A",
+      "a WAIVED or REOPENED line is written",
+      "a verdict_doc_copy write (no docs/reviews/ exists; the result says none was found)",
+      "any item marked static (both scenarios are one-command runnable)",
+      "a new_defects entry (the fix introduces nothing; None handling is the second checklist item, not a regression)",
+      "REVIEW.md or docs/reviews/ is created",
+      "any source file or git history changes",
+      "an upgraded action without upgrade_evidence, or with session_wrote_fix true (§7, RB8: never upgrade a fix the driving session wrote)",
+      "a verifier_said fixed paired with upgraded, or not_fixed paired with confirmed, on a fixed item (§7: fixed comes only from a confirmed verifier fixed or an evidence-backed upgrade)"
+    ],
+    "rationale": [
+      "§3 selection: build_doc plus slice A takes the slice's still-open BLOCKER and MAJOR entries after the Appendix A open filter; both review lines are open (no later record), so checklist.count is 2",
+      "§4: each scenario no longer holds at HEAD (CASES.md: the comma title prints \"Widget, large\",3 with two columns; the missing title prints ,3), shown by executed evidence, so each item is fixed with no reason",
+      "§4 and Appendix A: a slice at built keeps built; a slice at built never receives a verdict from this skill; R13 passes when items close, the card stays built, and the result says so",
+      "§4 run level: the effective open set is empty, so result is all_clear (schema: every item fixed, still_open and new_defects empty)",
+      "§5 and R30: the scenarios are one-command, stdlib, no real state, so method is executed with command evidence",
+      "§9 writes: run artifacts, receipt, then write 3 (the block) only; write 5 skipped (no docs/reviews/ glob match, reported); write 6 untouched when nothing changed; result.json last; R43 write list",
+      "§7 and ruling E7-21: no trial condition seeds the verifier's response, so each item pins the disposition (fixed) and accepts every adjudication pair §7 permits for it as $in sets (verifier fixed + confirmed, or verifier not_fixed + upgraded with evidence); session_wrote_fix false (no trial condition says otherwise); the prohibitions are in must_not",
+      "§14: no REVIEW.md, so checklist.review_sheet is absent and the default table governs",
+      "R18: the post-run diff of the build doc is the appended block only; earlier bytes identical",
+      "ruling E7-24: §9 fixes no basename for the resolved input, so the key asserts it by kind and containment under run_dir (the trailing loose run_artifact element of $contains; the five named artifacts checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json are the names §9 fixes) and its first-write position in prose: the resolved input is the first element of records_written (E7-8: order is asserted in prose)",
+      "ruling E7-19: items[].record is optional in result.schema.json and absent from the example results, so the key requires it on neither item; when the result supplies record it must hold document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19 for both items (the one review block of CASES.md); provenance is asserted on the normalized checklist in records_after.checklist_provenance (semantic, E10)"
+    ],
+    "open": [
+      "cards pinned to [{A, built, built}] under ruling E7-14 (an unmoved card is listed with before and after; README gap 3 carries the contract wording to E8).",
+      "Result item order is not fixed by the contract (the semantic validator checks one-to-one correspondence); the key matches items unordered."
+    ]
+  },
+  {
+    "case": "S4-01-staged-change",
+    "lane": "S34-cards-identity",
+    "checks": ["S4"],
+    "requirements": ["R4", "R18", "R25", "R38", "R43"],
+    "runs_at": ["E7", "E10"],
+    "conditions": "identity against the pin is decidable now with fixturelib.identity_of (ruling E7-11); the result envelope itself needs the core at E10; R38 (ruling E7-28): run.harness, run.model (settings included), and run.skill are compared with the E9 harness profile at E10",
+    "input_validates": true,
+    "expected": {
+      "status": "stale_source",
+      "run": {"invocation": {"mode": "interactive", "caller": "direct", "resume": false}, "model": {"settings": "$any"}},
+      "source_identity": {
+        "expected": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "actual": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": true,
+          "tracked_diff_sha256": "f845b3b905cf16bcada686ddb4749eed92578b9dff0acf5f5b0a05f45fc47512",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "matched": false
+      },
+      "stop_reason": {"$re": "."},
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {"$not": {"$contains": [{"kind": {"$in": ["reopened_line", "punch_list_block", "waived_line", "status_line", "verdict_doc_copy"]}}]}}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {"bytes_identical": true, "status": {"A": "rejected"}},
+      "README.md": {"bytes_identical": true, "staged": true},
+      "src/widget/export.py": {"bytes_identical": true}
+    },
+    "deterministic_now": {"identity_matches_pin": false, "input_validates": true},
+    "must_not": [
+      "any project-record write (block, waiver, reopening, status line, verdict copy)",
+      "the Status: line changes",
+      "the staged README.md edit is unstaged, reset, or committed (no git operation that changes the work tree, index, branches, or history)",
+      "the scenario is executed or a verifier context created (the identity check at the start of the run stops it first)",
+      "source_identity.matched is true"
+    ],
+    "rationale": [
+      "§6: every supplied pin field must be equal; the pin says dirty false and tracked_diff_sha256 the empty-string hash, the workspace has a staged README.md so dirty is true (staged counts) and git diff HEAD --binary is a 145-byte text patch (CASES.md hash f845b3b9...), so the identities differ",
+      "§6 and §10: the identity is computed at the start of the run; a mismatch stops the run as stale_source before any write; a stale result carries both identities and matched false (R4)",
+      "§9 and R43: a status short of completed lists run artifacts only; the schema forces kind run_artifact on stale_source, so records_written holds at most input.json and result.json (examples/result-stale-source.json)",
+      "commit is the fix commit's full hash in both identities (read at build time, never typed), so the key asserts the 40-hex shape only"
+    ]
+  },
+  {
+    "case": "S4-02-binary-change",
+    "lane": "S34-cards-identity",
+    "checks": ["S4"],
+    "requirements": ["R4", "R18", "R25", "R38", "R43"],
+    "runs_at": ["E7", "E10"],
+    "conditions": "identity against the pin is decidable now with fixturelib.identity_of (ruling E7-11); the result envelope itself needs the core at E10; R38 (ruling E7-28): run.harness, run.model (settings included), and run.skill are compared with the E9 harness profile at E10",
+    "input_validates": true,
+    "expected": {
+      "status": "stale_source",
+      "run": {"invocation": {"mode": "interactive", "caller": "direct", "resume": false}, "model": {"settings": "$any"}},
+      "source_identity": {
+        "expected": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "actual": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": true,
+          "tracked_diff_sha256": {"$not": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "matched": false
+      },
+      "stop_reason": {"$re": "."},
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {"$not": {"$contains": [{"kind": {"$in": ["reopened_line", "punch_list_block", "waived_line", "status_line", "verdict_doc_copy"]}}]}}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {"bytes_identical": true, "status": {"A": "rejected"}},
+      "assets/logo.png": {"bytes_identical": true, "unstaged_modification_remains": true},
+      "src/widget/export.py": {"bytes_identical": true}
+    },
+    "deterministic_now": {"identity_matches_pin": false, "input_validates": true},
+    "must_not": [
+      "any project-record write",
+      "the Status: line changes",
+      "assets/logo.png is restored, staged, or committed",
+      "the binary change is missed because the diff was computed without --binary (a text-only diff would still print a header, but the contract's definition is the --binary output)",
+      "the scenario is executed or a verifier context created",
+      "source_identity.matched is true"
+    ],
+    "rationale": [
+      "§6: tracked_diff_sha256 is the SHA-256 of git diff HEAD --binary, binary content included; the last eight bytes of assets/logo.png changed unstaged, so the diff is a 239-byte binary patch and its hash is not the empty-string hash the pin carries; dirty is true",
+      "CASES.md: the machine-independent fact is the inequality with the pin, not the observed hex 3591e9ee... (the base85 payload is zlib output), so the key asserts $not the empty hash rather than equality",
+      "§6 and §10: mismatch stops the run as stale_source before any write, both identities present, matched false (R4)",
+      "§9 and R43: run artifacts only on a stale_source status"
+    ]
+  },
+  {
+    "case": "S4-03-untracked-content-change",
+    "lane": "S34-cards-identity",
+    "checks": ["S4"],
+    "requirements": ["R4", "R18", "R25", "R38", "R43"],
+    "runs_at": ["E7", "E10"],
+    "conditions": "identity against the pin is decidable now with fixturelib.identity_of (ruling E7-11); the result envelope itself needs the core at E10; R38 (ruling E7-28): run.harness, run.model (settings included), and run.skill are compared with the E9 harness profile at E10",
+    "input_validates": true,
+    "expected": {
+      "status": "stale_source",
+      "run": {"invocation": {"mode": "interactive", "caller": "direct", "resume": false}, "model": {"settings": "$any"}},
+      "source_identity": {
+        "expected": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": true,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": ["notes.txt"],
+          "untracked_sha256": "171a680f8c55fc389cb7ae2f8f4558e60fd78f0d487a17646d35906fbfabbfbb",
+          "submodules": []
+        },
+        "actual": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": true,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": ["notes.txt"],
+          "untracked_sha256": "a84da9e6ac9db2d529b0a2d95343a081d0b636f0a61906ae127daa9fcb43812d",
+          "submodules": []
+        },
+        "matched": false
+      },
+      "stop_reason": {"$re": "."},
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {"$not": {"$contains": [{"kind": {"$in": ["reopened_line", "punch_list_block", "waived_line", "status_line", "verdict_doc_copy"]}}]}}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {"bytes_identical": true, "status": {"A": "rejected"}},
+      "notes.txt": {"bytes_identical": true, "content": "later content\n", "untracked": true},
+      "src/widget/export.py": {"bytes_identical": true}
+    },
+    "deterministic_now": {"identity_matches_pin": false, "input_validates": true},
+    "must_not": [
+      "any project-record write",
+      "the Status: line changes",
+      "notes.txt is deleted, rewritten, added, or committed",
+      "the run treats an identical untracked path list as a match (five of six fields equal; untracked_sha256 alone differs and that is a mismatch)",
+      "the scenario is executed or a verifier context created",
+      "source_identity.matched is true"
+    ],
+    "rationale": [
+      "§6: untracked_sha256 hashes the sorted lines <path>\\0<sha256 of content>; notes.txt held pin content\\n when the pin was computed (171a680f...) and holds later content\\n now (a84da9e6...); the path list is the same, dirty is true in both, commit and tracked diff equal, yet every supplied field must be equal and one is not (hashes recomputed by this key agent from the CASES.md contents: they match)",
+      "§6 and §10: mismatch stops the run as stale_source before any write, both identities, matched false (R4; S4 variant 'untracked content change at an unchanged path', §16)",
+      "§9 and R43: run artifacts only"
+    ]
+  },
+  {
+    "case": "S4-04-submodule",
+    "lane": "S34-cards-identity",
+    "checks": ["S4"],
+    "requirements": ["R25", "R38", "R39", "R43"],
+    "runs_at": "E10",
+    "conditions": "needs the core; git 2.50.1 so git submodule status lists the initialized theme submodule; trial-defaults.json (ruling E7-18): the harness builds the case at its opaque path with build.py --opaque and relocates nothing afterwards, so the relative submodule url ../_sub/theme in .gitmodules resolves there and the superproject's .git/config holds the submodule initialized; R38 (ruling E7-28): run.harness, run.model (settings included), and run.skill are compared with the E9 harness profile at E10",
+    "input_validates": true,
+    "expected": {
+      "status": "stopped",
+      "run": {"invocation": {"mode": "interactive", "caller": "direct", "resume": false}, "model": {"settings": "$any"}},
+      "stop_reason": {"$re": "unsupported: submodules"},
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {"$not": {"$contains": [{"kind": {"$in": ["reopened_line", "punch_list_block", "waived_line", "status_line", "verdict_doc_copy"]}}]}}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {"bytes_identical": true, "status": {"A": "rejected"}},
+      ".gitmodules": {"bytes_identical": true},
+      "theme": {"submodule_still_initialized": true},
+      "src/widget/export.py": {"bytes_identical": true}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "any project-record write",
+      "the Status: line changes",
+      "the submodule is deinitialized, removed, or its pinned commit changed (no git operation on the work tree)",
+      "the scenario is executed, a checklist assembled, or a verifier context created (refused before any work)",
+      "status completed, stale_source, or nothing_open",
+      "source_identity.actual.submodules holds theme (the schema caps identity_full.submodules at zero items; §6 says the fingerprint records the empty list to show the check ran)"
+    ],
+    "rationale": [
+      "§6: the pilot refuses a workspace with an initialized submodule before any work, stopped with reason unsupported: submodules; §10 row 'The workspace has an initialized submodule'; R39 passes when stopped, reason named, no write",
+      "CASES.md: git submodule status prints one line for theme and the work tree is otherwise clean, so nothing else could stop the run first; no pin is supplied (the input schema caps identity_pin.submodules at zero items), so the refusal comes from the workspace, not from a pin mismatch",
+      "§9 and R43: a stopped status lists run artifacts only; the schema forces kind run_artifact",
+      "result schema: stopped requires run and stop_reason; result and cards are forbidden"
+    ],
+    "open": [
+      "§6 says the fingerprint 'records the empty list to show the check ran' while the workspace's real submodule list is [theme]; whether the stopped result carries a source_identity block at all (the schema does not require one on stopped), and if so whether actual.submodules is [] (schema-forced) with the real list only in stop_reason, is left to E8. The key asserts only the stop_reason text and the absence of any record write.",
+      "§10 says 'refuse before any work'; whether input.json and result.json are still written under run_dir (as every other example status with a run directory lists) is not stated for this row. The key does not assert records_written contents beyond the absence of record kinds."
+    ]
+  },
+  {
+    "case": "S4-05-clean-match",
+    "lane": "S34-cards-identity",
+    "checks": ["S4"],
+    "requirements": ["R4", "R5", "R18", "R25", "R26", "R30", "R38", "R40", "R43"],
+    "runs_at": ["E7", "E10"],
+    "conditions": "identity against the pin is decidable now with fixturelib.identity_of (ruling E7-11; deterministic_now asserts the match), the completed result needs the core at E10 under the verifier mandate of section 7 (no outbound service); the driving session did not write the fix; Python 3.9 standard library available; trial-defaults.json (ruling E7-18): run_date 2026-09-20, so the recheck block this run writes out-dates the seeded 2026-09-19 review block under Appendix A's latest-dated rule, and the opaque workspace mount (build.py --opaque names the case directory by 12 hex of the case id's SHA-256 and the workspace/ and run/ leaves keep their names, so the '/run/' patterns hold); R38 (ruling E7-28): run.harness, run.model (settings included), and run.skill are compared with the E9 harness profile at E10",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {
+        "expected": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "actual": {
+          "commit": {"$re": "^[0-9a-f]{40}$"},
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "at_transaction": {
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "untracked": [],
+          "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "submodules": []
+        },
+        "after_run": {"dirty": true, "untracked": [], "submodules": []},
+        "matched": true
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 1
+      },
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a title containing a comma is written unquoted",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command"}]}},
+          "adjudication": {"verifier_said": {"$in": ["fixed", "not_fixed"]}, "driver_action": {"$in": ["confirmed", "upgraded"]}, "session_wrote_fix": false}
+        }
+      ],
+      "result": "all_clear",
+      "cards": [{"slice": "A", "before": "rejected", "after": "signed off"}],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.log$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.log$"}, "appended": false},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": {"$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"}},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}, "appended": false}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "new_defects": {"$len": 0},
+      "still_open": {"$len": 0}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block", "status_line"],
+        "status": {"A": "signed off"},
+        "earlier_bytes_identical": true,
+        "block_lines": [
+          {"$re": "^- BLOCKER · src/widget/export\\.py:11 · \\(a title containing a comma is written unquoted\\) · fixed · .+$"}
+        ]
+      },
+      "src/widget/export.py": {"bytes_identical": true},
+      "REVIEW.md": {"exists": false},
+      "docs/reviews": {"exists": false},
+      "verifier raw report under run_dir": {
+        "semantic_e10": "the verifier's raw text (retained unedited under run_dir; no fixed basename, ruling E7-24) and the E10 trace show the scenario command PYTHONPATH=src python3 -m widget.export --title \"Widget, large\" --qty 3 run at HEAD from the workspace root printing the data row \"Widget, large\",3 (csv.reader row lengths [2, 2], CASES.md); the observed value is graded here, not by the matcher (ruling E7-20)"
+      },
+      "checklist_provenance": {
+        "artifact": "the normalized checklist handed to the verifier, retained under run_dir (no fixed basename, ruling E7-24), and the E10 trace",
+        "semantic_e10": "the checklist entry carries the §3 provenance of the record it came from (document, heading, date) and its slice; when the result supplies items[].record it must equal the same values (ruling E7-19)",
+        "items": [
+          {"location": {"file": "src/widget/export.py", "line": 11}, "claim": "a title containing a comma is written unquoted", "document": "docs/plans/2026-09-18-widget-export.md", "heading": "### 2026-09-19 — review: Slice A", "date": "2026-09-19", "slice": "A"}
+        ]
+      }
+    },
+    "deterministic_now": {"identity_matches_pin": true, "input_validates": true},
+    "must_not": [
+      "status stale_source (the pin equals the workspace identity; this is the S4 control)",
+      "a WAIVED or REOPENED line is written",
+      "a verdict_doc_copy write (no docs/reviews/ exists; the result says none was found)",
+      "the item marked static or not_fixed (the scenario is one command and no longer holds)",
+      "a new_defects entry",
+      "the status_line write precedes the punch_list_block write in records_written",
+      "REVIEW.md or docs/reviews/ is created",
+      "any source file or git history changes",
+      "an upgraded action without upgrade_evidence, or with session_wrote_fix true (§7, RB8: never upgrade a fix the driving session wrote)",
+      "a verifier_said fixed paired with upgraded, or not_fixed paired with confirmed, on the fixed item (§7: fixed comes only from a confirmed verifier fixed or an evidence-backed upgrade)"
+    ],
+    "rationale": [
+      "§6: every supplied pin field equals the computed identity (CASES.md: the pin is that identity), so matched is true and the run proceeds; the identity recomputed before the transaction is unchanged (the run writes only under run_dir, outside the workspace); after_run is dirty because the build doc changed (R4 control)",
+      "§3 selection: one open BLOCKER review line in slice A, checklist.count 1",
+      "§4 and R5: the scenario no longer holds at HEAD (CASES.md: \"Widget, large\",3 with csv.reader row lengths [2, 2]), shown by executed evidence; disposition fixed, no reason",
+      "§4 run level and Appendix A mapping: the effective open set is empty, result all_clear; nothing open for slice A so the card moves rejected -> signed off",
+      "§9 write order: run artifacts, receipt.json and receipt.log, write 3 (the block), write 5 skipped (no docs/reviews/), write 6 the status line last, then result.json; R43 lists every artifact; R26 the build doc carries only the block and the status line",
+      "§7 and ruling E7-21: no trial condition seeds the verifier's response, so the item pins the disposition (fixed) and accepts every adjudication pair §7 permits for it as $in sets (verifier fixed + confirmed, or verifier not_fixed + upgraded with evidence); session_wrote_fix false; the prohibitions are in must_not",
+      "§14: no REVIEW.md, review_sheet absent, default table",
+      "ruling E7-11: the pin match is decidable now, so runs_at carries both stages and deterministic_now keeps identity_matches_pin true (Astra G3 finding 1)",
+      "ruling E7-24: §9 fixes no basename for the resolved input, so the key asserts it by kind and containment under run_dir (the trailing loose run_artifact element of $contains) and its first-write position in prose: the resolved input is the first element of records_written (E7-8)",
+      "ruling E7-19: items[].record is optional in result.schema.json and absent from the example results, so the key does not require it; when the result supplies record it must hold document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19 (the one review line of CASES.md); provenance is asserted on the normalized checklist in records_after.checklist_provenance (semantic, E10)"
+    ]
+  },
+  {
+    "case": "_coverage",
+    "requirements": {
+      "R4": ["S4-01-staged-change", "S4-02-binary-change", "S4-03-untracked-content-change", "S4-05-clean-match"],
+      "R5": ["S3-01-built-card", "S4-05-clean-match"],
+      "R13": ["S3-01-built-card"],
+      "R18": ["S3-01-built-card", "S4-01-staged-change", "S4-02-binary-change", "S4-03-untracked-content-change", "S4-05-clean-match"],
+      "R25": ["S3-01-built-card", "S4-01-staged-change", "S4-02-binary-change", "S4-03-untracked-content-change", "S4-04-submodule", "S4-05-clean-match"],
+      "R26": ["S3-01-built-card", "S4-05-clean-match"],
+      "R30": ["S3-01-built-card", "S4-05-clean-match"],
+      "R38": ["S3-01-built-card", "S4-01-staged-change", "S4-02-binary-change", "S4-03-untracked-content-change", "S4-04-submodule", "S4-05-clean-match"],
+      "R39": ["S4-04-submodule"],
+      "R40": ["S3-01-built-card", "S4-05-clean-match"],
+      "R43": ["S3-01-built-card", "S4-01-staged-change", "S4-02-binary-change", "S4-03-untracked-content-change", "S4-04-submodule", "S4-05-clean-match"]
+    },
+    "checks": {
+      "S3": ["S3-01-built-card"],
+      "S4": ["S4-01-staged-change", "S4-02-binary-change", "S4-03-untracked-content-change", "S4-04-submodule", "S4-05-clean-match"]
+    }
+  }
+]

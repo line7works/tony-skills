@@ -1,0 +1,553 @@
+[
+  {
+    "case": "S2-01-waived-clearance",
+    "lane": "S2-waivers-reopening",
+    "checks": ["S2", "X1", "W1"],
+    "requirements": ["R6", "R12", "R18", "R21", "R25", "R26", "R29", "R30", "R38", "R40", "R42", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); harness clock at 2026-09-20 (the manifest's trial_conditions.run_date, equal to the run_date in evals/trial-defaults.json; ruling E7-18) under an opaque workspace mount; the driving session did not write the fix; R38 (ruling E7-28): run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are compared with the active E9 adapter profile at E10, and run.model.settings must be present",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true, "raw_path": "$any"},
+        "session_wrote_fix": false
+      },
+      "source_identity": {"matched": true, "actual": {"dirty": false, "untracked": [], "submodules": []}, "at_transaction": {"dirty": false}},
+      "checklist": {"source": "build_doc", "build_doc": "docs/plans/2026-09-18-widget-export.md", "slice": "A", "review_sheet": "absent", "count": 1},
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a title containing a comma is exported unquoted",
+          "failure_scenario": "export a row whose title is Bolt, hex with quantity 3; the produced CSV line parses to three columns instead of two",
+          "slice": "A",
+          "disposition": "not_fixed",
+          "reason": "reproduces",
+          "waived": {"date": "2026-09-20", "quoted_words": "waive the comma one, we ship slice A without it", "turn_ref": "claude-code:session 3b1f:turn 14"},
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}},
+          "adjudication": {"verifier_said": {"$in": ["not_fixed", "fixed"]}, "driver_action": {"$in": ["confirmed", "downgraded"]}, "session_wrote_fix": false}
+        }
+      ],
+      "new_defects": {"$len": 0},
+      "result": "all_clear",
+      "cards": [{"slice": "A", "before": "rejected", "after": "signed off"}],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.log$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.log$"}},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A"},
+        {"kind": "waived_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "still_open": {"$len": 0},
+      "other_open_slices": {"$len": 0}
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export 'Bolt, hex' 3"], "observed_output": ["Bolt, hex,3 then columns: 3"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block", "waived_line"],
+        "block_heading": "### 2026-09-20 — recheck: Slice A",
+        "block_lines": ["- BLOCKER · src/widget/export.py:11 · (a title containing a comma is exported unquoted) · not fixed · <how verified>"],
+        "waived_lines": ["- WAIVED (per user) · 2026-09-20 · BLOCKER · src/widget/export.py:11 · a title containing a comma is exported unquoted · \"waive the comma one, we ship slice A without it\""],
+        "file_order": ["review block 2026-09-18", "recheck block 2026-09-19", "recheck block 2026-09-20 (block line not fixed)", "WAIVED line 2026-09-20"],
+        "status": {"A": "signed off"},
+        "earlier_bytes_identical": true
+      },
+      "src/widget/export.py": {"byte_identical": true},
+      "docs/reviews/": {"exists": false}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "adjudication.driver_action is downgraded without a note carrying the evidence the downgrade rests on (section 7: a downgrade needs evidence; ruling E7-21)",
+      "the item's disposition reads fixed (a waiver changes the open set, never the disposition, section 4)",
+      "the MAJOR at src/widget/export.py:19 appears in items (its latest record is the 2026-09-19 recheck line marked fixed)",
+      "a REOPENED line is written",
+      "the WAIVED line lands before the recheck block in the file",
+      "a verdict doc is created under docs/reviews/ (section 17; none exists, so the result says none was found)",
+      "any source file changes; any git operation changes branches or history",
+      "the verdict prose appears in the build doc (R26)"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional in result.schema.json and this key does not require it; when the result supplies it, it must read document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-18 — review: Slice A', date 2026-09-18; provenance is asserted on the normalized checklist through the E10 trace",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-21: the final disposition not_fixed and its reason are pinned; every adjudication pair section 7 permits for it is accepted (verifier not_fixed confirmed, or verifier fixed downgraded with evidence in the note); disputed is not permitted because no trial condition says the driving session wrote the fix",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "Ruling E7-28 (R38): run.model.settings is required present ($any); the values of run.harness and run.model are checked against the E9 adapter profile at E10, not by this key",
+      "§3 selection: build_doc plus slice A gives the slice's still-open BLOCKER and MAJOR entries after the Appendix A open filter; the MAJOR's latest record (2026-09-19 recheck, fixed) closes it, so the checklist is the one BLOCKER",
+      "§4 and §5: the scenario still holds at HEAD (CASES.md: Bolt, hex,3 and columns: 3), shown by executed evidence, so disposition not_fixed with reason reproduces; §7 adjudication confirmed, session did not write the fix",
+      "§8: the waiver arrives on the user channel with by, channel, turn_ref, quoted_words, date, severity and names the checklist item byte for byte, so it is accepted; the result marks the item waived with the grant's date and quoted words (R12, R42)",
+      "§4 effective open set: not_fixed items not waived plus new defects = empty, so all_clear; the schema's all_clear rule accepts an item carrying waived",
+      "Appendix A mapping over the empty open set for slice A: signed off; the MAJOR is already closed, the BLOCKER is waived (R42: card by the mapping)",
+      "§8 sequencing and §9 writes 3, 4, 6: block, then the WAIVED line so the user's word lands later in the file and wins the same-date tie (block and waiver both dated 2026-09-20 under trial run_date), then the status line last; no reopening (write 2), no verdict doc (write 5: glob matches nothing)",
+      "§9 write list order: run artifacts at first write, receipt.json and receipt.log, the transaction steps in plan order, result.json (R43)",
+      "R29: file order shows the sequence; the waived item is out of the mapping",
+      "R21 (§15, §16 check column 'trace inspection on ... S2'): on a run carrying an accepted grant the trace must show Appendix A loaded before checklist assembly and again before the recording transaction (the waiver line and the card mapping depend on it), and result.schema.json loaded before the result is assembled; each load precedes the action that requires it"
+    ],
+    "open": [
+      "Same-date tie between the block line (run date) and the WAIVED line (grant date): decided here because run_date 2026-09-20 equals the grant date (evals/trial-defaults.json and the manifest override, ruling E7-18); the rule for a later run date is README gap 8, carried to E8."
+    ]
+  },
+  {
+    "case": "S2-02-waiver-outside-checklist",
+    "lane": "S2-waivers-reopening",
+    "checks": ["S2", "X1", "W1"],
+    "requirements": ["R5", "R12", "R18", "R25", "R26", "R29", "R30", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); harness clock at 2026-09-20 (the manifest's trial_conditions.run_date, equal to the run_date in evals/trial-defaults.json; ruling E7-18) under an opaque workspace mount; the driving session did not write the fix; R38 (ruling E7-28): run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are compared with the active E9 adapter profile at E10, and run.model.settings must be present",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {"matched": true, "actual": {"dirty": false, "untracked": [], "submodules": []}},
+      "checklist": {"source": "build_doc", "build_doc": "docs/plans/2026-09-18-widget-export.md", "slice": "A", "review_sheet": "absent", "count": 1},
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a title containing a comma is exported unquoted",
+          "failure_scenario": "export a row whose title is Bolt, hex with quantity 3; the produced CSV line parses to three columns instead of two",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}},
+          "adjudication": {"verifier_said": {"$in": ["fixed", "not_fixed"]}, "driver_action": {"$in": ["confirmed", "upgraded"]}, "session_wrote_fix": false}
+        }
+      ],
+      "new_defects": {"$len": 0},
+      "result": "all_clear",
+      "cards": {"$contains": [{"slice": "A", "before": "rejected", "after": "signed off"}]},
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A"},
+        {"kind": "waived_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "still_open": {"$len": 0},
+      "other_open_slices": {"$contains": [{"$re": "^B\\b"}]}
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export 'Bolt, hex' 3"], "observed_output": ["\"Bolt, hex\",3 then columns: 2"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block", "waived_line"],
+        "block_heading": "### 2026-09-20 — recheck: Slice A",
+        "block_lines": ["- BLOCKER · src/widget/export.py:11 · (a title containing a comma is exported unquoted) · fixed · <how verified>"],
+        "waived_lines": ["- WAIVED (per user) · 2026-09-20 · MAJOR · src/widget/report.py:9 · an empty quantity cell raises ValueError in the total · \"waive the empty quantity crash in the report, that is a slice C job\""],
+        "status": {"A": "signed off"},
+        "earlier_bytes_identical": true
+      },
+      "src/widget/export.py": {"byte_identical": true},
+      "src/widget/report.py": {"byte_identical": true}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "adjudication.driver_action is upgraded without upgrade_evidence the verifier lacked, or upgraded at all when the driving session wrote the fix (section 7, R16; ruling E7-21)",
+      "any item carries a waived marker (the waiver names an entry outside the checklist; §8 step 3: it is written the same way and marks nothing)",
+      "the slice B entries (src/widget/report.py:9, src/widget/report.py:13) appear in items or in still_open (§3: other open slices are named, never absorbed)",
+      "the waiver is listed in rejected_grants (it arrived on the user channel with every field)",
+      "a REOPENED line is written",
+      "the slice A status line lands before the block or the WAIVED line",
+      "a verdict doc is created; any source file changes"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional in result.schema.json and this key does not require it; when the result supplies it, it must read document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19; provenance is asserted on the normalized checklist through the E10 trace",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-21: the final disposition fixed is pinned; every adjudication pair section 7 permits for it is accepted (verifier fixed confirmed, or verifier not_fixed upgraded with evidence the verifier lacked, allowed because the driving session did not write the fix)",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "Ruling E7-28 (R38): run.model.settings is required present ($any); the values of run.harness and run.model are checked against the E9 adapter profile at E10, not by this key",
+      "§3: build_doc plus slice A selects only slice A's open BLOCKER; slice B's two MAJOR entries are other open slices, named in the result and never absorbed",
+      "§4 and §5: at HEAD the row goes through csv.writer (CASES.md: \"Bolt, hex\",3 and columns: 2), so the scenario no longer holds, shown by executed evidence: fixed, no reason, no block or missing field (R5, R40)",
+      "§8: the waiver carries every user-channel field and names the slice B entry report.py:9 with its claim byte for byte; it is accepted and its WAIVED line is written after the block (§9 write 4), and because the entry is outside the checklist no item is marked (§8 step 3, R12, R29)",
+      "§4: the effective open set is empty (the one item is fixed, no new defect: the fix commit touches export.py only and the scenarios in CASES.md show no neighboring breakage), so all_clear",
+      "Appendix A mapping for slice A over the empty open set: signed off; a card never moves on another slice's items",
+      "§9 order: block, WAIVED line, status line for A last; no verdict doc exists so write 5 is skipped and the result says none was found (R43)"
+    ],
+    "open": [
+      "Whether slice B's Status: line is touched is README carried gap 10 (raised by this case and by W open question 2; critic CR-11). §8 step 4 says cards are computed last over the effective open set, one line per slice, and Appendix A says a card never moves on another slice's items; the run's scope holds no slice B item, so B should stay at rejected and appear under other_open_slices. But the accepted waiver removes one of B's two open MAJOR entries from the record, and if the core ran the Appendix A mapping over slice B (open MAJOR report.py:13 only) B would read signed off with conditions. The key asserts only A's card ($contains) and leaves B's card to E8's answer to gap 10; records_after does not assert B's status."
+    ]
+  },
+  {
+    "case": "S2-03-reopened",
+    "lane": "S2-waivers-reopening",
+    "checks": ["S2", "X1", "W1"],
+    "requirements": ["R6", "R12", "R18", "R25", "R26", "R29", "R30", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); harness clock at 2026-09-20 (the manifest's trial_conditions.run_date, equal to the run_date in evals/trial-defaults.json; ruling E7-18) under an opaque workspace mount; the driving session did not write the fix; R38 (ruling E7-28): run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are compared with the active E9 adapter profile at E10, and run.model.settings must be present",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {"matched": true, "actual": {"dirty": false, "untracked": [], "submodules": []}},
+      "checklist": {"source": {"$in": ["build_doc", "named_items"]}, "build_doc": "docs/plans/2026-09-18-widget-export.md", "review_sheet": "absent", "count": 1},
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a title containing a comma is exported unquoted",
+          "failure_scenario": "export a row whose title is Bolt, hex with quantity 3; the produced CSV line parses to three columns instead of two",
+          "slice": "A",
+          "reopened": {"date": "2026-09-20", "quoted_words": "reopen the comma finding, the export still splits it", "turn_ref": "claude-code:session 3b1f:turn 9"},
+          "waived": "$absent",
+          "disposition": "not_fixed",
+          "reason": "reproduces",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}},
+          "adjudication": {"verifier_said": {"$in": ["not_fixed", "fixed"]}, "driver_action": {"$in": ["confirmed", "downgraded"]}, "session_wrote_fix": false}
+        }
+      ],
+      "new_defects": {"$len": 0},
+      "result": "not_clear",
+      "cards": [{"slice": "A", "before": "signed off", "after": "rejected"}],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}},
+        {"kind": "reopened_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A"},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "still_open": [{"$re": "^BLOCKER · src/widget/export\\.py:11 · a title containing a comma is exported unquoted"}],
+      "other_open_slices": {"$len": 0}
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export 'Bolt, hex' 3"], "observed_output": ["Bolt, hex,3 then columns: 3"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["reopened_line", "punch_list_block"],
+        "reopened_lines": ["- REOPENED (per user) · 2026-09-20 · src/widget/export.py:11 · a title containing a comma is exported unquoted · \"reopen the comma finding, the export still splits it\""],
+        "block_heading": "### 2026-09-20 — recheck: Slice A",
+        "block_lines": ["- BLOCKER · src/widget/export.py:11 · (a title containing a comma is exported unquoted) · not fixed · <how verified>"],
+        "file_order": ["review block 2026-09-18", "recheck block 2026-09-19 (fixed)", "REOPENED line 2026-09-20", "recheck block 2026-09-20 (block line not fixed)"],
+        "status": {"A": "rejected"},
+        "earlier_bytes_identical": true
+      },
+      "src/widget/export.py": {"byte_identical": true}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "adjudication.driver_action is downgraded without a note carrying the evidence the downgrade rests on (section 7: a downgrade needs evidence; ruling E7-21)",
+      "the run ends nothing_open (the named item with its reopening grant puts one entry in scope, §3 and §8 step 1)",
+      "the run ends missing_input because the build_doc plus slice selection is empty (the named item resolves to exactly one record entry)",
+      "the REOPENED line lands after the block (§8 step 1 and §9 write 2: it is the first write of the transaction)",
+      "the 2026-09-19 recheck line is edited or removed (RB7, §9: records are additive)",
+      "a WAIVED line is written; a verdict doc is created; any source file changes",
+      "the card stays signed off (a BLOCKER is open, so Appendix A demotes it)"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional and not required by this key; when supplied, its document must be docs/plans/2026-09-18-widget-export.md (heading and date per the open item)",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-21: the final disposition not_fixed and its reason are pinned; every adjudication pair section 7 permits for it is accepted (verifier not_fixed confirmed, or verifier fixed downgraded with evidence in the note); disputed is not permitted because no trial condition says the driving session wrote the fix",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "Ruling E7-28 (R38): run.model.settings is required present ($any); the values of run.harness and run.model are checked against the E9 adapter profile at E10, not by this key",
+      "§3 named_items: the entry resolves against the whole record to exactly one review finding; naming a cleared entry reopens it with §8 sequencing; §8 step 1: the reopening takes effect at once, the entry is treated as open and verified, and the result marks it reopened with the grant's date and quoted words (R12)",
+      "§4 and §5: at HEAD format_row is unquoted and csv.writer is unused (CASES.md), the scenario holds: not_fixed, reason reproduces, executed evidence; the 2026-09-19 recheck line's account is not evidence (§5)",
+      "§4 run level: the effective open set holds the one not_fixed item, no item is fixed, so not_clear; the schema's not_clear rule holds (every item not_fixed, one without waived)",
+      "Appendix A mapping: a BLOCKER open means rejected, demoted from signed off; §9 write 6 moves the card",
+      "§8 step 3 and §9 writes 2, 3, 6: REOPENED line first, then the block (its not fixed line lands after the reopening line and wins the same-date tie), then the status line last; no waiver, no verdict doc (R29, R43)",
+      "checklist.source: the target is build_doc with slice A (which yields no open entry) and the one item comes through named_items; the schema enum offers both values and the contract does not say which one names a mixed run, so the key accepts either"
+    ],
+    "open": [
+      "checklist.source for a run whose target is build_doc plus slice but whose only item enters through named_items: the contract (§2, §3) and the result schema enum (build_doc, items, named_items) do not say which value applies; the key accepts either.",
+      "Provenance of a reopened entry (the 2026-09-18 review finding is its origin, the 2026-09-19 recheck line its latest record): items[].record is optional and not required by this key (ruling E7-19); when supplied, its document must be the build doc and E8 fixes which heading and date it names."
+    ]
+  },
+  {
+    "case": "S2-04-open-minor",
+    "lane": "S2-waivers-reopening",
+    "checks": ["S2", "X1", "W1"],
+    "requirements": ["R5", "R18", "R23", "R25", "R26", "R30", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); harness clock at 2026-09-20 from evals/trial-defaults.json run_date (ruling E7-18; the manifest names no override, so the recheck block heading is dated 2026-09-20) under an opaque workspace mount; the driving session did not write the fix; R38 (ruling E7-28): run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are compared with the active E9 adapter profile at E10, and run.model.settings must be present",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {"matched": true, "actual": {"dirty": false, "untracked": [], "submodules": []}},
+      "checklist": {"source": "build_doc", "build_doc": "docs/plans/2026-09-18-widget-export.md", "slice": "A", "review_sheet": "absent", "count": 1},
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a title containing a comma is exported unquoted",
+          "failure_scenario": "export a row whose title is Bolt, hex with quantity 3; the produced CSV line parses to three columns instead of two",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}},
+          "adjudication": {"verifier_said": {"$in": ["fixed", "not_fixed"]}, "driver_action": {"$in": ["confirmed", "upgraded"]}, "session_wrote_fix": false}
+        }
+      ],
+      "new_defects": {"$len": 0},
+      "result": "all_clear",
+      "cards": [{"slice": "A", "before": "rejected", "after": "signed off"}],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A"},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "still_open": {"$len": 0},
+      "other_open_slices": {"$len": 0}
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export 'Bolt, hex' 3"], "observed_output": ["\"Bolt, hex\",3 then columns: 2"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block"],
+        "block_heading": "### 2026-09-20 — recheck: Slice A",
+        "block_lines": ["- BLOCKER · src/widget/export.py:11 · (a title containing a comma is exported unquoted) · fixed · <how verified>"],
+        "status": {"A": "signed off"},
+        "earlier_bytes_identical": true
+      },
+      "src/widget/export.py": {"byte_identical": true}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "adjudication.driver_action is upgraded without upgrade_evidence the verifier lacked, or upgraded at all when the driving session wrote the fix (section 7, R16; ruling E7-21)",
+      "the MINOR at src/widget/export.py:7 appears in items (§3: MINOR entries join only when named; nothing names it)",
+      "the MINOR holds the card at rejected or at signed off with conditions (R23, RB10: MINOR items never move a card)",
+      "the MINOR is entered as a new defect (it is pre-existing and recorded, not fix-introduced)",
+      "a block line for the MINOR is written",
+      "a WAIVED or REOPENED line is written; a verdict doc is created; any source file changes"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional in result.schema.json and this key does not require it; when the result supplies it, it must read document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19; provenance is asserted on the normalized checklist through the E10 trace",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-21: the final disposition fixed is pinned; every adjudication pair section 7 permits for it is accepted (verifier fixed confirmed, or verifier not_fixed upgraded with evidence the verifier lacked, allowed because the driving session did not write the fix)",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "Ruling E7-28 (R38): run.model.settings is required present ($any); the values of run.harness and run.model are checked against the E9 adapter profile at E10, not by this key",
+      "§3 selection: build_doc plus slice A takes the still-open BLOCKER and MAJOR entries; the open MINOR stays out of the checklist because nothing names it, so count is 1",
+      "§4 and §5: at HEAD the row goes through csv.writer (CASES.md: \"Bolt, hex\",3 and columns: 2): fixed with executed evidence, no reason (R5, R30)",
+      "§4: the effective open set is empty, so all_clear; the MINOR is neither in the checklist nor a new defect",
+      "Appendix A mapping and §4: MINOR items never move a card; over the empty open set for slice A the card becomes signed off (R23)",
+      "§9 writes 3 and 6 only: the block and the status line; no grant in the input, no verdict doc (R43)"
+    ],
+    "open": [
+      "Whether the still-open MINOR is mentioned anywhere in the result (for example in still_open or the chat block's Still open line). §9's semantic validator says still_open equals the effective open set, which excludes the never-verified MINOR, so the key asserts still_open is empty; the contract gives the MINOR no other slot."
+    ]
+  },
+  {
+    "case": "S2-05-legacy-waiver-no-words",
+    "lane": "S2-waivers-reopening",
+    "checks": ["S2", "X1", "W1"],
+    "requirements": ["R5", "R18", "R25", "R26", "R30", "R36", "R38", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); harness clock at 2026-09-20 from evals/trial-defaults.json run_date (ruling E7-18; the manifest names no override, so the recheck block heading is dated 2026-09-20) under an opaque workspace mount; the driving session did not write the fix; R38 (ruling E7-28): run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are compared with the active E9 adapter profile at E10, and run.model.settings must be present",
+    "input_validates": true,
+    "expected": {
+      "status": "completed",
+      "run": {
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {"matched": true, "actual": {"dirty": false, "untracked": [], "submodules": []}},
+      "checklist": {"source": "build_doc", "build_doc": "docs/plans/2026-09-18-widget-export.md", "slice": "A", "review_sheet": "absent", "count": 1},
+      "items": [
+        {
+          "severity": "MAJOR",
+          "location": {"file": "src/widget/export.py", "line": 17},
+          "claim": "an empty title is exported as the string None",
+          "failure_scenario": "export a row with no title (argument -) and quantity 3; the first cell reads None instead of an empty cell",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {"method": "executed", "static_reason": "$absent", "blocked": "$absent", "missing": "$absent", "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}},
+          "adjudication": {"verifier_said": {"$in": ["fixed", "not_fixed"]}, "driver_action": {"$in": ["confirmed", "upgraded"]}, "session_wrote_fix": false}
+        }
+      ],
+      "new_defects": {"$len": 0},
+      "result": "all_clear",
+      "cards": [{"slice": "A", "before": "rejected", "after": "signed off"}],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": "### 2026-09-20 — recheck: Slice A"},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "still_open": {"$len": 0},
+      "other_open_slices": {"$len": 0}
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export - 3"], "observed_output": [",3 then columns: 2"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block"],
+        "block_heading": "### 2026-09-20 — recheck: Slice A",
+        "block_lines": ["- MAJOR · src/widget/export.py:17 · (an empty title is exported as the string None) · fixed · <how verified>"],
+        "legacy_waiver_line_unchanged": "- WAIVED (per user) · 2026-09-19 · BLOCKER · src/widget/export.py:9 · a title containing a comma is exported unquoted",
+        "status": {"A": "signed off"},
+        "earlier_bytes_identical": true
+      },
+      "src/widget/export.py": {"byte_identical": true}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "adjudication.driver_action is upgraded without upgrade_evidence the verifier lacked, or upgraded at all when the driving session wrote the fix (section 7, R16; ruling E7-21)",
+      "the run ends missing_input over the legacy waiver (Appendix A accepts the legacy waiver shape without quoted words; it carries its date, so it is not an ambiguous record)",
+      "the BLOCKER at src/widget/export.py:9 appears in items (its latest-dated record, the 2026-09-19 WAIVED line, leaves it waived)",
+      "the BLOCKER is re-verified or its reproduction (Bolt, hex,3, columns: 3) is entered as a new defect (a pre-existing issue newly noticed is not entered, §4)",
+      "the legacy WAIVED line is rewritten with quoted words or moved (RB7, §9: records are additive, never edited)",
+      "a new WAIVED line is written (no grant in the input; only the user creates waivers, RB6)",
+      "any item carries a waived marker (a marker records a grant accepted this run, §4; no grant arrived)",
+      "a REOPENED line is written; a verdict doc is created; any source file changes"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional in result.schema.json and this key does not require it; when the result supplies it, it must read document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-18 — review: Slice A', date 2026-09-18; provenance is asserted on the normalized checklist through the E10 trace",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-21: the final disposition fixed is pinned; every adjudication pair section 7 permits for it is accepted (verifier fixed confirmed, or verifier not_fixed upgraded with evidence the verifier lacked, allowed because the driving session did not write the fix)",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "Ruling E7-28 (R38): run.model.settings is required present ($any); the values of run.harness and run.model are checked against the E9 adapter profile at E10, not by this key",
+      "Ruling E7-28: R11 is not credited on this case: the two findings sit at different locations (export.py:9 and export.py:17), so a parser joining on location alone passes it; R36 stands for the legacy waiver shape",
+      "Appendix A: the legacy waiver (five fields, no quoted words, dated 2026-09-19) is an accepted read-only shape; the open filter matches it on location plus claim to the BLOCKER and, as its latest-dated record, leaves that entry waived (R36)",
+      "§3: the checklist is slice A's still-open BLOCKER and MAJOR entries: only the MAJOR at export.py:17, count 1",
+      "§4 and §5: at HEAD main maps - to an empty title (CASES.md: ,3 and columns: 2): fixed with executed evidence (R5, R30)",
+      "§4: effective open set empty, all_clear; Appendix A mapping for slice A: the BLOCKER is waived by record and the MAJOR fixed, nothing open, signed off",
+      "§9 writes 3 and 6: block at the ledger home's tail (after the legacy WAIVED line, which sits at the tail of the Punch list section) and the status line; no grant, so no write 4; no verdict doc (R43)"
+    ]
+  },
+  {
+    "case": "S2-06-failure-before-recording",
+    "lane": "S2-waivers-reopening",
+    "checks": ["S2"],
+    "requirements": ["R18", "R25", "R29", "R32", "R38", "R43"],
+    "runs_at": "E10",
+    "conditions": "harness injects verifier_transport fail-twice (the verifier call and its one re-send both fail in transport, are empty, or are incomplete); harness clock at 2026-09-20 (the manifest's trial_conditions.run_date, equal to the run_date in evals/trial-defaults.json; ruling E7-18) under an opaque workspace mount; R38 (ruling E7-28): run.harness (name, version, entry, sandbox) and run.model (id, floor_class, settings) are compared with the active E9 adapter profile at E10, and run.model.settings must be present",
+    "input_validates": true,
+    "expected": {
+      "status": "stopped",
+      "run": {
+        "run_id": "S2-06-failure-before-recording-run",
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "model": {"settings": "$any"},
+        "verifier": {"fresh": true, "restrictions_declared": true, "calls": {"$len": 2}},
+        "session_wrote_fix": false
+      },
+      "stop_reason": {"$re": "(?i)verifier|transport|re-?send|second|twice|empty|incomplete"},
+      "source_identity": {"matched": true, "actual": {"dirty": false, "untracked": [], "submodules": []}},
+      "checklist": {"build_doc": "docs/plans/2026-09-18-widget-export.md", "review_sheet": "absent", "count": 2},
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.log$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}}
+      ]}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {"A": "rejected"},
+        "earlier_bytes_identical": true,
+        "byte_identical": true
+      },
+      "src/widget/export.py": {"byte_identical": true}
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "a REOPENED line is written (§8 step 1: it is the first write of the recording transaction, and a run that fails before recording leaves the record untouched)",
+      "a WAIVED line or a punch-list block is written; the status line changes",
+      "receipt.json or receipt.log is created (the transaction never begins, so no plan exists)",
+      "records_written holds any kind other than run_artifact (R43; the schema enforces it on stopped)",
+      "the verifier is called a third time (§7: one re-send with a fresh call id, then stop)",
+      "any item is graded from the driving session's own context (§7: nothing is graded from the fixer's context)",
+      "the result carries items, cards, or a result value",
+      "the workspace identity changes between the start of the run and its end"
+    ],
+    "rationale": [
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (manifest override equal to evals/trial-defaults.json) and the run directory sits under an opaque mount, so this key's path assertions carry no lane or case name",
+      "Ruling E7-28 (R38): run.model.settings is required present ($any); the values of run.harness and run.model are checked against the E9 adapter profile at E10, not by this key",
+      "§3 and §8 step 1: scope is the open BLOCKER at export.py:11 plus the MAJOR at export.py:19 reopened by the named item and its user-channel grant, so the checklist counts 2 before the verifier is called",
+      "§7 and §10: a transport failure is retried once with a fresh call id; a second failure stops the run as stopped, so verifier.calls holds two entries and stop_reason names the verifier failure (R32)",
+      "§8 step 1 and §9: the REOPENED line is the first write of the recording transaction; the transaction never begins, so the build doc is byte-identical to HEAD and the card stays rejected (R29: a failed run leaves the record untouched)",
+      "§9 and R43: a stopped run lists only its run artifacts (the resolved input, the checklist, the checkpoint and its log, the verifier's raw text where any exists, result.json); receipt.json is created only with the transaction plan before write 2, which never happens",
+      "The accepted waiver and reopening are not written and mark nothing because no item result exists; the result schema on stopped forbids result and cards"
+    ],
+    "open": [
+      "Whether the verifier's raw text (run/verifier/raw.md) exists after two failed calls and therefore appears in records_written; the example result-stopped.json lists it, but §5 says the raw text is kept when there is one. The key does not assert it either way.",
+      "Whether rejected_grants and other_open_slices appear on a stopped result; the schema allows them and the contract does not say. The key asserts neither."
+    ]
+  },
+  {
+    "case": "_coverage",
+    "requirements": {
+      "R5": ["S2-02-waiver-outside-checklist", "S2-04-open-minor", "S2-05-legacy-waiver-no-words"],
+      "R6": ["S2-01-waived-clearance", "S2-03-reopened"],
+      "R12": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened"],
+      "R18": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words", "S2-06-failure-before-recording"],
+      "R21": ["S2-01-waived-clearance"],
+      "R23": ["S2-04-open-minor"],
+      "R25": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words", "S2-06-failure-before-recording"],
+      "R26": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words"],
+      "R29": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-06-failure-before-recording"],
+      "R30": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words"],
+      "R32": ["S2-06-failure-before-recording"],
+      "R36": ["S2-05-legacy-waiver-no-words"],
+      "R38": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words", "S2-06-failure-before-recording"],
+      "R40": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words"],
+      "R42": ["S2-01-waived-clearance"],
+      "R43": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words", "S2-06-failure-before-recording"]
+    },
+    "checks": {
+      "S2": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words", "S2-06-failure-before-recording"],
+      "X1": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words"],
+      "W1": ["S2-01-waived-clearance", "S2-02-waiver-outside-checklist", "S2-03-reopened", "S2-04-open-minor", "S2-05-legacy-waiver-no-words"]
+    }
+  }
+]

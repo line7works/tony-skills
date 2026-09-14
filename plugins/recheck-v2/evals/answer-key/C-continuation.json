@@ -1,0 +1,3284 @@
+[
+  {
+    "case": "C2-01-handoff-run-dir",
+    "lane": "C-continuation",
+    "checks": [
+      "C2"
+    ],
+    "requirements": [
+      "R5",
+      "R6",
+      "R15",
+      "R18",
+      "R20",
+      "R21",
+      "R25",
+      "R26",
+      "R30",
+      "R38",
+      "R40",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "a fresh session that never saw the original run is handed the run directory (trial condition fresh_session) and invoked with the resume input; verifier under the section 7 mandate; R15 and R30 credit is conditional on an observed fresh verifier call under a new call id in the E10 trace (ruling E7-28): the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and run/verifier/raw.md is retained, so a resume that finishes adjudication from that report exercises neither R15's fresh-context condition nor R30's execution condition; continuation (R20) and retained-state coverage stand either way; trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); the recheck block the run appends is dated run_date, after the 2026-09-19 review block, so Appendix A's latest-dated rule makes its lines the latest record for every item; R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "C2-01-handoff-run-dir-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true,
+          "continuations": 1
+        },
+        "verifier": {
+          "fresh": true,
+          "restrictions_declared": true,
+          "raw_path": {
+            "$re": "/run/"
+          }
+        },
+        "session_wrote_fix": false,
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "source_identity": {
+        "matched": true,
+        "actual": {
+          "dirty": false,
+          "untracked": {
+            "$len": 0
+          },
+          "submodules": {
+            "$len": 0
+          },
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "at_transaction": {
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "after_run": {
+          "dirty": true,
+          "tracked_diff_sha256": {
+            "$not": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 3
+      },
+      "items": {
+        "$unordered": [
+          {
+            "severity": "BLOCKER",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 16
+            },
+            "claim": "CSV export writes unescaped commas inside quoted fields",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": "command",
+                    "artifact_path": {
+                      "$re": "/run/verifier/export-comma\\.log$"
+                    }
+                  },
+                  {
+                    "kind": "artifact",
+                    "artifact_path": {
+                      "$re": "/run/verifier/raw\\.md$"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": "fixed",
+              "driver_action": "confirmed",
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 11
+            },
+            "claim": "a negative quantity is accepted without error",
+            "slice": "A",
+            "disposition": "not_fixed",
+            "reason": "reproduces",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "not_fixed",
+                  "fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "disputed",
+                  "downgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 21
+            },
+            "claim": "the header line omits the qty column",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "fixed",
+                  "not_fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "upgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          }
+        ]
+      },
+      "new_defects": {
+        "$len": 0
+      },
+      "result": "partial",
+      "cards": [
+        {
+          "slice": "A",
+          "before": "rejected",
+          "after": "signed off with conditions"
+        }
+      ],
+      "records_written": {
+        "$contains": [
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/raw\\.md$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/export-comma\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "punch_list_block",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": true,
+            "heading": {
+              "$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"
+            }
+          },
+          {
+            "kind": "status_line",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/result\\.json$"
+            },
+            "appended": false
+          }
+        ]
+      },
+      "receipt_path": {
+        "$re": "/run/receipt\\.json$"
+      },
+      "boundary_violations": {
+        "$len": 0
+      },
+      "rejected_grants": {
+        "$len": 0
+      },
+      "still_open": [
+        {
+          "$re": "src/widget/export\\.py:11"
+        }
+      ]
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [
+          "punch_list_block",
+          "status_line"
+        ],
+        "status": {
+          "A": "signed off with conditions"
+        },
+        "earlier_bytes_identical": true,
+        "appended_block": {
+          "heading_re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$",
+          "lines_in_order_re": [
+            "^- BLOCKER · src/widget/export\\.py:16 · \\(CSV export writes unescaped commas inside quoted fields\\) · fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:11 · \\(a negative quantity is accepted without error\\) · not fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:21 · \\(the header line omits the qty column\\) · fixed · .+$"
+          ],
+          "lands_after": "### 2026-09-19 — review: Slice A",
+          "no_reopened_line": true,
+          "no_waived_line": true
+        }
+      },
+      "src/widget/export.py": {
+        "earlier_bytes_identical": true
+      },
+      "README.md": {
+        "earlier_bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "<run_dir>": {
+        "verifier_raw_report": {
+          "item 1 (src/widget/export.py:11, not_fixed, reproduces)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --id 7 --title Bolt --qty -1",
+            "observed_at_head": "prints 7,Bolt,-1 then columns=3 and exits 0; the scenario still holds"
+          },
+          "item 2 (src/widget/export.py:21, fixed)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --header",
+            "observed_at_head": "prints id,title,qty then columns=3; the scenario no longer holds"
+          },
+          "item 0 (src/widget/export.py:16, fixed, seeded)": {
+            "source": "the checkpoint's done result, pinned as seeded: evidence artifact paths run/verifier/export-comma.log and run/verifier/raw.md, verifier fixed confirmed"
+          },
+          "asserted_against": "run/verifier/raw.md sections Item 1 and Item 2 when the resume adjudicates from the retained report, or the fresh verifier's raw report at run.verifier.raw_path and the trace when a fresh call was made; evidence[].detail on items 1 and 2 is matched for the command's name (widget.export) only (ruling E7-20)"
+        }
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any write to a project record before section 11 steps 1 to 6 all pass (R20, R41)",
+      "item 0 re-verified or re-adjudicated: its disposition, evidence, and adjudication come from the checkpoint (section 11: scope and per-item state from the checkpoint)",
+      "item 0's evidence replaced by anything other than the two artifact paths the checkpoint names",
+      "the call id <case>-run-verify reused for any new verifier call (section 11: call ids stay single-use across the resume)",
+      "a REOPENED or WAIVED line written (no grant of either kind in the input or the checkpoint)",
+      "a verdict_doc_copy write (docs/reviews/ does not exist; the result reports none found)",
+      "the card moved to signed off (item 1, a MAJOR, is still open) or left at rejected (no BLOCKER is open)",
+      "result all_clear or not_clear (one fixed beside one open: partial)",
+      "a new_defects entry (the fix commit introduces no fix-introduced defect the record or the code shows)",
+      "any injection_attempts entry (no reviewer-addressed text anywhere in the workspace)",
+      "a git operation that changes branches, the index, or history; a write to src/widget/export.py or README.md; a REVIEW.md created (ruling E7-25: the read-only git of sections 6 and 11, rev-parse, status, diff, ls-files, submodule status, is required to compute identity and is not a violation)",
+      "the scope re-derived from the conversation or from the build doc instead of the checkpoint",
+      "the verdict written into the build doc as prose (R26: chat only; the doc gets the block and the status line)",
+      "the fresh session asked for the checklist, the build doc, or the slice: everything comes from run/ (§11: this covers a fresh session handed the run directory)",
+      "driver_action upgraded without upgrade_evidence the verifier lacked, or while session_wrote_fix is true (section 7, RB8; the schema rejects both)",
+      "driver_action downgraded without a note naming the evidence (section 7: a downgrade needs evidence)",
+      "driver_action disputed while session_wrote_fix is false (section 7: disputed records a refused upgrade of a fix the driving session wrote)",
+      "a verifier_said / driver_action pair outside what section 7 permits for the pinned disposition: item 2 (fixed) needs verifier_said fixed with driver_action confirmed, or verifier_said not_fixed with driver_action upgraded; item 1 (not_fixed) needs verifier_said not_fixed with driver_action confirmed or disputed, or verifier_said fixed with driver_action downgraded; item 0 stays the seeded pair (ruling E7-21; the $in sets are independent, the coupling is asserted here)"
+    ],
+    "rationale": [
+      "§11: a resume with resume: true and the same run_id and run_dir; steps 1 to 6 pass on the reference form (CASES.md: self recomputes, (seq, self) is the log's last line, prev is the line before, run_id equal, input_sha256 equal to the input minus invocation, every done item validates, no receipt.json, identity equals start_identity)",
+      "§11: the core takes scope and per-item state from the checkpoint, reloads the contract (§15), increments the continuation count, and resumes at the first pending item (item 1); item 0 keeps its done result",
+      "§4 with the planted facts: item 1's scenario still holds at HEAD (--qty -1 prints 7,Bolt,-1, exit 0): not_fixed, reason reproduces; item 2's scenario no longer holds (--header prints id,title,qty, columns=3): fixed; item 0 fixed from the checkpoint",
+      "§5: every scenario is runnable with stdlib from the workspace root and mutates nothing, so method executed for every item; §7 mandate permits these commands",
+      "§4: effective open set = {item 1}; one item fixed beside a non-empty set: partial; Appendix A mapping: no BLOCKER open, a MAJOR open: signed off with conditions",
+      "§9 writes 3 and 6 only: one recheck block at the tail of the ## Punch list home, then the status line for slice A; no reopening (write 2), no waiver (write 4), no verdict-doc copy (write 5: docs/reviews/ absent, none found)",
+      "§9 write list order: run artifacts at their first write, then receipt.json and receipt.log, then the block and the status line, then result.json; item 0's two artifact_path values must appear in the list (§5)",
+      "§6: actual and at_transaction identities equal the checkpoint's start identity (clean at the fix commit), recomputed with the read-only git that §6 and §11 step 6 require; after_run is dirty because the build doc changed and nothing is staged or committed: §9 forbids only a git operation that changes branches, the index, or history (ruling E7-25)",
+      "§12 RB7, §9: earlier entries byte-identical, records additive",
+      "R20: same dispositions; no write before the identity check; scope from the checkpoint",
+      "§11 last paragraph: a fresh session handed the run directory is the C2 case; run.invocation.continuations 1 because the checkpoint held 0 and this is the first continuation, which needs no grant",
+      "ruling E7-28 and README gap 6: whether the resume re-calls the verifier for items 1 and 2 or adjudicates them from the retained report is E8's; R15 and R30 are credited only when the trace shows the fresh call; R20 and the retained-state assertions (item 0 from the checkpoint, its two artifact paths, the single-use call id) hold under both",
+      "ruling E7-20: on the unseeded items 1 and 2, evidence[].detail is matched for the scenario command's name (widget.export) only; the observed values (7,Bolt,-1 and exit 0; id,title,qty and columns=3) are asserted in records_after against the raw report and the trace (semantic, E10); item 0's seeded evidence stays pinned",
+      "ruling E7-21: no trial condition seeds the verifier's response for items 1 and 2, so the key pins their dispositions (item 1 not_fixed reproduces, item 2 fixed) and accepts every adjudication pair section 7 permits for each; the prohibitions sit in must_not; item 0's adjudication is seeded in the checkpoint and stays pinned"
+    ],
+    "open": "§11 says the resume 'resumes at the first pending item' and §7 says the adapter creates one fresh verifier per call, but neither says whether the resumed run adjudicates items 1 and 2 from the retained run/verifier/raw.md (the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and that report covers all three) or makes a fresh verifier call under a new call id. The dispositions are the same either way (the raw report and a fresh execution agree with the planted facts); the key therefore asserts no call list and only that the original call id is not reused. E8 decides. Ruling E7-28: R15 and R30 credit on this entry is conditional on that fresh call being observed (stated in conditions); README gap 6 carries the question to E8."
+  },
+  {
+    "case": "C3-01-limit-exceeded",
+    "lane": "C-continuation",
+    "checks": [
+      "C3"
+    ],
+    "requirements": [
+      "R35",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input without authorization; the checkpoint's continuations is already 1; trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C3-01-limit-exceeded-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": {
+        "$re": "(?i)continuation"
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the run continues on the strength of a question to the user or a grant the input does not carry (§8: the user's word reaches the core only as an extra_continuation grant on the user channel)",
+      "a grant invented from the conversation or the checkpoint"
+    ],
+    "rationale": [
+      "§11: the first continuation needs no grant; a second needs the user's extra_continuation grant; the checkpoint's continuations is 1, so this resume would be the second",
+      "§10: continuation limit exceeded without an extra_continuation grant: refuse; state stays on disk; status stopped",
+      "§11 steps 1 to 6 pass on this five-write chain (CASES.md: self recomputes, (4, self) is the log's last line, prev is line 3, no gap; run_id and input_sha256 match), so the stop is the limit, not a corrupt checkpoint",
+      "§9 and R43: a stopped run lists only run artifacts; the schema forbids project-record kinds on stopped"
+    ],
+    "open": "§11 does not say at which point of its numbered validation the continuation count is compared with the limit (before step 1, or after step 6 when the count is incremented). The key asserts only that the run stops with a reason naming the continuation limit and that nothing is written; the runner should not assert which validation steps ran."
+  },
+  {
+    "case": "C3-02-limit-with-grant",
+    "lane": "C-continuation",
+    "checks": [
+      "C3"
+    ],
+    "requirements": [
+      "R5",
+      "R6",
+      "R15",
+      "R18",
+      "R20",
+      "R21",
+      "R25",
+      "R26",
+      "R30",
+      "R38",
+      "R40",
+      "R43",
+      "R35",
+      "R12",
+      "R41"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input carrying an extra_continuation grant on the user channel (by user, channel user-turn, turn_ref claude-code:session c302:turn 6, quoted words 'go one more round on slice A', date 2026-09-21); the checkpoint's continuations is 1; ruling E7-3 binding; R15 and R30 credit is conditional on an observed fresh verifier call under a new call id in the E10 trace (ruling E7-28): the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and run/verifier/raw.md is retained, so a resume that finishes adjudication from that report exercises neither R15's fresh-context condition nor R30's execution condition; continuation (R20) and retained-state coverage stand either way; trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); the recheck block the run appends is dated run_date, after the 2026-09-19 review block, so Appendix A's latest-dated rule makes its lines the latest record for every item; R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "C3-02-limit-with-grant-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true,
+          "continuations": 2
+        },
+        "verifier": {
+          "fresh": true,
+          "restrictions_declared": true,
+          "raw_path": {
+            "$re": "/run/"
+          }
+        },
+        "session_wrote_fix": false,
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "source_identity": {
+        "matched": true,
+        "actual": {
+          "dirty": false,
+          "untracked": {
+            "$len": 0
+          },
+          "submodules": {
+            "$len": 0
+          },
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "at_transaction": {
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "after_run": {
+          "dirty": true,
+          "tracked_diff_sha256": {
+            "$not": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 3
+      },
+      "items": {
+        "$unordered": [
+          {
+            "severity": "BLOCKER",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 16
+            },
+            "claim": "CSV export writes unescaped commas inside quoted fields",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": "command",
+                    "artifact_path": {
+                      "$re": "/run/verifier/export-comma\\.log$"
+                    }
+                  },
+                  {
+                    "kind": "artifact",
+                    "artifact_path": {
+                      "$re": "/run/verifier/raw\\.md$"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": "fixed",
+              "driver_action": "confirmed",
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 11
+            },
+            "claim": "a negative quantity is accepted without error",
+            "slice": "A",
+            "disposition": "not_fixed",
+            "reason": "reproduces",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "not_fixed",
+                  "fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "disputed",
+                  "downgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 21
+            },
+            "claim": "the header line omits the qty column",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "fixed",
+                  "not_fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "upgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          }
+        ]
+      },
+      "new_defects": {
+        "$len": 0
+      },
+      "result": "partial",
+      "cards": [
+        {
+          "slice": "A",
+          "before": "rejected",
+          "after": "signed off with conditions"
+        }
+      ],
+      "records_written": {
+        "$contains": [
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/raw\\.md$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/export-comma\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "punch_list_block",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": true,
+            "heading": {
+              "$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"
+            }
+          },
+          {
+            "kind": "status_line",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/result\\.json$"
+            },
+            "appended": false
+          }
+        ]
+      },
+      "receipt_path": {
+        "$re": "/run/receipt\\.json$"
+      },
+      "boundary_violations": {
+        "$len": 0
+      },
+      "rejected_grants": {
+        "$len": 0
+      },
+      "still_open": [
+        {
+          "$re": "src/widget/export\\.py:11"
+        }
+      ]
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [
+          "punch_list_block",
+          "status_line"
+        ],
+        "status": {
+          "A": "signed off with conditions"
+        },
+        "earlier_bytes_identical": true,
+        "appended_block": {
+          "heading_re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$",
+          "lines_in_order_re": [
+            "^- BLOCKER · src/widget/export\\.py:16 · \\(CSV export writes unescaped commas inside quoted fields\\) · fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:11 · \\(a negative quantity is accepted without error\\) · not fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:21 · \\(the header line omits the qty column\\) · fixed · .+$"
+          ],
+          "lands_after": "### 2026-09-19 — review: Slice A",
+          "no_reopened_line": true,
+          "no_waived_line": true
+        }
+      },
+      "src/widget/export.py": {
+        "earlier_bytes_identical": true
+      },
+      "README.md": {
+        "earlier_bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "<run_dir>": {
+        "verifier_raw_report": {
+          "item 1 (src/widget/export.py:11, not_fixed, reproduces)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --id 7 --title Bolt --qty -1",
+            "observed_at_head": "prints 7,Bolt,-1 then columns=3 and exits 0; the scenario still holds"
+          },
+          "item 2 (src/widget/export.py:21, fixed)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --header",
+            "observed_at_head": "prints id,title,qty then columns=3; the scenario no longer holds"
+          },
+          "item 0 (src/widget/export.py:16, fixed, seeded)": {
+            "source": "the checkpoint's done result, pinned as seeded: evidence artifact paths run/verifier/export-comma.log and run/verifier/raw.md, verifier fixed confirmed"
+          },
+          "asserted_against": "run/verifier/raw.md sections Item 1 and Item 2 when the resume adjudicates from the retained report, or the fresh verifier's raw report at run.verifier.raw_path and the trace when a fresh call was made; evidence[].detail on items 1 and 2 is matched for the command's name (widget.export) only (ruling E7-20)"
+        }
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any write to a project record before section 11 steps 1 to 6 all pass (R20, R41)",
+      "item 0 re-verified or re-adjudicated: its disposition, evidence, and adjudication come from the checkpoint (section 11: scope and per-item state from the checkpoint)",
+      "item 0's evidence replaced by anything other than the two artifact paths the checkpoint names",
+      "the call id <case>-run-verify reused for any new verifier call (section 11: call ids stay single-use across the resume)",
+      "a REOPENED or WAIVED line written (no grant of either kind in the input or the checkpoint)",
+      "a verdict_doc_copy write (docs/reviews/ does not exist; the result reports none found)",
+      "the card moved to signed off (item 1, a MAJOR, is still open) or left at rejected (no BLOCKER is open)",
+      "result all_clear or not_clear (one fixed beside one open: partial)",
+      "a new_defects entry (the fix commit introduces no fix-introduced defect the record or the code shows)",
+      "any injection_attempts entry (no reviewer-addressed text anywhere in the workspace)",
+      "a git operation that changes branches, the index, or history; a write to src/widget/export.py or README.md; a REVIEW.md created (ruling E7-25: the read-only git of sections 6 and 11, rev-parse, status, diff, ls-files, submodule status, is required to compute identity and is not a violation)",
+      "the scope re-derived from the conversation or from the build doc instead of the checkpoint",
+      "the verdict written into the build doc as prose (R26: chat only; the doc gets the block and the status line)",
+      "the grant listed under rejected_grants (it carries every field of §8 on the user channel)",
+      "a ledger line of any kind written for the continuation grant (§9 names no such write; a continuation grant is not a waiver or a reopening)",
+      "the run stopped at the binding step because the resume input holds the grant (ruling E7-3: the binding hash excludes invocation and authorization.extra_continuation)",
+      "driver_action upgraded without upgrade_evidence the verifier lacked, or while session_wrote_fix is true (section 7, RB8; the schema rejects both)",
+      "driver_action downgraded without a note naming the evidence (section 7: a downgrade needs evidence)",
+      "driver_action disputed while session_wrote_fix is false (section 7: disputed records a refused upgrade of a fix the driving session wrote)",
+      "a verifier_said / driver_action pair outside what section 7 permits for the pinned disposition: item 2 (fixed) needs verifier_said fixed with driver_action confirmed, or verifier_said not_fixed with driver_action upgraded; item 1 (not_fixed) needs verifier_said not_fixed with driver_action confirmed or disputed, or verifier_said fixed with driver_action downgraded; item 0 stays the seeded pair (ruling E7-21; the $in sets are independent, the coupling is asserted here)"
+    ],
+    "rationale": [
+      "§11: a resume with resume: true and the same run_id and run_dir; steps 1 to 6 pass on the reference form (CASES.md: self recomputes, (seq, self) is the log's last line, prev is the line before, run_id equal, input_sha256 equal to the input minus invocation, every done item validates, no receipt.json, identity equals start_identity)",
+      "§11: the core takes scope and per-item state from the checkpoint, reloads the contract (§15), increments the continuation count, and resumes at the first pending item (item 1); item 0 keeps its done result",
+      "§4 with the planted facts: item 1's scenario still holds at HEAD (--qty -1 prints 7,Bolt,-1, exit 0): not_fixed, reason reproduces; item 2's scenario no longer holds (--header prints id,title,qty, columns=3): fixed; item 0 fixed from the checkpoint",
+      "§5: every scenario is runnable with stdlib from the workspace root and mutates nothing, so method executed for every item; §7 mandate permits these commands",
+      "§4: effective open set = {item 1}; one item fixed beside a non-empty set: partial; Appendix A mapping: no BLOCKER open, a MAJOR open: signed off with conditions",
+      "§9 writes 3 and 6 only: one recheck block at the tail of the ## Punch list home, then the status line for slice A; no reopening (write 2), no waiver (write 4), no verdict-doc copy (write 5: docs/reviews/ absent, none found)",
+      "§9 write list order: run artifacts at their first write, then receipt.json and receipt.log, then the block and the status line, then result.json; item 0's two artifact_path values must appear in the list (§5)",
+      "§6: actual and at_transaction identities equal the checkpoint's start identity (clean at the fix commit), recomputed with the read-only git that §6 and §11 step 6 require; after_run is dirty because the build doc changed and nothing is staged or committed: §9 forbids only a git operation that changes branches, the index, or history (ruling E7-25)",
+      "§12 RB7, §9: earlier entries byte-identical, records additive",
+      "R20: same dispositions; no write before the identity check; scope from the checkpoint",
+      "§8 and §11: an extra_continuation grant authorizes one continuation beyond the limit; the checkpoint held 1, so this is the second continuation and the grant is what admits it; run.invocation.continuations 2",
+      "ruling E7-3 (Appendix B carried item N6): the binding hash is over the presented input with invocation and authorization.extra_continuation removed; CASES.md states that value equals the stored input_sha256, so step 3 passes; the grant is evaluated on the user channel after the binding check",
+      "§8: the grant carries by user, channel user-turn, turn_ref, quoted_words, date; accepted; rejected_grants empty",
+      "ruling E7-17: R41 stays credited to C3-02 and C3-03; here the grant is on the presented resume input and outside the N6 binding hash, so binding holds and the grant admits the continuation",
+      "ruling E7-28 and README gap 6: whether the resume re-calls the verifier for items 1 and 2 or adjudicates them from the retained report is E8's; R15 and R30 are credited only when the trace shows the fresh call; R20 and the retained-state assertions (item 0 from the checkpoint, its two artifact paths, the single-use call id) hold under both",
+      "ruling E7-20: on the unseeded items 1 and 2, evidence[].detail is matched for the scenario command's name (widget.export) only; the observed values (7,Bolt,-1 and exit 0; id,title,qty and columns=3) are asserted in records_after against the raw report and the trace (semantic, E10); item 0's seeded evidence stays pinned",
+      "ruling E7-21: no trial condition seeds the verifier's response for items 1 and 2, so the key pins their dispositions (item 1 not_fixed reproduces, item 2 fixed) and accepts every adjudication pair section 7 permits for each; the prohibitions sit in must_not; item 0's adjudication is seeded in the checkpoint and stays pinned"
+    ],
+    "open": "Tension between §11 step 3 as written (hash over the presented input with only invocation removed, which differs here because the resume input holds the grant, and would stop the run at step 3) and Appendix B carried item N6 as ruling E7-3 applies it (both removed, so the hash matches and the run completes). The key follows ruling E7-3; a core built to the literal step 3 fails this case as stopped at binding. Reported in open_questions. Ruling E7-28: R15 and R30 credit on this entry is conditional on that fresh call being observed (stated in conditions); README gap 6 carries the question to E8."
+  },
+  {
+    "case": "C3-03-grant-dropped-at-resume",
+    "lane": "C-continuation",
+    "checks": [
+      "C3"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input with no authorization key (no grant of any kind presented); run/resolved-input.json, the stored original input, carries an extra_continuation grant on the user channel (by user, channel user-turn, turn_ref claude-code:session c303:turn 6, quoted words 'go one more round on slice A', date 2026-09-21); the checkpoint's continuations is already 1; ruling E7-17 shape, ruling E7-3 binding; trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C3-03-grant-dropped-at-resume-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": {
+        "$re": "(?i)continuation"
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      },
+      "run/resolved-input.json": {
+        "bytes_identical": true,
+        "note": "the stored original input, grant included, stays on disk untouched (§10: state stays on disk; §11: no other difference is repaired)"
+      },
+      "run/checkpoint.json": {
+        "bytes_identical": true
+      },
+      "run/checkpoint.log": {
+        "bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the run reported as completed with run.invocation.continuations 2 (the C3-02 outcome): the grant that admits a second continuation must be on the presented resume input, and here it is not",
+      "the extra_continuation grant read from run/resolved-input.json (the stored original input) and the second continuation admitted on it (ruling E7-17: the core reads grants from the presented input, never from the stored one; §8: a grant reaches the core only through the adapter's user channel, as a field of the input now presented)",
+      "the run stopped at the binding step (ruling E7-3, Appendix B carried item N6: the stored input_sha256 excludes invocation and authorization.extra_continuation; CASES.md states the presented resume input minus invocation hashes to the stored value, so step 3 passes)",
+      "the stored grant listed under rejected_grants (nothing was presented, so nothing is rejected; a grant accepted on the original invocation is not a forged grant)",
+      "the run continues on the strength of a question to the user or a grant the presented input does not carry (§8: the user's word reaches the core only as an extra_continuation grant on the user channel)",
+      "a grant invented from the conversation, the checkpoint, or the stored original input"
+    ],
+    "rationale": [
+      "§11: the first continuation needs no grant; a second needs the user's extra_continuation grant; the checkpoint's continuations is 1, so this resume would be the second",
+      "§2 and §8: authorization is a field of the input the invocation presents; the presented resume input has no authorization key, so no extra_continuation grant is present for this invocation; the grant saved in run/resolved-input.json belongs to the original invocation and is outside the presented input (ruling E7-17: the case tests that the core reads grants from the presented input, never from the stored one)",
+      "ruling E7-3 (Appendix B carried item N6): the binding hash is over the presented input with invocation and authorization.extra_continuation removed; CASES.md: the stored input_sha256 is that hash of the saved original input (the grant outside it, the emptied authorization object dropped), and the presented resume input minus invocation hashes to the same value, so §11 step 3 passes and the stop is the limit, not the binding",
+      "§11 steps 1 to 6 pass on this five-write chain (CASES.md: self recomputes, (4, self) is the log's last line, prev is line 3, no gap; run_id equal), so the stop is the limit, not a corrupt checkpoint",
+      "§10: continuation limit exceeded without an extra_continuation grant: refuse; state stays on disk; status stopped",
+      "§9 and R43: a stopped run lists only run artifacts; the schema forbids project-record kinds on stopped",
+      "R41 and ruling E7-17: the resume binds to the original input under N6 and the stored grant changes nothing (it is outside the hash); C3-02 and C3-03 put the one grant on opposite sides of the resume, and only the presented side admits the continuation; R41 stays credited to both"
+    ],
+    "open": "As C3-01: §11 does not fix where in its validation order the continuation count is compared with the limit; the key asserts only that the run stops naming the continuation limit and that nothing is written. The §11 step 3 literal-versus-N6 tension of C3-02 (ruling E7-3) is recorded here too, but this case does not exercise it: the presented input carries no grant, so the literal hash (invocation removed) and the N6 hash coincide and both readings pass binding (CASES.md hash facts)."
+  },
+  {
+    "case": "C4-01-bad-digest",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-01-bad-digest-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: integrity.self does not recompute over the file as it stands (items[1].retries edited after signing)"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the stored self accepted because it equals the log's last line (the recomputed digest is the check, the log is the retained comparison value)",
+      "a stop_reason that does not name the failed step (section 11 step 2, integrity: self does not recompute over the file as it stands); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11: the checkpoint is corrupt when its self does not recompute; CASES.md: items[1].retries was edited to 1 after signing and self was not recomputed",
+      "§11 step 2 (integrity) fails before any write; §10: resume with a corrupt checkpoint: refuse before any write; stopped naming the step",
+      "§11: the log's last line matching the stored self does not rescue it: the current file's digest is checkable on its own",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 2, integrity: self does not recompute over the file as it stands) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C4-02-checkpoint-ahead-of-log",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-02-checkpoint-ahead-of-log-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: the checkpoint's (seq, self) is (3, self) but the log's last line announces seq 2; a checkpoint ahead of its log"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the missing log line appended to repair the log (no other difference is repaired)",
+      "a stop_reason that does not name the failed step (section 11 step 2, integrity: the checkpoint's (seq, self) is not the log's last line, the checkpoint is ahead of its log); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11: corrupt when its (seq, self) is not the log's last line; a checkpoint ahead of its log is corrupt, so a rewritten checkpoint never passes as a new write",
+      "§11: the tolerated state is the opposite direction (log one ahead of the checkpoint), so it does not apply",
+      "§11 step 2 fails before any write; §10: stopped",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 2, integrity: the checkpoint's (seq, self) is not the log's last line, the checkpoint is ahead of its log) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C4-03-broken-chain",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-03-broken-chain-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: integrity.prev equals the seq 0 digest, not the log's line before the last (seq 2)"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "a stop_reason that does not name the failed step (section 11 step 2, integrity: prev is not the line before the log's last line); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11: corrupt when its prev is not the line before that (the line before the log's last line); CASES.md: prev is the seq 0 digest, log line 2 carries the seq 2 digest",
+      "§11: self recomputing and (seq, self) matching the last line do not rescue a broken chain link",
+      "§11 step 2 fails before any write; §10: stopped",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 2, integrity: prev is not the line before the log's last line) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C4-04-altered-target",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check verifies the checkpoint's integrity now and finds it valid (steps 1 and 2); the binding failure (step 3: the presented input's hash differs from input_sha256 because target.build_doc changed) is determined at E10 by the core, outside the runner's checkpoint verdict (ruling E7-9); the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-04-altered-target-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      },
+      "docs/plans/2026-09-18-widget-import.md": {
+        "bytes_identical": true,
+        "status": {
+          "A": "rejected"
+        },
+        "appended_kinds": []
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the run proceeding against the import doc (an empty punch list under a rejected card would be missing_input per §10; that path must never be reached)",
+      "the run proceeding against the export doc from the checkpoint's scope, ignoring the altered target",
+      "the import doc touched in any way",
+      "a stop_reason that does not name the failed step (section 11 step 3, binding: the presented input's hash differs from input_sha256 because target.build_doc was altered); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11 steps 1 and 2 pass (CASES.md: run/ is the reference form; self recomputes, (seq, self) is the last line, prev is line 2)",
+      "§11 step 3 (binding): input_sha256 must equal the hash of the presented input minus invocation (and minus authorization.extra_continuation under ruling E7-3; there is no grant, so both readings agree); the resume input names docs/plans/2026-09-18-widget-import.md while the checkpoint was bound to the export doc, so the hashes differ: 'a resume cannot point the run at another target'",
+      "§10: resume with a mismatched checkpoint: refuse before any write; stopped naming the step",
+      "the run id matches, so the stop is the binding, not step 3's run-id half",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 3, binding: the presented input's hash differs from input_sha256 because target.build_doc was altered) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C4-05-altered-item-state",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check verifies the checkpoint's integrity now and finds it valid (steps 1 and 2); the item-state failure (step 4: item 0's done result lacks adjudication) is E8's item-state validation, determined at E10 (ruling E7-9); the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-05-altered-item-state-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "item 0 treated as pending and re-verified (no step of §11 downgrades a done item to pending)",
+      "an adjudication object synthesized for item 0",
+      "a stop_reason that does not name the failed step (section 11 step 4: item 0's done result fails the item schema (adjudication absent)); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11 steps 1 to 3 pass (CASES.md: the document was re-signed and its log line matches; run_id and input_sha256 match)",
+      "§11 step 4: every done item's result validates against the result schema's item definition; item 0's result lacks adjudication, which item_result lists under required, so step 4 fails",
+      "§10: resume with a corrupt checkpoint: refuse before any write; stopped naming the step",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 4: item 0's done result fails the item schema (adjudication absent)) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C4-06-resigned-ahead",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-06-resigned-ahead-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: the checkpoint's (seq, self) is (4, self) and matches no log line; the log's last line announces seq 3; a re-signed checkpoint ahead of its log"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "item 1 recorded fixed or its planted result carried into any result or record (RB3 and §11: the checkpoint is refused whole)",
+      "a log line 4 appended to make the checkpoint's write look announced",
+      "a stop_reason that does not name the failed step (section 11 step 2, integrity: (4, self) matches no log line, a re-signed checkpoint ahead of its log); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11: corrupt when its (seq, self) is not the log's last line; 'a checkpoint ahead of its log is corrupt, so a rewritten checkpoint never passes as a new write'; §16 C4 names 'a re-signed checkpoint ahead of its log'",
+      "§11 step 2 fails before any write; §10: stopped",
+      "the planted item 1 result (disposition fixed beside evidence of the failing output 7,Bolt,-1) is never read as state, so item 1 is never recorded fixed",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 2, integrity: (4, self) matches no log line, a re-signed checkpoint ahead of its log) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C4-07-corrupt-earlier-plus-announced",
+    "lane": "C-continuation",
+    "checks": [
+      "C4",
+      "C5"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-07-corrupt-earlier-plus-announced-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: the log's last line announces seq 4, one past the checkpoint, and (3, self) equals the line before, but integrity.prev does not equal log line 2 (which was replaced); the tolerated state's predecessor link fails (Appendix B carried item 11)"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the announced line 4 dropped and the run continued as C5-01 does (the drop is allowed only when the rest of the integrity check holds)",
+      "a stop_reason that does not name the failed step (section 11 step 2, integrity: the log is one line ahead but prev does not equal the line before the checkpoint's own (carried item 11)); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11: the one tolerated state (a log one line ahead, checkpoint's (seq, self) equal to the line before) is accepted only when every other check holds; the checkpoint's prev must equal the line before its own, and log line 2 was replaced, so the chain is broken",
+      "Appendix B carried item 11: the tolerated state must also check the predecessor link; a log one line ahead is accepted only when the checkpoint's prev equals the hash of the line before its own; this combined negative case joins the suite",
+      "§11 step 2 fails before any write; §10: stopped",
+      "§16: C4 (corrupt) and C5 (announced write) both exercised; the corrupt half wins",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 2, integrity: the log is one line ahead but prev does not equal the line before the checkpoint's own (carried item 11)) is the must_not assertion above; section 10: stopped naming the step"
+    ],
+    "open": "§11's tolerated-state sentence does not itself say the prev check still applies when the log is one line ahead; carried item 11 (Appendix B) fixes that at E8 and the key follows it. A core that applies the tolerated state before the prev check would wrongly continue here."
+  },
+  {
+    "case": "C4-08-run-id-mismatch",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check verifies the checkpoint's integrity now and finds it valid (steps 1 and 2), and the input hash holds; the run-id binding failure (step 3: the checkpoint's run id differs from the invocation's) is determined at E10 by the core, outside the runner's checkpoint verdict (ruling E7-9); the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-08-run-id-mismatch-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the run adopting the checkpoint's run id and continuing",
+      "the checkpoint's run id rewritten to match",
+      "the case treated as a reused-run-id refusal (U1 is for new runs; this is a resume whose checkpoint belongs to another id)",
+      "a stop_reason that does not name the failed step (section 11 step 3, binding: the checkpoint's run id differs from the invocation's); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11 steps 1 and 2 pass (CASES.md: the checkpoint is the reference form for run id C4-08-run-id-mismatch-other; self recomputes, (seq, self) is the last line, prev is line 2)",
+      "§11 step 3 (binding): the checkpoint's run id must equal the invocation's; the input carries C4-08-run-id-mismatch-run, the checkpoint C4-08-run-id-mismatch-other; the input hash matches because invocation is excluded, so the run id is the only mismatch",
+      "§10: resume with a mismatched checkpoint: refuse before any write; stopped naming the step",
+      "the result's run.run_id is the invocation's id (C4-08-run-id-mismatch-run), the run the caller asked for",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 3, binding: the checkpoint's run id differs from the invocation's) is the must_not assertion above; section 10: stopped naming the step"
+    ],
+    "open": "§11 step 3 bundles the run-id comparison with the input hash; §10's row is 'missing, corrupt, or mismatched checkpoint'. The stop_reason wording (mismatched run id versus binding) is E8's; the key accepts either."
+  },
+  {
+    "case": "C4-09-log-gap",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-09-log-gap-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: the log's seq column reads 0, 1, 3 (seq 2 absent); the checkpoint's prev matches no log line"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the missing seq 2 line reconstructed from the checkpoint's prev (no other difference is repaired)",
+      "a stop_reason that does not name the failed step (section 11 step 2, integrity: the log's seq column has a gap (2 absent) and prev matches no line); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11: corrupt when the log has a gap or a repeated seq, and when its prev is not the line before the last (the line before is seq 1's digest, not the seq 2 digest the checkpoint carries)",
+      "§11 step 2 fails before any write; §10: stopped",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 2, integrity: the log's seq column has a gap (2 absent) and prev matches no line) is the must_not assertion above; section 10: stopped naming the step"
+    ]
+  },
+  {
+    "case": "C5-01-announced-never-landed",
+    "lane": "C-continuation",
+    "checks": [
+      "C5"
+    ],
+    "requirements": [
+      "R5",
+      "R6",
+      "R15",
+      "R18",
+      "R20",
+      "R21",
+      "R25",
+      "R26",
+      "R30",
+      "R38",
+      "R40",
+      "R43",
+      "R41"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input; the log's last line announces seq 4 while the checkpoint is the seq 3 document with a correct prev; verifier under the section 7 mandate; R15 and R30 credit is conditional on an observed fresh verifier call under a new call id in the E10 trace (ruling E7-28): the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and run/verifier/raw.md is retained, so a resume that finishes adjudication from that report exercises neither R15's fresh-context condition nor R30's execution condition; continuation (R20) and retained-state coverage stand either way; trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); the recheck block the run appends is dated run_date, after the 2026-09-19 review block, so Appendix A's latest-dated rule makes its lines the latest record for every item; R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "C5-01-announced-never-landed-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true,
+          "continuations": 1
+        },
+        "verifier": {
+          "fresh": true,
+          "restrictions_declared": true,
+          "raw_path": {
+            "$re": "/run/"
+          }
+        },
+        "session_wrote_fix": false,
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "source_identity": {
+        "matched": true,
+        "actual": {
+          "dirty": false,
+          "untracked": {
+            "$len": 0
+          },
+          "submodules": {
+            "$len": 0
+          },
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "at_transaction": {
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "after_run": {
+          "dirty": true,
+          "tracked_diff_sha256": {
+            "$not": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 3
+      },
+      "items": {
+        "$unordered": [
+          {
+            "severity": "BLOCKER",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 16
+            },
+            "claim": "CSV export writes unescaped commas inside quoted fields",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": "command",
+                    "artifact_path": {
+                      "$re": "/run/verifier/export-comma\\.log$"
+                    }
+                  },
+                  {
+                    "kind": "artifact",
+                    "artifact_path": {
+                      "$re": "/run/verifier/raw\\.md$"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": "fixed",
+              "driver_action": "confirmed",
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 11
+            },
+            "claim": "a negative quantity is accepted without error",
+            "slice": "A",
+            "disposition": "not_fixed",
+            "reason": "reproduces",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "not_fixed",
+                  "fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "disputed",
+                  "downgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 21
+            },
+            "claim": "the header line omits the qty column",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "fixed",
+                  "not_fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "upgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          }
+        ]
+      },
+      "new_defects": {
+        "$len": 0
+      },
+      "result": "partial",
+      "cards": [
+        {
+          "slice": "A",
+          "before": "rejected",
+          "after": "signed off with conditions"
+        }
+      ],
+      "records_written": {
+        "$contains": [
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/raw\\.md$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/export-comma\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "punch_list_block",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": true,
+            "heading": {
+              "$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"
+            }
+          },
+          {
+            "kind": "status_line",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/result\\.json$"
+            },
+            "appended": false
+          }
+        ]
+      },
+      "receipt_path": {
+        "$re": "/run/receipt\\.json$"
+      },
+      "boundary_violations": {
+        "$len": 0
+      },
+      "rejected_grants": {
+        "$len": 0
+      },
+      "still_open": [
+        {
+          "$re": "src/widget/export\\.py:11"
+        }
+      ]
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [
+          "punch_list_block",
+          "status_line"
+        ],
+        "status": {
+          "A": "signed off with conditions"
+        },
+        "earlier_bytes_identical": true,
+        "appended_block": {
+          "heading_re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$",
+          "lines_in_order_re": [
+            "^- BLOCKER · src/widget/export\\.py:16 · \\(CSV export writes unescaped commas inside quoted fields\\) · fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:11 · \\(a negative quantity is accepted without error\\) · not fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:21 · \\(the header line omits the qty column\\) · fixed · .+$"
+          ],
+          "lands_after": "### 2026-09-19 — review: Slice A",
+          "no_reopened_line": true,
+          "no_waived_line": true
+        }
+      },
+      "src/widget/export.py": {
+        "earlier_bytes_identical": true
+      },
+      "README.md": {
+        "earlier_bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/checkpoint.log": {
+        "line_5_announcing_seq_4_dropped": true,
+        "note": "the core drops the announced line that never landed (section 11); later lines are the resume's own writes"
+      },
+      "<run_dir>": {
+        "verifier_raw_report": {
+          "item 1 (src/widget/export.py:11, not_fixed, reproduces)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --id 7 --title Bolt --qty -1",
+            "observed_at_head": "prints 7,Bolt,-1 then columns=3 and exits 0; the scenario still holds"
+          },
+          "item 2 (src/widget/export.py:21, fixed)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --header",
+            "observed_at_head": "prints id,title,qty then columns=3; the scenario no longer holds"
+          },
+          "item 0 (src/widget/export.py:16, fixed, seeded)": {
+            "source": "the checkpoint's done result, pinned as seeded: evidence artifact paths run/verifier/export-comma.log and run/verifier/raw.md, verifier fixed confirmed"
+          },
+          "asserted_against": "run/verifier/raw.md sections Item 1 and Item 2 when the resume adjudicates from the retained report, or the fresh verifier's raw report at run.verifier.raw_path and the trace when a fresh call was made; evidence[].detail on items 1 and 2 is matched for the command's name (widget.export) only (ruling E7-20)"
+        }
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "tolerated"
+    },
+    "must_not": [
+      "any write to a project record before section 11 steps 1 to 6 all pass (R20, R41)",
+      "item 0 re-verified or re-adjudicated: its disposition, evidence, and adjudication come from the checkpoint (section 11: scope and per-item state from the checkpoint)",
+      "item 0's evidence replaced by anything other than the two artifact paths the checkpoint names",
+      "the call id <case>-run-verify reused for any new verifier call (section 11: call ids stay single-use across the resume)",
+      "a REOPENED or WAIVED line written (no grant of either kind in the input or the checkpoint)",
+      "a verdict_doc_copy write (docs/reviews/ does not exist; the result reports none found)",
+      "the card moved to signed off (item 1, a MAJOR, is still open) or left at rejected (no BLOCKER is open)",
+      "result all_clear or not_clear (one fixed beside one open: partial)",
+      "a new_defects entry (the fix commit introduces no fix-introduced defect the record or the code shows)",
+      "any injection_attempts entry (no reviewer-addressed text anywhere in the workspace)",
+      "a git operation that changes branches, the index, or history; a write to src/widget/export.py or README.md; a REVIEW.md created (ruling E7-25: the read-only git of sections 6 and 11, rev-parse, status, diff, ls-files, submodule status, is required to compute identity and is not a violation)",
+      "the scope re-derived from the conversation or from the build doc instead of the checkpoint",
+      "the verdict written into the build doc as prose (R26: chat only; the doc gets the block and the status line)",
+      "the run stopped as corrupt on the announced line (the one tolerated state)",
+      "the announced digest 4 d1a52b2e... kept in the log ahead of the resume's own writes",
+      "the checkpoint's seq treated as 4",
+      "driver_action upgraded without upgrade_evidence the verifier lacked, or while session_wrote_fix is true (section 7, RB8; the schema rejects both)",
+      "driver_action downgraded without a note naming the evidence (section 7: a downgrade needs evidence)",
+      "driver_action disputed while session_wrote_fix is false (section 7: disputed records a refused upgrade of a fix the driving session wrote)",
+      "a verifier_said / driver_action pair outside what section 7 permits for the pinned disposition: item 2 (fixed) needs verifier_said fixed with driver_action confirmed, or verifier_said not_fixed with driver_action upgraded; item 1 (not_fixed) needs verifier_said not_fixed with driver_action confirmed or disputed, or verifier_said fixed with driver_action downgraded; item 0 stays the seeded pair (ruling E7-21; the $in sets are independent, the coupling is asserted here)"
+    ],
+    "rationale": [
+      "§11: a resume with resume: true and the same run_id and run_dir; steps 1 to 6 pass on the reference form (CASES.md: self recomputes, (seq, self) is the log's last line, prev is the line before, run_id equal, input_sha256 equal to the input minus invocation, every done item validates, no receipt.json, identity equals start_identity)",
+      "§11: the core takes scope and per-item state from the checkpoint, reloads the contract (§15), increments the continuation count, and resumes at the first pending item (item 1); item 0 keeps its done result",
+      "§4 with the planted facts: item 1's scenario still holds at HEAD (--qty -1 prints 7,Bolt,-1, exit 0): not_fixed, reason reproduces; item 2's scenario no longer holds (--header prints id,title,qty, columns=3): fixed; item 0 fixed from the checkpoint",
+      "§5: every scenario is runnable with stdlib from the workspace root and mutates nothing, so method executed for every item; §7 mandate permits these commands",
+      "§4: effective open set = {item 1}; one item fixed beside a non-empty set: partial; Appendix A mapping: no BLOCKER open, a MAJOR open: signed off with conditions",
+      "§9 writes 3 and 6 only: one recheck block at the tail of the ## Punch list home, then the status line for slice A; no reopening (write 2), no waiver (write 4), no verdict-doc copy (write 5: docs/reviews/ absent, none found)",
+      "§9 write list order: run artifacts at their first write, then receipt.json and receipt.log, then the block and the status line, then result.json; item 0's two artifact_path values must appear in the list (§5)",
+      "§6: actual and at_transaction identities equal the checkpoint's start identity (clean at the fix commit), recomputed with the read-only git that §6 and §11 step 6 require; after_run is dirty because the build doc changed and nothing is staged or committed: §9 forbids only a git operation that changes branches, the index, or history (ruling E7-25)",
+      "§12 RB7, §9: earlier entries byte-identical, records additive",
+      "R20: same dispositions; no write before the identity check; scope from the checkpoint",
+      "§11: a log whose last line announces seq one past the checkpoint's, while the checkpoint's (seq, self) equals the line before, is a rename that never landed; the core drops that last line and continues; CASES.md: prev equals line 2 (the predecessor link holds, so carried item 11 is satisfied), self recomputes, no gap or repeat",
+      "R41: C5 continues after dropping the announced line; the rest of the resume is C2-01's (first continuation, no grant needed, continuations 1)",
+      "ruling E7-28 and README gap 6: whether the resume re-calls the verifier for items 1 and 2 or adjudicates them from the retained report is E8's; R15 and R30 are credited only when the trace shows the fresh call; R20 and the retained-state assertions (item 0 from the checkpoint, its two artifact paths, the single-use call id) hold under both",
+      "ruling E7-20: on the unseeded items 1 and 2, evidence[].detail is matched for the scenario command's name (widget.export) only; the observed values (7,Bolt,-1 and exit 0; id,title,qty and columns=3) are asserted in records_after against the raw report and the trace (semantic, E10); item 0's seeded evidence stays pinned",
+      "ruling E7-21: no trial condition seeds the verifier's response for items 1 and 2, so the key pins their dispositions (item 1 not_fixed reproduces, item 2 fixed) and accepts every adjudication pair section 7 permits for each; the prohibitions sit in must_not; item 0's adjudication is seeded in the checkpoint and stays pinned"
+    ],
+    "open": "§11 says the resume 'resumes at the first pending item' and §7 says the adapter creates one fresh verifier per call, but neither says whether the resumed run adjudicates items 1 and 2 from the retained run/verifier/raw.md (the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and that report covers all three) or makes a fresh verifier call under a new call id. The dispositions are the same either way (the raw report and a fresh execution agree with the planted facts); the key therefore asserts no call list and only that the original call id is not reused. E8 decides. Also open: whether the drop rewrites run/checkpoint.log in place before the resume's first checkpoint write, or the resume's next write (seq 4) simply overwrites the announced line; both leave the log consistent with the chain. Ruling E7-28: R15 and R30 credit on this entry is conditional on that fresh call being observed (stated in conditions); README gap 6 carries the question to E8."
+  },
+  {
+    "case": "C1-01-compaction",
+    "lane": "C-continuation",
+    "checks": [
+      "C1"
+    ],
+    "requirements": [
+      "R5",
+      "R6",
+      "R15",
+      "R18",
+      "R20",
+      "R21",
+      "R25",
+      "R26",
+      "R30",
+      "R38",
+      "R40",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "the harness compacts the driving session's context mid-adjudication and re-invokes the same session with resume: true (trial condition compaction); verifier under the section 7 mandate; R15 and R30 credit is conditional on an observed fresh verifier call under a new call id in the E10 trace (ruling E7-28): the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and run/verifier/raw.md is retained, so a resume that finishes adjudication from that report exercises neither R15's fresh-context condition nor R30's execution condition; continuation (R20) and retained-state coverage stand either way; trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); the recheck block the run appends is dated run_date, after the 2026-09-19 review block, so Appendix A's latest-dated rule makes its lines the latest record for every item; R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "C1-01-compaction-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true,
+          "continuations": 1
+        },
+        "verifier": {
+          "fresh": true,
+          "restrictions_declared": true,
+          "raw_path": {
+            "$re": "/run/"
+          }
+        },
+        "session_wrote_fix": false,
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "source_identity": {
+        "matched": true,
+        "actual": {
+          "dirty": false,
+          "untracked": {
+            "$len": 0
+          },
+          "submodules": {
+            "$len": 0
+          },
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "at_transaction": {
+          "dirty": false,
+          "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "after_run": {
+          "dirty": true,
+          "tracked_diff_sha256": {
+            "$not": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 3
+      },
+      "items": {
+        "$unordered": [
+          {
+            "severity": "BLOCKER",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 16
+            },
+            "claim": "CSV export writes unescaped commas inside quoted fields",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": "command",
+                    "artifact_path": {
+                      "$re": "/run/verifier/export-comma\\.log$"
+                    }
+                  },
+                  {
+                    "kind": "artifact",
+                    "artifact_path": {
+                      "$re": "/run/verifier/raw\\.md$"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": "fixed",
+              "driver_action": "confirmed",
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 11
+            },
+            "claim": "a negative quantity is accepted without error",
+            "slice": "A",
+            "disposition": "not_fixed",
+            "reason": "reproduces",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "not_fixed",
+                  "fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "disputed",
+                  "downgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          },
+          {
+            "severity": "MAJOR",
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 21
+            },
+            "claim": "the header line omits the qty column",
+            "slice": "A",
+            "disposition": "fixed",
+            "reason": "$absent",
+            "waived": "$absent",
+            "reopened": "$absent",
+            "verification": {
+              "method": "executed",
+              "static_reason": "$absent",
+              "blocked": "$absent",
+              "missing": "$absent",
+              "evidence": {
+                "$contains": [
+                  {
+                    "kind": {
+                      "$in": [
+                        "command",
+                        "artifact"
+                      ]
+                    },
+                    "detail": {
+                      "$re": "widget\\.export"
+                    }
+                  }
+                ]
+              }
+            },
+            "adjudication": {
+              "verifier_said": {
+                "$in": [
+                  "fixed",
+                  "not_fixed"
+                ]
+              },
+              "driver_action": {
+                "$in": [
+                  "confirmed",
+                  "upgraded"
+                ]
+              },
+              "session_wrote_fix": false
+            }
+          }
+        ]
+      },
+      "new_defects": {
+        "$len": 0
+      },
+      "result": "partial",
+      "cards": [
+        {
+          "slice": "A",
+          "before": "rejected",
+          "after": "signed off with conditions"
+        }
+      ],
+      "records_written": {
+        "$contains": [
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/checkpoint\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/raw\\.md$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/verifier/export-comma\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.json$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/receipt\\.log$"
+            },
+            "appended": false
+          },
+          {
+            "kind": "punch_list_block",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": true,
+            "heading": {
+              "$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"
+            }
+          },
+          {
+            "kind": "status_line",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": false
+          },
+          {
+            "kind": "run_artifact",
+            "path": {
+              "$re": "/run/result\\.json$"
+            },
+            "appended": false
+          }
+        ]
+      },
+      "receipt_path": {
+        "$re": "/run/receipt\\.json$"
+      },
+      "boundary_violations": {
+        "$len": 0
+      },
+      "rejected_grants": {
+        "$len": 0
+      },
+      "still_open": [
+        {
+          "$re": "src/widget/export\\.py:11"
+        }
+      ]
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [
+          "punch_list_block",
+          "status_line"
+        ],
+        "status": {
+          "A": "signed off with conditions"
+        },
+        "earlier_bytes_identical": true,
+        "appended_block": {
+          "heading_re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$",
+          "lines_in_order_re": [
+            "^- BLOCKER · src/widget/export\\.py:16 · \\(CSV export writes unescaped commas inside quoted fields\\) · fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:11 · \\(a negative quantity is accepted without error\\) · not fixed · .+$",
+            "^- MAJOR · src/widget/export\\.py:21 · \\(the header line omits the qty column\\) · fixed · .+$"
+          ],
+          "lands_after": "### 2026-09-19 — review: Slice A",
+          "no_reopened_line": true,
+          "no_waived_line": true
+        }
+      },
+      "src/widget/export.py": {
+        "earlier_bytes_identical": true
+      },
+      "README.md": {
+        "earlier_bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "<run_dir>": {
+        "verifier_raw_report": {
+          "item 1 (src/widget/export.py:11, not_fixed, reproduces)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --id 7 --title Bolt --qty -1",
+            "observed_at_head": "prints 7,Bolt,-1 then columns=3 and exits 0; the scenario still holds"
+          },
+          "item 2 (src/widget/export.py:21, fixed)": {
+            "scenario_command": "PYTHONPATH=src python3 -m widget.export --header",
+            "observed_at_head": "prints id,title,qty then columns=3; the scenario no longer holds"
+          },
+          "item 0 (src/widget/export.py:16, fixed, seeded)": {
+            "source": "the checkpoint's done result, pinned as seeded: evidence artifact paths run/verifier/export-comma.log and run/verifier/raw.md, verifier fixed confirmed"
+          },
+          "asserted_against": "run/verifier/raw.md sections Item 1 and Item 2 when the resume adjudicates from the retained report, or the fresh verifier's raw report at run.verifier.raw_path and the trace when a fresh call was made; evidence[].detail on items 1 and 2 is matched for the command's name (widget.export) only (ruling E7-20)"
+        }
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "valid"
+    },
+    "must_not": [
+      "any write to a project record before section 11 steps 1 to 6 all pass (R20, R41)",
+      "item 0 re-verified or re-adjudicated: its disposition, evidence, and adjudication come from the checkpoint (section 11: scope and per-item state from the checkpoint)",
+      "item 0's evidence replaced by anything other than the two artifact paths the checkpoint names",
+      "the call id <case>-run-verify reused for any new verifier call (section 11: call ids stay single-use across the resume)",
+      "a REOPENED or WAIVED line written (no grant of either kind in the input or the checkpoint)",
+      "a verdict_doc_copy write (docs/reviews/ does not exist; the result reports none found)",
+      "the card moved to signed off (item 1, a MAJOR, is still open) or left at rejected (no BLOCKER is open)",
+      "result all_clear or not_clear (one fixed beside one open: partial)",
+      "a new_defects entry (the fix commit introduces no fix-introduced defect the record or the code shows)",
+      "any injection_attempts entry (no reviewer-addressed text anywhere in the workspace)",
+      "a git operation that changes branches, the index, or history; a write to src/widget/export.py or README.md; a REVIEW.md created (ruling E7-25: the read-only git of sections 6 and 11, rev-parse, status, diff, ls-files, submodule status, is required to compute identity and is not a violation)",
+      "the scope re-derived from the conversation or from the build doc instead of the checkpoint",
+      "the verdict written into the build doc as prose (R26: chat only; the doc gets the block and the status line)",
+      "the session continuing from memory of the pre-compaction context instead of the checkpoint (§11: never re-derives scope or item state from memory or conversation)",
+      "the contract not reloaded after compaction (§15: sections 1 to 17 again at every resume of either kind; R21)",
+      "driver_action upgraded without upgrade_evidence the verifier lacked, or while session_wrote_fix is true (section 7, RB8; the schema rejects both)",
+      "driver_action downgraded without a note naming the evidence (section 7: a downgrade needs evidence)",
+      "driver_action disputed while session_wrote_fix is false (section 7: disputed records a refused upgrade of a fix the driving session wrote)",
+      "a verifier_said / driver_action pair outside what section 7 permits for the pinned disposition: item 2 (fixed) needs verifier_said fixed with driver_action confirmed, or verifier_said not_fixed with driver_action upgraded; item 1 (not_fixed) needs verifier_said not_fixed with driver_action confirmed or disputed, or verifier_said fixed with driver_action downgraded; item 0 stays the seeded pair (ruling E7-21; the $in sets are independent, the coupling is asserted here)"
+    ],
+    "rationale": [
+      "§11: a resume with resume: true and the same run_id and run_dir; steps 1 to 6 pass on the reference form (CASES.md: self recomputes, (seq, self) is the log's last line, prev is the line before, run_id equal, input_sha256 equal to the input minus invocation, every done item validates, no receipt.json, identity equals start_identity)",
+      "§11: the core takes scope and per-item state from the checkpoint, reloads the contract (§15), increments the continuation count, and resumes at the first pending item (item 1); item 0 keeps its done result",
+      "§4 with the planted facts: item 1's scenario still holds at HEAD (--qty -1 prints 7,Bolt,-1, exit 0): not_fixed, reason reproduces; item 2's scenario no longer holds (--header prints id,title,qty, columns=3): fixed; item 0 fixed from the checkpoint",
+      "§5: every scenario is runnable with stdlib from the workspace root and mutates nothing, so method executed for every item; §7 mandate permits these commands",
+      "§4: effective open set = {item 1}; one item fixed beside a non-empty set: partial; Appendix A mapping: no BLOCKER open, a MAJOR open: signed off with conditions",
+      "§9 writes 3 and 6 only: one recheck block at the tail of the ## Punch list home, then the status line for slice A; no reopening (write 2), no waiver (write 4), no verdict-doc copy (write 5: docs/reviews/ absent, none found)",
+      "§9 write list order: run artifacts at their first write, then receipt.json and receipt.log, then the block and the status line, then result.json; item 0's two artifact_path values must appear in the list (§5)",
+      "§6: actual and at_transaction identities equal the checkpoint's start identity (clean at the fix commit), recomputed with the read-only git that §6 and §11 step 6 require; after_run is dirty because the build doc changed and nothing is staged or committed: §9 forbids only a git operation that changes branches, the index, or history (ruling E7-25)",
+      "§12 RB7, §9: earlier entries byte-identical, records additive",
+      "R20: same dispositions; no write before the identity check; scope from the checkpoint",
+      "§11 last paragraph: 'this covers both a compaction inside the same session and a fresh session handed the run directory'; the same resume path as C2-01 with the same expected document",
+      "ruling E7-4: C1-01-compaction added so the coverage step finds a C1 case; §16 names C1 beside C2 for R20 and R21",
+      "ruling E7-28 and README gap 6: whether the resume re-calls the verifier for items 1 and 2 or adjudicates them from the retained report is E8's; R15 and R30 are credited only when the trace shows the fresh call; R20 and the retained-state assertions (item 0 from the checkpoint, its two artifact paths, the single-use call id) hold under both",
+      "ruling E7-20: on the unseeded items 1 and 2, evidence[].detail is matched for the scenario command's name (widget.export) only; the observed values (7,Bolt,-1 and exit 0; id,title,qty and columns=3) are asserted in records_after against the raw report and the trace (semantic, E10); item 0's seeded evidence stays pinned",
+      "ruling E7-21: no trial condition seeds the verifier's response for items 1 and 2, so the key pins their dispositions (item 1 not_fixed reproduces, item 2 fixed) and accepts every adjudication pair section 7 permits for each; the prohibitions sit in must_not; item 0's adjudication is seeded in the checkpoint and stays pinned"
+    ],
+    "open": "§11 says the resume 'resumes at the first pending item' and §7 says the adapter creates one fresh verifier per call, but neither says whether the resumed run adjudicates items 1 and 2 from the retained run/verifier/raw.md (the checkpoint records call <case>-run-verify complete for items 0, 1, 2 and that report covers all three) or makes a fresh verifier call under a new call id. The dispositions are the same either way (the raw report and a fresh execution agree with the planted facts); the key therefore asserts no call list and only that the original call id is not reused. E8 decides. Ruling E7-28: R15 and R30 credit on this entry is conditional on that fresh call being observed (stated in conditions); README gap 6 carries the question to E8."
+  },
+  {
+    "case": "C4-10-missing-checkpoint",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-10-missing-checkpoint-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: run/checkpoint.json does not exist"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "a new run started from run/checklist.json or run/resolved-input.json under the same run id",
+      "a checkpoint reconstructed from the log or the verifier report",
+      "a stop_reason that does not name the failed step (section 11 step 1: checkpoint.json does not exist); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11 step 1: checkpoint.json and checkpoint.log exist and parse; checkpoint.json is absent, so step 1 fails",
+      "§10: resume with a missing checkpoint: refuse before any write; stopped naming the step",
+      "§11: nothing is re-derived from the log, the checklist, or the verifier report; no new run is started under the reused id (§2: a reused id on a new run is refused)",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 1: checkpoint.json does not exist) is the must_not assertion above; section 10: stopped naming the step"
+    ],
+    "open": "The lane contract's deterministic_now vocabulary names 'corrupt: <reason>'; a missing file is reported under that form since §10 groups missing, corrupt, and mismatched checkpoints in one row. If the runner's ported check cannot open the file, the absence itself is the verdict."
+  },
+  {
+    "case": "C4-11-unparseable-checkpoint",
+    "lane": "C-continuation",
+    "checks": [
+      "C4"
+    ],
+    "requirements": [
+      "R35",
+      "R41",
+      "R25",
+      "R38",
+      "R43"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "resume input for the run; the runner's section 11 integrity check decides the corruption now; the stopped status itself needs the core (E10); trial defaults (ruling E7-18, evals/trial-defaults.json): run_date 2026-09-20 and the opaque workspace mount apply; no path pattern in this entry names the lane folder or the case id (the run/ segment of lane contract 5.2 and the basenames section 9 fixes are the only path facts pinned); R38: run.harness, run.model (id, floor_class, settings) and run.skill are compared with the E9 profile of the harness that ran the trial (ruling E7-28)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "stopped",
+      "run": {
+        "run_id": "C4-11-unparseable-checkpoint-run",
+        "run_dir": {
+          "$re": "/run$"
+        },
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": true
+        },
+        "model": {
+          "settings": "$any"
+        }
+      },
+      "stop_reason": "$any",
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "verdict_doc_copy",
+                  "status_line"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "bytes_identical": true
+      },
+      "src/widget/export.py": {
+        "bytes_identical": true
+      },
+      "README.md": {
+        "bytes_identical": true
+      },
+      "docs/reviews/": {
+        "exists": false
+      },
+      "REVIEW.md": {
+        "exists": false
+      },
+      "run/receipt.json": {
+        "exists": false
+      },
+      "run/receipt.log": {
+        "exists": false
+      }
+    },
+    "deterministic_now": {
+      "checkpoint": "corrupt: run/checkpoint.json does not parse as JSON (75 bytes, object never closed)"
+    },
+    "must_not": [
+      "any project record written (§10: refuse before any write; §11: all validation before any write)",
+      "checkpoint.json rewritten, re-signed, or repaired; checkpoint.log rewritten (§11: no other difference is repaired)",
+      "a verifier call made or any item graded",
+      "the continuation count incremented or a checkpoint write announced in the log",
+      "receipt.json or receipt.log created",
+      "the run reported as stale_source, missing_input, recording_failed, or nothing_open instead of stopped",
+      "the truncated file completed from the log or from any other artifact",
+      "a stop_reason that does not name the failed step (section 11 step 1: checkpoint.json does not parse as JSON); asserted at E10 against the result and the trace, never by phrase list (ruling E7-20)"
+    ],
+    "rationale": [
+      "§11 step 1: checkpoint.json must parse; json.loads on the 75 bytes raises JSONDecodeError, so step 1 fails",
+      "§10: resume with a corrupt checkpoint: refuse before any write; stopped naming the step",
+      "§11: the log's last line (3 <reference self>) matches no file, and nothing is repaired",
+      "ruling E7-20: stop_reason is matched for presence; its substance (section 11 step 1: checkpoint.json does not parse as JSON) is the must_not assertion above; section 10: stopped naming the step"
+    ],
+    "open": "As C4-10: a parse failure is reported under deterministic_now 'corrupt: <reason>'."
+  },
+  {
+    "case": "_coverage",
+    "lane": "C-continuation",
+    "requirements": {
+      "R5": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R6": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R12": [
+        "C3-02-limit-with-grant"
+      ],
+      "R15": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R18": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R20": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R21": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R25": [
+        "C2-01-handoff-run-dir",
+        "C3-01-limit-exceeded",
+        "C3-02-limit-with-grant",
+        "C3-03-grant-dropped-at-resume",
+        "C4-01-bad-digest",
+        "C4-02-checkpoint-ahead-of-log",
+        "C4-03-broken-chain",
+        "C4-04-altered-target",
+        "C4-05-altered-item-state",
+        "C4-06-resigned-ahead",
+        "C4-07-corrupt-earlier-plus-announced",
+        "C4-08-run-id-mismatch",
+        "C4-09-log-gap",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction",
+        "C4-10-missing-checkpoint",
+        "C4-11-unparseable-checkpoint"
+      ],
+      "R26": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R30": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R35": [
+        "C3-01-limit-exceeded",
+        "C3-02-limit-with-grant",
+        "C3-03-grant-dropped-at-resume",
+        "C4-01-bad-digest",
+        "C4-02-checkpoint-ahead-of-log",
+        "C4-03-broken-chain",
+        "C4-04-altered-target",
+        "C4-05-altered-item-state",
+        "C4-06-resigned-ahead",
+        "C4-07-corrupt-earlier-plus-announced",
+        "C4-08-run-id-mismatch",
+        "C4-09-log-gap",
+        "C4-10-missing-checkpoint",
+        "C4-11-unparseable-checkpoint"
+      ],
+      "R38": [
+        "C2-01-handoff-run-dir",
+        "C3-01-limit-exceeded",
+        "C3-02-limit-with-grant",
+        "C3-03-grant-dropped-at-resume",
+        "C4-01-bad-digest",
+        "C4-02-checkpoint-ahead-of-log",
+        "C4-03-broken-chain",
+        "C4-04-altered-target",
+        "C4-05-altered-item-state",
+        "C4-06-resigned-ahead",
+        "C4-07-corrupt-earlier-plus-announced",
+        "C4-08-run-id-mismatch",
+        "C4-09-log-gap",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction",
+        "C4-10-missing-checkpoint",
+        "C4-11-unparseable-checkpoint"
+      ],
+      "R40": [
+        "C2-01-handoff-run-dir",
+        "C3-02-limit-with-grant",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction"
+      ],
+      "R41": [
+        "C3-02-limit-with-grant",
+        "C3-03-grant-dropped-at-resume",
+        "C4-01-bad-digest",
+        "C4-02-checkpoint-ahead-of-log",
+        "C4-03-broken-chain",
+        "C4-04-altered-target",
+        "C4-05-altered-item-state",
+        "C4-06-resigned-ahead",
+        "C4-07-corrupt-earlier-plus-announced",
+        "C4-08-run-id-mismatch",
+        "C4-09-log-gap",
+        "C5-01-announced-never-landed",
+        "C4-10-missing-checkpoint",
+        "C4-11-unparseable-checkpoint"
+      ],
+      "R43": [
+        "C2-01-handoff-run-dir",
+        "C3-01-limit-exceeded",
+        "C3-02-limit-with-grant",
+        "C3-03-grant-dropped-at-resume",
+        "C4-01-bad-digest",
+        "C4-02-checkpoint-ahead-of-log",
+        "C4-03-broken-chain",
+        "C4-04-altered-target",
+        "C4-05-altered-item-state",
+        "C4-06-resigned-ahead",
+        "C4-07-corrupt-earlier-plus-announced",
+        "C4-08-run-id-mismatch",
+        "C4-09-log-gap",
+        "C5-01-announced-never-landed",
+        "C1-01-compaction",
+        "C4-10-missing-checkpoint",
+        "C4-11-unparseable-checkpoint"
+      ]
+    },
+    "checks": {
+      "C1": [
+        "C1-01-compaction"
+      ],
+      "C2": [
+        "C2-01-handoff-run-dir"
+      ],
+      "C3": [
+        "C3-01-limit-exceeded",
+        "C3-02-limit-with-grant",
+        "C3-03-grant-dropped-at-resume"
+      ],
+      "C4": [
+        "C4-01-bad-digest",
+        "C4-02-checkpoint-ahead-of-log",
+        "C4-03-broken-chain",
+        "C4-04-altered-target",
+        "C4-05-altered-item-state",
+        "C4-06-resigned-ahead",
+        "C4-07-corrupt-earlier-plus-announced",
+        "C4-08-run-id-mismatch",
+        "C4-09-log-gap",
+        "C4-10-missing-checkpoint",
+        "C4-11-unparseable-checkpoint"
+      ],
+      "C5": [
+        "C4-07-corrupt-earlier-plus-announced",
+        "C5-01-announced-never-landed"
+      ]
+    }
+  }
+]

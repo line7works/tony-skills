@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/recheck-v2/receipt.schema.json",
+  "title": "Recheck v2 receipt",
+  "description": "The recording transaction's plan and write-ahead entries in run_dir/receipt.json (pilot-contract.md section 9; lane contract E8-14, E8-16, E8-28; E7 lane contract 5.8). The plan is computed in memory before the first step and never changes afterwards, except a status-line step marked cancelled by the boundary check; each step carries its kind (the result schema's project-record write kinds), its workspace-relative target, the target's hash before and the planned hash after, and, for the core's own runs, the exact content it appends (content) or the status value it sets (value) so a redo replays bytes (E8-28); a plan without them (seeded or legacy) is regenerated from the checkpoint by the same renderer and the planned after-hash decides whether the regeneration matched. Entries are appended in order, intent before a step and done with the observed hash after it, and the receipt is rewritten at each entry; a resume classifies every step against the virtual state of its target (E8-14). integrity carries seq, prev, and self, checked by the core against run_dir/receipt.log exactly as the checkpoint's. E8-A34: a status_line step's value is one of the three card values the skill may set; integrity's prev is null exactly at seq 0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "phase",
+    "plan",
+    "entries",
+    "integrity"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "the run this receipt belongs to; equals the checkpoint's and the result's"
+    },
+    "phase": {
+      "enum": [
+        "recording",
+        "committed"
+      ],
+      "description": "recording until the commit point (the done entry of the last step not cancelled), then committed"
+    },
+    "plan": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/plan_step"
+      },
+      "description": "every step of the transaction in order: reopening lines, the block, waiver lines, the verdict-doc copy, one status line per slice (section 9)"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      },
+      "description": "the write-ahead entries in the order they were appended"
+    },
+    "integrity": {
+      "$ref": "#/$defs/integrity"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "plan_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "kind",
+        "target",
+        "before_sha256",
+        "after_sha256"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based position in the plan"
+        },
+        "kind": {
+          "enum": [
+            "reopened_line",
+            "punch_list_block",
+            "waived_line",
+            "verdict_doc_copy",
+            "status_line"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/]",
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          },
+          "description": "the target file, relative to the workspace: no leading slash and no .. segment (the input schema's contained_relative_path rule)"
+        },
+        "before_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the target's bytes before this step (the virtual state after the previous step on the same target)"
+        },
+        "after_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "the planned SHA-256 of the target's bytes after this step"
+        },
+        "content": {
+          "type": "string",
+          "description": "the exact bytes an append step adds at the ledger home's tail (E8-28); forbidden on a status_line step"
+        },
+        "value": {
+          "type": "string",
+          "description": "the new text after 'Status: ' for a status_line step (E8-28): rejected, signed off with conditions, or signed off (E8-A34); forbidden on every other kind"
+        },
+        "heading": {
+          "type": "string",
+          "description": "the block heading for a punch_list_block or verdict_doc_copy step"
+        },
+        "cancelled": {
+          "type": "boolean",
+          "description": "true on a status_line step the boundary check cancelled (section 9); the only change a plan step ever takes; forbidden on every other kind"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "status_line"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "content": false,
+              "value": {
+                "enum": [
+                  "rejected",
+                  "signed off with conditions",
+                  "signed off"
+                ],
+                "description": "the card values this skill may set (Appendix A, E8-A34)"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": {
+                "kind": {
+                  "const": "status_line"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "cancelled": false,
+              "value": false
+            }
+          }
+        }
+      ]
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "type"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": {
+          "enum": [
+            "intent",
+            "done"
+          ]
+        },
+        "observed_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "the target's hash observed after the step; required on done, absent on intent"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "done"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "observed_sha256"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "intent"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "observed_sha256": false
+            }
+          }
+        }
+      ]
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "prev",
+        "self"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0 for the first write, then one more per write"
+        },
+        "prev": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the self of the previous write; null exactly at seq 0 and a string above it (E8-A34)"
+        },
+        "self": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the canonical serialization of the document with integrity.self removed (keys sorted, separators , and :, UTF-8, non-ASCII unescaped)"
+        }
+      },
+      "description": "pilot-contract.md section 11: the same block as the checkpoint's, checked by the core against run_dir/receipt.log, never by this schema",
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "seq"
+            ],
+            "properties": {
+              "seq": {
+                "const": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "seq"
+            ],
+            "properties": {
+              "seq": {
+                "minimum": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

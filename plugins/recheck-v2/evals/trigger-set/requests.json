@@ -1,0 +1,181 @@
+{
+  "set": "tuning",
+  "profile": "v2-test",
+  "requests": [
+    {
+      "id": "T-01-slash-v2-slice",
+      "text": "/recheck-v2 slice A",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "Explicit slash command for the pilot skill with the slice named. Direct interactive route; build_doc resolves from the workspace."
+    },
+    {
+      "id": "T-02-fixes-landed-flip-card",
+      "text": "fixed both blockers on slice B, recheck it and flip the card",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "build"
+      ],
+      "exclusion": null,
+      "notes": "Dictated. Names the closed-checklist job (verify named fixes, move the status card). 'fixed both blockers' is the fixer's account and is never evidence; activation still holds."
+    },
+    {
+      "id": "T-03-punch-list-verify",
+      "text": "go through the punch list from yesterday's signoff on docs/plans/2026-09-18-widget-export.md and tell me which fixes actually landed",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "readers"
+      ],
+      "exclusion": null,
+      "notes": "Sentence form naming the build doc. 'which fixes actually landed' is the per-item disposition question of contract section 1. No slice named; section 3 selects the latest rejected slice or asks."
+    },
+    {
+      "id": "T-04-reopen-named-item",
+      "text": "reopen the csv comma one on export.py and recheck it, i think the fix regressed",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "Naming a cleared entry is the one door back into scope (RB4, section 8). The reopening grant comes from this user turn; the adapter carries it on the user channel."
+    },
+    {
+      "id": "T-05-card-still-rejected",
+      "text": "card on slice C still says rejected but I pushed the fixes an hour ago. verify them and move it",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "handoff"
+      ],
+      "exclusion": null,
+      "notes": "No 'recheck' keyword. The job is described by its effect: verify named fixes against an open card and move the status line. A description keyed on the word alone misses this one."
+    },
+    {
+      "id": "T-06-majors-fixed-check-each",
+      "text": "the two majors from the signoff on slice A are fixed. check each one, don't hunt for new stuff",
+      "expected": {
+        "activate": true,
+        "target": "recheck-v2"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "exclusion": null,
+      "notes": "Explicitly closed checklist ('don't hunt for new stuff'), which is the boundary between recheck-v2 and an initial review (section 1, section 17)."
+    },
+    {
+      "id": "T-07-initial-review",
+      "text": "slice A is built, review it and give me a verdict",
+      "expected": {
+        "activate": false,
+        "target": "none: v1 station blocked in this profile"
+      },
+      "competitors": [
+        "signoff (blocked)",
+        "recheck-v2",
+        "readers",
+        "wargame"
+      ],
+      "exclusion": "An initial review of freshly built work with no prior findings to verify. Section 1: initial review is another job; section 17 excludes grading a slice's initial review.",
+      "notes": "Near miss: same slice vocabulary and 'verdict', but the checklist does not exist yet. In the v2 test profile the v1 signoff station is blocked, so nothing activates."
+    },
+    {
+      "id": "T-08-whole-build",
+      "text": "everything's signed off, run the whole-build review against main",
+      "expected": {
+        "activate": false,
+        "target": "none: v1 station blocked in this profile"
+      },
+      "competitors": [
+        "vertical (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "exclusion": "A whole-build adversarial review across every slice is the vertical station's job; recheck-v2 works one closed checklist of named findings, never the full build.",
+      "notes": "Near miss: post-signoff timing and loop vocabulary. Vertical is blocked in the profile."
+    },
+    {
+      "id": "T-09-plan-check",
+      "text": "check the build doc before I build it, does slice B trace back to the spec",
+      "expected": {
+        "activate": false,
+        "target": "none: v1 station blocked in this profile"
+      },
+      "competitors": [
+        "inspect (blocked)",
+        "recheck-v2",
+        "blueprint",
+        "readers"
+      ],
+      "exclusion": "A plan check happens before any code exists; there are no fixes to verify and no findings to close. That is the inspect station, blocked in this profile.",
+      "notes": "Near miss: 'check' plus 'slice B' plus a build doc. The word 'before I build it' is the tell that nothing has been built."
+    },
+    {
+      "id": "T-10-recheck-non-loop",
+      "text": "recheck the payroll numbers for tempest, the total looks off by a couple hundred",
+      "expected": {
+        "activate": false,
+        "target": "none"
+      },
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "exclusion": "'Recheck' in its everyday sense: re-examine some numbers. No build doc, no findings, no slice, no repo. Plain conversation.",
+      "notes": "Near miss on the keyword alone. A description that matches on 'recheck' without the loop context grabs this."
+    },
+    {
+      "id": "T-11-fixer-rerun-tests",
+      "text": "run the tests again on the csv fix, I want to see them pass before I move on",
+      "expected": {
+        "activate": false,
+        "target": "none"
+      },
+      "competitors": [
+        "recheck-v2",
+        "build",
+        "recheck (blocked)"
+      ],
+      "exclusion": "The fixing session re-running its own test suite is not a recheck: no fresh verifier, no checklist, no record write. RB2 says the fixer never grades its own fixes, and this request is the fixer asking for exactly that.",
+      "notes": "Near miss: 'fix', 'again', 'pass'. The right response is to run the tests in the current session, no skill."
+    },
+    {
+      "id": "T-12-v1-slash-bare",
+      "text": "/recheck slice A",
+      "expected": {
+        "activate": false,
+        "target": "none: v1 station blocked in this profile"
+      },
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2"
+      ],
+      "exclusion": "Names the v1 station by its slash command and says nothing else about the job. In the v2 test profile v1 recheck is blocked; the request does not otherwise describe recheck-v2's work, so the pilot must not claim it.",
+      "notes": "Near miss by name collision. Compare H-05 in held-out, where the same slash command is followed by a description of the job."
+    }
+  ]
+}

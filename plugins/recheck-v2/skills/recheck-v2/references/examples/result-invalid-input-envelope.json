@@ -1,0 +1,13 @@
+{
+  "protocol_version": 1,
+  "status": "missing_input",
+  "missing_input": {
+    "fields": [
+      "invocation.run_id",
+      "workspace"
+    ],
+    "ambiguity": [
+      "the payload failed schema validation before a run id existed: run_id absent, workspace is a relative path"
+    ]
+  }
+}

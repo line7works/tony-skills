@@ -1,0 +1,1426 @@
+[
+  {
+    "case": "I2-01-two-build-docs",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R3"
+    ],
+    "runs_at": "E10",
+    "conditions": "on a harness whose adapter receives the natural-language request 'recheck slice A' (trial_conditions.adapter_request) and builds the input itself; the direct interactive route",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.build_doc"
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        },
+        "ambiguity": {
+          "$contains": [
+            {
+              "$re": "\\S"
+            }
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "status_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      },
+      "docs/plans/2026-09-18-widget-import.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the adapter picks docs/plans/2026-09-18-widget-export.md because it sorts first, or because it is 'the lone doc' of the export topic",
+      "the adapter reads the conversation to pick a doc",
+      "more than one question is asked",
+      "the harness feeds input.json to the core directly and scores the result",
+      "the ambiguity entries, read together, fail to identify the two build docs (docs/plans/2026-09-18-widget-export.md and docs/plans/2026-09-18-widget-import.md, each with slice A at rejected) as the conflict; equivalent wording and information spread across several entries are accepted (ruling E7-20, semantic assertion at E10)"
+    ],
+    "rationale": [
+      "§2: 'Conflicts are missing input: two build docs match the invocation'; both docs under docs/plans/ carry a Slice A at rejected with an open entry and the request names no doc",
+      "§2: 'Nothing else is consulted for scope: not the conversation, not the fixer's account, not a guess at the lone doc on disk'",
+      "§2 / §10 row 1 / R3: direct interactive route asks exactly one question naming what is missing and waits; no write",
+      "§17: the doc hunt is out of the core's scope; the adapter names the build doc, so the ambiguity resolves at the adapter, never by a default choice",
+      "§9 / R43: a missing_input result lists run artifacts only; §16 R1: invalid or incomplete input never reaches verification",
+      "ruling E7-20: missing_input.ambiguity is free text, matched for presence only (one entry with non-whitespace text); what it must say is in must_not and is graded semantically at E10"
+    ],
+    "open": "E10 honors trial_conditions.adapter_request per lane contract 5.5 (a trial condition names what the harness must inject; the resolved input.json is what the core sees only after the adapter builds it), so this case runs through the adapter on the natural-language request 'recheck slice A' and the expected block above is its outcome (§2 'two build docs match the invocation'; §17 the adapter names the build doc). The input.json-alone outcome (a harness that bypasses the adapter would run to completed: the export doc's item fixed, all_clear, A rejected -> signed off, the import doc untouched) is not a scored path; it is recorded here only so E10 does not mistake it for one (critic CR-03)."
+  },
+  {
+    "case": "I2-02-named-item-none",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R3"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core on input.json; direct interactive route; no verifier needed because the run stops at scope normalization",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            {
+              "$re": "^named_items\\[0\\]"
+            }
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        },
+        "ambiguity": {
+          "$contains": [
+            {
+              "$re": "\\S"
+            }
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "status_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the named item is silently dropped and the run proceeds on the slice A checklist alone",
+      "the named item is added to scope as a new entry (the record holds no such entry; naming is not creation)",
+      "the ledger entry at src/widget/export.py:7 is graded",
+      "the ambiguity entries, read together, fail to say that the named item (src/widget/export.py:99, claim 'export drops the header row') matches no record entry; equivalent wording and information spread across several entries are accepted (ruling E7-20, semantic assertion at E10)"
+    ],
+    "rationale": [
+      "§2 named_items: 'each must resolve to exactly one record entry'; no record holds src/widget/export.py:99 or the claim 'export drops the header row'",
+      "§2: 'Conflicts are missing input: ... a named item that matches nothing or more than one entry'",
+      "§3: named_items resolve against the whole record; RB4: the user naming an entry is the one door, and a door into nothing is a gap, not an expansion",
+      "§10 row 1 / R3: direct interactive asks one question naming the missing field, no write",
+      "§16 R1: invalid or incomplete input never reaches verification",
+      "ruling E7-20: missing_input.ambiguity is free text, matched for presence only; what it must say is in must_not and is graded semantically at E10"
+    ]
+  },
+  {
+    "case": "I2-03-named-item-two",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R3"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core on input.json; direct interactive route; the run stops at scope normalization",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            {
+              "$re": "^named_items\\[0\\]"
+            }
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        },
+        "ambiguity": {
+          "$contains": [
+            {
+              "$re": "\\S"
+            }
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "status_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the core picks the Slice A entry because the target names slice A, or the Slice B entry because it is later in the file",
+      "the two entries are merged into one item",
+      "the run proceeds and grades either entry",
+      "the ambiguity entries, read together, fail to say that the named pair (src/widget/export.py:7, claim 'CSV export writes unescaped commas inside quoted fields') is held by two record entries, one under the Slice A review block and one under the Slice B review block; equivalent wording and information spread across several entries are accepted (ruling E7-20, semantic assertion at E10)"
+    ],
+    "rationale": [
+      "§2 named_items: 'each must resolve to exactly one record entry'; the pair src/widget/export.py:7 + 'CSV export writes unescaped commas inside quoted fields' is held by two review findings (block '### 2026-09-19 — review: Slice A' and block '### 2026-09-19 — review: Slice B') with different scenarios and found-by fields",
+      "§2: 'a named item that matches nothing or more than one entry' is missing input; §3 join key is location plus claim, exactly as recorded, and both records share it",
+      "Appendix A ambiguous-legacy rule ('two review findings with the same location and claim in one block') does not fire here, the two lines sit in different blocks; the named_items exactly-one rule is what stops the run",
+      "§10 row 1 / R3: direct interactive asks one question, no write; the two co-located entries are never collapsed into one (R11's rule), but R11 is not credited here, see open",
+      "ruling E7-20: missing_input.ambiguity is free text, matched for presence only; what it must say is in must_not and is graded semantically at E10"
+    ],
+    "open": [
+      "Whether the result names the field as named_items[0] alone or also lists target.slice (the slice A checklist itself contains the same join key that the Slice B block also holds); §2 fixes only that the named item is the conflict. The $contains form above accepts either.",
+      "R11 credit removed per ruling E7-28 (Astra G3 finding 4): R11 passes when 'each entry keeps its own disposition; records round-trip', and this run stops at scope normalization before any disposition or record write; R11 is served by S1 and W3. I2, R1, R3 stay credited."
+    ]
+  },
+  {
+    "case": "I2-04-multiple-candidate-slices",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R3"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core on input.json; direct interactive route; the run stops at slice resolution (§3) before any verifier is created",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.slice"
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        },
+        "ambiguity": {
+          "$contains": [
+            {
+              "$re": "\\S"
+            }
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "status_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "slice A is chosen because it comes first, or slice B because its block is later in the file",
+      "both slices are absorbed into one run",
+      "a BLOCKER outranks a MAJOR in slice selection (severity is not a §3 tie-breaker)",
+      "the ambiguity entries, read together, fail to identify slices A and B as tied candidates (both standing at rejected, latest punch-list blocks both dated 2026-09-19); equivalent wording and information spread across several entries are accepted (ruling E7-20, semantic assertion at E10)"
+    ],
+    "rationale": [
+      "§3 build_doc without slice: 'the slice whose punch-list block carries the latest date among slices standing at rejected ...; more than one candidate is missing input'; A and B both stand at rejected and both latest blocks are dated 2026-09-19",
+      "§2 / §10 row 1 / R3: direct interactive asks exactly one question naming target.slice and waits; no write",
+      "examples/result-missing-input-interactive.json is this exact shape (fields ['target.slice'], the A/B ambiguity, one question)",
+      "§9 / R43: a missing_input result lists run artifacts only",
+      "ruling E7-20 (Astra G3 finding 5): missing_input.ambiguity is free text, matched for presence only (one entry with non-whitespace text), never by word order; the tied-candidacy requirement is in must_not and graded semantically at E10"
+    ]
+  },
+  {
+    "case": "I2-05-single-candidate",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R5",
+      "R26",
+      "R30",
+      "R43"
+    ],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (fresh verifier, no outbound service); direct interactive; Python 3.9 stdlib present so the scenario executes; trial-defaults.json (ruling E7-18): run_date 2026-09-20, so the recheck block this run writes out-dates the seeded 2026-09-19 review block under Appendix A's latest-dated rule, and the opaque workspace mount (no path names the lane or the case)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 1
+      },
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {
+            "file": "src/widget/export.py",
+            "line": 7
+          },
+          "claim": "CSV export writes unescaped commas inside quoted fields",
+          "failure_scenario": "export a row whose title contains a comma; the produced CSV has one extra column",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {
+            "method": "executed",
+            "static_reason": "$absent",
+            "blocked": "$absent",
+            "missing": "$absent",
+            "evidence": {
+              "$contains": [
+                {
+                  "kind": "command",
+                  "detail": {
+                    "$re": "(?i)widget\\.export"
+                  }
+                }
+              ]
+            }
+          },
+          "adjudication": {
+            "verifier_said": {
+              "$in": [
+                "fixed",
+                "not_fixed"
+              ]
+            },
+            "driver_action": {
+              "$in": [
+                "confirmed",
+                "upgraded"
+              ]
+            },
+            "session_wrote_fix": false
+          }
+        }
+      ],
+      "new_defects": {
+        "$len": 0
+      },
+      "result": "all_clear",
+      "cards": [
+        {
+          "slice": "A",
+          "before": "rejected",
+          "after": "signed off"
+        }
+      ],
+      "records_written": {
+        "$contains": [
+          {
+            "kind": "punch_list_block",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": true,
+            "heading": {
+              "$re": "^### \\d{4}-\\d{2}-\\d{2} — recheck: Slice A$"
+            }
+          },
+          {
+            "kind": "status_line",
+            "path": "docs/plans/2026-09-18-widget-export.md",
+            "appended": false
+          }
+        ]
+      },
+      "source_identity": {
+        "matched": true,
+        "expected": "$absent",
+        "actual": {
+          "dirty": false,
+          "submodules": [],
+          "untracked": []
+        }
+      },
+      "receipt_path": "$any",
+      "boundary_violations": {
+        "$len": 0
+      },
+      "rejected_grants": {
+        "$len": 0
+      },
+      "still_open": {
+        "$len": 0
+      },
+      "run": {
+        "session_wrote_fix": false,
+        "verifier": {
+          "fresh": true,
+          "restrictions_declared": true
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [
+          "punch_list_block",
+          "status_line"
+        ],
+        "status": {
+          "A": "signed off",
+          "B": "signed off"
+        },
+        "earlier_bytes_identical": true
+      },
+      "verifier raw report under run_dir": {
+        "semantic_e10": "the verifier's raw text (retained unedited under run_dir; no fixed basename, ruling E7-24) and the E10 trace show the scenario command PYTHONPATH=src python3 -m widget.export \"Widget, deluxe\" 3 run at HEAD from the workspace root with the output \"Widget, deluxe\",3 (two fields by csv.reader, CASES.md); the item's evidence[].detail names the command (matcher) and the observed value is graded here, not by the matcher (ruling E7-20)"
+      },
+      "checklist_provenance": {
+        "artifact": "the normalized checklist handed to the verifier, retained under run_dir (no fixed basename, ruling E7-24), and the E10 trace",
+        "semantic_e10": "the checklist entry carries the §3 provenance of the record it came from (document, heading, date) and its slice, slice A resolved under §3 from a build_doc target without slice; when the result supplies items[].record it must equal the same values (ruling E7-19)",
+        "items": [
+          {
+            "location": {
+              "file": "src/widget/export.py",
+              "line": 7
+            },
+            "claim": "CSV export writes unescaped commas inside quoted fields",
+            "document": "docs/plans/2026-09-18-widget-export.md",
+            "heading": "### 2026-09-19 — review: Slice A",
+            "date": "2026-09-19",
+            "slice": "A"
+          }
+        ]
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "a question is asked (the candidate set has one member; nothing is missing)",
+      "slice B is named in other_open_slices (its card reads signed off and it has no entry, so it is not open)",
+      "a verdict_doc_copy write (no docs/reviews/ exists; the result says none was found)",
+      "a WAIVED or REOPENED line is written (no grants in the input)",
+      "the item is graded static (the scenario is one local stdlib command; §5 / R30)",
+      "any write to src/ or any tracked file other than the build doc",
+      "the recheck block lands anywhere but the tail of the ## Punch list section",
+      "the status_line write precedes the punch_list_block write in records_written (§9: the status line is always the last step)",
+      "other_open_slices names slice B",
+      "an upgraded action without upgrade_evidence, or with session_wrote_fix true (§7, RB8: never upgrade a fix the driving session wrote; the schema forbids the pair, the semantic grader checks the evidence)",
+      "a verifier_said fixed paired with upgraded, or not_fixed paired with confirmed, on this fixed item (§7: fixed comes only from a confirmed verifier fixed or an evidence-backed upgrade)"
+    ],
+    "rationale": [
+      "§3 build_doc without slice: A stands at rejected with its latest block dated 2026-09-19; B stands at signed off with no block; exactly one candidate, so A is selected without a question",
+      "§3 selection: slice A's still-open BLOCKER entry is the checklist (count 1); §4: the scenario no longer holds at HEAD (fix commit prints \"Widget, deluxe\",3, two fields) shown by executed evidence -> fixed, no reason",
+      "§5 / R30: a runnable scenario executes (PYTHONPATH=src python3 -m widget.export \"Widget, deluxe\" 3); static would need a stated reason and none applies",
+      "§4 effective open set is empty and one item is fixed -> all_clear; Appendix A mapping: nothing open -> signed off; card A rejected -> signed off",
+      "§9 writes 3 and 6 only: one punch-list block at the tail of ## Punch list, then the Status: line of slice A; write 5 skipped because the glob docs/reviews/*-signoff-widget-export-a.md matches nothing; writes 2 and 4 absent because no grants",
+      "§14: no REVIEW.md -> review_sheet absent, defaults; §7: a fresh verifier, the session did not write the fix (fix is a fixture commit)",
+      "R26: the verdict is in chat; the doc receives only the block and the status line; R43: run artifacts listed with the record writes",
+      "ruling E7-20: evidence[].detail is matched for the scenario command's name only (widget.export); the observed output is asserted semantically in records_after against the raw report and the trace",
+      "ruling E7-21: no trial condition seeds the verifier's response, so the key pins the disposition (fixed) and accepts every adjudication pair §7 permits for it as $in sets (verifier fixed + confirmed, or verifier not_fixed + upgraded with evidence); the prohibitions are in must_not",
+      "ruling E7-19: the key pins no items[].record (optional in result.schema.json, absent from the example results); when the result supplies it, record must hold document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19 (the one review line of CASES.md); provenance is asserted on the normalized checklist in records_after.checklist_provenance (semantic, E10)"
+    ],
+    "open": "verification.location_after_fix: the csv.writer call sits at line 10 of the fixed file while the ledger points at line 7 (now the def line); §5 says the post-fix location is recorded 'when it moved'. Whether a within-file line shift counts as moved is not fixed by the contract, so the field is left unpinned."
+  },
+  {
+    "case": "I4-01-relative-workspace",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "input validity decided by the runner now against input.schema.json; the envelope shape below is for the E10 harness run",
+    "input_validates": false,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "workspace"
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": false,
+      "invalid_fields": [
+        "workspace"
+      ]
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the relative path is resolved against the case directory or the current working directory and the run proceeds"
+    ],
+    "rationale": [
+      "input.schema.json: workspace carries pattern ^/ and the value 'workspace' starts with 'w'",
+      "§2 path rules: 'workspace and run_dir are absolute ... a violation is invalid input'; §2: 'Input that fails validation ... returns the same envelope ... and every invalid field named'",
+      "§16 R1: invalid or incomplete input never reaches verification; §10 row 1: missing_input"
+    ],
+    "open": "§2 says a payload that fails validation 'before a run id exists' returns the envelope with the run block omitted; here invocation.run_id is present and well-formed, so whether the envelope carries a run block, and whether the direct interactive route asks its one question (R3) or returns the envelope, is not fixed by the contract. The result schema forbids missing_input.question when no run block is present. run and question are left unpinned."
+  },
+  {
+    "case": "I4-02-run-dir-inside-workspace",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core's semantic validator (§2 path rules, §9 validator) on input.json; direct interactive route with a user channel that can receive one question; trial-defaults.json (ruling E7-18): the harness builds the case at its opaque path with build.py --opaque and relocates nothing afterwards, so input.json's run_dir is generated under the opaque workspace path and stays inside it",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "run": {
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": false
+        }
+      },
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "invocation.run_dir"
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "any file or directory is created at <workspace>/.recheck-run (it would be an untracked, non-ignored file inside the workspace and would dirty the identity)",
+      "the run proceeds with run_dir relocated outside the workspace on its own",
+      "more than one question is asked, or the run proceeds past the question without the user's answer (§10: one question, wait)",
+      "any records_written entry, run_artifact included: the named run_dir cannot be used and the core chooses no substitute destination, so the list is empty or absent (ruling E7-27; the 5.9 forms cannot say absent-or-empty, lane contract gap 9)",
+      "any file written under any run directory for this run, named or substituted"
+    ],
+    "rationale": [
+      "§2 path rules: 'run_dir is not inside the workspace ... a violation is invalid input'; the value starts with the workspace value followed by '/'",
+      "input.schema.json description: 'run_dir outside the workspace' belongs to the semantic validator, so the schema passes and the core must stop it",
+      "§6 exclusions: run_dir is 'outside the workspace by rule'; a run_dir inside would enter the identity as untracked content",
+      "§16 R1: invalid input never reaches verification; §10 row 1: missing_input",
+      "ruling E7-27 (Astra G3 findings 6 and 7): the input is schema-valid with a semantic fault, so §10 row 1 decides 'direct interactive: one question, wait'; run.invocation is pinned to the direct interactive route and missing_input.question to non-empty text (a single string in the schema, so exactly one); §9 decides that a status which never reached a run directory lists nothing, and records_written is deliberately absent from expected: checks/match.py fails a missing key before evaluating any operator (control room, 2026-09-13), so a $not form would reject an envelope that omits the key (the shape of examples/result-invalid-input-envelope.json), and the 5.9 forms have no absent-or-empty form; the must_not line 'any records_written entry, run_artifact included; list empty or absent' is the assertion, the gap-9 practice (lane contract gap 9, E7-10)"
+    ],
+    "open": [
+      "Question, run block, and write list settled by ruling E7-27; closed."
+    ]
+  },
+  {
+    "case": "I4-03-build-doc-dotdot",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "input validity decided by the runner now against input.schema.json; the envelope shape below is for the E10 harness run",
+    "input_validates": false,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.build_doc"
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": false,
+      "invalid_fields": [
+        "target.build_doc"
+      ]
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the path is normalized to docs/plans/2026-09-18-widget-export.md and the run proceeds (it resolves to the same file, and that is not a defense)"
+    ],
+    "rationale": [
+      "input.schema.json contained_relative_path: not pattern (^|/)\\.\\.(/|$); the value holds the segment '/../'",
+      "§2 path rules: 'build_doc is relative, contains no .. segment, and resolves inside the workspace after symlinks; a violation is invalid input'",
+      "§16 R1; §10 row 1: missing_input"
+    ],
+    "open": "As I4-01: run block presence and the direct interactive question are not fixed for a schema-invalid payload that carries a run id."
+  },
+  {
+    "case": "I4-04-build-doc-symlink-escape",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core's semantic validator on input.json (realpath containment); direct interactive route with a user channel that can receive one question; the workspace holds a committed symlink under docs/plans/; trial-defaults.json (ruling E7-18): the harness builds the case at its opaque path with build.py --opaque and relocates nothing afterwards, so the relative link ../../../_outside/2026-09-18-widget-export.md resolves to a file outside the workspace there too",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "run": {
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": false
+        }
+      },
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.build_doc"
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true,
+        "note": "the workspace path is a symlink; the bytes live at <case>/_outside/2026-09-18-widget-export.md and must be unchanged too"
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the build doc is read through the link and the run proceeds (the records would be read from outside the workspace)",
+      "any write through the link to <case>/_outside/2026-09-18-widget-export.md",
+      "the symlink is replaced, removed, or rewritten",
+      "more than one question is asked, or the run proceeds past the question without the user's answer (§10: one question, wait)"
+    ],
+    "rationale": [
+      "§2 path rules: build_doc must resolve 'inside the workspace after symlinks'; realpath(<workspace>/docs/plans/2026-09-18-widget-export.md) does not start with realpath(<workspace>) + '/'",
+      "input.schema.json description: 'build_doc containment after symlinks' belongs to the semantic validator, so the schema passes and the core must stop it",
+      "§16 R1; §10 row 1: missing_input; §9: every record write must target an authorized destination inside the workspace, which a write through this link would not",
+      "ruling E7-27 (Astra G3 finding 6): the input is schema-valid with a semantic fault, so §10 row 1 decides 'direct interactive: one question, wait'; run.invocation is pinned to the direct interactive route and missing_input.question to non-empty text (a single string in the schema, so exactly one)"
+    ],
+    "open": [
+      "Question and run block settled by ruling E7-27; closed.",
+      "How the identity helper and the runner's tree_sha256 treat the symlink (link text versus resolved content) is a library decision CASES.md records as open; the case is clean at HEAD either way because the link is committed."
+    ]
+  },
+  {
+    "case": "I4-05-duplicate-items",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core's semantic validator on input.json (items unique on location plus claim); direct interactive route with a user channel that can receive one question",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "run": {
+        "invocation": {
+          "mode": "interactive",
+          "caller": "direct",
+          "resume": false
+        }
+      },
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            {
+              "$re": "^target\\.items(?:$|\\[[01]\\])"
+            }
+          ]
+        },
+        "question": {
+          "$re": "\\S"
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the duplicate is silently collapsed to one item and the run proceeds",
+      "both elements are graded as two items (checklist.count 2)",
+      "more than one question is asked, or the run proceeds past the question without the user's answer (§10: one question, wait)"
+    ],
+    "rationale": [
+      "§2 target.items[]: 'items unique on location plus claim'; the two elements are byte-identical, so they share location and claim",
+      "input.schema.json description: 'unique items' belongs to the semantic validator (target.items declares minItems 1 and no uniqueItems), so the schema passes and the core must stop it",
+      "§16 R1: invalid input never reaches verification; §10 row 1: missing_input",
+      "ruling E7-27 (Astra G3 finding 6): the input is schema-valid with a semantic fault, so §10 row 1 decides 'direct interactive: one question, wait'; run.invocation is pinned to the direct interactive route and missing_input.question to non-empty text (a single string in the schema, so exactly one)",
+      "Astra G3 finding 8: §2's uniqueness rule constrains the array, so the envelope may name target.items itself or either element; the regular expression accepts the array path and either index"
+    ],
+    "open": [
+      "Which path the envelope names for the duplicate (target.items, target.items[0], target.items[1], or several of them) is not fixed by §2; the regular expression accepts the array path and either index (Astra G3 finding 8).",
+      "Question and run block settled by ruling E7-27; closed."
+    ]
+  },
+  {
+    "case": "I4-06-claim-with-separator",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "input validity decided by the runner now against input.schema.json; the envelope shape below is for the E10 harness run",
+    "input_validates": false,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.items[0].claim"
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": false,
+      "invalid_fields": [
+        "target.items[0].claim"
+      ]
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the claim is split on the separator or stripped of it and matched against the ledger entry",
+      "the claim is written into any ledger line"
+    ],
+    "rationale": [
+      "input.schema.json claim: not pattern [\\r\\n\\u00b7]; the value contains U+00B7",
+      "Appendix A: 'A claim is a single line and contains no ·; the input schema enforces this for new items'",
+      "§16 R1; §10 row 1: missing_input"
+    ],
+    "open": "As I4-01 on run block and question."
+  },
+  {
+    "case": "I4-07-claim-with-newline",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "input validity decided by the runner now against input.schema.json; the envelope shape below is for the E10 harness run",
+    "input_validates": false,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.items[0].claim"
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": false,
+      "invalid_fields": [
+        "target.items[0].claim"
+      ]
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "the line feed is normalized to a space and the claim matched against the ledger entry",
+      "the claim is written into any ledger line"
+    ],
+    "rationale": [
+      "input.schema.json claim: not pattern [\\r\\n\\u00b7]; the value contains U+000A",
+      "Appendix A single-line fields: 'the input schema rejects a carriage return or line feed anywhere in them'",
+      "§16 R1; §10 row 1: missing_input"
+    ],
+    "open": "As I4-01 on run block and question."
+  },
+  {
+    "case": "I4-08-station-caller-interactive",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1",
+      "R2"
+    ],
+    "runs_at": [
+      "E7",
+      "E10"
+    ],
+    "conditions": "input validity decided by the runner now against input.schema.json; the envelope shape below is for the E10 harness run on a station route",
+    "input_validates": false,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "invocation.mode"
+          ]
+        },
+        "question": "$absent"
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": false,
+      "invalid_fields": [
+        "invocation.mode"
+      ]
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "a question is asked (a station caller never receives a question, whatever mode it claims)",
+      "mode is silently rewritten to headless and the run proceeds"
+    ],
+    "rationale": [
+      "input.schema.json invocation: if caller is 'direct' ... else mode const 'headless'; caller 'ship-v2' with mode 'interactive' fails the else branch",
+      "§2: 'a station caller is always headless (the schema enforces it)'; 'Every other invocation (headless, or any station caller) receives a result with status missing_input ... no question, and no write'",
+      "result.schema.json: missing_input.question is allowed only when run.invocation is interactive and direct; here the caller is a station",
+      "§16 R1 on both routes, R2: structured envelope, all fields listed, no question, no write"
+    ],
+    "open": "Whether the envelope carries a run block (the run id exists in the payload but validation failed): as I4-01. question is pinned absent either way (R2 and the result schema)."
+  },
+  {
+    "case": "I2-06-headless-two-candidates",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R2"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core on input.json; station route (caller ship-v2, headless); stops at slice resolution before any verifier is created",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.slice"
+          ]
+        },
+        "question": "$absent",
+        "ambiguity": {
+          "$contains": [
+            {
+              "$re": "\\S"
+            }
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "status_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "a question is asked or emitted into any channel",
+      "a slice is chosen by file order, block order, or severity",
+      "the ambiguity entries, read together, fail to identify slices A and B as tied candidates (both standing at rejected, latest punch-list blocks both dated 2026-09-19); equivalent wording and information spread across several entries are accepted (ruling E7-20, semantic assertion at E10)"
+    ],
+    "rationale": [
+      "§3: more than one candidate slice is missing input (A and B both rejected, both latest blocks dated 2026-09-19)",
+      "§2 / §10 row 1 / R2: a station caller receives the structured envelope: every missing field listed, the ambiguity stated, no question, no write; 'A question into a channel nobody reads is a failure'",
+      "result.schema.json forbids missing_input.question unless run.invocation is interactive and direct",
+      "examples/result-missing-input-headless.json shows the envelope shape",
+      "ruling E7-20 (Astra G3 finding 5): missing_input.ambiguity is free text, matched for presence only, never by word order; the tied-candidacy requirement is in must_not and graded semantically at E10"
+    ]
+  },
+  {
+    "case": "I2-07-direct-headless-two-candidates",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I2"
+    ],
+    "requirements": [
+      "R1",
+      "R2"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core on input.json; direct route in headless mode; stops at slice resolution before any verifier is created",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "target.slice"
+          ]
+        },
+        "question": "$absent",
+        "ambiguity": {
+          "$contains": [
+            {
+              "$re": "\\S"
+            }
+          ]
+        }
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "records_written": {
+        "$not": {
+          "$contains": [
+            {
+              "kind": {
+                "$in": [
+                  "reopened_line",
+                  "punch_list_block",
+                  "waived_line",
+                  "status_line",
+                  "verdict_doc_copy"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "a question is asked because the caller is direct (headless never asks)",
+      "a slice is chosen by file order, block order, or severity",
+      "the ambiguity entries, read together, fail to identify slices A and B as tied candidates (both standing at rejected, latest punch-list blocks both dated 2026-09-19); equivalent wording and information spread across several entries are accepted (ruling E7-20, semantic assertion at E10)"
+    ],
+    "rationale": [
+      "§3: more than one candidate slice is missing input",
+      "§2: 'Only a direct, interactive invocation may ask'; 'Every other invocation (headless, or any station caller) receives a result with status missing_input ... no question, and no write'",
+      "result.schema.json: question allowed only for interactive plus direct; here mode is headless",
+      "§16 R2: 'I1, I2 with mode: headless' -> envelope, no question, no write",
+      "ruling E7-20 (Astra G3 finding 5): missing_input.ambiguity is free text, matched for presence only, never by word order; the tied-candidacy requirement is in must_not and graded semantically at E10"
+    ]
+  },
+  {
+    "case": "I4-09-station-duplicate-items",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1",
+      "R2"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core's semantic validator on input.json; station route (caller ship-v2, headless)",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            {
+              "$re": "^target\\.items(?:$|\\[[01]\\])"
+            }
+          ]
+        },
+        "question": "$absent"
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "a question is asked or emitted into any channel",
+      "the duplicate is collapsed and the run proceeds",
+      "both elements are graded as two items"
+    ],
+    "rationale": [
+      "§2 target.items[]: 'items unique on location plus claim'; §2: 'A calling station's payload is validated exactly like a direct request'",
+      "input.schema.json description assigns 'unique items' to the semantic validator, so the schema passes and the core must stop it",
+      "§2 / R2: a station caller receives the envelope, no question, no write; result.schema.json forbids the question on this route",
+      "§16 R1: 'I1, I2, I4 on both routes'",
+      "Astra G3 finding 8: §2's uniqueness rule constrains the array, so the envelope may name target.items itself or either element; the regular expression accepts the array path and either index"
+    ],
+    "open": "Which path the envelope names for the duplicate (target.items, target.items[0], target.items[1], or several of them) is not fixed by §2; the regular expression accepts the array path and either index (Astra G3 finding 8). Whether a run block is present when the invalid field is found by the semantic validator after the run id existed (§2 suggests yes since the run id exists; E7-27 pins it for the direct interactive cases only, so it is left unpinned here)."
+  },
+  {
+    "case": "I4-10-station-run-dir-inside-workspace",
+    "lane": "I2I4-conflicts-paths",
+    "checks": [
+      "I4"
+    ],
+    "requirements": [
+      "R1",
+      "R2"
+    ],
+    "runs_at": "E10",
+    "conditions": "the core's semantic validator on input.json; station route (caller ship-v2, headless); trial-defaults.json (ruling E7-18): the harness builds the case at its opaque path with build.py --opaque and relocates nothing afterwards, so input.json's run_dir is generated under the opaque workspace path and stays inside it",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "missing_input": {
+        "fields": {
+          "$contains": [
+            "invocation.run_dir"
+          ]
+        },
+        "question": "$absent"
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent"
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {
+          "A": "rejected"
+        },
+        "earlier_bytes_identical": true
+      }
+    },
+    "deterministic_now": {
+      "input_validates": true
+    },
+    "must_not": [
+      "any project record write (punch_list_block, waived_line, reopened_line, verdict_doc_copy, status_line)",
+      "any change to the build doc's Status: line",
+      "any file created inside the workspace",
+      "a verifier is created or any scenario is executed",
+      "a question is asked or emitted into any channel",
+      "any file or directory is created at <workspace>/.recheck-run",
+      "run_dir is relocated outside the workspace on the core's own initiative",
+      "any records_written entry, run_artifact included: the named run_dir cannot be used and the core chooses no substitute destination, so the list is empty or absent (ruling E7-27; the 5.9 forms cannot say absent-or-empty, lane contract gap 9)",
+      "any file written under any run directory for this run, named or substituted"
+    ],
+    "rationale": [
+      "§2 path rules: 'run_dir is not inside the workspace ... a violation is invalid input'; the value starts with the workspace value followed by '/'",
+      "input.schema.json description assigns 'run_dir outside the workspace' to the semantic validator",
+      "§2 / R2: station caller -> envelope, no question, no write; §16 R1 on both routes",
+      "ruling E7-27 (Astra G3 finding 7): §9 decides that a status which never reached a run directory lists nothing; the named run_dir cannot be used and the core chooses no substitute; records_written is deliberately absent from expected: checks/match.py fails a missing key before evaluating any operator (control room, 2026-09-13), so a $not form would reject an envelope that omits the key (the shape of examples/result-invalid-input-envelope.json), and the 5.9 forms have no absent-or-empty form; the must_not line 'any records_written entry, run_artifact included; list empty or absent' is the assertion, the gap-9 practice (lane contract gap 9, E7-10)"
+    ],
+    "open": [
+      "Write list settled by ruling E7-27; closed."
+    ]
+  },
+  {
+    "case": "_coverage",
+    "requirements": {
+      "R1": [
+        "I2-01-two-build-docs",
+        "I2-02-named-item-none",
+        "I2-03-named-item-two",
+        "I2-04-multiple-candidate-slices",
+        "I2-05-single-candidate",
+        "I4-01-relative-workspace",
+        "I4-02-run-dir-inside-workspace",
+        "I4-03-build-doc-dotdot",
+        "I4-04-build-doc-symlink-escape",
+        "I4-05-duplicate-items",
+        "I4-06-claim-with-separator",
+        "I4-07-claim-with-newline",
+        "I4-08-station-caller-interactive",
+        "I2-06-headless-two-candidates",
+        "I2-07-direct-headless-two-candidates",
+        "I4-09-station-duplicate-items",
+        "I4-10-station-run-dir-inside-workspace"
+      ],
+      "R2": [
+        "I4-08-station-caller-interactive",
+        "I2-06-headless-two-candidates",
+        "I2-07-direct-headless-two-candidates",
+        "I4-09-station-duplicate-items",
+        "I4-10-station-run-dir-inside-workspace"
+      ],
+      "R3": [
+        "I2-01-two-build-docs",
+        "I2-02-named-item-none",
+        "I2-03-named-item-two",
+        "I2-04-multiple-candidate-slices"
+      ],
+      "R5": [
+        "I2-05-single-candidate"
+      ],
+      "R26": [
+        "I2-05-single-candidate"
+      ],
+      "R30": [
+        "I2-05-single-candidate"
+      ],
+      "R43": [
+        "I2-05-single-candidate"
+      ]
+    },
+    "checks": {
+      "I2": [
+        "I2-01-two-build-docs",
+        "I2-02-named-item-none",
+        "I2-03-named-item-two",
+        "I2-04-multiple-candidate-slices",
+        "I2-05-single-candidate",
+        "I2-06-headless-two-candidates",
+        "I2-07-direct-headless-two-candidates"
+      ],
+      "I4": [
+        "I4-01-relative-workspace",
+        "I4-02-run-dir-inside-workspace",
+        "I4-03-build-doc-dotdot",
+        "I4-04-build-doc-symlink-escape",
+        "I4-05-duplicate-items",
+        "I4-06-claim-with-separator",
+        "I4-07-claim-with-newline",
+        "I4-08-station-caller-interactive",
+        "I4-09-station-duplicate-items",
+        "I4-10-station-run-dir-inside-workspace"
+      ]
+    }
+  }
+]

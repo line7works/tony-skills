@@ -1,0 +1,375 @@
+[
+  {
+    "case": "S1-01-two-claims-one-location",
+    "lane": "S1-colocated",
+    "checks": ["S1", "W3"],
+    "requirements": ["R5", "R6", "R11", "R18", "R25", "R26", "R36", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); Python 3.9 stdlib available from the workspace root; no manifest trial conditions; trial defaults (ruling E7-18, evals/trial-defaults.json): the core's clock is pinned at run_date 2026-09-20 and the workspace and run directory are staged under an opaque mount, so no path in the result names the lane or the case",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "S1-01-two-claims-one-location-run",
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {
+        "expected": "$absent",
+        "actual": {"dirty": false, "untracked": [], "submodules": []},
+        "at_transaction": {"dirty": false, "untracked": [], "submodules": []},
+        "after_run": {"dirty": true, "submodules": []},
+        "matched": true
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 2
+      },
+      "items": {"$unordered": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "CSV export does not quote a field that contains a comma",
+          "failure_scenario": "export a row whose title contains a comma; the produced CSV has one extra column",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {
+            "method": "executed",
+            "static_reason": "$absent",
+            "blocked": "$absent",
+            "missing": "$absent",
+            "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}
+          },
+          "adjudication": {"session_wrote_fix": false, "driver_action": {"$in": ["confirmed", "upgraded"]}}
+        },
+        {
+          "severity": "MAJOR",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "a missing title exports as the string None",
+          "failure_scenario": "export a row with no title; the CSV cell reads None instead of an empty quoted field",
+          "slice": "A",
+          "disposition": "not_fixed",
+          "reason": "reproduces",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {
+            "method": "executed",
+            "static_reason": "$absent",
+            "blocked": "$absent",
+            "missing": "$absent",
+            "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}
+          },
+          "adjudication": {"session_wrote_fix": false, "driver_action": {"$in": ["confirmed", "disputed", "downgraded"]}}
+        }
+      ]},
+      "result": "partial",
+      "cards": [
+        {"slice": "A", "before": "rejected", "after": "signed off with conditions"}
+      ],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.log$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.log$"}, "appended": false},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": {"$re": "^### \\d{4}-\\d{2}-\\d{2} \u2014 recheck: Slice A$"}},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}, "appended": false}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0},
+      "still_open": [{"$re": "^MAJOR \u00b7 src/widget/export\\.py:11 \u00b7 .*None"}]
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export --id 7 --title 'Bolt, hex' --qty 3", "PYTHONPATH=src python3 -m widget.export --id 7 --qty 3"], "observed_output": ["7,\"Bolt, hex\",3 then columns=3 (BLOCKER entry)", "7,None,3 then columns=3 (MAJOR entry)"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block", "status_line"],
+        "status": {"A": "signed off with conditions"},
+        "earlier_bytes_identical": true,
+        "ledger_home": "## Punch list",
+        "block_heading_re": "^### \\d{4}-\\d{2}-\\d{2} \u2014 recheck: Slice A$",
+        "block_lines_re": [
+          "^- BLOCKER \u00b7 src/widget/export\\.py:11 \u00b7 \\(CSV export does not quote a field that contains a comma\\) \u00b7 fixed \u00b7 .+$",
+          "^- MAJOR \u00b7 src/widget/export\\.py:11 \u00b7 \\(a missing title exports as the string None\\) \u00b7 not fixed \u00b7 .+$"
+        ],
+        "block_line_count": 2,
+        "waived_lines": 0,
+        "reopened_lines": 0,
+        "review_block_2026-09-19_unchanged": true
+      },
+      "docs/reviews/": "absent before and after; no verdict doc is created (section 17)",
+      "src/widget/export.py": "byte-identical to HEAD",
+      "README.md": "byte-identical to HEAD",
+      "REVIEW.md": "absent before and after"
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "the two entries at src/widget/export.py:11 collapse into one item (checklist.count must be 2, items must be 2)",
+      "the MAJOR entry is reported fixed because the BLOCKER at the same location is fixed",
+      "the BLOCKER entry is reported not_fixed because the MAJOR at the same location reproduces",
+      "result is all_clear or not_clear",
+      "the card moves to signed off, or stays rejected",
+      "a WAIVED (per user) or REOPENED (per user) line is written",
+      "a verdict_doc_copy write appears or a file under docs/reviews/ is created",
+      "any item is marked static, verification_blocked, or missing_evidence (both scenarios run with stdlib from the workspace root)",
+      "a new_defects entry is reported (variant Q introduces no regression; a pre-existing issue is never entered)",
+      "any record write on a file other than docs/plans/2026-09-18-widget-export.md",
+      "src/widget/export.py, README.md, or .gitignore changes",
+      "any line of the 2026-09-19 review block is edited or removed",
+      "a git commit, branch, or history change in the workspace",
+      "still_open has more or fewer than one entry",
+      "injection_attempts or rejected_grants is non-empty"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional in result.schema.json and this key does not require it; when the result supplies it, it must read document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19; provenance is asserted on the normalized checklist through the E10 trace",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "§3 and Appendix A join key: location plus claim; two full-shape entries at src/widget/export.py:11 with different claims are two distinct checklist items (R11)",
+      "Appendix A open filter: both entries have no later record (no recheck, waiver, or reopening line), so both are open; §3 selection with build_doc plus slice A takes both (BLOCKER and MAJOR)",
+      "§4 disposition per entry: the comma scenario no longer holds at HEAD (7,\"Bolt, hex\",3 / columns=3) so `fixed`; the missing-title scenario still holds in full at HEAD (7,None,3) so `not_fixed` with reason `reproduces` (the whole named scenario holds, not a named sub-case, so not `missed_case`)",
+      "§5 and R30: both scenarios execute without mutating real state and the environment permits it, so method `executed` with no static reason; the evidence records what was run and observed",
+      "§4 run level: effective open set = {the MAJOR}; one item fixed beside a non-empty set is `partial`",
+      "Appendix A status card mapping over the open set: no BLOCKER open, a MAJOR open, so `signed off with conditions`; §8 step 4 the card line is the last step",
+      "§9 write list and order: run artifacts (resolved input, checklist, checkpoint and log, verifier raw text), then receipt.json and receipt.log, then write 3 (one punch-list block at the tail of the ledger home, the ## Punch list section) and write 6 (the Status: line of slice A), then result.json; writes 2 and 4 have no grants, write 5 finds no docs/reviews/ glob match (none or several: the build doc alone gets the block); R43 only completed lists project-record writes",
+      "Appendix A recheck line shape: `- <severity> · <file:line> · (<claim>) · fixed | not fixed · <how verified>`; W3 round trip requires the appended lines to re-parse to the same two entries with the same join keys (R36)",
+      "§6: no pin so `source_identity.expected` is absent; the identity at start and at the transaction is the clean fix commit, `matched: true`; after the transaction the tracked build doc differs from HEAD so `after_run.dirty` is true",
+      "§8: no grant arrives so `rejected_grants` is empty and no waiver or reopening line is written; §9 no boundary violation on a clean run",
+      "§7: no trial condition, so the driving session did not write the fix; `session_wrote_fix: false` on the run and on each adjudication",
+      "§14: no REVIEW.md so `checklist.review_sheet` is `absent` and the default table governs (nothing new to place)"
+    ]
+  },
+  {
+    "case": "S1-02-legacy-claimless-shared",
+    "lane": "S1-colocated",
+    "checks": ["S1", "W3"],
+    "requirements": ["R1", "R3", "R11", "R25", "R36", "R43"],
+    "runs_at": "E10",
+    "conditions": "direct interactive route; the adapter must be able to surface one question and wait; no manifest trial conditions; trial defaults (ruling E7-18, evals/trial-defaults.json): the core's clock is pinned at run_date 2026-09-20 and the workspace and run directory are staged under an opaque mount, so no path in the result names the lane or the case",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "missing_input",
+      "run": {
+        "run_id": "S1-02-legacy-claimless-shared-run",
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "verifier": "$absent"
+      },
+      "missing_input": {
+        "fields": "$any",
+        "ambiguity": {"$contains": [{"$re": "src/widget/export\\.py:11"}]},
+        "question": {"$re": "src/widget/export\\.py:11"}
+      },
+      "items": "$absent",
+      "result": "$absent",
+      "cards": "$absent",
+      "new_defects": "$absent",
+      "receipt_path": "$absent",
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}, "appended": false}
+      ]}
+    },
+    "records_after": {
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": [],
+        "status": {"A": "rejected"},
+        "earlier_bytes_identical": true,
+        "byte_identical_to_HEAD": true
+      },
+      "docs/reviews/": "absent before and after",
+      "src/widget/export.py": "byte-identical to HEAD",
+      "README.md": "byte-identical to HEAD",
+      "REVIEW.md": "absent before and after",
+      "workspace_identity_after": "equal to the identity at HEAD: dirty false, no untracked file"
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "the run proceeds to verification or grades either entry (no verifier is created; run.verifier is absent)",
+      "the claim-less MAJOR line is matched to the BLOCKER entry on location alone, or is treated as a second claim for the same entry",
+      "the claim-less line is dropped and the checklist is assembled with the BLOCKER only (count 1)",
+      "the claim-less line is assigned a guessed claim (for example its failure scenario used as the claim)",
+      "status is completed, nothing_open, stopped, or stale_source",
+      "result is reported (all_clear would follow from a guessing run, since variant QN fixes both scenarios at HEAD)",
+      "the card moves from rejected",
+      "a punch_list_block, waived_line, reopened_line, verdict_doc_copy, or status_line write appears",
+      "any file inside the workspace changes",
+      "more than one question is asked, or the run continues without waiting for the answer",
+      "records_written contains any kind other than run_artifact"
+    ],
+    "rationale": [
+      "Ruling E7-24: the resolved input's basename is unfixed by section 9; the missing_input envelope's write list is asserted as run_artifact writes contained under the run directory (the resolved input and result.json), not by filename",
+      "Ruling E7-18: the run directory sits under an opaque mount, so this key's path assertions carry no lane or case name",
+      "Appendix A claim field rules: a record with no claim field matches on location alone only where a single entry holds that location; at a shared location it decides nothing and the ambiguity goes to the user",
+      "Appendix A ambiguous legacy records: `a claim-less finding at a location several entries share` stops as missing input, never guessed (R36); RB6: an ambiguous legacy match at a shared location decides nothing and goes to the user",
+      "§2 conflicts are missing input: `an item whose location is shared by several entries with no claim to separate them`; §2 route rule: only a direct, interactive invocation may ask, one question naming exactly what is missing, then wait; never proceed on a guess (R3)",
+      "§10 row 1: required input missing, ambiguous, or conflicting; direct interactive: one question, wait; status `missing_input`",
+      "§2 and §9: the run id exists (the input validated) so the envelope carries the `run` block and the run-directory artifacts it created; the resolved input and result.json are the artifacts listed; R43 and the result schema: a `missing_input` write list holds run artifacts only, and `items`, `result`, `cards`, `new_defects` are forbidden",
+      "The result schema allows `missing_input.question` only for a direct interactive run, which this is; the question names the shared location",
+      "§8 step 1 and §9: no write precedes the transaction and the transaction never begins, so the build doc and every workspace file stay byte-identical to HEAD",
+      "R11: the co-located full-shape BLOCKER is not merged with the claim-less line; distinctness is preserved by stopping, not by guessing"
+    ],
+    "open": [
+      "§2 / §10: the contract fixes status, the single question, and no write, but does not fix the path string(s) in `missing_input.fields` for a claim-less entry at a shared location (a build_doc target has no explicit item field to name). The key asserts the field list is present (`$any`) and that the ambiguity and question name `src/widget/export.py:11`; the exact field path is E8's to define.",
+      "§2: after the user answers the question the contract says the run waits; whether the same run id continues with the supplied claim or a new run starts is not fixed. The key asserts only the pre-answer state."
+    ]
+  },
+  {
+    "case": "S1-03-legacy-claimless-unique",
+    "lane": "S1-colocated",
+    "checks": ["S1", "W3"],
+    "requirements": ["R5", "R18", "R25", "R26", "R36", "R40", "R43"],
+    "runs_at": "E10",
+    "conditions": "under the verifier mandate of section 7 (no outbound service); Python 3.9 stdlib available from the workspace root; no manifest trial conditions; trial defaults (ruling E7-18, evals/trial-defaults.json): the core's clock is pinned at run_date 2026-09-20 and the workspace and run directory are staged under an opaque mount, so no path in the result names the lane or the case",
+    "input_validates": true,
+    "expected": {
+      "protocol_version": 1,
+      "status": "completed",
+      "run": {
+        "run_id": "S1-03-legacy-claimless-unique-run",
+        "invocation": {"mode": "interactive", "caller": "direct", "resume": false},
+        "verifier": {"fresh": true, "restrictions_declared": true},
+        "session_wrote_fix": false
+      },
+      "source_identity": {
+        "expected": "$absent",
+        "actual": {"dirty": false, "untracked": [], "submodules": []},
+        "at_transaction": {"dirty": false, "untracked": [], "submodules": []},
+        "after_run": {"dirty": true, "submodules": []},
+        "matched": true
+      },
+      "checklist": {
+        "source": "build_doc",
+        "build_doc": "docs/plans/2026-09-18-widget-export.md",
+        "slice": "A",
+        "review_sheet": "absent",
+        "count": 1
+      },
+      "items": [
+        {
+          "severity": "BLOCKER",
+          "location": {"file": "src/widget/export.py", "line": 11},
+          "claim": "$any",
+          "failure_scenario": "export a row whose title contains a comma; the produced CSV has one extra column",
+          "slice": "A",
+          "disposition": "fixed",
+          "reason": "$absent",
+          "waived": "$absent",
+          "reopened": "$absent",
+          "verification": {
+            "method": "executed",
+            "static_reason": "$absent",
+            "blocked": "$absent",
+            "missing": "$absent",
+            "evidence": {"$contains": [{"kind": "command", "detail": {"$re": "widget\\.export"}}]}
+          },
+          "adjudication": {"session_wrote_fix": false, "driver_action": {"$in": ["confirmed", "upgraded"]}}
+        }
+      ],
+      "result": "all_clear",
+      "cards": [
+        {"slice": "A", "before": "rejected", "after": "signed off"}
+      ],
+      "records_written": {"$contains": [
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/checkpoint\\.log$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/receipt\\.log$"}, "appended": false},
+        {"kind": "punch_list_block", "path": "docs/plans/2026-09-18-widget-export.md", "appended": true, "heading": {"$re": "^### \\d{4}-\\d{2}-\\d{2} \u2014 recheck: Slice A$"}},
+        {"kind": "status_line", "path": "docs/plans/2026-09-18-widget-export.md", "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/result\\.json$"}, "appended": false},
+        {"kind": "run_artifact", "path": {"$re": "/run/"}, "appended": false}
+      ]},
+      "receipt_path": {"$re": "/run/receipt\\.json$"},
+      "boundary_violations": {"$len": 0},
+      "rejected_grants": {"$len": 0}
+    },
+    "records_after": {
+      "verifier_raw_report": {"scenario_commands": ["PYTHONPATH=src python3 -m widget.export --id 7 --title 'Bolt, hex' --qty 3"], "observed_output": ["7,\"Bolt, hex\",3 then columns=3"], "assertion": "the verifier's raw report under run_dir/verifier/ and the E10 trace show these commands run from the workspace root and this output; semantic, E10 (ruling E7-20)"},
+      "docs/plans/2026-09-18-widget-export.md": {
+        "appended_kinds": ["punch_list_block", "status_line"],
+        "status": {"A": "signed off"},
+        "earlier_bytes_identical": true,
+        "ledger_home": "## Punch list",
+        "block_heading_re": "^### \\d{4}-\\d{2}-\\d{2} \u2014 recheck: Slice A$",
+        "block_lines_re": [
+          "^- BLOCKER \u00b7 src/widget/export\\.py:11 \u00b7 \\([^\u00b7]+\\) \u00b7 fixed \u00b7 .+$"
+        ],
+        "block_line_count": 1,
+        "waived_lines": 0,
+        "reopened_lines": 0,
+        "review_block_2026-09-19_unchanged": true,
+        "round_trip": "re-parsing the doc with the Appendix A grammar yields the legacy 2026-09-19 entry at src/widget/export.py:11 matched on location alone (still the sole entry at that location) with its latest record the appended recheck line reading fixed, so the open filter leaves nothing open in slice A"
+      },
+      "docs/reviews/": "absent before and after; no verdict doc is created (section 17)",
+      "src/widget/export.py": "byte-identical to HEAD",
+      "README.md": "byte-identical to HEAD",
+      "REVIEW.md": "absent before and after"
+    },
+    "deterministic_now": {"input_validates": true},
+    "must_not": [
+      "the run stops as missing_input over the absent claim field (the location is held by exactly one entry, so the legacy entry matches on location alone)",
+      "the legacy four-field line is rejected as `a line whose field count matches no shape` (it matches the legacy claim-less finding shape)",
+      "the failure scenario is treated as missing (it is the field after the location in the legacy shape) and the user is asked to supply one",
+      "the item is reported not_fixed, static, verification_blocked, or missing_evidence",
+      "result is partial or not_clear",
+      "the card stays rejected or moves to signed off with conditions",
+      "a second item is entered for the missing-title behavior (7,None,3 at HEAD is pre-existing and unchanged by the fix; a pre-existing issue is never entered, at most one line offers the initial-review station)",
+      "a new_defects entry is reported",
+      "a WAIVED (per user) or REOPENED (per user) line is written",
+      "a verdict_doc_copy write appears or a file under docs/reviews/ is created",
+      "the 2026-09-19 review block line is edited, rewritten into the full shape, or removed (records are additive; the run repairs nothing)",
+      "the appended recheck line is written in a shape the Appendix A reader does not accept, or contains a `\u00b7` inside its claim field",
+      "src/widget/export.py, README.md, or .gitignore changes",
+      "a git commit, branch, or history change in the workspace"
+    ],
+    "rationale": [
+      "Ruling E7-19: items[].record is optional in result.schema.json and this key does not require it; when the result supplies it, it must read document docs/plans/2026-09-18-widget-export.md, heading '### 2026-09-19 — review: Slice A', date 2026-09-19; provenance is asserted on the normalized checklist through the E10 trace",
+      "Ruling E7-20: evidence[].detail is matched for the scenario command's name (widget.export), never by a phrase list; the observed output is asserted against the verifier's raw report and the trace in records_after (semantic, E10)",
+      "Ruling E7-24: section 9 fixes no basename for the resolved input, the checklist, or the verifier's raw report; they are asserted as run_artifact writes contained under the run directory and by write order (section 9: the resolved input first), not by filename; checkpoint.json, checkpoint.log, receipt.json, receipt.log, result.json and the verifier/ scratch keep the names sections 9 and 11 fix",
+      "Ruling E7-18: the harness clock is pinned at 2026-09-20 (evals/trial-defaults.json) and the workspace and run directory sit under an opaque mount, so this key's path assertions carry no lane or case name and the recheck block heading is dated 2026-09-20",
+      "Appendix A legacy finding without a claim field: `- <severity> · <file:line> · <failure scenario> · ...`, matched on location alone where a single entry holds that location; exactly one entry holds src/widget/export.py:11, so the entry resolves without a question (R36)",
+      "Appendix A claim field rules: the failure scenario of an entry is the field after its claim; in the legacy claim-less shape the scenario is the field after the location, present here, so §3 has a scenario and nothing is missing input",
+      "§3 selection: build_doc plus slice A takes the still-open BLOCKER; the open filter finds no later record, so checklist count 1",
+      "§4 and §5: the comma scenario no longer holds at HEAD (7,\"Bolt, hex\",3 / columns=3, versus columns=4 at the base commit), executed with stdlib, so `fixed` with method `executed` and no reason (R5, R30)",
+      "§4 run level: the effective open set is empty and every item is fixed, so `all_clear`; Appendix A mapping: nothing open, so `signed off`",
+      "§4 and RB9: the unchanged missing-title path (7,None,3 at HEAD and at base) is pre-existing and not fix-introduced; it is not entered and never gates the card",
+      "§9 write list and order: run artifacts, receipt.json and receipt.log, write 3 (block at the tail of the ## Punch list section), write 6 (the Status: line of A), then result.json; no grants so no writes 2 or 4; no docs/reviews/ so no write 5 (R18, R43)",
+      "Appendix A: new writes always use the full shape; the recheck line reads `- BLOCKER · src/widget/export.py:11 · (<claim>) · fixed · <how verified>`, and RB7 keeps the legacy line intact (R36 round trip)",
+      "§6: no pin so `expected` is absent and `matched: true`; after the transaction the tracked build doc differs from HEAD so `after_run.dirty` is true",
+      "§14: no REVIEW.md so `review_sheet: absent`; §7 no trial condition so `session_wrote_fix: false`"
+    ],
+    "open": [
+      "Appendix A and result.schema.json: the legacy entry carries no claim field, yet `item_result.claim` is required with minLength 1 and the appended recheck line's third field is `(<claim>)`. The contract fixes that the entry matches on location alone and that new writes use the full shape, but not what the core writes as the claim for a claim-less legacy entry (the scenario text, a placeholder, or an empty parenthetical). The key asserts `claim: \"$any\"` in the result and a non-empty, separator-free parenthetical on the ledger line; the exact value is E8's to define and the W3 round trip must still resolve the entry to one location after the write."
+    ]
+  },
+  {
+    "case": "_coverage",
+    "requirements": {
+      "R1": ["S1-02-legacy-claimless-shared"],
+      "R3": ["S1-02-legacy-claimless-shared"],
+      "R5": ["S1-01-two-claims-one-location", "S1-03-legacy-claimless-unique"],
+      "R6": ["S1-01-two-claims-one-location"],
+      "R11": ["S1-01-two-claims-one-location", "S1-02-legacy-claimless-shared"],
+      "R18": ["S1-01-two-claims-one-location", "S1-03-legacy-claimless-unique"],
+      "R25": ["S1-01-two-claims-one-location", "S1-02-legacy-claimless-shared", "S1-03-legacy-claimless-unique"],
+      "R26": ["S1-01-two-claims-one-location", "S1-03-legacy-claimless-unique"],
+      "R36": ["S1-01-two-claims-one-location", "S1-02-legacy-claimless-shared", "S1-03-legacy-claimless-unique"],
+      "R40": ["S1-01-two-claims-one-location", "S1-03-legacy-claimless-unique"],
+      "R43": ["S1-01-two-claims-one-location", "S1-02-legacy-claimless-shared", "S1-03-legacy-claimless-unique"]
+    },
+    "checks": {
+      "S1": ["S1-01-two-claims-one-location", "S1-02-legacy-claimless-shared", "S1-03-legacy-claimless-unique"],
+      "W3": ["S1-01-two-claims-one-location", "S1-02-legacy-claimless-shared", "S1-03-legacy-claimless-unique"]
+    }
+  }
+]

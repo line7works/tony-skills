@@ -1,0 +1,61 @@
+{
+  "protocol_version": 1,
+  "run": {
+    "run_id": "recheck-b-20260923-c0de",
+    "run_dir": "/tmp/recheck-b-20260923-c0de",
+    "invocation": {
+      "mode": "headless",
+      "caller": "ship-v2",
+      "resume": false
+    },
+    "harness": {
+      "name": "codex-cli",
+      "version": "0.154.0",
+      "entry": "plugin",
+      "sandbox": "workspace-write"
+    },
+    "model": {
+      "id": "gpt-6-astra",
+      "floor_class": "opus",
+      "effort": "low"
+    },
+    "skill": {
+      "name": "recheck-v2",
+      "version": "0.1.0",
+      "commit": "0123abc",
+      "content_sha256": "3f2a6e1c9b8d7a5e4c3b2a1908f7e6d5c4b3a2918e7d6c5b4a39281706f5e4d3"
+    }
+  },
+  "status": "nothing_open",
+  "source_identity": {
+    "actual": {
+      "commit": "9c2f1e4d0b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d",
+      "dirty": false,
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked": [],
+      "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "submodules": []
+    },
+    "matched": true
+  },
+  "checklist": {
+    "source": "build_doc",
+    "build_doc": "docs/plans/2026-09-18-widget-export.md",
+    "slice": "B",
+    "review_sheet": "absent",
+    "count": 0
+  },
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-b-20260923-c0de/input.json",
+      "appended": false
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/recheck-b-20260923-c0de/result.json",
+      "appended": false
+    }
+  ],
+  "stop_reason": "slice B stands at signed off with no open entry; nothing to recheck, no record written"
+}

@@ -1,0 +1,8 @@
+{
+  "_comment": "Defaults every E10 trial applies to every case (ruling E7-18 in README.md). A case's manifest.json trial_conditions may ADD conditions or set a STRICTER value for one of these keys; it can never weaken one. The harness reads this file; generators and manifests do not repeat it.",
+  "run_date": "2026-09-20",
+  "workspace_mount": "opaque",
+  "workspace_mount_rule": "The E10 harness builds every lane with `python3 build.py --out <DIR> --opaque` into a directory whose own path names neither a lane nor a case; with --opaque the generator names each case directory by 12 hex of the SHA-256 of the case id (fixturelib.opaque_case_name) and the --json summary carries the case-to-path mapping. The workspace/ and run/ leaves keep their names, so every key's '/run/' pattern holds; seeded files (checkpoints, receipts, resolved inputs) are built at the opaque path and their digests stay valid; nothing is relocated after the build. Run ids still carry the case id (carried gap 13).",
+  "clock_rule": "Every record the core writes during the trial is dated run_date; the harness pins the core's clock, not the machine's. run_date falls after the seeded review headings (2026-09-19) and equals the seeded grant dates of the S2 cases whose outcome depends on Appendix A's same-date tie rule; W2's seeded 2026-09-21 grants sit inside seeded plans and do not depend on the clock.",
+  "override_rule": "A manifest key with the same name as a default is honored only when it is at least as strict; a weaker value (for example F4's earlier 'a path that does not contain the case id', which still allows a parent named for the lane) is subsumed by the default and recorded as such in the key's conditions."
+}

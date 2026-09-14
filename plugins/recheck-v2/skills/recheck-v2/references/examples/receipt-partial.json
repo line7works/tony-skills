@@ -1,0 +1,61 @@
+{
+  "run_id": "recheck-a-20260924-5f5f",
+  "phase": "recording",
+  "plan": [
+    {
+      "step": 1,
+      "kind": "punch_list_block",
+      "target": "docs/plans/2026-09-18-widget-export.md",
+      "before_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "after_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "heading": "### 2026-09-24 \u2014 recheck: Slice A",
+      "content": "\n### 2026-09-24 \u2014 recheck: Slice A\n- MAJOR \u00b7 src/export.ts:142 \u00b7 (empty titles export as the string \"undefined\") \u00b7 fixed \u00b7 executed node scripts/export.js fixtures/no-title.json; cell 3 reads \"\" for null and for an absent key\n"
+    },
+    {
+      "step": 2,
+      "kind": "verdict_doc_copy",
+      "target": "docs/reviews/2026-09-19-signoff-widget-export-a.md",
+      "before_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "after_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "heading": "### 2026-09-24 \u2014 recheck: Slice A",
+      "content": "\n### 2026-09-24 \u2014 recheck: Slice A\n- MAJOR \u00b7 src/export.ts:142 \u00b7 (empty titles export as the string \"undefined\") \u00b7 fixed \u00b7 executed node scripts/export.js fixtures/no-title.json; cell 3 reads \"\" for null and for an absent key\n"
+    },
+    {
+      "step": 3,
+      "kind": "status_line",
+      "target": "docs/plans/2026-09-18-widget-export.md",
+      "before_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "after_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "value": "signed off"
+    }
+  ],
+  "entries": [
+    {
+      "step": 1,
+      "type": "intent"
+    },
+    {
+      "step": 1,
+      "type": "done",
+      "observed_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "step": 2,
+      "type": "intent"
+    },
+    {
+      "step": 2,
+      "type": "done",
+      "observed_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "step": 3,
+      "type": "intent"
+    }
+  ],
+  "integrity": {
+    "seq": 5,
+    "prev": "3b9da16fed4a130935c1a3852afaa2e20f848875385d3777a4f843902b0e3b58",
+    "self": "056c147ff89e4875330e7968cdbaabb479b0741c47cfa87236eba75ed05b55a3"
+  }
+}
