@@ -47,7 +47,8 @@ native harness in an isolated pilot setup discovers or explicitly loads recheck-
 permitted evidence, executes an allowed check, refuses a prohibited action, captures its actual
 model and settings, and produces the common result format, with no v1 station named in the
 trace (section 9, the live proof); every profile identifies the same shared-core hash
-(`recheck.py skill-identity` printed from the installed copy equals the canonical checkout's);
+(`recheck.py skill-identity` printed from the installed copy reports the canonical checkout's
+`content_sha256`, and the installed-package diff is empty; E9-16);
 the deterministic gates of section 9 are reported with their outputs; the reviews of section
 11 close each lane under plan ruling 17.
 
@@ -349,8 +350,9 @@ returned) and which it never types. A reviewer holds the profile to this.
   id>.jsonl`: `session_meta` (thread id, cwd, `cli_version`, `model_provider`),
   `turn_context` (`turn_id`, cwd, and the model in force), `event_msg` `item_completed` with
   `item.type` `UserMessage` (the user's turn: `id`, `turn_id`) or `AgentMessage`;
-  `turn_ref` is `codex:thread <thread id>:turn <turn id>` (the example input's shape with
-  the real ids). How the session locates its own rollout is the lane's measurement,
+  `turn_ref` is `codex:thread <thread id>:turn <turn id>:item <item id>` (E9-15: the item id
+  is required because a user message and the assistant's reply in one turn share the thread
+  and turn ids; the example input's two-part shape predates this ruling). How the session locates its own rollout is the lane's measurement,
   candidates: (a) `lsof -p $PPID` on the shell's parent (the codex process) naming the open
   rollout file; (b) the `notify` program of `config.toml` (it receives `thread-id` and
   `turn-id` after each turn; in a one-turn `codex exec` it fires too late, record it); (c)
@@ -471,8 +473,8 @@ returned) and which it never types. A reviewer holds the profile to this.
   harness itself did); a symlinked `SKILL.md` file versus a symlinked skill directory; an
   update that changes the installed copy from a copy to a symlink or back (reinstall after an
   edit and diff again).
-- **The live proof** (E9-8): four headless sessions on built fixtures, each with its prompt
-  file, the harness's record, the run directory, `result.json`, `validate-result.py --input
+- **The live proof** (E9-8): three headless sessions on built fixtures (F1-01, F2-01, and one
+  of F6-04 or V4-01) plus V1-01 through the core, each with its prompt file, the harness's record, the run directory, `result.json`, `validate-result.py --input
   --run-dir` output, and `chat.md`; the trace check's output.
 
 ## 10. The builder's report
@@ -512,4 +514,39 @@ been said.
 
 ## 12. Amendments (control-room rulings issued while the lanes run)
 
-(none yet)
+- **E9-15 (after lane R's first pass), the Codex turn reference carries the item id.** In a
+  Codex rollout the `UserMessage` and the `AgentMessage` of one turn share `thread_id` and
+  `turn_id`, so `codex:thread <thread id>:turn <turn id>` names both parties. The Codex
+  `turn_ref` is `codex:thread <thread id>:turn <turn id>:item <item id>`, the item id being
+  the `id` of the `item_completed` event's item; `turns.py` keys the map by it and refuses a
+  reference without the item segment. Section 7 amended. The example input's two-part shape
+  (`examples/input-caller.json`) is illustrative and is not changed at E9; E10's key notes
+  carry the real shape.
+- **E9-16 (after lane R's first pass), identity equality on an installed copy.** The
+  `skill-identity` fields `version` and `commit` come from the packaging around the skill and
+  read `unversioned` on a host-skill copy outside git and outside a plugin; they are recorded,
+  never compared. "The same shared-core hash" means the installed copy's `content_sha256`
+  equals the canonical checkout's and `verify-install.sh`'s diff of the installed folder
+  against the canonical one is empty (excluding `__pycache__`). Section 1 amended. Whether
+  `skill-identity` should hash the references and scripts too is carried to E10 as a core
+  question (the diff covers it for now).
+- **E9-17 (after lane R's first pass), the live proof count.** Section 9.2 said four headless
+  sessions where E9-8 lists three live cases plus V1-01 through the core; E9-8's reading
+  stands and section 9.2 is corrected.
+- **E9-18 (after lane R's first pass), lane R's live gates run outside the builder's sandbox.**
+  A `codex exec` launched from inside another `codex exec`'s workspace-write sandbox fails to
+  initialize (`failed to initialize in-process app-server client: Operation not permitted`,
+  measured 2026-09-14 in the builder's run with the default home). The control room runs lane
+  R's live gates from an unsandboxed shell (install, verify-install, the probes, the negative
+  tests, the three live sessions) and writes the outputs under the lane's scratch
+  `control-room/`; a second Codex-Astra pass at low then fills `RESULTS.md`, the profile's
+  measured sections, and the real-rollout test fixture from those outputs before the review.
+  Whether the executor's own verifier launch (a nested `codex exec` from a live Codex
+  session) initializes when `CODEX_HOME` is a writable directory inside the sandbox is
+  measured by the control room first; if it does not, the Codex verifier capability is
+  `lane-unavailable` under the sandbox in force and the profile says so (contract section 13:
+  reported, not worked around).
+- **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
+  `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
+  every lane) because the Claude Code and Codex installs read the marketplace; section 11's
+  "lists the plugin at the close" is superseded by this earlier listing.
