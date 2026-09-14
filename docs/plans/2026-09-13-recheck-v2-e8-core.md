@@ -967,3 +967,9 @@ The fix round after this review is one round (plan ruling 17): four fresh Fable 
 sequence (scope and ledger; driver and transaction; schemas and validators; skill body and
 tests), the suites rerun after each, one commit, then Astra's verification round on a fresh
 copy.
+
+**E8 CLOSED under plan ruling 17 on 2026-09-14** (Astra's second targeted re-check: BOTH CLEARED, no
+new BLOCKER, at `1346eb2`): no BLOCKER open; every MAJOR fixed or carried in writing to E9 or E10
+with its fix named (the README's build record lists them); 326 unit tests, the example suite, and
+the E7 runner green. Astra's prompts, verdicts, and logs for all four rounds are in the Clerk
+packet under `astra-outputs/e8/`.
