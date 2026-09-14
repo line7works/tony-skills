@@ -699,6 +699,44 @@ been said.
   sessions directory beside the child home (E9-25), else under `CODEX_HOME`, else the default
   home, requiring exactly one match and refusing otherwise (exit 3 naming the thread and the
   roots searched); the open-file walk stays as the fallback when no thread id is set; one test.
+- **E9-32 (after Astra's review of lane Q), the OpenCode user channel and verifier.** The
+  same three holes the other lanes closed, closed here: `turns.py` binds to the current
+  session through the harness's own record only (the session-pointer plugin's file keyed by
+  the harness process, then nothing: no `--session` at run time, no newest-session fallback,
+  ambiguity is exit 3; `--session` and a record override only under `RECHECK_ADAPTER_TEST=1`),
+  and OpenCode applies no sandbox to the executor's tools, so the pointer and the SQLite store
+  stay writable by the session itself: the profile's section 4 and the section 12 row read
+  `instruction-bound` with the failure modes named (a rewritten pointer, a newly written user
+  row), and a test records the limit. Rows that are tool-only, `synthetic`, or otherwise
+  harness-written stay unmapped (E9-22's OpenCode reading, stated in the profile).
+  `verifier.py` takes no `--model` and no `--agent`: the agent is `recheck-verifier` always,
+  the model is the bound driving session's own (read from its record, never a default), and
+  an `ok` needs the child's actual model row, else `lane-unavailable` naming the missing
+  record; the brief must be `<run_dir>/checklist.md`, the scratch `<run_dir>/verifier`, and
+  every capture path inside it after symlinks; a refusal is reported from the recorded
+  permission outcome (a denied `bash` counts; a tool error after a completed request is not
+  "no side effect"); an absent setup or pinned binary stops before any launch, all four XDG
+  roots are set unconditionally, and npm's cache and log stay inside the setup.
+- **E9-33 (after Astra's reviews of lanes C and Q), the interaction mode is a harness fact.**
+  All seven completed live inputs on lanes C and Q said `mode: interactive` inside a headless
+  run. Ruling for every lane: `invocation.mode` is supplied by the helper inside the
+  invocation object from what the harness reports (Claude Code:
+  `CLAUDE_CODE_SESSION_ATTENDED` 0 or 1, else `CLAUDE_CODE_ENTRYPOINT`; Codex: the rollout's
+  `session_meta.originator`, `codex_exec` is headless; OpenCode: `opencode run` is headless,
+  the TUI interactive, read from the session record where it says so), and the executor
+  copies the object whole and types no invocation field itself. A direct interactive run
+  keeps its one question; a headless run returns the envelope. Each lane's fix round applies
+  it and the control room's fresh proofs check the recorded mode.
+- **E9-34 (after Astra's review of lane Q), measurements and gates.** Byte counts are UTF-8
+  bytes (the real body is 23,332), stated beside character counts where a harness records
+  characters; counts of a result's lists come from the result file. The V1 branch is
+  validated like every terminal branch (contract section 9). `verify-install.sh` checks the
+  backticked paths too, after resolving symlinks. `negative-tests.sh` classifies from exit
+  status, catalog, and diagnostics, and the update row runs `install.sh`. A missing binary is
+  exit 3 (A7a). A reused output directory is refused, and the timeout terminates only its
+  own launch. Every lane's packet keeps the originals the reviewer could not find (the run
+  directories, the installed snapshot, the raw catalogs, the child's initial rows), preserved
+  by the control room under the lane's `preserved/`.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
