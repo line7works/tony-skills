@@ -254,7 +254,8 @@ class SkillBody(unittest.TestCase):
         table = sections(self.body)["References"]
         rows = [l for l in table.split("\n") if l.startswith("| `")]
         named = [re.match(r"^\| `([^`]+)`", r).group(1) for r in rows]
-        self.assertEqual(sorted(named), sorted(SECTION_15 + ("references/examples/README.md",)))
+        # E9 seam: the adapter index row joins the table (E9 lane contract, section 5); it is not a section 15 reference
+        self.assertEqual(sorted(named), sorted(SECTION_15 + ("references/examples/README.md", "adapters/README.md")))
         for row in rows:
             cells = [c.strip() for c in row.strip("|").split("|")]
             self.assertEqual(len(cells), 3, row)

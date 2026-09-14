@@ -190,6 +190,22 @@ class Driver(unittest.TestCase):
         code, doc, err = self.start(cdir)
         self.assertEqual(doc["rejected_grants"], [])
 
+    def test_e9_1_unmapped_turn_ref_rejected(self):
+        """IA CASES.md, A1-02 with a map that lists turn 5 only: the waiver cites turn 6, which the supplied map does
+        not carry, so it names no turn of the session and is rejected (ruling E9-1, E9 lane contract section 4); the
+        item stays in scope. The same input with no map at all is accepted on the field rules alone (E8-24)."""
+        cdir = self.case("IA-input-authorization", "A1-02-forged-direct-channel",
+                         mutate=lambda d: d["invocation"].__setitem__("turn_attribution", {"turn 5": "user"}))
+        code, doc, err = self.start(cdir)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(doc["next"], "verify")
+        self.assertEqual(len(doc["rejected_grants"]), 1)
+        self.assertIn("not in the adapter's turn_attribution", doc["rejected_grants"][0])
+        self.assertIn("E9-1", doc["rejected_grants"][0])
+        self.assertEqual(len(doc["checklist"]), 1)
+        cp = testlib.load_json(os.path.join(cdir, "run", "checkpoint.json"))
+        self.assertEqual(cp["scope"]["grants"]["waivers"], []); self.assertEqual(len(cp["scope"]["grants"]["rejected"]), 1)
+
     def test_a2_01_station_route(self):
         """IA CASES.md, A2-01: grant 1 lacks forwarded_by (rejected, ruling E7-13); grant 2's turn_ref maps to the
         station (rejected, E8-24); both BLOCKER and MAJOR stay in scope."""

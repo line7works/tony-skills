@@ -324,7 +324,8 @@ class V7V14Grants(Base):
         turn = "codex:thread 01a0a1b2:turn 12"
         inp["authorization"]["extra_continuation"] = {"by": "user", "channel": "user-turn", "turn_ref": turn, "quoted_words": "one more round", "date": "2026-09-20", "forwarded_by": "ship-v2"}
         self.assertEqual(self.paths(result, "V14", input_doc=inp), [])
-        inp["invocation"]["turn_attribution"] = {turn: "station"}
+        # E9-1: a supplied map is the session's turn list, so the waiver's own turn is listed as the user's
+        inp["invocation"]["turn_attribution"] = {turn: "station", self.TURN: "user"}
         v14 = self.findings(result, "V14", input_doc=inp)
         self.assertEqual([f["path"] for f in v14], ["/authorization/extra_continuation"], v14)
         listed = copy.deepcopy(result)

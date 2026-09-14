@@ -272,6 +272,9 @@ def grant_channel_ok(grant, doc):
     who = attribution.get(grant["turn_ref"])
     if who is not None and who != "user":
         return False, "turn_ref %r maps to %s (the adapter's turn_attribution); not a grant" % (grant["turn_ref"], who)
+    if attribution and who is None:
+        # E9-1: a supplied map is the session's turn list; a reference outside it names no turn of the session.
+        return False, "turn_ref %r is not in the adapter's turn_attribution (no turn of this session); not a grant (ruling E9-1)" % (grant["turn_ref"],)
     return True, ""
 
 
