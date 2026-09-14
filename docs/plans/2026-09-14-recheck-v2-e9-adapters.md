@@ -546,6 +546,20 @@ been said.
   measured by the control room first; if it does not, the Codex verifier capability is
   `lane-unavailable` under the sandbox in force and the profile says so (contract section 13:
   reported, not worked around).
+- **E9-20 (after the control room's measurement), the Codex executor's sandbox carries its
+  home.** Measured 2026-09-14 with `codex sandbox` and no model in the loop: a nested
+  `codex exec` fails to initialize (`failed to initialize in-process app-server client:
+  Operation not permitted`) when `CODEX_HOME` is the default home or the isolated home under
+  `~/.local/share`, and initializes and answers when that home is a writable root of the
+  outer sandbox (a home under the writable tmp root; the real isolated home added through
+  `sandbox_workspace_write.writable_roots`). Evidence under the lane's scratch
+  `control-room/nested-sandbox/`. Ruling: `setups/codex/launch.sh` launches the executor
+  session with `--add-dir "$CODEX_HOME"`, the profile's Identity section reports
+  `harness.sandbox` as `workspace-write plus the isolated home`, and the verifier helper
+  inherits `CODEX_HOME` from the environment and never sets it in a command (Codex's base
+  instructions forbid the model repurposing `$CODEX_HOME`; the outer probe run refused the
+  command on that rule). E9-18's condition is resolved: the Codex verifier capability is
+  available under this launch.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
