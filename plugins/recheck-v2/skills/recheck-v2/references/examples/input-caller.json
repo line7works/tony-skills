@@ -6,8 +6,8 @@
     "run_id": "ship-a-20260920-1b2e-recheck",
     "run_dir": "/tmp/ship-a-20260920-1b2e/recheck",
     "resume": false,
-    "harness": "codex-cli 0.154.0",
-    "model": "gpt-6-astra"
+    "harness": { "name": "codex-cli", "version": "0.154.0", "entry": "plugin", "sandbox": "workspace-write" },
+    "model": { "id": "gpt-6-astra", "floor_class": "opus", "floor_met": true, "effort": "low", "settings": { "reasoning_effort": "low", "web_search": false } }
   },
   "workspace": "/Users/example/Developer/widget",
   "source_identity": { "commit": "9c2f1e4d", "dirty": false },

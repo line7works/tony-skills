@@ -6,8 +6,9 @@
     "run_id": "recheck-a-20260920-7f3c",
     "run_dir": "/tmp/recheck-a-20260920-7f3c",
     "resume": false,
-    "harness": "claude-code 2.1.268",
-    "model": "claude-fable-5-1"
+    "harness": { "name": "claude-code", "version": "2.1.268", "entry": "plugin", "sandbox": "default" },
+    "model": { "id": "claude-fable-5-1", "floor_class": "opus", "floor_met": true, "effort": "low" },
+    "session_wrote_fix": false
   },
   "workspace": "/Users/example/Developer/widget",
   "target": { "build_doc": "docs/plans/2026-09-18-widget-export.md", "slice": "A" },

@@ -89,13 +89,13 @@ for its own test derives it from `CASES.md` and the contract and says so in the 
 - One writer in the worktree at a time. Slices run in sequence; a checker never writes.
 - Runtime: `/usr/bin/python3` 3.9.6 and git 2.50.1 are the floor. Every script runs under
   Python 3.9 syntax (no `match`, no `X | Y` type unions, no `str.removeprefix` assumptions
-  beyond 3.9). Standard library only, with one declared exception: `jsonschema==4.26.0`,
+  beyond 3.9). Standard library only, with one declared exception: `jsonschema==4.25.1`,
   supplied through `uv run` from a PEP 723 block at the top of each CLI script
-  (`# /// script` … `# dependencies = ["jsonschema==4.26.0"]` … `# ///`,
+  (`# /// script` … `# dependencies = ["jsonschema==4.25.1"]` … `# ///`,
   `requires-python = ">=3.9"`). A script started without `jsonschema` importable exits 3 with
-  `missing dependency: jsonschema==4.26.0 (run through uv run, or install it)` on stderr and
+  `missing dependency: jsonschema==4.25.1 (run through uv run, or install it)` on stderr and
   nothing on stdout. `uv` 0.11.18 is on this machine; tests invoke scripts through
-  `uv run --with jsonschema==4.26.0 python3 <script>` or `uv run <script>`.
+  `uv run --with jsonschema==4.25.1 python3 <script>` or `uv run <script>`.
 - No network. No MCP tool. No subagent. No model call of any kind inside the scripts (the
   verifier is summoned by the executor through the adapter, never by a script). Report a
   blocker in your result; never work around it.
@@ -588,3 +588,30 @@ The control room records the build in `plugins/recheck-v2/README.md` (status, la
 rulings E8-1 to E8-30 by reference to this document, the carried items), appends guide
 findings to `~/Developer/tony-skills/docs/guide-findings.md` under `## Inbox`, and closes
 this document with a section 12 "Amendments" naming any ruling issued while the slices ran.
+
+## 12. Amendments (control-room rulings issued while the slices ran)
+
+- **E8-A1 (after slice 1), call status vocabulary.** The checkpoint records a verifier call
+  whose report was accepted as `status: "complete"` (the word the E7 seeds use); the transport
+  status `ok` of E8-27 maps to it at `record-call`, and every other transport status is stored
+  as reported. E8-7 reads `complete`. A reader accepts `complete` and `ok` as the same state.
+- **E8-A2 (after slice 1), `floor_met` in the result.** `result.schema.json`'s `run.model`
+  gains an optional `floor_met` (boolean or null) so E8-18's "echo the objects" is literal; the
+  fix round after slice 1's check adds it with a negative case (a non-boolean value rejected)
+  and a positive mutation. A result without it stays valid.
+- **E8-A3 (after slice 1's check), the jsonschema pin.** `jsonschema==4.25.1` requires Python
+  3.10, which contradicts the 3.9.6 floor of section 3. The pin becomes the newest jsonschema
+  release that installs under `/usr/bin/python3` 3.9.6 (the fix round verifies it with
+  `uv run --python /usr/bin/python3 --with jsonschema==<v>` and records the version); every
+  PEP 723 block, the exit-3 message, the tests, and section 3 of this document carry that
+  version. Under `uv run` the interpreter may be newer than 3.9; proving the 3.9 floor is a
+  separate step (`py_compile` and a run under `/usr/bin/python3`), which every slice reports.
+- **E8-A4 (after slice 1's check), `--skill-root`.** Every CLI accepts `--skill-root DIR`,
+  documented in `--help` as a test-only option; without it, references resolve from the
+  script's own location (section 15). A result file that exists but is not JSON is invalid
+  input (exit 4, the parse error inside `schema[]`); a missing file is a usage error (exit 2);
+  the docstrings and `--help` say so.
+- **E8-A5 (after slice 1's check), V2 and V6.** Slice 1 implements the workspace-free part of
+  V2 (for an explicit-items input, each result item's slice equals the input item's, and every
+  `charged_to_slice` is one of those slices); the rest of V2 and all of V6 are slice 2's, and
+  the slice-1 row of section 9 reads that way.

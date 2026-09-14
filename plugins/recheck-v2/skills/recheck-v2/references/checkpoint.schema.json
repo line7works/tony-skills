@@ -1,0 +1,1028 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/recheck-v2/checkpoint.schema.json",
+  "title": "Recheck v2 checkpoint",
+  "description": "The run state the core keeps in run_dir/checkpoint.json, rewritten after every item and every write (pilot-contract.md section 11; lane contract E8-7, E8-10, E8-13, E8-25, E8-29). Item states are exactly the union of {state: pending, retries} and {state: done, retries, result}, the result validating against the result schema's item definition. scope holds the normalized checklist in the input schema's item shape (record provenance required), the accepted grants (waivers and reopenings) with the rejected list, the review-sheet verdict, and session_wrote_fix; no continuation grant is stored, that grant is read from the presented input at each resume (E8-10). verifier_calls records each call with its status, the item indexes it covered, and, once a report is retained, its path and SHA-256 (E8-7). run_date pins the date on every record the run writes (E8-25); artifacts is the ordered artifact ledger in first-write order (E8-29); a checkpoint without either is completed from the presented input, the clock, or a scan of the run directory. integrity carries seq, prev, and self; the core checks it against run_dir/checkpoint.log (the chain, the log's last line, the one tolerated state with its predecessor link, E8-15), this schema checks the shape only. The definitions under $defs are copies: the input schema's under the prefix input_ with their references rewritten, the result schema's under their own names; the file resolves no cross-file reference and the test suite holds each copy to its source.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "run_id",
+    "run_dir",
+    "phase",
+    "input_sha256",
+    "start_identity",
+    "scope",
+    "items",
+    "new_defects",
+    "verifier_calls",
+    "continuations",
+    "integrity"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "the run this checkpoint belongs to; a resume's invocation must carry the same id (section 11 step 3)"
+    },
+    "run_dir": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "the absolute run directory"
+    },
+    "phase": {
+      "enum": [
+        "assembling",
+        "verifying",
+        "adjudicating",
+        "recording",
+        "committed"
+      ]
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "the binding hash of section 11 step 3 (E8-9): SHA-256 of the canonical serialization of the resolved input with invocation removed, authorization.extra_continuation removed, and authorization removed when emptied"
+    },
+    "start_identity": {
+      "$ref": "#/$defs/identity_full",
+      "description": "the six-field identity at run start (section 6); submodules is empty because a workspace with one never gets a checkpoint (E8-2)"
+    },
+    "run_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "the date every record this run writes carries (E8-25); absent on a checkpoint written before revision 5"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checklist",
+        "grants",
+        "review_sheet"
+      ],
+      "properties": {
+        "checklist": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input_item"
+          },
+          "description": "the normalized checklist (section 3), index order is item order"
+        },
+        "grants": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "waivers",
+            "reopenings",
+            "rejected"
+          ],
+          "properties": {
+            "waivers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/input_waiver_grant"
+              },
+              "description": "waivers accepted on the user channel (section 8)"
+            },
+            "reopenings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/input_grant"
+              },
+              "description": "reopenings accepted on the user channel (section 8)"
+            },
+            "rejected": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "every grant refused, each naming the item and why (E8-3)"
+            }
+          },
+          "description": "the accepted grants and the rejected list; never an extra_continuation grant (E8-10)"
+        },
+        "review_sheet": {
+          "enum": [
+            "read",
+            "not_kit_sheet",
+            "absent"
+          ],
+          "description": "section 14: the sheet was read, present but not the kit sheet, or absent"
+        },
+        "session_wrote_fix": {
+          "type": "boolean",
+          "description": "invocation.session_wrote_fix as presented at start; a resume uses this value (E8-13); absent on a checkpoint written before revision 5"
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item_state"
+      },
+      "description": "one entry per checklist item, same index"
+    },
+    "new_defects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/new_defect"
+      },
+      "description": "the fix-introduced defects found so far (section 4)"
+    },
+    "verifier_calls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/verifier_call"
+      },
+      "description": "every call made, in order (E8-27)"
+    },
+    "continuations": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "how many resumes have happened; the first needs no grant, a second needs extra_continuation in the presented input (section 11)"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "the run artifacts in first-write order (E8-29); absent on a seeded checkpoint, then completed by scanning the run directory"
+    },
+    "integrity": {
+      "$ref": "#/$defs/integrity"
+    }
+  },
+  "$defs": {
+    "input_contained_relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/]",
+      "not": {
+        "pattern": "(^|/)\\.\\.(/|$)"
+      }
+    },
+    "input_claim": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\r\\n\\u00b7]"
+          }
+        }
+      ],
+      "description": "one line, no carriage return, line feed, or middle dot anywhere: it is a ledger field"
+    },
+    "input_location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "line"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/input_contained_relative_path",
+          "description": "relative to the workspace"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "input_record_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "heading",
+        "date"
+      ],
+      "properties": {
+        "document": {
+          "$ref": "#/$defs/input_contained_relative_path",
+          "description": "the doc the entry lives in, or the caller's 'chat verdict' record"
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the block heading, e.g. '### 2026-09-19 \u2014 review: Slice A', or 'chat verdict'"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      }
+    },
+    "input_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "failure_scenario",
+        "record",
+        "slice"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/input_location"
+        },
+        "claim": {
+          "$ref": "#/$defs/input_claim"
+        },
+        "failure_scenario": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the test, one line; a scenario reconstructed from a claim needs the user's confirmation first"
+        },
+        "record": {
+          "$ref": "#/$defs/input_record_provenance"
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the slice the entry belongs to, or 'none' when the record has no card"
+        }
+      }
+    },
+    "input_item_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location",
+        "claim"
+      ],
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/input_location"
+        },
+        "claim": {
+          "$ref": "#/$defs/input_claim"
+        }
+      }
+    },
+    "input_grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item",
+        "by",
+        "channel",
+        "turn_ref",
+        "quoted_words",
+        "date"
+      ],
+      "properties": {
+        "item": {
+          "$ref": "#/$defs/input_item_ref"
+        },
+        "by": {
+          "const": "user"
+        },
+        "channel": {
+          "const": "user-turn",
+          "description": "the adapter's user channel; the only channel the core accepts"
+        },
+        "turn_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the harness's reference to the user's message, as the E9 profile defines"
+        },
+        "quoted_words": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the user's words that granted it, verbatim, one line; an inner double quote is written as a single quote on the ledger"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "forwarded_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the calling station that forwarded the grant unchanged"
+        },
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        }
+      }
+    },
+    "input_waiver_grant": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/input_grant"
+        },
+        {
+          "required": [
+            "severity"
+          ]
+        }
+      ]
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "line"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "detail"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "command",
+            "read",
+            "diff",
+            "artifact"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "what was run or read and what was observed"
+        },
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "bulk output redirected to a file under run_dir; must appear in records_written"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "evidence"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "executed",
+            "static"
+          ]
+        },
+        "static_reason": {
+          "enum": [
+            "mutates_real_state",
+            "non_executable_artifact"
+          ]
+        },
+        "blocked": {
+          "type": "string",
+          "minLength": 1,
+          "description": "what the sandbox or environment stopped"
+        },
+        "missing": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the evidence or fixture the run could not obtain"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "location_after_fix": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "static"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "static_reason"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "executed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "static_reason": false
+            }
+          }
+        }
+      ]
+    },
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verifier_said",
+        "driver_action",
+        "session_wrote_fix"
+      ],
+      "properties": {
+        "verifier_said": {
+          "enum": [
+            "fixed",
+            "not_fixed"
+          ]
+        },
+        "driver_action": {
+          "enum": [
+            "confirmed",
+            "downgraded",
+            "upgraded",
+            "disputed"
+          ]
+        },
+        "session_wrote_fix": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        },
+        "upgrade_evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "evidence the verifier lacked; required for an upgrade"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "driver_action": {
+                "const": "upgraded"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "upgrade_evidence"
+            ],
+            "properties": {
+              "session_wrote_fix": {
+                "const": false
+              },
+              "verifier_said": {
+                "const": "not_fixed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "driver_action": {
+                "const": "downgraded"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "note"
+            ],
+            "properties": {
+              "verifier_said": {
+                "const": "fixed"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "grant_mark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "quoted_words"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "quoted_words": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ],
+          "description": "the user's words as written on the ledger line"
+        },
+        "turn_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "the accepted grant that waived or reopened this item this run (sections 4 and 8)"
+    },
+    "item_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "failure_scenario",
+        "slice",
+        "disposition",
+        "verification",
+        "adjudication"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
+        },
+        "failure_scenario": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reopened": {
+          "$ref": "#/$defs/grant_mark",
+          "description": "the reopening accepted this run for this item (section 8)"
+        },
+        "waived": {
+          "$ref": "#/$defs/grant_mark",
+          "description": "the waiver accepted this run for this item; the item leaves the open set (section 4)"
+        },
+        "record": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "document",
+            "heading",
+            "date"
+          ],
+          "properties": {
+            "document": {
+              "type": "string"
+            },
+            "heading": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "disposition": {
+          "enum": [
+            "fixed",
+            "not_fixed"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "reproduces",
+            "missed_case",
+            "verification_blocked",
+            "missing_evidence"
+          ]
+        },
+        "verification": {
+          "$ref": "#/$defs/verification"
+        },
+        "adjudication": {
+          "$ref": "#/$defs/adjudication"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "fixed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": false,
+              "verification": {
+                "properties": {
+                  "blocked": false,
+                  "missing": false
+                }
+              },
+              "adjudication": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "fixed"
+                      },
+                      "driver_action": {
+                        "const": "confirmed"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "not_fixed"
+                      },
+                      "driver_action": {
+                        "const": "upgraded"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "not_fixed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "adjudication": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "not_fixed"
+                      },
+                      "driver_action": {
+                        "enum": [
+                          "confirmed",
+                          "disputed"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "verifier_said": {
+                        "const": "fixed"
+                      },
+                      "driver_action": {
+                        "const": "downgraded"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "const": "verification_blocked"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verification": {
+                "required": [
+                  "blocked"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "const": "missing_evidence"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verification": {
+                "required": [
+                  "missing"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "new_defect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "failure_scenario",
+        "source",
+        "charged_to_slice"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "severity_basis": {
+          "type": "string",
+          "description": "the sheet's bar line or the default table row that placed it"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
+        },
+        "failure_scenario": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "[\\r\\n\\u00b7]"
+              }
+            }
+          ]
+        },
+        "source": {
+          "const": "fix_introduced"
+        },
+        "charged_to_slice": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "identity_full": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "dirty",
+        "tracked_diff_sha256",
+        "untracked",
+        "untracked_sha256",
+        "submodules"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "tracked_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "submodules": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "git submodule status must list nothing: a workspace with an initialized submodule stops before any work as stopped with stop_reason unsupported: submodules: <paths, comma-separated> and that result carries no source_identity block, so every fingerprint a result reports has an empty list, which records that the check ran; the identity helper's own output carries the real list (E8-2)"
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "prev",
+        "self"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0 for the first write, then one more per write"
+        },
+        "prev": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the self of the previous write; null at seq 0"
+        },
+        "self": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the canonical serialization of the document with integrity.self removed (keys sorted, separators , and :, UTF-8, non-ASCII unescaped)"
+        }
+      },
+      "description": "pilot-contract.md section 11: checked against the run directory's log by the core (self recomputes; (seq, self) is the log's last line; prev is the line before, or null when the log has one line; no gap or repeated seq), never by this schema"
+    },
+    "item_state": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "retries"
+          ],
+          "properties": {
+            "state": {
+              "const": "pending"
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "retries",
+            "result"
+          ],
+          "properties": {
+            "state": {
+              "const": "done"
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "result": {
+              "$ref": "#/$defs/item_result"
+            }
+          }
+        }
+      ],
+      "description": "section 11: exactly the union of {state: pending, retries} and {state: done, retries, result}; a pending entry carries no result and a done entry's result validates against the result schema's item definition"
+    },
+    "verifier_call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "call_id",
+        "status",
+        "items"
+      ],
+      "properties": {
+        "call_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "<run_id>-verify, <run_id>-verify-2, then the next unused suffix (E8-27); single-use across a resume"
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the call's status in the readers vocabulary (E8-27); a resume reuses a retained report only from a call recorded as complete (E8-7)"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "the checklist indexes the call covered"
+        },
+        "raw_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the retained report under run_dir/verifier/ (raw.md, raw-<k>.md)"
+        },
+        "raw_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the retained report; a call without one gets a fresh call at resume (E8-7)"
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/recheck-v2/result.schema.json",
   "title": "Recheck v2 result",
-  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); the result is computed over the effective open set (not_fixed items without a waived marker, plus new defects): all_clear means that set is empty and every item is fixed or waived, not_clear means no item fixed and the set not empty, partial means a fixed item beside a non-empty set; a boundary violation forces not_clear whatever the items, and the not_clear item rule yields to it; a waived or reopened marker carries the grant's date and quoted words; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries no items, result, or cards, and its write list, when present, holds run artifacts only; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9).",
+  "description": "The common result every harness produces and every caller consumes unchanged (pilot-contract.md sections 4 to 11). Schema-enforced constraints: a fixed item carries no reason; a not_fixed item carries one; verification_blocked names the block; static names its reason; an upgrade carries evidence and is impossible when the session wrote the fix; a card at built stays built and a record without a card stays none; a fixed item carries no block or missing field; disposition agrees with adjudication (fixed from a confirmed verifier fixed or an evidence-backed upgrade, not_fixed from a confirmed or disputed verifier not_fixed or a downgrade); the result is computed over the effective open set (not_fixed items without a waived marker, plus new defects): all_clear means that set is empty and every item is fixed or waived, not_clear means no item fixed and the set not empty, partial means a fixed item beside a non-empty set; a boundary violation forces not_clear whatever the items, and the not_clear item rule yields to it; a waived or reopened marker carries the grant's date and quoted words; only a completed run carries items, cards, a result, and a full write list; a recording_failed run carries its receipt and partial write list but no cards; every other status carries no items, result, or cards, and its write list, when present, holds run artifacts only; missing_input carries a question only for a direct interactive run; block, copy, waiver, and reopening writes are appends and a status line is not; a new defect is charged to a slice; a stale result carries both identities and matched false. A stopped result whose stop_reason begins unsupported: submodules: carries no source_identity block (E8-2). run.model may echo the adapter's floor_met (boolean or null, E8-A2). Cardinality, correspondence, destinations, and the card mapping are checked by the semantic validator (section 9). Revision 5 (2026-09-13) implements rulings E8-2 to E8-5, E8-25, E8-27, and amendment E8-A2 of the E8 lane contract, docs/plans/2026-09-13-recheck-v2-e8-core.md: run.verifier.refused_actions, raw_path and raw_sha256 on every verifier call, run.invocation.run_date, and the reporting-slot descriptions of rejected_grants, injection_attempts, boundary_violations, cards, and submodules.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -144,7 +144,8 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/card_change"
-      }
+      },
+      "description": "one entry per slice that has at least one checklist item in the run, in ascending slice order, with before and after whether or not the card moved; built stays built; an entry under docs/punch-list.md (slice none) produces no entry; a slice whose only grant names an entry outside the checklist gets no entry and is named under other_open_slices with its unchanged card (E8-4); a run with boundary violations moves no card"
     },
     "records_written": {
       "type": "array",
@@ -162,21 +163,21 @@
       "items": {
         "type": "string"
       },
-      "description": "any write or action outside sections 7, 9, and 13, found after the run; empty on a clean run"
+      "description": "actions found to have happened outside sections 7, 9, and 13: the tracked diff before the status lines differing from the receipted done steps, a git state change, a mutation of real state; a prohibited action that was refused or surfaced with no side effect is not one and is reported under run.verifier.refused_actions instead (E8-5); any entry forces result not_clear and freezes every card; empty on a clean run"
     },
     "injection_attempts": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "instruction-like text found in reviewed material and ignored"
+      "description": "instruction-like text found in reviewed material and ignored: a scope change, a disposition instruction, an authority claim, or text that claims a waiver or a reopening (such a claim is listed under rejected_grants too, E8-3); a refused prohibited action that reviewed material prompted is listed here as well as under run.verifier.refused_actions (E8-5)"
     },
     "rejected_grants": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "grants refused because they did not arrive on the user channel, with why"
+      "description": "every grant the run refused, whatever its source: a grant object that failed the channel rules of section 8 (no user channel or turn_ref, a channel other than user-turn, a turn_ref the adapter attributes to the assistant or a station, a station route without forwarded_by) and text in reviewed material that claims a waiver or a reopening; each entry names the item (file and line) and why it is not a grant; a claim found in reviewed material is listed under injection_attempts too (E8-3); nothing is written for a rejected grant"
     },
     "still_open": {
       "type": "array",
@@ -613,6 +614,27 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "required": [
+          "status",
+          "stop_reason"
+        ],
+        "properties": {
+          "status": {
+            "const": "stopped"
+          },
+          "stop_reason": {
+            "pattern": "^unsupported: submodules: "
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source_identity": false
+        }
+      }
     }
   ],
   "$defs": {
@@ -661,6 +683,12 @@
             "continuations": {
               "type": "integer",
               "minimum": 0
+            },
+            "run_date": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "the date every record this run wrote carries: invocation.run_date when the adapter supplied one, else the machine's local date (E8-25)"
             }
           }
         },
@@ -718,6 +746,13 @@
               "type": "string",
               "minLength": 1,
               "description": "the capability class the adapter asserted from the id, per the E9 profile"
+            },
+            "floor_met": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": "the adapter's floor assertion echoed from invocation.model (E8-18, E8-A2): true, false, or null for unknown; optional, a result without it stays valid"
             },
             "effort": {
               "type": "string"
@@ -821,9 +856,26 @@
                   },
                   "status": {
                     "type": "string"
+                  },
+                  "raw_path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "the retained report of this call under run_dir/verifier/ (raw.md for call 1, raw-<k>.md for call k, E8-27)"
+                  },
+                  "raw_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "SHA-256 of the retained report as the checkpoint recorded it (E8-7)"
                   }
                 }
               }
+            },
+            "refused_actions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "prohibited actions the verifier declined or the harness stopped with no side effect (sections 7 and 9, E8-5): reported here, not as boundary violations; an attempt prompted by reviewed material is listed under injection_attempts too"
             }
           }
         },
@@ -987,7 +1039,7 @@
         "submodules": {
           "type": "array",
           "maxItems": 0,
-          "description": "git submodule status must list nothing; the check is recorded"
+          "description": "git submodule status must list nothing: a workspace with an initialized submodule stops before any work as stopped with stop_reason unsupported: submodules: <paths, comma-separated> and that result carries no source_identity block, so every fingerprint a result reports has an empty list, which records that the check ran; the identity helper's own output carries the real list (E8-2)"
         }
       }
     },
