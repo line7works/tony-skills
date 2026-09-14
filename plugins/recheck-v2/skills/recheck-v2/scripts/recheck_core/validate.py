@@ -1106,7 +1106,10 @@ def check_v17(result, ctx):
     return findings, None
 
 
-REFUSED_RESUME = re.compile(r"^resume refused at section 11 step (\d+)")
+REFUSED_RESUME = re.compile(r"^resume refused at section 11 step (\d+)(?:: (.*))?$", re.S)
+# E8-A49: the two refusal reasons cmd_resume builds whose named condition V18 checks on the checkpoint
+ENDED_RUN = re.compile(r"^the run ended as ([a-z_]+): (.*); start a new run$", re.S)
+REUSED_GRANT = re.compile(r"extra_continuation: turn_ref '(.*)' already used for continuation (\d+)")
 
 
 def check_v18(result, ctx):
@@ -1118,8 +1121,11 @@ def check_v18(result, ctx):
     supplied; step 4 through a done item's result failing the item definition; step 5 through the
     receipt's verification; step 6 through the identity against the start identity or the transaction
     guard, which needs the workspace), and the result carries no items, cards, new defects, or
-    project-record writes; a refusal beside a checkpoint that verifies is the finding. Every other
-    status: V18 as before."""
+    project-record writes; a refusal beside a checkpoint that verifies is the finding. E8-A49: a step 1
+    refusal that says the run ended (`the run ended as <status>: ...; start a new run`) needs the
+    checkpoint verified at phase `stopped` with `terminal.resumable` false and `terminal.status` the named
+    status; a step 6 refusal naming `extra_continuation: turn_ref '<ref>' already used for continuation
+    <n>` needs `<ref>` in the checkpoint's `continuation_grants_used`. Every other status: V18 as before."""
     if ctx.get("run_dir") is None:
         return [], _skip("run_dir")
     if "run" not in result:
@@ -1127,7 +1133,7 @@ def check_v18(result, ctx):
     from . import checkpoint as cpmod
     m = REFUSED_RESUME.match(result.get("stop_reason") or "") if result.get("status") == "stopped" else None
     if m:
-        return _check_refused_resume(result, ctx, int(m.group(1)))
+        return _check_refused_resume(result, ctx, int(m.group(1)), m.group(2) or "")
     if not os.path.isfile(os.path.join(ctx["run_dir"], "checkpoint.json")):
         if result.get("status") in ("completed", "recording_failed", "stopped") and any(
                 os.path.basename(w.get("path", "")) == "checkpoint.json" for w in result.get("records_written") or []):
@@ -1141,8 +1147,10 @@ def check_v18(result, ctx):
     return [], None
 
 
-def _check_refused_resume(result, ctx, step):
-    """E8-A33: the refusal at section 11 step `step` must be real, and the envelope must carry nothing graded."""
+def _check_refused_resume(result, ctx, step, reason=""):
+    """E8-A33: the refusal at section 11 step `step` must be real, and the envelope must carry nothing graded;
+    E8-A49: a refusal that names its condition (a run that ended, a reused continuation grant) is held to that
+    condition on the checkpoint."""
     from . import checkpoint as cpmod, receipt as rcmod, identity
     findings = []
     for key in ("items", "cards", "new_defects"):
@@ -1153,6 +1161,23 @@ def _check_refused_resume(result, ctx, step):
             findings.append(_f("V18", "/records_written/%d" % i, "a refused resume lists a project-record write (%s)" % w.get("kind")))
     v = cpmod.read_and_verify(ctx["run_dir"], ctx.get("schemas"))
     skip = None
+    ended = ENDED_RUN.match(reason) if step == 1 else None
+    if ended:
+        # E8-A49: the run ended (section 11 step 1, E8-A20): the checkpoint verifies at phase stopped, its terminal
+        # block is not resumable, and its terminal status is the one the refusal names
+        named = ended.group(1)
+        if not v["ok"]:
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 1 as a run that ended as %s, but the checkpoint fails at step %d: %s" % (named, v["step"], v["reason"])))
+            return findings, None
+        cp = v["doc"]
+        term = cp.get("terminal") or {}
+        if cp.get("phase") != "stopped":
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 1 as a run that ended as %s, but the checkpoint's phase is %s, not stopped" % (named, cp.get("phase"))))
+        elif term.get("resumable"):
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 1 as a run that ended as %s, but the checkpoint's terminal block says resumable" % named))
+        elif term.get("status", "stopped") != named:
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 1 as a run that ended as %s, but the checkpoint's terminal status is %s" % (named, term.get("status", "stopped (no terminal block)"))))
+        return findings, None
     if step in (1, 2):
         if v["ok"] or v["step"] != step:
             findings.append(_f("V18", "/stop_reason", "the resume was refused at step %d but the checkpoint %s" % (step, "verifies" if v["ok"] else "fails at step %d: %s" % (v["step"], v["reason"]))))
@@ -1181,6 +1206,11 @@ def _check_refused_resume(result, ctx, step):
                 skip = _skip("workspace")
             elif not any(c["class"] == "outside" for c in rcmod.classify(r["doc"].get("plan") or [], r["doc"].get("entries") or [], ctx["workspace"])):
                 findings.append(_f("V18", "/stop_reason", "the resume was refused at step 5 but the receipt verifies and no plan step classifies as an outside edit"))
+    elif step == 6 and REUSED_GRANT.search(reason):
+        # E8-A49: the presented grant's turn_ref was already consumed (E8-A23): the checkpoint lists it
+        ref = REUSED_GRANT.search(reason).group(1)
+        if ref not in (cp.get("continuation_grants_used") or []):
+            findings.append(_f("V18", "/stop_reason", "the resume was refused at step 6 for a reused continuation grant, but the checkpoint's continuation_grants_used does not list turn_ref %r" % ref))
     elif step == 6:
         if ctx.get("workspace") is None:
             skip = _skip("workspace")

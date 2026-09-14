@@ -907,6 +907,54 @@ live status-line steps in ascending slice order, since a seeded E8-28 plan carri
 V13's legacy skip (E8-A26) covers a call record without `raw_sha256` whose report exists
 without a block; a missing report file is a finding for every record.
 
+### After Astra's verification round (2026-09-14, 10:21 AM): 21 of 27 cleared; six open
+
+Astra's verification (`e8-astra-verify.md` in the packet) reported FIXED on 21 findings and left
+open: 9 (BLOCKER, partly), 26 (BLOCKER, partly), 28 (new BLOCKER), 16 (MAJOR, partly), 19
+(MAJOR, partly), 29 (new MAJOR). Under plan ruling 17 as applied at E7's close (a targeted fix
+and a targeted re-check for what the verification round leaves open), the control room ruled:
+
+- **E8-A47 (finding 9), every key of the report block is required.** `parse_report_tail`
+  requires all six top-level keys (`grant_claims`, `injection_attempts`, `refused_actions`
+  present as lists, empty allowed) and types every nullable field: `reason` null or one of the
+  four reasons; `static_reason` null or one of `mutates_real_state`, `non_executable_artifact`,
+  non-null exactly when `method` is `static`; `blocked` and `missing` null or a non-empty one-line
+  string, non-null exactly for their reasons; `missed_case` null or a non-empty one-line string,
+  non-null exactly for reason `missed_case`; a boolean or a number where a string or null is
+  expected is a violation. `verifier.md` section 2 says the six keys are required.
+- **E8-A48 (finding 28), the test helper finds its root.** `testlib` takes the worktree root
+  from `git rev-parse --show-toplevel` when it succeeds, else the plugin root (the directory
+  holding `.claude-plugin/`, as in a standalone copy), and `other_cwd` accepts any scratch
+  directory outside that root; the suite runs green from a copy of the plugin folder with no
+  git repository around it.
+- **E8-A49 (finding 29), V18 knows every refusal reason.** For a `stopped` result whose reason
+  is `resume refused at section 11 step 1: the run ended as <status>: …`, V18 requires the
+  checkpoint at phase `stopped` with `terminal.resumable` false and `terminal.status` equal to
+  the named status; for a step 6 refusal naming `extra_continuation: turn_ref '<ref>' already
+  used for continuation <n>`, V18 requires `continuation_grants_used` to contain `<ref>`; a
+  refusal whose named condition does not hold is the finding; one negative control per reason.
+- **E8-A50 (finding 16), the forty-hex pin.** `input.schema.json`'s `source_identity.commit`
+  pattern is `^[0-9a-f]{40}$` (section 6, E8-A34); a shorter pin is invalid input; every built
+  fixture's pin is forty hex (checked before the change).
+- **E8-A51 (finding 19), a malformed example is a failure, not a crash.** `validate-examples.py`
+  reports a positive example (or a mutation base) that fails to load, validate, or mutate in
+  `failures` with the file name and the error, `ok` false, exit 4; exit 1 is reserved for a
+  missing or unreadable schema.
+- **Finding 26, the two sentences.** Section 4's card rule and section 9's validator paragraph
+  now say what E8-A44's transaction paragraph says: a violation freezes the cards of the
+  cancelled steps, a card moved before the violation was found stays moved and is listed with
+  that reason, and the result is `not_clear`.
+
+One fresh Fable low agent applies E8-A47 to E8-A51; the control room makes the text change;
+Astra re-checks the six on a fresh copy (`mandate-recheck.md`).
+
+Readings from that pass: `input-caller.json`'s eight-hex pin became the full hash (the example had
+to satisfy its own schema); `verifier.md` section 2 was compacted to stay under its 200-line cap;
+the control room aligned `result.schema.json`'s `identity_pin.commit` echo and the two result
+examples' `expected.commit` with E8-A50 (forty hex), since a result echoes a pin the input schema
+admitted. Carried to E10 as a text note: `evals/fixtures/IA-input-authorization/CASES.md` quotes
+the old `{7,40}` pattern (no fixture pin is short; `evals/` is outside E8's write scope).
+
 The fix round after this review is one round (plan ruling 17): four fresh Fable low agents in
 sequence (scope and ledger; driver and transaction; schemas and validators; skill body and
 tests), the suites rerun after each, one commit, then Astra's verification round on a fresh

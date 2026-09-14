@@ -38,24 +38,67 @@ class ClosedShape(unittest.TestCase):
         self.assertIsNone(got["tail"])
 
     def test_example_block_parses(self):
-        """The exact verifier.md example block is a complete report; the three string lists may be absent."""
+        """The exact verifier.md example block is a complete report; the four lists may be empty (E8-A47)."""
         got = self.parse(self.tail)
         self.assertTrue(got["ok"], got["reason"])
         self.assertEqual(got["tail"], self.tail)
         t = copy.deepcopy(self.tail)
-        for k in ("grant_claims", "injection_attempts", "refused_actions"):
-            del t[k]
-        self.assertTrue(self.parse(t)["ok"])
-        t = copy.deepcopy(self.tail)
-        del t["new_defects"]
-        self.assertTrue(self.parse(t)["ok"])
+        for k in ("new_defects", "grant_claims", "injection_attempts", "refused_actions"):
+            t[k] = []
+        self.assertTrue(self.parse(t)["ok"], self.parse(t)["reason"])
         self.assertEqual(verifier.candidate_defects(self.tail)[0]["caused_by_index"], 0)
 
     def test_omitted_top_level_keys(self):
-        for k in ("recheck_verifier_report", "items"):
+        """E8-A47: all six top-level keys are required; a two-key report is incomplete, naming the missing key."""
+        self.assertEqual(verifier.TOP_REQUIRED, verifier.TOP_KEYS)
+        for k in verifier.TOP_KEYS:
             t = copy.deepcopy(self.tail)
             del t[k]
             self.assert_incomplete(t, k)
+        two = {"recheck_verifier_report": 1, "items": self.tail["items"]}
+        got = self.parse(two)
+        self.assertFalse(got["ok"])
+        for k in ("new_defects", "grant_claims", "injection_attempts", "refused_actions"):
+            self.assertIn("lacks the key " + k, got["reason"], got["reason"])
+        for k in ("new_defects", "grant_claims", "injection_attempts", "refused_actions"):
+            t = copy.deepcopy(self.tail)
+            t[k] = None
+            self.assert_incomplete(t, k)
+
+    def test_typed_nullable_fields(self):
+        """E8-A47: a boolean or a number where a string or null is expected is a violation naming the key."""
+        t = copy.deepcopy(self.tail)
+        t["items"][0]["static_reason"] = False
+        self.assert_incomplete(t, "static_reason")
+        t = copy.deepcopy(self.tail)
+        t["items"][0]["static_reason"] = "guessing"
+        self.assert_incomplete(t, "static_reason")
+        for field, value in (("blocked", True), ("missing", 0), ("missed_case", False), ("reason", True), ("blocked", 1.5), ("missing", "")):
+            t = copy.deepcopy(self.tail)
+            t["items"][0]["disposition"] = "not_fixed"
+            t["items"][0]["reason"] = {"blocked": "verification_blocked", "missing": "missing_evidence", "missed_case": "missed_case"}.get(field, "reproduces")
+            t["items"][0][field] = value
+            self.assert_incomplete(t, field)
+        t = copy.deepcopy(self.tail)
+        t["items"][0]["reason"] = "guessing"
+        self.assert_incomplete(t, "reason")
+        # the proper not_fixed shapes parse: a blocked string for verification_blocked, a missing string for
+        # missing_evidence, a missed_case string for missed_case, a static item with its static_reason
+        for field, reason in (("blocked", "verification_blocked"), ("missing", "missing_evidence"), ("missed_case", "missed_case")):
+            t = copy.deepcopy(self.tail)
+            t["items"][0]["disposition"] = "not_fixed"
+            t["items"][0]["reason"] = reason
+            t["items"][0][field] = "the sandbox denies the network the scenario needs"
+            got = self.parse(t)
+            self.assertTrue(got["ok"], (field, got["reason"]))
+            m = verifier.map_item(got["tail"]["items"][0], "/nonexistent-run-dir")
+            self.assertEqual(m["verifier_said"], "not_fixed"); self.assertEqual(m["reason"], reason)
+        t = copy.deepcopy(self.tail)
+        t["items"][0]["method"] = "static"
+        t["items"][0]["static_reason"] = "mutates_real_state"
+        self.assertTrue(self.parse(t)["ok"], self.parse(t)["reason"])
+        t["items"][0]["static_reason"] = None
+        self.assert_incomplete(t, "static_reason")
 
     def test_omitted_item_keys(self):
         for k in verifier.ITEM_KEYS:

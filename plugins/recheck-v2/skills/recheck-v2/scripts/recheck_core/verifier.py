@@ -21,6 +21,7 @@ DETERMINISTIC = ("unknown-model", "floor-refused", "profile-unsupported", "versi
                  "lane-unavailable", "invalid-request", "unauthorized")
 STATUSES = (OK,) + RETRYABLE + DETERMINISTIC
 REASONS = ("reproduces", "missed_case", "verification_blocked", "missing_evidence")
+STATIC_REASONS = ("mutates_real_state", "non_executable_artifact")
 EVIDENCE_KINDS = ("command", "read", "diff", "artifact")
 SEP = " · "
 SIDECAR = "calls.json"
@@ -103,13 +104,28 @@ def _one_line(value, what, problems):
         problems.append("%s spans lines or contains the separator" % what)
 
 
+def _nullable_text(value, what, problems):
+    """E8-A47: null or a non-empty one-line string; a boolean, a number, or any other type is a violation
+    naming the key."""
+    if value is None:
+        return
+    if not isinstance(value, str):
+        problems.append("%s is not a string or null (got %s)" % (what, type(value).__name__))
+        return
+    if not value.strip():
+        problems.append("%s is an empty string" % what)
+        return
+    _one_line(value, what, problems)
+
+
 def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-# E8-A27: the block, each item, each evidence entry, and each candidate are closed shapes
+# E8-A27: the block, each item, each evidence entry, and each candidate are closed shapes; E8-A47: every one of
+# the six top-level keys is required (the four lists may be empty, never null)
 TOP_KEYS = ("recheck_verifier_report", "items", "new_defects", "grant_claims", "injection_attempts", "refused_actions")
-TOP_REQUIRED = ("recheck_verifier_report", "items")
+TOP_REQUIRED = TOP_KEYS
 ITEM_KEYS = ("index", "location", "disposition", "reason", "method", "static_reason", "blocked", "missing",
              "missed_case", "evidence", "location_after_fix")
 EVIDENCE_KEYS = ("kind", "detail", "artifact")
@@ -204,31 +220,33 @@ def parse_report_tail(text, n_items, indexes=None):
         disp, reason = it.get("disposition"), it.get("reason")
         if disp not in ("fixed", "not_fixed"):
             problems.append("item %s: disposition %r" % (idx, disp))
+        # E8-A47: every nullable field is typed; a boolean or a number where a string or null is expected is a violation
+        if reason is not None and reason not in REASONS:
+            problems.append("item %s: reason %r is not null or one of %s" % (idx, reason, ", ".join(REASONS)))
         if disp == "fixed" and reason is not None:
             problems.append("item %s: a fixed item carries a reason" % idx)
         if disp == "not_fixed" and reason not in REASONS:
             problems.append("item %s: reason %r is not one of %s" % (idx, reason, ", ".join(REASONS)))
-        if (reason == "missed_case") != bool(it.get("missed_case")):
-            problems.append("item %s: missed_case must be named exactly for reason missed_case" % idx)
-        if (reason == "verification_blocked") != bool(it.get("blocked")):
-            problems.append("item %s: blocked must be non-null exactly for reason verification_blocked" % idx)
-        if (reason == "missing_evidence") != bool(it.get("missing")):
-            problems.append("item %s: missing must be non-null exactly for reason missing_evidence" % idx)
+        for f, r in (("missed_case", "missed_case"), ("blocked", "verification_blocked"), ("missing", "missing_evidence")):
+            _nullable_text(it.get(f), "item %s %s" % (idx, f), problems)
+            if (reason == r) != (it.get(f) is not None):
+                problems.append("item %s: %s must be non-null exactly for reason %s" % (idx, f, r))
         method = it.get("method")
         if method not in ("executed", "static"):
             problems.append("item %s: method %r" % (idx, method))
-        if method == "static" and it.get("static_reason") not in ("mutates_real_state", "non_executable_artifact"):
+        static_reason = it.get("static_reason")
+        if static_reason is not None and static_reason not in STATIC_REASONS:
+            problems.append("item %s: static_reason %r is not null or one of %s" % (idx, static_reason, ", ".join(STATIC_REASONS)))
+        if method == "static" and static_reason is None:
             problems.append("item %s: static needs static_reason" % idx)
-        if method == "executed" and it.get("static_reason"):
+        if method == "executed" and static_reason is not None:
             problems.append("item %s: executed carries a static_reason" % idx)
         _check_evidence(it.get("evidence"), "item %s" % idx, problems)
-        for f in ("location", "missed_case", "blocked", "missing", "location_after_fix"):
+        for f in ("location", "location_after_fix"):
             _one_line(it.get(f), "item %s %s" % (idx, f), problems)
     defects = tail.get("new_defects")
-    if defects is None:
-        defects = []
     if not isinstance(defects, list):
-        problems.append("new_defects is not a list")
+        problems.append("new_defects is not a list (null is not an empty list)")
         defects = []
     for n, d in enumerate(defects):
         label = "new_defects[%d]" % n
@@ -247,8 +265,8 @@ def parse_report_tail(text, n_items, indexes=None):
         _check_evidence(d.get("evidence"), label, problems)
     for f in STRING_LISTS:
         v = tail.get(f)
-        if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) for x in v)):
-            problems.append("%s is not a list of strings" % f)
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            problems.append("%s is not a list of strings (null is not an empty list)" % f)
         elif v:
             for n, x in enumerate(v):
                 _one_line(x, "%s[%d]" % (f, n), problems)

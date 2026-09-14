@@ -489,6 +489,70 @@ class V18RefusedResume(Base):
         env["records_written"] = [{"kind": "punch_list_block", "path": DOC, "appended": True}]
         self.assertIn("/records_written/0", self.paths(env, "V18", run_dir=run_dir))
 
+    def seed_signed(self, run_dir, mutate):
+        """The example checkpoint with `mutate` applied, re-signed, and its log's last line rewritten to match, so
+        that the checkpoint verifies (the precondition is asserted)."""
+        cp = example("checkpoint-partial.json")
+        mutate(cp)
+        cp["integrity"]["self"] = cpmod.self_hash(cp)
+        write_json(os.path.join(run_dir, "checkpoint.json"), cp)
+        rows = testlib.read_text(os.path.join(testlib.EX, "checkpoint-partial.log")).splitlines()
+        rows[-1] = "%d %s" % (cp["integrity"]["seq"], cp["integrity"]["self"])
+        write_text(os.path.join(run_dir, "checkpoint.log"), "\n".join(rows) + "\n")
+        v = cpmod.read_and_verify(run_dir, self.schemas)
+        self.assertTrue(v["ok"], v)
+        return cp
+
+    def test_step_1_run_ended(self):
+        """E8-A49: `the run ended as <status>: ...; start a new run` (cmd_resume, section 11 step 1, E8-A20) needs the
+        checkpoint verified at phase stopped, terminal.resumable false, and terminal.status the named status."""
+        run_dir = os.path.join(self.dir, "run")
+
+        def ended(cp):
+            cp["phase"] = "stopped"
+            cp["terminal"] = {"status": "stale_source", "stop_reason": "HEAD is 1111111, the run started at 7a1b2c3", "resumable": False}
+        self.seed_signed(run_dir, ended)
+        env = self.envelope(1, "the run ended as stale_source: HEAD is 1111111, the run started at 7a1b2c3; start a new run")
+        self.assertEqual(validate.validate_result(env, self.schemas), [])
+        self.assertEqual(self.paths(env, "V18", run_dir=run_dir), [], self.messages(env, "V18", run_dir=run_dir))
+        # negative control: the same reason beside a checkpoint still verifying
+        self.seed_signed(run_dir, lambda cp: cp.__setitem__("phase", "verifying"))
+        found = self.findings(env, "V18", run_dir=run_dir)
+        self.assertEqual([f["path"] for f in found], ["/stop_reason"], found)
+        self.assertIn("phase is verifying", found[0]["message"])
+        # a resumable terminal (section 10's bounded recovery) is not an ended run
+        self.seed_signed(run_dir, lambda cp: (ended(cp), cp["terminal"].__setitem__("resumable", True)))
+        self.assertIn("says resumable", self.messages(env, "V18", run_dir=run_dir))
+        # another terminal status than the one named
+        self.seed_signed(run_dir, lambda cp: (ended(cp), cp["terminal"].__setitem__("status", "verifier_unavailable")))
+        self.assertIn("terminal status is verifier_unavailable", self.messages(env, "V18", run_dir=run_dir))
+        # a step 1 refusal with another reason keeps E8-A33: the checkpoint must fail at step 1
+        self.seed_signed(run_dir, ended)
+        self.assertEqual(self.paths(self.envelope(1, "checkpoint.log does not exist"), "V18", run_dir=run_dir), ["/stop_reason"])
+
+    def test_step_6_reused_grant(self):
+        """E8-A49: `extra_continuation: turn_ref '<ref>' already used for continuation <n>` (cmd_resume, E8-A23) needs
+        <ref> in the checkpoint's continuation_grants_used; no workspace is needed for this reason."""
+        run_dir = os.path.join(self.dir, "run")
+        ref = "codex:thread 01a0a1b2:turn 9"
+        reason = "continuation limit exceeded: this would be continuation 3 and extra_continuation: turn_ref '%s' already used for continuation 2; state stays on disk" % ref
+        self.seed_signed(run_dir, lambda cp: (cp.__setitem__("continuations", 1), cp.__setitem__("continuation_grants_used", [ref])))
+        env = self.envelope(6, reason)
+        self.assertEqual(validate.validate_result(env, self.schemas), [])
+        out = self.run_checks(env, run_dir=run_dir)
+        self.assertEqual([f for f in out["semantic"] if f["id"] == "V18"], [], out["semantic"])
+        self.assertNotIn("V18", {s["id"] for s in out["skipped"]}, "the reused-grant condition needs no workspace")
+        # negative control: the same reason beside a checkpoint whose used list lacks the ref
+        self.seed_signed(run_dir, lambda cp: (cp.__setitem__("continuations", 1), cp.__setitem__("continuation_grants_used", ["codex:thread 01a0a1b2:turn 4"])))
+        found = self.findings(env, "V18", run_dir=run_dir)
+        self.assertEqual([f["path"] for f in found], ["/stop_reason"], found)
+        self.assertIn(ref, found[0]["message"])
+        self.seed_signed(run_dir, lambda cp: cp.__setitem__("continuations", 1))  # no used list at all
+        self.assertEqual(self.paths(env, "V18", run_dir=run_dir), ["/stop_reason"])
+        # a step 6 refusal with another reason keeps E8-A33: the identity check, which needs the workspace
+        other = self.envelope(6, "continuation limit exceeded: this would be continuation 3 and no extra_continuation grant is presented; state stays on disk")
+        self.assertIn("workspace", self.skips(other, run_dir=run_dir).get("V18", ""))
+
 
 class V12MovedBefore(Base):
     """E8-A44: a card may be listed as moved beside a boundary violation only when its status-line step is

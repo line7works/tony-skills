@@ -54,7 +54,7 @@
   "status": "completed",
   "source_identity": {
     "expected": {
-      "commit": "9c2f1e4d",
+      "commit": "9c2f1e4d0b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d",
       "dirty": false
     },
     "actual": {

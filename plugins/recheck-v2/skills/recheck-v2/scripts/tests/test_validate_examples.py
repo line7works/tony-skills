@@ -30,6 +30,8 @@ NEW_NEGATIVE_CASES = (
     "receipt: a status_line value of built (E8-A34)",
     "input: a waiver dated 2026-02-30 (E8-A34, FormatChecker)",
     "input: a run_date of 2026-99-99 (E8-A34, FormatChecker)",
+    # E8-A50
+    "input: a seven-hex pin (E8-A50)",
 )
 NEW_POSITIVE_CASES = (
     "a stopped submodule result without source_identity (E8-2)",
@@ -41,6 +43,8 @@ NEW_POSITIVE_CASES = (
     "a verifier_unavailable run.model carrying floor_met null (unknown capability, E8-A2, E8-A34)",
     "a new defect carrying its severity_basis (E8-A34)",
     "a receipt status_line value of signed off with conditions (E8-A34)",
+    # E8-A50
+    "input: a forty-hex pin (E8-A50)",
 )
 KEYS = ["checkpoint", "failures", "mutations", "negative", "ok", "positive", "receipt"]
 
@@ -140,6 +144,44 @@ class ValidateExamples(unittest.TestCase):
         os.remove(os.path.join(root, "references", "receipt.schema.json"))
         code, out, err = self.run_cli("--skill-root", root)
         self.assertEqual(code, 1); self.assertEqual(out, ""); self.assertIn("reference unavailable: references/receipt.schema.json", err)
+
+    def test_a_malformed_example_is_a_failure_not_a_crash(self):
+        """E8-A51: a positive example replaced by {} fails its schema and breaks the mutations that use it as a base;
+        one that is not JSON fails to load; the checkpoint example replaced breaks its checks. Each is exit 4 with the
+        JSON on stdout, ok false, and a failure naming the file; never exit 1 (reserved for a missing schema)."""
+        root = os.path.join(self.dir, "skill-root-malformed")
+        shutil.copytree(testlib.SKILL, root, ignore=shutil.ignore_patterns("tests", "__pycache__"))
+        examples = os.path.join(root, "references", "examples")
+        target = "input-direct.json"
+        self.assertTrue(os.path.exists(os.path.join(examples, target)))
+
+        def run_expecting_failure(name):
+            code, out, err = self.run_cli("--skill-root", root)
+            self.assertEqual(code, 4, err[-2000:] + out[-500:])
+            self.assertNotIn("validate-examples.py failed", err)
+            got = json.loads(out)
+            self.assertEqual(sorted(got), KEYS)
+            self.assertFalse(got["ok"])
+            self.assertTrue(any(name in f for f in got["failures"]), got["failures"])
+            return got
+
+        with open(os.path.join(examples, target), "w", encoding="utf-8") as fh:
+            fh.write("{}\n")
+        got = run_expecting_failure(target)
+        self.assertEqual(got["positive"]["failing"], 1)
+        self.assertTrue(any(target in f and "mutation raised" in f for f in got["failures"]), "a mutation on {} raises (KeyError) and is reported")
+        self.assertLess(got["negative"]["rejected"], got["negative"]["total"] + 1)
+        with open(os.path.join(examples, target), "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        got = run_expecting_failure(target)
+        self.assertTrue(any(target in f and "does not load" in f for f in got["failures"]), got["failures"])
+        self.assertLess(got["mutations"]["accepted"], got["mutations"]["total"], "the cases on the unloadable base count as not passed")
+        shutil.copy(os.path.join(testlib.EX, target), os.path.join(examples, target))
+        with open(os.path.join(examples, "checkpoint-partial.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}\n")
+        got = run_expecting_failure("checkpoint-partial.json")
+        self.assertEqual(got["checkpoint"]["passed"], 0)
+        self.assertEqual(got["checkpoint"]["total"], CHECKPOINT_FLOOR)
 
     def test_old_location_is_gone(self):
         self.assertFalse(os.path.exists(os.path.join(testlib.EX, "validate-examples.py")))

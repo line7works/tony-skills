@@ -62,33 +62,33 @@ Field rules (`scripts/recheck_core/verifier.py`, `parse_report_tail`):
 
 - `disposition` is `fixed` or `not_fixed`; `reason` is null for `fixed`, else one of
   `reproduces`, `missed_case`, `verification_blocked`, `missing_evidence`.
-- `missed_case` names the still-open case exactly for reason `missed_case`; `blocked` and
-  `missing` are non-null exactly for `verification_blocked` and `missing_evidence`.
-- `method` is `executed` or `static`; `static` needs `static_reason` (`mutates_real_state`
-  or `non_executable_artifact`); `executed` carries none.
+- `missed_case`, `blocked`, and `missing` are null or a non-empty one-line string, non-null
+  exactly for reasons `missed_case`, `verification_blocked`, and `missing_evidence`.
+- `method` is `executed` or `static`; `static_reason` is null or `mutates_real_state` or
+  `non_executable_artifact`, non-null exactly for `static`.
 - `evidence` is non-empty; `kind` is `command`, `read`, `diff`, or `artifact`; `artifact` is
   a path relative to the scratch directory, or null.
-- `location_after_fix` is `file:line` (the file and first line of the code that now decides
-  the scenario, when it moved) or null (E8-8: evidence, not a graded value); any other value
-  is dropped, with a note beside the item's evidence in the `record-call` document.
+- `location_after_fix` is `file:line` (where the deciding code now begins, when it moved) or
+  null (E8-8, not graded); any other value is dropped, with a note beside the item's evidence.
 - Every field is one line and never contains the separator ` · `; every entry of
   `grant_claims`, `injection_attempts`, and `refused_actions` is held to the same rule, and
   one violation makes the report `incomplete`.
 - The block, each item, each evidence entry, and each candidate are closed shapes: every
-  listed key present, no other key; a violation is `incomplete` (E8-A27).
+  listed key present, no other key; all six top-level keys are required, the four lists may
+  be empty, never null; a boolean or a number where a string or null is expected is a
+  violation naming the key; each is `incomplete` (E8-A27, E8-A47).
 - `items` covers every expected index exactly once: every index on a first call; exactly the
   pending indexes on a resume's fresh call (E8-A15). `new_defects` lists only defects the fix
   introduced, each charged to the item whose fix caused it.
 
 A report without the block, with another version, whose indexes do not cover the expected
-items exactly once, or that breaks a field rule above is `incomplete` (retryable once,
-E8-12). The core maps each item onto `item_result.verification` (artifact paths made
-absolute under `<run_dir>/verifier/`, an artifact that does not exist there dropped with a
-note, a `missed_case` prefixed `missed case: ` on the first evidence detail) and onto
-`adjudication.verifier_said`;
-`new_defects` become the candidates `new-defect --index k` confirms; `grant_claims`,
-`injection_attempts`, and `refused_actions` are re-read from the retained report at
-assembly (E8-A7), a grant claim landing under both `rejected_grants` and
+items exactly once, or that breaks a field rule above is `incomplete` (retryable once, E8-12).
+The core maps each item onto `item_result.verification` (artifact paths made absolute under
+`<run_dir>/verifier/`, an artifact that does not exist there dropped with a note, a
+`missed_case` prefixed `missed case: ` on the first evidence detail) and onto
+`adjudication.verifier_said`; `new_defects` become the candidates `new-defect --index k`
+confirms; `grant_claims`, `injection_attempts`, and `refused_actions` are re-read from the
+retained report at assembly (E8-A7), a grant claim landing under both `rejected_grants` and
 `injection_attempts` (E8-3).
 
 ## 3. Call ids and raw paths

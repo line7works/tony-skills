@@ -10,7 +10,7 @@
     "model": { "id": "gpt-6-astra", "floor_class": "opus", "floor_met": true, "effort": "low", "settings": { "reasoning_effort": "low", "web_search": false } }
   },
   "workspace": "/Users/example/Developer/widget",
-  "source_identity": { "commit": "9c2f1e4d", "dirty": false },
+  "source_identity": { "commit": "9c2f1e4d0b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d", "dirty": false },
   "target": {
     "items": [
       {

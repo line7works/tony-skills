@@ -8,6 +8,11 @@ Fixtures are built with the E7 generators (read and run, never modified) into a 
 directory under RECHECK_TEST_SCRATCH when that variable names a directory, else under the
 system temporary directory; never into the worktree and never under evals/. Every test that
 builds cleans up what it built.
+
+The root (E8-A48): REPO is `git rev-parse --show-toplevel` run in the scripts directory when
+that succeeds, else the plugin root (the first directory above this file holding
+`.claude-plugin/`, as in a standalone copy of the plugin folder); `other_cwd` accepts any
+scratch directory outside that root and outside the plugin root.
 """
 import json
 import os
@@ -21,8 +26,35 @@ SCRIPTS = os.path.dirname(TESTS)
 SKILL = os.path.dirname(SCRIPTS)
 REF = os.path.join(SKILL, "references")
 EX = os.path.join(REF, "examples")
-PLUGIN = os.path.dirname(os.path.dirname(SKILL))
-REPO = os.path.dirname(os.path.dirname(PLUGIN))  # the worktree root (plugins/<plugin> sits two levels down)
+
+
+def _plugin_root():
+    """E8-A48: the first directory above this file holding `.claude-plugin/`; the layout-derived
+    skills/<skill>/../.. when none is found."""
+    d = SCRIPTS
+    while True:
+        if os.path.isdir(os.path.join(d, ".claude-plugin")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return os.path.dirname(os.path.dirname(SKILL))
+        d = parent
+
+
+def _worktree_root():
+    """E8-A48: `git rev-parse --show-toplevel` run in the scripts directory when it succeeds, else the
+    plugin root (a copy of the plugin folder with no git repository around it)."""
+    try:
+        proc = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=SCRIPTS, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError:
+        proc = None
+    if proc is not None and proc.returncode == 0 and proc.stdout.strip():
+        return proc.stdout.decode("utf-8", "replace").strip()
+    return PLUGIN
+
+
+PLUGIN = _plugin_root()
+REPO = _worktree_root()  # the worktree root, or the plugin root of a standalone copy (E8-A48)
 EVALS = os.path.join(PLUGIN, "evals")
 FIXTURES = os.path.join(EVALS, "fixtures")
 FIXTURE_LIB = os.path.join(FIXTURES, "_lib")
@@ -63,12 +95,15 @@ def make_scratch(prefix):
 def other_cwd(parent, name="elsewhere"):
     """A working directory for the "from another working directory" tests: a subdirectory of a
     scratch directory under the scratch base, never the home directory and never inside the
-    worktree (Astra's check G, E8 fix round). Refuses a parent that resolves inside the worktree."""
+    worktree (Astra's check G, E8 fix round). Refuses a parent that resolves inside the worktree
+    root or the plugin root (E8-A48: any scratch directory outside both is accepted)."""
     path = os.path.join(parent, name)
-    os.makedirs(path, exist_ok=True)
-    real, repo = os.path.realpath(path), os.path.realpath(REPO)
-    if real == repo or real.startswith(repo + os.sep):
-        raise AssertionError("the other working directory %s is inside the worktree %s" % (real, repo))
+    real = os.path.realpath(path)
+    for label, root in (("worktree", REPO), ("plugin", PLUGIN)):
+        r = os.path.realpath(root)
+        if real == r or real.startswith(r + os.sep):
+            raise AssertionError("the other working directory %s is inside the %s root %s" % (real, label, r))
+    os.makedirs(path, exist_ok=True)  # created only once accepted
     return path
 
 

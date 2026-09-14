@@ -25,6 +25,10 @@ one line per check (PASS/FAIL, REJECTED/ACCEPTED (BUG), ACCEPTED/REJECTED (BUG),
 RECEIPT OK/(BUG)). Exit 0 when ok; 4 when any check fails; 2 on an unknown argument or a
 --skill-root that is not a directory; 3 when jsonschema cannot be imported (nothing on stdout);
 1 when a schema under the skill root is missing or unreadable.
+E8-A51: a positive example, a mutation base, or the checkpoint or receipt example that fails to
+load (not JSON), fails its schema, or raises during a mutation (KeyError, TypeError, ...) is a
+failure named `<file>: <error>` in `failures`, the JSON still printed with `ok` false, exit 4;
+exit 1 is reserved for a missing or unreadable schema.
 Side effects: none (read-only). Reruns are safe.
 """
 import argparse
@@ -45,9 +49,10 @@ EXAMPLE = """example:
       "failures": []}
   uv run %(prog)s --verbose 2>checks.log
 
-exit status: 0 every check passed; 4 a check failed (the failures list names each); 2 usage (an unknown
-  argument, a --skill-root that is not a directory); 3 jsonschema missing (nothing on stdout); 1 a
-  schema under the skill root missing or unreadable.
+exit status: 0 every check passed; 4 a check failed (the failures list names each, an example that does
+  not load, fails its schema, or breaks a mutation included); 2 usage (an unknown argument, a --skill-root
+  that is not a directory); 3 jsonschema missing (nothing on stdout); 1 a schema under the skill root
+  missing or unreadable.
 side effects: none (read-only). Reruns are safe."""
 
 
@@ -129,6 +134,7 @@ class Suite:
         self.verbose = verbose
         self.ex = os.path.join(schemas.root, "references", "examples")
         self.failures = []
+        self._names = {}  # id(doc) -> example file name, for the failure lines (E8-A51)
 
     def say(self, line):
         if self.verbose:
@@ -141,6 +147,20 @@ class Suite:
     def load(self, name):
         with open(os.path.join(self.ex, name), "rb") as fh:
             return json.loads(fh.read().decode("utf-8"))
+
+    def base(self, name):
+        """A positive example as a mutation base, or None with the failure recorded once (E8-A51: a base that
+        does not load is a failure, not a crash; every case on it counts as not passed)."""
+        try:
+            doc = self.load(name)
+        except (OSError, ValueError) as exc:
+            self.fail("%s: does not load: %s: %s" % (name, type(exc).__name__, exc))
+            return None
+        self._names[id(doc)] = name
+        return doc
+
+    def name_of(self, doc):
+        return self._names.get(id(doc), "<example>")
 
     def validator_for(self, base):
         if base.startswith("input-"):
@@ -158,7 +178,13 @@ class Suite:
         failing = 0
         for f in files:
             base = os.path.basename(f)
-            errs = list(self.validator_for(base).iter_errors(self.load(base)))
+            try:
+                doc = self.load(base)
+            except (OSError, ValueError) as exc:  # E8-A51: an example that is not JSON is a failure, not a crash
+                failing += 1
+                self.fail("FAIL %s: does not load: %s: %s" % (base, type(exc).__name__, exc))
+                continue
+            errs = list(self.validator_for(base).iter_errors(doc))
             if errs:
                 failing += 1
                 self.fail("FAIL " + base + ": " + "; ".join(e.message[:110] for e in errs[:3]))
@@ -169,9 +195,15 @@ class Suite:
     # ---- the negative suite and the positive mutations ----
 
     def neg(self, name, doc, validator, mutate):
-        d = copy.deepcopy(doc)
-        mutate(d)
-        ok = not validator.is_valid(d)
+        if doc is None:
+            return False  # the base did not load; recorded once by base()
+        try:
+            d = copy.deepcopy(doc)
+            mutate(d)
+            ok = not validator.is_valid(d)
+        except Exception as exc:  # noqa: BLE001 - E8-A51: a mutation that raises is a failure, not a crash
+            self.fail("%s: %s: mutation raised %s: %s" % (self.name_of(doc), name, type(exc).__name__, exc))
+            return False
         if ok:
             self.say("REJECTED " + name)
         else:
@@ -179,9 +211,15 @@ class Suite:
         return ok
 
     def pos(self, name, doc, validator, mutate):
-        d = copy.deepcopy(doc)
-        mutate(d)
-        errs = list(validator.iter_errors(d))
+        if doc is None:
+            return False  # the base did not load; recorded once by base()
+        try:
+            d = copy.deepcopy(doc)
+            mutate(d)
+            errs = list(validator.iter_errors(d))
+        except Exception as exc:  # noqa: BLE001 - E8-A51
+            self.fail("%s: %s: mutation raised %s: %s" % (self.name_of(doc), name, type(exc).__name__, exc))
+            return False
         if errs:
             self.fail("REJECTED (BUG) " + name + ": " + errs[0].message[:120])
         else:
@@ -190,7 +228,7 @@ class Suite:
 
     def mutations(self):
         inp, res, cpv, rcv = self.schemas.input, self.schemas.result, self.schemas.checkpoint, self.schemas.receipt
-        load = self.load
+        load = self.base
         completed = load("result-completed.json")
         blocked = load("result-completed-blocked.json")
         stopped = load("result-stopped.json")
@@ -385,6 +423,8 @@ class Suite:
             ("a waived marker dated 2026-02-30 (E8-A34, FormatChecker)", completed, res, lambda d: set_path(d, ["items", 1, "waived"], dict(MARK, date="2026-02-30"))),
             ("checkpoint: run_date 2026-02-30 (E8-A34, FormatChecker)", cp, cpv, lambda d: d.__setitem__("run_date", "2026-02-30")),
             ("checkpoint: a reopening grant dated 2026-99-99 (E8-A34, FormatChecker)", cp, cpv, lambda d: set_path(d, ["scope", "grants", "reopenings", 0, "date"], "2026-99-99")),
+            # the fix round after Astra's verification: E8-A50 (finding 16), the forty-hex pin
+            ("input: a seven-hex pin (E8-A50)", caller, inp, lambda d: set_path(d, ["source_identity", "commit"], "9c2f1e4")),
         ]
         rejected = sum(self.neg(*c) for c in cases)
 
@@ -436,6 +476,8 @@ class Suite:
             ("a receipt status_line value of signed off with conditions (E8-A34)", rc, rcv, lambda d: set_path(d, ["plan", 2, "value"], "signed off with conditions")),
             ("a receipt status_line value of rejected (E8-A34)", rc, rcv, lambda d: set_path(d, ["plan", 2, "value"], "rejected")),
             ("input: a leap-day run_date 2028-02-29 (E8-A34, FormatChecker)", direct, inp, lambda d: set_path(d, ["invocation", "run_date"], "2028-02-29")),
+            # the fix round after Astra's verification: E8-A50 (finding 16)
+            ("input: a forty-hex pin (E8-A50)", direct, inp, lambda d: d.__setitem__("source_identity", {"commit": "9c2f1e4d0b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d", "dirty": False})),
         ]
         accepted = sum(self.pos(*c) for c in positives)
         self._docs = {"cp": cp, "rc": rc}
@@ -454,10 +496,18 @@ class Suite:
                 return "item %d: unknown state" % i
         return check_integrity(cp, log_lines)
 
+    def read_log(self, name):
+        """The example log's lines, or None with the failure recorded (E8-A51)."""
+        try:
+            with open(os.path.join(self.ex, name), "r", encoding="utf-8") as fh:
+                return fh.read().splitlines()
+        except OSError as exc:
+            self.fail("%s: does not load: %s: %s" % (name, type(exc).__name__, exc))
+            return None
+
     def checkpoint_checks(self):
         cp = self._docs["cp"]
-        with open(os.path.join(self.ex, "checkpoint-partial.log"), "r", encoding="utf-8") as fh:
-            log = fh.read().splitlines()
+        log = self.read_log("checkpoint-partial.log") or []
         cp_cases = [
             ("the example: one done item, two pending, digest and chain intact", "ok", None, None),
             ("a pending item carrying a result", "corrupt", lambda c: c["items"][1].__setitem__("result", c["items"][0]["result"]), None),
@@ -476,13 +526,19 @@ class Suite:
             ("a log line with three fields", "corrupt", None, lambda l: l.__setitem__(0, l[0] + " extra")),
         ]
         passed = 0
+        if cp is None or not log:
+            return {"total": len(cp_cases), "passed": 0}  # the example or its log did not load; recorded once
         for name, expect, mutate_cp, mutate_log in cp_cases:
-            c = copy.deepcopy(cp); l = list(log)
-            if mutate_cp:
-                mutate_cp(c)
-            if mutate_log:
-                mutate_log(l)
-            got = self.check_checkpoint(c, l)
+            try:
+                c = copy.deepcopy(cp); l = list(log)
+                if mutate_cp:
+                    mutate_cp(c)
+                if mutate_log:
+                    mutate_log(l)
+                got = self.check_checkpoint(c, l)
+            except Exception as exc:  # noqa: BLE001 - E8-A51: a malformed example is a failure, not a crash
+                self.fail("checkpoint-partial.json: %s: raised %s: %s" % (name, type(exc).__name__, exc))
+                continue
             ok = (got == expect) if expect in ("ok", "repair") else (got not in ("ok", "repair"))
             if ok:
                 self.say("CHECKPOINT OK " + name + " -> " + got)
@@ -495,7 +551,9 @@ class Suite:
 
     def rc_consistency(self, rc):
         """The receipt example is the receipt of result-recording-failed.json as it stood when step 3 failed."""
-        failed = self.load("result-recording-failed.json")
+        failed = self.base("result-recording-failed.json")
+        if failed is None:
+            return ["result-recording-failed.json does not load"]
         problems = []
         if rc["run_id"] != failed["run"]["run_id"]:
             problems.append("run_id differs from the result's")
@@ -516,8 +574,7 @@ class Suite:
 
     def receipt_checks(self):
         rc = self._docs["rc"]
-        with open(os.path.join(self.ex, "receipt-partial.log"), "r", encoding="utf-8") as fh:
-            rlog = fh.read().splitlines()
+        rlog = self.read_log("receipt-partial.log") or []
         rc_cases = [
             ("the example: six writes, digest and chain intact", "ok", None, None),
             ("a truncated log", "corrupt", None, lambda l: l.pop()),
@@ -529,20 +586,29 @@ class Suite:
             ("a corrupted earlier line beside an announced next write (E8-15)", "corrupt", None, lambda l: (l.__setitem__(4, "4 " + "f" * 64), l.append("6 " + "1" * 64))),
         ]
         passed = 0
+        if rc is None or not rlog:
+            return {"total": len(rc_cases) + 1, "passed": 0}  # the example or its log did not load; recorded once
         for name, expect, mutate_rc, mutate_log in rc_cases:
-            c = copy.deepcopy(rc); l = list(rlog)
-            if mutate_rc:
-                mutate_rc(c)
-            if mutate_log:
-                mutate_log(l)
-            got = check_integrity(c, l)
+            try:
+                c = copy.deepcopy(rc); l = list(rlog)
+                if mutate_rc:
+                    mutate_rc(c)
+                if mutate_log:
+                    mutate_log(l)
+                got = check_integrity(c, l)
+            except Exception as exc:  # noqa: BLE001 - E8-A51
+                self.fail("receipt-partial.json: %s: raised %s: %s" % (name, type(exc).__name__, exc))
+                continue
             ok = (got == expect) if expect in ("ok", "repair") else (got not in ("ok", "repair"))
             if ok:
                 self.say("RECEIPT OK " + name + " -> " + got)
                 passed += 1
             else:
                 self.fail("RECEIPT (BUG) " + name + " -> " + got)
-        problems = self.rc_consistency(rc)
+        try:
+            problems = self.rc_consistency(rc)
+        except Exception as exc:  # noqa: BLE001 - E8-A51
+            problems = ["raised %s: %s" % (type(exc).__name__, exc)]
         if problems:
             self.fail("RECEIPT (BUG) receipt-partial.json is consistent with result-recording-failed.json: " + "; ".join(problems))
         else:

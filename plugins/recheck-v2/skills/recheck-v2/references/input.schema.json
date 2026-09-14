@@ -526,7 +526,7 @@
       "properties": {
         "commit": {
           "type": "string",
-          "pattern": "^[0-9a-f]{7,40}$",
+          "pattern": "^[0-9a-f]{40}$",
           "description": "normalized to the full hash before comparison"
         },
         "dirty": {

@@ -145,7 +145,10 @@ changes an item's place in the open set, never its disposition: the block line s
 `waived` with the grant's date and quoted words (a reopened item is marked `reopened` the same
 way). A waiver for an item the run found `fixed` is still written, since the user's word is
 recorded, and changes nothing else. Boundary override: a run whose transaction check found a
-violation (section 9) reports `not_clear` whatever the dispositions, and no card moves. Cards
+violation (section 9) reports `not_clear` whatever the dispositions; the cards of the cancelled status-line steps stay
+as they were, and a card whose status line was already receipted `done` when the violation was
+found stays moved and is listed with the reason `moved before the violation was found` (section
+9, E8-A44). Cards
 move by the mapping in Appendix A over the same effective open set; MINOR items never move a
 card; a slice at `built` never receives a verdict from this skill. The result's `cards` holds
 one entry per slice that has at least one checklist item, in ascending slice order, with
@@ -402,7 +405,8 @@ disposition agrees with its adjudication (`fixed` only from a verifier `fixed` c
 verifier `not_fixed` upgraded with evidence; `not_fixed` only from a verifier `not_fixed`
 confirmed or disputed, or a verifier `fixed` downgraded); the `result` value follows section 4
 from the effective open set; a `fixed` item carries no block and no missing-evidence field; a
-run with boundary violations changed no card, cancelled its status-line steps, and reports
+run with boundary violations moved no card past the violation (a card moved before it was found
+stays moved, listed with its reason), cancelled the remaining status-line steps, and reports
 `not_clear`; each item's `verifier_said` equals the retained report's disposition for it;
 every accepted grant maps to a write or a marker and every rejected grant object to a
 `rejected_grants` entry; the `run` block is present exactly when the input validated; every
@@ -918,3 +922,11 @@ command ran (gap 16) are the executor's judgment at adjudication (section 7) unt
 measures them, carried to E10 with the fix named: a structured `commands_run` list and an
 `observed` line per item in the report block, checked against the scenario's named commands
 by the validator.
+
+Revision 5, targeted fix 2026-09-14 after Astra's verification round (rulings E8-A47 to E8-A51 in
+the E8 lane contract, section 12): every key of the report block required and every nullable
+field typed (section 7 by way of `verifier.md`, E8-A47); the forty-hex pin enforced by the input
+schema (section 6, E8-A50); sections 4 and 9 aligned with E8-A44 on a card moved before a
+violation was found (Astra's item 26); the test helper's root discovery and V18's knowledge of
+the ended-run and consumed-grant refusals are script changes (E8-A48, E8-A49); a malformed
+example is a reported failure of the example suite, never a crash (E8-A51).

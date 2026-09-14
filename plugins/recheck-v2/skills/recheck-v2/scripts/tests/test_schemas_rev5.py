@@ -102,6 +102,18 @@ class InputSchemaRevision5(unittest.TestCase):
                                     "run_date": "2026-09-20", "turn_attribution": {"codex:thread 01a0a1b2:turn 7": "user"}})
         self.assertEqual(self.errors(self.mutated(self.caller, all_new)), [])
 
+    # E8-A50: the pin's commit is the full forty-hex hash (every built fixture's pin is forty hex)
+    def test_pin_commit_is_forty_hex(self):
+        pin = self.schemas.docs["input"]["$defs"]["identity_pin"]["properties"]["commit"]
+        self.assertEqual(pin["pattern"], "^[0-9a-f]{40}$")
+        self.assertIn("normalized", pin["description"])
+        full = "9c2f1e4d0b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d"
+        self.assertEqual(self.caller["source_identity"]["commit"], full, "the caller example pins the full hash")
+        self.assertEqual(self.errors(self.mutated(self.direct, lambda d: d.__setitem__("source_identity", {"commit": full}))), [])
+        for bad in (full[:7], full[:8], full[:39], full + "0", full.upper(), ""):
+            errs = self.errors(self.mutated(self.caller, lambda d, v=bad: d["source_identity"].__setitem__("commit", v)))
+            self.assertTrue(errs and errs[0]["path"] == "/source_identity/commit", (bad, errs))
+
     # E8-9: the binding hash rule is stated in the top-level description
     def test_description_states_binding_hash_rule(self):
         text = self.schemas.docs["input"]["description"]
