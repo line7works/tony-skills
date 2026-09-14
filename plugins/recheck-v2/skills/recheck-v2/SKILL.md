@@ -94,11 +94,13 @@ Direct route (the user asked you): build the document from the request and the w
 never from the conversation's history or the fixer's account.
 
 - `protocol_version: 1`.
-- `invocation`: `mode` (`interactive` when the user can answer a question, else `headless`),
-  `caller: direct`, `run_id` and `run_dir` minted as the adapter profile says (a fresh
-  single-use id; an absolute directory outside the workspace), `resume: false`, and the
-  adapter's `harness`, `model` (`id`, `floor_class`, `floor_met`), `session_wrote_fix` (true
-  when this session authored any fix under review), `run_date`, and `turn_attribution`.
+- `invocation`: the whole `invocation` object as the adapter's helper prints it (the profile
+  names the helper and what to pass it); type none of its fields yourself. It carries `mode`
+  (a fact the harness reports, never your guess), `caller`, `run_id` and `run_dir` (a fresh
+  single-use id; an absolute directory outside the workspace), `resume: false` (Resume is
+  the one step that flips it), `harness`, `model` (`id`, `floor_class`, `floor_met`),
+  `session_wrote_fix` (true when this session authored any fix under review; the profile
+  says how the helper learns it), `run_date`, and `turn_attribution`.
 - `workspace`: the absolute repo root.
 - `target`: `{"build_doc": "<relative path>", "slice": "<name>"}` from the request; omit
   `slice` when the user named none (the script selects the slice or asks). A caller that
