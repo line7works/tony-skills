@@ -32,6 +32,7 @@ def main():
     except ValueError:p.error('run-date must be a calendar YYYY-MM-DD')
     if not re.fullmatch('[A-Za-z0-9_-]+',a.target_token):p.error('invalid target token')
     if any([a.caller,a.run_id,a.run_dir]) and not all([a.caller,a.run_id,a.run_dir]):p.error('caller, run-id and run-dir are required together')
+    if a.run_id is not None and not re.fullmatch(r'[A-Za-z0-9._-]+',a.run_id):p.error('invalid run-id')
     ws=Path(a.workspace).resolve();records=read_records(locate(ws));meta,ctx=facts(records)
     if Path(meta.get('cwd','')).resolve()!=ws:raise ValueError('rollout cwd differs from workspace')
     mapping=attribution(records)
@@ -45,6 +46,7 @@ def main():
     roots=[Path(x).resolve() for x in ctx.get('sandbox_policy',{}).get('writable_roots',[])]
     if sandbox=='workspace-write' and any(home==r or r in home.parents for r in roots):
         sandbox='workspace-write plus the isolated home'
+    if ctx.get('sandbox_policy',{}).get('network_access') is True:sandbox+=', network on'
     # The installed helper location is the installation surface, not a model-supplied flag.
     entry='plugin' if '/plugins/cache/' in str(Path(__file__).resolve()) else 'host skill' if '/skills/recheck-v2/' in str(Path(__file__).resolve()) and str(home/'skills')+'/' in str(Path(__file__).resolve()) else 'explicit path'
     return dict(run_id=rid,run_dir=str(rd),harness=dict(name='codex-cli',version=meta['cli_version'],entry=entry,sandbox=sandbox),model=model_facts(meta,ctx,records),run_date=a.run_date,session_wrote_fix=a.session_wrote_fix,turn_attribution=mapping)

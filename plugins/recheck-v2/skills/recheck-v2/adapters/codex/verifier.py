@@ -12,11 +12,19 @@ from turns import Missing, parser, read_records, run
 def status(code, raw, timed_out=False):
     if timed_out:return 'timed-out'
     if code!=0:return 'transport-failed'
-    return 'ok' if raw.is_file() and raw.stat().st_size else 'empty'
+    return 'ok' if raw.is_file() and raw.read_text(errors='replace').strip() else 'empty'
 
 
 def metadata(events):
     model=None;injected=[]
+    def message_text(content):
+        return content if isinstance(content,str) else '\n'.join(x.get('text','') for x in content if isinstance(x,dict))
+    # User response messages without a corresponding native UserMessage are
+    # harness delivery, not attributable grants (E9-22/E9-26(e)).
+    user_texts={message_text(e.get('payload',{}).get('item',{}).get('content',[]))
+                for e in events if e.get('type')=='event_msg'
+                and e.get('payload',{}).get('type')=='item_completed'
+                and e.get('payload',{}).get('item',{}).get('type')=='UserMessage'}
     for event in events:
         if event.get('type') in ['turn_context','session_meta']:
             model=event.get('payload',event).get('model',model)
@@ -37,10 +45,10 @@ def metadata(events):
             injected.append('session_meta.base_instructions')
         if event.get('type')=='response_item':
             payload=event.get('payload',{})
-            if payload.get('type')=='message' and payload.get('role')=='developer':
-                text='\n'.join(x.get('text','') for x in payload.get('content',[]) if isinstance(x,dict))
-                tags=re.findall(r'<([a-z_]+)>',text)
-                injected.extend('developer.'+x for x in tags)
+            role=payload.get('role');text=message_text(payload.get('content',[]))
+            if payload.get('type')=='message' and (role=='developer' or (role=='user' and text not in user_texts)):
+                tags=re.findall(r'<([a-z_]+)(?:\s[^>]*)?>',text)
+                injected.extend(role+'.'+x for x in tags)
     return model,sorted(set(injected))
 
 
@@ -68,11 +76,16 @@ def main():
     canned=os.environ.get('RECHECK_ADAPTER_CANNED')
     if canned and os.environ.get('RECHECK_ADAPTER_TEST')!='1':raise ValueError('canned response outside test')
     if not brief.is_file():raise Missing('absent brief record: '+str(brief))
+    if brief != scratch.parent/'checklist.md':p.error('brief must be <run_dir>/checklist.md, the file start wrote')
     if not ws.is_dir():raise Missing('absent workspace: '+str(ws))
     if scratch==ws or ws in scratch.parents:raise ValueError('scratch must be outside workspace')
     if scratch not in raw.parents:raise ValueError('raw must be inside scratch')
     if raw.exists():raise ValueError('raw already exists; call ids are single-use')
     if not canned and not shutil.which('codex'):raise Missing('missing binary: codex')
+    if not canned:
+        home=os.environ.get('CODEX_HOME')
+        if not home or not Path(home).is_dir():raise Missing('CODEX_HOME is not set or not a directory; inherited isolated child home required (E9-25); nothing launched')
+        if os.environ.get('CODEX_SANDBOX')!='seatbelt':raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a); nothing launched')
     scratch.mkdir(parents=True,exist_ok=True);raw.parent.mkdir(parents=True,exist_ok=True)
     events=scratch/(a.call_id+'.events.jsonl');err=scratch/(a.call_id+'.stderr.log')
     if events.exists():raise ValueError('call capture already exists')
@@ -95,9 +108,9 @@ def main():
     if not canned:
         # Inherit CODEX_HOME, never set it in a command or replace the environment.
         try:
-            records=child_records(records,Path(os.environ['CODEX_HOME']).resolve())
+            records=child_records(records,Path(home).resolve())
             (scratch/(a.call_id+'.rollout.jsonl')).write_text(''.join(json.dumps(r)+'\n' for r in records))
-        except (Missing,ValueError,KeyError) as exc:
+        except (Missing,ValueError) as exc:
             if result=='ok':result='lane-unavailable'
             note=str(exc)+'; '+note
     model,injected=metadata(records)

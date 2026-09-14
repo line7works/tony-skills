@@ -11,12 +11,16 @@ home.mkdir(parents=True)
 for folder in ['skills','plugins']:
  if (base/folder).exists():shutil.copytree(base/folder,home/folder)
 shutil.copyfile(base/'config.toml',home/'config.toml')
-fd=os.open(str(home/'auth.json'),os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
-os.chmod(home/'auth.json',0o600)
-with os.fdopen(fd,'wb') as auth:auth.write((base/'auth.json').read_bytes())
+credential=base.parent.parent/'home/auth.json'
+(home/'auth.json').symlink_to(credential)
+child=home/'child';child.mkdir()
+shutil.copyfile(base/'child/config.toml',child/'config.toml')
+(child/'auth.json').symlink_to(credential)
+(child/'uv-cache').mkdir()
 for f in [home/'config.toml']+list((home/'plugins').rglob('*.json')):
  f.write_text(f.read_text().replace(str(base),str(home)))
-skill=home/'skills/manual-only-probe';body=skill/'SKILL.md';side=skill/'agents/openai.yaml'
+probe='delivery-probe' if name in ['missing-name','broken-delimiter','duplicate-name','symlink-file','symlink-directory'] else 'manual-only-probe'
+skill=home/'skills'/probe;body=skill/'SKILL.md';side=skill/'agents/openai.yaml'
 if name=='malformed-sidecar':side.write_text('interface:\n  display_name: [not, a, string]\npolicy:\n  allow_implicit_invocation: false\n')
 elif name=='missing-sidecar':side.unlink()
 elif name=='missing-name':body.write_text('\n'.join(l for l in body.read_text().splitlines() if not l.startswith('name:'))+'\n')

@@ -3,13 +3,14 @@ set -eu
 if [ "$#" -ne 3 ]; then echo 'usage: launch.sh prompt-file workspace out-dir' >&2; exit 2; fi
 export CODEX_HOME="${RECHECK_CODEX_HOME:-$HOME/.local/share/skills-v2-pilot/codex/home}"
 export PYTHONDONTWRITEBYTECODE=1
+export UV_CACHE_DIR="$CODEX_HOME/child/uv-cache"
 python3 - "$1" "$2" "$3" <<'PY'
 import json, os, shutil, subprocess, sys
 from pathlib import Path
 prompt,ws,out=map(lambda x:Path(x).resolve(),sys.argv[1:])
 if out.exists():raise SystemExit('out-dir exists; refusing to overwrite a live session')
 out.mkdir(parents=True)
-cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',os.environ['CODEX_HOME'],'-c','sandbox_workspace_write.network_access=true','-']  # E9-21: the nested verifier reaches the model through this sandbox  # E9-20: the home must be a writable root or the executor's nested verifier cannot initialize
+cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',str(Path(os.environ['CODEX_HOME'])/'child'),'-c','sandbox_workspace_write.network_access=true','-']  # E9-25: only the child home is writable; executor sessions and installed core stay outside.
 (out/'command.json').write_text(json.dumps(cmd))
 with prompt.open('rb') as inp,(out/'events.jsonl').open('wb') as events,(out/'stderr.log').open('wb') as err:
  code=subprocess.run(cmd,stdin=inp,stdout=events,stderr=err).returncode

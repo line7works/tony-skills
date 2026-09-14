@@ -32,33 +32,29 @@ def read_records(path):
 
 
 def locate(workspace):
-    home=Path(os.environ.get('CODEX_HOME', str(Path.home()/'.local/share/skills-v2-pilot/codex/home'))).resolve()
     override=os.environ.get('RECHECK_ADAPTER_RECORD')
     if override:
         if os.environ.get('RECHECK_ADAPTER_TEST')!='1':
             raise ValueError('record override outside test')
         return Path(override).resolve()
-    # Walk shell ancestors; lsof ties the record to a process rather than a cwd race.
+    # E9-25: only the executor parent's open file identifies its rollout.
+    # A shell or Python wrapper may intervene; inspect parents, never a home scan.
     pid=os.getppid()
     for _ in range(6):
         try:
-            out=subprocess.run(['lsof','-p',str(pid),'-Fn'],capture_output=True,text=True).stdout
+            probe=subprocess.run(['lsof','-p',str(pid),'-Fn'],capture_output=True,text=True)
         except FileNotFoundError:
-            raise Missing('missing binary: lsof')
-        paths=[]
-        for line in out.splitlines():
-            if line.startswith('n') and '/sessions/' in line and '/rollout-' in line and line.endswith('.jsonl'):
-                p=Path(line[1:]).resolve()
-                if home in p.parents: paths.append(p)
-        if len(set(paths))==1:return paths[0]
-        if len(set(paths))>1:raise ValueError('ambiguous open rollout files')
+            raise Missing('missing binary: lsof; executor rollout unavailable')
+        paths={Path(line[1:]).resolve() for line in probe.stdout.splitlines()
+               if line.startswith('n') and '/sessions/' in line and '/rollout-' in line and line.endswith('.jsonl')}
+        if len(paths)==1:return next(iter(paths))
+        if paths:raise Missing('ambiguous executor rollout open files on parent process')
         try:
             parent=subprocess.run(['ps','-o','ppid=','-p',str(pid)],capture_output=True,text=True)
             pid=int(parent.stdout.strip())
         except (ValueError,OSError):break
         if pid<=1:break
-    # Candidate c is deliberately not an automatic fallback: concurrent sessions collide.
-    raise Missing('absent harness record: no isolated rollout open on ancestor process; notify/newest-cwd not qualified')
+    raise Missing('absent harness record: no executor rollout open on parent process; lsof -p $PPID required (E9-25); parent inspection may be denied')
 
 
 def facts(records):
@@ -111,7 +107,9 @@ def run(main):
 
 def main():
     p=parser('Read native thread/turn/item roles; missing item ids fail closed.');p.add_argument('--workspace',default=os.getcwd());p.add_argument('--find');p.add_argument('--json',action='store_true',help='JSON is always emitted')
-    a=p.parse_args();return attribution(read_records(locate(Path(a.workspace).resolve())),a.find)
+    a=p.parse_args()
+    if a.find is not None and not a.find:p.error('--find must not be empty')
+    return attribution(read_records(locate(Path(a.workspace).resolve())),a.find)
 
 
 if __name__=='__main__':sys.exit(run(main))
