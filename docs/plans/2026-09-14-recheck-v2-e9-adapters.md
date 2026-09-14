@@ -579,6 +579,34 @@ been said.
   session, recorded in `harness.sandbox`. The profile says all of this in those words, and
   E11 weighs it: on Codex 0.154.0 a skill that summons the harness as a subprocess pays for it
   in containment.
+- **E9-22 (after lane C's pass), harness-written user records stay unmapped.** On Claude
+  Code 2.1.270 the transcript writes a `user` record for text the harness itself produced: a
+  delivered skill body (25,770 bytes measured), a tool result, a system reminder. Such a
+  record carries `isMeta`, `turnCompanion`, `sourceToolUseID`, or `toolUseResult`. Section
+  6's role rule is amended: a `user` record carrying any of those is the harness's and stays
+  unmapped; only a string or text-block `user` record without them is the user's turn. The
+  Claude adapter implements it; lanes R and Q look for the equivalent in their records (a
+  Codex `UserMessage` item the harness injects for a `$name` invocation, an OpenCode message
+  the harness synthesizes) and say what they found. A trust-boundary rule, not a convenience:
+  without it a grant could cite a delivered body's record.
+- **E9-23 (after lane C's pass), the Claude isolated setup and the sign-in.** An isolated
+  `CLAUDE_CONFIG_DIR` keeps no sign-in (`Not logged in`), so E9-4's "install and run there" is
+  split on this harness: the isolated config dir is the install and verification home (plugin
+  install, package verification, the negative tests run there), and every live session runs
+  against the machine's config dir with `--plugin-dir` onto the isolated cache,
+  `--setting-sources local`, and `--strict-mcp-config`, which the session's init event
+  records as its catalog (the built-in skills plus the named plugins, no v1 station, no MCP
+  server). Not recovered and recorded: transcripts land under the machine's `~/.claude/projects`
+  and the global instruction file still loads. `harness.entry` reads `explicit path (installed
+  plugin cache loaded with --plugin-dir)`.
+- **E9-24 (after lane C's pass), the packaged answer key, carried to E10.** The plugin folder
+  packages `evals/` into the installed cache (17 answer-key files and the held-out requests,
+  measured under the isolated config dir), so at E10 the key would be inside a trial
+  session's reach. Carried to E10 with the fix named: move `evals/` out of the plugin root
+  before the trials (the test library's `EVALS` root and the E7 runner's paths follow), or
+  build the trial package from a copy without `evals/`; until then the wall is procedural and
+  recorded. Tony's call at the close whether the move happens before E10 or the package is
+  built without it.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
