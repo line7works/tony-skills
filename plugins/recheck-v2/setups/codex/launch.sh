@@ -9,7 +9,7 @@ from pathlib import Path
 prompt,ws,out=map(lambda x:Path(x).resolve(),sys.argv[1:])
 if out.exists():raise SystemExit('out-dir exists; refusing to overwrite a live session')
 out.mkdir(parents=True)
-cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'-']
+cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',os.environ['CODEX_HOME'],'-']  # E9-20: the home must be a writable root or the executor's nested verifier cannot initialize
 (out/'command.json').write_text(json.dumps(cmd))
 with prompt.open('rb') as inp,(out/'events.jsonl').open('wb') as events,(out/'stderr.log').open('wb') as err:
  code=subprocess.run(cmd,stdin=inp,stdout=events,stderr=err).returncode
