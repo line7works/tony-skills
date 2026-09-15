@@ -499,3 +499,126 @@ stop; "PR" has not been said.
   "high" where it says "max" for those rounds; the E10 Astra kit's launcher and operator script
   carry the setting.
 
+### Rulings after Astra's review (control room, 2026-09-15; verdict RUNNER REJECTED, 20 BLOCKER, 6 MAJOR, 1 MINOR)
+
+Astra's verdict is at the Clerk packet `astra-outputs/e10/review.md` (its prompt, events and
+scratch beside it). Every finding is accepted as a fix-round item unless a ruling below reads
+it differently. One fix round (a fresh Opus 5 at the session's effort), one verification round
+(Astra at high, R1d), targeted re-checks, close under plan ruling 17.
+
+- **E10-40 (finding 1), the wall is a measured boundary, not an enforced one.** The three
+  harnesses run every trial as the same user with no read sandbox (the E9 profiles record
+  unrestricted file reads on all three; Codex confines writes only), so no process boundary can
+  keep a model under trial from a readable file. The rule: the answer key and held-out set live
+  only in the checkout (never under the campaign root, never in a stage, never in a home); during
+  every launch the runner holds both directories at mode `000` and reopens them only inside the
+  grade and routing-score steps after every trial process ended (the campaign's own process
+  holds the lock; a crash leaves them closed and `campaign start` refuses until `--reopen-key`
+  is run by hand and logged); the grader scans every trial's native tool records for reads under
+  the campaign root outside the trial's own opaque tree and records `records_reached` beside
+  `skill_file_reached` (E10-3); a symlink or hard link anywhere in a stage or a home is refused
+  by `stage` and `install`; a sentinel file placed by `check` proves what the fake child can and
+  cannot read and the record labels the boundary `instruction-bound + measured`, E9's word for
+  the same situation. Astra's prescription "outside the launch process's enforced read access"
+  is not reachable on these setups and is recorded as such.
+- **E10-41 (finding 2 and E10-34), the opaque tree.** Every trial's fixture build and run
+  directory live under `<campaign>/tmp/<digest of trial id>/{fixture,runs}`; the workspace path a
+  prompt names therefore carries no setup, case, condition or repetition, and sits inside the
+  one tree OpenCode's allow rule covers (the parent-directory refusal of E10-34 disappears with
+  the layout that caused it). The record keeps the mapping in `command.json` and receives a
+  copy of the fixture and the run directory after the trial. The paired-prompt test compares
+  complete normalized bytes. The run id's case name (E7 gap 13) stays the one documented
+  exception and the record says so.
+- **E10-42 (finding 3), one environment boundary.** Every subprocess the runner starts, the
+  detached campaign process included, goes through one function that builds the E10-7
+  environment; the harness-created names are a per-harness measured list (`CLAUDECODE` and the
+  eight `CLAUDE_CODE_*` for Claude Code; `CODEX_*` and `GH_PAGER` for Codex; none for OpenCode)
+  recorded with the probe that measured them, and any other name in a probe fails it; a probe
+  that exits non-zero or prints nothing fails; all nine probe records are retained by name and
+  `campaign start` refuses without nine current successful ones.
+- **E10-43 (findings 4, 5, 7, 19, 21), identities, records and outcomes.** `plan` validates the
+  whole plan (the harness set, the six cases, unique setup and case names, no separator or dot
+  segment anywhere) before any write; run locations derive from campaign, full trial id and
+  attempt number and an existing run directory is refused, never removed; every record name is
+  unique and reserved atomically (probe records aggregated by reference, tables separate from
+  the operator's report, `grade.json` the sole replaceable file); the process outcome decides the
+  status independently of artifact presence, one status for `command.json` and the ledger, and
+  every failure, timeout, signal and stop is an attempt-specific interruption line; `campaign
+  stop` terminates registered trial groups and collects their statuses, and a directory without
+  `command.json` is a `partial` attempt the report retains.
+- **E10-44 (findings 6, 22, 23), attempts and grading.** Reruns dispatch by trial kind
+  (comparison, continuation, routing); records and grades join on `(trial id, attempt)`; every
+  comparison and continuation attempt is graded and every report cell derives from that
+  attempt's own records; `grade` returns its written path; dispositions and false-fixed metrics
+  use an explicit item correspondence over the matcher's forms and report unmatched items.
+- **E10-45 (findings 8, 9, 10), the grading barrier and the grade.** Every launch process is
+  registered before it starts and bound to its attempt; neither grading path opens a key while
+  any registered process of that attempt is alive; a key whose `runs_at` lacks E10 is refused
+  before matching; grading inputs are bound to the trial's recorded commit and case with their
+  hashes recorded; stand-ins are honoured only for campaigns the runner itself marks synthetic;
+  every mandatory metric must pass, zero skips, validator exit zero, and a retained validation is
+  used only when its recorded input hashes equal the current files; the interop check reads the
+  session's actual final reply against the Output block's required lines and items.
+- **E10-46 (findings 11, 12, 13, 14), witnesses from native records.** Trace grading parses
+  each harness's native tool records (verifier and both continuation captures included),
+  resolves destinations by path-component containment, parses git options, separates completed
+  from refused actions, and emits `skill_file_reached` and `records_reached`; condition and
+  activation witnesses come from the session's active catalog and a successful delivery event
+  of the exact message or tool type, with file and line or message and part ids retained;
+  Codex routing selects from actual read and delivery events under E10-33's rule with every
+  candidate listed (E10-33's description of the T-02 record is corrected: rollout line 3 is
+  the developer catalog message, not a browse; the recheck-v2 read begins at line 13); a
+  catalog is parsed in its native format, the full required set is verified, and a breach
+  persists a lane stop no later launch can pass.
+- **E10-47 (finding 15), the cut is what was retained.** The runner stops the relevant
+  processes, then captures and verifies the exact checkpoint and log pair before any resume; a
+  cut whose retained pair does not show the claimed state is an invalid cut and the trial is
+  recorded so; the default poll interval is 0.1 s (E10-25 amended: "at least ten times a
+  second" is the rule and the default); a compaction witness is a native compaction event in the
+  resumed session before the resumed work, never prose; the three continuation invariants
+  (continuations equal 1, done items and prior verifier calls unchanged, start identity
+  preserved) are graded.
+- **E10-48 (finding 16 and E10-27 corrected), measurements.** Raw history stays; the runner
+  adds hash-bound corrected measurement records for the dry run's early continuation totals and
+  the Claude compaction r2 cost, and the report consumes them; launches are counted apart from
+  trials. E10-27 is corrected: a cut session's cost is recorded when the harness had already
+  written its result event (the Claude hand-off's first session recorded $2.906325 at trace line
+  224 and was not cut); only a session killed before its result event has none. The dry run's
+  ledger as Astra recounted it: 24 attempts over 20 ids, 16 complete, 5 no result, 3 launch
+  failed, $6.497 recorded; the nested campaign 3 attempts, 2 complete, 1 launch failed, $3.054.
+- **E10-49 (finding 17), the OpenCode store separation.** Measured on the verifier child's
+  own rows, located by its recorded call and session id, retained beside the trial; an empty or
+  absent capture is `unavailable`, never `measured`.
+- **E10-50 (finding 18), model provenance.** `model.json` reads the native init event or
+  record itself, validates its session binding, and is `null` when the required event is
+  absent; configured and observed values are kept apart.
+- **E10-51 (finding 20 and E10-5), the campaign process.** One atomic ownership handshake for
+  `campaign start`; launch options preserved into the detached process; one sequential worker
+  per setup, the three running concurrently, with native timestamps proving overlap.
+- **E10-52 (findings 24, 25, 26, 27), the scanner, the tests, the stage, the docs.** The
+  scanner recognises assignment delimiters, scans every retained capture regardless of extension
+  or leading NUL, exempts only each setup's actual configured store (Claude Code has none: its
+  sign-in is the Keychain), and a hit fails the launch or report gate; every test exercises the
+  real path it names with fully substituted harness boundaries and test-only held-out entries,
+  and the fix round runs the suites under both intended runtimes with `jsonschema` present;
+  `stage` and `verify` require a successful fresh identity with a non-empty digest, fail on any
+  failed row, and exit 3 for a missing prerequisite. `--help` text on stdout is the documented
+  A7a exception (as every E9 helper answers it); the README's superseded claims are rewritten as
+  history; E10-37's citation is corrected: the false hit sat in `/payload/encrypted_content` at
+  verifier rollout line 26, the classification unchanged.
+- **E10-53, Astra's five questions, answered.** (1) The four sign-in probe sessions the
+  builder ran are not retained as records: its `authprobe/` scratch holds compile caches only;
+  the `USER` measurement is therefore re-made in the fix round as retained probe records
+  (E10-42), and the builder's quoted costs for those four sessions are struck from the estimate
+  until then. (2) The operator's argv, environment names and the bound rollout of the nested
+  proof are supplied beside the proof (`nested-2026-09-15/operator/operator-launch.json`,
+  `nested-proof.sh`, `operator-rollout.jsonl`); the proof ran Astra at low, which the record
+  states; the builder's effort witness is `e10/builder/effort-witness.txt` (the transcript's
+  effort and model counts). (3) Stage manifests and full no-key home inventories are a fix-round
+  output: `stage` writes the file manifest with hashes and `install` writes each home's full
+  inventory. (4) The manual-only measurement is one dedicated request outside both evaluation
+  sets, added by the runner to every routing lane and reported as its own row; neither
+  denominator changes. (5) The pre-E10-30 Codex probe records were replaced by `--refresh` and
+  are not retained; `runner.log` and E10-30 hold the observation; E10-43 makes every probe
+  record immutable from here.
+
