@@ -1,0 +1,1 @@
+Load recheck-v2 and report the final numbered procedure step and the Gotchas section that reached you. Do not start a recheck or read the body through a tool to recover missing text. Do not use web, MCP, other models, or agents.

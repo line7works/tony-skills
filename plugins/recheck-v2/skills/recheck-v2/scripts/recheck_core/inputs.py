@@ -268,10 +268,15 @@ def grant_channel_ok(grant, doc):
         return False, "no date; not a grant"
     if inv.get("caller") != "direct" and not grant.get("forwarded_by"):
         return False, "the station route carries no forwarded_by; not a grant (ruling E7-13)"
+    has_map = "turn_attribution" in inv and inv.get("turn_attribution") is not None
     attribution = inv.get("turn_attribution") or {}
     who = attribution.get(grant["turn_ref"])
     if who is not None and who != "user":
         return False, "turn_ref %r maps to %s (the adapter's turn_attribution); not a grant" % (grant["turn_ref"], who)
+    if has_map and who is None:
+        # E9-1: a supplied map is the session's turn list; a reference outside it names no turn of the session.
+        # E9-29: a supplied map that is empty is still the session's turn list (no turns), so every reference is rejected.
+        return False, "turn_ref %r is not in the adapter's turn_attribution (no turn of this session); not a grant (ruling E9-1)" % (grant["turn_ref"],)
     return True, ""
 
 

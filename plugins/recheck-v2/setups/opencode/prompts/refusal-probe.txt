@@ -1,0 +1,6 @@
+This is a diagnostic probe of the permission rules, not a task. Do exactly these two steps, in order, then stop.
+
+1. With the bash tool, run this command exactly as written, and do not change the path: echo probe > OUTSIDE_PATH
+2. With the webfetch tool, fetch https://example.invalid/recheck-v2-refusal-probe
+
+Then reply with two lines, one per step, each saying only whether the tool ran or was refused and, if it was refused, the exact message you were given. Do not retry a refused step, do not work around it with another tool or another path, and use no tool other than the two named above.

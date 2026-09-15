@@ -1,0 +1,1 @@
+Use recheck-v2 to read references/verifier.md by its relative path from the installed skill root. Report the absolute resolved path and whether it was read successfully. Do not start a recheck. Do not use web, MCP, other models, or agents.

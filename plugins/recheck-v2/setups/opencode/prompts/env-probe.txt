@@ -1,0 +1,5 @@
+Run exactly this command and nothing else, then reply with the word DONE and nothing else:
+
+env | cut -d= -f1 | sort > ENV_NAMES_PATH
+
+Do not print any environment variable's value, do not read the file back, and do not run any other command. This probe records variable NAMES only: a value of OPENROUTER_API_KEY, or of any variable whose name contains KEY, TOKEN, SECRET or PASSWORD, must never be written down, printed, or copied anywhere (E9 section 3; Astra finding 1).

@@ -1,0 +1,159 @@
+{
+  "_comment": "A real opencode 1.18.31 session record captured by lane Q on 2026-09-14 and committed for the adapter tests. The rows are the store's own `session`, `message` and `part` rows verbatim except that the user's prompt text and the assistant's reply text were replaced with a neutral token (ALPHA-TOKEN), which both turns carry so `turns.py --find` can be held to returning the user's turn only. No credential-looking string is present; the store's credential and account tables were never read.",
+  "constructed": {
+    "_comment": "Four rows this lane's own captures do not contain, added so the unmapped cases are covered: a message with a role the map does not carry; one written by the harness's own internal `summary` agent; a `user` row whose only part is a tool result (tool-only); and a `user` row whose only text part is marked `synthetic`. The last two are ruling E9-22's OpenCode reading: measured over the 26 sessions this lane's store held on 2026-09-14, opencode 1.18.31 wrote no such row itself (every `user` row carried exactly one non-synthetic text part and no `synthetic` key appears anywhere in the store), so these are constructed, not captured.",
+    "messages": [
+      {
+        "data": "{\"role\": \"system\", \"time\": {\"created\": 1789419425900}, \"agent\": \"build\"}",
+        "id": "msg_constructed_unknown_role",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419425900,
+        "time_updated": 1789419425900
+      },
+      {
+        "data": "{\"role\": \"user\", \"time\": {\"created\": 1789419425950}, \"agent\": \"summary\", \"model\": {\"providerID\": \"openrouter\", \"modelID\": \"qwen/qwen3.8-flash\"}}",
+        "id": "msg_constructed_internal_agent",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419425950,
+        "time_updated": 1789419425950
+      },
+      {
+        "data": "{\"role\": \"user\", \"time\": {\"created\": 1789419426000}, \"agent\": \"build\"}",
+        "id": "msg_constructed_tool_only_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426000,
+        "time_updated": 1789419426000
+      },
+      {
+        "data": "{\"role\": \"user\", \"time\": {\"created\": 1789419426100}, \"agent\": \"build\"}",
+        "id": "msg_constructed_synthetic_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426100,
+        "time_updated": 1789419426100
+      }
+    ],
+    "parts": [
+      {
+        "data": "{\"type\": \"text\", \"text\": \"ALPHA-TOKEN appears here too.\"}",
+        "id": "prt_constructed_internal",
+        "message_id": "msg_constructed_internal_agent",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419425950,
+        "time_updated": 1789419425950
+      },
+      {
+        "data": "{\"type\": \"tool\", \"tool\": \"read\", \"callID\": \"call_constructed\", \"state\": {\"status\": \"completed\", \"input\": {\"filePath\": \"README.md\"}, \"output\": \"ALPHA-TOKEN\"}}",
+        "id": "prt_constructed_tool_only_user",
+        "message_id": "msg_constructed_tool_only_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426000,
+        "time_updated": 1789419426000
+      },
+      {
+        "data": "{\"type\": \"text\", \"synthetic\": true, \"text\": \"ALPHA-TOKEN written by the harness, not the user.\"}",
+        "id": "prt_constructed_synthetic_user",
+        "message_id": "msg_constructed_synthetic_user",
+        "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+        "time_created": 1789419426100,
+        "time_updated": 1789419426100
+      }
+    ]
+  },
+  "messages": [
+    {
+      "data": "{\"role\":\"user\",\"time\":{\"created\":1789419425461},\"agent\":\"build\",\"model\":{\"providerID\":\"openrouter\",\"modelID\":\"qwen/qwen3.8-flash\"},\"summary\":{\"diffs\":[]}}",
+      "id": "msg_0a1b58eb50012re3DCLlXMbVn0",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419425461,
+      "time_updated": 1789419425725
+    },
+    {
+      "data": "{\"parentID\":\"msg_0a1b58eb50012re3DCLlXMbVn0\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/opencode/probes/envprobe\",\"root\":\"/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/opencode/probes/envprobe\"},\"cost\":0.000205932,\"tokens\":{\"total\":9698,\"input\":162,\"output\":6,\"reasoning\":58,\"cache\":{\"write\":0,\"read\":9472}},\"modelID\":\"qwen/qwen3.8-flash\",\"providerID\":\"openrouter\",\"time\":{\"created\":1789419425619,\"completed\":1789419428532},\"finish\":\"stop\"}",
+      "id": "msg_0a1b58f5300123Q0h9wYYEn8Xj",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419425619,
+      "time_updated": 1789419428533
+    }
+  ],
+  "parts": [
+    {
+      "data": "{\"type\": \"text\", \"text\": \"Please reply with exactly ALPHA-TOKEN and nothing else.\"}",
+      "id": "prt_0a1b58eb9001LIi8Yqwf2SiQX7",
+      "message_id": "msg_0a1b58eb50012re3DCLlXMbVn0",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419425614,
+      "time_updated": 1789419425614
+    },
+    {
+      "data": "{\"snapshot\": \"7dd7df0503561ea3ded76123a31c986a4570fae8\", \"type\": \"step-start\"}",
+      "id": "prt_0a1b595b7001kBpSNRfbZKzmYC",
+      "message_id": "msg_0a1b58f5300123Q0h9wYYEn8Xj",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419427255,
+      "time_updated": 1789419427255
+    },
+    {
+      "data": "{\"type\": \"reasoning\", \"text\": \"The user is asking me to reply with exactly \\\"ALPHA-TOKEN\\\". The system says I'm interactive and should be direct. There's also a note about NEVER duplicating content, but the user has given an explicit instruction. A test probe is being requested. Reply with ALPHA-TOKEN.\\n\", \"time\": {\"start\": 1789419427256, \"end\": 1789419428344}, \"metadata\": {\"openrouter\": {\"reasoning_details\": [{\"type\": \"reasoning.text\", \"text\": \"The user is asking me to reply with exactly \\\"PROBE2\\\". The system says I'm interactive and should be direct. There's also a note about NEVER duplicating content, but the user has given an explicit instruction. A test probe is being requested. Reply with PROBE2.\\n\", \"format\": \"unknown\", \"index\": 0}]}}}",
+      "id": "prt_0a1b595b8001ybKIHL3EGIXgZP",
+      "message_id": "msg_0a1b58f5300123Q0h9wYYEn8Xj",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419427256,
+      "time_updated": 1789419428345
+    },
+    {
+      "data": "{\"type\": \"text\", \"text\": \"ALPHA-TOKEN\", \"time\": {\"start\": 1789419428345, \"end\": 1789419428370}}",
+      "id": "prt_0a1b599f90015mrdMhxhzaVgqb",
+      "message_id": "msg_0a1b58f5300123Q0h9wYYEn8Xj",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419428345,
+      "time_updated": 1789419428371
+    },
+    {
+      "data": "{\"reason\": \"stop\", \"snapshot\": \"9805a83d2773753c96ca3c4598859694499b1532\", \"type\": \"step-finish\", \"tokens\": {\"total\": 9698, \"input\": 162, \"output\": 6, \"reasoning\": 58, \"cache\": {\"write\": 0, \"read\": 9472}}, \"cost\": 0.000205932}",
+      "id": "prt_0a1b59a5f0010xkvHitx41tHyh",
+      "message_id": "msg_0a1b58f5300123Q0h9wYYEn8Xj",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419428447,
+      "time_updated": 1789419428448
+    },
+    {
+      "data": "{\"type\": \"patch\", \"hash\": \"7dd7df0503561ea3ded76123a31c986a4570fae8\", \"files\": [\"/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/opencode/probes/envprobe/t2.json\"]}",
+      "id": "prt_0a1b59ab2001zLwldkdSi33m3h",
+      "message_id": "msg_0a1b58f5300123Q0h9wYYEn8Xj",
+      "session_id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+      "time_created": 1789419428530,
+      "time_updated": 1789419428531
+    }
+  ],
+  "session": {
+    "agent": "build",
+    "cost": 0.000205932,
+    "directory": "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/opencode/probes/envprobe",
+    "id": "ses_f5e4a7160ffeJv04kUmJa2PHl7",
+    "metadata": null,
+    "model": "{\"id\":\"qwen/qwen3.8-flash\",\"providerID\":\"openrouter\",\"variant\":\"default\"}",
+    "parent_id": null,
+    "path": "",
+    "permission": "[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]",
+    "project_id": "global",
+    "revert": null,
+    "share_url": null,
+    "slug": "sunny-planet",
+    "summary_additions": 0,
+    "summary_deletions": 0,
+    "summary_diffs": null,
+    "summary_files": 0,
+    "time_archived": null,
+    "time_compacting": null,
+    "time_created": 1789419425439,
+    "time_updated": 1789419428538,
+    "title": "neutral probe session",
+    "tokens_cache_read": 9472,
+    "tokens_cache_write": 0,
+    "tokens_input": 162,
+    "tokens_output": 6,
+    "tokens_reasoning": 58,
+    "version": "1.18.31",
+    "workspace_id": null
+  }
+}

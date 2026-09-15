@@ -1,0 +1,5 @@
+{
+  "name": "delivery-probe",
+  "description": "Skills v2 pilot fixture (E9, amendment A7b): a skill whose body carries 24 numbered sentinel lines about 1,000 bytes apart, so the text a harness actually delivers to the model can be measured. Never installed outside an isolated pilot setup.",
+  "version": "0.1.0"
+}

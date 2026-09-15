@@ -86,15 +86,21 @@ never fetch a reference from anywhere else. The References table says when each 
 
 ### 2. Build the input
 
+First read `adapters/README.md`, the adapter index: it names the profile for the harness
+you run in, and that profile says how every `invocation` field below is filled (its helper
+prints them as facts) and how the verifier is summoned in step 4. Read that profile now.
+
 Direct route (the user asked you): build the document from the request and the workspace,
 never from the conversation's history or the fixer's account.
 
 - `protocol_version: 1`.
-- `invocation`: `mode` (`interactive` when the user can answer a question, else `headless`),
-  `caller: direct`, `run_id` and `run_dir` minted as the adapter profile says (a fresh
-  single-use id; an absolute directory outside the workspace), `resume: false`, and the
-  adapter's `harness`, `model` (`id`, `floor_class`, `floor_met`), `session_wrote_fix` (true
-  when this session authored any fix under review), `run_date`, and `turn_attribution`.
+- `invocation`: the whole `invocation` object as the adapter's helper prints it (the profile
+  names the helper and what to pass it); type none of its fields yourself. It carries `mode`
+  (a fact the harness reports, never your guess), `caller`, `run_id` and `run_dir` (a fresh
+  single-use id; an absolute directory outside the workspace), `resume: false` (Resume is
+  the one step that flips it), `harness`, `model` (`id`, `floor_class`, `floor_met`),
+  `session_wrote_fix` (true when this session authored any fix under review; the profile
+  says how the helper learns it), `run_date`, and `turn_attribution`.
 - `workspace`: the absolute repo root.
 - `target`: `{"build_doc": "<relative path>", "slice": "<name>"}` from the request; omit
   `slice` when the user named none (the script selects the slice or asks). A caller that
@@ -143,8 +149,8 @@ answers `{"next": "verify", "call_id": "recheck-a-20260920-7f3c-verify", "brief"
 
 ### 4. Summon the verifier
 
-Read `references/verifier.md`. Summon one fresh verifier through the harness's verifier
-capability with `<run_dir>/checklist.md` as its whole brief: hand over that file's path, add
+Read `references/verifier.md`. Summon one fresh verifier through the verifier capability
+the adapter profile names, with `<run_dir>/checklist.md` as its whole brief: hand over that file's path, add
 nothing from this session (no summary, no history, no fixer account, no instruction), and
 choose no model, reasoning setting, or authorization for it: the brief is the whole mandate,
 and where the request needs `session_model` or `authorized` the adapter fills them as
@@ -375,3 +381,4 @@ defect to report.
 | `references/receipt.schema.json` | loaded by the scripts; never edited by the executor | the receipt the scripts write |
 | `references/verifier.md` | before summoning the verifier and when taking a report back | steps 4 and 5 |
 | `references/examples/README.md` | when building an input by hand | step 2 |
+| `adapters/README.md`, then the profile it names for your harness | before step 2; again before step 4 | the invocation block (step 2); the verifier capability (step 4) |

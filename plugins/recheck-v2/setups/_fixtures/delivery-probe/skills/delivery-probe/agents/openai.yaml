@@ -1,0 +1,3 @@
+interface:
+  display_name: "Delivery probe"
+  short_description: "Lists the sentinel lines of its own body (skills v2 pilot fixture)"

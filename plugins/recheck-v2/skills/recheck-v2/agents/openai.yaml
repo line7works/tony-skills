@@ -1,0 +1,3 @@
+interface:
+  display_name: "Recheck v2"
+  short_description: "Verify recorded fixes with a fresh closed-checklist inspection"

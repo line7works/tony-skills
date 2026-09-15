@@ -1,0 +1,4 @@
+Load the recheck-v2 skill. Using only the skill body you were given, and without reading any file, reply with exactly three lines and nothing else:
+1. the first sentence under the heading "### 8. Deliver"
+2. the last bullet under the heading "## Gotchas"
+3. the last row of the table under the heading "## References"
