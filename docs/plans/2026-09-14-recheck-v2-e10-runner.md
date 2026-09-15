@@ -479,4 +479,17 @@ stop; "PR" has not been said.
   Every key shape now requires a non-base64 boundary before its prefix; re-scanned, the records
   and the builder's scratch are clean. The exemption list is unchanged (the setups' own auth
   stores by resolved path).
+- **E10-38 (control-room pass), the nested-launch proof.** One `codex exec` of the operator's
+  exact shape (E10-8: `-m gpt-6-astra`, `-s danger-full-access`, `approval_policy=never`,
+  `web_search=disabled`, `features.shell_snapshot=false`, the E10-7 allowlist with `USER`),
+  whose prompt only invoked `runner.py run` three times, launched one trial per setup in the
+  campaign `~/.local/share/skills-v2-pilot/e10/nested-2026-09-15/`: Claude Code complete and
+  validating (265 s, `claude-opus-5` at high, $3.05), Codex complete and validating (157 s,
+  `gpt-6-astra` at high, nested inside the operator's session), OpenCode launched, loaded the
+  skill and ran to the model, then OpenRouter returned 429 (`qwen/qwen3.8-flash is temporarily
+  rate-limited upstream`) and the harness exited 1 (recorded `launch_failed`, 121 s, $0.003).
+  The three launch shapes therefore start from inside a `codex exec`; the OpenCode failure is
+  an upstream interruption of the kind E10-14 records and E10-15 reruns once. The `codex
+  sandbox` half of E10-8 stays unperformable on 0.154.0 (the builder's fourteen shapes).
+  Astra's own final message reproduced the three JSON results verbatim and nothing else.
 
