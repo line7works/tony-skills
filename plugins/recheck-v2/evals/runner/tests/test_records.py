@@ -99,14 +99,22 @@ class RecordLayoutTest(RunnerCase):
         self.assertNotIn("do not use", prompt.lower())
         self.assertIn("a fresh verifier proves", prompt)
 
-    def test_the_run_root_breach_of_E10_4_is_recorded_rather_than_hidden(self):
+    def test_the_default_run_root_is_neutral_and_the_note_says_so(self):
+        # E10-22: the setups name the run root ${TMPDIR}/runs, so the default plan breaches
+        # nothing; the note still records the name and the rule that ties the launchers to it.
         command = runner.read_json(os.path.join(self.record, "command.json"))
         note = command["run_root_note"]
-        self.assertEqual(note["run_root_name"], "recheck-v2")
-        self.assertTrue(note["prompt_names_the_skill"])
+        self.assertEqual(note["run_root_name"], "runs")
+        self.assertFalse(note["prompt_names_the_skill"])
         self.assertIn("external_directory", note["reason"])
         prompt = runner.read_text(os.path.join(self.record, "prompt.txt"))
-        self.assertIn("recheck-v2", prompt, "the breach the note records is not real")
+        self.assertNotIn("recheck-v2", prompt, "the run-directory path names the skill")
+
+    def test_a_plan_that_names_the_old_run_root_records_the_breach_rather_than_hiding_it(self):
+        note = runner.run_root_note({"run_root_name": "recheck-v2"})
+        self.assertEqual(note["run_root_name"], "recheck-v2")
+        self.assertTrue(note["prompt_names_the_skill"])
+        self.assertIn("breached", note["reason"])
 
     def test_a_neutral_run_root_name_in_the_plan_removes_the_name_from_the_prompt(self):
         self.campaign = os.path.join(self.scratch, "neutral-campaign")

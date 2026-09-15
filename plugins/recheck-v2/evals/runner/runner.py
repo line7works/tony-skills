@@ -1769,7 +1769,7 @@ def build_fixture(campaign, case, out):
 # prompt "never names recheck-v2", and the prompt must name the run directory, so the two rules
 # collide. The runner keeps the working path and records the breach; `plan.json` may set
 # `run_root_name` to a neutral segment once the setups allow one (the report names the edit).
-DEFAULT_RUN_ROOT_NAME = "recheck-v2"
+DEFAULT_RUN_ROOT_NAME = "runs"  # E10-22: the setups name the run root ${TMPDIR}/runs since a55da08
 
 
 def run_root_of(campaign, plan, trial=None):
@@ -1792,12 +1792,15 @@ def run_root_note(plan):
     return {
         "run_root_name": name,
         "prompt_names_the_skill": name == "recheck-v2",
-        "reason": "the adapter's run root is ${TMPDIR}/recheck-v2 (pilot contract section 2, "
-                  "every profile section 3); the Claude launcher's --add-dir and the OpenCode "
-                  "external_directory allow rule are written for that path, so a neutral "
-                  "segment makes every write outside the workspace fail. E10-4's 'the prompt "
-                  "never names recheck-v2' is breached by the run-directory path alone and is "
-                  "reported as a finding.",
+        "reason": ("the run root is ${TMPDIR}/runs (E10-22: setups/claude-code/launch.sh's "
+                   "--add-dir and setups/opencode/install.sh's external_directory allow rule "
+                   "are written for that segment since a55da08), so the run-directory path "
+                   "names no skill; E10-4 holds." if name != "recheck-v2" else
+                   "the run root segment is recheck-v2, so the run-directory path in the prompt "
+                   "names the skill: E10-4's 'the prompt never names recheck-v2' is breached by "
+                   "the path alone and is recorded here; the Claude launcher's --add-dir and the "
+                   "OpenCode external_directory allow rule must be written for the same segment "
+                   "or every write outside the workspace fails."),
     }
 
 

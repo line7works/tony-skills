@@ -314,7 +314,7 @@ wall-clock gap and skipped incomplete record with what the runner observed and w
   "continuation": {"case": "F3-02-mixed-two-items", "condition": "available", "repetitions": 1},
   "routing": {"entries": "all", "repetitions": 3},
   "timeouts": {"comparison": 1800, "continuation": 1800, "routing": 300},
-  "run_root_name": "recheck-v2"
+  "run_root_name": "runs"
 }
 ```
 
