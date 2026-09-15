@@ -154,15 +154,11 @@ class AdapterTests(unittest.TestCase):
             c=self.call('verifier.py','--brief',str(brief),'--workspace',tmp,'--scratch',str(Path(tmp)/'verifier'),'--raw',str(Path(tmp)/'verifier/raw.md'))
             self.assertEqual(c.returncode,2,c.stderr)
 
-    def test_locator_requires_thread_and_single_root(self):
-        with mock.patch.dict(os.environ,{},clear=True):
-            with self.assertRaisesRegex(turns.Missing,'no CODEX_THREAD_ID'):
-                turns.locate(Path('/tmp/ws'))
-        with tempfile.TemporaryDirectory() as tmp:
-            home=Path(tmp)/'default'
-            with mock.patch.dict(os.environ,{'CODEX_HOME':str(home),'CODEX_THREAD_ID':'absent'},clear=True), mock.patch.object(Path,'home',return_value=home.parent):
-                with self.assertRaisesRegex(turns.Missing,str(home.parent/'.codex/sessions')):
-                    turns.locate(Path('/tmp/ws'))
+    def test_worktree_location_refused(self):
+        for helper in ['turns.py','invocation.py']:
+            c=self.call(helper)
+            self.assertEqual(c.returncode,3,c.stderr)
+            self.assertIn(str(ROOT/'turns.py'),c.stderr)
 
     def test_invocation_originator(self):
         fixture=ROOT/'tests/fixtures/real-rollout.jsonl'
@@ -250,98 +246,101 @@ class AdapterTests(unittest.TestCase):
 
 
 class ThreadIdLocator(unittest.TestCase):
-    """E9-31: CODEX_THREAD_ID names the executor's rollout under the sessions directory beside the child home;
-    an absent file is a missing record (exit 3), never a fallback to another session."""
+    """E9-40 installed-location tests; no harness or model is launched."""
 
-    def _run(self, env, workspace):
-        import subprocess, sys, os
-        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        e = dict(os.environ); e.pop('RECHECK_ADAPTER_RECORD', None); e.pop('RECHECK_ADAPTER_TEST', None); e.update(env)
-        return subprocess.run([sys.executable, os.path.join(here, 'turns.py'), '--workspace', workspace], capture_output=True, text=True, env=e)
+    def setUp(self):
+        import shutil
+        self.tmp=tempfile.TemporaryDirectory(dir=os.environ.get('RECHECK_TEST_SCRATCH'))
+        self.addCleanup(self.tmp.cleanup)
+        self.home=Path(self.tmp.name).resolve()
+        self.helpers=self.home/'plugins/cache/m/p/v/skills/recheck-v2/adapters/codex'
+        self.helpers.mkdir(parents=True)
+        for name in ['turns.py','invocation.py','verifier.py']:
+            shutil.copyfile(ROOT/name,self.helpers/name)
+        self.rows=turns.read_records(ROOT/'tests/fixtures/real-rollout.jsonl')
+        self.meta=turns.facts(self.rows)[0]
+        self.thread=self.meta['id']
+        self.env=dict(os.environ,CODEX_HOME=str(self.home/'child'),CODEX_THREAD_ID=self.thread,PYTHONDONTWRITEBYTECODE='1')
+        for key in ['RECHECK_ADAPTER_TEST','RECHECK_ADAPTER_RECORD']:
+            self.env.pop(key,None)
+
+    def record(self,root,readonly=True):
+        path=root/'sessions/2026/09/14'/('rollout-executor-'+self.thread+'.jsonl')
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(''.join(json.dumps(r)+'\n' for r in self.rows))
+        if readonly:path.chmod(0o444)
+        return path
+
+    def check(self,code,contains=None,mapped=False):
+        for helper in ['turns.py','invocation.py']:
+            with self.subTest(helper=helper):
+                c=subprocess.run([sys.executable,str(self.helpers/helper),'--workspace',self.meta['cwd']],cwd=self.home,env=self.env,capture_output=True,text=True)
+                self.assertEqual(c.returncode,code,c.stderr)
+                if contains:self.assertIn(str(contains),c.stderr)
+                if mapped:
+                    d=json.loads(c.stdout)
+                    self.assertEqual(d if helper=='turns.py' else d['turn_attribution'],turns.attribution(self.rows))
 
     def test_thread_id_names_the_rollout(self):
-        import json, os, shutil, tempfile
-        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        fixture = os.path.join(here, 'tests', 'fixtures', 'real-rollout.jsonl')
-        with open(fixture) as f:
-            meta = [json.loads(l) for l in f if l.strip() and '"session_meta"' in l][0]['payload']
-        thread = meta['id']; cwd = meta['cwd']
-        tmp = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, tmp, True)
-        home = os.path.join(tmp, 'home'); child = os.path.join(home, 'child'); os.makedirs(child)
-        sessions = os.path.join(home, 'sessions', '2026', '09', '14'); os.makedirs(sessions)
-        shutil.copyfile(fixture, os.path.join(sessions, 'rollout-2026-09-14T00-00-00-' + thread + '.jsonl'))
-        Path(sessions, 'rollout-2026-09-14T00-00-00-' + thread + '.jsonl').chmod(0o444)
-        ok = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': thread}, cwd)
-        self.assertEqual(ok.returncode, 0, ok.stderr)
-        self.assertIn('codex:thread ' + thread, ok.stdout)
-        missing = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': 'no-such-thread'}, cwd)
-        self.assertEqual(missing.returncode, 3, missing.stderr)
-        self.assertIn('E9-31', missing.stderr)
-
-    def _check_candidate(self, root_name, readonly):
-        with tempfile.TemporaryDirectory() as tmp:
-            base=Path(tmp)/root_name;child=base/'child';child.mkdir(parents=True)
-            sessions=base/'sessions';sessions.mkdir()
-            rows=turns.read_records(ROOT/'tests/fixtures/real-rollout.jsonl')
-            meta=turns.facts(rows)[0];thread=meta['id']
-            record=sessions/('rollout-executor-'+thread+'.jsonl')
-            original=''.join(json.dumps(r)+'\n' for r in rows)
-            record.write_text(original)
-            if readonly:record.chmod(0o444)
-            env=dict(os.environ,CODEX_HOME=str(child),CODEX_THREAD_ID=thread,PYTHONDONTWRITEBYTECODE='1')
-            env.pop('RECHECK_ADAPTER_RECORD',None);env.pop('RECHECK_ADAPTER_TEST',None)
-            for helper in ['turns.py','invocation.py']:
-                with self.subTest(helper=helper,root=root_name,readonly=readonly):
-                    c=subprocess.run([sys.executable,str(ROOT/helper),'--workspace',meta['cwd']],env=env,capture_output=True,text=True)
-                    self.assertEqual(c.returncode,0 if readonly else 3,c.stderr)
-                    if readonly:
-                        mapping=json.loads(c.stdout)
-                        if helper=='invocation.py':mapping=mapping['turn_attribution']
-                        self.assertEqual(mapping,turns.attribution(rows))
-                    else:
-                        self.assertIn('writable executor rollout refused: '+str(record.resolve())+' (E9-37)',c.stderr)
-                    self.assertEqual(record.read_text(),original)
-
-    def test_relocated_root_writable_refused(self):
-        self._check_candidate('elsewhere',False)
-
-    def test_permitted_root_writable_refused(self):
-        self._check_candidate('home',False)
+        self.record(self.home);self.check(0,mapped=True)
+        self.env['CODEX_THREAD_ID']='no-such-thread'
+        self.check(3,self.home/'sessions')
+        self.env.pop('CODEX_THREAD_ID')
+        self.check(3,'no CODEX_THREAD_ID')
 
     def test_permitted_root_readonly_mapped(self):
-        self._check_candidate('home',True)
+        self.record(self.home);self.check(0,mapped=True)
+
+    def test_permitted_root_writable_refused(self):
+        p=self.record(self.home,False);before=p.read_bytes()
+        self.check(3,'writable executor rollout refused: '+str(p))
+        self.assertEqual(p.read_bytes(),before)
+
+    def relocated(self,readonly=True,immutable=False):
+        other=self.home/'elsewhere'
+        p=self.record(other,readonly)
+        self.env['CODEX_HOME']=str(other/'child')
+        before=p.read_bytes()
+        if immutable:subprocess.run(['chflags','uchg',str(p)],check=True,capture_output=True)
+        try:self.check(3,self.home/'sessions')
+        finally:
+            if immutable:subprocess.run(['chflags','nouchg',str(p)],check=True,capture_output=True)
+        self.assertEqual(p.read_bytes(),before)
+
+    def test_relocated_root_writable_refused(self):self.relocated(False)
+    def test_relocated_root_readonly_refused(self):self.relocated()
+    def test_relocated_root_immutable_refused(self):self.relocated(False,True)
+
+    def test_installed_overrides_ignored(self):
+        other=self.record(self.home/'elsewhere')
+        self.env.update(RECHECK_ADAPTER_TEST='1',RECHECK_ADAPTER_RECORD=str(other))
+        self.check(3,self.home/'sessions')
+        self.record(self.home);self.check(0,mapped=True)
 
     def test_child_rollout_refused_executor_found(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            home=Path(tmp)/'home';child=home/'child'
-            child_sessions=child/'sessions/2026/09/14';child_sessions.mkdir(parents=True)
-            sessions=home/'sessions/2026/09/14';sessions.mkdir(parents=True)
-            rows=turns.read_records(ROOT/'tests/fixtures/real-rollout.jsonl')
-            meta=turns.facts(rows)[0];thread=meta['id'];workspace=meta['cwd']
-            executor=sessions/('rollout-executor-'+thread+'.jsonl')
-            executor.write_text(''.join(json.dumps(r)+'\n' for r in rows))
-            executor.chmod(0o444)
-            child_thread='child-thread'
-            forged=child_sessions/('rollout-child-'+child_thread+'.jsonl')
-            child_rows=json.loads(json.dumps(rows))
-            child_rows[0]['payload']['id']=child_thread
-            forged.write_text(''.join(json.dumps(r)+'\n' for r in child_rows))
-            missing=self._run({'CODEX_HOME':str(child),'CODEX_THREAD_ID':child_thread},workspace)
-            self.assertEqual(missing.returncode,3,missing.stderr)
-            self.assertIn(str(child.resolve()),missing.stderr)
-            # A candidate in the only permitted root resolving into child must name the refused file.
-            (sessions/forged.name).symlink_to(forged)
-            for helper in ['turns.py','invocation.py']:
-                env=dict(os.environ,CODEX_HOME=str(child),CODEX_THREAD_ID=child_thread,PYTHONDONTWRITEBYTECODE='1')
-                env.pop('RECHECK_ADAPTER_RECORD',None);env.pop('RECHECK_ADAPTER_TEST',None)
-                bad=subprocess.run([sys.executable,str(ROOT/helper),'--workspace',workspace],env=env,capture_output=True,text=True)
-                self.assertEqual(bad.returncode,3,bad.stderr);self.assertIn(str(forged.resolve()),bad.stderr)
-                env['CODEX_THREAD_ID']=thread
-                ok=subprocess.run([sys.executable,str(ROOT/helper),'--workspace',workspace],env=env,capture_output=True,text=True)
-                self.assertEqual(ok.returncode,0,ok.stderr)
-                mapping=json.loads(ok.stdout)
-                if helper=='invocation.py':mapping=mapping['turn_attribution']
-                self.assertEqual(mapping,turns.attribution(rows))
+        child=self.home/'child'
+        forged=self.record(child)
+        self.check(3,self.home/'sessions')
+        sessions=self.home/'sessions';sessions.mkdir()
+        link=sessions/forged.name;link.symlink_to(forged)
+        self.check(3,'refused executor rollout path under CODEX_HOME: '+str(forged))
+        link.unlink();self.record(self.home);self.check(0,mapped=True)
+
+    def test_host_skill_location(self):
+        import shutil
+        host=self.home/'host'
+        self.helpers=host/'skills/recheck-v2/adapters/codex'
+        self.helpers.mkdir(parents=True)
+        for name in ['turns.py','invocation.py','verifier.py']:
+            shutil.copyfile(ROOT/name,self.helpers/name)
+        self.record(host);self.check(0,mapped=True)
+        self.env.update(RECHECK_ADAPTER_TEST='1',RECHECK_ADAPTER_RECORD='/absent')
+        self.check(0,mapped=True)
+
+    def test_resolved_helper_location(self):
+        link=self.home/'linked';link.symlink_to(self.helpers,target_is_directory=True)
+        self.helpers=link
+        self.record(self.home);self.check(0,mapped=True)
 
 
 if __name__=='__main__':unittest.main()

@@ -1,6 +1,6 @@
 # Lane R fix-round results, 2026-09-14
 
-The four fresh proofs below are the qualification evidence: F1-01 and X1-01 all_clear; F2-01 and F6-04 not_clear, all completed on clean fixtures and validated. CR/e9-25, CR/livecheck/child-env and CR/negative-pass3 supply the boundary and corrected negatives. The post-E9-36 fresh2 mode/locator proofs are recorded in "Fresh2 F1-01 and F6-04: post-E9-36 proofs" below. E9-37 adds the append-open check locally; its new live acceptance proof and targeted outside re-check remain with the control room. No headless session ran in this pass. Live3 is history on reused dirty fixtures; RESULTS-first-pass.md remains historical.
+The four fresh proofs below are the qualification evidence: F1-01 and X1-01 all_clear; F2-01 and F6-04 not_clear, all completed on clean fixtures and validated. CR/e9-25, CR/livecheck/child-env and CR/negative-pass3 supply the boundary and corrected negatives. The post-E9-36 fresh2 mode/locator proofs are recorded in "Fresh2 F1-01 and F6-04: post-E9-36 proofs" below. The E9-37 live acceptance proof is recorded in "Fresh3 F1-01: post-E9-37 acceptance proof" below. E9-40 adds the helper-location root; fresh4, the live relocated-copy check and outside re-check remain with the control room. No headless session ran in this pass. Live3 is history on reused dirty fixtures; RESULTS-first-pass.md remains historical.
 
 R = `/Users/tonycoon/Developer/tony-skills-e9-codex`; S = `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/pass3`; CR = `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room`. T = `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/targeted`. Every live capture below retains command.json, rollout.jsonl, events.jsonl, final.md and run artifacts. Pass3 reads existing records by type and writes its own evidence only under S.
 
@@ -12,7 +12,7 @@ CR/livecheck/child-env/rollout.jsonl CommandExecution measures CODEX_HOME=<home>
 
 CR/e9-25/append.txt records Operation not permitted and DENIED for the executor rollout; child-write.txt records CHILD-WRITABLE. inner.exit reads inner exit 0 and inner.md reads hello / 0. CR/livecheck/child-env confirms seatbelt in the live tool shell. verifier.py requires that marker and an existing inherited CODEX_HOME before launch; the guard tests remain passing. The earlier CR/livecheck/append refusal was not a write-denial proof; the deterministic e9-25 record is.
 
-User channel: **helper-derived (E9-37)**. turns.py and invocation.py keep the E9-36 sole-root and CODEX_HOME refusal rules. Each resolved candidate must raise PermissionError on open(path,'ab'), closed at once without writing; success is refused with exit 3 naming the path, and any other OSError is exit 3 naming the path and error. The test-only override stays exempt. CR/e9-25/append.txt records Operation not permitted and DENIED, the denial this check relies on. Remaining limits: another real session's id under the unwritable <home>/sessions yields only that session's real user turns; where the harness denies no write (no sandbox, or CODEX_HOME unset outside the pilot) every rollout opens and the helper refuses, so the channel exists only where the harness denies the write; and an executor that types a map by hand instead of running the helper is the instruction-bound residual every lane shares. Tests cover both helpers for relocated/permitted writable copies, read-only mapping, child-root exclusion and resolved symlinks.
+User channel: **helper-derived (E9-40)**. The resolved installed helper location supplies <home>/sessions, never CODEX_HOME. Installed helpers ignore RECHECK_ADAPTER_TEST and RECHECK_ADAPTER_RECORD; the worktree-only test override remains available. E9-36 refuses resolved paths under CODEX_HOME; E9-37 then requires PermissionError on append-open, closing without writing; success or other OSError exits 3 naming the path. CR/e9-25/append.txt records Operation not permitted and DENIED for the harness's denial. Remaining limit: Any departure from the instructed helper command (an environment prefix, a helper copied to another path, a map typed by hand) is the executor's own act and is instruction-bound, the same class in every lane; the harness protects the record, the helper protects the reading, nothing protects the invocation (E9-40). Tests cover both helpers for relocated read-only/immutable copies, writable/read-only permitted copies, child-root exclusion, symlinks and both installed entry shapes.
 
 Verifier command: `codex exec -s danger-full-access -c approval_policy=never -C <workspace> -c web_search=disabled --json -o <raw> -`, only checklist.md on stdin, inherited child home, no model/effort override, one call, 900-second timeout. Outer seatbelt enforces writes outside permitted roots; workspace/child/temp writes and outbound-network restrictions remain instruction-bound. The marker is an environment check, not unforgeable attestation. Injected channels include attribute-bearing developer tags and unmatched user message tags. Whitespace-only raw is empty; arbitrary briefs, empty --find and invalid run ids fail usage checks.
 
@@ -168,7 +168,7 @@ Recount uses the verdict grep pattern `/(recheck|signoff|inspect|vertical|ship|b
 
 ## Fresh2 F1-01 and F6-04: post-E9-36 proofs
 
-These control-room proofs predate E9-37. They close the recorded mode/locator evidence gap; they do not prove the new append-open check accepts the live executor rollout. That new live proof remains with the control room. Recount and per-hit classifications: CR/../targeted2/trace-check.json; grep counts: CR/../targeted2/trace-grep.json. No validator or live session was rerun for this section.
+These control-room proofs predate E9-37. They close the recorded mode/locator evidence gap; they do not prove the new append-open check accepts the live executor rollout. The E9-37 live proof is recorded in "Fresh3 F1-01: post-E9-37 acceptance proof" below. Recount and per-hit classifications: CR/../targeted2/trace-check.json; grep counts: CR/../targeted2/trace-grep.json. No validator or live session was rerun for this section.
 
 
 ### fresh2-F1-01
@@ -240,6 +240,37 @@ run/input.json records invocation.mode=`headless`, caller=`direct`, resume=`fals
 Trace `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/fresh2-F6-04/rollout.jsonl`: {"/recheck": 428, "/signoff": 16}; classes {"path segment": 418, "description's exclusion": 6, "core's own sentence about v1": 8, "profile quotation of refused fixture text": 4, "fixture's planted text and declined quotations": 8}; **0 invocations**.
 
 Trace `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/fresh2-F6-04/run/verifier/recheck-a-20260920-ac5e-verify.rollout.jsonl`: {"/recheck": 11, "/signoff": 7}; classes {"path segment": 11, "fixture's planted text and declined quotations": 7}; **0 invocations**.
+
+## Fresh3 F1-01: post-E9-37 acceptance proof
+
+This control-room proof ran at 5:31:23 PM after the second targeted reinstall at 5:31:21 PM, commit 8f2d98a. It proves the E9-37 append-open check accepted the live executor record; it predates E9-40 and does not prove its new locator. No validator or live session was rerun for this section.
+
+Command from CR/fresh3-F1-01/command.json:
+
+```json
+["codex", "exec", "--json", "-o", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/fresh3-F1-01/final.md", "-C", "/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/fresh3/F1-fixed-defect/75d13f306773/workspace", "--add-dir", "/Users/tonycoon/.local/share/skills-v2-pilot/codex/home/child", "-c", "sandbox_workspace_write.network_access=true", "-"]
+```
+
+Record: `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/fresh3-F1-01/rollout.jsonl`; artifacts: `/private/tmp/claude-501/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90/scratchpad/e9-live/codex/control-room/fresh3-F1-01/run`. launch.json exit `0`; result.json status `completed`, result `all_clear`; item 0 `fixed`, verification method `executed`. The child ran `PYTHONPATH=src python3 -m widget.export 'Bolt, hex' 3`, exit 0, with title,qty then "Bolt, hex",3 then columns=2. Source is clean at input/transaction; card rejected → signed off; no rejected grants, boundary violations or new defects.
+
+Validator JSON from CR/fresh3-F1-01/validate.txt, recorded exit 0:
+
+```json
+{"ok": true, "schema": [], "semantic": [], "skipped": []}
+```
+
+chat.md first two lines:
+
+```text
+RECHECK: A — 1 items (+0 new)
+Result: ALL CLEAR · Status: rejected → signed off
+```
+
+run/input.json records invocation.mode=`headless`, caller=`direct`, resume=`false`, run_id=`recheck-a-20260920-ceec`. Its 3 map entries (1 user, 2 assistant) name only `01a0a279-c13e-7f11-b8c1-7ce4a1dff054`, equal to launch.json.thread_id. The recorded installed invocation.py command exited 0 and printed that object. CR/fresh3-F1-01.proof.log records `E9-33 ok` and `E9-36 locator ok`. Executor sessions are under the pilot home's sessions; the verifier's own child rollout is under child/sessions.
+
+Trace classes from the second targeted re-check verdict, independently recounted in CR/../targeted3/trace-check.json: executor rollout {"/recheck": 439, "/signoff": 12}; classes {"path segment": 431, "description's exclusion": 4, "core's own sentence about v1": 8, "profile quotation of refused fixture text": 8}; **0 invocations**. Child `run/verifier/recheck-a-20260920-ceec-verify.rollout.jsonl`: {"/recheck": 10}; all 10 path segments, **0 invocations**; 0 unclassified in either trace.
+
+CR/reinstall-targeted2.log records an empty installed-cache diff, `diff exit 0`, auth counts **1 regular file / 41 symlinks**, and installed content_sha256 `4261f82ed2f63477171bb699fd5ebe5acc8989b2295501aeb5e1ffcf4ddfa427`. These are the recorded pre-fresh3 measurements, not a new credential read.
 
 ## Historical live3 proofs (reused dirty fixtures)
 
@@ -393,7 +424,7 @@ Pattern: `/(recheck|signoff|inspect|vertical|ship|build|blueprint|precon|archite
 
 ## Nested sandbox measurements
 
-CR/nested-sandbox default-home and real-isolated-home without a writable root fail initialization. A second seatbelt fails sandbox_apply (71); danger-full-access under the executor seatbelt runs commands. CR/e9-25 and CR/livecheck/child-env prove the child-home boundary. CR/fresh-X1-01/run/verifier records the requested execution, columns=2, exit 0, with completed/all_clear in result.json. X1-01 is complete; the post-E9-36 mode and locator are proved in "Fresh2 F1-01 and F6-04: post-E9-36 proofs" below; the new E9-37 live acceptance gate remains with the control room.
+CR/nested-sandbox default-home and real-isolated-home without a writable root fail initialization. A second seatbelt fails sandbox_apply (71); danger-full-access under the executor seatbelt runs commands. CR/e9-25 and CR/livecheck/child-env prove the child-home boundary. CR/fresh-X1-01/run/verifier records the requested execution, columns=2, exit 0, with completed/all_clear in result.json. X1-01 is complete; the post-E9-36 mode and locator are proved in "Fresh2 F1-01 and F6-04: post-E9-36 proofs" below; the E9-37 live acceptance gate is recorded in "Fresh3 F1-01: post-E9-37 acceptance proof" above.
 
 ## Delivery, real body, manual-only and recovery
 
@@ -459,7 +490,7 @@ The whole-root count remains in install.sh. Its repair walk now covers homes/**/
 
 Read completely: verifier verdict; plan section 7 and section 12 E9-25/E9-26/E9-31/E9-33/E9-35/E9-36; Codex setup/adapter/prompts/fixtures; named CR records by type and all finals; SKILL.md step 2; verifier reference sections 4–7; pilot contract section 8. E9-36 supersedes the writable CODEX_HOME root in E9-31. E9-33/E9-35 require the whole printed invocation and no executor-typed field, except Resume flipping resume. Contract section 8 authenticates only mapped native user turns; verifier sections 4–7 require honest capability/status/context reporting. No core rule changed.
 
-E9-35/E9-36 close the remaining local changes: helper-supplied mode/caller/resume, the single-root locator and scoped credential repair. CR/livecheck/child-env, CR/e9-25, CR/fresh-* and CR/negative-pass3 resolve the earlier pending measurements. The fresh2 post-E9-36 proof is recorded above. The new E9-37 live acceptance proof and targeted Fable re-check remain control-room work. E9-24 packaged answer keys and E9-16 hash scope remain carried to E10. No new contract question; original absolute run directories are required for validation, and all four still exist.
+E9-35/E9-36 close the remaining local changes: helper-supplied mode/caller/resume, the single-root locator and scoped credential repair. CR/livecheck/child-env, CR/e9-25, CR/fresh-* and CR/negative-pass3 resolve the earlier pending measurements. The fresh2 post-E9-36 proof is recorded above. The E9-37 live acceptance proof is recorded in "Fresh3 F1-01: post-E9-37 acceptance proof" above. E9-40 fresh4, the live relocated-copy check and targeted Fable re-check remain control-room work. E9-24 packaged answer keys and E9-16 hash scope remain carried to E10. No new contract question; original absolute run directories are required for validation, and all four still exist.
 
 ## Guide findings
 
@@ -470,4 +501,4 @@ E9-35/E9-36 close the remaining local changes: helper-supplied mode/caller/resum
 
 ## Not done and why
 
-No headless session, live negatives, fixture rebuild, new append attempt, web, MCP, other model or subagent: prohibited in this sandbox; fresh2 post-E9-36 proofs are recorded above; the control room owns the new E9-37 live acceptance proof and outside re-check. No core edit or core-suite rerun, no other-lane edit, no git mutation, push/PR/merge, protected-home write or credential logging. Install alone updates the isolated home. Model calls and new model-call cost: zero.
+No headless session, live negatives, fixture rebuild, new append attempt, web, MCP, other model or subagent: prohibited in this sandbox; fresh2 post-E9-36 proofs are recorded above; the E9-37 acceptance proof is recorded in "Fresh3 F1-01: post-E9-37 acceptance proof" above; the control room owns E9-40 fresh4, the live relocated-copy check and outside re-check. No core edit or core-suite rerun, no other-lane edit, no git mutation, push/PR/merge, protected-home write or credential logging. Install alone updates the isolated home. Model calls and new model-call cost: zero.

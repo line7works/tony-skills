@@ -30,18 +30,33 @@ def read_records(path):
         raise Missing('absent harness record: '+str(path))
 
 
+def installed_home():
+    """E9-40: the resolved helper path, never environment, selects the home."""
+    helper=Path(__file__).resolve()
+    for ancestor in helper.parents:
+        if ancestor.name=='cache' and ancestor.parent.name=='plugins':
+            return ancestor.parent.parent
+    for ancestor in helper.parents:
+        if ancestor.name=='recheck-v2' and ancestor.parent.name=='skills':
+            home=ancestor.parent.parent
+            # A source plugin's skills/ is packaging, not a host-skill install.
+            if home.parent.name!='plugins':return home
+    return None
+
+
 def locate(workspace):
-    override=os.environ.get('RECHECK_ADAPTER_RECORD')
-    if override:
-        if os.environ.get('RECHECK_ADAPTER_TEST')!='1':
-            raise ValueError('record override outside test')
-        return Path(override).resolve()
-    # E9-31/E9-36: exactly one root; the writable child home is never a source.
+    home_root=installed_home()
+    if home_root is None:
+        override=os.environ.get('RECHECK_ADAPTER_RECORD')
+        if os.environ.get('RECHECK_ADAPTER_TEST')=='1' and override:
+            return Path(override).resolve()
+        raise Missing('absent harness record: helper outside an installed location: '+str(Path(__file__).resolve())+' (E9-40)')
+    root=home_root/'sessions'
+    # Installed helpers ignore both test overrides entirely (E9-40).
     thread=os.environ.get('CODEX_THREAD_ID','').strip()
-    if not thread:raise Missing('absent harness record: no CODEX_THREAD_ID (E9-31/E9-36)')
+    if not thread:raise Missing('absent harness record: no CODEX_THREAD_ID under '+str(root)+' (E9-31/E9-40)')
     if not re.fullmatch(r'[A-Za-z0-9-]+',thread):raise ValueError('invalid CODEX_THREAD_ID')
     home=Path(os.environ['CODEX_HOME']).expanduser() if os.environ.get('CODEX_HOME') else None
-    root=home.parent/'sessions' if home is not None and home.name=='child' else Path.home()/'.codex'/'sessions'
     resolved_home=home.resolve() if home is not None else None
     def outside_home(path):
         resolved=path.resolve()
