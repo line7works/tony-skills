@@ -788,6 +788,21 @@ been said.
   the profile (the re-check's NEW MINOR). After the pass: reinstall, one fresh live proof (the
   executor's real rollout must still be accepted under the live launch), then a targeted Fable
   re-check of N1, 1 and the fresh2 record.
+- **E9-38 (after the control room's lane Q proofs), the provider key never rides in the
+  session environment.** In the fresh F1-01 proof on DeepSeek the executor ran
+  `env | grep -iE 'OPENCODE|OPENROUTER|RECHECK|XDG|TMPDIR'` as its own diagnostic and printed
+  the OpenRouter key into its tool output, which the harness wrote into the session store and
+  the launcher's trace (the control room redacted every text record and scrubbed the store;
+  the rotation stays Tony's). The lane's `install.sh` and `launch.sh` hand the key to the
+  harness through `OPENROUTER_API_KEY`, so every tool shell inherits it. Ruling: the key lives
+  only in the setup's own auth store (the harness's `auth.json` under the setup's
+  `XDG_DATA_HOME`, mode 0600, written by `install.sh` from the variable without printing it),
+  `launch.sh` and the verifier's launch unset `OPENROUTER_API_KEY` for the harness process, the
+  env probe (names only) proves the tool shell does not carry it, and `scan-secrets.sh` runs
+  over the launcher's captures after every launch. A probe that dumps the environment is the
+  executor's own act; the launch shape is what keeps the value out of its reach. Applied by
+  lane Q before Astra's verification round; the profile's section 7 (containment) and
+  RESULTS record the measurement.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
