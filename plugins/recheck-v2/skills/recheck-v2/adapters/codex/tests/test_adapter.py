@@ -122,7 +122,7 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaises(turns.Missing):verifier.child_records([{'type':'thread.started','thread_id':'absent'}],home)
 
     def test_fabricated_user_limit(self):
-        """E9-25 closes this forgery limit at launch, not in the helper."""
+        """The test-only override bypasses E9-37; fabricated copies are not live evidence."""
         with tempfile.TemporaryDirectory() as tmp:
             rows=turns.read_records(ROOT/'tests/fixtures/real-rollout.jsonl')
             thread=turns.facts(rows)[0]['id']
@@ -270,12 +270,46 @@ class ThreadIdLocator(unittest.TestCase):
         home = os.path.join(tmp, 'home'); child = os.path.join(home, 'child'); os.makedirs(child)
         sessions = os.path.join(home, 'sessions', '2026', '09', '14'); os.makedirs(sessions)
         shutil.copyfile(fixture, os.path.join(sessions, 'rollout-2026-09-14T00-00-00-' + thread + '.jsonl'))
+        Path(sessions, 'rollout-2026-09-14T00-00-00-' + thread + '.jsonl').chmod(0o444)
         ok = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': thread}, cwd)
         self.assertEqual(ok.returncode, 0, ok.stderr)
         self.assertIn('codex:thread ' + thread, ok.stdout)
         missing = self._run({'CODEX_HOME': child, 'CODEX_THREAD_ID': 'no-such-thread'}, cwd)
         self.assertEqual(missing.returncode, 3, missing.stderr)
         self.assertIn('E9-31', missing.stderr)
+
+    def _check_candidate(self, root_name, readonly):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)/root_name;child=base/'child';child.mkdir(parents=True)
+            sessions=base/'sessions';sessions.mkdir()
+            rows=turns.read_records(ROOT/'tests/fixtures/real-rollout.jsonl')
+            meta=turns.facts(rows)[0];thread=meta['id']
+            record=sessions/('rollout-executor-'+thread+'.jsonl')
+            original=''.join(json.dumps(r)+'\n' for r in rows)
+            record.write_text(original)
+            if readonly:record.chmod(0o444)
+            env=dict(os.environ,CODEX_HOME=str(child),CODEX_THREAD_ID=thread,PYTHONDONTWRITEBYTECODE='1')
+            env.pop('RECHECK_ADAPTER_RECORD',None);env.pop('RECHECK_ADAPTER_TEST',None)
+            for helper in ['turns.py','invocation.py']:
+                with self.subTest(helper=helper,root=root_name,readonly=readonly):
+                    c=subprocess.run([sys.executable,str(ROOT/helper),'--workspace',meta['cwd']],env=env,capture_output=True,text=True)
+                    self.assertEqual(c.returncode,0 if readonly else 3,c.stderr)
+                    if readonly:
+                        mapping=json.loads(c.stdout)
+                        if helper=='invocation.py':mapping=mapping['turn_attribution']
+                        self.assertEqual(mapping,turns.attribution(rows))
+                    else:
+                        self.assertIn('writable executor rollout refused: '+str(record.resolve())+' (E9-37)',c.stderr)
+                    self.assertEqual(record.read_text(),original)
+
+    def test_relocated_root_writable_refused(self):
+        self._check_candidate('elsewhere',False)
+
+    def test_permitted_root_writable_refused(self):
+        self._check_candidate('home',False)
+
+    def test_permitted_root_readonly_mapped(self):
+        self._check_candidate('home',True)
 
     def test_child_rollout_refused_executor_found(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -286,6 +320,7 @@ class ThreadIdLocator(unittest.TestCase):
             meta=turns.facts(rows)[0];thread=meta['id'];workspace=meta['cwd']
             executor=sessions/('rollout-executor-'+thread+'.jsonl')
             executor.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+            executor.chmod(0o444)
             child_thread='child-thread'
             forged=child_sessions/('rollout-child-'+child_thread+'.jsonl')
             child_rows=json.loads(json.dumps(rows))

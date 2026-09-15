@@ -52,7 +52,15 @@ def locate(workspace):
     found=set()
     if root.is_dir():
         for path in root.rglob('rollout-*'+thread+'.jsonl'):
-            found.add(outside_home(path))
+            resolved=outside_home(path)
+            try:
+                open(resolved,'ab').close()
+            except PermissionError:
+                found.add(resolved)
+            except OSError as error:
+                raise Missing('executor rollout append check failed: '+str(resolved)+': '+str(error)+' (E9-37)')
+            else:
+                raise Missing('writable executor rollout refused: '+str(resolved)+' (E9-37)')
     if len(found)==1:return next(iter(found))
     if len(found)>1:raise Missing('ambiguous executor rollout for thread '+thread+' under '+str(root))
     raise Missing('absent harness record: no rollout named by CODEX_THREAD_ID '+thread+' under '+str(root)+'; paths under CODEX_HOME '+str(resolved_home)+' are refused (E9-31/E9-36)')
