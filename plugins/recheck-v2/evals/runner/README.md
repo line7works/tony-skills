@@ -191,8 +191,10 @@ no environment name at all (E10-59 (3))**, when the runner passed a banned name,
 banned name appears that is not on that harness's measured own-tool-shell list
 (`HARNESS_CREATED_ENV`). A probe passes only on at least one printed name: a session answering
 "I could not run the requested command." used to pass with zero parsed names, so the nine-home
-gate below stood on nothing. `reply_reports_it_could_not_run` names that shape in the record
-when the reply says so. `campaign start` refuses to start without one
+gate below stood on nothing. **And a reply that reports it could not run the command fails the
+probe whatever else it printed (E10-60 (3))** — a name beside a refusal proves nothing about the
+session's environment — so `reply_reports_it_could_not_run` is a failing rule of its own.
+`why_not_rules` names every rule that failed, by name, beside the sentences in `why_not`. `campaign start` refuses to start without one
 current successful probe per setup and home — nine for the full plan — where "current" means
 bound to this campaign's staged commit and `plugin_tree_sha256` (E10-42).
 
@@ -541,7 +543,7 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 | `chat.md` | what the core wrote into the run directory |
 | `reply.md` | the **session's own final reply** (`result.txt`, `final.md`, or the store's last text part) — what `interop` grades |
 | `validate.txt` | the exact output of `uv run validate-result.py … --strict`, with the exit status on the last line |
-| `validate.json` | the hashes that verdict was bound to (E10-45): the result, the input, and **the whole retained run directory's tree hash (E10-59 (10))** — `run_tree_sha256`, `<path>\0<sha256>` over every file under `run/`, sorted. A retained validation is honoured on a regrade only while all three still hold, so a rewritten verifier capture can no longer sit under a stale `ok` |
+| `validate.json` | the hashes that verdict was bound to (E10-45): the result, the input, and **the whole retained run directory's tree hash (E10-59 (10))** — `run_tree_sha256`, `<path>\0<sha256>` over **every entry** under `run/`, sorted: `__pycache__` and every other directory walked and carrying an entry of its own, a symlink contributing its target path as content, a directory link's contents walked too (E10-60 (10)). A retained validation is honoured on a regrade only while all three still hold, so nothing under `run/` can move under a stale `ok` |
 | `scan.json` | the credential scan of this record |
 | `grade.json` | written by `grade`, never by `run` — the one replaceable file |
 | `attempts/<n>/` | a rerun's own record, with the same layout |
@@ -733,6 +735,7 @@ at its own allowlist before the launcher ever ran.
 | E10-56(2)(3)(4), no edit | the validator's path-rebase flag stays E11 (`_recorded_validation`'s fallback); a session ignoring the named run directory is a measurement (section 10 item 14); `disable-model-invocation` not honoured by Codex and OpenCode is a measurement (`do_routing_score`'s manual-only row) |
 | E10-57, the second fix round's scope | E10-54, E10-55 and E10-56(1), with the fix campaign regraded and one live trial rerun under the new layout; the first fix round is committed as delivered at `a7f852b` and nothing of it was re-opened |
 | E10-59, the third round's scope | the fifteen PARTLY items of Astra's verification, each with its own test class in `tests/test_findings.py` (and two in `tests/test_fake_end_to_end.py` for item 17); the first two rounds are committed as delivered at `a7f852b`, `91e1174` and `8ee9adf` and nothing of them was re-opened |
+| E10-60, the targeted pass's scope | items 3 and 10 alone, after Astra's re-check cleared the other thirteen; the third round is committed as delivered at `7f63037` and nothing else of it was re-opened |
 | E10-59 (1, 8), the barrier is the campaign, and a reserved launch is alive | `ProcessRegistry.reserved`/`released`, `live_processes`, `refuse_while_alive` |
 | E10-59 (3), a probe must print a name | `do_probe_env`, `_probe_names`, `COULD_NOT_RUN_RE` |
 | E10-59 (7), tables reserved under `tables/<n>/` | `reserve_tables_dir`, `sorted_table_dirs`, `do_report` |
@@ -746,6 +749,8 @@ at its own allowlist before the launcher ever ran.
 | E10-59 (21), a journalled partial attempt is counted and shown | `do_report`, `_identity_of_id` |
 | E10-59 (25), the tests' own stand-ins and complete fakes | `testlib.held_out_stand_in`/`held_out_env`/`dispatch_launcher`, `test_env_allowlist.InstallCredentialTest` |
 | E10-59 (26), the verifier subprocess exit | `do_verify`'s `verify_exit_ok` |
+| E10-60 (3), a refusal fails the probe whatever it printed | `do_probe_env`'s `could_not_run` rule, `why_not_rules`, `COULD_NOT_RUN_RE` |
+| E10-60 (10), every entry under the run directory | `tree_sha256_of` (the complete walk is the default; `E10_6_TREE_EXCLUDED` and `follow_directory_links=False` keep E10-6's two hashes byte for byte) |
 | E9-34, a record is never overwritten | every subcommand's refusal, `reserve_record` |
 | E9-41, the timeout verdict | `run_cmd` collects the child's status before any verdict |
 | E7-18, the opaque mount and the run date | `build_fixture`, `Campaign.opaque_tree`, `default_plan` |
@@ -903,3 +908,11 @@ verification found fifteen of the thirty-one items PARTLY):
 | a directory with no `command.json` is a `partial` attempt the report retains | E10-59 (21): it is also COUNTED — in `attempts_seen`, in `partial_attempts_detail`, and in the table under its own row with a `partial` column |
 | the default-plan tests read the trigger set; the detached test hands one harness's fake to three lanes; the install-credential test compares dictionaries | E10-59 (25): the plan tests carry their own held-out stand-in (E10-21), the detached test dispatches to each harness's own fake so every lane's catalog is complete, and the install-credential test runs the three real `install.sh` scripts against a synthetic home with an empty auth store |
 | `verify` records the verifier's exit | E10-59 (26): it counts it. An `available` home needs exit 0 and an `absent` home needs a non-zero exit (its verifier failing to find an installed skill is the proof), and `ok` is false without it |
+
+**The third round's two claims that the targeted pass replaced** (E10-60, after Astra's targeted
+re-check cleared thirteen of the fifteen items):
+
+| the third round said | what replaced it |
+|---|---|
+| a probe fails unless it printed at least one environment name, with the refusal noted beside that reason | E10-60 (3): the refusal is a **failing rule of its own**. A reply of "I could not run the requested command." followed by the single word `PATH` parsed one name and passed; a name beside a refusal proves nothing, and `why_not_rules` now names every rule that failed |
+| `run_tree_sha256` is `tree_sha256_of` over the retained run directory | E10-60 (10): that walk skipped `.git` and `__pycache__`, and `os.walk` does not follow a directory link, so `run/__pycache__/evidence.txt` and everything behind `run/linked-verifier -> …` could be rewritten under a retained validation without moving the hash. The walk now covers every entry, each directory carries an entry of its own, a link contributes its target path and a directory link's contents are walked; `plugin_tree_sha256` and `setup_tree_sha256` keep E10-6's narrower definition through `E10_6_TREE_EXCLUDED` and `follow_directory_links=False`, and the staged plugin's recorded `89925ff7…` was re-measured as unchanged |

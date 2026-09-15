@@ -1651,6 +1651,32 @@ class ProbeNamePrintedTest(RunnerCase):
         self.assertTrue(row["ok"], json.dumps(row["why_not"]))
         self.assertEqual(row["names_seen"], ["HOME", "LANG", "PATH", "TERM", "TMPDIR"])
         self.assertFalse(row["reply_reports_it_could_not_run"])
+        self.assertEqual(row["why_not_rules"], [])
+
+    def test_a_refusal_that_also_prints_a_name_fails_the_probe(self):
+        """E10-60 (3): the reviewer's adapted case — `I could not run the requested command.`
+        followed by `PATH` — passed with one parsed name. A name beside a refusal proves
+        nothing, so the refusal fails the probe on its own and the record names the rule."""
+        with self.assertRaises(runner.Failure) as caught:
+            self.probe("I could not run the requested command.\nPATH\n")
+        self.assertIn("the reply reports it could not run the command", str(caught.exception))
+        row = runner.read_json(sorted(glob.glob(os.path.join(
+            self.campaign, "probes", "claude-code-available", "probe-*.json")))[0])
+        self.assertFalse(row["ok"])
+        self.assertEqual(row["names_seen"], ["PATH"])
+        self.assertTrue(row["reply_reports_it_could_not_run"])
+        self.assertEqual(row["why_not_rules"], ["reply_reports_it_could_not_run"])
+        self.assertIn("whatever else it printed (E10-60 (3)); names seen beside it: PATH",
+                      " ".join(row["why_not"]))
+
+    def test_a_refusal_alone_fails_on_both_rules_and_names_them(self):
+        with self.assertRaises(runner.Failure):
+            self.probe("I could not run the requested command.\n")
+        row = runner.read_json(sorted(glob.glob(os.path.join(
+            self.campaign, "probes", "claude-code-available", "probe-*.json")))[0])
+        self.assertFalse(row["ok"])
+        self.assertEqual(row["why_not_rules"],
+                         ["no_environment_name", "reply_reports_it_could_not_run"])
 
 
 class TablesReservedTest(RunnerCase):
@@ -1785,6 +1811,75 @@ class RetainedValidationTreeTest(RunnerCase):
         self.assertFalse(after["binding_ok"])
         self.assertTrue(any("no run-directory tree hash" in why
                             for why in after["binding"]["why_not"]))
+
+    def test_a_change_under_pycache_breaks_the_binding(self):
+        """E10-60 (10): the reviewer's adapted probe 10 rewrote `run/__pycache__/evidence.txt`
+        and the binding still held, because the old walk skipped `__pycache__`."""
+        record, command = self.retained()
+        omitted = os.path.join(record, "run", "__pycache__", "evidence.txt")
+        runner.ensure_dir(os.path.dirname(omitted))
+        runner.write_text(omitted, "initial\n")
+        command["validation_binding"]["run_tree_sha256"] = runner.tree_sha256_of(
+            os.path.join(record, "run"))
+        self.assertTrue(runner._recorded_validation(record, command)["binding_ok"])
+        runner.write_text(omitted, "changed\n")
+        after = runner._recorded_validation(record, command)
+        self.assertFalse(after["binding_ok"])
+        self.assertTrue(any("run directory has changed" in why
+                            for why in after["binding"]["why_not"]))
+
+    def test_a_change_behind_a_directory_link_breaks_the_binding(self):
+        """E10-60 (10): `os.walk` does not follow a directory link, so the reviewer's
+        `run/linked-verifier -> …` contributed nothing at all."""
+        record, command = self.retained()
+        target = os.path.join(self.scratch, "linked-evidence")
+        runner.ensure_dir(target)
+        runner.write_text(os.path.join(target, "raw.md"), "initial\n")
+        os.symlink(target, os.path.join(record, "run", "linked-verifier"))
+        command["validation_binding"]["run_tree_sha256"] = runner.tree_sha256_of(
+            os.path.join(record, "run"))
+        self.assertTrue(runner._recorded_validation(record, command)["binding_ok"])
+        runner.write_text(os.path.join(target, "raw.md"), "changed\n")
+        self.assertFalse(runner._recorded_validation(record, command)["binding_ok"])
+
+    def test_a_repointed_link_breaks_the_binding(self):
+        record, command = self.retained()
+        for name in ("a", "b"):
+            runner.write_text(os.path.join(self.scratch, "t-%s" % name), name)
+        link = os.path.join(record, "run", "evidence.md")
+        os.symlink(os.path.join(self.scratch, "t-a"), link)
+        command["validation_binding"]["run_tree_sha256"] = runner.tree_sha256_of(
+            os.path.join(record, "run"))
+        self.assertTrue(runner._recorded_validation(record, command)["binding_ok"])
+        os.unlink(link)
+        os.symlink(os.path.join(self.scratch, "t-b"), link)
+        self.assertFalse(runner._recorded_validation(record, command)["binding_ok"])
+
+    def test_the_complete_walk_and_the_E10_6_walk_are_both_available(self):
+        """E10-6 fixes what `plugin_tree_sha256` and `setup_tree_sha256` mean; E10-60 (10)
+        widened the DEFAULT. A tree with no `__pycache__` and no link hashes the same either
+        way, which is why the staged plugin's recorded value still holds."""
+        root = os.path.join(self.scratch, "tree")
+        runner.ensure_dir(os.path.join(root, "sub"))
+        runner.write_text(os.path.join(root, "sub", "f.txt"), "x\n")
+        narrow = dict(exclude_dirs=runner.E10_6_TREE_EXCLUDED,
+                      follow_directory_links=False)
+        self.assertEqual(runner.tree_sha256_of(root, **narrow),
+                         runner.tree_sha256_of(root, exclude_dirs=(),
+                                               follow_directory_links=False))
+        runner.ensure_dir(os.path.join(root, "__pycache__"))
+        runner.write_text(os.path.join(root, "__pycache__", "c.pyc"), "y\n")
+        self.assertNotEqual(runner.tree_sha256_of(root), runner.tree_sha256_of(root, **narrow))
+        # the E10-6 walk is stable across the addition it is defined to ignore
+        self.assertEqual(
+            runner.tree_sha256_of(root, **narrow),
+            runner.tree_sha256_of(os.path.join(self.scratch, "tree"), **narrow))
+
+    def test_a_link_cycle_is_recorded_rather_than_walked_forever(self):
+        root = os.path.join(self.scratch, "cycle")
+        runner.ensure_dir(os.path.join(root, "inner"))
+        os.symlink(root, os.path.join(root, "inner", "up"))
+        self.assertEqual(len(runner.tree_sha256_of(root)), 64)
 
     def test_a_changed_result_still_breaks_the_binding(self):
         record, command = self.retained()

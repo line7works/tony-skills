@@ -339,20 +339,70 @@ def now_iso():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def tree_sha256_of(root):
-    """`<path>\\0<sha256>\\n` over every file under root, sorted (the fixturelib shape)."""
+# E10-6 fixes what `plugin_tree_sha256` and `setup_tree_sha256` mean: every file under the
+# staged plugin with `__pycache__` excluded. Those two hashes keep that definition exactly, so
+# a re-stage of unchanged content still produces the value the nine probe records are bound to;
+# everything else takes the complete walk of E10-60 (10).
+E10_6_TREE_EXCLUDED = (".git", "__pycache__")
+
+
+def tree_sha256_of(root, exclude_dirs=(), follow_directory_links=True):
+    """`<path>\\0<sha256>\\n` over every entry under root, sorted (the fixturelib shape).
+
+    E10-60 (10): **every** entry. `__pycache__` and every other directory are walked, each
+    directory contributes an entry of its own (so an empty directory appearing or going is a
+    change), a symlink contributes its own target path as its content and, when it names a
+    directory, that directory's contents are walked too under the link's own relative path — so
+    a changed link, or a changed file behind it, changes the hash. The previous reader skipped
+    `.git` and `__pycache__` and, because `os.walk` does not follow directory links, a directory
+    link contributed nothing at all: a `run/` holding `__pycache__/evidence.txt` or
+    `linked-verifier -> …` could be rewritten under a retained validation without moving the
+    hash (the reviewer's adapted probe 10 measured both).
+
+    `exclude_dirs` and `follow_directory_links=False` restore the older, narrower walk for the
+    two hashes E10-6 defines; a file entry's bytes are identical either way, so the narrow walk
+    still produces exactly the values it always did. A link that resolves to a directory already
+    seen is recorded as a cycle and not walked again.
+    """
     entries = []
-    for base, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in (".git", "__pycache__"))
-        for name in sorted(files):
-            full = os.path.join(base, name)
-            rel = os.path.relpath(full, root)
+    seen = set()
+
+    def note(rel, digest):
+        entries.append("%s\0%s\n" % (rel, digest))
+
+    def walk(directory, prefix):
+        real = os.path.realpath(directory)
+        if real in seen:
+            note(prefix or ".", "cycle:%s" % sha256_hex(real.encode("utf-8")))
+            return
+        seen.add(real)
+        try:
+            names = sorted(os.listdir(directory))
+        except OSError as exc:
+            note(prefix or ".", "unreadable:%s" % exc.errno)
+            return
+        for name in names:
+            if name in exclude_dirs:
+                continue
+            full = os.path.join(directory, name)
+            rel = os.path.join(prefix, name) if prefix else name
             if os.path.islink(full):
-                digest = sha256_hex(os.readlink(full).encode("utf-8"))
-            else:
+                note(rel, sha256_hex(os.readlink(full).encode("utf-8")))
+                if follow_directory_links and os.path.isdir(full):
+                    walk(full, rel)
+                continue
+            if os.path.isdir(full):
+                if follow_directory_links:
+                    # a directory of its own, so an empty one appearing is a change
+                    note(rel, "dir")
+                walk(full, rel)
+                continue
+            try:
                 with open(full, "rb") as handle:
-                    digest = sha256_hex(handle.read())
-            entries.append("%s\0%s\n" % (rel, digest))
+                    note(rel, sha256_hex(handle.read()))
+            except (IOError, OSError) as exc:
+                note(rel, "unreadable:%s" % exc.errno)
+    walk(root, "")
     entries.sort()
     return sha256_hex("".join(entries).encode("utf-8"))
 
@@ -1105,7 +1155,9 @@ def do_stage(args):
     manifest_path = campaign.reserve_record("stage-manifest")
     write_json(manifest_path, {"root": staged_plugin, "commit": commit["stdout"].strip(),
                                "files": manifest,
-                               "plugin_tree_sha256": tree_sha256_of(staged_plugin)})
+                               "plugin_tree_sha256": tree_sha256_of(
+                                   staged_plugin, exclude_dirs=E10_6_TREE_EXCLUDED,
+                                   follow_directory_links=False)})
     document = {
         "campaign": campaign.root,
         "checkout": REPO_ROOT,
@@ -1113,7 +1165,10 @@ def do_stage(args):
         "staged_at": now_iso(),
         "stage": campaign.stage,
         "files_copied": copied,
-        "plugin_tree_sha256": tree_sha256_of(staged_plugin),
+        # E10-6's own definition, kept byte for byte (E10-60 (10) widened the default).
+        "plugin_tree_sha256": tree_sha256_of(staged_plugin,
+                                            exclude_dirs=E10_6_TREE_EXCLUDED,
+                                            follow_directory_links=False),
         "evals_excluded": True,
         "answer_key_or_held_out_in_stage": leaked,
         "canonical_content_sha256": identity["content_sha256"],
@@ -1199,7 +1254,9 @@ class Setup(object):
         return pilot_home(self.harness, condition)
 
     def setup_tree_sha256(self):
-        return tree_sha256_of(self.setup_dir)
+        # E10-6's definition, as above.
+        return tree_sha256_of(self.setup_dir, exclude_dirs=E10_6_TREE_EXCLUDED,
+                              follow_directory_links=False)
 
     # ---- the launcher's own variables (E10-7: "the variables the setup's own launcher sets
     # for itself" are the home pointers each script documents)
@@ -2315,7 +2372,13 @@ def do_install(args):
             path = campaign.reserve_record("home-inventory-%s-%s" % (setup.name, condition))
             write_json(path, {"setup": setup.name, "condition": condition,
                               "home": record["home"], "files": len(inventory),
-                              "tree_sha256": tree_sha256_of(record["home"]),
+                              # a home holds link farms and an npm tree; following its
+                              # directory links would walk outside the home an inventory is
+                              # of, so the inventory keeps the narrow walk (E10-60 (10)
+                              # widened the run directory's hash, not this one).
+                              "tree_sha256": tree_sha256_of(
+                                  record["home"], exclude_dirs=E10_6_TREE_EXCLUDED,
+                                  follow_directory_links=False),
                               # E10-56(1): the inventory says whether the skill was NEVER
                               # INSTALLED here or installed and then removed.
                               "recheck_v2_installation": record.get("recheck_v2_installation"),
@@ -2582,20 +2645,35 @@ def do_probe_env(args):
             # "I could not run the requested command." passed with zero parsed names and the
             # nine-home gate of E10-42 stood on nothing.
             could_not_run = bool(COULD_NOT_RUN_RE.search(printed or ""))
-            reasons = []
+            # E10-60 (3): a reply that reports it could not run the command is a FAILED probe
+            # WHATEVER ELSE IT PRINTED. The first pass made the refusal a note on the
+            # no-name reason, so a reply of "I could not run the requested command." plus the
+            # single word `PATH` passed with one parsed name (the reviewer's adapted probe 3).
+            # A name printed beside a refusal proves nothing about the session's environment.
+            # Each rule that failed is named in `why_not_rules` beside its sentence.
+            reasons, rules = [], []
             if step["exit"] not in (0,):
+                rules.append("nonzero_exit")
                 reasons.append("the probe session exited %s" % step["exit"])
             if empty:
+                rules.append("no_output")
                 reasons.append("the probe session printed no environment names")
             elif not names:
+                rules.append("no_environment_name")
                 reasons.append(
                     "the probe session printed no environment name (%d line(s) of reply, "
-                    "none of them a name)%s" % (len(printed.strip().splitlines()),
-                                                "; the reply reports it could not run the "
-                                                "command" if could_not_run else ""))
+                    "none of them a name)" % len(printed.strip().splitlines()))
+            if could_not_run:
+                rules.append("reply_reports_it_could_not_run")
+                reasons.append(
+                    "the reply reports it could not run the command, which fails the probe "
+                    "whatever else it printed (E10-60 (3)); names seen beside it: %s"
+                    % (", ".join(names) or "none"))
             if from_runner:
+                rules.append("banned_the_runner_passed")
                 reasons.append("the runner passed banned names: %s" % ", ".join(from_runner))
             if unexplained:
+                rules.append("banned_names_nobody_measured")
                 reasons.append("banned names nobody measured: %s" % ", ".join(unexplained))
             row = {
                 "setup": setup.name, "harness": setup.harness, "condition": condition,
@@ -2604,6 +2682,8 @@ def do_probe_env(args):
                 "names_seen": names,
                 "names_read_from": printed_source,
                 "reply_reports_it_could_not_run": could_not_run,
+                # E10-60 (3): which rule failed the probe, by name.
+                "why_not_rules": rules,
                 "names_anywhere_in_the_record": names_in_the_record,
                 "name_lines_printed": len(printed.strip().splitlines()),
                 "names_the_runner_passed": passed,
