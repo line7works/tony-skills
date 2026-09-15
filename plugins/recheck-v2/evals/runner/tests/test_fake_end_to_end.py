@@ -86,21 +86,66 @@ class ThreeSetupsTest(RunnerCase):
         self.assertEqual(witness["child_rows_inspected"], 0)
 
     def test_the_store_separation_witness_reads_the_verifier_child_s_own_rows(self):
+        """E10-59 (17): the rows are selected by the child session id the RECORDED CALL names.
+
+        The driving session's own store carries the `task` call that spawned the verifier and
+        the child session id in its output; the capture beside the trial carries that child's
+        rows. Both halves have to agree before anything is `measured`.
+        """
         tid, got = self.run_trial(harness="opencode")
         harness = os.path.join(self.campaign, "trials", tid, "harness")
-        # a verifier child's own rows, retained beside the trial the way E10-49 asks
+        session = runner.read_json(os.path.join(harness, "session.json"))
+        session["records"].append({"message_id": "msg_task", "parts": [
+            {"id": "prt_task", "data": {"type": "tool", "tool": "task", "callID": "call_v1",
+                                        "state": {"status": "completed",
+                                                  "input": {"description": "verify"},
+                                                  "output": "ses_child000000000000000001"}}}]})
+        runner.write_json(os.path.join(harness, "session.json"), session)
+        # the verifier child's own rows, retained beside the trial the way E10-49 asks
         runner.write_json(os.path.join(harness, "verifier-child.json"), {
-            "records": [{"message_id": "msg_child", "parts": [
-                {"id": "prt_c", "data": {"type": "tool", "tool": "read", "state": {
-                    "input": {"filePath": "/x/xdg-data/opencode/opencode.db"},
-                    "status": "completed"}}}]}]})
+            "session_id": "ses_child000000000000000001",
+            "records": [{"session_id": "ses_child000000000000000001",
+                         "message_id": "msg_child", "parts": [
+                             {"id": "prt_c", "data": {"type": "tool", "tool": "read", "state": {
+                                 "input": {"filePath": "/x/xdg-data/opencode/opencode.db"},
+                                 "status": "completed"}}}]}]})
         setup = runner.make_setup(runner.Campaign(self.campaign),
                                   {"name": "opencode", "harness": "opencode"})
         witness = setup.store_separation_witness(harness)
+        self.assertEqual(witness["child_sessions_the_calls_name"],
+                         ["ses_child000000000000000001"])
         self.assertTrue(witness["measured"])
         self.assertEqual(witness["child_rows_inspected"], 1)
         self.assertEqual(len(witness["reads_of_the_driving_store"]), 1)
         self.assertIn("read the driving store", witness["verdict"])
+
+    def test_rows_of_a_session_no_recorded_call_names_are_not_a_measurement(self):
+        """E10-59 (17): the reviewer's probe — a capture whose rows belong to some other
+        session established a measurement, because the reader took any file whose name looked
+        like a verifier capture."""
+        tid, got = self.run_trial(harness="opencode")
+        harness = os.path.join(self.campaign, "trials", tid, "harness")
+        session = runner.read_json(os.path.join(harness, "session.json"))
+        session["records"].append({"message_id": "msg_task", "parts": [
+            {"id": "prt_task", "data": {"type": "tool", "tool": "task", "callID": "call_v1",
+                                        "state": {"status": "completed",
+                                                  "input": {"description": "verify"},
+                                                  "output": "ses_expected00000000000001"}}}]})
+        runner.write_json(os.path.join(harness, "session.json"), session)
+        runner.write_json(os.path.join(harness, "verifier-unrelated.json"), {
+            "records": [{"session_id": "ses_unrelated0000000000001",
+                         "message_id": "other", "parts": []}]})
+        setup = runner.make_setup(runner.Campaign(self.campaign),
+                                  {"name": "opencode", "harness": "opencode"})
+        witness = setup.store_separation_witness(harness)
+        self.assertEqual(witness["child_sessions_the_calls_name"],
+                         ["ses_expected00000000000001"])
+        self.assertEqual(witness["child_rows_inspected"], 0)
+        self.assertFalse(witness["measured"])
+        self.assertIn("unavailable", witness["verdict"])
+        self.assertEqual(witness["child_rows_rejected_count"], 1)
+        self.assertEqual(witness["child_rows_rejected"][0]["session_id"],
+                         "ses_unrelated0000000000001")
 
 
 class ConditionWitnessTest(RunnerCase):

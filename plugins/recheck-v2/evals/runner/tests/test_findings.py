@@ -14,7 +14,9 @@ import os
 import subprocess
 import sys
 import time
+import types
 import unittest
+from unittest import mock
 
 from testlib import RunnerCase, cli, parse_stdout, runner, CASE, TWO_ITEM_CASE, FAKE
 
@@ -32,6 +34,10 @@ class OpaqueTreeTest(RunnerCase):
         tid, got = self.run_trial()
         self.assertEqual(got.returncode, 0, got.stderr)
         prompt = runner.read_text(os.path.join(self.campaign, "trials", tid, "prompt.txt"))
+        # The leak check is about what the RUNNER put in the prompt, so the campaign root the
+        # test happened to get is masked first: a random scratch name such as
+        # `runner-test-r1xwag5m` carries "-r1" by chance (control room, 2026-09-15).
+        prompt = prompt.replace(self.campaign, "<campaign>")
         for leak in ("claude-code", "codex", "opencode", "available", "absent", "-r1",
                      "recheck-v2", "/trials/"):
             self.assertNotIn(leak, prompt, "the prompt carries %r" % leak)
@@ -173,7 +179,10 @@ class PlanValidationTest(RunnerCase):
         return path
 
     def refuse(self, path, fragment):
-        got = cli(["plan", "--campaign", self.campaign, "--refresh", "--plan", path])
+        # E10-59 (25): the default plan asks for the whole trigger set, so every plan test
+        # carries its OWN held-out stand-in (E10-21) and none reaches the sealed file.
+        got = cli(["plan", "--campaign", self.campaign, "--refresh", "--plan", path],
+                  env=self.held_out_env())
         self.assertEqual(got.returncode, 2, got.stdout)
         self.assertIn(fragment, got.stderr)
         return got
@@ -221,11 +230,16 @@ class PlanValidationTest(RunnerCase):
         runner.Campaign(fresh).ensure()
         runner.write_json(os.path.join(fresh, "stage.json"),
                           runner.read_json(os.path.join(self.campaign, "stage.json")))
-        got = cli(["plan", "--campaign", fresh])
+        # E10-59 (25): the plan's `entries: "all"` is the tuning set plus the held-out set,
+        # and this test supplies its OWN held-out stand-in with as many entries as E10-13
+        # states the sealed set has (eight, beside twelve tuning), so the arithmetic below is
+        # this test's own and the sealed file is never opened (E10-21).
+        got = cli(["plan", "--campaign", fresh], env=self.held_out_env(entries=8))
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
         self.assertEqual(document["counts"]["comparison"], 72)
         self.assertEqual(document["counts"]["continuation"], 6)
+        self.assertEqual(document["routing_entries"], 20)
         self.assertEqual(document["counts"]["routing"], 180)
         # E10-53(4): one dedicated manual-only request per lane, counted apart
         self.assertEqual(document["counts"]["manual_only"], 3)
@@ -400,8 +414,12 @@ class RecordNamesTest(RunnerCase):
         got = cli(["report", "--campaign", self.campaign])
         self.assertEqual(got.returncode, 0, got.stderr)
         self.assertEqual(runner.read_text(marker), "the operator's own report\n")
-        self.assertTrue(os.path.isfile(os.path.join(self.campaign, "tables",
+        # E10-59 (7): the skeleton lands in the reserved directory the report names, and no
+        # earlier one is replaced.
+        document = parse_stdout(got)
+        self.assertTrue(os.path.isfile(os.path.join(document["tables_dir"],
                                                     "report-skeleton.md")))
+        self.assertEqual(os.path.basename(document["tables_dir"]), "1")
 
     def test_a_second_routing_score_never_replaces_the_first(self):
         tid = runner.routing_trial_id("claude-code", "T-01-slash-v2-slice", 1)
@@ -809,18 +827,25 @@ class OutcomeAndCampaignTest(RunnerCase):
         self.assertEqual([row["id"] for row in report["partial_attempts"]], [tid])
 
     def test_the_detached_start_runs_its_trials_and_keeps_its_launch_options(self):
-        """Finding 20: the child printed `already holds campaign.pid` and ran zero trials."""
+        """Finding 20: the child printed `already holds campaign.pid` and ran zero trials.
+
+        E10-59 (25): the fake catalogs are COMPLETE. The launcher is a dispatcher that gives
+        each lane its own harness's fake, so every lane records itself in its own native shape
+        with the catalog that harness writes; handing all three lanes the claude-code fake
+        made the codex and opencode records claude-code records with no catalog of their own,
+        and the `complete: 3` below then proved only that three trials ran.
+        """
         self.make_campaign({"cases": [CASE], "conditions": ["available"], "repetitions": 1,
                             "routing": {"entries": [], "repetitions": 1},
                             "continuation": None})
+        launcher = self.dispatch_launcher()
         got = cli(["campaign", "start", "--campaign", self.campaign, "--skip-probe-gate",
-                   "--reopen-key", "--fake-launcher", self.fake_launcher("claude-code")])
+                   "--reopen-key", "--fake-launcher", launcher])
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
         self.assertTrue(document["started"])
         self.assertTrue(document["owner_token_accepted"])
-        self.assertEqual(document["launch_options"]["fake_launcher"],
-                         self.fake_launcher("claude-code"))
+        self.assertEqual(document["launch_options"]["fake_launcher"], launcher)
         deadline = time.time() + 240
         while time.time() < deadline:
             status = parse_stdout(cli(["campaign", "status", "--campaign", self.campaign]))
@@ -829,6 +854,27 @@ class OutcomeAndCampaignTest(RunnerCase):
             time.sleep(1)
         self.assertEqual(status["status"], "complete", json.dumps(status)[:1200])
         self.assertGreaterEqual(status["complete"], 3)
+        # every COMPARISON lane recorded ITS OWN harness, its own catalog and its own
+        # activation (the manual-only probe is a routing record and carries neither)
+        seen = {}
+        for line in runner.read_text(os.path.join(self.campaign, "trials.jsonl"),
+                                    "").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if runner.trial_kind_of(runner.Campaign(self.campaign).plan(),
+                                    row["id"]) != "comparison":
+                continue
+            command = runner.read_json(os.path.join(row["record"], "command.json"))
+            seen[command["setup"]] = command
+        self.assertEqual(sorted(seen), sorted(self.setups))
+        for name, command in sorted(seen.items()):
+            self.assertEqual(command["harness"], name)
+            self.assertTrue(command["catalog"].get("record"), name)
+            self.assertIn("recheck-v2",
+                          json.dumps(command["catalog"]["record"]), name)
+            self.assertTrue(command["activated"]["activated"], name)
+            self.assertTrue(command["condition_witness"]["recheck_v2_in_catalog"], name)
 
     def test_the_three_lanes_overlap_and_each_lane_is_sequential(self):
         """Finding 20 / E10-51: the six-trial run used to have zero overlapping intervals."""
@@ -838,9 +884,11 @@ class OutcomeAndCampaignTest(RunnerCase):
         for harness in self.setups:
             # the fake launcher of each setup, one per lane
             pass
+        # E10-59 (25): each lane gets its own harness's fake, so the intervals below are the
+        # three harnesses' own records rather than three copies of one.
         got = cli(["campaign", "start", "--campaign", self.campaign, "--foreground",
                    "--skip-probe-gate", "--reopen-key",
-                   "--fake-launcher", os.path.join(FAKE, "claude-code-launch.sh")])
+                   "--fake-launcher", self.dispatch_launcher()])
         self.assertEqual(got.returncode, 0, got.stderr)
         spans = {}
         for line in runner.read_text(os.path.join(self.campaign, "trials.jsonl"), "").splitlines():
@@ -1024,6 +1072,13 @@ class StageAndVerifyTest(RunnerCase):
             self.assertFalse(bool(isinstance(digest, str) and len(digest) == 64))
 
     def test_verify_exits_three_for_a_home_that_is_not_installed(self):
+        # The test pilot root is relocated for the suite but SHARED inside it, so this test
+        # says which home it means rather than depending on no earlier test having built one
+        # (`claude-code`'s `available` home IS the root's own harness directory, which any
+        # install of its `absent` home creates as a parent).
+        home = runner.pilot_home("claude-code", "available")
+        runner.rmtree(home)
+        self.assertFalse(os.path.isdir(home))
         got = cli(["verify", "--campaign", self.campaign, "--setup", "claude-code",
                    "--home", "available"])
         self.assertEqual(got.returncode, 3, got.stdout)
@@ -1347,6 +1402,7 @@ class WithoutTheSkillTest(RunnerCase):
         log = self.stub_install("claude-code")
         campaign = runner.Campaign(self.campaign)
         setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        self.addCleanup(runner.rmtree, runner.pilot_home("claude-code", "available"))
         record = setup.install("absent")
         self.assertIn("--without recheck-v2", runner.read_text(log))
         # one step only: no `claude plugin uninstall`, no cache removal (E10-24's second guard)
@@ -1358,6 +1414,7 @@ class WithoutTheSkillTest(RunnerCase):
     def test_the_claude_available_install_does_not_pass_the_flag(self):
         log = self.stub_install("claude-code")
         campaign = runner.Campaign(self.campaign)
+        self.addCleanup(runner.rmtree, runner.pilot_home("claude-code", "available"))
         runner.ClaudeCodeSetup(campaign, stage=self.stage).install("available")
         self.assertNotIn("--without", runner.read_text(log))
 
@@ -1425,6 +1482,7 @@ class WithoutTheSkillTest(RunnerCase):
         log = self.stub_install("opencode")
         campaign = runner.Campaign(self.campaign)
         setup = runner.OpenCodeSetup(campaign, stage=self.stage)
+        self.addCleanup(runner.rmtree, runner.pilot_home("opencode", "available"))
         record = setup.install("absent")
         self.assertIn("--without recheck-v2", runner.read_text(log))
         self.assertEqual(record["removed"], [])
@@ -1460,6 +1518,699 @@ class HelpAndDocumentationTest(unittest.TestCase):
         self.assertIn("0.1", readme)
         self.assertNotIn("polls `run/checkpoint.json` and `run/checkpoint.log` every second",
                          readme)
+
+
+
+# ------------------------------------------------- E10-59: the third round, items 1 to 26
+#
+# One class per item family. Every test drives the real path the item names, with the harness
+# boundary substituted by the stubs under `tests/fake/` or by a stub the test writes, and every
+# expectation comes from the lane contract plus a `CASES.md` fact, never from a key.
+
+
+class GradeBarrierCampaignWideTest(RunnerCase):
+    """E10-59 (1, 8): a reserved launch with a live owner is live, and the key opens only when
+    no registered launch of the CAMPAIGN is alive."""
+
+    def sleeper(self):
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"],
+                                 start_new_session=True)
+        self.addCleanup(child.kill)
+        return child
+
+    def test_a_reserved_launch_whose_owner_is_alive_is_a_live_process(self):
+        campaign = runner.Campaign(self.campaign)
+        registry = runner.ProcessRegistry(campaign, "other-trial", 0, "comparison")
+        registry.reserved(["sleep"], "a launch about to start")
+        alive = runner.live_processes(campaign, trial="other-trial", attempt=0)
+        self.assertEqual(len(alive), 1, json.dumps(alive))
+        self.assertEqual(alive[0]["pid"], os.getpid())
+        self.assertIn("reserved launch", alive[0]["live_because"])
+
+    def test_a_reservation_closed_by_released_is_not_live(self):
+        campaign = runner.Campaign(self.campaign)
+        registry = runner.ProcessRegistry(campaign, "other-trial", 0, "comparison")
+        registry.reserved(["sleep"], "a launch that never started")
+        registry.released("the binary could not be started")
+        self.assertEqual(runner.live_processes(campaign, trial="other-trial", attempt=0), [])
+
+    def test_a_reservation_closed_by_started_and_ended_is_not_live(self):
+        campaign = runner.Campaign(self.campaign)
+        registry = runner.ProcessRegistry(campaign, "other-trial", 0, "comparison")
+        registry.reserved(["sleep"], "a launch")
+        child = self.sleeper()
+        registry.started(child.pid)
+        self.assertEqual(len(runner.live_processes(campaign, trial="other-trial")), 1)
+        registry.ended(child.pid, 0)
+        self.assertEqual(runner.live_processes(campaign, trial="other-trial"), [])
+
+    def test_grading_a_terminal_trial_refuses_while_another_trial_is_alive(self):
+        """The reviewer's probe: a terminal F1-01 grade opened both key directories while
+        another registered trial was still running, and a live child read a sentinel out of
+        the open key."""
+        directory = self.stand_in_key()
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        campaign = runner.Campaign(self.campaign)
+        child = self.sleeper()
+        other = runner.ProcessRegistry(campaign, "other-trial", 0, "comparison")
+        other.reserved(["sleep"], "the other trial")
+        other.started(child.pid)
+        environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                      "RECHECK_RUNNER_KEY_DIR": directory})
+        refused = cli(["grade", "--campaign", self.campaign, tid, "--summary"], env=environment)
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("grading waits", refused.stderr)
+        self.assertIn("another registered launch of this campaign is alive", refused.stderr)
+        self.assertFalse(os.path.isfile(os.path.join(self.campaign, "trials", tid,
+                                                     "grade.json")))
+        self.assertNotIn("key opened (grade)",
+                         runner.read_text(os.path.join(self.campaign, "runner.log"), ""))
+        # once it ends, the same grade goes through
+        child.kill()
+        child.wait()
+        other.ended(child.pid, -9)
+        graded = cli(["grade", "--campaign", self.campaign, tid, "--summary"], env=environment)
+        self.assertEqual(graded.returncode, 0, graded.stderr)
+        self.assertIn("key opened (grade)",
+                      runner.read_text(os.path.join(self.campaign, "runner.log"), ""))
+
+    def test_a_reserved_launch_of_another_trial_also_holds_the_key_shut(self):
+        directory = self.stand_in_key()
+        tid, got = self.run_trial()
+        campaign = runner.Campaign(self.campaign)
+        runner.ProcessRegistry(campaign, "reserved-only", 0, "comparison").reserved(
+            ["sleep"], "a reservation with this process as its owner")
+        environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                      "RECHECK_RUNNER_KEY_DIR": directory})
+        refused = cli(["grade", "--campaign", self.campaign, "--all", "--summary"],
+                      env=environment)
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("reserved launch whose owner process is alive", refused.stderr)
+
+
+class ProbeNamePrintedTest(RunnerCase):
+    """E10-59 (3): a probe passes only when it printed at least one environment name."""
+
+    def launcher(self, reply):
+        def launch(condition, prompt, workspace, out_dir, **kw):
+            runner.ensure_dir(out_dir)
+            runner.write_text(os.path.join(out_dir, "result.txt"), reply)
+            return {"exit": 0, "wall_seconds": 0.0, "argv": ["(stub)"],
+                    "started_at": runner.now_iso(), "ended_at": runner.now_iso()}
+        return launch
+
+    def probe(self, reply):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        args = types.SimpleNamespace(campaign=self.campaign, setup=None, home="available",
+                                     timeout=1, refresh=False)
+        with mock.patch.object(runner, "_selected_setups", return_value=[setup]), \
+                mock.patch.object(setup, "launch", side_effect=self.launcher(reply)):
+            return runner.do_probe_env(args)
+
+    def test_a_reply_that_reports_it_could_not_run_the_command_fails_the_probe(self):
+        with self.assertRaises(runner.Failure) as caught:
+            self.probe("I could not run the requested command.\n")
+        self.assertIn("printed no environment name", str(caught.exception))
+        row = runner.read_json(sorted(glob.glob(os.path.join(
+            self.campaign, "probes", "claude-code-available", "probe-*.json")))[0])
+        self.assertFalse(row["ok"])
+        self.assertEqual(row["names_seen"], [])
+        self.assertEqual(row["name_lines_printed"], 1)
+        self.assertTrue(row["reply_reports_it_could_not_run"])
+        self.assertTrue(any("printed no environment name" in why for why in row["why_not"]))
+
+    def test_a_reply_of_prose_with_no_name_fails_the_probe(self):
+        with self.assertRaises(runner.Failure):
+            self.probe("Here is the environment you asked about.\n")
+
+    def test_a_reply_that_prints_names_passes(self):
+        document = self.probe("HOME\nLANG\nPATH\nTERM\nTMPDIR\n")
+        row = document["probes_full"][0]
+        self.assertTrue(row["ok"], json.dumps(row["why_not"]))
+        self.assertEqual(row["names_seen"], ["HOME", "LANG", "PATH", "TERM", "TMPDIR"])
+        self.assertFalse(row["reply_reports_it_could_not_run"])
+
+
+class TablesReservedTest(RunnerCase):
+    """E10-59 (7): tables are reserved under `tables/<n>/` and never replaced."""
+
+    def test_two_reports_take_two_directories_and_the_first_is_untouched(self):
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        first = parse_stdout(cli(["report", "--campaign", self.campaign]))
+        self.assertEqual(os.path.basename(first["tables_dir"]), "1")
+        self.assertEqual(first["tables_dir_reserved_as"], os.path.join("tables", "1"))
+        self.assertTrue(os.path.isfile(first["table_json"]))
+        # an operator marker inside the reserved directory survives the next report
+        marker = os.path.join(first["tables_dir"], "table.json")
+        runner.write_text(marker, "operator marker\n")
+        second = parse_stdout(cli(["report", "--campaign", self.campaign]))
+        self.assertEqual(os.path.basename(second["tables_dir"]), "2")
+        self.assertEqual(runner.read_text(marker), "operator marker\n")
+        self.assertEqual(second["previous_tables_dirs"], [first["tables_dir"]])
+        self.assertTrue(second["tables_replaced_nothing"])
+        self.assertNotEqual(first["tables_dir"], second["tables_dir"])
+        # and the fixed path the old shape wrote is not written at all
+        self.assertFalse(os.path.isfile(os.path.join(self.campaign, "tables", "table.json")))
+
+    def test_the_reserved_directory_is_taken_atomically(self):
+        campaign = runner.Campaign(self.campaign)
+        taken = [runner.reserve_tables_dir(campaign) for _ in range(3)]
+        self.assertEqual([os.path.basename(p) for p in taken], ["1", "2", "3"])
+        self.assertEqual(runner.sorted_table_dirs(campaign), taken)
+
+
+class StagedCommitBindingTest(RunnerCase):
+    """E10-59 (9): `grade` binds to the record's own `staged_commit`."""
+
+    def disagreeing_record(self):
+        directory = self.stand_in_key()
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        record = os.path.join(self.campaign, "trials", tid)
+        command = runner.read_json(os.path.join(record, "command.json"))
+        self.assertEqual(command["staged_commit"], "test-commit")
+        command["staged_commit"] = "a-revision-this-campaign-never-staged"
+        runner.write_json(os.path.join(record, "command.json"), command)
+        return tid, record, self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                            "RECHECK_RUNNER_KEY_DIR": directory})
+
+    def test_a_disagreeing_commit_is_refused_and_no_grade_is_written(self):
+        tid, record, environment = self.disagreeing_record()
+        refused = cli(["grade", "--campaign", self.campaign, tid, "--summary"], env=environment)
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("is not the campaign's staged commit", refused.stderr)
+        self.assertIn("--restaged", refused.stderr)
+        self.assertFalse(os.path.isfile(os.path.join(record, "grade.json")))
+        # the refusal happens before the key opens
+        self.assertNotIn("key opened (grade)",
+                         runner.read_text(os.path.join(self.campaign, "runner.log"), ""))
+
+    def test_restaged_grades_it_and_records_the_disagreement(self):
+        tid, record, environment = self.disagreeing_record()
+        got = cli(["grade", "--campaign", self.campaign, tid, "--summary", "--restaged"],
+                  env=environment)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        row = parse_stdout(got)["per_trial"][0]
+        self.assertFalse(row["staged_commit_agrees"])
+        self.assertTrue(row["graded_with_restaged"])
+        grade = runner.read_json(os.path.join(record, "grade.json"))
+        binding = grade["staged_commit_binding"]
+        self.assertEqual(binding["record_staged_commit"],
+                         "a-revision-this-campaign-never-staged")
+        self.assertEqual(binding["campaign_staged_commit"], "test-commit")
+        self.assertFalse(binding["agrees"])
+        self.assertTrue(binding["restaged"])
+        self.assertIn("the trial ran at", binding["disagreement"])
+        self.assertEqual(binding["accepted_by"], "--restaged")
+        self.assertTrue(grade["checks"]["staged_commit_bound"])
+
+    def test_an_agreeing_commit_needs_no_flag_and_the_check_holds(self):
+        directory = self.stand_in_key()
+        tid, got = self.run_trial()
+        graded = cli(["grade", "--campaign", self.campaign, tid, "--summary"],
+                     env=self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                         "RECHECK_RUNNER_KEY_DIR": directory}))
+        self.assertEqual(graded.returncode, 0, graded.stderr)
+        row = parse_stdout(graded)["per_trial"][0]
+        self.assertTrue(row["staged_commit_agrees"])
+        self.assertFalse(row["graded_with_restaged"])
+        grade = runner.read_json(os.path.join(self.campaign, "trials", tid, "grade.json"))
+        self.assertTrue(grade["checks"]["staged_commit_bound"])
+
+
+class RetainedValidationTreeTest(RunnerCase):
+    """E10-59 (10): a retained validation is honoured only while the WHOLE retained run
+    directory still hashes to what was validated."""
+
+    def retained(self):
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        record = os.path.join(self.campaign, "trials", tid)
+        command = runner.read_json(os.path.join(record, "command.json"))
+        return record, command
+
+    def test_the_binding_records_the_whole_run_directory(self):
+        record, command = self.retained()
+        binding = command["validation_binding"]
+        self.assertTrue(binding["validated"])
+        self.assertEqual(len(binding["run_tree_sha256"]), 64)
+        self.assertEqual(binding["run_tree_sha256"],
+                         runner.tree_sha256_of(os.path.join(record, "run")))
+        self.assertEqual(runner.read_json(os.path.join(record, "validate.json"))
+                         ["run_tree_sha256"], binding["run_tree_sha256"])
+
+    def test_a_changed_verifier_capture_breaks_the_binding(self):
+        """The reviewer's probe: the result and the input were unchanged, the retained verifier
+        output was rewritten, and the binding still read `true`."""
+        record, command = self.retained()
+        before = runner._recorded_validation(record, command)
+        self.assertTrue(before["binding_ok"], json.dumps(before["binding"]))
+        raw = os.path.join(record, "run", "verifier", "raw.md")
+        runner.ensure_dir(os.path.dirname(raw))
+        runner.write_text(raw, "changed retained verifier output\n")
+        after = runner._recorded_validation(record, command)
+        self.assertFalse(after["binding_ok"])
+        self.assertIn("run_tree_sha256", after["binding"]["now"])
+        self.assertTrue(any("run directory has changed" in why
+                            for why in after["binding"]["why_not"]),
+                        json.dumps(after["binding"]["why_not"]))
+
+    def test_a_binding_without_a_tree_hash_is_not_honoured(self):
+        record, command = self.retained()
+        command["validation_binding"].pop("run_tree_sha256")
+        after = runner._recorded_validation(record, command)
+        self.assertFalse(after["binding_ok"])
+        self.assertTrue(any("no run-directory tree hash" in why
+                            for why in after["binding"]["why_not"]))
+
+    def test_a_changed_result_still_breaks_the_binding(self):
+        record, command = self.retained()
+        runner.write_json(os.path.join(record, "result.json"), {"status": "completed"})
+        after = runner._recorded_validation(record, command)
+        self.assertFalse(after["binding_ok"])
+        self.assertIn("result.json is not the file that was validated",
+                      after["binding"]["why_not"])
+
+
+class NativeCmdAndRelativeWriteTest(RunnerCase):
+    """E10-59 (11): `exec_command`'s `cmd`, and a relative destination resolved against the
+    session's own working directory."""
+
+    def native(self, rows, name="rollout.jsonl", workspace=None, extra=None):
+        record = os.path.join(self.campaign, "trials", "native")
+        harness = os.path.join(record, "harness")
+        runner.ensure_dir(harness)
+        runner.write_text(os.path.join(harness, name),
+                          "\n".join(json.dumps(r) for r in rows) + "\n")
+        tree = os.path.join(self.scratch, "tree")
+        command = {"workspace": workspace or os.path.join(self.scratch, "ws"),
+                   "run_dir": os.path.join(tree, "run"), "opaque_tree": tree}
+        command.update(extra or {})
+        return record, command
+
+    def test_a_codex_exec_command_names_its_command_cmd(self):
+        record, command = self.native([
+            {"type": "response_item", "payload": {
+                "type": "function_call", "name": "exec_command", "call_id": "c1",
+                "arguments": json.dumps(
+                    {"cmd": "git -c advice.detachedHead=false reset --hard HEAD~1"})}},
+            {"type": "response_item", "payload": {
+                "type": "function_call_output", "call_id": "c1",
+                "output": json.dumps({"exit_code": 0})}}])
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual(witnesses["commands_scanned"], 1)
+        self.assertEqual([row["subcommand"] for row in witnesses["git"]], ["reset"])
+        self.assertIn("-c", witnesses["git"][0]["options_before_it"])
+
+    def test_a_cmd_at_the_node_is_scanned_too(self):
+        record, command = self.native([
+            {"type": "response_item", "payload": {
+                "type": "function_call", "name": "exec_command", "call_id": "c2",
+                "cmd": ["/bin/zsh", "-lc", "git commit -m x"]}},
+            {"type": "response_item", "payload": {
+                "type": "function_call_output", "call_id": "c2", "output": "exit code 0"}}])
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual([row["subcommand"] for row in witnesses["git"]], ["commit"])
+
+    def test_a_completed_relative_write_outside_the_workspace_is_caught(self):
+        """The reviewer's probe: a completed `Write` to `../outside.txt` produced an empty
+        `writes_outside`, because a non-absolute destination was skipped."""
+        record, command = self.native([
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "c3", "name": "Write",
+                 "input": {"file_path": "../outside.txt", "content": "test"}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "c3", "content": "written"}]}},
+        ], name="trace.jsonl")
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        outside = witnesses["writes_outside"]
+        self.assertEqual(len(outside), 1, json.dumps(witnesses["writes_outside"]))
+        self.assertEqual(outside[0]["path"],
+                         os.path.normpath(os.path.join(self.scratch, "outside.txt")))
+        self.assertEqual(outside[0]["as_recorded"], "../outside.txt")
+        self.assertEqual(witnesses["session_cwd"], os.path.join(self.scratch, "ws"))
+        self.assertIn("workspace", witnesses["session_cwd_source"])
+        self.assertEqual(len(witnesses["relative_destinations_resolved"]), 1)
+
+    def test_a_relative_write_inside_the_workspace_is_not_a_violation(self):
+        record, command = self.native([
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "c4", "name": "Write",
+                 "input": {"file_path": "src/inside.txt"}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "c4", "content": "written"}]}},
+        ], name="trace.jsonl")
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual(witnesses["writes_outside"], [])
+        self.assertEqual(len(witnesses["relative_destinations_resolved"]), 1)
+
+    def test_the_session_s_own_cwd_is_used_when_it_records_one(self):
+        elsewhere = os.path.join(self.scratch, "elsewhere")
+        record, command = self.native([
+            {"type": "system", "subtype": "init", "session_id": "s1", "cwd": elsewhere},
+            {"type": "assistant", "cwd": elsewhere, "message": {"content": [
+                {"type": "tool_use", "id": "c5", "name": "Write",
+                 "input": {"file_path": "out.txt"}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "c5", "content": "written"}]}},
+        ], name="trace.jsonl")
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual(witnesses["session_cwd"], elsewhere)
+        self.assertIn("trace.jsonl", witnesses["session_cwd_source"])
+        self.assertEqual([row["path"] for row in witnesses["writes_outside"]],
+                         [os.path.join(elsewhere, "out.txt")])
+
+    def test_a_refused_relative_write_is_not_a_violation(self):
+        record, command = self.native([
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "c6", "name": "Write",
+                 "input": {"file_path": "../refused.txt"}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "c6", "is_error": True,
+                 "content": "denied"}]}},
+        ], name="trace.jsonl")
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual(witnesses["writes_outside"], [])
+        self.assertEqual(len(witnesses["relative_destinations_resolved"]), 1)
+
+
+class CodexDeliveryJoinTest(RunnerCase):
+    """E10-59 (12, 13): a Codex read is delivered only when its `function_call_output` reports
+    success; a refused read is neither an activation nor a routing target."""
+
+    def rollout(self, rows):
+        harness = os.path.join(self.campaign, "trials", "codex-native", "harness")
+        runner.ensure_dir(harness)
+        runner.write_text(os.path.join(harness, "rollout.jsonl"),
+                          "\n".join(json.dumps(r) for r in rows) + "\n")
+        return harness
+
+    def read_call(self, call, command="cat /x/skills/recheck-v2/SKILL.md"):
+        return {"type": "response_item", "payload": {
+            "type": "function_call", "name": "shell", "call_id": call,
+            "arguments": json.dumps({"command": command})}}
+
+    def output(self, call, text):
+        return {"type": "response_item", "payload": {
+            "type": "function_call_output", "call_id": call, "output": text}}
+
+    def setup_for(self):
+        return runner.CodexSetup(runner.Campaign(self.campaign), stage=self.stage)
+
+    def test_a_refused_read_is_not_an_activation_and_not_the_target(self):
+        harness = self.rollout([self.read_call("c2"),
+                                self.output("c2", "Permission denied; exit code 1")])
+        setup = self.setup_for()
+        activation = setup.activation(harness)
+        self.assertFalse(activation["activated"])
+        self.assertEqual(activation["marker"]["installed_skill_reads"][0]["status"], "refused")
+        self.assertIn("function_call_output",
+                      activation["marker"]["installed_skill_reads"][0]["why"])
+        target = runner.observed_target(setup, harness)
+        self.assertEqual(target["target"], "none")
+        self.assertEqual(target["candidates"][0]["status"], "refused")
+        self.assertIn("refused", target["how"])
+
+    def test_a_delivered_read_is_an_activation_and_the_target(self):
+        harness = self.rollout([self.read_call("c1"),
+                                self.output("c1", json.dumps({"exit_code": 0,
+                                                              "output": "the body"}))])
+        setup = self.setup_for()
+        self.assertTrue(setup.activation(harness)["activated"])
+        target = runner.observed_target(setup, harness)
+        self.assertEqual(target["target"], "recheck-v2")
+        self.assertEqual(target["candidates"][0]["status"], "completed")
+
+    def test_a_call_with_no_output_record_is_not_a_delivery(self):
+        harness = self.rollout([self.read_call("c9")])
+        setup = self.setup_for()
+        activation = setup.activation(harness)
+        self.assertFalse(activation["activated"])
+        self.assertEqual(activation["marker"]["installed_skill_reads"][0]["status"], "unknown")
+        self.assertEqual(runner.observed_target(setup, harness)["target"], "none")
+
+    def test_a_refused_read_of_another_skill_never_becomes_the_target(self):
+        harness = self.rollout([
+            self.read_call("a1", "cat /x/skills/arcade/SKILL.md"),
+            self.output("a1", "Permission denied; exit code 1"),
+            self.read_call("a2"),
+            self.output("a2", json.dumps({"exit_code": 0})),
+        ])
+        target = runner.observed_target(self.setup_for(), self.rollout([
+            self.read_call("a1", "cat /x/skills/arcade/SKILL.md"),
+            self.output("a1", "Permission denied; exit code 1"),
+            self.read_call("a2"),
+            self.output("a2", json.dumps({"exit_code": 0})),
+        ]))
+        self.assertEqual(target["target"], "recheck-v2")
+        self.assertEqual(sorted(row["status"] for row in target["candidates"]),
+                         ["completed", "refused"])
+        self.assertEqual([row["skill"] for row in target["not_delivered"]], ["arcade"])
+        self.assertTrue(os.path.isdir(harness))
+
+    def test_the_output_reader_reads_every_shape_it_names(self):
+        for output, expected in ((json.dumps({"exit_code": 0}), True),
+                                 (json.dumps({"exit_code": 7}), False),
+                                 ("exit code 0", True),
+                                 ("Permission denied; exit code 1", False),
+                                 ("Operation not permitted", False),
+                                 (json.dumps({"success": False}), False),
+                                 ("the whole file body", True)):
+            ok, why = runner.codex_output_ok(output)
+            self.assertEqual(ok, expected, "%r -> %s (%s)" % (output, ok, why))
+            self.assertTrue(why)
+
+
+class ContinuationInvariantsCutTest(RunnerCase):
+    """E10-59 (15): `all_held` requires `cut_valid`, and prior verifier calls are compared by
+    set equality."""
+
+    def continuation(self, cut_valid, prior_calls, after_calls, done=True):
+        record = os.path.join(self.scratch, "continuation-%s-%s"
+                             % (cut_valid, len(prior_calls) + len(after_calls)))
+        runner.ensure_dir(os.path.join(record, "run"))
+        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same"}
+        done_item = {"index": 0, "state": "done", "disposition": "fixed"}
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
+            "phase": "completed", "continuations": 1,
+            "verifier_calls": [{"call_id": c} for c in after_calls],
+            "scope": {"items": [done_item,
+                                {"index": 1, "state": "done", "disposition": "not_fixed"}]}})
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"source_identity": {"actual": identity}})
+        command = {"cut": {"valid": cut_valid, "start_identity": identity,
+                           "retained": {"done_items": [done_item] if done else [],
+                                        "verifier_calls_for_done_items": list(prior_calls)}}}
+        return runner.continuation_invariants(record, command)
+
+    def test_an_invalid_cut_makes_all_held_false_however_the_invariants_read(self):
+        """The reviewer's probe: `all_held: true` beside `cut_valid: false`."""
+        result = self.continuation(False, [], [])
+        self.assertTrue(result["invariants_held_ignoring_the_cut"])
+        self.assertFalse(result["cut_valid"])
+        self.assertFalse(result["all_held"])
+        self.assertEqual(result["all_held_requires_cut_valid"], "E10-59 (15)")
+
+    def test_a_valid_cut_with_every_invariant_holding_is_all_held(self):
+        result = self.continuation(True, [], [])
+        self.assertTrue(result["all_held"])
+
+    def test_a_vanished_prior_verifier_call_is_a_breach(self):
+        result = self.continuation(True, ["prior-call"], [])
+        row = result["invariants"]["done_items_not_re_adjudicated"]
+        self.assertEqual(row["prior_calls_that_vanished"], ["prior-call"])
+        self.assertEqual(row["new_calls_for_a_done_item"], [])
+        self.assertFalse(row["held"])
+        self.assertFalse(result["all_held"])
+        self.assertIn("set equality", row["compared_by"])
+
+    def test_a_new_verifier_call_for_a_done_item_is_still_a_breach(self):
+        result = self.continuation(True, ["prior-call"], ["prior-call", "new-call"])
+        row = result["invariants"]["done_items_not_re_adjudicated"]
+        self.assertEqual(row["new_calls_for_a_done_item"], ["new-call"])
+        self.assertFalse(row["held"])
+
+    def test_the_same_set_in_a_different_order_holds(self):
+        result = self.continuation(True, ["b", "a"], ["a", "b"])
+        self.assertTrue(result["invariants"]["done_items_not_re_adjudicated"]["held"])
+        self.assertTrue(result["all_held"])
+
+
+class ModelSessionBindingTest(RunnerCase):
+    """E10-59 (18): a model record with no session binding is `null`."""
+
+    def capture(self, name, rows, as_json=False):
+        harness = os.path.join(self.scratch, "unbound-%s" % name.replace(".", "-"))
+        runner.ensure_dir(harness)
+        if as_json:
+            runner.write_json(os.path.join(harness, name), rows)
+        else:
+            runner.write_text(os.path.join(harness, name),
+                              "\n".join(json.dumps(r) for r in rows) + "\n")
+        return harness
+
+    def test_a_claude_assistant_record_with_no_session_is_null(self):
+        """The reviewer's probe: `model: "native-label-without-session"` with
+        `session_binding: null`."""
+        harness = self.capture("trace.jsonl", [
+            {"type": "assistant", "message": {"model": "native-label-without-session"}}])
+        record = runner.ClaudeCodeSetup(runner.Campaign(self.campaign),
+                                       stage=self.stage).model_record(harness)
+        self.assertIsNone(record["id"])
+        self.assertIsNone(record["effort"])
+        self.assertIsNone(record["source"])
+        self.assertIsNone(record["session_binding"])
+        self.assertFalse(record["session_binding_ok"])
+        self.assertEqual(record["observed_without_a_session_binding"]["id"],
+                         "native-label-without-session")
+
+    def test_a_bound_claude_record_keeps_its_model(self):
+        harness = self.capture("trace.jsonl", [
+            {"type": "system", "subtype": "init", "session_id": "s1", "model": "m"},
+            {"type": "assistant", "session_id": "s1", "message": {"model": "claude-opus-5"}}])
+        record = runner.ClaudeCodeSetup(runner.Campaign(self.campaign),
+                                       stage=self.stage).model_record(harness)
+        self.assertEqual(record["id"], "claude-opus-5")
+        self.assertTrue(record["session_binding_ok"])
+        self.assertNotIn("observed_without_a_session_binding", record)
+
+    def test_a_codex_rollout_with_no_session_meta_is_null(self):
+        harness = self.capture("rollout.jsonl", [
+            {"type": "turn_context", "payload": {"type": "turn_context", "model": "gpt-6-astra",
+                                                 "effort": "high"}}])
+        record = runner.CodexSetup(runner.Campaign(self.campaign),
+                                   stage=self.stage).model_record(harness)
+        self.assertIsNone(record["id"])
+        self.assertFalse(record["session_binding_ok"])
+        self.assertEqual(record["observed_without_a_session_binding"]["id"], "gpt-6-astra")
+
+    def test_an_opencode_store_with_no_session_id_is_null(self):
+        harness = self.capture("session.json", {"records": [
+            {"data": {"role": "assistant", "modelID": "qwen3.8-flash",
+                      "providerID": "openrouter"}}]}, as_json=True)
+        record = runner.OpenCodeSetup(runner.Campaign(self.campaign),
+                                      stage=self.stage).model_record(harness)
+        self.assertIsNone(record["id"])
+        self.assertIsNone(record["model_id"])
+        self.assertIsNone(record["provider"])
+        self.assertFalse(record["session_binding_ok"])
+        self.assertEqual(record["observed_without_a_session_binding"]["model_id"],
+                         "qwen3.8-flash")
+
+
+class PartialAttemptCountedTest(RunnerCase):
+    """E10-59 (21): a journalled attempt without `command.json` is counted and shown."""
+
+    def test_a_journalled_partial_attempt_is_counted_and_in_the_table(self):
+        """The reviewer's probe: `attempts_seen: 0, journalled: 1, table_rows: 0`."""
+        campaign = runner.Campaign(self.campaign)
+        tid = runner.trial_id("claude-code", CASE, "available", 1)
+        record = os.path.join(self.campaign, "trials", tid)
+        runner.ensure_dir(record)
+        campaign.journal_attempt(tid, 0, record, "comparison")
+        got = cli(["report", "--campaign", self.campaign])
+        self.assertEqual(got.returncode, 0, got.stderr)
+        document = parse_stdout(got)
+        self.assertEqual(document["attempts_seen"], 1)
+        self.assertEqual(document["attempts_journalled"], 1)
+        self.assertEqual([row["id"] for row in document["partial_attempts"]], [tid])
+        detail = document["partial_attempts_detail"]
+        self.assertEqual(len(detail), 1)
+        self.assertEqual(detail[0]["status"], "partial")
+        self.assertEqual(detail[0]["setup"], "claude-code")
+        self.assertEqual(detail[0]["condition"], "available")
+        table = runner.read_json(os.path.join(document["tables_dir"], "table.json"))["table"]
+        self.assertEqual(len(table), 1, json.dumps(table))
+        self.assertEqual(table[0]["partial"], 1)
+        self.assertEqual(table[0]["attempts"], 1)
+        self.assertEqual(table[0]["setup"], "claude-code")
+        self.assertEqual(table[0]["attempt_ids"], ["%s#0" % tid])
+        self.assertIn("status `partial`",
+                      runner.read_text(os.path.join(document["tables_dir"], "table.md")))
+
+    def test_a_recorded_attempt_is_not_counted_twice(self):
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        document = parse_stdout(cli(["report", "--campaign", self.campaign]))
+        self.assertEqual(document["attempts_seen"], 1)
+        self.assertEqual(document["partial_attempts_detail"], [])
+        table = runner.read_json(os.path.join(document["tables_dir"], "table.json"))["table"]
+        self.assertEqual([row["partial"] for row in table], [0])
+
+    def test_the_identity_of_an_id_with_no_record_comes_off_the_plan(self):
+        plan = runner.Campaign(self.campaign).plan()
+        for tid, expected in ((runner.trial_id("claude-code", CASE, "absent", 2),
+                               ("claude-code", "absent")),
+                              (runner.continuation_trial_id("claude-code", TWO_ITEM_CASE,
+                                                            "handoff", 1),
+                               ("claude-code", "n/a")),
+                              (runner.routing_trial_id("claude-code", "T-01", 1),
+                               ("claude-code", "n/a"))):
+            self.assertEqual(runner._identity_of_id(plan, tid), expected, tid)
+
+
+class VerifyExitTest(RunnerCase):
+    """E10-59 (26): `verify`'s success condition includes the verifier subprocess exit."""
+
+    def verify(self, step, condition="available", identity=None):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        # the pilot root is relocated for the whole suite but shared inside it, so the home
+        # this test creates goes away with the test (no other test may find it).
+        runner.ensure_dir(setup.home(condition))
+        self.addCleanup(runner.rmtree, setup.home(condition))
+        identity = identity or {"ok": True, "exit": 0, "content_sha256": "a" * 64}
+        args = types.SimpleNamespace(campaign=self.campaign, setup=None, home=condition)
+        with mock.patch.object(runner, "fresh_skill_identity", return_value=identity), \
+                mock.patch.object(runner, "_selected_setups", return_value=[setup]), \
+                mock.patch.object(setup, "verify", return_value=step):
+            return runner.do_verify(args)
+
+    def installed(self, exit_status):
+        return {"exit": exit_status,
+                "stdout": json.dumps({"ok": True,
+                                      "skill_identity": {"installed":
+                                                         {"content_sha256": "a" * 64}}}),
+                "stderr": "verification exited %s" % exit_status}
+
+    def test_a_verifier_that_exited_non_zero_fails_the_row_and_the_command(self):
+        """The reviewer's probe: `verify_exit: 7` with `row_ok: true, overall_ok: true`."""
+        with self.assertRaises(runner.Failure) as caught:
+            self.verify(self.installed(7))
+        self.assertIn("verification failed", str(caught.exception))
+        document = runner.read_json(sorted(glob.glob(
+            os.path.join(self.campaign, "records", "verify*.json")))[-1])
+        row = document["rows"][0]
+        self.assertEqual(row["verify_exit"], 7)
+        self.assertEqual(row["verify_exit_expected"], 0)
+        self.assertFalse(row["verify_exit_ok"])
+        self.assertFalse(row["ok"])
+        self.assertFalse(document["ok"])
+        self.assertIn("verify_exit=7 (expected 0)", document["failed"][0]["why"])
+
+    def test_a_verifier_that_exited_zero_passes(self):
+        document = self.verify(self.installed(0))
+        self.assertTrue(document["ok"])
+        self.assertTrue(document["rows"][0]["verify_exit_ok"])
+        self.assertTrue(document["rows"][0]["ok"])
+
+    def test_an_absent_home_expects_a_non_zero_exit(self):
+        """E10-58 measured it: `verify-install.sh` on an absent home exits 1 because it finds
+        no installed skill, and that IS the expected outcome there."""
+        document = self.verify({"exit": 1, "stdout": "{}", "stderr": "no installed skill"},
+                               condition="absent")
+        row = document["rows"][0]
+        self.assertEqual(row["verify_exit_expected"], "non-zero")
+        self.assertTrue(row["verify_exit_ok"])
+        self.assertTrue(row["ok"])
+        self.assertTrue(document["ok"])
+
+    def test_an_absent_home_whose_verifier_exited_zero_fails(self):
+        with self.assertRaises(runner.Failure):
+            self.verify({"exit": 0, "stdout": "{}", "stderr": ""}, condition="absent")
 
 
 if __name__ == "__main__":

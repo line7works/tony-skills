@@ -363,7 +363,9 @@ class ReportCountsTest(RunnerCase):
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
         self.assertEqual(document["trials_seen"], 3)
-        table = runner.read_json(os.path.join(self.campaign, "tables", "table.json"))
+        # E10-59 (7): the generated table sits in the reserved directory the report NAMES.
+        self.assertEqual(os.path.basename(document["tables_dir"]), "1")
+        table = runner.read_json(os.path.join(document["tables_dir"], "table.json"))
         self.assertEqual(table["trials_seen"], 3)
         self.assertEqual(table["sources"]["lines"], os.path.join(self.campaign, "trials.jsonl"))
         rows = {(r["setup"], r["condition"], r["activated"]): r for r in table["table"]}
@@ -373,11 +375,11 @@ class ReportCountsTest(RunnerCase):
         self.assertAlmostEqual(rows[("claude-code", "available", True)]["cost_usd"], 0.1)
         for row in table["table"]:
             self.assertTrue(row["records"], "a row names no record")
-        table = runner.read_text(os.path.join(self.campaign, "tables", "table.md"))
+        table = runner.read_text(os.path.join(document["tables_dir"], "table.md"))
         self.assertIn("| setup | condition | activated |", table)
         # E10-43 (finding 7): the generated skeleton is a table, kept apart from the
         # operator's own `report.md`, which `report` never writes.
-        self.assertTrue(os.path.isfile(os.path.join(self.campaign, "tables",
+        self.assertTrue(os.path.isfile(os.path.join(document["tables_dir"],
                                                     "report-skeleton.md")))
         self.assertFalse(os.path.isfile(os.path.join(self.campaign, "report.md")))
 

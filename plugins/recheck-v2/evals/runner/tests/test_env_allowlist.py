@@ -131,7 +131,30 @@ class LaunchedChildEnvironmentTest(RunnerCase):
 class InstallCredentialTest(RunnerCase):
     """E10-20: `install` is the only path that passes OPENROUTER_API_KEY, to one script."""
 
+    def real_script(self, harness):
+        return os.path.join(runner.PLUGIN_DIR, "setups", harness, "install.sh")
+
+    def synthetic_home(self):
+        """A HOME this test built, with an EMPTY auth store and nothing else (E10-59 (25)).
+
+        The second round's pattern: a live-install proof needs no credential, so the store the
+        scripts would write into is `{}` and stays `{}` unless a script writes it.
+        """
+        home = os.path.join(self.scratch, "synthetic-home")
+        for rel in (".codex", ".config", os.path.join(".local", "share")):
+            os.makedirs(os.path.join(home, rel), exist_ok=True)
+        runner.write_text(os.path.join(home, ".codex", "auth.json"), "{}\n")
+        return home
+
     def test_only_the_opencode_install_receives_the_credential_name(self):
+        """E10-59 (25): this test RUNS THE REAL INSTALL SCRIPTS against a synthetic home.
+
+        It used to compare dictionaries only — zero subprocess calls — so what it proved was
+        that `campaign.env` puts the name in one place, never that the script on disk is the
+        one that needs it or that the others do not. The three real scripts are run here, under
+        a HOME this test built and a PATH without their binaries, so each stops at its own
+        precondition and nothing is installed anywhere.
+        """
         campaign = runner.Campaign(self.campaign)
         os.environ["OPENROUTER_API_KEY"] = "planted-not-a-real-key"
         self.addCleanup(os.environ.pop, "OPENROUTER_API_KEY", None)
@@ -150,6 +173,51 @@ class InstallCredentialTest(RunnerCase):
         # a launch never carries it
         launch = campaign.env(extra=opencode.launch_env("available"), require_binaries=False)
         self.assertNotIn("OPENROUTER_API_KEY", launch)
+
+        # ---- the real scripts, against the synthetic home
+        home = self.synthetic_home()
+        base = dict(campaign.env(require_binaries=False), HOME=home,
+                    PATH="/usr/bin:/bin:/usr/sbin:/sbin")
+        self.assertNotIn("OPENROUTER_API_KEY", base)
+        setup_dir = os.path.join(home, "opencode-setup")
+        runner.ensure_dir(setup_dir)
+        runner.write_text(os.path.join(setup_dir, "auth.json"), "{}\n")
+
+        # 1. the real OpenCode install, with the name absent: refused before anything is built
+        refused = runner.run_cmd(
+            ["sh", self.real_script("opencode"), "--setup", setup_dir,
+             "--without", "recheck-v2"],
+            env=base, timeout=180, label="the real opencode install, no credential name")
+        self.assertEqual(refused["exit"], 3, refused["stderr"][-600:])
+        self.assertIn("OPENROUTER_API_KEY is not set", refused["stderr"])
+        self.assertEqual(runner.read_text(os.path.join(setup_dir, "auth.json")), "{}\n")
+
+        # 2. the same real script with the name passed: past the credential gate, and it stops
+        #    at the next precondition because this PATH has no npm
+        passed = runner.run_cmd(
+            ["sh", self.real_script("opencode"), "--setup", setup_dir,
+             "--without", "recheck-v2"],
+            env=dict(base, OPENROUTER_API_KEY=os.environ["OPENROUTER_API_KEY"]),
+            timeout=180, label="the real opencode install, with the credential name")
+        self.assertIn("credential: OPENROUTER_API_KEY set in this shell", passed["stdout"])
+        self.assertNotEqual(passed["exit"], 0)
+        # the VALUE never appears in anything the runner kept
+        self.assertNotIn(os.environ["OPENROUTER_API_KEY"],
+                         json.dumps({k: passed[k] for k in ("stdout", "stderr", "label")}))
+        self.assertEqual(runner.read_text(os.path.join(setup_dir, "auth.json")), "{}\n")
+
+        # 3. the other two real scripts never ask for it
+        others = (("claude-code", ["sh", self.real_script("claude-code"), "--pilot-home",
+                                   os.path.join(home, "cc"), "--without", "recheck-v2"], base),
+                  ("codex", ["sh", self.real_script("codex"), "--without", "recheck-v2"],
+                   dict(base, RECHECK_CODEX_HOME=os.path.join(home, "codex-home"))))
+        for harness, argv, env in others:
+            step = runner.run_cmd(argv, env=env, timeout=180,
+                                  label="the real %s install" % harness)
+            self.assertNotEqual(step["exit"], 0, harness)
+            self.assertNotIn("OPENROUTER", step["stdout"] + step["stderr"], harness)
+        # nothing was written outside the synthetic home this test built
+        self.assertEqual(runner.read_text(os.path.join(home, ".codex", "auth.json")), "{}\n")
 
     def test_a_launch_of_every_setup_passes_only_that_setup_s_home_pointer(self):
         campaign = runner.Campaign(self.campaign)

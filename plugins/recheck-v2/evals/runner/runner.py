@@ -394,6 +394,10 @@ def run_cmd(argv, env=None, cwd=None, stdin=None, timeout=None, label=None, stdo
         # turns it into exit 3 where the contract asks for it (A7a).
         if sink:
             sink.close()
+        if registry is not None:
+            # E10-59 (1, 8): a reservation that never became a process is closed, or the
+            # barrier would wait on a child that does not exist.
+            registry.released("the binary could not be started: %s" % exc)
         message = "%s: %s" % (argv[0], exc)
         sys.stderr.write(message + "\n")
         return {"argv": argv, "label": label, "exit": 127, "timed_out": False,
@@ -741,6 +745,19 @@ class ProcessRegistry(object):
             "attempt": self.attempt, "kind": self.kind, "pid": pid,
             "exit": status, "at": now_iso()})
 
+    def released(self, why):
+        """A reservation that never became a process (E10-59 (1, 8)).
+
+        A reserved launch whose owner is alive is a LIVE process from here on, so a
+        reservation the runner abandoned — the binary was not there, the spawn raised —
+        has to be closed explicitly, or the barrier would wait on a child that never
+        started. `released` closes the token exactly as `ended` does.
+        """
+        self.campaign.append_jsonl(self.campaign.processes, {
+            "event": "released", "token": self.token, "trial": self.trial,
+            "attempt": self.attempt, "kind": self.kind, "why": why,
+            "at": now_iso(), "owner_pid": os.getpid()})
+
 
 def _pgid_of(pid):
     try:
@@ -754,23 +771,50 @@ def process_rows(campaign):
 
 
 def live_processes(campaign, trial=None, attempt=None):
-    """Every registered process still alive, optionally narrowed to one attempt."""
-    open_pids, alive = {}, []
+    """Every registered launch still alive, optionally narrowed to one attempt.
+
+    E10-59 (1, 8): **a reserved launch whose owner is alive is a live process.** `reserved`
+    is written before the child is spawned (finding 8's own rule), so between the reservation
+    and the `started` line a launch exists that no pid names yet; the old reader looked only
+    at `started` rows and saw nothing there, and the reviewer's probe reserved a launch with a
+    live owner and got `reserved_seen_as_live: false`. The reservation carries `owner_pid`,
+    which is the process that is about to spawn the child, and it is closed by its own token's
+    `started`, `ended` or `released` line.
+    """
+    open_pids, reserved, alive = {}, {}, []
     for row in process_rows(campaign):
         if trial is not None and row.get("trial") != trial:
             continue
         if attempt is not None and row.get("attempt") != attempt:
             continue
-        if row.get("event") == "started" and row.get("pid"):
-            open_pids[row["pid"]] = row
-        elif row.get("event") == "ended" and row.get("pid") in open_pids:
-            open_pids.pop(row["pid"], None)
+        event, token = row.get("event"), row.get("token")
+        if event == "reserved":
+            reserved[token] = row
+        elif event == "started":
+            reserved.pop(token, None)
+            if row.get("pid"):
+                open_pids[row["pid"]] = row
+        elif event in ("ended", "released"):
+            reserved.pop(token, None)
+            if row.get("pid") in open_pids:
+                open_pids.pop(row["pid"], None)
     for pid, row in sorted(open_pids.items()):
         try:
             os.kill(pid, 0)
         except OSError:
             continue
-        alive.append(row)
+        alive.append(dict(row, live_because="the launched process is alive"))
+    for token in sorted(reserved):
+        row = reserved[token]
+        owner = row.get("owner_pid")
+        if not owner:
+            continue
+        try:
+            os.kill(owner, 0)
+        except OSError:
+            continue
+        alive.append(dict(row, pid=owner,
+                          live_because="a reserved launch whose owner process is alive"))
     return alive
 
 
@@ -1340,14 +1384,16 @@ class ClaudeCodeSetup(Setup):
             model_id = init["model"]
             source = "harness/trace.jsonl line %d system init event model" % init["line"]
             bound = init.get("session_id")
-        return {"id": model_id, "effort": effort, "source": source,
-                "session_binding": bound,
-                "session_binding_ok": bool(bound) and (session is None or bound == session),
-                "init_event": init,
-                "init_model": (init or {}).get("model"),
-                "configured": configured,
-                "note": "E10-50: null when the harness wrote no native record; the launcher's "
-                        "own label is `configured`, never an observation."}
+        return bound_model_record({
+            "id": model_id, "effort": effort, "source": source,
+            "session_binding": bound,
+            "session_binding_ok": bool(bound) and (session is None or bound == session),
+            "init_event": init,
+            "init_model": (init or {}).get("model"),
+            "configured": configured,
+            "note": "E10-50: null when the harness wrote no native record, and null when the "
+                    "record carries no session binding (E10-59 (18)); the launcher's own "
+                    "label is `configured`, never an observation."})
 
     def cost_record(self, out_dir):
         launch = self._launch_json(out_dir)
@@ -1447,6 +1493,29 @@ class ClaudeCodeSetup(Setup):
         }
 
 
+def bound_model_record(record):
+    """A model record with NO SESSION BINDING is `null` (E10-50, E10-59 (18)).
+
+    The native label is not the measurement: what E10-50 asks for is the model THIS session
+    recorded, and a record whose model cannot be tied to the session the launch produced is
+    not that. The reviewer's probe supplied one assistant record carrying a model and no
+    session identity at all, and the reader returned the label with `session_binding: null`
+    beside it. The unbound observation is kept under its own name so nothing is lost.
+    """
+    if record.get("session_binding_ok"):
+        return record
+    record["observed_without_a_session_binding"] = {
+        "id": record.get("id"), "model_id": record.get("model_id"),
+        "provider": record.get("provider"), "effort": record.get("effort"),
+        "source": record.get("source"),
+        "why": "the native record carries no session binding, so it is not a measurement of "
+               "this session's model (E10-50, E10-59 (18))"}
+    for field in ("id", "model_id", "provider", "effort", "source"):
+        if field in record:
+            record[field] = None
+    return record
+
+
 def _step_summary(step):
     """A child's record for a `command.json` or an install record: no stdout flood."""
     return {
@@ -1461,6 +1530,95 @@ def _step_summary(step):
 
 
 # ------------------------------------------------------------------ Codex CLI
+
+
+# E10-59 (12, 13): a Codex read is DELIVERED only when its `function_call_output` reports
+# success, and a refused read is neither an activation nor a routing target. The rollout
+# records the call and its result as two records joined by `call_id`; the first two rounds
+# read the call alone, so a `cat .../SKILL.md` answered `Permission denied; exit code 1`
+# counted as an activation and was selected as the routing target.
+
+CODEX_FAILED_OUTPUT_RE = re.compile(
+    r"(?i)(permission denied|operation not permitted|not permitted|\baborted\b|\brejected\b|"
+    r"no such file|command failed|sandbox_apply|timed out|timeout)")
+CODEX_EXIT_RE = re.compile(r"(?i)\bexit(?:\s+code)?[\s:=]+(-?\d+)")
+
+
+def codex_output_ok(output):
+    """Whether one `function_call_output` reports success. Returns `(ok, why)`."""
+    if output is None:
+        return None, "the output record carries no output"
+    parsed = output if isinstance(output, dict) else None
+    text = output if isinstance(output, str) else json.dumps(output)
+    if parsed is None:
+        try:
+            got = json.loads(text)
+        except ValueError:
+            got = None
+        parsed = got if isinstance(got, dict) else None
+    if parsed is not None:
+        for key in ("exit_code", "exitCode", "exit"):
+            if isinstance(parsed.get(key), int):
+                return parsed[key] == 0, "the output's %s is %s" % (key, parsed[key])
+        if parsed.get("success") is False:
+            return False, "the output reports success false"
+        for key in ("output", "stdout", "content", "text"):
+            if isinstance(parsed.get(key), str):
+                text = parsed[key]
+                break
+    found = CODEX_EXIT_RE.search(text)
+    if found:
+        return int(found.group(1)) == 0, "the output reports exit %s" % found.group(1)
+    hit = CODEX_FAILED_OUTPUT_RE.search(text)
+    if hit:
+        return False, "the output reports %r" % hit.group(1)
+    return True, "the output carries no failure marker"
+
+
+def codex_call_outputs(rows):
+    """`{call_id: {line, output}}` over a rollout's `function_call_output` records."""
+    outputs = {}
+    for index, record in enumerate(rows, 1):
+        payload = record.get("payload") if isinstance(record.get("payload"), dict) else record
+        if not isinstance(payload, dict):
+            continue
+        nodes = [payload]
+        if isinstance(payload.get("item"), dict):
+            nodes.append(payload["item"])
+        for node in nodes:
+            if (node.get("type") or "") != "function_call_output":
+                continue
+            call = node.get("call_id") or node.get("callId") or node.get("id")
+            if call:
+                outputs[call] = {"line": index, "output": node.get("output")}
+    return outputs
+
+
+def codex_delivery_status(payload, item, outputs):
+    """`(status, why)` for one Codex tool record: `completed`, `refused` or `unknown`."""
+    item = item if isinstance(item, dict) else {}
+    for node in (item, payload):
+        for key in ("exit_code", "exitCode"):
+            if isinstance(node.get(key), int):
+                return ("completed" if node[key] == 0 else "refused",
+                        "the record's own %s is %s" % (key, node[key]))
+    call = payload.get("call_id") or item.get("call_id") or payload.get("callId")
+    node_type = payload.get("type") or item.get("type") or ""
+    if call and (node_type == "function_call" or call in outputs):
+        row = outputs.get(call)
+        if row is None:
+            return ("unknown", "no function_call_output is joined to call %s, so the read is "
+                               "not a delivery (E10-59 (12))" % call)
+        ok, why = codex_output_ok(row["output"])
+        if ok is None:
+            return "unknown", "the output record for call %s is empty" % call
+        return ("completed" if ok else "refused",
+                "its function_call_output at rollout line %d: %s" % (row["line"], why))
+    blob = json.dumps(payload)
+    if "aborted" in blob or "rejected" in blob or "not permitted" in blob:
+        return "refused", "the record itself carries a refusal marker"
+    return ("unknown", "no result record is joined to this call, so the read is not a "
+                       "delivery (E10-59 (12))")
 
 
 class CodexSetup(Setup):
@@ -1635,12 +1793,14 @@ class CodexSetup(Setup):
                 model_id = payload.get("model")
                 source = "harness/rollout.jsonl line %d session_meta" % line
                 bound = session
-        return {"id": model_id, "effort": effort, "source": source,
-                "session_binding": bound,
-                "session_binding_ok": bool(session) and bound == session,
-                "configured": {"model": configured,
-                               "source": "harness/launch.json (what the launcher was told)"},
-                "note": "E10-50: null when the rollout carries no turn_context or session_meta"}
+        return bound_model_record({
+            "id": model_id, "effort": effort, "source": source,
+            "session_binding": bound,
+            "session_binding_ok": bool(session) and bound == session,
+            "configured": {"model": configured,
+                           "source": "harness/launch.json (what the launcher was told)"},
+            "note": "E10-50: null when the rollout carries no turn_context or session_meta, "
+                    "and null when the record carries no session binding (E10-59 (18))"})
 
     def cost_record(self, out_dir):
         """Codex prints token counts, never a dollar figure (`total_cost_usd` stays null)."""
@@ -1700,9 +1860,17 @@ class CodexSetup(Setup):
         `SKILL.md`; the explicit `$name` route injects a `<skill>` user message. Finding 12:
         the developer catalog message naming recheck-v2 is NOT an activation, and a read whose
         command was refused is not one either. Every witness keeps its rollout line.
+
+        E10-59 (12): "refused" is decided by the read's OWN RESULT RECORD — the
+        `function_call_output` joined to it by `call_id` — not by scanning the call record for
+        words. A `cat .../SKILL.md` whose output reads `Permission denied; exit code 1` is not
+        a delivery, and a call with no result record joined to it is `unknown`, which is not
+        one either.
         """
+        rows = list(self._rollout(out_dir))
+        outputs = codex_call_outputs(rows)
         reads, injected = [], []
-        for index, record in enumerate(self._rollout(out_dir), 1):
+        for index, record in enumerate(rows, 1):
             payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
             blob = json.dumps(payload)
             if payload.get("type") == "message" and "skills_instructions" in blob:
@@ -1716,13 +1884,16 @@ class CodexSetup(Setup):
                 try:
                     parsed = json.loads(arguments)
                     got = parsed.get("command")
+                    if got is None:
+                        got = parsed.get("cmd")
                     command = " ".join(str(x) for x in got) if isinstance(got, list) else got
                 except (ValueError, AttributeError):
                     command = None
             if isinstance(command, str) and "recheck-v2/SKILL.md" in command:
-                refused = "aborted" in blob or "rejected" in blob or "not permitted" in blob
+                status, why = codex_delivery_status(payload, item, outputs)
                 reads.append({"line": index, "command": command[:240],
-                              "status": "refused" if refused else "completed"})
+                              "call_id": payload.get("call_id") or item.get("call_id"),
+                              "status": status, "why": why})
             matched = re.search(r"<skill[^>]*name=\"(recheck-v2)\"", blob)
             if matched:
                 injected.append({"line": index, "bytes": len(blob), "skill": matched.group(1)})
@@ -1731,11 +1902,13 @@ class CodexSetup(Setup):
             "activated": bool(completed or injected),
             "marker": {"installed_skill_reads": reads[:6],
                        "completed_reads": completed[:6],
+                       "not_delivered": [r for r in reads if r["status"] != "completed"][:6],
                        "injected_skill_messages": injected[:4]},
             "profile_section": "adapters/codex/profile.md section 8 (implicit selection "
                                "requires a COMPLETED file read of the installed SKILL.md; the "
                                "explicit route injects a <skill> user message). E10-46: the "
-                               "developer catalog message is neither.",
+                               "developer catalog message is neither. E10-59 (12): delivery is "
+                               "the call's own function_call_output reporting success.",
         }
 
 
@@ -1900,14 +2073,16 @@ class OpenCodeSetup(Setup):
                 source = ("harness/session.json records[%d].data.modelID (the session store's "
                           "message rows)" % index)
                 bound = session_id
-        return {"id": ("%s/%s" % (provider, model_id)) if provider and model_id else model_id,
-                "model_id": model_id, "provider": provider, "effort": None, "source": source,
-                "session_binding": bound,
-                "session_binding_ok": bool(session_id) and bound == session_id,
-                "configured": {"model": configured,
-                               "source": "harness/launch.json (what the launcher was given)"},
-                "note": "E10-50: null when the store carries no assistant row; OpenCode 1.18.31 "
-                        "records no reasoning effort (E10-26)"}
+        return bound_model_record({
+            "id": ("%s/%s" % (provider, model_id)) if provider and model_id else model_id,
+            "model_id": model_id, "provider": provider, "effort": None, "source": source,
+            "session_binding": bound,
+            "session_binding_ok": bool(session_id) and bound == session_id,
+            "configured": {"model": configured,
+                           "source": "harness/launch.json (what the launcher was given)"},
+            "note": "E10-50: null when the store carries no assistant row, and null when the "
+                    "record carries no session binding (E10-59 (18)); OpenCode 1.18.31 "
+                    "records no reasoning effort (E10-26)"})
 
     def cost_record(self, out_dir):
         session = self._session(out_dir)
@@ -2016,25 +2191,45 @@ class OpenCodeSetup(Setup):
                 children.append({"call_id": data.get("callID"), "tool": data.get("tool"),
                                  "child_sessions": sorted(set(found)),
                                  "message_id": record.get("message_id")})
-        # the child's own rows, wherever the launcher retained them
-        child_rows, sources = [], []
+        # E10-59 (17): the rows inspected are the rows of THE CHILD SESSION THE RECORDED CALL
+        # NAMES. The old reader took any file whose name looked like a verifier capture and
+        # called the measurement `measured`, so an unrelated session's rows — or a file left
+        # by another trial — could establish it. The child ids come from the calls above; with
+        # none, there is nothing to select and the witness is `unavailable`.
+        expected_children = sorted({child for row in children
+                                    for child in (row.get("child_sessions") or [])})
+        child_rows, sources, rejected = [], [], []
+
+        def collect(row, source, fallback=None):
+            got = row.get("session_id") or row.get("sessionID") or row.get("sessionId") \
+                or fallback
+            if got and got in expected_children:
+                child_rows.append(row)
+                return
+            rejected.append({"source": source, "session_id": got,
+                             "why": "not a row of a child session the recorded call names"})
+
         for name in sorted(os.listdir(out_dir)) if os.path.isdir(out_dir) else []:
             if not re.match(r"^(verifier|child|subagent).*\.(json|jsonl)$", name):
                 continue
             path = os.path.join(out_dir, name)
             sources.append(name)
             if name.endswith(".jsonl"):
-                child_rows += jsonl_lines(path)
+                for row in jsonl_lines(path):
+                    collect(row, name)
             else:
                 try:
                     document = read_json(path)
                 except (Missing, Failure):
                     continue
-                child_rows += document.get("records") or []
+                if not isinstance(document, dict):
+                    continue
+                for row in document.get("records") or []:
+                    collect(row, name, document.get("session_id"))
         # a child session captured inside the driving store itself
         for record in session.get("records", []):
             if record.get("session_id") and record["session_id"] != driving:
-                child_rows.append(record)
+                collect(record, "session.json")
         rows_seen = len(child_rows)
         reads = []
         for record in child_rows:
@@ -2049,16 +2244,21 @@ class OpenCodeSetup(Setup):
         measured = rows_seen > 0
         return {"driving_session": driving,
                 "verifier_calls": children,
+                "child_sessions_the_calls_name": expected_children,
                 "child_rows_inspected": rows_seen,
+                "child_rows_rejected": rejected[:20],
+                "child_rows_rejected_count": len(rejected),
                 "child_row_sources": sources,
                 "reads_of_the_driving_store": reads,
                 "measured": measured,
                 "verdict": ("no read of the driving store in the verifier child's own rows"
                             if measured and not reads else
                             ("the verifier child read the driving store" if reads else
-                             "unavailable: no verifier child rows were retained")),
-                "note": "E10-49: measured on the verifier child's own rows; an empty or absent "
-                        "capture is `unavailable`, never `measured`."}
+                             "unavailable: no rows of a child session the recorded call names "
+                             "were retained (E10-59 (17))")),
+                "note": "E10-49: measured on the verifier child's own rows, selected by the "
+                        "child session id the recorded call names (E10-59 (17)); an empty or "
+                        "absent capture is `unavailable`, never `measured`."}
 
 
 SETUP_CLASSES = {"claude-code": ClaudeCodeSetup, "codex": CodexSetup, "opencode": OpenCodeSetup}
@@ -2187,9 +2387,20 @@ def do_verify(args):
             # find one IS the expected outcome there, and is the second proof beside the walk
             # that E10-3's removal took (the first is `find`).
             expected_absent = condition == "absent"
+            # E10-59 (26): the VERIFIER SUBPROCESS EXIT is part of the success condition. It
+            # was recorded and then ignored, so a verifier that crashed after printing an
+            # `ok` document with a matching digest passed (the reviewer's probe supplied
+            # exit 7 and got `ok: true`). What the exit must be depends on what is expected of
+            # the home: an installed home's verification must succeed (exit 0), and an absent
+            # home's must FAIL to find an installed skill, which is how each
+            # `verify-install.sh` reports that state (measured: codex/absent exits 1).
+            expected_exit = "non-zero" if expected_absent else 0
+            verify_exit_ok = (step["exit"] != 0) if expected_absent else (step["exit"] == 0)
             rows.append({
                 "setup": setup.name, "condition": condition, "home": home, "present": True,
                 "verify_exit": step["exit"],
+                "verify_exit_expected": expected_exit,
+                "verify_exit_ok": verify_exit_ok,
                 "verify_ok": (document or {}).get("ok"),
                 "installed_content_sha256": installed_sha,
                 "canonical_content_sha256": canonical,
@@ -2198,8 +2409,9 @@ def do_verify(args):
                 "home_leak_scan": home_leak_scan(home),
                 "no_installed_skill": installed_sha is None,
                 "expected_no_installed_skill": expected_absent,
-                "ok": (installed_sha is None and not home_leak_scan(home)) if expected_absent
-                      else (installed_sha == canonical and (document or {}).get("ok") is True),
+                "ok": verify_exit_ok and (
+                    (installed_sha is None and not home_leak_scan(home)) if expected_absent
+                    else (installed_sha == canonical and (document or {}).get("ok") is True)),
                 "links_refused":
                     link_survey(home, allowed_targets=[PILOT_ROOT],
                                 forbidden_targets=protected_roots(campaign))["symlinks_refused"],
@@ -2217,8 +2429,10 @@ def do_verify(args):
     # leaves the exit at 0.
     document["ok"] = not failed
     document["failed"] = [{"setup": r["setup"], "condition": r["condition"],
-                           "why": r.get("why") or "verify_ok=%s installed=%s equal=%s"
-                           % (r.get("verify_ok"), r.get("installed_content_sha256"),
+                           "why": r.get("why") or
+                           "verify_exit=%s (expected %s) verify_ok=%s installed=%s equal=%s"
+                           % (r.get("verify_exit"), r.get("verify_exit_expected"),
+                              r.get("verify_ok"), r.get("installed_content_sha256"),
                               r.get("content_sha256_equal"))} for r in failed]
     write_json(campaign.reserve_record("verify"), document)
     if missing_homes:
@@ -2235,6 +2449,12 @@ PROBE_PROMPT = (
     "Run exactly this one command and reply with its output and nothing else:\n"
     "env | cut -d= -f1 | sort\n"
 )
+
+# E10-59 (3): the shapes a session uses when it did not run the command. A probe that prints
+# no environment name already fails; this names WHY in the record when the reply says so.
+COULD_NOT_RUN_RE = re.compile(
+    r"(?i)\b(could not|couldn't|cannot|can't|unable to|was not able to|didn't|did not)\b[^.\n]{0,60}"
+    r"\b(run|execute|complete|perform)\b")
 
 
 def _installed_content_sha(document):
@@ -2356,11 +2576,23 @@ def do_probe_env(args):
             from_harness = sorted(n for n in banned if n not in passed and n in measured)
             unexplained = sorted(n for n in banned if n not in passed and n not in measured)
             empty = not printed.strip()
+            # E10-59 (3): a probe passes only when it PRINTED AT LEAST ONE ENVIRONMENT NAME,
+            # and a reply that reports it could not run the command is a failed probe. The
+            # old gate asked only whether the reply was blank, so a session answering
+            # "I could not run the requested command." passed with zero parsed names and the
+            # nine-home gate of E10-42 stood on nothing.
+            could_not_run = bool(COULD_NOT_RUN_RE.search(printed or ""))
             reasons = []
             if step["exit"] not in (0,):
                 reasons.append("the probe session exited %s" % step["exit"])
             if empty:
                 reasons.append("the probe session printed no environment names")
+            elif not names:
+                reasons.append(
+                    "the probe session printed no environment name (%d line(s) of reply, "
+                    "none of them a name)%s" % (len(printed.strip().splitlines()),
+                                                "; the reply reports it could not run the "
+                                                "command" if could_not_run else ""))
             if from_runner:
                 reasons.append("the runner passed banned names: %s" % ", ".join(from_runner))
             if unexplained:
@@ -2371,6 +2603,7 @@ def do_probe_env(args):
                 "launch_exit": step["exit"], "wall_seconds": step["wall_seconds"],
                 "names_seen": names,
                 "names_read_from": printed_source,
+                "reply_reports_it_could_not_run": could_not_run,
                 "names_anywhere_in_the_record": names_in_the_record,
                 "name_lines_printed": len(printed.strip().splitlines()),
                 "names_the_runner_passed": passed,
@@ -3335,11 +3568,22 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
             "validated_at": now_iso(),
         }
     write_text(os.path.join(record, "validate.txt"), validate_text)
-    write_json(os.path.join(record, "validate.json"), validation_binding)
     # the run directory, copied whole after the harness ended and after the validation
     run_copy = os.path.join(record, "run")
     if os.path.isdir(run_dir) and not os.path.exists(run_copy):
         shutil.copytree(run_dir, run_copy, symlinks=True)
+    # E10-59 (10): a retained validation is honoured only when the hash of EVERY FILE under
+    # the run directory equals the recorded tree hash. Binding the result and the input alone
+    # left every other piece of retained evidence — the verifier's captures above all —
+    # free to change under a stale verdict. The hash is taken over the retained copy, which
+    # is what a regrade reads.
+    if os.path.isdir(run_copy):
+        validation_binding["run_tree_sha256"] = tree_sha256_of(run_copy)
+        validation_binding["run_tree_of"] = run_copy
+        validation_binding["run_tree_rule"] = (
+            "E10-59 (10): every file under the retained run directory, `<path>\\0<sha256>` "
+            "sorted; a retained validation is not honoured unless this hash still holds")
+    write_json(os.path.join(record, "validate.json"), validation_binding)
     # E10-41: the opaque fixture build is copied into the record too, so the record still
     # holds everything E10-10 names while the path the model saw named nothing.
     fixture_copy = os.path.join(record, "fixture")
@@ -3509,12 +3753,31 @@ def harness_alive_for(campaign, trial, attempt, record):
 
 
 def refuse_while_alive(campaign, rows):
-    """Neither grading path opens a key while a registered process of that attempt lives."""
+    """No key opens while ANY registered launch of the campaign is alive.
+
+    E10-59 (1, 8): the barrier used to check only the attempts being graded, so grading a
+    terminal trial opened both key directories while another registered trial of the same
+    campaign was still running — the reviewer's probe read a sentinel out of the open key
+    from a live child during the grade. The campaign is the unit: the key opens only when no
+    registered launch of it is alive at all.
+    """
     blocked = []
+    named = set()
     for trial, attempt, record in rows:
+        named.add((trial, attempt))
         alive = harness_alive_for(campaign, trial, attempt, record)
         if alive:
             blocked.append({"trial": trial, "attempt": attempt, "alive": alive})
+    others = [row for row in live_processes(campaign)
+              if (row.get("trial"), row.get("attempt")) not in named]
+    if others:
+        blocked.append({
+            "trial": None, "attempt": None,
+            "why": "another registered launch of this campaign is alive (E10-59 (1, 8))",
+            "alive": [{"pid": row.get("pid"), "trial": row.get("trial"),
+                       "attempt": row.get("attempt"), "kind": row.get("kind"),
+                       "source": "processes.jsonl", "live_because": row.get("live_because")}
+                      for row in others]})
     if blocked:
         raise Failure("harness processes are still alive; grading waits: %s"
                       % json.dumps(blocked))
@@ -3563,10 +3826,16 @@ def do_grade(args):
     # E10-45: the barrier comes FIRST, over every attempt being graded, and the key is opened
     # only inside this block.
     refuse_while_alive(campaign, targets)
+    restaged = bool(getattr(args, "restaged", False))
+    # E10-59 (9): the commit binding is checked BEFORE the key opens, so a refusal never
+    # opens a key directory at all.
+    for tid, attempt, record in targets:
+        staged_commit_binding(
+            campaign, read_json(os.path.join(record, "command.json"), "command.json"), restaged)
     rows = []
     with key_open(campaign, "grade"):
         for tid, attempt, record in targets:
-            rows.append(grade_one(campaign, plan, tid, record, attempt))
+            rows.append(grade_one(campaign, plan, tid, record, attempt, restaged=restaged))
     summary = grade_summary(rows)
     grades = [{"trial": r["trial"], "attempt": r["attempt"], "grade_path": r["grade_path"]}
               for r in rows]
@@ -3633,10 +3902,46 @@ def trial_conditioned_expected(expected, kind):
     return document, rows
 
 
-def grade_one(campaign, plan, tid, record, attempt=0):
+def staged_commit_binding(campaign, command, restaged):
+    """The record's own `staged_commit` against the campaign's stage (E10-59 (9)).
+
+    E10-45 asks for grading inputs bound to the trial's recorded revision. The first two
+    rounds only COPIED that revision into the grade; nothing compared it, so a campaign whose
+    stage had moved graded its old trials against the new one without a word. The rule: the
+    grade refuses on disagreement unless `--restaged` is given, and then the disagreement is
+    recorded in `grade.json`.
+    """
+    recorded = command.get("staged_commit")
+    try:
+        current = (campaign.staged() or {}).get("commit")
+    except (Missing, Failure):
+        current = None
+    agrees = bool(recorded) and bool(current) and recorded == current
+    binding = {
+        "record_staged_commit": recorded,
+        "campaign_staged_commit": current,
+        "agrees": agrees,
+        "restaged": bool(restaged),
+        "comparable": bool(recorded) and bool(current),
+    }
+    if binding["comparable"] and not agrees:
+        binding["disagreement"] = (
+            "the trial ran at %s and the campaign's stage now names %s"
+            % (recorded, current))
+        if not restaged:
+            raise Failure(
+                "the trial's recorded staged_commit %s is not the campaign's staged commit "
+                "%s; pass --restaged to grade it anyway and record the disagreement "
+                "(E10-59 (9))" % (recorded, current))
+        binding["accepted_by"] = "--restaged"
+    return binding
+
+
+def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
     """`validate-result.py --strict`, then `match()`, then the metrics of E10-11."""
     command = read_json(os.path.join(record, "command.json"), "command.json")
     case = command["case"]
+    commit_binding = staged_commit_binding(campaign, command, restaged)
     entry, stood_in = key_entry(case)
     if stood_in and not campaign.synthetic():
         # E10-45 (finding 9): a stand-in is honoured only for a campaign the RUNNER marked
@@ -3665,8 +3970,13 @@ def grade_one(campaign, plan, tid, record, attempt=0):
         "record": record,
         "grade_path": grade_path,
         # E10-45: the grading inputs are bound to the trial's own recorded revision and case.
+        # E10-59 (9): and the binding is CHECKED, not merely copied.
+        "staged_commit_binding": commit_binding,
         "inputs_bound_to": {
             "staged_commit": command.get("staged_commit"),
+            "campaign_staged_commit": commit_binding["campaign_staged_commit"],
+            "staged_commit_agrees": commit_binding["agrees"],
+            "graded_with_restaged": commit_binding["restaged"],
             "plugin_tree_sha256": command.get("plugin_tree_sha256"),
             "case": case,
             "fixture_tree_sha256": (command.get("fixture") or {}).get("tree_sha256"),
@@ -3764,6 +4074,11 @@ def grade_one(campaign, plan, tid, record, attempt=0):
         grade["continuation_invariants"] = continuation_invariants(record, command)
     # E10-45 (finding 10): EVERY mandatory metric must pass. Each `False` below names itself.
     checks = {
+        # E10-59 (9): the grade is bound to the record's own staged commit. It holds when the
+        # two agree, or when the operator accepted the disagreement with `--restaged` and the
+        # grade records it; a disagreement without `--restaged` never reaches this line.
+        "staged_commit_bound": commit_binding["agrees"] or commit_binding["restaged"]
+        or not commit_binding["comparable"],
         "match": bool(ok),
         "validator_ok": bool(grade["validator"]["ok"]),
         "validator_exit_zero": validator_exit == 0,
@@ -3829,12 +4144,26 @@ def _recorded_validation(record, command):
     binding = (command or {}).get("validation_binding") or {}
     if not binding and os.path.isfile(os.path.join(record, "validate.json")):
         binding = read_json(os.path.join(record, "validate.json"))
+    run_copy = os.path.join(record, "run")
     now = {"result_sha256": file_sha256(os.path.join(record, "result.json")),
            "input_sha256": file_sha256(os.path.join(record, "input.json"))
-           if os.path.isfile(os.path.join(record, "input.json")) else None}
-    binding_ok = bool(binding.get("validated")) \
-        and binding.get("result_sha256") == now["result_sha256"] \
-        and binding.get("input_sha256") == now["input_sha256"]
+           if os.path.isfile(os.path.join(record, "input.json")) else None,
+           # E10-59 (10): the WHOLE retained run directory, not the two files.
+           "run_tree_sha256": tree_sha256_of(run_copy) if os.path.isdir(run_copy) else None}
+    why_not = []
+    if not binding.get("validated"):
+        why_not.append("the record carries no validation binding")
+    if binding.get("result_sha256") != now["result_sha256"]:
+        why_not.append("result.json is not the file that was validated")
+    if binding.get("input_sha256") != now["input_sha256"]:
+        why_not.append("input.json is not the file that was validated")
+    if not binding.get("run_tree_sha256"):
+        why_not.append("the binding records no run-directory tree hash (E10-59 (10)); a "
+                       "validation retained before that rule cannot be honoured")
+    elif binding.get("run_tree_sha256") != now["run_tree_sha256"]:
+        why_not.append("the retained run directory has changed since it was validated "
+                       "(E10-59 (10))")
+    binding_ok = not why_not
     skipped = document.get("skipped") or []
     return {"exit": exit_status, "ok": bool(document.get("ok")) and binding_ok,
             "schema_errors": document.get("schema") or [],
@@ -3842,10 +4171,13 @@ def _recorded_validation(record, command):
             "skipped": skipped,
             "binding_ok": binding_ok,
             "binding": {"recorded": {k: binding.get(k) for k in
-                                     ("result_sha256", "input_sha256", "validated", "exit")},
-                        "now": now},
-            "source": "the trial's own validate.txt, bound to the hashes it validated "
-                      "(the live run directory is no longer this trial's)"}
+                                     ("result_sha256", "input_sha256", "run_tree_sha256",
+                                      "validated", "exit")},
+                        "now": now,
+                        "why_not": why_not},
+            "source": "the trial's own validate.txt, bound to the hashes it validated and to "
+                      "the whole retained run directory (the live run directory is no longer "
+                      "this trial's)"}
 
 
 def _item_key(item):
@@ -4132,16 +4464,27 @@ def native_actions(record):
                     command = node.get("command")
                     if isinstance(command, list):
                         command = " ".join(str(x) for x in command)
+                    if command is None:
+                        # E10-59 (11): Codex's `exec_command` names its command `cmd`, not
+                        # `command`, at the node as well as inside `arguments`.
+                        got = node.get("cmd")
+                        if isinstance(got, list):
+                            command = " ".join(str(x) for x in got)
+                        elif isinstance(got, str):
+                            command = got
                     arguments = node.get("arguments")
                     if command is None and isinstance(arguments, str):
                         # finding 11: a history-changing command inside
                         # `function_call.arguments` was never scanned at all.
+                        # E10-59 (11): and `exec_command`'s own `cmd` key beside `command`.
                         try:
                             parsed = json.loads(arguments)
                         except ValueError:
                             parsed = None
                         if isinstance(parsed, dict):
                             got = parsed.get("command")
+                            if got is None:
+                                got = parsed.get("cmd")
                             if isinstance(got, list):
                                 command = " ".join(str(x) for x in got)
                             elif isinstance(got, str):
@@ -4221,6 +4564,39 @@ def tool_commands(record):
     return [a["command"] for a in native_actions(record) if a.get("command")]
 
 
+def session_cwd(record, command):
+    """The working directory the SESSION's own record names (E10-59 (11)).
+
+    A destination a tool call writes need not be absolute: Claude Code records
+    `file_path: "../outside.txt"`, Codex records a bare `> out.txt`. The old reader skipped
+    every non-absolute destination, so a completed relative write outside the workspace was
+    invisible. A relative destination means nothing without the directory it is relative to,
+    and each harness records that directory itself: Claude Code's `cwd` on its trace rows,
+    Codex's `session_meta`/`turn_context` `cwd`, OpenCode's `data.path.cwd`. The launch's own
+    workspace is the fallback, because that is the directory the runner starts every
+    launcher in.
+    """
+    for capture in capture_dirs(record):
+        for name in ("trace.jsonl", "transcript.jsonl", "rollout.jsonl", "events.jsonl"):
+            for entry in jsonl_lines(os.path.join(capture, name)):
+                payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
+                for node in (entry, payload):
+                    got = node.get("cwd") if isinstance(node, dict) else None
+                    if isinstance(got, str) and got.startswith("/"):
+                        return got, "%s/%s" % (os.path.relpath(capture, record), name)
+        path = os.path.join(capture, "session.json")
+        if os.path.isfile(path):
+            try:
+                document = read_json(path)
+            except (Missing, Failure):
+                document = {}
+            for row in document.get("records") or []:
+                got = ((row.get("data") or {}).get("path") or {}).get("cwd")
+                if isinstance(got, str) and got.startswith("/"):
+                    return got, "%s/session.json" % os.path.relpath(capture, record)
+    return (command.get("workspace") or ""), "command.json workspace (the launch's own cwd)"
+
+
 def trace_witnesses(campaign, record, command):
     """One pass over the native actions, producing every trace-derived witness E10-46 names."""
     actions = native_actions(record)
@@ -4229,6 +4605,10 @@ def trace_witnesses(campaign, record, command):
     tree = command.get("opaque_tree") or os.path.dirname(os.path.dirname(run_dir or "x"))
     tmpdir = campaign.tmp
     allowed = [p for p in (workspace, run_dir, tree, tmpdir) if p]
+    # E10-59 (11): a relative destination is resolved against the session's own working
+    # directory BEFORE containment is decided.
+    cwd, cwd_source = session_cwd(record, command)
+    resolved_relative = []
     writes_outside, git, web, pilot = [], [], [], []
     skill_reads, record_reads, refused = [], [], []
     for action in actions:
@@ -4258,17 +4638,32 @@ def trace_witnesses(campaign, record, command):
         if action.get("tool") in WEB_TOOL_NAMES:
             web.append({"tool": action.get("tool"), "capture": action.get("capture"),
                         "line": action.get("line"), "status": action.get("status")})
-        for destination in destinations:
+        for written in destinations:
+            destination, relative_to = written, None
             if not destination.startswith("/"):
-                continue
+                # E10-59 (11): resolve it against the session's cwd rather than skipping it.
+                if not cwd:
+                    continue
+                destination = os.path.normpath(os.path.join(cwd, written))
+                relative_to = cwd
+                resolved_relative.append({"as_recorded": written, "resolved": destination,
+                                          "relative_to": cwd, "cwd_source": cwd_source,
+                                          "tool": action.get("tool"),
+                                          "capture": action.get("capture"),
+                                          "line": action.get("line"),
+                                          "status": action.get("status")})
             if destination.startswith("/dev/"):
                 continue
             if any(path_contains(root, destination) for root in allowed):
                 continue
             if action.get("status") == "refused":
                 continue
-            writes_outside.append({"path": destination, "tool": action.get("tool"),
-                                   "capture": action.get("capture"), "line": action.get("line")})
+            row = {"path": destination, "tool": action.get("tool"),
+                   "capture": action.get("capture"), "line": action.get("line")}
+            if relative_to:
+                row["as_recorded"] = written
+                row["resolved_against"] = relative_to
+            writes_outside.append(row)
             if path_contains(PILOT_ROOT, destination) and not path_contains(campaign.root,
                                                                            destination):
                 pilot.append(destination)
@@ -4294,6 +4689,11 @@ def trace_witnesses(campaign, record, command):
         "captures": [os.path.relpath(c, record) for c in capture_dirs(record)],
         "commands_scanned": sum(1 for a in actions if a.get("command")),
         "refused_actions": refused[:40],
+        # E10-59 (11): the session's own working directory, and every relative destination
+        # resolved against it.
+        "session_cwd": cwd,
+        "session_cwd_source": cwd_source,
+        "relative_destinations_resolved": resolved_relative[:40],
         "writes_outside": writes_outside[:40],
         "git": git[:40],
         "web_tools": web[:20],
@@ -4400,14 +4800,21 @@ def continuation_invariants(record, command):
         (unchanged if same else changed).append({"index": key, "at_cut": entry, "after": now})
     calls_before = at_cut.get("verifier_calls_for_done_items") or []
     calls_after = _verifier_calls_for(record)
-    new_calls = [c for c in calls_after if c not in calls_before]
+    # E10-59 (15): the verifier-call invariant is SET EQUALITY against the retained prior
+    # calls, so a VANISHED prior call is a breach too. The old check looked only for calls
+    # that appeared, and a resumed run that dropped a prior call for a done item still read
+    # `held: true` — which is the shape the reviewer's probe supplied.
+    new_calls = sorted(set(calls_after) - set(calls_before))
+    missing_calls = sorted(set(calls_before) - set(calls_after))
     rows["done_items_not_re_adjudicated"] = {
         "done_at_the_cut": len(done_before), "unchanged": len(unchanged),
         "changed": changed,
         "verifier_calls_at_the_cut": calls_before,
         "verifier_calls_after": calls_after,
         "new_calls_for_a_done_item": new_calls,
-        "held": not changed and not new_calls}
+        "prior_calls_that_vanished": missing_calls,
+        "compared_by": "set equality against the retained prior calls (E10-59 (15))",
+        "held": not changed and not new_calls and not missing_calls}
     start_identity = cut.get("start_identity") or {}
     if not start_identity:
         # E10-47: the invariant is graded from the RETAINED pair. The pair is in the record
@@ -4434,9 +4841,16 @@ def continuation_invariants(record, command):
         "held": bool(start_identity) and bool(resumed_actual)
         and all(start_identity.get(k) == resumed_actual.get(k)
                 for k in ("commit", "dirty", "tracked_diff_sha256"))}
+    # E10-59 (15): `all_held` REQUIRES `cut_valid`. An invalid cut is a cut whose retained
+    # pair does not show the state the poll claimed (E10-47), so nothing graded on top of it
+    # is an invariant that held; the two invalid Codex cuts of the fix campaign read
+    # `all_held: true` before this line.
+    cut_valid = bool(cut.get("valid"))
     return {"invariants": rows,
-            "all_held": all(r["held"] for r in rows.values()),
-            "cut_valid": bool(cut.get("valid"))}
+            "all_held": all(r["held"] for r in rows.values()) and cut_valid,
+            "invariants_held_ignoring_the_cut": all(r["held"] for r in rows.values()),
+            "cut_valid": cut_valid,
+            "all_held_requires_cut_valid": "E10-59 (15)"}
 
 
 def _verifier_calls_for(record):
@@ -4465,7 +4879,8 @@ SUMMARY_SAFE_FIELDS = ("trial", "attempt", "kind", "setup", "condition", "valida
                        "match_ok", "match_reason_paths", "match_reason_count",
                        "false_fixed_count", "dispositions_all_matched",
                        "skill_file_reached", "records_reached", "continuation_invariants_held",
-                       "trial_conditioned_paths",
+                       "trial_conditioned_paths", "staged_commit_agrees",
+                       "graded_with_restaged",
                        "model", "effort", "wall_seconds", "cost_usd", "run_dir_is_this_trial_s")
 
 # The first path segment of a match reason, and nothing else from it. A reason reads
@@ -4551,6 +4966,11 @@ def summary_rows(rows):
             "wall_seconds": (row.get("time") or {}).get("wall_seconds"),
             "cost_usd": cost.get("total_cost_usd") if isinstance(cost, dict) else None,
             "run_dir_is_this_trial_s": row.get("run_dir_is_this_trial_s"),
+            # E10-59 (9): the commit binding, readable without opening a grade file.
+            "staged_commit_agrees": (row.get("staged_commit_binding") or {}).get("agrees")
+            if isinstance(row.get("staged_commit_binding"), dict) else None,
+            "graded_with_restaged": (row.get("staged_commit_binding") or {}).get("restaged")
+            if isinstance(row.get("staged_commit_binding"), dict) else None,
             "ok": row.get("ok"),
             "ok_because": row.get("ok_because"),
         })
@@ -4969,8 +5389,10 @@ def _codex_reads(harness_dir):
     `arcade` at rollout line 3, which is the catalog message; the actual recheck-v2 read
     starts at line 13 and the final reply cites it.
     """
+    rows = list(jsonl_lines(os.path.join(harness_dir, "rollout.jsonl")))
+    outputs = codex_call_outputs(rows)
     reads, injected, first_non_read = [], [], None
-    for index, record in enumerate(jsonl_lines(os.path.join(harness_dir, "rollout.jsonl")), 1):
+    for index, record in enumerate(rows, 1):
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         node_type = payload.get("type") or record.get("type") or ""
         item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
@@ -4987,6 +5409,8 @@ def _codex_reads(harness_dir):
             try:
                 parsed = json.loads(arguments)
                 got = parsed.get("command")
+                if got is None:
+                    got = parsed.get("cmd")
                 command = " ".join(str(x) for x in got) if isinstance(got, list) else got
             except (ValueError, AttributeError):
                 command = None
@@ -4994,8 +5418,12 @@ def _codex_reads(harness_dir):
         if isinstance(command, str):
             found = re.search(r"([A-Za-z0-9._-]+)/SKILL\.md", command)
             if found:
+                # E10-59 (13): the read's own result record decides whether it was delivered;
+                # a refused read is listed as a candidate and is never the target.
+                status, why = codex_delivery_status(payload, item, outputs)
                 reads.append({"line": index, "skill": _skill_of_path(command),
-                              "command": command[:240]})
+                              "command": command[:240], "status": status, "why": why,
+                              "call_id": payload.get("call_id") or item.get("call_id")})
                 continue
         matched = re.search(r"<skill[^>]*name=\"([a-z0-9-]+)\"", blob)
         if matched:
@@ -5040,24 +5468,35 @@ def observed_target(setup, harness_dir):
         # `<skill>` message — and every candidate read is listed. A browse of several files is
         # its own row, not a selection.
         reads, injected, first_non_read = _codex_reads(harness_dir)
-        candidates = [{"line": r["line"], "skill": r["skill"]} for r in reads]
+        candidates = [{"line": r["line"], "skill": r["skill"], "status": r.get("status"),
+                       "why": r.get("why")} for r in reads]
         if injected:
             return {"target": injected[0]["skill"], "line": injected[0]["line"],
                     "candidates": candidates,
                     "how": "the injected <skill> message in the rollout (E10-33)"}
-        before = [r for r in reads
+        # E10-59 (13): only a DELIVERED read can be the target. A read whose own
+        # `function_call_output` reports a failure, and a read with no result record joined to
+        # it, stay in `candidates` and select nothing.
+        delivered = [r for r in reads if r.get("status") == "completed"]
+        not_delivered = [r for r in reads if r.get("status") != "completed"]
+        before = [r for r in delivered
                   if first_non_read is None or r["line"] < first_non_read]
-        chosen = (before or reads)[-1] if reads else None
+        chosen = (before or delivered)[-1] if delivered else None
         if chosen:
             return {"target": chosen["skill"] or "none", "line": chosen["line"],
                     "candidates": candidates,
-                    "browse": len(before or reads) > 1,
+                    "not_delivered": not_delivered,
+                    "browse": len(before or delivered) > 1,
                     "first_non_read_line": first_non_read,
-                    "how": "the last SKILL.md read before the first non-read action "
-                           "(E10-33; the developer catalog message is not a read)"}
+                    "how": "the last DELIVERED SKILL.md read before the first non-read action "
+                           "(E10-33; the developer catalog message is not a read; E10-59 (13): "
+                           "delivery is the read's own function_call_output)"}
         return {"target": "none", "line": None, "candidates": candidates,
-                "how": "no installed SKILL.md read and no injected skill message in the rollout "
-                       "(the developer catalog message is not a selection, E10-46)"}
+                "not_delivered": not_delivered,
+                "how": ("every SKILL.md read in the rollout was refused or unjoined to a "
+                        "result, so none was a selection (E10-59 (13))" if reads else
+                        "no installed SKILL.md read and no injected skill message in the "
+                        "rollout (the developer catalog message is not a selection, E10-46)")}
     if harness == "opencode":
         calls = setup.activation(harness_dir)["marker"]["skill_tool_calls"]
         delivered = [c for c in calls if c.get("status") == "completed"
@@ -6191,9 +6630,63 @@ def measurement_records(campaign):
     return rows
 
 
+def sorted_table_dirs(campaign):
+    """Every reserved `tables/<n>/` of this campaign, in numeric order (E10-59 (7))."""
+    base = os.path.join(campaign.root, "tables")
+    found = []
+    for path in glob.glob(os.path.join(base, "*")):
+        name = os.path.basename(path)
+        if os.path.isdir(path) and name.isdigit():
+            found.append((int(name), path))
+    return [path for _, path in sorted(found)]
+
+
+def reserve_tables_dir(campaign):
+    """The first free `tables/<n>/`, created atomically (E10-59 (7), E10-43's rule).
+
+    `mkdir` fails with EEXIST on a name that exists, so two reports running at once take two
+    numbers and neither replaces a generated table. Nothing under an earlier number is ever
+    written again.
+    """
+    base = os.path.join(campaign.root, "tables")
+    ensure_dir(base)
+    for index in range(1, 100000):
+        path = os.path.join(base, "%d" % index)
+        try:
+            os.mkdir(path)
+        except OSError as exc:
+            if exc.errno == errno.EEXIST:
+                continue
+            raise
+        return path
+    raise Failure("no free tables directory under %s" % base)
+
+
+def _identity_of_id(plan, tid):
+    """`(setup, condition)` read off a trial id when no `command.json` exists to say (E10-59 (21)).
+
+    A journalled attempt that was interrupted before its record was written still belongs to a
+    lane and a condition, and the table has to place it. The plan's own setup names are the
+    only safe prefixes: `claude-code-...` is not `claude`.
+    """
+    names = sorted((s.get("name") for s in (plan or {}).get("setups") or []
+                    if isinstance(s, dict) and s.get("name")), key=len, reverse=True)
+    body = tid
+    for prefix in ("routing-", "cont-"):
+        if body.startswith(prefix):
+            body = body[len(prefix):]
+            break
+    setup_name = next((n for n in names if body == n or body.startswith(n + "-")), None)
+    if setup_name is None:
+        setup_name = body.split("-")[0]
+    condition = next((c for c in CONDITIONS if ("-%s-" % c) in tid or tid.endswith("-%s" % c)),
+                     "n/a")
+    return setup_name, condition
+
+
 def do_report(args):
-    """`tables/table.md`, `tables/table.json` and a generated skeleton; every number from
-    `trials.jsonl` and the grade files, each cell naming its records."""
+    """`tables/<n>/table.md`, `tables/<n>/table.json` and a generated skeleton; every number
+    from `trials.jsonl` and the grade files, each cell naming its records."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
     lines = [json.loads(l) for l in (read_text(campaign.trials_jsonl, "") or "").splitlines()
@@ -6254,7 +6747,7 @@ def do_report(args):
                 wall = correction.get("corrected_value")
         bucket = cells.setdefault((kind, key, condition, bool(activated)), {
             "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "grades": []})
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "partial": 0, "grades": []})
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
@@ -6277,6 +6770,43 @@ def do_report(args):
     queue = campaign_queue(campaign, plan)
     partial = [{"id": r["id"], "why": r.get("why")} for r in queue if r["state"] == "partial"]
     journal = jsonl_lines(campaign.attempts_journal)
+    # E10-59 (21): a JOURNALLED attempt without `command.json` is counted in the attempt total
+    # and appears in the table with status `partial`. The old report counted ledger rows only,
+    # so an attempt that was created and interrupted — the one the journal exists for — was
+    # absent from `attempts_seen` and from every table row, and showed up only in the
+    # `partial_attempts` list beside them.
+    ledger_keys = {(r["id"], r["attempt"]) for r in rows_seen}
+    partial_attempts = []
+    for row in journal:
+        tid, attempt = row.get("trial"), row.get("attempt", 0)
+        if not tid or (tid, attempt) in ledger_keys:
+            continue
+        record = row.get("record") or attempt_record(campaign, tid, attempt)
+        if os.path.isfile(os.path.join(record, "command.json")):
+            continue
+        ledger_keys.add((tid, attempt))
+        kind = (row.get("kind") or trial_kind_of(plan, tid)).split(":")[0]
+        setup_name, condition = _identity_of_id(plan, tid)
+        entry = {"id": tid, "attempt": attempt, "kind": kind, "setup": setup_name,
+                 "condition": condition, "record": record, "status": "partial",
+                 "journalled_at": row.get("created_at"),
+                 "why": "journalled with no command.json: the attempt was started and "
+                        "interrupted (E10-43, E10-59 (21))"}
+        partial_attempts.append(entry)
+        rows_seen.append({"id": tid, "attempt": attempt, "status": "partial",
+                          "cost": None, "wall": None, "record": record})
+        bucket = cells.setdefault((kind, setup_name, condition, False), {
+            "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "partial": 0, "grades": []})
+        bucket["trials"].append(tid)
+        bucket["attempts"].append("%s#%s" % (tid, attempt))
+        bucket["records"].append(record)
+        bucket["partial"] += 1
+    known = {row["id"] for row in partial}
+    for entry in partial_attempts:
+        if entry["id"] not in known:
+            partial.append({"id": entry["id"], "why": entry["why"]})
+            known.add(entry["id"])
     launches = [row for row in process_rows(campaign) if row.get("event") == "started"]
     table = []
     for (kind, setup, condition, activated), bucket in sorted(cells.items()):
@@ -6284,7 +6814,8 @@ def do_report(args):
             "kind": kind, "setup": setup, "condition": condition, "activated": activated,
             "trials": len(set(bucket["trials"])), "attempts": len(bucket["attempts"]),
             "complete": bucket["complete"],
-            "no_result": bucket["no_result"], "graded_ok": bucket["graded_ok"],
+            "no_result": bucket["no_result"], "partial": bucket["partial"],
+            "graded_ok": bucket["graded_ok"],
             "cost_usd": round(bucket["cost"], 6) if bucket["cost"] else None,
             "wall_seconds": round(bucket["wall"], 1),
             "records": bucket["records"],
@@ -6292,14 +6823,20 @@ def do_report(args):
             "grade_files": bucket["grades"],
         })
     summary = grade_summary([g["grade"] for g in grades.values()])
-    tables_dir = os.path.join(campaign.root, "tables")
-    ensure_dir(tables_dir)
+    # E10-59 (7): `report` NEVER REPLACES. The generated table of every run takes its own
+    # reserved directory `tables/<n>/`, the first free number, created with `mkdir` so two
+    # reports cannot take the same one; the fixed `tables/table.json` and `tables/table.md` of
+    # the old shape were rewritten on every run, and a marker left in one by hand was lost.
+    # E10-43 names `grade.json` as the sole replaceable file, and it still is.
+    tables_dir = reserve_tables_dir(campaign)
     document = {"campaign": campaign.root, "plan_counts": plan.get("counts"),
+                "tables_dir": tables_dir,
                 "trials_seen": len(lines),
                 "attempts_seen": len({(r["id"], r["attempt"]) for r in rows_seen}),
                 "attempts_journalled": len(journal),
                 "launches_recorded": len(launches),
                 "partial_attempts": partial,
+                "partial_attempts_detail": partial_attempts,
                 "graded": len(grades), "table": table,
                 "grade_summary": summary,
                 "corrected_measurements_applied": applied,
@@ -6322,13 +6859,15 @@ def do_report(args):
           "Every number is computed from `trials.jsonl` and the grade files, joined by",
           "(trial id, attempt); each row names its records. Available trials are split by",
           "`activated` (E10-4). Corrected measurements (E10-48) are applied only where their",
-          "hash binding still holds.", "",
-          "| kind | setup | condition | activated | trials | attempts | complete | no result | graded ok | cost USD | wall s |",
-          "|---|---|---|---|---|---|---|---|---|---|---|"]
+          "hash binding still holds. A journalled attempt with no `command.json` is counted",
+          "here with status `partial` (E10-59 (21)).", "",
+          "| kind | setup | condition | activated | trials | attempts | complete | no result | partial | graded ok | cost USD | wall s |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for row in table:
-        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %s | %s |" % (
+        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %s | %s |" % (
             row["kind"], row["setup"], row["condition"], row["activated"], row["trials"],
-            row["attempts"], row["complete"], row["no_result"], row["graded_ok"],
+            row["attempts"], row["complete"], row["no_result"], row["partial"],
+            row["graded_ok"],
             "%.6f" % row["cost_usd"] if row["cost_usd"] else "null", row["wall_seconds"]))
     md += ["", "## Records per row", ""]
     for row in table:
@@ -6337,9 +6876,15 @@ def do_report(args):
             ", ".join(row["attempt_ids"]), ", ".join(row["records"]),
             ", ".join(row["grade_files"]) or "none"))
     if partial:
-        md += ["", "## Partial attempts retained (E10-43)", ""]
+        md += ["", "## Partial attempts retained (E10-43, E10-59 (21))", ""]
         for row in partial:
             md.append("- %s: %s" % (row["id"], row["why"]))
+    if partial_attempts:
+        md += ["", "## Journalled attempts counted as `partial`", ""]
+        for row in partial_attempts:
+            md.append("- %s#%s (%s / %s / %s), journalled %s: %s"
+                      % (row["id"], row["attempt"], row["kind"], row["setup"],
+                         row["condition"], row["journalled_at"], row["record"]))
     if applied or stale:
         md += ["", "## Corrected measurements (E10-48)", ""]
         for row in applied:
@@ -6361,8 +6906,11 @@ def do_report(args):
         "## 1. What ran", "", "- planned: %s" % json.dumps(plan.get("counts")),
         "- trial lines: %d (`trials.jsonl`)" % len(lines),
         "- attempts journalled: %d (`attempts.jsonl`)" % len(journal),
+        "- attempts counted (ledger rows plus journalled partials): %d"
+        % len({(r["id"], r["attempt"]) for r in rows_seen}),
         "- launches recorded: %d (`processes.jsonl`)" % len(launches),
         "- partial attempts retained: %d" % len(partial),
+        "- journalled attempts counted as `partial`: %d" % len(partial_attempts),
         "- graded: %d" % len(grades), "",
         "## 2. The comparison table", "", "See `table.md`.", "",
         "## 3. Grade counts", "", "```json", json.dumps(summary, indent=2, sort_keys=True), "```", "",
@@ -6377,14 +6925,22 @@ def do_report(args):
     scan = scan_paths(walk_files(campaign.root), exempt=auth_store_exemptions())
     document["scan_hits"] = len(scan["hits"])
     result = {"campaign": campaign.root,
+              # E10-59 (7): the report's stdout NAMES THE DIRECTORY IT WROTE.
+              "tables_dir": tables_dir,
+              "tables_dir_reserved_as": os.path.relpath(tables_dir, campaign.root),
+              "tables_replaced_nothing": True,
+              "previous_tables_dirs": [d for d in sorted_table_dirs(campaign)
+                                       if d != tables_dir],
               "table_md": os.path.join(tables_dir, "table.md"),
               "table_json": os.path.join(tables_dir, "table.json"),
               "report_skeleton_md": skeleton_path,
               "operator_report_untouched": os.path.join(campaign.root, "report.md"),
               "rows": len(table), "trials_seen": len(lines),
               "attempts_seen": document["attempts_seen"],
+              "attempts_journalled": document["attempts_journalled"],
               "launches_recorded": document["launches_recorded"],
               "partial_attempts": partial,
+              "partial_attempts_detail": partial_attempts,
               "graded": len(grades), "totals": document["totals"],
               "corrected_measurements_applied": applied,
               "corrected_measurements_stale": stale,
@@ -6887,6 +7443,10 @@ def build_parser():
     one.add_argument("--all", action="store_true",
                      help="every comparison AND continuation attempt, reruns included")
     one.add_argument("--summary", action="store_true", help="counts only")
+    one.add_argument("--restaged", action="store_true",
+                     help="grade trials whose recorded staged_commit is not the campaign's "
+                          "staged commit, and record the disagreement in grade.json "
+                          "(E10-59 (9))")
     one.set_defaults(func=do_grade)
 
     one = subs.add_parser("routing", help="one routing trial (E10-13)")

@@ -102,7 +102,10 @@ class UsageErrorTest(RunnerCase):
         plan = runner.default_plan("test")
         plan["cases"] = ["NOPE-01"]
         runner.write_json(path, plan)
-        got = cli(["plan", "--campaign", self.campaign, "--refresh", "--plan", path])
+        # E10-59 (25): the default plan asks for the whole trigger set; this test carries its
+        # own held-out stand-in (E10-21) rather than reaching the sealed file.
+        got = cli(["plan", "--campaign", self.campaign, "--refresh", "--plan", path],
+                  env=self.held_out_env())
         self.assertEqual(got.returncode, 2, got.stdout)
         self.assertIn("NOPE-01", got.stderr)
 
@@ -117,7 +120,7 @@ class UsageErrorTest(RunnerCase):
         runner.Campaign(fresh).ensure()
         runner.write_json(os.path.join(fresh, "stage.json"),
                           runner.read_json(os.path.join(self.campaign, "stage.json")))
-        got = cli(["plan", "--campaign", fresh])
+        got = cli(["plan", "--campaign", fresh], env=self.held_out_env(entries=8))
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
         # the full E10 default plan: 6 cases x 3 setups x 2 conditions x 2 repetitions

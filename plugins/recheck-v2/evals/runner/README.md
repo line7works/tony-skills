@@ -170,6 +170,15 @@ installed: "no skill in a home that does not exist" proves nothing, so an absent
 missing prerequisite, never an `ok: true` row (E10-52). **Exit 1** when any required row
 failed — every failed row fails the command.
 
+**The verifier subprocess's own exit is part of the success condition (E10-59 (26)).** It was
+recorded and then ignored, so a `verify-install.sh` that crashed after printing an `ok`
+document with a matching digest passed. What the exit must be depends on what is expected of
+the home, and the row states both: an `available` or `routing` home's verification must
+succeed (`verify_exit_expected: 0`), and an `absent` home's must fail to find an installed
+skill, which is how each `verify-install.sh` reports that state (`verify_exit_expected:
+"non-zero"`; measured on codex/absent at E10-58: exit 1). `verify_exit_ok` is the row's own
+field and `ok` is false without it.
+
 ### `probe-env [--setup NAME]... [--home ...] [--timeout N] [--refresh]`
 
 A trial-shaped session per setup and home whose whole prompt is `env | cut -d= -f1 | sort`.
@@ -177,9 +186,13 @@ Each probe writes its own **immutable** record, `<campaign>/probes/<setup>-<home
 `--refresh` runs another probe **beside** the old one and never replaces it (E10-43,
 E10-53(5)). The aggregate index takes a reserved name of its own under `records/`.
 
-A probe **fails** when the session exited non-zero, when it printed nothing, when the runner
-passed a banned name, or when a banned name appears that is not on that harness's measured
-own-tool-shell list (`HARNESS_CREATED_ENV`). `campaign start` refuses to start without one
+A probe **fails** when the session exited non-zero, when it printed nothing, **when it printed
+no environment name at all (E10-59 (3))**, when the runner passed a banned name, or when a
+banned name appears that is not on that harness's measured own-tool-shell list
+(`HARNESS_CREATED_ENV`). A probe passes only on at least one printed name: a session answering
+"I could not run the requested command." used to pass with zero parsed names, so the nine-home
+gate below stood on nothing. `reply_reports_it_could_not_run` names that shape in the record
+when the reply says so. `campaign start` refuses to start without one
 current successful probe per setup and home — nine for the full plan — where "current" means
 bound to this campaign's staged commit and `plugin_tree_sha256` (E10-42).
 
@@ -274,9 +287,25 @@ attempt number.
 
 `validate-result.py --strict`, then `match()` from `evals/checks/match.py` against the key
 entry's `expected`, then every metric of E10-11. `--all` covers **every comparison and
-continuation attempt**, `attempts/<n>/` included (E10-44). Refuses while any process of the
-attempt is alive (exit 1). Exit 3 for a record that is not there. **Refuses a key whose
-`runs_at` does not include E10, before matching** (exit 1, E10-45).
+continuation attempt**, `attempts/<n>/` included (E10-44). Exit 3 for a record that is not
+there. **Refuses a key whose `runs_at` does not include E10, before matching** (exit 1,
+E10-45).
+
+**The barrier is the CAMPAIGN, not the attempt (E10-59 (1, 8)).** No key opens while any
+registered launch of the campaign is alive — not only a launch of the attempts being graded —
+and a **reserved** launch whose owner process is alive counts as alive, because `reserved` is
+written before the child is spawned and there is a window in which the launch exists and no pid
+names it. A reservation is closed by its own token's `started`, `ended` or `released` line;
+`released` is written when a reservation never became a process (the binary was not there), so
+the barrier never waits on a child that does not exist.
+
+**The grade is bound to the record's own `staged_commit` (E10-59 (9)).** `grade` refuses, before
+the key opens, when the trial's recorded staged commit is not the campaign's current staged
+commit; `--restaged` grades it anyway and records the disagreement in `grade.json`'s
+`staged_commit_binding` (`record_staged_commit`, `campaign_staged_commit`, `agrees`, `restaged`,
+`disagreement`, `accepted_by`), with `checks.staged_commit_bound` beside it. A campaign whose
+stage was refreshed after its trials ran — the fix campaign, restaged at `91e1174` for
+E10-58(2)'s live install — is exactly that case.
 
 **The trial's own facts go in first (E10-54(c)).** The keys carry E7's trial shape and are
 correct as E7 wrote them; two of the fields they pin are the TRIAL's own facts, and `grade`
@@ -439,12 +468,23 @@ length, never a value. A hit, or an unreadable mandatory capture, is exit 1.
 
 ### `report`
 
-`tables/table.md`, `tables/table.json` and `tables/report-skeleton.md`. Every number is
-computed from `trials.jsonl` and the grade files **joined by (trial id, attempt)**, and every
-row names the attempts, the records and the grade files it came from. Available trials are
-split by `activated` (E10-4). Partial attempts are retained and listed. Launches
-(`processes.jsonl`) are counted apart from trials, and journalled attempts apart from ledger
-lines.
+**Every run takes its own reserved directory `tables/<n>/` (E10-59 (7))**, the first free number,
+created with `mkdir` so two reports cannot take the same one, holding `table.md`, `table.json`
+and `report-skeleton.md`; the stdout names it as `tables_dir` and lists `previous_tables_dirs`
+beside it. The fixed `tables/table.json` and `tables/table.md` of the old shape were rewritten
+on every run, and a marker left in one by hand was lost; **`grade.json` remains the sole
+replaceable file** (E10-43).
+
+Every number is computed from `trials.jsonl` and the grade files **joined by (trial id,
+attempt)**, and every row names the attempts, the records and the grade files it came from.
+Available trials are split by `activated` (E10-4). Launches (`processes.jsonl`) are counted
+apart from trials, and journalled attempts apart from ledger lines.
+
+**A journalled attempt with no `command.json` is counted and shown (E10-59 (21)).** It is an
+attempt that was created and interrupted — which is what the journal exists for — so it is in
+`attempts_seen`, in `partial_attempts_detail` with its setup, condition and record, and in the
+table under its own row with a `partial` count; every table row carries that column. It used to
+appear only in the `partial_attempts` list beside a table that did not know about it.
 
 **`report` never writes `report.md`** — that is the operator's own file (E10-43). Corrected
 measurements (below) are applied only where their hash binding still holds; a stale one is
@@ -493,7 +533,7 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 | `prompt.txt` | the prompt bytes, exactly as the harness received them |
 | `harness/` | everything the setup's `launch.sh` wrote: the trace, the transcript or rollout or session-store dump, `launch.json`, stderr, and the catalog capture |
 | `harness-first/`, `harness-second/` | a continuation trial's two sessions, with `at-cut-*` beside the first |
-| `model.json` | `id`, `effort`, the **record they were read from**, the session binding, the native init event, and `configured` (what the launcher was told) kept apart (E10-50) |
+| `model.json` | `id`, `effort`, the **record they were read from**, the session binding, the native init event, and `configured` (what the launcher was told) kept apart (E10-50). **A record with no session binding is `null` (E10-59 (18))**: the native label is not a measurement of THIS session's model, and the unbound observation is kept under `observed_without_a_session_binding` rather than promoted |
 | `cost.json` | `total_cost_usd`, token counts, and the record; `null` when the harness printed nothing |
 | `run/` | the run directory copied whole after the harness ended and after the validation, verifier captures included. It is the fixture's own `run/` leaf (E10-54(a)), so `fixture/<12 hex>/run/` below holds the same files |
 | `fixture/` | this trial's opaque fixture build, copied in after the trial |
@@ -501,7 +541,7 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 | `chat.md` | what the core wrote into the run directory |
 | `reply.md` | the **session's own final reply** (`result.txt`, `final.md`, or the store's last text part) — what `interop` grades |
 | `validate.txt` | the exact output of `uv run validate-result.py … --strict`, with the exit status on the last line |
-| `validate.json` | the hashes that verdict was bound to (E10-45) |
+| `validate.json` | the hashes that verdict was bound to (E10-45): the result, the input, and **the whole retained run directory's tree hash (E10-59 (10))** — `run_tree_sha256`, `<path>\0<sha256>` over every file under `run/`, sorted. A retained validation is honoured on a regrade only while all three still hold, so a rewritten verifier capture can no longer sit under a stale `ok` |
 | `scan.json` | the credential scan of this record |
 | `grade.json` | written by `grade`, never by `run` — the one replaceable file |
 | `attempts/<n>/` | a rerun's own record, with the same layout |
@@ -691,7 +731,21 @@ at its own allowlist before the launcher ever ran.
 | E10-56(1), `--without recheck-v2` | `ClaudeCodeSetup.install`, `OpenCodeSetup.install`, `CodexSetup.install`, the three `setups/*/install.sh` |
 | E10-58(2), the Codex absent home | `setups/codex/install.sh`'s `RECHECK_CODEX_HOME` default, `CodexSetup.install`'s `absent` branch, `CodexSetup._link_auth` |
 | E10-56(2)(3)(4), no edit | the validator's path-rebase flag stays E11 (`_recorded_validation`'s fallback); a session ignoring the named run directory is a measurement (section 10 item 14); `disable-model-invocation` not honoured by Codex and OpenCode is a measurement (`do_routing_score`'s manual-only row) |
-| E10-57, the second fix round's scope | this round: E10-54, E10-55 and E10-56(1), with the fix campaign regraded and one live trial rerun under the new layout; the first fix round is committed as delivered at `a7f852b` and nothing of it was re-opened |
+| E10-57, the second fix round's scope | E10-54, E10-55 and E10-56(1), with the fix campaign regraded and one live trial rerun under the new layout; the first fix round is committed as delivered at `a7f852b` and nothing of it was re-opened |
+| E10-59, the third round's scope | the fifteen PARTLY items of Astra's verification, each with its own test class in `tests/test_findings.py` (and two in `tests/test_fake_end_to_end.py` for item 17); the first two rounds are committed as delivered at `a7f852b`, `91e1174` and `8ee9adf` and nothing of them was re-opened |
+| E10-59 (1, 8), the barrier is the campaign, and a reserved launch is alive | `ProcessRegistry.reserved`/`released`, `live_processes`, `refuse_while_alive` |
+| E10-59 (3), a probe must print a name | `do_probe_env`, `_probe_names`, `COULD_NOT_RUN_RE` |
+| E10-59 (7), tables reserved under `tables/<n>/` | `reserve_tables_dir`, `sorted_table_dirs`, `do_report` |
+| E10-59 (9), the grade is bound to the record's staged commit | `staged_commit_binding`, `grade_one`, `do_grade`'s `--restaged` |
+| E10-59 (10), the whole run directory's tree hash | `collect_trial`'s `validation_binding.run_tree_sha256`, `_recorded_validation` |
+| E10-59 (11), `exec_command`'s `cmd` and a relative destination | `native_actions`, `session_cwd`, `trace_witnesses` |
+| E10-59 (12, 13), a Codex read joined to its `function_call_output` | `codex_call_outputs`, `codex_output_ok`, `codex_delivery_status`, `CodexSetup.activation`, `_codex_reads`, `observed_target` |
+| E10-59 (15), `all_held` requires `cut_valid`; prior calls by set equality | `continuation_invariants` |
+| E10-59 (17), the child session the recorded call names | `OpenCodeSetup.store_separation_witness` |
+| E10-59 (18), no session binding, no model | `bound_model_record`, `model_record` per setup |
+| E10-59 (21), a journalled partial attempt is counted and shown | `do_report`, `_identity_of_id` |
+| E10-59 (25), the tests' own stand-ins and complete fakes | `testlib.held_out_stand_in`/`held_out_env`/`dispatch_launcher`, `test_env_allowlist.InstallCredentialTest` |
+| E10-59 (26), the verifier subprocess exit | `do_verify`'s `verify_exit_ok` |
 | E9-34, a record is never overwritten | every subcommand's refusal, `reserve_record` |
 | E9-41, the timeout verdict | `run_cmd` collects the child's status before any verdict |
 | E7-18, the opaque mount and the run date | `build_fixture`, `Campaign.opaque_tree`, `default_plan` |
@@ -828,3 +882,24 @@ the first build claimed, the second what the first fix round claimed.
 | the cut is captured after the process group is gone | E10-55: the group is frozen with SIGSTOP and the stop confirmed, the pair is captured frozen, then SIGCONT, SIGTERM and SIGKILL |
 | every absent home is the installed home with the skill removed | E10-56(1): the Claude Code and OpenCode absent homes are installed `--without recheck-v2` and never held it |
 | the Codex absent home is the one the flag cannot reach, `derived_from_available` with the skill removed by `codex plugin remove` | E10-58(2): `setups/codex/install.sh` honours `RECHECK_CODEX_HOME`, so that home is its own `install.sh --without recheck-v2` run and never held the skill either; `derived_from_available` is `false` and `why_not_never_installed` is gone |
+
+**The first two fix rounds' claims that the third round replaced** (E10-59, after Astra's
+verification found fifteen of the thirty-one items PARTLY):
+
+| the first two rounds said | what replaced it |
+|---|---|
+| "neither grading path opens a key while any registered process **of that attempt** is alive" | E10-59 (1, 8): the unit is the CAMPAIGN. Grading a terminal trial used to open both key directories while another registered trial was still running, and a live child read a sentinel out of the open key |
+| a launch is alive from its `started` line | E10-59 (1, 8): a **reserved** launch whose owner process is alive is alive too, because `reserved` is written before the child is spawned. `released` closes a reservation that never became a process |
+| a probe fails when it "printed nothing" | E10-59 (3): it fails unless it printed at least one environment NAME. A reply of "I could not run the requested command." passed with zero parsed names |
+| `report` writes `tables/table.json`, `tables/table.md` and `tables/report-skeleton.md` | E10-59 (7): every run takes a reserved `tables/<n>/` and replaces nothing; the stdout names the directory. `grade.json` is still the sole replaceable file |
+| "grading inputs are bound to the trial's recorded commit" | E10-59 (9): the recorded `staged_commit` was copied into the grade, never compared. `grade` now refuses on a disagreement unless `--restaged` is given, and records the disagreement |
+| a retained validation is honoured while the result and input hashes hold | E10-59 (10): the whole retained run directory's tree hash must hold too. A rewritten verifier capture used to sit under a stale `ok` |
+| `native_actions` reads a Codex tool record's `command` | E10-59 (11): `exec_command` names it `cmd`, at the node and inside `arguments`, and both are read |
+| a non-absolute write destination is skipped | E10-59 (11): it is resolved against the session's own working directory (the harness's recorded `cwd`, else the launch's workspace) before containment is decided. A completed `Write` to `../outside.txt` used to be invisible |
+| a Codex read is refused when its own record carries a refusal word | E10-59 (12, 13): delivery is the `function_call_output` joined to the call by `call_id` reporting success. A `cat …/SKILL.md` answered `Permission denied; exit code 1` counted as an activation and was selected as the routing target |
+| the continuation invariant on verifier calls looks for calls that appeared | E10-59 (15): it is set equality against the retained prior calls, so a vanished prior call is a breach; and `all_held` requires `cut_valid`, so the two invalid Codex cuts of the fix campaign no longer read `all_held: true` |
+| the store-separation witness inspects every file whose name looks like a verifier capture | E10-59 (17): only rows of the child session the recorded call names, and `unavailable` when there are none |
+| `model.json` is `null` when the harness wrote no native record | E10-59 (18): and `null` when the record it wrote carries no session binding, whatever the native label says. The unbound observation is kept under `observed_without_a_session_binding` |
+| a directory with no `command.json` is a `partial` attempt the report retains | E10-59 (21): it is also COUNTED — in `attempts_seen`, in `partial_attempts_detail`, and in the table under its own row with a `partial` column |
+| the default-plan tests read the trigger set; the detached test hands one harness's fake to three lanes; the install-credential test compares dictionaries | E10-59 (25): the plan tests carry their own held-out stand-in (E10-21), the detached test dispatches to each harness's own fake so every lane's catalog is complete, and the install-credential test runs the three real `install.sh` scripts against a synthetic home with an empty auth store |
+| `verify` records the verifier's exit | E10-59 (26): it counts it. An `available` home needs exit 0 and an `absent` home needs a non-zero exit (its verifier failing to find an installed skill is the proof), and `ok` is false without it |

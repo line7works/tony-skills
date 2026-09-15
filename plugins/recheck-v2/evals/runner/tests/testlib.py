@@ -149,6 +149,53 @@ class RunnerCase(unittest.TestCase):
     def fake_launcher(self, harness):
         return os.path.join(FAKE, "%s-launch.sh" % harness)
 
+    def dispatch_launcher(self):
+        """One stub that dispatches to EACH HARNESS's own fake launcher (E10-59 (25)).
+
+        A campaign of three lanes handed one harness's launcher wrote three claude-code
+        records, so every codex and opencode lane carried an incomplete catalog and a record
+        in the wrong native shape: the detached test's `complete: 3` proved the campaign ran,
+        not that the three lanes recorded themselves. The runner tells the launcher which
+        harness it is by the one pointer name it passes (E10-7's allowlist), so the stub can
+        pick the right fake from its own environment.
+        """
+        path = os.path.join(self.scratch, "dispatch-launcher.sh")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(
+                "#!/bin/sh\n"
+                "h=claude-code\n"
+                '[ -n "$RECHECK_CODEX_HOME" ] && h=codex\n'
+                '[ -n "$RECHECK_OPENCODE_SETUP" ] && h=opencode\n'
+                'exec /usr/bin/python3 "%s/fakelib.py" "$h" "$@"\n' % FAKE)
+        os.chmod(path, 0o755)
+        return path
+
+    def held_out_stand_in(self, entries=2):
+        """A held-out trigger-set file THIS TEST WROTE (E10-21, E10-59 (25)).
+
+        `default_plan` asks for `routing: {"entries": "all"}`, and "all" is the tuning set plus
+        the held-out set; the plan tests therefore reached the real
+        `evals/trigger-set/held-out/requests.json`. A copy of the runner without it — the
+        reviewer's copy, and any copy behind the wall — failed those tests for a missing file
+        rather than for anything the runner does. The stand-in carries synthetic entries in the
+        set's own shape and is never a copy of a real one.
+        """
+        path = os.path.join(self.scratch, "held-out-stand-in.json")
+        runner.write_json(path, {"requests": [
+            {"id": "H-%02d-stand-in" % n,
+             "text": "a request this test wrote, entry %d" % n,
+             "expected": {"target": "recheck-v2"},
+             "competitors": []}
+            for n in range(1, entries + 1)]})
+        return path
+
+    def held_out_env(self, extra=None, entries=2):
+        """The `cli` environment with this test's own held-out stand-in named (E10-21)."""
+        environment = {"RECHECK_RUNNER_TEST": "1",
+                       "RECHECK_RUNNER_HELDOUT": self.held_out_stand_in(entries)}
+        environment.update(extra or {})
+        return self.child_env(environment)
+
     def stub_launcher(self, harness, name, sleep=None, **settings):
         """A stub launcher this test WROTE, carrying its behaviour in the file itself.
 
