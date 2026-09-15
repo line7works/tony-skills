@@ -126,7 +126,7 @@ source points at the stage. Per harness, measured, not assumed:
 | harness | available | absent | routing |
 |---|---|---|---|
 | `claude-code` | `install.sh --pilot-home <home>` | **`install.sh --pilot-home <home> --without recheck-v2`**: the skill is never installed | the same install, then `claude plugin install <name>@tony-skills` for every marketplace plugin except the five blocked |
-| `codex` | `install.sh` (it takes no arguments and derives `$HOME/.local/share/skills-v2-pilot/codex/home`) | a copy of the available home with its absolute paths rewritten (the way `install.sh` makes its own `homes/plugin-only`), then `codex plugin remove recheck-v2` and the host-skill folder gone | the same copy, then `codex plugin add <name>@tony-skills` per plugin |
+| `codex` | `install.sh` (the home is `$RECHECK_CODEX_HOME` when set, else `$HOME/.local/share/skills-v2-pilot/codex/home`) | **`RECHECK_CODEX_HOME=<home> install.sh --without recheck-v2`**: the script's own run into that home, the skill never installed, then `auth.json` linked to the available home's store | a copy of the available home with its absolute paths rewritten (the way `install.sh` makes its own `homes/plugin-only`), then `codex plugin add <name>@tony-skills` per plugin |
 | `opencode` | `install.sh --setup <home> --model <model>` | **`install.sh --setup <home> --model <model> --without recheck-v2`**: the skill folder is never copied in | the same install, then every unblocked plugin's skill folders copied into that directory |
 
 **The absent home, and where the flag reaches (E10-56(1)).** All three `install.sh` scripts
@@ -136,18 +136,19 @@ absent home, so that home **never held recheck-v2 on any surface** (E10-3) and t
 second-guard removal is gone with it — no `claude plugin uninstall`, no cache removal (E10-24),
 no skill-folder `rmtree`.
 
-**Codex is the one home the flag cannot reach.** `setups/codex/install.sh` derives its
-`CODEX_HOME` from `$HOME` and takes no home argument, and E10-56(1) authorizes the flag and
-nothing else in those three files, so running it with the flag would rebuild the *available*
-home. The Codex absent home therefore stays `derived_from_available: true` with the skill
-removed by the harness's own mechanism (`codex plugin remove` plus the host-skill folder), and
-its record says so. The edit that would close it is a `--home DIR` flag on that script; it is a
-finding, not a change this round made.
+**Codex too, since E10-58(2).** `setups/codex/install.sh` honours `RECHECK_CODEX_HOME` (the
+name `verify-install.sh` and `launch.sh` already read) and defaults to the pilot home as before,
+so the runner points the script at the `absent` home and passes the flag. That home therefore
+**never held recheck-v2 on any surface**: no plugin registry entry, no cache copy, no host-skill
+folder, and a catalog without it; `derived_from_available` is `false` and nothing is removed
+afterwards. Its `auth.json` and its child's are then linked to the available home's store, so
+the credential stays one file (E9-26(c)). The **routing** home is still the copy of the
+available one.
 
-`recheck_v2_installation` in the install record says which of the two happened: `how` is
-`never installed` (with the flag that did it) or `removed after install` (with what was removed
-and why the flag could not be used). The home inventory carries that same field beside every
-path under the home whose name holds `recheck-v2`.
+`recheck_v2_installation` in the install record says what happened: `how` is `never installed`
+on every `absent` home, with the flag that did it and, on Codex, the name the home was pointed
+by. The home inventory carries that same field beside every path under the home whose name holds
+`recheck-v2` (empty on all three absent homes).
 
 Every install record carries `home_leak_scan` (the walk that proves no `answer-key`,
 `held-out` or `evals` name exists anywhere under the home, E10-6), a `link_survey`, and the
@@ -687,7 +688,8 @@ at its own allowlist before the launcher ever ran.
 | E10-54(c), the trial's facts in the expected document | `trial_defaults`, `trial_conditioned_expected`, `grade_one`, `evals/trial-defaults.json` |
 | E10-54, the regrade's reasons by path segment | `reason_path_segments`, `grade_summary`, `summary_rows` |
 | E10-55, the cut is captured frozen | `_freeze_group`, `_thaw_group`, `cut_verdict`, `_launch_and_cut` |
-| E10-56(1), `--without recheck-v2` | `ClaudeCodeSetup.install`, `OpenCodeSetup.install`, `CodexSetup.install` (the one it cannot reach), the three `setups/*/install.sh` |
+| E10-56(1), `--without recheck-v2` | `ClaudeCodeSetup.install`, `OpenCodeSetup.install`, `CodexSetup.install`, the three `setups/*/install.sh` |
+| E10-58(2), the Codex absent home | `setups/codex/install.sh`'s `RECHECK_CODEX_HOME` default, `CodexSetup.install`'s `absent` branch, `CodexSetup._link_auth` |
 | E10-56(2)(3)(4), no edit | the validator's path-rebase flag stays E11 (`_recorded_validation`'s fallback); a session ignoring the named run directory is a measurement (section 10 item 14); `disable-model-invocation` not honoured by Codex and OpenCode is a measurement (`do_routing_score`'s manual-only row) |
 | E10-57, the second fix round's scope | this round: E10-54, E10-55 and E10-56(1), with the fix campaign regraded and one live trial rerun under the new layout; the first fix round is committed as delivered at `a7f852b` and nothing of it was re-opened |
 | E9-34, a record is never overwritten | every subcommand's refusal, `reserve_record` |
@@ -752,12 +754,15 @@ opencode-ai 1.18.31):
    OpenCode trial (E10-26).
 6. **OpenCode writes no init event**, so its condition witness is `opencode debug skill` under
    that home (E10-26).
-7. **`absent` is a removal, not a never-install.** See `install` above.
+7. **`absent` is a never-install on all three harnesses** since E10-56(1) and E10-58(2): each
+   one's own `install.sh` skips the skill's one install step, so no home ever held it. See
+   `install` above. Before those rulings it was the installed home with the skill removed.
 8. **`claude plugin uninstall` leaves the cache copy on disk** (measured on 2.1.272). The
    setup's own `install.sh` clears the leftover before every install; since E10-56(1) the
    absent home is built with `--without recheck-v2` and the runner's own removal is gone, so
    nothing depends on the uninstall leaving a clean cache.
-9. **`codex plugin remove` needs the qualified name.**
+9. **`codex plugin remove` needs the qualified name** (measured on 0.154.0). The runner no
+   longer calls it anywhere: E10-58(2) builds the absent home without the plugin instead.
 10. **`opencode debug skill` truncates into a pipe**: exactly 65,536 bytes through a pipe,
     67,934 into a file. The catalog capture goes to a file.
 11. **A cut session writes no `launch.json`**, so the session id comes from the harness's own
@@ -821,4 +826,5 @@ the first build claimed, the second what the first fix round claimed.
 | `run_root_note.reason` describing `${TMPDIR}/runs` as the trial's run root | E10-54(a): `run_root_name` is the ADAPTERS' segment and `run_root_note.means` says so; `run_root` in the record is the leaf's parent and `adapters_run_root` is the old segment |
 | `grade` matches the key's `expected` as written | E10-54(c): the trial's own facts are substituted first (`run.invocation.mode` from `trial-defaults.json`, `run.invocation.resume` true on a continuation) and `grade.json.trial_conditioned` lists every substitution |
 | the cut is captured after the process group is gone | E10-55: the group is frozen with SIGSTOP and the stop confirmed, the pair is captured frozen, then SIGCONT, SIGTERM and SIGKILL |
-| every absent home is the installed home with the skill removed | E10-56(1): the Claude Code and OpenCode absent homes are installed `--without recheck-v2` and never held it; the Codex absent home is the one the flag cannot reach, and its record says why |
+| every absent home is the installed home with the skill removed | E10-56(1): the Claude Code and OpenCode absent homes are installed `--without recheck-v2` and never held it |
+| the Codex absent home is the one the flag cannot reach, `derived_from_available` with the skill removed by `codex plugin remove` | E10-58(2): `setups/codex/install.sh` honours `RECHECK_CODEX_HOME`, so that home is its own `install.sh --without recheck-v2` run and never held the skill either; `derived_from_available` is `false` and `why_not_never_installed` is gone |

@@ -1331,11 +1331,15 @@ class WithoutTheSkillTest(RunnerCase):
     """E10-56(1): `install.sh --without recheck-v2` for the absent home, and no second guard."""
 
     def stub_install(self, harness):
-        """A stub `install.sh` in the stage that records the argv it was given."""
+        """A stub `install.sh` in the stage that records the argv it was given, and the NAMES
+        its own environment carried (never a value), so a test can prove what the runner
+        actually handed the child."""
         path = os.path.join(self.stage, "plugins", "recheck-v2", "setups", harness, "install.sh")
         runner.ensure_dir(os.path.dirname(path))
         log = os.path.join(self.scratch, "install-argv-%s.txt" % harness)
-        runner.write_text(path, "#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %s\nexit 0\n" % log)
+        runner.write_text(path, "#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %s\n"
+                                "env | cut -d= -f1 | sort | sed 's/^/name: /' >> %s\n"
+                                "exit 0\n" % (log, log))
         os.chmod(path, 0o755)
         return log
 
@@ -1356,6 +1360,66 @@ class WithoutTheSkillTest(RunnerCase):
         campaign = runner.Campaign(self.campaign)
         runner.ClaudeCodeSetup(campaign, stage=self.stage).install("available")
         self.assertNotIn("--without", runner.read_text(log))
+
+    def test_the_codex_absent_install_passes_the_flag_and_points_the_home_by_name(self):
+        """E10-58(2): the codex absent home is its own `install.sh` run now. The script honours
+        `RECHECK_CODEX_HOME`, so the runner points it at the absent home and skips the one
+        install step of the skill; nothing is removed afterwards and the home is not derived."""
+        log = self.stub_install("codex")
+        campaign = runner.Campaign(self.campaign)
+        base = runner.pilot_home("codex", "available")
+        runner.write_text(os.path.join(base, "auth.json"), "{}\n")
+        setup = runner.CodexSetup(campaign, stage=self.stage)
+        record = setup.install("absent")
+        self.assertIn("--without recheck-v2", runner.read_text(log))
+        self.assertEqual(len(record["steps"]), 1)
+        self.assertEqual(record["removed"], [])
+        self.assertFalse(record["derived_from_available"])
+        self.assertEqual(record["recheck_v2_installation"]["how"], "never installed")
+        self.assertNotIn("why_not_never_installed", record["recheck_v2_installation"])
+        # the environment NAME is recorded, never a value
+        blob = json.dumps(record)
+        self.assertIn("RECHECK_CODEX_HOME", blob)
+        self.assertNotIn("RECHECK_CODEX_HOME=", blob)
+        # and the CHILD was actually given it: the stub printed its own environment's names
+        names = [l[len("name: "):] for l in runner.read_text(log).splitlines()
+                 if l.startswith("name: ")]
+        self.assertIn("RECHECK_CODEX_HOME", names)
+        self.assertEqual([n for n in names if runner.BANNED_ENV_RE.match(n)], [],
+                         "the install child carried a banned name: %s" % names)
+        # the credential stays one file: both auth paths are links to the available store
+        self.assertEqual(record["auth_linked_to_the_available_store"],
+                         ["auth.json", os.path.join("child", "auth.json")])
+        for rel in record["auth_linked_to_the_available_store"]:
+            path = os.path.join(record["home"], rel)
+            self.assertTrue(os.path.islink(path), path)
+            self.assertEqual(os.path.realpath(path),
+                             os.path.realpath(os.path.join(base, "auth.json")))
+
+    def test_the_codex_install_env_carries_the_home_pointer_and_no_value(self):
+        """The name the runner passes, from the one boundary that builds every child (E10-42)."""
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.CodexSetup(campaign, stage=self.stage)
+        built = campaign.env(extra={"RECHECK_CODEX_HOME": setup.home("absent")},
+                             require_binaries=False)
+        self.assertEqual(sorted(built), sorted(list(runner.ALLOWED_ENV) + ["RECHECK_CODEX_HOME"]))
+        self.assertIsNone(runner.BANNED_ENV_RE.match("RECHECK_CODEX_HOME"))
+        self.assertEqual(runner.allowlisted_names(built),
+                         sorted(list(runner.ALLOWED_ENV) + ["RECHECK_CODEX_HOME"]))
+
+    def test_the_codex_install_script_honours_the_home_pointer(self):
+        """The real script, read: `CODEX_HOME` comes from `RECHECK_CODEX_HOME` when it is set
+        (E10-58(2)), and defaults to the pilot home as before."""
+        text = runner.read_text(os.path.join(runner.PLUGIN_DIR, "setups", "codex", "install.sh"))
+        self.assertIn('export CODEX_HOME="${RECHECK_CODEX_HOME:-$HOME/.local/share/'
+                      'skills-v2-pilot/codex/home}"', text)
+        self.assertIn("E10-58(2)", text)
+
+    def test_the_codex_routing_home_is_still_derived_from_the_available_one(self):
+        source = runner.read_text(runner.__file__)
+        body = source.split("class CodexSetup(", 1)[1].split("\nclass ", 1)[0]
+        self.assertIn("Only `routing` reaches here (E10-58(2))", body)
+        self.assertIn('"derived_from_available": True', body)
 
     def test_the_opencode_absent_install_passes_the_flag_and_removes_nothing(self):
         log = self.stub_install("opencode")

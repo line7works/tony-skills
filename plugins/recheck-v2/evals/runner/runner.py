@@ -1469,15 +1469,35 @@ class CodexSetup(Setup):
     def launch_env(self, condition):
         return {"RECHECK_CODEX_HOME": self.home(condition)}
 
-    def install(self, condition, fake=None):
-        """`setups/codex/install.sh` takes no arguments and derives its home from `$HOME`.
+    def _link_auth(self, home, base):
+        """Every derived or second home points at the base home's one credential store.
 
-        So only the `available` home is installed by the script. The other two homes are made
-        the way the script makes its own comparison homes (`homes/plugin-only`,
-        `homes/host-only`): a copy of the installed home with the absolute paths rewritten,
-        then the skill removed by the harness's own mechanism (`codex plugin remove` plus the
-        host-skill folder gone) for `absent`, or the extra plugins added for `routing`.
-        Labelled in the record: `derived_from_available`, not a second `install.sh` run.
+        The credential stays one file: `install.sh` writes a copy into whatever home it built,
+        and it is replaced here by a link to the available home's store, exactly as the
+        `plugin-only` and `host-only` surfaces do (E9-26(c)). Nothing here reads the value.
+        """
+        linked = []
+        for auth in [os.path.join(home, "auth.json"), os.path.join(home, "child", "auth.json")]:
+            if os.path.lexists(auth):
+                os.unlink(auth)
+            ensure_dir(os.path.dirname(auth))
+            os.symlink(os.path.join(base, "auth.json"), auth)
+            linked.append(os.path.relpath(auth, home))
+        return linked
+
+    def install(self, condition, fake=None):
+        """`available` and `absent` are each their own `install.sh` run; `routing` is derived.
+
+        E10-58(2): `setups/codex/install.sh` honours `RECHECK_CODEX_HOME` (the name
+        `verify-install.sh` and `launch.sh` already read), so the `absent` home is built by the
+        script itself with `--without recheck-v2` (E10-56(1)) and **never held the skill on any
+        surface** (E10-3): no plugin registry entry, no cache copy, no host-skill folder, and a
+        catalog without it. Its `auth.json` is then linked to the available home's store the
+        way the derived homes do.
+
+        `routing` stays what it was: a copy of the installed home with the absolute paths
+        rewritten (the way `install.sh` makes its own `homes/plugin-only` and `homes/host-only`
+        surfaces), plus the extra plugins added. Labelled `derived_from_available`.
         """
         base = self.home("available")
         env = self.campaign.env()
@@ -1490,17 +1510,39 @@ class CodexSetup(Setup):
         if not os.path.isdir(base):
             raise Missing("install the codex `available` home before %r" % condition)
         home = self.home(condition)
+        if condition == "absent":
+            # E10-58(2): the script's own run, pointed at this home by the one name it now
+            # honours, with the one install step of the skill skipped.
+            if os.path.isdir(home):
+                rmtree(home)
+            ensure_dir(os.path.dirname(home))
+            steps.append(run_cmd(
+                ["sh", self.script("install.sh"), "--without", "recheck-v2"],
+                env=self.campaign.env(extra={"RECHECK_CODEX_HOME": home}),
+                label="install.sh --without recheck-v2"))
+            linked = self._link_auth(home, base)
+            ensure_dir(os.path.join(home, "child", "uv-cache"))
+            return {
+                "home": home, "condition": condition, "derived_from_available": False,
+                "removed": [],
+                "recheck_v2_installation": {
+                    "how": "never installed",
+                    "by": "install.sh --without recheck-v2",
+                    "home_pointed_by": "RECHECK_CODEX_HOME (E10-58(2)); the name only, never "
+                                       "a value, is recorded in the install record",
+                    "surfaces_it_never_reached": ["the plugin registry (`codex plugin add` "
+                                                  "skipped)", "the plugin cache",
+                                                  "the host-skill folder", "the session catalog"],
+                },
+                "auth_linked_to_the_available_store": linked,
+                "added": [], "steps": [_step_summary(s) for s in steps],
+            }
         if os.path.isdir(home):
             rmtree(home)
         ensure_dir(os.path.dirname(home))
         shutil.copytree(base, home, symlinks=True,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "sessions"))
-        # The credential stays one file: every derived home points at the base home's store.
-        for auth in [os.path.join(home, "auth.json"), os.path.join(home, "child", "auth.json")]:
-            if os.path.lexists(auth):
-                os.unlink(auth)
-            ensure_dir(os.path.dirname(auth))
-            os.symlink(os.path.join(base, "auth.json"), auth)
+        self._link_auth(home, base)
         for path in [os.path.join(home, "config.toml")] + \
                 glob.glob(os.path.join(home, "plugins", "**", "*.json"), recursive=True) + \
                 [os.path.join(home, "child", "config.toml")]:
@@ -1509,51 +1551,20 @@ class CodexSetup(Setup):
                 write_text(path, text.replace(base, home))
         ensure_dir(os.path.join(home, "child", "uv-cache"))
         removed, added = [], []
-        if condition == "absent":
-            host_skill = os.path.join(home, "skills", "recheck-v2")
-            if os.path.exists(host_skill):
-                rmtree(host_skill)
-                removed.append("skills/recheck-v2 (the host-skill copy)")
-            # Measured on codex-cli 0.154.0: a bare name is refused with "plugin requires
-            # --marketplace unless passed as <plugin>@<marketplace>", so the qualified form is
-            # what the harness's own removal takes.
-            steps.append(run_cmd(["codex", "plugin", "remove", "recheck-v2@tony-skills"],
-                                 env=dict(env, CODEX_HOME=home), label="plugin remove"))
-            # A plugin cache entry the harness's own remove left behind is a finding, not a
-            # thing the runner deletes by hand: the record says what is still there.
-            left = sorted(glob.glob(os.path.join(home, "plugins", "**", "recheck-v2"),
-                                    recursive=True))
-            if left:
-                for path in left:
-                    rmtree(path)
-                    removed.append(os.path.relpath(path, home) + " (cache entry left by `plugin remove`)")
-        if condition == "routing":
-            manifest = read_json(os.path.join(self.stage, ".claude-plugin", "marketplace.json"))
-            for plugin in [p["name"] for p in manifest.get("plugins", [])]:
-                if plugin in BLOCKED_PLUGINS or plugin == "recheck-v2":
-                    continue
-                steps.append(run_cmd(
-                    ["codex", "plugin", "add", "%s@tony-skills" % plugin, "--json"],
-                    env=dict(env, CODEX_HOME=home), label="plugin add %s" % plugin))
-                added.append(plugin)
-        # E10-56(1): the flag is on this script too, but the runner cannot use it for the
-        # absent home. `setups/codex/install.sh` derives its CODEX_HOME from `$HOME` and takes
-        # no home argument, and E10-56(1) authorizes the flag and nothing else in these three
-        # files, so running it with the flag would rebuild the AVAILABLE home. The codex
-        # absent home therefore stays `derived_from_available` with the skill removed by the
-        # harness's own mechanism, and the report carries the exact edit that would close it.
-        installation = {
-            "how": "removed after install" if condition == "absent" else "installed",
-            "by": "codex plugin remove recheck-v2@tony-skills, on a copy of the available home",
-            "removed": removed,
-            "why_not_never_installed":
-                "setups/codex/install.sh derives CODEX_HOME from $HOME and takes no home "
-                "argument, so --without recheck-v2 (E10-56(1)) cannot target this home; the "
-                "edit that would close it is a --home DIR flag on that script, which E10-56(1) "
-                "does not authorize" if condition == "absent" else None,
-        }
+        # Only `routing` reaches here (E10-58(2)): the copy of the installed home, plus every
+        # unblocked plugin added by the harness's own mechanism.
+        manifest = read_json(os.path.join(self.stage, ".claude-plugin", "marketplace.json"))
+        for plugin in [p["name"] for p in manifest.get("plugins", [])]:
+            if plugin in BLOCKED_PLUGINS or plugin == "recheck-v2":
+                continue
+            steps.append(run_cmd(
+                ["codex", "plugin", "add", "%s@tony-skills" % plugin, "--json"],
+                env=dict(env, CODEX_HOME=home), label="plugin add %s" % plugin))
+            added.append(plugin)
         return {"home": home, "condition": condition, "derived_from_available": True,
-                "removed": removed, "recheck_v2_installation": installation,
+                "removed": removed,
+                "recheck_v2_installation": {"how": "installed",
+                                            "by": "the copy of the available home"},
                 "added": added, "steps": [_step_summary(s) for s in steps]}
 
     def verify(self, condition):

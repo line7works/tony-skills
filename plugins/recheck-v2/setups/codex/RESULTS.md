@@ -524,7 +524,26 @@ env HOME=<scratch> sh install.sh --without recheck-v2
   still holds `home/plugins/cache/tony-skills/recheck-v2`.
 - `--without` with any other name exits 2.
 
-**What it does not reach.** Because the home comes from `$HOME`, the E10 runner cannot use this
-flag for the codex `absent` home; that home stays a copy of the available home with the skill
-removed by `codex plugin remove`. The edit that would close it is a `--home DIR` flag on this
-script, which E10-56(1) does not authorize.
+**E10-58(2): the home pointer, and what the flag now reaches.** The one line the ruling added
+is `export CODEX_HOME="${RECHECK_CODEX_HOME:-$HOME/.local/share/skills-v2-pilot/codex/home}"`,
+the same name `verify-install.sh` and `launch.sh` already read, defaulting to the pilot home as
+before. With it the E10 runner builds the codex `absent` home by running this script into that
+home with the flag, then links `auth.json` (top level and `child/`) to the available home's
+store so the credential stays one file. That home therefore never held recheck-v2 on any
+surface: no plugin registry entry, no cache copy, no host-skill folder, and a catalog without
+it. Measured 2026-09-15 on the fix campaign, from the runner's own records:
+
+```
+install --setup codex --home absent   exit 0
+  recheck_v2_installation  {"how": "never installed", "by": "install.sh --without recheck-v2"}
+  derived_from_available   false
+  home_leak_scan           []           auth_linked_to_the_available_store  auth.json, child/auth.json
+verify  --setup codex --home absent   exit 0
+  no_installed_skill true   expected_no_installed_skill true   ok true
+find <home> -name '*recheck-v2*'      0 paths
+codex plugin list (the runner's own catalog read, no model)
+  active names   delivery-probe, manual-only-probe (plus Codex's own bundled plugins)
+  recheck-v2     not among them; its tony-skills row reads `not installed`
+```
+
+The `routing` home is still the copy of the available one.

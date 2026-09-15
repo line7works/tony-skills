@@ -4,6 +4,11 @@
 # Usage: install.sh [--without recheck-v2]
 #        install.sh --prepare-negative <a> <b>
 #
+# The home is $RECHECK_CODEX_HOME when it is set (the same name verify-install.sh and
+# launch.sh already read), else ~/.local/share/skills-v2-pilot/codex/home as before. Ruling
+# E10-58(2) added the one line, so the E10 runner can build the `absent` home with the flag
+# below instead of copying the installed one.
+#
 # --without recheck-v2 skips the one step that installs the recheck-v2 skill (the plugin
 # `codex plugin add` and the host-only surface's copy of the skill folder), so the home this
 # install builds never held it on any surface (E10-3, authorized by ruling E10-56(1)).
@@ -11,7 +16,7 @@
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../../../.." && pwd)
-export CODEX_HOME="$HOME/.local/share/skills-v2-pilot/codex/home"
+export CODEX_HOME="${RECHECK_CODEX_HOME:-$HOME/.local/share/skills-v2-pilot/codex/home}"
 export PYTHONDONTWRITEBYTECODE=1
 if [ "${1:-}" = "--prepare-negative" ]; then
   [ "$#" -eq 3 ] || exit 2
