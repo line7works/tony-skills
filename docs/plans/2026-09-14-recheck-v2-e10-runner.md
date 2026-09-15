@@ -768,3 +768,23 @@ report could not read from behind the wall.
   a pid-reuse hardening for reservations (third round's Q4, a guide finding); lane R's two
   MINORs and E9-34's parenthetical (E10-17). The runner at `268cbd6` is the campaign's runner.
   The campaign itself starts on Tony's word after he sees the plan (E10 kickoff hand-off).
+- **E10-62 (Tony, 2026-09-15 evening: the floors, the fourth lane, the crew).** Tony settled the
+  E9-3 floors and the campaign's lanes in his own words ("opus medium for claude, sol medium for
+  codex, qwen 3.8 flash for opencode, deep seek 4.1 for new lane"; "yes add deepseek"; the key
+  rotates "after"): four setups, each pinned to one model and, where the harness takes one, one
+  effort: `claude-code` = Claude Opus 5 at effort `medium` (`claude --model opus --effort medium`);
+  `codex` = `gpt-5.6-sol` at `model_reasoning_effort=medium` (the id as Codex's own model list
+  spells it); `opencode` = `openrouter/qwen/qwen3.8-flash`; `opencode-deepseek` =
+  `openrouter/deepseek/deepseek-v4.1-flash` (the second model the OpenCode setup already
+  carries). The floor map (E9-3) is settled to exactly these four: each is class `opus` with
+  `floor_met` true on its own lane, and `gpt-5.6-sol` joins lane R's map (it read `unknown`).
+  Before the campaign, one builder pass: the plan's per-setup `model` and `effort` keys are
+  honoured by the runner and passed to each launcher (Claude Code's two flags; Codex's pilot
+  `config.toml` model and effort lines written per home from the plan; OpenCode's `--model` per
+  setup, with the DeepSeek setup its own three homes); every trial's `model.json` witnesses the
+  configured pair beside the native one; `floor_met` from the settled map; tests; then Astra's
+  targeted re-check at high on that change alone. **Crew from here (Tony, same message):** the
+  control room is Opus 5 at high (Fable time is out), Astra at high for every review; builders
+  Opus 5 at the session's effort as before. The campaign plan (`plan.json`) carries the four
+  setups and the timeouts unchanged; the estimate grows by about a third of the OpenCode lane
+  for the fourth setup.
