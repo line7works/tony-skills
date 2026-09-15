@@ -1,0 +1,4 @@
+Use the recheck-v2 skill. Do not run any command and do not read any file. From the skill body the harness just delivered to you, reply with exactly three lines and nothing else:
+1. The last row of the References table, verbatim.
+2. The last bullet of the Gotchas section, verbatim.
+3. The heading of the last numbered step of the Procedure, verbatim.
