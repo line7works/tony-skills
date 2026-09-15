@@ -50,9 +50,11 @@ def parse_prompt(text):
     if match:
         got["slice"], got["build_doc"], got["workspace"] = match.groups()
         got["workspace"] = got["workspace"].rstrip(":")
-    match = re.search(r"Use the run directory (\S+)\.", text)
+    # E10-54(b): the E10-4 prompt names the run id in words beside the run directory, because
+    # the core otherwise mints its own and the key's `run_id` can never hold.
+    match = re.search(r"Use run id (\S+) and the run directory (\S+)\.", text)
     if match:
-        got["run_dir"] = match.group(1)
+        got["run_id"], got["run_dir"] = match.groups()
     match = re.search(r"run date (\d{4}-\d{2}-\d{2})", text)
     if match:
         got["run_date"] = match.group(1)
@@ -80,7 +82,10 @@ def build_input(harness, prompt, out_dir):
     document["invocation"] = {
         "mode": "headless",
         "caller": "direct",
-        "run_id": os.path.basename(run_dir),
+        # E10-54(b): the id the prompt named, never a guess from the directory's basename
+        # (which is now `run`, the fixture's own leaf).
+        "run_id": prompt.get("run_id") or prompt.get("resume_run_id")
+        or os.path.basename(run_dir),
         "run_dir": run_dir,
         "resume": bool(prompt.get("resume")),
         "harness": {"name": harness, "version": "fake-0.0.0",

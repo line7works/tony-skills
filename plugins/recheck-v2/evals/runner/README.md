@@ -11,8 +11,11 @@ Built at step E10 of the skills v2 execution plan under the lane contract
 (`skills/recheck-v2/references/pilot-contract.md`, revision 5) outranks that document, and
 that document outranks the E9 lane contract at E10. Astra's review of the first build
 (RUNNER REJECTED, 20 BLOCKER, 6 MAJOR, 1 MINOR) and the control room's rulings E10-40 to
-E10-53 are the predicate for everything marked **fix round** below; section 11 is the history
-of what the first build claimed and what replaced it.
+E10-53 are the predicate for everything marked **fix round** below. The control room then read
+the twelve grades of that round's verification campaign and issued **E10-54 to E10-57**: the
+run directory, the run id, the trial-conditioned expected document, the frozen cut and the
+`--without recheck-v2` flag. Section 11 is the history of what the first build and the first
+fix round claimed and what replaced it.
 
 - Python 3.9 syntax, standard library only. The grading step calls the core's
   `validate-result.py` through `uv run`, the way the E7 runner calls things, and imports
@@ -35,7 +38,7 @@ of what the first build claimed and what replaced it.
 7. [Where each ruling is implemented](#7-where-each-ruling-is-implemented) ·
 8. [Codex quirks](#8-codex-quirks) · 9. [Tests](#9-tests) ·
 10. [What the harnesses cannot do](#10-what-the-harnesses-cannot-do) ·
-11. [History: what the first build claimed](#11-history-what-the-first-build-claimed)
+11. [History: superseded claims](#11-history-superseded-claims)
 
 ## 1. The wall and the key lock
 
@@ -122,17 +125,29 @@ source points at the stage. Per harness, measured, not assumed:
 
 | harness | available | absent | routing |
 |---|---|---|---|
-| `claude-code` | `install.sh --pilot-home <home>` | the same install, then `claude plugin uninstall recheck-v2@tony-skills` under that home's `CLAUDE_CONFIG_DIR` | the same install, then `claude plugin install <name>@tony-skills` for every marketplace plugin except the five blocked |
+| `claude-code` | `install.sh --pilot-home <home>` | **`install.sh --pilot-home <home> --without recheck-v2`**: the skill is never installed | the same install, then `claude plugin install <name>@tony-skills` for every marketplace plugin except the five blocked |
 | `codex` | `install.sh` (it takes no arguments and derives `$HOME/.local/share/skills-v2-pilot/codex/home`) | a copy of the available home with its absolute paths rewritten (the way `install.sh` makes its own `homes/plugin-only`), then `codex plugin remove recheck-v2` and the host-skill folder gone | the same copy, then `codex plugin add <name>@tony-skills` per plugin |
-| `opencode` | `install.sh --setup <home> --model <model>` | the same install, then the `recheck-v2` folder removed from `<home>/xdg-config/opencode/skill/` | the same install, then every unblocked plugin's skill folders copied into that directory |
+| `opencode` | `install.sh --setup <home> --model <model>` | **`install.sh --setup <home> --model <model> --without recheck-v2`**: the skill folder is never copied in | the same install, then every unblocked plugin's skill folders copied into that directory |
 
-**Labelled honestly.** The Claude Code and OpenCode installs target a second home directly;
-the Codex `install.sh` cannot, so its `absent` and `routing` homes are recorded
-`derived_from_available: true`. And in every case `absent` is *the installed home with the
-skill removed by the harness's own mechanism*, not a home that never held it. The record names
-what was removed (`uninstalled_after_install`, `removed`). E10-3's words are "never held
-recheck-v2 on any surface"; the runner cannot reach that without editing a setup, so it is a
-finding.
+**The absent home, and where the flag reaches (E10-56(1)).** All three `install.sh` scripts
+take `--without recheck-v2`, which skips the one step that installs the skill and records
+`without` in their own install report. On Claude Code and OpenCode the runner passes it for the
+absent home, so that home **never held recheck-v2 on any surface** (E10-3) and the runner's own
+second-guard removal is gone with it — no `claude plugin uninstall`, no cache removal (E10-24),
+no skill-folder `rmtree`.
+
+**Codex is the one home the flag cannot reach.** `setups/codex/install.sh` derives its
+`CODEX_HOME` from `$HOME` and takes no home argument, and E10-56(1) authorizes the flag and
+nothing else in those three files, so running it with the flag would rebuild the *available*
+home. The Codex absent home therefore stays `derived_from_available: true` with the skill
+removed by the harness's own mechanism (`codex plugin remove` plus the host-skill folder), and
+its record says so. The edit that would close it is a `--home DIR` flag on that script; it is a
+finding, not a change this round made.
+
+`recheck_v2_installation` in the install record says which of the two happened: `how` is
+`never installed` (with the flag that did it) or `removed after install` (with what was removed
+and why the flag could not be used). The home inventory carries that same field beside every
+path under the home whose name holds `recheck-v2`.
 
 Every install record carries `home_leak_scan` (the walk that proves no `answer-key`,
 `held-out` or `evals` name exists anywhere under the home, E10-6), a `link_survey`, and the
@@ -190,11 +205,19 @@ One comparison trial end to end, in this order:
    campaign id, the full trial id and the attempt number (E10-41), so the workspace path the
    model sees names no setup, case, condition, repetition or attempt, and two attempts never
    mint the same path;
-2. a fresh run directory at `<campaign>/tmp/<digest>/runs/<case id>-run`, with the canonical
-   `result.schema.json` copied in (never edited, E10-4). An existing run directory is
-   **refused**, never removed (E10-43);
+2. **the fixture's own `run/` leaf** as the run directory — `<campaign>/tmp/<digest>/fixture/<12
+   hex>/run` — with the canonical `result.schema.json` copied in (never edited, E10-4).
+   E7-18 lays the opaque mount out that way ("`workspace/` and `run/` keep their names, so
+   every key's `/run/` pattern holds") and each case's own seeded `input.json` already names
+   that leaf as `invocation.run_dir`; E10-54(a) makes the trial use it. The leaf exists — the
+   build made it — so its existence is not an error; a leaf that already holds
+   `result.schema.json` was **prepared before** and is refused. `prepare_run_dir` removes
+   nothing (E10-43);
 3. the prompt from the E10-4 template, identical bytes in both conditions after each trial's
-   own paths are normalised;
+   own paths are normalised. It **names the run id in words** — `Use run id <case id>-run and
+   the run directory …` — because the core otherwise mints its own id and the key's `run_id`
+   could never hold (E10-54(b)); the id is the one the fixture's seeded input carries, and
+   this is E10-41's one documented exception made explicit;
 4. the launch through the staged copy's `setups/<harness>/launch.sh` under the allowlist, with
    `TMPDIR` fixed to `<campaign>/tmp/`, the key closed, and the process registered in
    `processes.jsonl` before it starts;
@@ -254,6 +277,20 @@ continuation attempt**, `attempts/<n>/` included (E10-44). Refuses while any pro
 attempt is alive (exit 1). Exit 3 for a record that is not there. **Refuses a key whose
 `runs_at` does not include E10, before matching** (exit 1, E10-45).
 
+**The trial's own facts go in first (E10-54(c)).** The keys carry E7's trial shape and are
+correct as E7 wrote them; two of the fields they pin are the TRIAL's own facts, and `grade`
+substitutes those into a **copy** of the expected document before matching — the key on disk is
+never touched:
+
+| path | value | where it comes from |
+|---|---|---|
+| `$.run.invocation.mode` | `headless` | `evals/trial-defaults.json`'s `invocation_mode` and its rule: every E10 harness launches headless, and the core records the fact the harness reports (SKILL.md step 2), never a guess |
+| `$.run.invocation.resume` | `true`, on a continuation trial only | the graded session of a continuation trial is the resumed one (E10-12) |
+
+Every substitution is a row of `grade.json`'s `trial_conditioned`: `path`, `key_literal` (what
+the key said, or `"$absent"`), `used` (the value substituted), `source`, and `applied`. Nothing
+else in the expected document changes.
+
 Fields of `grade.json`:
 
 | field | what it holds |
@@ -264,6 +301,7 @@ Fields of `grade.json`:
 | `key_stand_in` | whether an E10-21 stand-in supplied the entry |
 | `validator` | the exit, `ok`, the schema and semantic errors, the skips, `skip_count`, `failed_for_a_skip`, `binding_ok` |
 | `match` | `match()`'s verdict and its reasons |
+| `trial_conditioned` | every substitution of E10-54(c): `{path, key_literal, used, source, applied}` |
 | `dispositions` | the matcher form, per item: expected, observed, match and how the pair was made; plus `unmatched_expected` and `all_matched` |
 | `false_fixed` | the items the key pins as not fixed or broke that the result reports `fixed`, and the count |
 | `evidence_sufficient` | per item: the evidence count, the method, the static reason, and `commands_run` / `observed` as E8-A43 names them |
@@ -288,6 +326,13 @@ condition, never as excluded.
 `grade --summary` prints the counts **and** a `per_trial` block whose fields are listed in
 `SUMMARY_SAFE_FIELDS`. `match`'s *reasons* are never in it, because they quote the expected
 values the wall keeps from a builder.
+
+What it does print about a failing match is the reasons **counted by first path segment**:
+`match_reasons_by_path_segment` over the whole run and `match_reason_paths` per trial, beside
+`trials_with_a_failing_match` and `match_reason_count`. A reason reads `<JSON path>: <detail>`
+and the detail quotes the key; the segment names which field of the **result** diverged and
+nothing about what the key wanted there, so a builder can see which half of the document is
+failing without opening a grade file (E10-54's regrade reads exactly this).
 
 ### `routing <trial-id>`
 
@@ -342,15 +387,29 @@ denominator changes (E10-53(4)).
 `run/checkpoint.json` and `run/checkpoint.log` **at least ten times a second** — E10-47 fixes
 both the default and the maximum at 0.1 s, and a coarser `--poll-interval` is refused.
 
-**The cut is what was retained (E10-47).** The poller notices the first checkpoint showing one
-item `done` and one `pending` in phase `adjudicating` or `verifying`; the runner then stops the
-process group (SIGTERM, SIGKILL after five seconds) and waits for it to be gone; only then does
-it read the checkpoint and its log off disk, copy that exact pair into the record as
-`at-cut-*` with their hashes, and check that the **retained** pair shows the state the cut
-claims. Every figure in `cut` — `seq`, `phase`, `done`, `pending`, `checkpoint_log_lines`,
-`start_identity` — comes from the retained pair. A pair that disagrees is an **invalid cut**:
-`valid: false`, `invalid_because` naming both states, an interruption line, and the resume
-still run so the record carries what the harness did.
+**The cut is captured frozen, and the cut is what was retained (E10-47, E10-55).** The poller
+notices the first checkpoint showing one item `done` and one `pending` in phase `adjudicating`
+or `verifying`. Then, in this order:
+
+1. **SIGSTOP** to the trial's own process group, and a wait until the group leader reports
+   stopped (`waitpid(WUNTRACED)`, the kernel's own answer to "is it stopped yet" — SIGSTOP is
+   asynchronous, and capturing before it lands would not be capturing while nothing can write);
+2. the checkpoint, its log and any receipt pair copied into the record as `at-cut-*` with their
+   hashes, **while the group is frozen**;
+3. **SIGCONT**, then SIGTERM, then SIGKILL after five seconds, as E10-12 says;
+4. the verification: the **retained** pair must show the state the cut claims.
+
+Every figure in `cut` — `seq`, `phase`, `done`, `pending`, `checkpoint_log_lines`,
+`start_identity` — comes from the retained pair, and `cut.freeze` records the signal, whether
+the stop was confirmed, how long it took and how long the capture ran. A pair that disagrees is
+still an **invalid cut**: `valid: false`, `invalid_because` naming both states, an interruption
+line, and the resume still run so the record carries what the harness did. So is a session that
+never showed a mixed state at all.
+
+E10-55 is what removed the race, not the check: two of the fix campaign's six live cuts were
+invalid because the core's next `adjudicate` landed between the poll and the process group
+dying. Those two stay recorded as invalid — they are the measurement that motivated the
+ruling.
 
 Then, per kind:
 
@@ -435,7 +494,7 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 | `harness-first/`, `harness-second/` | a continuation trial's two sessions, with `at-cut-*` beside the first |
 | `model.json` | `id`, `effort`, the **record they were read from**, the session binding, the native init event, and `configured` (what the launcher was told) kept apart (E10-50) |
 | `cost.json` | `total_cost_usd`, token counts, and the record; `null` when the harness printed nothing |
-| `run/` | the run directory copied whole after the harness ended and after the validation, verifier captures included |
+| `run/` | the run directory copied whole after the harness ended and after the validation, verifier captures included. It is the fixture's own `run/` leaf (E10-54(a)), so `fixture/<12 hex>/run/` below holds the same files |
 | `fixture/` | this trial's opaque fixture build, copied in after the trial |
 | `input.json`, `result.json` | copies from the run directory, or absent with `absent: true` in `command.json` |
 | `chat.md` | what the core wrote into the run directory |
@@ -450,7 +509,9 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 never values), `launcher_env_names`, `started_at`, `ended_at`, `wall_seconds`,
 `launch_wall_seconds`, `exit`, `timeout_verdict`, `condition_witness`, `catalog`, `activated`,
 `setup_home`, `setup`, `harness`, `condition`, `case`, `staged_commit`, `plugin_tree_sha256`,
-`setup_tree_sha256`, `fixture`, `opaque_tree` and `opaque_tree_mapping`, `run_dir`, `run_root`,
+`setup_tree_sha256`, `fixture`, `opaque_tree` and `opaque_tree_mapping`, `run_dir`, `run_root`
+(the leaf's parent, the opaque case directory), `adapters_run_root` (`${TMPDIR}`'s own `runs`
+segment, E10-22, which a trial no longer uses), `run_dir_is_the_fixture_run_leaf`,
 `run_root_note`, `workspace`, `reply_source`, `result_absent`, `absent`, `status`,
 `validate_exit`, `validation_binding`, `key_boundary`, `scan_hits`, and on OpenCode
 `store_separation_witness` (E10-49). A continuation trial adds `cut`, `compaction`,
@@ -565,7 +626,9 @@ a credential.
 `tests/fake/` holds a stub launcher per setup with the real launcher's own arguments, and
 `fakelib.py` behind them. A stub does what a real session does, minus the model:
 
-1. reads the run directory, the workspace, the slice and the build doc out of the prompt;
+1. reads the **run id**, the run directory, the workspace, the slice and the build doc out of
+   the prompt (E10-54(b): the id is named in words, and the fake takes it rather than guessing
+   from the directory's basename, which is now `run`);
 2. builds the input document from the fixture's own seeded `input.json`, replacing only the
    `invocation` object;
 3. drives `scripts/recheck.py` through `start`, `record-call`, `adjudicate` and `record`, with
@@ -619,6 +682,14 @@ at its own allowlist before the launcher ever ran.
 | E10-51, the campaign process | `claim_campaign`, `do_campaign`, `_campaign_loop` |
 | E10-52, the scanner, the tests, the stage, the docs | `scan_paths`, `auth_store_exemptions`, `tests/`, `do_stage`, `do_verify`, this file |
 | E10-53, Astra's five questions | `do_probe_env` (1), `file_manifest` (3), `MANUAL_ONLY_ENTRY` (4), immutable probe records (5) |
+| E10-54(a), the run directory is the fixture's `run/` leaf | `trial_run_dir`, `prepare_run_dir`, `run_root_note`, `_one_trial`, `do_continuation`, `collect_trial` |
+| E10-54(b), the prompt names the run id | `PROMPT_TEMPLATE`, `trial_run_id`, `trial_prompt` |
+| E10-54(c), the trial's facts in the expected document | `trial_defaults`, `trial_conditioned_expected`, `grade_one`, `evals/trial-defaults.json` |
+| E10-54, the regrade's reasons by path segment | `reason_path_segments`, `grade_summary`, `summary_rows` |
+| E10-55, the cut is captured frozen | `_freeze_group`, `_thaw_group`, `cut_verdict`, `_launch_and_cut` |
+| E10-56(1), `--without recheck-v2` | `ClaudeCodeSetup.install`, `OpenCodeSetup.install`, `CodexSetup.install` (the one it cannot reach), the three `setups/*/install.sh` |
+| E10-56(2)(3)(4), no edit | the validator's path-rebase flag stays E11 (`_recorded_validation`'s fallback); a session ignoring the named run directory is a measurement (section 10 item 14); `disable-model-invocation` not honoured by Codex and OpenCode is a measurement (`do_routing_score`'s manual-only row) |
+| E10-57, the second fix round's scope | this round: E10-54, E10-55 and E10-56(1), with the fix campaign regraded and one live trial rerun under the new layout; the first fix round is committed as delivered at `a7f852b` and nothing of it was re-opened |
 | E9-34, a record is never overwritten | every subcommand's refusal, `reserve_record` |
 | E9-41, the timeout verdict | `run_cmd` collects the child's status before any verdict |
 | E7-18, the opaque mount and the run date | `build_fixture`, `Campaign.opaque_tree`, `default_plan` |
@@ -661,8 +732,8 @@ both are set. Every test restores the two key directories on the way out, whatev
 | `test_env_allowlist.py` | the allowlist's shape, the banned pattern over every shape E10-7 names, a real launched child's own environment, and that only the OpenCode install ever sees the credential name |
 | `test_wall.py` | the key lock closing on every launch path and a real child failing to read them, `grade` reopening and re-closing, `campaign start --reopen-key`, `records_reached` / `skill_file_reached`, the AST proof of which functions can reach a reader, the E10-21 and E10-45 refusals, the grading barrier from all three pid sources, and the link survey |
 | `test_records.py` | the record layout and every `command.json` field, the opaque fixture path, the refusal to overwrite, `rerun`'s attempt directories, the timeout path driven by a sleeping **stub launcher**, the credential scan including a NUL capture and an assignment delimiter, the report's counts, and campaign resume from disk |
-| `test_fake_end_to_end.py` | one trial per setup validating end to end, the model/cost/activation/condition-witness readers per harness, the grade paths, the routing and routing-score paths, the valid and invalid cut, the poll-interval refusal, and the compaction witness's ordering |
-| `test_findings.py` | one test per finding of the review verdict, exercising the real path the finding names |
+| `test_fake_end_to_end.py` | one trial per setup validating end to end, the model/cost/activation/condition-witness readers per harness, the grade paths, the routing and routing-score paths, the frozen valid cut, the race of finding 15 that can no longer reach the retained pair (E10-55), the poll-interval refusal, and the compaction witness's ordering |
+| `test_findings.py` | one test per finding of the review verdict, exercising the real path the finding names, plus the second fix round: `TrialShapeTest` (E10-54(a) and (b)), `TrialConditionedExpectedTest` (E10-54(c) and the summary's reasons by path segment), `FrozenCutTest` (E10-55) and `WithoutTheSkillTest` (E10-56(1)) |
 
 ## 10. What the harnesses cannot do
 
@@ -683,7 +754,9 @@ opencode-ai 1.18.31):
    that home (E10-26).
 7. **`absent` is a removal, not a never-install.** See `install` above.
 8. **`claude plugin uninstall` leaves the cache copy on disk** (measured on 2.1.272). The
-   runner removes the leftover with its own `rmtree` and names it in the install record.
+   setup's own `install.sh` clears the leftover before every install; since E10-56(1) the
+   absent home is built with `--without recheck-v2` and the runner's own removal is gone, so
+   nothing depends on the uninstall leaving a clean cache.
 9. **`codex plugin remove` needs the qualified name.**
 10. **`opencode debug skill` truncates into a pipe**: exactly 65,536 bytes through a pipe,
     67,934 into a file. The catalog capture goes to a file.
@@ -704,11 +777,14 @@ opencode-ai 1.18.31):
     and the validator reported `the write list names checkpoint.json but the run directory holds
     none`. The runner records it; making the helpers refuse to mint a directory when one was
     named is a core change.
-15. **A cut can be raced.** E10-47 orders stop-then-capture-then-verify, and on two of six live
+15. **A cut could be raced, and no longer is inside the frozen group.** On two of six live
     continuation trials the core advanced from `seq 3, one done one pending` to `seq 4, both
-    done` between the poll and the process group dying. Those cuts are recorded **invalid** with
-    both states named. Freezing the group with `SIGSTOP` before capturing would remove the race
-    and is a ruling, not a builder's call.
+    done` between the poll and the process group dying, and both cuts are recorded **invalid**
+    with both states named — they stay that way, as the measurement that motivated E10-55.
+    E10-55 now freezes the trial's process group with `SIGSTOP` and confirms the stop before
+    capturing, so nothing in that group can advance the checkpoint between the poll and the
+    capture. A writer outside that group still could, which is why the verification stays: a
+    retained pair that does not show the claimed state is an invalid cut whatever caused it.
 16. **`codex sandbox` cannot be driven on 0.154.0.** It requires `--permission-profile` naming
     a profile in an undocumented `[permissions]` table; fourteen shapes were tried, and the one
     the deserializer accepts aborts with signal 6. The no-model half of E10-8 is not performed.
@@ -716,10 +792,11 @@ opencode-ai 1.18.31):
     supported when using Codex with a ChatGPT account` (HTTP 400) on every Codex session while
     the free account is signed in.
 
-## 11. History: what the first build claimed
+## 11. History: superseded claims
 
-Every statement below was true of the first build and is **no longer current**. It is kept so a
-reader of the E10 records can tell a superseded claim from a live one.
+Every statement below was true when it was written and is **no longer current**. It is kept so
+a reader of the E10 records can tell a superseded claim from a live one: the first table is what
+the first build claimed, the second what the first fix round claimed.
 
 | the first build said | what replaced it |
 |---|---|
@@ -733,3 +810,15 @@ reader of the E10 records can tell a superseded claim from a live one.
 | "the exemption list is the setups' own auth stores" including a Claude Code `auth.json` | E10-52: Claude Code has no configured store; its sign-in is the Keychain |
 | E10-37's false hit described as `internal_chat_message_metadata_passthrough` | E10-52 corrects the citation: the 307-character match sat in `/payload/encrypted_content` at verifier rollout line 26. The classification is unchanged: a real key never sits mid-token in a base64 run |
 | "23,332" in E9-34's parenthetical, and lane R's two MINORs | E10-17: still carried, listed in the README build record at the close, E11 named |
+
+**The first fix round's claims that the second round replaced** (E10-54 to E10-56):
+
+| the first fix round said | what replaced it |
+|---|---|
+| the run directory is `<campaign>/tmp/<digest>/runs/<case id>-run`, under the plan's `run_root_name` segment | E10-54(a): it is the fixture's own `run/` leaf, `<campaign>/tmp/<digest>/fixture/<12 hex>/run`, as E7-18 lays the opaque mount out and as each case's seeded `input.json` already names it. The six continuation grades of the fix campaign failed every `records_written` and `receipt_path` regex of the form `/run/<file>$` on the old layout |
+| `prepare_run_dir` refuses an existing run directory | E10-54(a): the leaf exists because the build made it, so what is refused is a leaf already holding `result.schema.json`. Nothing is removed either way |
+| the prompt's `Use the run directory <dir>.` | E10-54(b): `Use run id <case id>-run and the run directory <dir>.` The core otherwise mints its own id, and with the run directory now named `run` the basename is no id at all |
+| `run_root_note.reason` describing `${TMPDIR}/runs` as the trial's run root | E10-54(a): `run_root_name` is the ADAPTERS' segment and `run_root_note.means` says so; `run_root` in the record is the leaf's parent and `adapters_run_root` is the old segment |
+| `grade` matches the key's `expected` as written | E10-54(c): the trial's own facts are substituted first (`run.invocation.mode` from `trial-defaults.json`, `run.invocation.resume` true on a continuation) and `grade.json.trial_conditioned` lists every substitution |
+| the cut is captured after the process group is gone | E10-55: the group is frozen with SIGSTOP and the stop confirmed, the pair is captured frozen, then SIGCONT, SIGTERM and SIGKILL |
+| every absent home is the installed home with the skill removed | E10-56(1): the Claude Code and OpenCode absent homes are installed `--without recheck-v2` and never held it; the Codex absent home is the one the flag cannot reach, and its record says why |

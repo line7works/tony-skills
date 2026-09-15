@@ -169,23 +169,37 @@ class RunnerCase(unittest.TestCase):
         os.chmod(path, 0o755)
         return path
 
-    def cut_stub(self, name, advance_on_term=False, hold=60):
-        """A stub that plants a checkpoint/log pair and then waits to be cut (E10-47).
+    def cut_stub(self, name, advance_on_term=False, hold=60, mixed=True):
+        """A stub that plants a checkpoint/log pair and then waits to be cut (E10-47, E10-55).
 
         `advance_on_term` makes the stub advance the checkpoint to `done, done` when it is
-        terminated — the exact race finding 15 describes, made deterministic — so the runner
-        must retain the pair AFTER the process is gone and call the cut invalid.
+        terminated — the exact race finding 15 describes, made deterministic. Before E10-55
+        that race won and the cut was invalid; with the group frozen before the capture the
+        stub cannot advance until the pair is already retained, which is what the freeze is
+        for.
+
+        `mixed=False` writes a state that is never a cut point (both items pending) and exits,
+        so the poller never sees one: the other invalid cut E10-47 names, and the shape one
+        live Claude hand-off trial produced.
+
+        A resume prompt names no run directory, so the stub answers it and exits at once
+        rather than holding for `hold` seconds.
         """
         path = os.path.join(self.scratch, "cut-%s.sh" % name)
         lines = []
         lines.append("#!/bin/sh")
         lines.append('PROMPT="$1"; WS="$2"; OUT="$3"')
-        lines.append('RUN=$(sed -n \'s|^Use the run directory \\(.*\\)\\.$|\\1|p\' "$PROMPT")')
-        lines.append('mkdir -p "$OUT" "$RUN"')
+        # E10-54(b): the prompt names the run id before the run directory.
+        lines.append('RUN=$(sed -n \'s|^Use run id .* and the run directory \\(.*\\)\\.$|\\1|p\''
+                     ' "$PROMPT")')
+        lines.append('mkdir -p "$OUT"')
         lines.append('cat > "$OUT/trace.jsonl" <<TRACE')
         lines.append('{"type":"system","subtype":"init","session_id":"cut-session-1",'
                      '"model":"claude-opus-5[1m]"}')
         lines.append('TRACE')
+        # the resume prompt names no run directory: answer and exit rather than hold
+        lines.append('if [ -z "$RUN" ]; then echo \'{"fake":"cut-stub","resume":true}\'; exit 0; fi')
+        lines.append('mkdir -p "$RUN"')
         lines.append('write_state() {')
         lines.append('  cat > "$RUN/checkpoint.json" <<CP')
         lines.append('{"phase":"adjudicating","integrity":{"seq":$1},'
@@ -198,7 +212,19 @@ class RunnerCase(unittest.TestCase):
         lines.append('  while [ $i -lt $4 ]; do echo "line $i" >> "$RUN/checkpoint.log"; '
                      'i=$((i+1)); done')
         lines.append('}')
-        lines.append('write_state 3 pending null 4')
+        if mixed:
+            lines.append('write_state 3 pending null 4')
+        else:
+            # never a cut point: item 0 pending too, so `done` is 0 on every poll
+            lines.append('cat > "$RUN/checkpoint.json" <<CP')
+            lines.append('{"phase":"adjudicating","integrity":{"seq":2},'
+                         '"start_identity":{"commit":"cut-commit"},"continuations":0,'
+                         '"scope":{"items":[{"index":0,"state":"pending"},'
+                         '{"index":1,"state":"pending"}]}}')
+            lines.append('CP')
+            lines.append(': > "$RUN/checkpoint.log"')
+            lines.append('echo \'{"fake":"cut-stub","mixed":false}\'')
+            lines.append('exit 0')
         if advance_on_term:
             lines.append('trap \'write_state 4 done fixed 5; exit 143\' TERM')
         lines.append('sleep %d' % hold)

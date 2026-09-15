@@ -684,3 +684,29 @@ report could not read from behind the wall.
   3 stands as run by the control room on the first fix round's runner (below), then Astra's
   verification at high (R1d) over both rounds, then targeted re-checks. The first fix round is
   committed as delivered before the second starts.
+- **E10-58 (after the second fix round's report), the Codex absent home, the readers
+  temp write, and the second round's readings.** The second round delivered A to I (240 runner
+  tests green under both runtimes, the core and adapter suites green, `check` green under both,
+  the fix campaign regraded: `match_ok` 0 to 3 of 12, the six continuation grades still failing
+  only their `/run/` regexes as E10-54 predicted, and one live rerun under the new layout
+  matching the whole expected document with zero reasons). The control room reproduced every
+  count from `trials.jsonl`, `processes.jsonl` and the grade files (21 attempts over 18 ids, 45
+  launches, 13 grades, `match_ok` 4, `ok` 2, invariants held 4) and ran the E7 check runner
+  itself from its side of the wall. Readings: (1) Q1, the Claude Code launcher's `--add-dir
+  ${TMPDIR}/runs` not covering the fixture leaf is measured harmless on every trial of both
+  campaigns (`acceptEdits` writes inside `TMPDIR` land) and is left; (2) Q2 is closed now rather
+  than carried: `setups/codex/install.sh` honours `RECHECK_CODEX_HOME` when set (the same name
+  `verify-install.sh` and `launch.sh` already read), defaulting to the pilot home as before, and
+  the runner's Codex `absent` install runs the script with that name pointing at the absent home
+  and `--without recheck-v2`, then links `auth.json` to the available home's store exactly as the
+  derived homes do, so the absent home never held the skill on any surface (E10-3) and the
+  record says `never installed`; the routing home stays derived from the available one; this
+  widens E10-56(1) by that one line in that one script and the runner's install path; (3) the
+  readers request block written to a `mktemp -d` directory under the machine's temp directory
+  (the one scope violation on the live rerun and on the first round's two Claude Code trials) is
+  a measurement about the readers contract (`plugins/readers`, SKILL.md step 1), outside
+  recheck-v2; E10-11's allowed roots are not widened; it is carried to the guide findings and to
+  E11 with the two edits the report names; (4) Q4 and Q5 as read (the frozen cut's disagreement
+  branch stays graded and tested through `cut_verdict` on the retained shapes; the regrade
+  rewrote only `grade.json`); (5) Q6 recorded; (6) the builder's one recorded slip (a header-only
+  directory listing of the key, no file name printed) is accepted as recorded under E10-28.

@@ -1,5 +1,13 @@
 #!/bin/sh
 # Isolated install; rerun refreshes copied skills and auth, never the live home.
+#
+# Usage: install.sh [--without recheck-v2]
+#        install.sh --prepare-negative <a> <b>
+#
+# --without recheck-v2 skips the one step that installs the recheck-v2 skill (the plugin
+# `codex plugin add` and the host-only surface's copy of the skill folder), so the home this
+# install builds never held it on any surface (E10-3, authorized by ruling E10-56(1)).
+# Everything else is identical.
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../../../.." && pwd)
@@ -8,6 +16,11 @@ export PYTHONDONTWRITEBYTECODE=1
 if [ "${1:-}" = "--prepare-negative" ]; then
   [ "$#" -eq 3 ] || exit 2
   exec python3 "$HERE/prepare-negative.py" "$2" "$3"
+fi
+WITHOUT=""
+if [ "$#" -eq 2 ] && [ "$1" = "--without" ]; then
+  [ "$2" = "recheck-v2" ] || { echo "install.sh: --without takes recheck-v2 (E10-56(1))" >&2; exit 2; }
+  WITHOUT="recheck-v2"; shift 2
 fi
 [ "$#" -eq 0 ] || exit 2
 mkdir -p "$CODEX_HOME"
@@ -57,15 +70,20 @@ PY
 failed=0
 codex --version
 codex plugin marketplace add "$ROOT" --json || failed=1
-codex plugin add recheck-v2@tony-skills --json || failed=1
+# E10-56(1): the one install step of the skill, skipped by --without recheck-v2.
+if [ "$WITHOUT" = "recheck-v2" ]; then
+  echo '{"skipped":"codex plugin add recheck-v2@tony-skills","why":"--without recheck-v2 (E10-56(1))"}'
+else
+  codex plugin add recheck-v2@tony-skills --json || failed=1
+fi
 codex plugin marketplace add "$CODEX_HOME/../probe-marketplace" --json || failed=1
 codex plugin add delivery-probe@recheck-probes --json || failed=1
 codex plugin add manual-only-probe@recheck-probes --json || failed=1
 [ "$failed" -eq 0 ] || exit "$failed"
-python3 - "$ROOT" "$CODEX_HOME" <<'PY2'
+python3 - "$ROOT" "$CODEX_HOME" "$WITHOUT" <<'PY2'
 import json, os, shutil, sys
 from pathlib import Path
-root,home=map(Path,sys.argv[1:])
+root,home=map(Path,sys.argv[1:3]); without=sys.argv[3]
 for surface in ['plugin-only','host-only']:
  dst=home.parent/'homes'/surface
  # Refresh installation assets only: preserve retained sessions and auth never leaves this home tree.
@@ -90,8 +108,9 @@ for surface in ['plugin-only','host-only']:
  if surface=='host-only':
   cfg=dst/'config.toml';cfg.write_text(cfg.read_text().replace('enabled = true','enabled = false'))
   for name in ['recheck-v2','delivery-probe','manual-only-probe']:
+   if name==without:continue   # E10-56(1): never copied, so the home never held it
    src=root/'plugins/recheck-v2/skills/recheck-v2' if name=='recheck-v2' else root/'plugins/recheck-v2/setups/_fixtures'/name/'skills'/name
    shutil.copytree(src,dst/'skills'/name,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
- print(json.dumps({'surface':surface,'home':str(dst)}))
+ print(json.dumps({'surface':surface,'home':str(dst),'without':[without] if without else []}))
 print(json.dumps({'regular_auth_files':sum(p.is_file() and not p.is_symlink() for p in home.parent.rglob('auth.json'))}))
 PY2

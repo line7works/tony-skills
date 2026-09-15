@@ -562,3 +562,26 @@ subagent).
 | *targeted pass:* real-body delivery, installed route (`54f89b2c-…`) | $0.159 |
 | *targeted pass:* real-body delivery, worktree route (`6f847a95-…`) | $0.104 |
 | Total | **≈ $11.35** |
+
+## E10-56(1): `install.sh --without recheck-v2`
+
+Measured 2026-09-15 by the E10 second fix round, on a throwaway home so no pilot home changed:
+
+```
+sh install.sh --pilot-home ~/.local/share/skills-v2-pilot/e10/fix2-flag/claude-code-without \
+   --without recheck-v2
+```
+
+- exit 0; `install.json` carries `"without": ["recheck-v2"]` and
+  `install_results["recheck-v2@tony-skills"]` reads
+  `skipped: --without recheck-v2 (E10-56(1))`.
+- `installed_plugin_dirs` holds `tony-skills/readers/1.0.0`,
+  `skills-v2-pilot/delivery-probe/0.1.0` and `skills-v2-pilot/manual-only-probe/0.1.0`, and
+  nothing else: `find <home> -name '*recheck-v2*'` returns **0 paths**.
+- `verify-install.sh --pilot-home <that home>` exits **3** with
+  `no installed recheck-v2 under <home>/config/plugins/cache`, which is the proof the E10
+  runner's `verify` reads for an absent home (E10-52: an absent home's missing skill is the
+  expected outcome there, and the runner records it as such).
+
+The flag exists so the E10 absent home never held the skill on any surface (E10-3); the runner
+passes it and drops its own uninstall-and-clear second guard (E10-24).

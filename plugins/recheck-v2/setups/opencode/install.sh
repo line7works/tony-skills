@@ -7,12 +7,17 @@
 # folder, and the two shared probes. Touches nothing under ~/.config/opencode,
 # ~/.local/share/opencode, ~/.claude, or any repository.
 #
-# Usage:  sh install.sh [--setup DIR] [--model MODEL] [--npm-cache DIR]
+# Usage:  sh install.sh [--setup DIR] [--model MODEL] [--npm-cache DIR] [--without recheck-v2]
 #   --setup DIR      the isolated pilot home (default ~/.local/share/skills-v2-pilot/opencode)
 #   --model M        the default model written into opencode.json
 #                    (default openrouter/qwen/qwen3.8-flash)
 #   --npm-cache DIR  npm's cache and log directory (default <setup>/npm-cache). Pinned so npm
 #                    writes nothing under ~/.npm or ~/.npm/_logs (E9 section 3; Astra finding 9)
+#   --without recheck-v2
+#                    skip the one step that installs the recheck-v2 skill folder, so the home
+#                    this install builds never held it on any surface (E10-3, authorized by
+#                    ruling E10-56(1)). Everything else is identical: the binary, the config,
+#                    the verifier agent, the session-pointer plugin and the two shared probes
 #
 # Requires OPENROUTER_API_KEY in the environment, ONCE, at install time. Ruling E9-38: the key
 # never rides in a session's environment, because every tool shell inherits it and a probe that
@@ -38,13 +43,18 @@ OPENCODE_VERSION="1.18.31"   # pinned 2026-09-14 from `npm view opencode-ai vers
 SETUP="${HOME}/.local/share/skills-v2-pilot/opencode"
 MODEL="openrouter/qwen/qwen3.8-flash"
 NPM_CACHE=""
+WITHOUT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --setup) SETUP="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --npm-cache) NPM_CACHE="$2"; shift 2 ;;
-    -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+    --without)
+      [ "$2" = "recheck-v2" ] || {
+        echo "install.sh: --without takes recheck-v2 (E10-56(1)), not $2" >&2; exit 2; }
+      WITHOUT="recheck-v2"; shift 2 ;;
+    -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -106,7 +116,13 @@ mkdir -p "$SKILLDIR"
 for name in recheck-v2 delivery-probe manual-only-probe; do
   rm -rf "$SKILLDIR/$name"
 done
-cp -R "$SKILL_SRC" "$SKILLDIR/recheck-v2"
+# E10-56(1): the one install step of the skill, skipped by --without recheck-v2, so the home
+# never held it on any surface. The loop above already cleared any earlier copy.
+if [ "$WITHOUT" = "recheck-v2" ]; then
+  echo "skill: recheck-v2 NOT installed (--without recheck-v2, E10-56(1))"
+else
+  cp -R "$SKILL_SRC" "$SKILLDIR/recheck-v2"
+fi
 cp -R "$FIXTURES/delivery-probe/skills/delivery-probe" "$SKILLDIR/delivery-probe"
 cp -R "$FIXTURES/manual-only-probe/skills/manual-only-probe" "$SKILLDIR/manual-only-probe"
 find "$SKILLDIR" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true

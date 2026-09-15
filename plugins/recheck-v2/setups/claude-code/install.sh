@@ -4,7 +4,13 @@
 # Creates ~/.local/share/skills-v2-pilot/claude-code/ and nothing else outside
 # it: no write under ~/.claude, no write in this repository. Re-runnable.
 #
-# Usage: install.sh [--pilot-home DIR]
+# Usage: install.sh [--pilot-home DIR] [--without recheck-v2]
+#
+# --without recheck-v2 skips the one step that installs the recheck-v2 plugin,
+# so the home this install builds never held the skill on any surface (E10-3,
+# authorized by ruling E10-56(1)). Everything else is identical: readers and the
+# two probes are installed, the settings, the marketplaces and the readers
+# checkout are written the same way. install.json records `without`.
 # Prints one JSON object on stdout; every command's own output goes to stderr.
 # Exit 0 every command succeeded, 2 usage, 3 the claude binary is missing, 1 a
 # marketplace or install command failed or reported an outcome other than ok
@@ -20,12 +26,17 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
 REPO_ROOT=$(CDPATH= cd -- "$PLUGIN_ROOT/../.." && pwd -P)
 PILOT_HOME="${SKILLS_V2_PILOT_HOME:-$HOME/.local/share/skills-v2-pilot/claude-code}"
+WITHOUT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --pilot-home) PILOT_HOME="$2"; shift 2 ;;
+    --without)
+      [ "$2" = "recheck-v2" ] || {
+        echo "install.sh: --without takes recheck-v2 (E10-56(1)), not: $2" >&2; exit 2; }
+      WITHOUT="recheck-v2"; shift 2 ;;
     -h|--help)
-      sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) echo "install.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -117,7 +128,15 @@ install_plugin() {  # install_plugin <spec>
   fi
   printf '%s' "$line"
 }
-RECHECK_RESULT=$(install_plugin recheck-v2@tony-skills)
+# E10-56(1): with --without recheck-v2 the one install step of the skill is skipped, so this
+# home never held it. The uninstall-and-clear loop above still ran, so nothing of an earlier
+# install survives either.
+if [ "$WITHOUT" = "recheck-v2" ]; then
+  RECHECK_RESULT="skipped: --without recheck-v2 (E10-56(1))"
+  echo "recheck-v2@tony-skills: not installed (--without recheck-v2)" >&2
+else
+  RECHECK_RESULT=$(install_plugin recheck-v2@tony-skills)
+fi
 READERS_RESULT=$(install_plugin readers@tony-skills)
 DELIVERY_RESULT=$(install_plugin delivery-probe@skills-v2-pilot)
 MANUAL_RESULT=$(install_plugin manual-only-probe@skills-v2-pilot)
@@ -183,11 +202,11 @@ INSTALLED=$(find "$CONFIG_DIR/plugins/cache" -maxdepth 3 -mindepth 3 -type d 2>/
 
 python3 - "$PILOT_HOME" "$CLAUDE_VERSION" "$REPO_ROOT" "$PLUGIN_ROOT" "$INSTALLED" \
   "$RECHECK_RESULT" "$READERS_RESULT" "$DELIVERY_RESULT" "$MANUAL_RESULT" \
-  "$(cat "$WORK/failures")" <<'PY'
+  "$(cat "$WORK/failures")" "$WITHOUT" <<'PY'
 import json, os, subprocess, sys
 
 (pilot, version, repo, plugin_root, installed,
- recheck, readers, delivery, manual, failures) = sys.argv[1:11]
+ recheck, readers, delivery, manual, failures, without) = sys.argv[1:12]
 failed = [line for line in failures.splitlines() if line.strip()]
 document = {
     "pilot_home": pilot,
@@ -207,6 +226,9 @@ document = {
         "manual-only-probe@skills-v2-pilot": manual,
     },
     "launch_settings": os.path.join(pilot, "launch-settings.json"),
+    # E10-56(1): what this install deliberately did not install, so a reader of the home knows
+    # the skill was never installed here rather than installed and removed.
+    "without": [without] if without else [],
     "ok": not failed,
     "failed_commands": failed,
 }

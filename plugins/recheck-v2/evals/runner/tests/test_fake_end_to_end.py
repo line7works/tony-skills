@@ -333,33 +333,35 @@ class ContinuationTest(RunnerCase):
         self.assertEqual((cut["done"], cut["pending"]), (1, 1))
         self.assertEqual(cut["checkpoint_log_lines"], 4)
         self.assertEqual(cut["poll_interval_seconds"], 0.1)
+        # E10-55: the pair was captured while the group was frozen
+        self.assertTrue(cut["freeze"]["captured_while_frozen"], cut["freeze"])
         retained = os.path.join(self.campaign, "trials", tid, "harness-first",
                                 "at-cut-checkpoint.json")
         self.assertEqual(runner.read_json(retained)["integrity"]["seq"], 3)
         self.assertEqual(cut["start_identity"], {"commit": "cut-commit"})
 
-    def test_a_retained_pair_that_disagrees_with_the_poll_is_an_invalid_cut(self):
-        """Finding 15, made deterministic: the session advances to `done, done` as it dies.
+    def test_the_race_of_finding_15_no_longer_reaches_the_retained_pair(self):
+        """E10-55 replaces what this test used to prove.
 
-        The dry run claimed seq 3 with one item done while both retained
-        `at-cut-checkpoint.json` files were seq 4 with both items done. The claim must now come
-        from the retained pair, and a pair that does not show the claimed state is an INVALID
-        cut, recorded as one.
+        Finding 15's race, made deterministic: the session advances to `done, done` as it dies.
+        Before E10-55 it won — the dry run claimed seq 3 with one item done while both retained
+        `at-cut-checkpoint.json` files were seq 4 with both done — and the cut was recorded
+        INVALID. The group is now frozen with SIGSTOP before the capture, so the same stub
+        cannot advance until the pair is retained, and the cut is valid at the state the poller
+        saw. A retained pair that still disagrees is still an invalid cut
+        (`test_findings.FrozenCutTest`).
         """
         tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
-        stub = self.cut_stub("invalid", advance_on_term=True)
+        stub = self.cut_stub("race", advance_on_term=True)
         got = cli(["continuation", "--campaign", self.campaign, tid, "--fake-launcher", stub])
         self.assertIn(got.returncode, (0, 1), got.stderr)
         command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
         cut = command["cut"]
         self.assertTrue(cut["cut_made"], "the poller never saw the mixed state")
-        self.assertFalse(cut["valid"])
-        self.assertIn("retained checkpoint/log pair does not show the claimed state",
-                      cut["invalid_because"])
-        self.assertEqual(cut["seq"], 4)
+        self.assertTrue(cut["freeze"]["confirmed"], cut["freeze"])
+        self.assertTrue(cut["valid"], cut.get("invalid_because"))
+        self.assertEqual(cut["seq"], 3)
         self.assertEqual(cut["observed_at_the_poll"]["seq"], 3)
-        interruptions = runner.read_text(os.path.join(self.campaign, "interruptions.jsonl"), "")
-        self.assertIn("invalid cut", interruptions)
 
     def test_a_poll_interval_coarser_than_a_tenth_of_a_second_is_refused(self):
         tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)

@@ -265,13 +265,22 @@ class RunDirectoryTest(RunnerCase):
                  for setup in ("claude-code", "codex", "opencode")}
         self.assertEqual(len(trees), 3)
 
-    def test_prepare_run_dir_refuses_an_existing_directory(self):
-        campaign = runner.Campaign(self.campaign)
-        root = os.path.join(self.scratch, "runs")
-        runner.ensure_dir(os.path.join(root, "x-run"))
+    def test_prepare_run_dir_refuses_a_prepared_leaf_and_removes_nothing(self):
+        """E10-54(a): the leaf exists — the fixture build made it — so its existence is not the
+        error. A leaf that already holds `result.schema.json` was prepared before, and a run
+        directory is refused, never removed (E10-43)."""
+        leaf = os.path.join(self.scratch, "fixture", "abc123def456", "run")
+        runner.ensure_dir(leaf)
+        sentinel = os.path.join(leaf, "sentinel.txt")
+        runner.write_text(sentinel, "an earlier attempt's live run directory\n")
+        # an existing but unprepared leaf is the normal case
+        self.assertEqual(runner.prepare_run_dir(leaf), leaf)
+        self.assertTrue(os.path.isfile(os.path.join(leaf, "result.schema.json")))
+        # a second preparation is refused, and nothing in the leaf is touched
         with self.assertRaises(runner.Usage) as caught:
-            runner.prepare_run_dir(campaign, None, root, "x-run")
+            runner.prepare_run_dir(leaf)
         self.assertIn("never removed", str(caught.exception))
+        self.assertTrue(os.path.isfile(sentinel), "prepare_run_dir removed something")
 
 
 # --------------------------------------------------------------------------- 6, 22, 23
@@ -1033,6 +1042,340 @@ class StageAndVerifyTest(RunnerCase):
             self.assertEqual(len(row["sha256"]), 64)
         self.assertEqual(document["link_survey"]["symlinks"], [])
         self.assertEqual(document["answer_key_or_held_out_in_stage"], [])
+
+
+# ------------------------------------------------- E10-54, E10-55, E10-56(1): the second round
+
+
+class TrialShapeTest(RunnerCase):
+    """E10-54(a) and (b): the run directory is the fixture's own `run/` leaf and the prompt
+    names the run id.
+
+    The facts these tests stand on are the fixture's own, never the key's: `build.py --opaque`
+    lays a case out as `<out>/<12 hex>/{workspace,run,input.json,manifest.json}`
+    (`fixturelib.Fixture`), and the case's seeded `input.json` names that leaf as
+    `invocation.run_dir` and `<case id>-run` as `invocation.run_id`.
+    """
+
+    def test_the_run_directory_is_the_fixture_s_own_run_leaf(self):
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        case_dir = command["fixture"]["case_dir"]
+        self.assertEqual(command["run_dir"], os.path.join(case_dir, "run"))
+        self.assertEqual(command["run_root"], case_dir)
+        self.assertTrue(command["run_dir_is_the_fixture_run_leaf"])
+        # E7-18's own promise: the leaf keeps the name `run`, so a key's `/run/` pattern holds
+        self.assertEqual(os.path.basename(command["run_dir"]), "run")
+        self.assertIn("/run/", os.path.join(command["run_dir"], "result.json"))
+
+    def test_the_seeded_input_names_the_same_leaf_and_the_same_run_id(self):
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        seeded = runner.read_json(os.path.join(command["fixture"]["case_dir"], "input.json"))
+        self.assertEqual(seeded["invocation"]["run_dir"], command["run_dir"])
+        self.assertEqual(seeded["invocation"]["run_id"], "%s-run" % CASE)
+
+    def test_the_prompt_names_the_run_id_in_words(self):
+        tid, got = self.run_trial()
+        prompt = runner.read_text(os.path.join(self.campaign, "trials", tid, "prompt.txt"))
+        self.assertIn("Use run id %s-run and the run directory " % CASE, prompt)
+        note = runner.read_json(os.path.join(self.campaign, "trials", tid,
+                                             "command.json"))["run_root_note"]
+        self.assertIn("NAMES it in words", note["documented_exception"])
+        self.assertIn("E10-54(b)", note["documented_exception"])
+
+    def test_the_result_the_session_wrote_carries_that_run_id_and_that_directory(self):
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        result = runner.read_json(os.path.join(self.campaign, "trials", tid, "result.json"))
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        # the field names are the ones a retained real record of the fix campaign carries:
+        # `run.run_id` and `run.run_dir` at the top of the run block, `mode` under
+        # `run.invocation` (read as a fact from
+        # `e10/fix-2026-09-15/trials/claude-code-F1-01-fixed-clean-absent-r1/result.json`).
+        self.assertEqual(result["run"]["run_id"], "%s-run" % CASE)
+        self.assertEqual(result["run"]["run_dir"], command["run_dir"])
+        self.assertEqual(result["run"]["invocation"]["mode"], "headless")
+        # every artifact the run wrote is under a `/run/` path now
+        for write in result.get("records_written") or []:
+            path = write.get("path") if isinstance(write, dict) else write
+            if isinstance(path, str) and path.startswith(command["run_dir"]):
+                self.assertIn("/run/", path)
+
+    def test_the_run_root_note_says_what_the_adapters_segment_now_means(self):
+        tid, got = self.run_trial()
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        note = command["run_root_note"]
+        self.assertEqual(note["run_root_name"], "runs")
+        self.assertIn("${TMPDIR}/runs", note["means"])
+        self.assertIn("fixture's own `run/` leaf", note["means"])
+        self.assertEqual(command["adapters_run_root"],
+                         os.path.join(command["opaque_tree"], "runs"))
+
+    def test_the_two_conditions_still_get_byte_identical_prompts(self):
+        self.make_campaign({"conditions": ["available", "absent"]})
+        first, got = self.run_trial(condition="available")
+        self.assertEqual(got.returncode, 0, got.stderr)
+        second, got = self.run_trial(condition="absent")
+        self.assertEqual(got.returncode, 0, got.stderr)
+
+        def normalised(tid):
+            record = os.path.join(self.campaign, "trials", tid)
+            command = runner.read_json(os.path.join(record, "command.json"))
+            text = runner.read_text(os.path.join(record, "prompt.txt"))
+            for name, value in (("<RUN_DIR>", command["run_dir"]),
+                                ("<WORKSPACE>", command["workspace"]),
+                                ("<TREE>", command["opaque_tree"])):
+                text = text.replace(value, name)
+            return text
+
+        self.assertEqual(normalised(first), normalised(second))
+        self.assertNotIn(self.campaign, normalised(first))
+
+
+class TrialConditionedExpectedTest(RunnerCase):
+    """E10-54(c): the trial's own facts are substituted into the expected document.
+
+    Every expected document below is one this test wrote (E10-21); no test here opens the
+    answer key.
+    """
+
+    cases = (CASE, TWO_ITEM_CASE)
+
+    def test_the_default_carries_the_mode_and_its_rule(self):
+        defaults = runner.trial_defaults()
+        self.assertEqual(defaults["invocation_mode"], "headless")
+        self.assertIn("headless", defaults["invocation_mode_rule"])
+        self.assertIn("E10-54(c)", defaults["invocation_mode_rule"])
+
+    def stand_in_expected(self):
+        return {
+            "status": "completed",
+            "run": {"run_id": "%s-run" % CASE,
+                    "invocation": {"mode": "interactive", "resume": False},
+                    "model": {"floor_met": True}},
+            "items": [{"disposition": "fixed"}],
+        }
+
+    def test_the_mode_is_substituted_and_recorded_and_nothing_else_changes(self):
+        original = self.stand_in_expected()
+        before = json.dumps(original, sort_keys=True)
+        document, rows = runner.trial_conditioned_expected(original, "comparison")
+        # the substitution happened
+        self.assertEqual(document["run"]["invocation"]["mode"], "headless")
+        # it is recorded, with the key's own literal beside the value used
+        row = [r for r in rows if r["path"] == "$.run.invocation.mode"][0]
+        self.assertEqual(row["key_literal"], "interactive")
+        self.assertEqual(row["used"], "headless")
+        self.assertTrue(row["applied"])
+        self.assertIn("trial-defaults.json", row["source"])
+        # a comparison trial leaves `resume` alone
+        self.assertEqual(document["run"]["invocation"]["resume"], False)
+        self.assertFalse([r for r in rows if r["path"] == "$.run.invocation.resume"])
+        # the key's own document is untouched, and nothing but the substituted path changed
+        self.assertEqual(json.dumps(original, sort_keys=True), before)
+        stripped_before, stripped_after = json.loads(before), json.loads(json.dumps(document))
+        stripped_before["run"]["invocation"].pop("mode")
+        stripped_after["run"]["invocation"].pop("mode")
+        self.assertEqual(json.dumps(stripped_before, sort_keys=True).encode("utf-8"),
+                         json.dumps(stripped_after, sort_keys=True).encode("utf-8"))
+
+    def test_a_continuation_trial_also_substitutes_resume_true(self):
+        original = self.stand_in_expected()
+        document, rows = runner.trial_conditioned_expected(original, "continuation:handoff")
+        self.assertEqual(document["run"]["invocation"]["resume"], True)
+        row = [r for r in rows if r["path"] == "$.run.invocation.resume"][0]
+        self.assertEqual(row["key_literal"], False)
+        self.assertEqual(row["used"], True)
+        self.assertIn("continuation", row["source"])
+        stripped_before = self.stand_in_expected()
+        stripped_after = json.loads(json.dumps(document))
+        for node in (stripped_before, stripped_after):
+            node["run"]["invocation"].pop("mode")
+            node["run"]["invocation"].pop("resume")
+        self.assertEqual(json.dumps(stripped_before, sort_keys=True).encode("utf-8"),
+                         json.dumps(stripped_after, sort_keys=True).encode("utf-8"))
+
+    def test_an_expected_document_with_no_run_invocation_records_that_nothing_applied(self):
+        document, rows = runner.trial_conditioned_expected({"status": "completed"}, "comparison")
+        self.assertEqual(document, {"status": "completed"})
+        self.assertFalse(rows[0]["applied"])
+        self.assertIsNone(rows[0]["used"])
+        self.assertIn("nothing to substitute", rows[0]["why_not"])
+
+    def test_a_graded_trial_matches_a_stand_in_key_that_pins_the_interactive_mode(self):
+        """The whole point: a key written from E7's interactive trial shape now matches a
+        headless E10 trial, and `grade.json` says what was substituted."""
+        directory = self.stand_in_key(expected=self.stand_in_expected())
+        tid, got = self.run_trial(case=CASE)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                      "RECHECK_RUNNER_KEY_DIR": directory})
+        graded = parse_stdout(cli(["grade", "--campaign", self.campaign, tid, "--summary"],
+                                  env=environment))
+        self.assertEqual(graded["summary"]["match_ok"], 1, graded["per_trial"])
+        self.assertEqual(graded["per_trial"][0]["trial_conditioned_paths"],
+                         ["$.run.invocation.mode"])
+        grade = runner.read_json(os.path.join(self.campaign, "trials", tid, "grade.json"))
+        rows = grade["trial_conditioned"]
+        self.assertEqual([r["path"] for r in rows], ["$.run.invocation.mode"])
+        self.assertEqual(rows[0]["key_literal"], "interactive")
+        self.assertEqual(rows[0]["used"], "headless")
+
+    def test_without_the_substitution_the_same_key_fails_on_the_mode_alone(self):
+        """The counterfactual, from the runner's own matcher: the key's literal is what E7
+        wrote and the trial is headless, so the mode is the one field that diverges."""
+        expected = self.stand_in_expected()
+        actual = {"status": "completed",
+                  "run": {"run_id": "%s-run" % CASE,
+                          "invocation": {"mode": "headless", "resume": False},
+                          "model": {"floor_met": True}},
+                  "items": [{"disposition": "fixed"}]}
+        raw_ok, raw_reasons = runner._import_match().match(expected, actual)
+        self.assertFalse(raw_ok)
+        self.assertEqual(runner.reason_path_segments(raw_reasons), {"run": 1})
+        conditioned, _ = runner.trial_conditioned_expected(expected, "comparison")
+        self.assertTrue(runner._import_match().match(conditioned, actual)[0])
+
+    def test_the_summary_counts_match_reasons_by_first_path_segment_only(self):
+        """E10-54's regrade reads the reasons by PATH SEGMENT from `grade --summary`; the
+        reason's own text quotes the key's expected value and is never printed."""
+        directory = self.stand_in_key(expected={"status": "nonesuch",
+                                                "items": [{"disposition": "not_fixed"}]})
+        tid, got = self.run_trial(case=CASE)
+        environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                      "RECHECK_RUNNER_KEY_DIR": directory})
+        result = cli(["grade", "--campaign", self.campaign, tid, "--summary"], env=environment)
+        graded = parse_stdout(result)
+        self.assertEqual(graded["summary"]["trials_with_a_failing_match"], 1)
+        segments = graded["summary"]["match_reasons_by_path_segment"]
+        self.assertEqual(sorted(segments), ["items", "status"])
+        self.assertNotIn("nonesuch", result.stdout)
+        self.assertNotIn('"reasons"', result.stdout)
+
+
+class FrozenCutTest(RunnerCase):
+    """E10-55: the cut is captured frozen."""
+
+    cases = (TWO_ITEM_CASE,)
+
+    def test_a_valid_cut_is_captured_while_the_group_is_frozen(self):
+        tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
+        stub = self.cut_stub("frozen-valid")
+        got = cli(["continuation", "--campaign", self.campaign, tid, "--fake-launcher", stub])
+        self.assertIn(got.returncode, (0, 1), got.stderr)
+        cut = runner.read_json(os.path.join(self.campaign, "trials", tid,
+                                            "command.json"))["cut"]
+        self.assertTrue(cut["valid"], cut.get("invalid_because"))
+        self.assertEqual(cut["freeze"]["signal"], "SIGSTOP")
+        self.assertTrue(cut["freeze"]["sent"])
+        self.assertTrue(cut["freeze"]["confirmed"], cut["freeze"])
+        self.assertTrue(cut["freeze"]["captured_while_frozen"])
+        self.assertEqual(cut["seq"], 3)
+        self.assertEqual((cut["done"], cut["pending"]), (1, 1))
+
+    def test_a_session_that_would_advance_as_it_dies_can_no_longer_beat_the_capture(self):
+        """The race of finding 15, made deterministic by a SIGTERM trap. Before E10-55 the
+        retained pair read seq 4 with both items done and the cut was invalid; with the group
+        frozen before the capture the retained pair is the state the poller saw."""
+        tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
+        stub = self.cut_stub("frozen-race", advance_on_term=True)
+        got = cli(["continuation", "--campaign", self.campaign, tid, "--fake-launcher", stub])
+        self.assertIn(got.returncode, (0, 1), got.stderr)
+        record = os.path.join(self.campaign, "trials", tid)
+        cut = runner.read_json(os.path.join(record, "command.json"))["cut"]
+        self.assertTrue(cut["freeze"]["confirmed"], cut["freeze"])
+        self.assertTrue(cut["valid"], cut.get("invalid_because"))
+        self.assertEqual(cut["seq"], 3)
+        self.assertEqual(cut["observed_at_the_poll"]["seq"], cut["seq"])
+        retained = runner.read_json(os.path.join(record, "harness-first",
+                                                 "at-cut-checkpoint.json"))
+        self.assertEqual(retained["integrity"]["seq"], 3)
+        self.assertEqual(sorted(r["state"] for r in retained["scope"]["items"]),
+                         ["done", "pending"])
+
+    def test_a_session_that_never_shows_a_mixed_state_is_an_invalid_cut(self):
+        tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
+        stub = self.cut_stub("never-mixed", mixed=False)
+        got = cli(["continuation", "--campaign", self.campaign, tid, "--fake-launcher", stub])
+        self.assertIn(got.returncode, (0, 1), got.stderr)
+        cut = runner.read_json(os.path.join(self.campaign, "trials", tid,
+                                            "command.json"))["cut"]
+        self.assertFalse(cut["cut_made"])
+        self.assertFalse(cut["valid"])
+        self.assertIn("before the checkpoint ever showed a mixed state", cut["invalid_because"])
+        self.assertFalse(cut["freeze"]["sent"])
+        interruptions = runner.read_text(os.path.join(self.campaign, "interruptions.jsonl"), "")
+        self.assertIn("invalid cut", interruptions)
+
+    def test_a_retained_pair_that_disagrees_with_the_poll_is_still_an_invalid_cut(self):
+        """E10-55 keeps E10-47's rule. The two shapes below are the ones the fix campaign's own
+        two invalid cuts recorded: the poll saw seq 3 with one item done and one pending, the
+        retained pair held seq 4 with both done."""
+        observed = {"seq": 3, "done": 1, "pending": 1, "phase": "adjudicating"}
+        retained = {"seq": 4, "done": 2, "pending": 0, "phase": "adjudicating",
+                    "item_rows": [{"index": 0, "state": "done"}, {"index": 1, "state": "done"}]}
+        valid, why = runner.cut_verdict(observed, retained)
+        self.assertFalse(valid)
+        self.assertIn("does not show the claimed state", why)
+        self.assertIn("observed seq 3", why)
+        self.assertIn("retained seq 4", why)
+        # and the agreeing pair is valid
+        self.assertEqual(runner.cut_verdict(observed, dict(observed, item_rows=[])),
+                         (True, None))
+
+
+class WithoutTheSkillTest(RunnerCase):
+    """E10-56(1): `install.sh --without recheck-v2` for the absent home, and no second guard."""
+
+    def stub_install(self, harness):
+        """A stub `install.sh` in the stage that records the argv it was given."""
+        path = os.path.join(self.stage, "plugins", "recheck-v2", "setups", harness, "install.sh")
+        runner.ensure_dir(os.path.dirname(path))
+        log = os.path.join(self.scratch, "install-argv-%s.txt" % harness)
+        runner.write_text(path, "#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %s\nexit 0\n" % log)
+        os.chmod(path, 0o755)
+        return log
+
+    def test_the_claude_absent_install_passes_the_flag_and_removes_nothing(self):
+        log = self.stub_install("claude-code")
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        record = setup.install("absent")
+        self.assertIn("--without recheck-v2", runner.read_text(log))
+        # one step only: no `claude plugin uninstall`, no cache removal (E10-24's second guard)
+        self.assertEqual(len(record["steps"]), 1)
+        self.assertEqual(record["uninstalled_after_install"], [])
+        self.assertEqual(record["recheck_v2_installation"]["how"], "never installed")
+        self.assertIn("E10-56(1)", record["recheck_v2_installation"]["by"])
+
+    def test_the_claude_available_install_does_not_pass_the_flag(self):
+        log = self.stub_install("claude-code")
+        campaign = runner.Campaign(self.campaign)
+        runner.ClaudeCodeSetup(campaign, stage=self.stage).install("available")
+        self.assertNotIn("--without", runner.read_text(log))
+
+    def test_the_opencode_absent_install_passes_the_flag_and_removes_nothing(self):
+        log = self.stub_install("opencode")
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.OpenCodeSetup(campaign, stage=self.stage)
+        record = setup.install("absent")
+        self.assertIn("--without recheck-v2", runner.read_text(log))
+        self.assertEqual(record["removed"], [])
+        self.assertEqual(record["recheck_v2_installation"]["how"], "never installed")
+
+    def test_the_three_install_scripts_take_the_flag_and_refuse_another_name(self):
+        """The real scripts, parsed: `--without` takes `recheck-v2` and nothing else."""
+        for harness in ("claude-code", "codex", "opencode"):
+            path = os.path.join(runner.PLUGIN_DIR, "setups", harness, "install.sh")
+            text = runner.read_text(path)
+            self.assertIn("--without", text, harness)
+            self.assertIn("E10-56(1)", text, harness)
+            got = runner.run_cmd(["sh", path, "--without", "readers"], env=runner.tool_env(),
+                                 label="--without readers")
+            self.assertEqual(got["exit"], 2, "%s: %s" % (harness, got["stderr"][-400:]))
 
 
 class HelpAndDocumentationTest(unittest.TestCase):

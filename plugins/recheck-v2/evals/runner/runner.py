@@ -1213,29 +1213,24 @@ class ClaudeCodeSetup(Setup):
     def install(self, condition, fake=None):
         home = self.home(condition)
         env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home})
-        steps = [run_cmd(["sh", self.script("install.sh"), "--pilot-home", home], env=env,
-                         label="install.sh")]
+        argv = ["sh", self.script("install.sh"), "--pilot-home", home]
+        # E10-56(1): the absent home is built by an install that never installs the skill, so
+        # E10-3's "never held recheck-v2 on any surface" holds by construction. The runner's
+        # own second-guard removal (`claude plugin uninstall` plus the cache entry E10-24
+        # measured it leaving behind) is gone with it.
+        if condition == "absent":
+            argv += ["--without", "recheck-v2"]
+        steps = [run_cmd(argv, env=env, label="install.sh")]
         config = os.path.join(home, "config")
         removed, added = [], []
         if condition == "absent":
-            # E10-3: the removal uses the harness's own mechanism. `install.sh` installs
-            # recheck-v2 unconditionally and takes no flag to skip it, so the absent home is
-            # the installed home with the plugin uninstalled by `claude plugin uninstall`
-            # (labelled in the record: removed after install, not never-installed).
-            steps.append(run_cmd(
-                ["claude", "plugin", "uninstall", "recheck-v2@tony-skills"],
-                env=dict(env, CLAUDE_CONFIG_DIR=config), label="uninstall recheck-v2"))
-            removed.append("recheck-v2@tony-skills (claude plugin uninstall)")
-            # Measured on 2.1.272: the uninstall reports success and drops the plugin from
-            # `claude plugin list`, and LEAVES its cache directory on disk, so the absent
-            # home would still hold the skill files that E10-3 forbids. The cache entry the
-            # harness left is removed here and named in the record.
-            left = sorted(glob.glob(os.path.join(config, "plugins", "cache", "*",
-                                                 "recheck-v2")))
-            for path in left:
-                rmtree(path)
-                removed.append(os.path.relpath(path, home)
-                               + " (cache entry left behind by `claude plugin uninstall`)")
+            installation = {
+                "how": "never installed",
+                "by": "install.sh --without recheck-v2 (E10-56(1))",
+                "second_guard_removal": "dropped: no uninstall and no cache removal runs",
+            }
+        else:
+            installation = {"how": "installed", "by": "install.sh"}
         if condition == "routing":
             wanted = [p for p in self.marketplace_plugins() if p not in BLOCKED_PLUGINS]
             for plugin in wanted:
@@ -1250,6 +1245,7 @@ class ClaudeCodeSetup(Setup):
             "condition": condition,
             "steps": [_step_summary(s) for s in steps],
             "uninstalled_after_install": removed,
+            "recheck_v2_installation": installation,
             "extra_plugins_installed": added,
             "install_json": read_json(os.path.join(home, "install.json"), "install.json")
             if os.path.isfile(os.path.join(home, "install.json")) else None,
@@ -1489,6 +1485,7 @@ class CodexSetup(Setup):
         if condition == "available":
             steps.append(run_cmd(["sh", self.script("install.sh")], env=env, label="install.sh"))
             return {"home": base, "condition": condition, "derived_from_available": False,
+                    "recheck_v2_installation": {"how": "installed", "by": "install.sh"},
                     "steps": [_step_summary(s) for s in steps]}
         if not os.path.isdir(base):
             raise Missing("install the codex `available` home before %r" % condition)
@@ -1539,8 +1536,25 @@ class CodexSetup(Setup):
                     ["codex", "plugin", "add", "%s@tony-skills" % plugin, "--json"],
                     env=dict(env, CODEX_HOME=home), label="plugin add %s" % plugin))
                 added.append(plugin)
+        # E10-56(1): the flag is on this script too, but the runner cannot use it for the
+        # absent home. `setups/codex/install.sh` derives its CODEX_HOME from `$HOME` and takes
+        # no home argument, and E10-56(1) authorizes the flag and nothing else in these three
+        # files, so running it with the flag would rebuild the AVAILABLE home. The codex
+        # absent home therefore stays `derived_from_available` with the skill removed by the
+        # harness's own mechanism, and the report carries the exact edit that would close it.
+        installation = {
+            "how": "removed after install" if condition == "absent" else "installed",
+            "by": "codex plugin remove recheck-v2@tony-skills, on a copy of the available home",
+            "removed": removed,
+            "why_not_never_installed":
+                "setups/codex/install.sh derives CODEX_HOME from $HOME and takes no home "
+                "argument, so --without recheck-v2 (E10-56(1)) cannot target this home; the "
+                "edit that would close it is a --home DIR flag on that script, which E10-56(1) "
+                "does not authorize" if condition == "absent" else None,
+        }
         return {"home": home, "condition": condition, "derived_from_available": True,
-                "removed": removed, "added": added, "steps": [_step_summary(s) for s in steps]}
+                "removed": removed, "recheck_v2_installation": installation,
+                "added": added, "steps": [_step_summary(s) for s in steps]}
 
     def verify(self, condition):
         home = self.home(condition)
@@ -1749,14 +1763,21 @@ class OpenCodeSetup(Setup):
         env = self.campaign.env(extra=extra)
         model = {"qwen": "openrouter/qwen/qwen3.8-flash",
                  "deepseek": "openrouter/deepseek/deepseek-v4.1-flash"}.get(self.model, self.model)
-        steps = [run_cmd(["sh", self.script("install.sh"), "--setup", home, "--model", model],
-                         env=env, label="install.sh")]
+        argv = ["sh", self.script("install.sh"), "--setup", home, "--model", model]
+        # E10-56(1): the absent home's install never copies the skill folder in, so the runner
+        # no longer removes one afterwards.
+        if condition == "absent":
+            argv += ["--without", "recheck-v2"]
+        steps = [run_cmd(argv, env=env, label="install.sh")]
         removed, added = [], []
         if condition == "absent":
-            target = os.path.join(self.skill_dir(condition), "recheck-v2")
-            if os.path.isdir(target):
-                rmtree(target)
-                removed.append("xdg-config/opencode/skill/recheck-v2")
+            installation = {
+                "how": "never installed",
+                "by": "install.sh --without recheck-v2 (E10-56(1))",
+                "second_guard_removal": "dropped: no skill folder is removed",
+            }
+        else:
+            installation = {"how": "installed", "by": "install.sh"}
         if condition == "routing":
             # E10-13: every plugin's skill folders copied into this home's skill directory.
             for plugin_dir in sorted(glob.glob(os.path.join(self.stage, "plugins", "*"))):
@@ -1775,7 +1796,8 @@ class OpenCodeSetup(Setup):
                     added.append(name)
         return {"home": home, "condition": condition, "model": model,
                 "credential_passed": bool(credential),
-                "removed": removed, "added": sorted(set(added)),
+                "removed": removed, "recheck_v2_installation": installation,
+                "added": sorted(set(added)),
                 "steps": [_step_summary(s) for s in steps]}
 
     def verify(self, condition):
@@ -2083,6 +2105,12 @@ def do_install(args):
             write_json(path, {"setup": setup.name, "condition": condition,
                               "home": record["home"], "files": len(inventory),
                               "tree_sha256": tree_sha256_of(record["home"]),
+                              # E10-56(1): the inventory says whether the skill was NEVER
+                              # INSTALLED here or installed and then removed.
+                              "recheck_v2_installation": record.get("recheck_v2_installation"),
+                              "recheck_v2_paths_in_the_home":
+                                  sorted(r["path"] for r in inventory
+                                         if "recheck-v2" in r["path"])[:40],
                               "inventory": inventory})
             record["inventory_record"] = path
             record["inventory_files"] = len(inventory)
@@ -2845,12 +2873,17 @@ def _import_match():
 
 # E10-4: one template, filled per trial, identical bytes in both conditions. It names no
 # skill, no plugin, no harness, no condition, and never says "use" or "do not use".
+#
+# E10-54(b): the run id is named IN WORDS beside the run directory. The core otherwise mints
+# its own id, and the key's `run_id` — `<case id>-run`, the id the fixture's own seeded
+# `input.json` carries (E7 gap 13) — can then never hold. This is E10-41's one documented
+# exception made explicit: the case name appears in the run id and nowhere else.
 PROMPT_TEMPLATE = (
     "recheck slice {slice} of {build_doc} in {workspace}: a fresh verifier proves each named "
     "BLOCKER or MAJOR fix on the punch list landed, then move the slice's card; run date "
     "{run_date}.\n"
     "\n"
-    "Use the run directory {run_dir}.\n"
+    "Use run id {run_id} and the run directory {run_dir}.\n"
     "\n"
     "Write result.json in the run directory validating against {run_dir}/result.schema.json "
     "and print the chat block.\n"
@@ -2896,24 +2929,34 @@ def build_fixture(campaign, case, out):
             "tree_sha256": row["tree_sha256"], "opaque": row["opaque"]}
 
 
-# The adapter's run root (`references/pilot-contract.md` section 2 and every profile's section
-# 3) is `${TMPDIR}/recheck-v2`, and three installed things are written for exactly that path:
+# The adapters' run root (`references/pilot-contract.md` section 2 and every profile's section
+# 3) is `${TMPDIR}/runs` since E10-22, and three installed things are written for that path:
 # the Claude launcher's `--add-dir`, the OpenCode `external_directory` allow rule the install
-# writes from its own TMPDIR (E9-27), and the adapter helpers' own default. E10-4 also says the
-# prompt "never names recheck-v2", and the prompt must name the run directory, so the two rules
-# collide. The runner keeps the working path and records the breach; `plan.json` may set
-# `run_root_name` to a neutral segment once the setups allow one (the report names the edit).
+# writes from its own TMPDIR (E9-27), and the adapter helpers' own default.
+#
+# E10-54(a): a TRIAL's run directory is no longer under it. The run directory of every trial is
+# the fixture's own `run/` leaf — `<campaign>/tmp/<digest>/fixture/<12 hex>/run` — exactly as
+# E7-18 lays the opaque mount out ("`workspace/` and `run/` keep their names, so every key's
+# `/run/` pattern holds"), and as each case's own seeded `input.json` already names it. The
+# segment below is kept because the adapters are written for it and because the record has to
+# say what it now means.
 DEFAULT_RUN_ROOT_NAME = "runs"  # E10-22: the setups name the run root ${TMPDIR}/runs since a55da08
+RUN_LEAF = "run"                # E7-18 / E10-54(a): the fixture's own leaf, named `run`
 
 
 def run_root_of(campaign, plan, trial=None, attempt=0):
-    """`<campaign>/tmp/<digest>/<run root name>` — the run root inside the trial's opaque tree.
+    """`<campaign>/tmp/<digest>/<run root name>` — the ADAPTERS' run root inside the trial's
+    opaque tree (E10-22).
 
     E10-41: the whole reachable world of one trial is `<campaign>/tmp/<digest of campaign,
     trial id and attempt>/`, so the workspace and run-directory paths a prompt must name carry
     no setup, case, condition, repetition or attempt, and two attempts of one trial never mint
     the same absolute path (finding 5: `_one_trial` used to hash the record's BASENAME, so
     every first rerun of every trial hashed `1`).
+
+    Since E10-54(a) this is NOT where a trial's run directory goes — `trial_run_dir` is. It
+    stays as the segment the adapters' own defaults and allow rules are written for, and the
+    record names it.
     """
     name = plan.get("run_root_name") or DEFAULT_RUN_ROOT_NAME
     if trial is None:
@@ -2921,21 +2964,53 @@ def run_root_of(campaign, plan, trial=None, attempt=0):
     return os.path.join(campaign.opaque_tree(trial, attempt), name)
 
 
+def trial_run_dir(fixture):
+    """E10-54(a): the fixture's own `run/` leaf, and nothing else.
+
+    `build.py --opaque` lays every case out as `<out>/<12 hex>/{workspace,run,input.json,
+    manifest.json}` (`fixturelib.Fixture`), and the case's seeded `input.json` names that leaf
+    as `invocation.run_dir`. E7-18 promises the leaf keeps its name so every key's `/run/`
+    pattern holds; the first build put the run directory under `<tree>/runs/<case id>-run`
+    instead, and every `records_written` and `receipt_path` regex of the six continuation
+    grades failed on it (E10-54).
+    """
+    return os.path.join(fixture["case_dir"], RUN_LEAF)
+
+
+def trial_run_id(fixture, seeded=None):
+    """`<case id>-run` (E7 gap 13), read from the fixture's own seeded input where it is."""
+    if seeded is None:
+        seeded = read_json(os.path.join(fixture["case_dir"], "input.json"), "the seeded input")
+    given = ((seeded or {}).get("invocation") or {}).get("run_id")
+    return given if isinstance(given, str) and given else None
+
+
 def run_root_note(plan):
     name = plan.get("run_root_name") or DEFAULT_RUN_ROOT_NAME
     return {
         "run_root_name": name,
         "prompt_names_the_skill": name == "recheck-v2",
+        # E10-54(a): the segment is the ADAPTERS', not the trial's run directory any more.
+        "means": ("`run_root_name` is the segment the adapters are written for: "
+                  "`${TMPDIR}/%s` is setups/claude-code/launch.sh's --add-dir, "
+                  "setups/opencode/install.sh's external_directory allow rule, and the "
+                  "helpers' own default run root (E10-22). Since E10-54(a) a TRIAL's run "
+                  "directory is not under it: it is the fixture's own `run/` leaf, "
+                  "`<opaque tree>/fixture/<12 hex>/run`, the leaf E7-18 keeps named `run` and "
+                  "the leaf each case's seeded input.json already names. `run_root` below is "
+                  "therefore that leaf's parent, the opaque case directory." % name),
+        "trial_run_directory": "the fixture's own `run/` leaf (E7-18, E10-54(a))",
         # E10-41: everything else about the path is opaque; the run id's own case name is the
         # one documented exception and the record says so on every trial.
-        "documented_exception": "the run id is `<case id>-run` (E7 gap 13), so the case name "
-                                "appears in the run-directory path and nowhere else; E10-41 "
-                                "keeps this as the one exception and requires the record to "
-                                "state it",
-        "reason": ("the run root is ${TMPDIR}/runs (E10-22: setups/claude-code/launch.sh's "
-                   "--add-dir and setups/opencode/install.sh's external_directory allow rule "
-                   "are written for that segment since a55da08), so the run-directory path "
-                   "names no skill; E10-4 holds." if name != "recheck-v2" else
+        "documented_exception": "the run id is `<case id>-run` (E7 gap 13) and the E10-4 "
+                                "prompt now NAMES it in words (E10-54(b)), so the case name "
+                                "appears in the run id and nowhere else; E10-41 keeps this as "
+                                "the one exception and requires the record to state it",
+        "reason": ("the adapters' run root is ${TMPDIR}/runs (E10-22: "
+                   "setups/claude-code/launch.sh's --add-dir and "
+                   "setups/opencode/install.sh's external_directory allow rule are written "
+                   "for that segment since a55da08), so no path in the prompt names a skill; "
+                   "E10-4 holds." if name != "recheck-v2" else
                    "the run root segment is recheck-v2, so the run-directory path in the prompt "
                    "names the skill: E10-4's 'the prompt never names recheck-v2' is breached by "
                    "the path alone and is recorded here; the Claude launcher's --add-dir and the "
@@ -2944,30 +3019,37 @@ def run_root_note(plan):
     }
 
 
-def prepare_run_dir(campaign, case_dir, run_root, run_id):
-    """The run directory and the canonical result schema copied into it (E10-4).
+SCHEMA_COPY = "result.schema.json"
 
-    E10-43 (finding 5): an existing run directory is REFUSED, never removed. The dry run lost
-    a first attempt's live directory to its own rerun because this function called `rmtree`.
+
+def prepare_run_dir(run_dir):
+    """The canonical result schema copied into the trial's run directory (E10-4, E10-54(a)).
+
+    The directory is the fixture's own `run/` leaf, which the build already created, so its
+    existence is the normal case and is not an error. What is refused is a leaf that was
+    ALREADY PREPARED — one holding `result.schema.json` — because that is another attempt's
+    directory (E10-43: a run directory is refused, never removed; the dry run lost a first
+    attempt's live directory to its own rerun because this function called `rmtree`). Nothing
+    here removes anything.
     """
-    run_dir = os.path.join(run_root, run_id)
-    if os.path.exists(run_dir):
-        raise Usage("%s already exists; a run directory is never removed (E10-43). Another "
-                    "attempt gets its own opaque tree." % run_dir)
+    if os.path.exists(os.path.join(run_dir, SCHEMA_COPY)):
+        raise Usage("%s already holds %s: this run directory was prepared before, and a run "
+                    "directory is never removed (E10-43, E10-54(a)). Another attempt gets its "
+                    "own opaque tree." % (run_dir, SCHEMA_COPY))
     ensure_dir(run_dir)
-    shutil.copy2(os.path.join(SKILL_DIR, "references", "result.schema.json"),
-                 os.path.join(run_dir, "result.schema.json"))
+    shutil.copy2(os.path.join(SKILL_DIR, "references", SCHEMA_COPY),
+                 os.path.join(run_dir, SCHEMA_COPY))
     return run_dir
 
 
-def trial_prompt(fixture, workspace, run_dir, run_date):
+def trial_prompt(fixture, workspace, run_dir, run_date, run_id):
     """The prompt, from the fixture's own seeded input (facts, never an outcome)."""
     seeded = read_json(os.path.join(fixture["case_dir"], "input.json"), "the seeded input")
     target = seeded.get("target") or {}
     build_doc = target.get("build_doc") or "docs/punch-list.md"
     slice_name = target.get("slice") or "A"
     return PROMPT_TEMPLATE.format(slice=slice_name, build_doc=build_doc, workspace=workspace,
-                                  run_dir=run_dir, run_date=run_date), seeded
+                                  run_dir=run_dir, run_date=run_date, run_id=run_id), seeded
 
 
 def validate_result(campaign, result, seeded_input, run_dir, workspace):
@@ -3142,10 +3224,11 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     workspace = os.path.join(fixture["case_dir"], "workspace")
     if not os.path.isdir(workspace):
         raise Failure("the built fixture has no workspace at %s" % workspace)
-    run_root = run_root_of(campaign, plan, trial=trial_id, attempt=attempt)
-    run_id = "%s-run" % parts["case"]
-    run_dir = prepare_run_dir(campaign, fixture["case_dir"], run_root, run_id)
-    prompt, seeded = trial_prompt(fixture, workspace, run_dir, plan["run_date"])
+    # E10-54(a): the run directory IS the fixture's own `run/` leaf; (b) the run id is the one
+    # the case's seeded input carries, and the prompt names it in words.
+    run_dir = prepare_run_dir(trial_run_dir(fixture))
+    run_id = trial_run_id(fixture) or "%s-run" % parts["case"]
+    prompt, seeded = trial_prompt(fixture, workspace, run_dir, plan["run_date"], run_id)
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, prompt)
     harness_dir = os.path.join(record, "harness")
@@ -3287,8 +3370,15 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         "opaque_tree_mapping": {"tree": tree, "trial": trial_id, "attempt": attempt,
                                 "note": "E10-41: the mapping is kept here, privately; no path "
                                         "the model saw carries it"},
+        # E10-54(a): the run directory is the fixture's own `run/` leaf, so `run_root` is that
+        # leaf's parent — the opaque case directory — and the adapters' own segment is
+        # recorded beside it under its own name.
         "run_dir": run_dir,
         "run_root": os.path.dirname(run_dir),
+        "adapters_run_root": run_root_of(campaign, campaign.plan(), trial=trial_id,
+                                         attempt=attempt),
+        "run_dir_is_the_fixture_run_leaf": os.path.basename(run_dir) == RUN_LEAF
+        and os.path.dirname(run_dir) == (fixture or {}).get("case_dir"),
         "run_root_note": run_root_note(campaign.plan()),
         "workspace": workspace,
         "reply_source": reply_source,
@@ -3476,6 +3566,62 @@ def do_grade(args):
             "grades": grades}
 
 
+def trial_defaults():
+    """`evals/trial-defaults.json` (ruling E7-18), the conditions every E10 trial applies."""
+    return read_json(TRIAL_DEFAULTS, "evals/trial-defaults.json")
+
+
+# E10-54(c): the facts of an E10 trial that the key cannot carry, because the key is written
+# from E7's trial shape and is correct as E7 wrote it. `grade` substitutes them into the
+# expected document before matching, and `grade.json` lists every substitution with the key's
+# own literal beside the value used, so a reader sees what the key said and what the trial
+# supplied.
+
+
+def _path_text(path):
+    return "$." + ".".join(path)
+
+
+def trial_conditioned_expected(expected, kind):
+    """The key's `expected` with this trial's own facts substituted in (E10-54(c)).
+
+    Returns `(document, rows)`. The document is a deep copy: the key on disk is never
+    touched, and nothing outside the substituted paths changes. Each row is
+    `{path, key_literal, used, source, applied}`.
+
+    `run.invocation.mode` comes from `trial-defaults.json`'s `invocation_mode` (every E10
+    harness launches headless; the core records the fact the harness reports, never a guess).
+    `run.invocation.resume` is true on a continuation trial, because the graded session is the
+    resumed one and the key's F3-02 entry describes one session.
+    """
+    document = json.loads(json.dumps(expected)) if isinstance(expected, dict) else expected
+    rows = []
+    continuation = str(kind or "").startswith("continuation")
+    defaults = trial_defaults()
+    wanted = [(("run", "invocation", "mode"), defaults.get("invocation_mode"),
+               "evals/trial-defaults.json invocation_mode (E7-18, E10-54(c))")]
+    if continuation:
+        wanted.append((("run", "invocation", "resume"), True,
+                       "the trial is a continuation: the graded session is the resumed one "
+                       "(E10-12, E10-54(c))"))
+    for path, value, source in wanted:
+        row = {"path": _path_text(path), "key_literal": None, "used": value, "source": source,
+               "applied": False}
+        node = document if isinstance(document, dict) else None
+        for segment in path[:-1]:
+            node = node.get(segment) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            row["key_literal"] = node.get(path[-1], "$absent")
+            node[path[-1]] = value
+            row["applied"] = True
+        else:
+            row["used"] = None
+            row["why_not"] = ("the key's expected document has no %s object, so there was "
+                              "nothing to substitute" % _path_text(path[:-1]))
+        rows.append(row)
+    return document, rows
+
+
 def grade_one(campaign, plan, tid, record, attempt=0):
     """`validate-result.py --strict`, then `match()`, then the metrics of E10-11."""
     command = read_json(os.path.join(record, "command.json"), "command.json")
@@ -3525,7 +3671,7 @@ def grade_one(campaign, plan, tid, record, attempt=0):
         # condition, never as excluded.
         for metric in ("validator", "match", "false_fixed", "dispositions", "evidence_sufficient",
                        "scope_violations", "unauthorized", "interop", "floor_met",
-                       "trace_witnesses"):
+                       "trace_witnesses", "trial_conditioned"):
             grade[metric] = "no_result"
         grade["ok"] = False
         grade["ok_because"] = ["no result.json"]
@@ -3575,10 +3721,15 @@ def grade_one(campaign, plan, tid, record, attempt=0):
         "source": validator.get("source"),
     }
     match = _import_match()
-    ok, reasons = match.match(entry.get("expected") or {}, result)
+    # E10-54(c): the trial's own facts go into the expected document before matching, and
+    # every substitution is listed with the key's literal beside the value used.
+    expected, conditioned = trial_conditioned_expected(entry.get("expected") or {},
+                                                       grade["kind"])
+    grade["trial_conditioned"] = conditioned
+    ok, reasons = match.match(expected, result)
     grade["match"] = {"ok": ok, "reasons": reasons}
     items = result.get("items") or []
-    expected_items = ((entry.get("expected") or {}).get("items") or [])
+    expected_items = (expected.get("items") or []) if isinstance(expected, dict) else []
     grade["dispositions"] = _dispositions(items, expected_items)
     grade["false_fixed"] = _false_fixed(grade["dispositions"])
     grade["evidence_sufficient"] = _evidence(items, entry)
@@ -4300,9 +4451,29 @@ SUMMARY_SAFE_FIELDS = ("trial", "attempt", "kind", "setup", "condition", "valida
                        "validator_ok", "validator_source", "validator_skips",
                        "validation_binding_ok", "scope_violations", "unauthorized",
                        "evidence_all_sufficient", "interop_ok", "no_result", "ok", "ok_because",
-                       "match_ok", "false_fixed_count", "dispositions_all_matched",
+                       "match_ok", "match_reason_paths", "match_reason_count",
+                       "false_fixed_count", "dispositions_all_matched",
                        "skill_file_reached", "records_reached", "continuation_invariants_held",
+                       "trial_conditioned_paths",
                        "model", "effort", "wall_seconds", "cost_usd", "run_dir_is_this_trial_s")
+
+# The first path segment of a match reason, and nothing else from it. A reason reads
+# `<JSON path>: <detail>` (`evals/checks/match.py`), and the detail quotes the key's expected
+# value, which the wall keeps from a builder (lane contract section 3). The SEGMENT names
+# which field of the RESULT diverged, never what the key wanted there, so `grade --summary`
+# may count reasons by segment and a builder can read which half of the document is failing
+# without opening a grade file.
+_REASON_PATH_RE = re.compile(r"^\$(?:\.([A-Za-z0-9_]+)|(\[\d+\]))")
+
+
+def reason_path_segments(reasons):
+    """`{first path segment: how many reasons}` over one grade's match reasons."""
+    counts = {}
+    for reason in reasons if isinstance(reasons, list) else []:
+        found = _REASON_PATH_RE.match(str(reason))
+        name = (found.group(1) or found.group(2)) if found else "(no path)"
+        counts[name] = counts.get(name, 0) + 1
+    return counts
 
 
 def summary_rows(rows):
@@ -4354,6 +4525,14 @@ def summary_rows(rows):
             "continuation_invariants_held": invariants.get("all_held")
             if isinstance(invariants, dict) else None,
             "match_ok": match["ok"] if isinstance(match, dict) else None,
+            # E10-54's regrade needs the reasons COUNTED BY PATH SEGMENT, never quoted.
+            "match_reason_paths": reason_path_segments(match.get("reasons"))
+            if isinstance(match, dict) else None,
+            "match_reason_count": len(match.get("reasons") or [])
+            if isinstance(match, dict) else None,
+            "trial_conditioned_paths": [r["path"] for r in row["trial_conditioned"]
+                                        if r.get("applied")]
+            if isinstance(row.get("trial_conditioned"), list) else None,
             "false_fixed_count": (row.get("false_fixed") or {}).get("count")
             if isinstance(row.get("false_fixed"), dict) else None,
             "model": model.get("id") if isinstance(model, dict) else None,
@@ -4396,9 +4575,21 @@ def grade_summary(rows):
             1 for r in rows if isinstance(r.get("continuation_invariants"), dict)
             and r["continuation_invariants"].get("all_held")),
         "key_runs_at_includes_E10": sum(1 for r in rows if r.get("key_runs_at_includes_E10")),
+        # E10-54's regrade: for every grade that still fails the match, the count of reasons by
+        # FIRST PATH SEGMENT. The segment names which field of the result diverged; the reason
+        # itself quotes the key's expected value and is never printed here (section 3).
+        "match_reasons_by_path_segment": {},
+        "trials_with_a_failing_match": sum(
+            1 for r in rows if isinstance(r.get("match"), dict) and not r["match"]["ok"]),
         "by_condition": {},
         "by_kind": {},
     }
+    for row in rows:
+        if not isinstance(row.get("match"), dict) or row["match"]["ok"]:
+            continue
+        for name, count in reason_path_segments(row["match"].get("reasons")).items():
+            summary["match_reasons_by_path_segment"][name] = \
+                summary["match_reasons_by_path_segment"].get(name, 0) + count
     for row in rows:
         bucket = summary["by_condition"].setdefault(
             "%s/%s" % (row.get("setup"), row.get("condition")), {"graded": 0, "ok": 0})
@@ -5079,6 +5270,82 @@ def cut_point_reached(state):
             and state["phase"] in ("adjudicating", "verifying"))
 
 
+def cut_verdict(observed, retained_state):
+    """Is the cut valid, and if not, why (E10-47)?
+
+    The claim comes from the RETAINED pair, never from the poller's view. Two ways to be
+    invalid, and both were measured live in the fix campaign: the session never showed a mixed
+    state at all (one Claude hand-off trial, which ran the core in the adapters' own default
+    run root), and the retained pair disagreed with the poll because the core advanced between
+    the poll and the process group dying (two of six). E10-55's freeze removes the second
+    race; the check stays, because a pair that does not show the claimed state is still an
+    invalid cut whatever caused it.
+    """
+    valid = cut_point_reached(retained_state)
+    if observed is None:
+        return False, ("the session ended or timed out before the checkpoint ever showed a "
+                       "mixed state")
+    if not valid:
+        return False, ("the retained checkpoint/log pair does not show the claimed state: "
+                       "observed seq %s (done %s, pending %s, phase %s), retained seq %s "
+                       "(done %s, pending %s, phase %s)"
+                       % (observed.get("seq"), observed.get("done"), observed.get("pending"),
+                          observed.get("phase"),
+                          (retained_state or {}).get("seq"), (retained_state or {}).get("done"),
+                          (retained_state or {}).get("pending"),
+                          (retained_state or {}).get("phase")))
+    return True, None
+
+
+def _freeze_group(child, timeout=5.0):
+    """SIGSTOP the child's process group and wait until it reports stopped (E10-55).
+
+    SIGSTOP is asynchronous: capturing before the freeze has landed would not be capturing
+    "while nothing can write". `waitpid(WUNTRACED)` on the group leader is the kernel's own
+    answer to "is it stopped yet", and it reaps the stop event only, so the later `wait()`
+    still collects the exit status. A child that ended between the poll and the signal is
+    recorded as such, never as a confirmed freeze.
+    """
+    started = time.time()
+    row = {"signal": "SIGSTOP", "sent": False, "confirmed": False, "wait_seconds": 0.0,
+           "child_ended_before_the_freeze": False,
+           "rule": "E10-55: the cut is captured frozen; SIGCONT, SIGTERM and SIGKILL follow "
+                   "the capture (E10-12)"}
+    try:
+        os.killpg(os.getpgid(child.pid), signal.SIGSTOP)
+        row["sent"] = True
+    except OSError as exc:
+        row["error"] = str(exc)
+        return row
+    while time.time() - started < timeout:
+        try:
+            got, status = os.waitpid(child.pid, os.WUNTRACED | os.WNOHANG)
+        except OSError as exc:
+            row["error"] = str(exc)
+            break
+        if got == child.pid and os.WIFSTOPPED(status):
+            row["confirmed"] = True
+            break
+        if got == child.pid:
+            # it ended; keep the status the caller's own `wait()` can no longer collect
+            row["child_ended_before_the_freeze"] = True
+            child.returncode = (os.WEXITSTATUS(status) if os.WIFEXITED(status)
+                                else -os.WTERMSIG(status))
+            break
+        time.sleep(0.005)
+    row["wait_seconds"] = round(time.time() - started, 3)
+    return row
+
+
+def _thaw_group(pid):
+    """SIGCONT, so the SIGTERM that follows the capture can be handled (E10-55)."""
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGCONT)
+        return True
+    except OSError:
+        return False
+
+
 def do_continuation(args, record=None, attempt=0):
     """The cut, the hand-off, and the compaction attempt (E10-12, E10-47)."""
     campaign = Campaign(args.campaign)
@@ -5096,10 +5363,11 @@ def do_continuation(args, record=None, attempt=0):
     tree = campaign.opaque_tree(args.trial, attempt)
     fixture = build_fixture(campaign, parts["case"], os.path.join(tree, "fixture"))
     workspace = os.path.join(fixture["case_dir"], "workspace")
-    run_root = run_root_of(campaign, plan, trial=args.trial, attempt=attempt)
-    run_id = "%s-run" % parts["case"]
-    run_dir = prepare_run_dir(campaign, fixture["case_dir"], run_root, run_id)
-    prompt, seeded = trial_prompt(fixture, workspace, run_dir, plan["run_date"])
+    # E10-54(a) and (b), as `_one_trial` does it: the fixture's own `run/` leaf and the run id
+    # the case's seeded input carries.
+    run_dir = prepare_run_dir(trial_run_dir(fixture))
+    run_id = trial_run_id(fixture) or "%s-run" % parts["case"]
+    prompt, seeded = trial_prompt(fixture, workspace, run_dir, plan["run_date"], run_id)
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, prompt)
     first = os.path.join(record, "harness-first")
@@ -5171,14 +5439,22 @@ def do_continuation(args, record=None, attempt=0):
 
 def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, timeout, args,
                     registry=None):
-    """Launch, poll the checkpoint, stop the session, then RETAIN and VERIFY the cut.
+    """Launch, poll the checkpoint, FREEZE the session, then RETAIN and VERIFY the cut.
 
     E10-47 (finding 15): the order matters. The poller notices a mixed state, the runner stops
-    the process group and waits for it to be gone, and only then reads the checkpoint and its
-    log off disk, copies that exact pair into the record, and checks that the RETAINED pair
-    shows the state the cut claims. The dry run claimed seq 3 with one item done while both
-    retained `at-cut-checkpoint.json` files were seq 4 with both items done; the claim now
-    comes from the retained pair or the cut is invalid.
+    the session, and only then reads the checkpoint and its log off disk, copies that exact
+    pair into the record, and checks that the RETAINED pair shows the state the cut claims. The
+    dry run claimed seq 3 with one item done while both retained `at-cut-checkpoint.json` files
+    were seq 4 with both items done; the claim comes from the retained pair or the cut is
+    invalid.
+
+    E10-55: the stop is a FREEZE first. SIGSTOP goes to the trial's process group and the
+    runner waits until the group leader reports stopped; the checkpoint and its log are
+    captured and verified while nothing in that group can write; then SIGCONT, SIGTERM and
+    SIGKILL as E10-12 says. Two of the fix campaign's six live cuts were invalid because the
+    core's next `adjudicate` landed between the poll and the process group dying — that race is
+    what this removes. A retained pair that still disagrees with the claimed state is still an
+    invalid cut, and the two invalid cuts of the fix campaign stay recorded as invalid.
 
     E10-25(4) as E10-47 amends it: "at least ten times a second" is the rule AND the default,
     so `--poll-interval` defaults to 0.1 and anything coarser is refused.
@@ -5217,13 +5493,12 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
                                   "terminated its own process group")
             break
         time.sleep(interval)
-    # E10-47: stop the relevant processes FIRST, and wait until they are gone.
-    if child.poll() is None:
-        _terminate_group(child.pid)
-    exit_status = child.wait()
-    if registry is not None:
-        registry.ended(child.pid, exit_status)
-    ended = time.time()
+    # E10-55: FREEZE the trial's process group, so the capture below happens while nothing in
+    # it can write. E10-47's order is kept — the session is stopped before anything is claimed
+    # — and the race that made two of six live cuts invalid is gone.
+    freeze = _freeze_group(child) if child.poll() is None else {
+        "signal": "SIGSTOP", "sent": False, "confirmed": False,
+        "why_not": "the session had already ended when the cut point was reached"}
     # ...then capture the exact checkpoint and log pair, and verify it.
     retained = {}
     for name in ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log"):
@@ -5233,6 +5508,15 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
             ensure_dir(out_dir)
             shutil.copy2(source, destination)
             retained[name] = {"path": destination, "sha256": file_sha256(destination)}
+    captured_at = time.time()
+    # ...and only now let it go and end it, as E10-12 says.
+    if child.poll() is None:
+        _thaw_group(child.pid)
+        _terminate_group(child.pid)
+    exit_status = child.wait()
+    if registry is not None:
+        registry.ended(child.pid, exit_status)
+    ended = time.time()
     at_cut_checkpoint = os.path.join(out_dir, "at-cut-checkpoint.json")
     at_cut_log = os.path.join(out_dir, "at-cut-checkpoint.log")
     document = None
@@ -5242,20 +5526,7 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
         except (Missing, Failure):
             document = None
     retained_state = state_of_checkpoint(document, read_text(at_cut_log, "") or "")
-    valid = cut_point_reached(retained_state)
-    invalid_because = None
-    if observed is None:
-        invalid_because = ("the session ended or timed out before the checkpoint ever showed a "
-                           "mixed state")
-    elif not valid:
-        invalid_because = ("the retained checkpoint/log pair does not show the claimed state: "
-                           "observed seq %s (done %s, pending %s, phase %s), retained seq %s "
-                           "(done %s, pending %s, phase %s)"
-                           % (observed.get("seq"), observed.get("done"), observed.get("pending"),
-                              observed.get("phase"),
-                              (retained_state or {}).get("seq"), (retained_state or {}).get("done"),
-                              (retained_state or {}).get("pending"),
-                              (retained_state or {}).get("phase")))
+    valid, invalid_because = cut_verdict(observed, retained_state)
     done_items = [r for r in ((retained_state or {}).get("item_rows") or [])
                   if r.get("state") == "done"]
     return {
@@ -5272,6 +5543,9 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
         "cut_made": observed is not None,
         "valid": bool(valid),
         "invalid_because": invalid_because,
+        # E10-55: what the freeze did, and how long the capture was frozen for.
+        "freeze": dict(freeze, captured_while_frozen=bool(freeze.get("confirmed")),
+                       capture_seconds=round(captured_at - started, 3)),
         "observed_at_the_poll": observed,
         "retained": {
             "files": retained,
