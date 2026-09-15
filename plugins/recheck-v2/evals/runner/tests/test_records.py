@@ -164,11 +164,27 @@ class RefuseToOverwriteTest(RunnerCase):
         self.assertIn("already holds a stage", got.stderr)
 
     def test_probe_env_refuses_to_replace_a_probe_record_without_refresh(self):
-        os.makedirs(os.path.join(self.campaign, "probes", "claude-code-available"))
+        base = os.path.join(self.campaign, "probes", "claude-code-available")
+        runner.write_json(os.path.join(base, "probe-20260915T000000Z.json"),
+                          {"setup": "claude-code", "condition": "available", "ok": True})
         got = cli(["probe-env", "--campaign", self.campaign, "--setup", "claude-code",
                    "--home", "available"])
         self.assertEqual(got.returncode, 2, got.stdout)
         self.assertIn("already holds a probe record", got.stderr)
+
+    def test_a_probe_record_is_never_replaced_even_with_refresh(self):
+        """E10-43 (finding 7) and E10-53(5): `--refresh` runs another probe BESIDE the old one.
+
+        The pre-E10-30 Codex probes were lost because `--refresh` removed the directory.
+        """
+        base = os.path.join(self.campaign, "probes", "claude-code-available")
+        first = os.path.join(base, "probe-20260915T000000Z.json")
+        runner.write_json(first, {"setup": "claude-code", "condition": "available", "ok": True})
+        before = runner.read_text(first)
+        cli(["probe-env", "--campaign", self.campaign, "--setup", "claude-code",
+             "--home", "available", "--refresh"])
+        self.assertEqual(runner.read_text(first), before,
+                         "the earlier probe record was replaced")
 
     def test_rerun_keeps_the_failed_attempt_and_counts_it(self):
         tid, got = self.run_trial()
@@ -201,22 +217,24 @@ class TimeoutTest(RunnerCase):
 
     def test_a_child_that_finished_first_keeps_its_own_status_under_a_one_second_limit(self):
         step = runner.run_cmd([sys.executable, "-c", "import sys; sys.exit(7)"],
-                              env=dict(os.environ), timeout=1)
+                              env=runner.tool_env(), timeout=1)
         self.assertFalse(step["timed_out"])
         self.assertEqual(step["exit"], 7)
 
     def test_a_child_still_running_at_the_limit_is_terminated_and_marked(self):
         started = time.time()
         step = runner.run_cmd([sys.executable, "-c", "import time; time.sleep(30)"],
-                              env=dict(os.environ), timeout=1)
+                              env=runner.tool_env(), timeout=1)
         self.assertTrue(step["timed_out"])
         self.assertLess(time.time() - started, 20, "the child was not terminated promptly")
 
     def test_a_timed_out_trial_records_the_verdict(self):
-        environment = self.child_env({"RECHECK_FAKE_SLEEP": "30"})
+        """Finding 25: the sleeping child comes from a stub launcher, not from an environment
+        variable the runner's own allowlist (E10-7) strips before the launcher ever runs."""
         campaign = self.make_campaign({"timeouts": {"comparison": 1, "continuation": 1,
                                                     "routing": 1}})
-        tid, got = self.run_trial(env=environment)
+        stub = self.stub_launcher("claude-code", "slow", sleep=30)
+        tid, got = self.run_trial(launcher=stub)
         self.assertIn(got.returncode, (0, 1), got.stderr)
         command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
         self.assertEqual(command["timeout_verdict"], "timed_out")
@@ -245,18 +263,47 @@ class CredentialScanTest(RunnerCase):
         got = cli(["scan", "--campaign", self.campaign])
         self.assertEqual(got.returncode, 1, got.stdout)
         record = runner.read_json(sorted(
-            __import__("glob").glob(os.path.join(self.campaign, "records", "scan-*.json")))[-1])
+            __import__("glob").glob(os.path.join(self.campaign, "records", "scan*.json")))[-1])
         self.assertEqual(sorted({h["shape"] for h in record["hits"]}),
                          ["jwt", "provider-key"])
 
-    def test_a_compiled_binary_is_skipped_rather_than_scanned(self):
-        path = os.path.join(self.campaign, "records", "helper.bin")
+    def test_a_capture_with_a_leading_nul_is_scanned_anyway(self):
+        """E10-52 (finding 24): a NUL in the first bytes no longer buys a free pass.
+
+        `K_probe.py` planted a key in a capture with an initial NUL and the old scanner skipped
+        the whole file for being "a compiled binary".
+        """
+        path = os.path.join(self.campaign, "trials", "fake", "harness", "capture.bin")
+        runner.ensure_dir(os.path.dirname(path))
         with open(path, "wb") as handle:
             handle.write(b"\x00\x01\x02" + ("sk" + "-" + "y" * 60).encode("utf-8"))
         got = cli(["scan", "--campaign", self.campaign])
-        self.assertEqual(got.returncode, 0, got.stdout)
-        document = parse_stdout(got)
-        self.assertGreaterEqual(document["binary_files_skipped"], 1)
+        self.assertEqual(got.returncode, 1, got.stdout)
+        record = runner.read_json(sorted(
+            __import__("glob").glob(os.path.join(self.campaign, "records", "scan*.json")))[-1])
+        self.assertEqual([h["shape"] for h in record["hits"]], ["provider-key"])
+        self.assertGreaterEqual(record["files_with_a_nul_scanned_anyway"], 1)
+
+    def test_an_assignment_delimiter_is_a_boundary(self):
+        """Finding 24: `OPENROUTER_API_KEY=<key>` was missed because `=` counted as base64."""
+        path = os.path.join(self.scratch, "assigned.txt")
+        runner.write_text(path, "OPENROUTER_API_KEY=sk-or-v1-%s\n" % ("a1b2c3d4" * 8))
+        result = runner.scan_paths([path])
+        self.assertEqual([h["shape"] for h in result["hits"]], ["openrouter-key"])
+
+    def test_a_key_shaped_run_inside_a_base64_blob_is_still_not_a_hit(self):
+        """E10-37's classification is unchanged: the false hit sat in
+        `/payload/encrypted_content` at verifier rollout line 26, mid-token in a base64 blob."""
+        path = os.path.join(self.scratch, "blob.txt")
+        runner.write_text(path, "AAAAsk-" + "b" * 60 + "CCCC\n")
+        self.assertEqual(runner.scan_paths([path])["hits"], [])
+
+    def test_claude_code_has_no_exempt_auth_store(self):
+        """E10-52: Claude Code signs in through the Keychain, so a file named `auth.json` under
+        its pilot home is a planted credential and is scanned like any other capture."""
+        exempt = runner.auth_store_exemptions()
+        for path in exempt:
+            self.assertNotIn("skills-v2-pilot/claude-code", path)
 
     def test_a_clean_campaign_scans_clean_and_names_the_exempt_stores(self):
         tid, _ = self.run_trial()
@@ -316,7 +363,7 @@ class ReportCountsTest(RunnerCase):
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
         self.assertEqual(document["trials_seen"], 3)
-        table = runner.read_json(os.path.join(self.campaign, "table.json"))
+        table = runner.read_json(os.path.join(self.campaign, "tables", "table.json"))
         self.assertEqual(table["trials_seen"], 3)
         self.assertEqual(table["sources"]["lines"], os.path.join(self.campaign, "trials.jsonl"))
         rows = {(r["setup"], r["condition"], r["activated"]): r for r in table["table"]}
@@ -326,9 +373,13 @@ class ReportCountsTest(RunnerCase):
         self.assertAlmostEqual(rows[("claude-code", "available", True)]["cost_usd"], 0.1)
         for row in table["table"]:
             self.assertTrue(row["records"], "a row names no record")
-        table = runner.read_text(os.path.join(self.campaign, "table.md"))
+        table = runner.read_text(os.path.join(self.campaign, "tables", "table.md"))
         self.assertIn("| setup | condition | activated |", table)
-        self.assertTrue(os.path.isfile(os.path.join(self.campaign, "report.md")))
+        # E10-43 (finding 7): the generated skeleton is a table, kept apart from the
+        # operator's own `report.md`, which `report` never writes.
+        self.assertTrue(os.path.isfile(os.path.join(self.campaign, "tables",
+                                                    "report-skeleton.md")))
+        self.assertFalse(os.path.isfile(os.path.join(self.campaign, "report.md")))
 
 
 class CampaignResumeTest(RunnerCase):
@@ -358,6 +409,7 @@ class CampaignResumeTest(RunnerCase):
         self.assertEqual([r["id"] for r in status["recorded_with_a_failed_outcome"]], [second])
         self.assertEqual(status["partial_records"], [])
         loop = cli(["campaign", "start", "--campaign", self.campaign, "--foreground",
+                    "--skip-probe-gate", "--reopen-key",
                     "--fake-launcher", self.fake_launcher("claude-code")])
         self.assertEqual(loop.returncode, 0, loop.stderr)
         document = parse_stdout(loop)
@@ -384,8 +436,9 @@ class CampaignResumeTest(RunnerCase):
         self.assertIn("campaign.pid", document["reason"])
 
     def test_campaign_start_refuses_while_a_pid_file_stands(self):
-        runner.write_text(os.path.join(self.campaign, "campaign.pid"), "1\n")
-        got = cli(["campaign", "start", "--campaign", self.campaign, "--foreground"])
+        runner.write_text(os.path.join(self.campaign, "campaign.pid"), "%d\n" % os.getpid())
+        got = cli(["campaign", "start", "--campaign", self.campaign, "--foreground",
+                   "--skip-probe-gate"])
         self.assertEqual(got.returncode, 2, got.stdout)
         self.assertIn("campaign.pid", got.stderr)
 

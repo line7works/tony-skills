@@ -72,11 +72,35 @@ class ThreeSetupsTest(RunnerCase):
         self.assertTrue(marker["skill_tool_calls"])
         self.assertTrue(marker["delivered_body_records"])
 
-    def test_the_opencode_store_separation_witness_is_recorded(self):
+    def test_the_opencode_store_separation_witness_says_unavailable_with_no_child_rows(self):
+        """E10-49 (finding 17): an empty or absent capture is `unavailable`, never `measured`.
+
+        The old reader scanned the DRIVING session's rows and reported `measured: true`
+        whatever it found; the real compaction record has exactly this empty shape.
+        """
         tid, got = self.run_trial(harness="opencode")
         command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
-        self.assertIn("store_separation_witness", command)
-        self.assertTrue(command["store_separation_witness"]["measured"])
+        witness = command["store_separation_witness"]
+        self.assertFalse(witness["measured"])
+        self.assertIn("unavailable", witness["verdict"])
+        self.assertEqual(witness["child_rows_inspected"], 0)
+
+    def test_the_store_separation_witness_reads_the_verifier_child_s_own_rows(self):
+        tid, got = self.run_trial(harness="opencode")
+        harness = os.path.join(self.campaign, "trials", tid, "harness")
+        # a verifier child's own rows, retained beside the trial the way E10-49 asks
+        runner.write_json(os.path.join(harness, "verifier-child.json"), {
+            "records": [{"message_id": "msg_child", "parts": [
+                {"id": "prt_c", "data": {"type": "tool", "tool": "read", "state": {
+                    "input": {"filePath": "/x/xdg-data/opencode/opencode.db"},
+                    "status": "completed"}}}]}]})
+        setup = runner.make_setup(runner.Campaign(self.campaign),
+                                  {"name": "opencode", "harness": "opencode"})
+        witness = setup.store_separation_witness(harness)
+        self.assertTrue(witness["measured"])
+        self.assertEqual(witness["child_rows_inspected"], 1)
+        self.assertEqual(len(witness["reads_of_the_driving_store"]), 1)
+        self.assertIn("read the driving store", witness["verdict"])
 
 
 class ConditionWitnessTest(RunnerCase):
@@ -156,7 +180,14 @@ class GradeTest(RunnerCase):
                                       "RECHECK_RUNNER_KEY_DIR": directory})
         graded = parse_stdout(cli(["grade", "--campaign", self.campaign, "--all", "--summary"],
                                   env=environment))
-        self.assertEqual(graded["graded"], 1)
+        # E10-44 (finding 6): every ATTEMPT is graded, the rerun's own included, and the two
+        # grades join on (trial id, attempt).
+        self.assertEqual(graded["graded"], 2)
+        self.assertEqual(sorted(g["attempt"] for g in graded["grades"]), [0, 1])
+        self.assertTrue(os.path.isfile(os.path.join(self.campaign, "trials", first,
+                                                    "attempts", "1", "grade.json")))
+        for row in graded["grades"]:
+            self.assertTrue(row["grade_path"], "grade returned no written path")
 
     def test_the_grade_records_the_evidence_and_the_interop_fields(self):
         directory = self.stand_in_key()
@@ -194,7 +225,13 @@ class RoutingTest(RunnerCase):
         got = cli(["routing", "--campaign", self.campaign, tid,
                    "--fake-launcher", self.fake_launcher("claude-code")])
         self.assertEqual(got.returncode, 0, got.stderr)
-        workspace = os.path.join(self.campaign, "trials", tid, "workspace")
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        workspace = command["workspace"]
+        # E10-41: the workspace sits inside the trial's own opaque tree, and its path names
+        # neither the setup nor the entry.
+        self.assertTrue(workspace.startswith(command["opaque_tree"]))
+        self.assertNotIn("claude-code", workspace)
+        self.assertNotIn("T-01", workspace)
         self.assertTrue(os.path.isdir(os.path.join(workspace, ".git")))
         self.assertEqual(sorted(n for n in os.listdir(workspace) if n != ".git"), [".gitkeep"])
 
@@ -282,6 +319,89 @@ class ContinuationTest(RunnerCase):
         self.assertIsNone(runner.COMPACTION["opencode"]["flag"])
         self.assertIn("model_auto_compact_token_limit", runner.COMPACTION["codex"]["flag"])
 
+    def test_the_cut_is_read_from_the_retained_pair_and_is_valid_when_they_agree(self):
+        """E10-47: the claim comes from the checkpoint/log pair retained AFTER the stop."""
+        tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
+        stub = self.cut_stub("valid")
+        got = cli(["continuation", "--campaign", self.campaign, tid, "--fake-launcher", stub])
+        self.assertIn(got.returncode, (0, 1), got.stderr)
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        cut = command["cut"]
+        self.assertTrue(cut["cut_made"])
+        self.assertTrue(cut["valid"], cut.get("invalid_because"))
+        self.assertEqual(cut["seq"], 3)
+        self.assertEqual((cut["done"], cut["pending"]), (1, 1))
+        self.assertEqual(cut["checkpoint_log_lines"], 4)
+        self.assertEqual(cut["poll_interval_seconds"], 0.1)
+        retained = os.path.join(self.campaign, "trials", tid, "harness-first",
+                                "at-cut-checkpoint.json")
+        self.assertEqual(runner.read_json(retained)["integrity"]["seq"], 3)
+        self.assertEqual(cut["start_identity"], {"commit": "cut-commit"})
+
+    def test_a_retained_pair_that_disagrees_with_the_poll_is_an_invalid_cut(self):
+        """Finding 15, made deterministic: the session advances to `done, done` as it dies.
+
+        The dry run claimed seq 3 with one item done while both retained
+        `at-cut-checkpoint.json` files were seq 4 with both items done. The claim must now come
+        from the retained pair, and a pair that does not show the claimed state is an INVALID
+        cut, recorded as one.
+        """
+        tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
+        stub = self.cut_stub("invalid", advance_on_term=True)
+        got = cli(["continuation", "--campaign", self.campaign, tid, "--fake-launcher", stub])
+        self.assertIn(got.returncode, (0, 1), got.stderr)
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        cut = command["cut"]
+        self.assertTrue(cut["cut_made"], "the poller never saw the mixed state")
+        self.assertFalse(cut["valid"])
+        self.assertIn("retained checkpoint/log pair does not show the claimed state",
+                      cut["invalid_because"])
+        self.assertEqual(cut["seq"], 4)
+        self.assertEqual(cut["observed_at_the_poll"]["seq"], 3)
+        interruptions = runner.read_text(os.path.join(self.campaign, "interruptions.jsonl"), "")
+        self.assertIn("invalid cut", interruptions)
+
+    def test_a_poll_interval_coarser_than_a_tenth_of_a_second_is_refused(self):
+        tid = runner.continuation_trial_id("claude-code", TWO_ITEM_CASE, "handoff", 1)
+        got = cli(["continuation", "--campaign", self.campaign, tid, "--poll-interval", "1.0",
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertEqual(got.returncode, 2, got.stdout)
+        self.assertIn("ten times a second", got.stderr)
+
+    def test_a_compaction_witness_is_a_native_event_before_the_resumed_work(self):
+        """E10-47: never prose. `G_probe.py` made a diagnostic SENTENCE count as a witness."""
+        setup = runner.make_setup(runner.Campaign(self.campaign),
+                                  {"name": "claude-code", "harness": "claude-code"})
+        out = os.path.join(self.scratch, "second")
+        runner.ensure_dir(out)
+        # prose that mentions compaction, in the file the old reader also grepped
+        runner.write_text(os.path.join(out, "resume.err"),
+                          "the session was compacted before the turn; subtype: compact\n")
+        self.assertIsNone(runner.compaction_witness(setup, out))
+        # the native event, in the harness's own record
+        runner.write_text(os.path.join(out, "trace.jsonl"), "\n".join([
+            '{"type": "system", "subtype": "compact_boundary", "session_id": "s"}',
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash",'
+            ' "id": "t1", "input": {"command": "ls"}}]}}']) + "\n")
+        witness = runner.compaction_witness(setup, out)
+        self.assertEqual(witness["file"], "trace.jsonl")
+        self.assertEqual(witness["line"], 1)
+        self.assertEqual(witness["first_resumed_work_line"], 2)
+        self.assertTrue(witness["before_the_resumed_work"])
+
+    def test_a_compaction_event_after_the_resumed_work_is_not_ok(self):
+        setup = runner.make_setup(runner.Campaign(self.campaign),
+                                  {"name": "claude-code", "harness": "claude-code"})
+        out = os.path.join(self.scratch, "late")
+        runner.ensure_dir(out)
+        runner.write_text(os.path.join(out, "trace.jsonl"), "\n".join([
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash",'
+            ' "id": "t1", "input": {"command": "ls"}}]}}',
+            '{"type": "system", "subtype": "compact_boundary", "session_id": "s"}']) + "\n")
+        witness = runner.compaction_witness(setup, out)
+        self.assertFalse(witness["before_the_resumed_work"])
+        self.assertFalse(witness["ok"])
+
     def test_the_cut_predicate_is_one_item_done_and_one_pending_in_the_right_phase(self):
         self.assertTrue(runner.cut_point_reached(
             {"done": 1, "pending": 1, "phase": "adjudicating", "seq": 4}))
@@ -314,6 +434,7 @@ class CampaignLoopTest(RunnerCase):
 
     def test_the_whole_small_plan_runs_in_the_foreground_and_reports(self):
         got = cli(["campaign", "start", "--campaign", self.campaign, "--foreground",
+                   "--skip-probe-gate", "--reopen-key",
                    "--fake-launcher", self.fake_launcher("claude-code")])
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)

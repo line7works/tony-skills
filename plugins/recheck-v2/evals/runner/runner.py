@@ -32,7 +32,9 @@ import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
+import uuid
 
 # --------------------------------------------------------------------------- exits
 
@@ -64,7 +66,13 @@ KEY_DIR = os.path.join(EVALS_DIR, "answer-key")
 TRIGGER_TUNING = os.path.join(EVALS_DIR, "trigger-set", "requests.json")
 TRIGGER_HELDOUT = os.path.join(EVALS_DIR, "trigger-set", "held-out", "requests.json")
 TRIAL_DEFAULTS = os.path.join(EVALS_DIR, "trial-defaults.json")
+# The pilot root. The tests relocate it, under their own flag, so no test can install into,
+# read from or scan a real pilot home (the suite found the machine's own `codex plugin list`
+# through one of them). Nothing else honours the override: without `RECHECK_RUNNER_TEST_PILOT=1`
+# the real root is used whatever the environment says.
 PILOT_ROOT = os.path.join(os.path.expanduser("~"), ".local", "share", "skills-v2-pilot")
+if os.environ.get("RECHECK_RUNNER_TEST_PILOT") == "1" and os.environ.get("RECHECK_PILOT_ROOT"):
+    PILOT_ROOT = os.path.abspath(os.environ["RECHECK_PILOT_ROOT"])
 CAMPAIGN_ROOT = os.path.join(PILOT_ROOT, "e10")
 
 HARNESSES = ("claude-code", "codex", "opencode")
@@ -96,19 +104,70 @@ BANNED_ENV_RE = re.compile(
 )
 # E10-20: the one name `install` passes, to the OpenCode install script alone.
 INSTALL_CREDENTIAL = "OPENROUTER_API_KEY"
+# E10-7's clause "plus the variables the setup's own launcher sets for itself", written out.
+# These are the ONLY names matching a banned shape that any child of the runner may carry, and
+# each says which measurement put it there. Every other banned name is a hard failure at the
+# one environment boundary (E10-42), whatever the caller passes.
+DECLARED_ENV = {
+    # E9-25 and E10-7: the Codex home pointer. `setups/codex/launch.sh` sets it for its own
+    # child; the runner sets it directly only for `codex plugin list` (the catalog capture,
+    # no model) and for the `codex exec resume` of a compaction trial.
+    "CODEX_HOME": "the Codex home pointer (E9-25, E10-7)",
+    # E10-20: the one install-time credential, passed to one script, for three homes.
+    INSTALL_CREDENTIAL: "the OpenCode install's one credential (E10-20)",
+}
 PATH_BINARIES = ("claude", "codex", "node", "uv", "git", "python3")
 PATH_TAIL = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
+# E10-42: the names each harness sets in its OWN tool shells, below the boundary the runner
+# controls. Measured 2026-09-15 (Claude Code 2.1.272, codex-cli 0.154.0 with
+# `[features] shell_snapshot = false`, opencode-ai 1.18.31) and re-measured by every probe
+# record the fix round writes. A banned name in a probe that is NOT on its harness's list
+# fails that probe; a name on the list is recorded beside the probe that measured it.
+HARNESS_CREATED_ENV = {
+    "claude-code": (
+        "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_EXECPATH", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ATTENDED",
+        "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+    ),
+    # E9-25: the Codex launcher sets `CODEX_HOME` for the child by design; `GH_PAGER` is
+    # Codex's own setting for the GitHub CLI and carries no secret (E10-30).
+    # Measured 2026-09-15 by the fix round's own nine probes, from the session's own printed
+    # `env | cut -d= -f1 | sort` (see `<campaign>/probes/codex-*/probe-*.json`): the Codex tool
+    # shell carries 35 names, of which these nine match a banned shape. None is a credential —
+    # `CODEX_HOME` is the home pointer (E9-25), `GH_PAGER` is Codex's own setting for the
+    # GitHub CLI (E10-30), and the rest are Codex's own session instrumentation. No
+    # `OPENROUTER_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` appears, so E9-38 holds on
+    # this lane. The first build's list was short by five names and the gate caught it.
+    "codex": ("CODEX_HOME", "CODEX_MANAGED_BY_NPM", "CODEX_SANDBOX",
+              "CODEX_SANDBOX_NETWORK_DISABLED", "GH_PAGER",
+              "CODEX_CI", "CODEX_MANAGED_PACKAGE_ROOT", "CODEX_SESSION_ID",
+              "CODEX_THREAD_ID", "CODEX_VERSION"),
+    # E9-38 holds on this lane: nothing banned in an OpenCode tool shell.
+    "opencode": (),
+}
+# The names the platform and the two shims add BELOW the boundary a parent can control
+# (measured: /bin/sh adds PWD and SHLVL, CoreFoundation adds __CF_USER_TEXT_ENCODING, the
+# /usr/bin/python3 xcrun shim adds SDKROOT, CPATH, LIBRARY_PATH and MANPATH). None is a
+# banned shape; they are listed so a probe's "other names" set is the harness's own.
+PLATFORM_ADDED_ENV = ("__CF_USER_TEXT_ENCODING", "PWD", "SHLVL", "SDKROOT", "CPATH",
+                      "LIBRARY_PATH", "MANPATH", "OLDPWD", "_")
+
 # The credential shapes `scan` looks for (the OpenCode scanner's shapes plus JWT and sk-).
+#
+# E10-37 / E10-52: every prefix needs a boundary before it, and an assignment delimiter IS a
+# boundary. Codex's rollouts carry opaque base64 metadata blobs (the false hit of E10-37 sat
+# in `/payload/encrypted_content` at verifier rollout line 26) in which `sk-` occurs
+# mid-token, and a real key never sits inside a longer base64 run — but `=` is base64's
+# padding character and only ever ends a run, so `KEY=sk-...` and `"key": "sk-..."` are
+# credentials, not continuations. `=`, `"`, `'`, `:` and whitespace are therefore boundaries;
+# the reviewer's `OPENROUTER_API_KEY=<key>` example was missed for exactly this reason.
+BOUNDARY = r"(?<![A-Za-z0-9_/+-])"
 CREDENTIAL_SHAPES = (
-    # E10-37: every prefix needs a boundary before it. Codex's rollouts carry opaque base64
-    # metadata blobs (internal_chat_message_metadata_passthrough) in which `sk-` occurs
-    # mid-token; the dry run's scan flagged one 307-character slice of such a blob as a
-    # provider key. A real key never sits inside a longer base64 run.
-    ("openrouter-key", re.compile(r"(?<![A-Za-z0-9_/+=-])sk-or-v1-[0-9a-f]{32,}")),
-    ("provider-key", re.compile(r"(?<![A-Za-z0-9_/+=-])sk-[A-Za-z0-9_-]{40,}")),
-    ("jwt", re.compile(r"(?<![A-Za-z0-9_/+=-])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
-    ("anthropic-key", re.compile(r"(?<![A-Za-z0-9_/+=-])sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("openrouter-key", re.compile(BOUNDARY + r"sk-or-v1-[0-9a-f]{32,}")),
+    ("anthropic-key", re.compile(BOUNDARY + r"sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("provider-key", re.compile(BOUNDARY + r"sk-[A-Za-z0-9_-]{40,}")),
+    ("jwt", re.compile(BOUNDARY + r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
 )
 
 
@@ -162,6 +221,37 @@ def allowlist_env(tmpdir, extra=None, require_binaries=True):
 def allowlisted_names(env):
     """The names a `command.json` records (never values)."""
     return sorted(env)
+
+
+# E10-42: ONE boundary. Every subprocess the runner starts — an install, a verify, a launch,
+# a probe, a grade, a fixture listing, the held-out one-entry lookup, the self-test, and the
+# detached campaign process itself — is built here. Nothing in this file calls
+# `os.environ.copy()`; `run_cmd` refuses a child with no environment, so a new call site
+# cannot inherit the session's environment by omission.
+_TOOL_TMPDIR = [None]
+
+
+def tool_tmpdir():
+    """The TMPDIR the runner's own helper subprocesses get when no campaign supplies one."""
+    if _TOOL_TMPDIR[0] is None:
+        base = os.environ.get("RECHECK_RUNNER_TOOL_TMPDIR") or os.path.join(
+            os.path.expanduser("~"), ".local", "share", "skills-v2-pilot", "runner-tmp")
+        ensure_dir(base)
+        _TOOL_TMPDIR[0] = base
+    return _TOOL_TMPDIR[0]
+
+
+def tool_env(extra=None, require_binaries=False):
+    """The allowlisted environment for a helper the runner runs for itself (no harness)."""
+    env = allowlist_env(tool_tmpdir(), extra=extra, require_binaries=require_binaries)
+    # A helper that runs `uv` needs a cache it can write; it sits under the runner's own
+    # TMPDIR so no campaign record and no home is touched.
+    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    return env
+
+
+def banned_names(names):
+    return sorted(n for n in names if BANNED_ENV_RE.match(n))
 
 
 # --------------------------------------------------------------------------- small helpers
@@ -267,7 +357,8 @@ def tree_sha256_of(root):
     return sha256_hex("".join(entries).encode("utf-8"))
 
 
-def run_cmd(argv, env=None, cwd=None, stdin=None, timeout=None, label=None, stdout_path=None):
+def run_cmd(argv, env=None, cwd=None, stdin=None, timeout=None, label=None, stdout_path=None,
+            registry=None):
     """One child process: its status, its streams, its wall time.
 
     Never raises on a non-zero status; the caller decides. A timeout terminates the child's
@@ -277,6 +368,14 @@ def run_cmd(argv, env=None, cwd=None, stdin=None, timeout=None, label=None, stdo
     2026-09-15: `opencode debug skill` writes exactly 65,536 bytes into a pipe and the whole
     67,934 into a file, so its catalog capture goes through a file and the record is complete.
     """
+    if env is None:
+        # E10-42: one environment boundary, and no way to skip it by omission.
+        raise Failure("run_cmd was called with no environment; every child goes through "
+                      "allowlist_env (E10-7, E10-42): %s" % " ".join(argv[:3]))
+    leaked = [n for n in banned_names(env) if n not in DECLARED_ENV]
+    if leaked:
+        raise Failure("the environment built for %s carries banned names: %s"
+                      % (argv[0], ", ".join(leaked)))
     started = time.time()
     sys.stderr.write("$ %s\n" % " ".join(argv))
     sink = open(stdout_path, "wb") if stdout_path else None
@@ -300,6 +399,8 @@ def run_cmd(argv, env=None, cwd=None, stdin=None, timeout=None, label=None, stdo
         return {"argv": argv, "label": label, "exit": 127, "timed_out": False,
                 "wall_seconds": 0.0, "stdout": "", "stderr": message,
                 "started_at": now_iso(), "ended_at": now_iso(), "binary_missing": True}
+    if registry is not None:
+        registry.started(handle.pid, argv)
     timed_out = False
     try:
         out, err = handle.communicate(
@@ -314,6 +415,8 @@ def run_cmd(argv, env=None, cwd=None, stdin=None, timeout=None, label=None, stdo
             handle.kill()
             out, err = handle.communicate()
     ended = time.time()
+    if registry is not None:
+        registry.ended(handle.pid, handle.returncode)
     if sink:
         sink.close()
         out = read_text(stdout_path, "").encode("utf-8")
@@ -358,7 +461,7 @@ def lane_of_case(case_id):
         build = os.path.join(FIXTURES_DIR, lane, "build.py")
         if not os.path.isfile(build):
             continue
-        listed = run_cmd([sys.executable, build, "--list"], env=os.environ.copy(), label="list")
+        listed = run_cmd([sys.executable, build, "--list"], env=tool_env(), label="list")
         if case_id in listed["stdout"].split():
             return lane
     raise Usage("no fixture lane holds the case %r" % case_id)
@@ -374,7 +477,7 @@ def lane_index():
             build = os.path.join(FIXTURES_DIR, lane, "build.py")
             if not os.path.isfile(build):
                 continue
-            listed = run_cmd([sys.executable, build, "--list"], env=os.environ.copy(), label="list")
+            listed = run_cmd([sys.executable, build, "--list"], env=tool_env(), label="list")
             for case in listed["stdout"].split():
                 _LANE_CACHE[case] = lane
     return _LANE_CACHE
@@ -430,11 +533,78 @@ class Campaign(object):
     def pid_file(self):
         return os.path.join(self.root, "campaign.pid")
 
+    @property
+    def processes(self):
+        return os.path.join(self.root, "processes.jsonl")
+
+    @property
+    def attempts_journal(self):
+        return os.path.join(self.root, "attempts.jsonl")
+
+    @property
+    def measurements(self):
+        return os.path.join(self.root, "measurements")
+
+    @property
+    def synthetic_marker(self):
+        return os.path.join(self.root, "SYNTHETIC")
+
     def trial_dir(self, trial_id):
-        return os.path.join(self.trials, trial_id)
+        """The record directory for one trial id, with resolved containment enforced.
+
+        E10-43 (finding 4): a separator or a dot segment in an id could put `command.json`
+        outside `trials/`. The id is checked by `check_identifier` and the resolved path is
+        checked again here, so neither a plan nor a hand-typed id can escape.
+        """
+        check_identifier("trial id", trial_id)
+        path = os.path.join(self.trials, trial_id)
+        contained(self.trials, path, "the trial record for %r" % trial_id)
+        return path
 
     def records(self, name):
         return os.path.join(self.root, "records", name)
+
+    def reserve_record(self, stem, suffix=".json"):
+        """A record name nothing else holds, reserved atomically (E10-43, finding 7).
+
+        `install-<timestamp>.json` collided when two installs landed in one second; every
+        generated record now takes the first free `<stem>-<n><suffix>` and creates it with
+        O_CREAT|O_EXCL before anything is written into it.
+        """
+        directory = os.path.join(self.root, "records")
+        ensure_dir(directory)
+        for index in range(0, 10000):
+            name = "%s%s%s" % (stem, "" if index == 0 else "-%d" % index, suffix)
+            path = os.path.join(directory, name)
+            try:
+                handle = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            except OSError as exc:
+                if exc.errno == errno.EEXIST:
+                    continue
+                raise
+            os.close(handle)
+            return path
+        raise Failure("no free record name for %s under %s" % (stem, directory))
+
+    def synthetic(self):
+        """True when the runner itself marked this campaign synthetic (E10-45, finding 9).
+
+        Set by `plan --synthetic` and by any launch that ran a `--fake-launcher`; a key
+        stand-in is honoured only for such a campaign, so a stand-in can never grade a real
+        trial even with the test flag set.
+        """
+        if os.path.exists(self.synthetic_marker):
+            return True
+        try:
+            return bool(self.plan().get("synthetic"))
+        except (Missing, Failure):
+            return False
+
+    def mark_synthetic(self, why):
+        if not os.path.exists(self.synthetic_marker):
+            ensure_dir(self.root)
+            write_text(self.synthetic_marker,
+                       "%s %s\n" % (now_iso(), why))
 
     # ---- state
     def ensure(self):
@@ -459,19 +629,278 @@ class Campaign(object):
 
     def append_jsonl(self, path, document):
         ensure_dir(os.path.dirname(path))
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(document, sort_keys=True) + "\n")
+        with _APPEND_LOCK:
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(document, sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
 
-    def interruption(self, trial_id, observed, action):
+    def interruption(self, trial_id, observed, action, attempt=None):
+        """One line per failure, timeout, signal, stop and rerun (E10-14, E10-43).
+
+        `attempt` is part of the identity: a rerun's interruption must not read as the base
+        attempt's (finding 19).
+        """
         self.append_jsonl(
             self.interruptions,
-            {"trial": trial_id, "at": now_iso(), "observed": observed, "did": action},
+            {"trial": trial_id, "attempt": attempt, "at": now_iso(), "observed": observed,
+             "did": action},
         )
+
+    def journal_attempt(self, trial_id, attempt, record, kind):
+        """Durable creation journal (E10-43, finding 21): an attempt exists from this line on,
+        whatever happens to its directory afterwards, so a stop or a crash cannot lose it."""
+        self.append_jsonl(self.attempts_journal, {
+            "trial": trial_id, "attempt": attempt, "record": record, "kind": kind,
+            "created_at": now_iso(), "pid": os.getpid()})
 
     def note(self, text):
         ensure_dir(self.root)
-        with open(self.log, "a", encoding="utf-8") as handle:
-            handle.write("%s %s\n" % (now_iso(), text))
+        with _APPEND_LOCK:
+            with open(self.log, "a", encoding="utf-8") as handle:
+                handle.write("%s %s\n" % (now_iso(), text))
+
+    # ---- the opaque tree (E10-41, finding 2)
+    def opaque_tree(self, trial_id, attempt=0):
+        """`<campaign>/tmp/<digest>/` — the one tree a model under trial ever sees.
+
+        The digest is over the campaign id, the full trial id and the attempt number, so no
+        parent directory of the workspace or the run directory names a setup, a case, a
+        condition or a repetition (finding 2: the dry run's prompts carried
+        `/trials/claude-code-F1-01-fixed-clean-available-r1/fixture/...`), two attempts of one
+        trial never mint the same path (finding 5), and the whole reachable world of a trial
+        sits inside the one tree OpenCode's allow rule covers (E10-34).
+        """
+        seed = "%s\0%s\0%d" % (os.path.basename(self.root), trial_id, attempt)
+        return os.path.join(self.tmp, hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16])
+
+
+_APPEND_LOCK = threading.RLock()
+
+# E10-43 (finding 4): an identifier that reaches a path. No separator, no dot segment, no
+# NUL, nothing but the characters the ids of E10-10, E10-12 and E10-13 are built from.
+IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def check_identifier(what, value):
+    if not isinstance(value, str) or not value:
+        raise Usage("%s must be a non-empty string, got %r" % (what, value))
+    if os.sep in value or (os.altsep and os.altsep in value) or "/" in value or "\\" in value:
+        raise Usage("%s %r carries a path separator" % (what, value))
+    if value in (".", "..") or value.startswith(".") or "/.." in value or "\0" in value:
+        raise Usage("%s %r is a dot segment" % (what, value))
+    if not IDENTIFIER_RE.match(value):
+        raise Usage("%s %r is not of the shape [A-Za-z0-9][A-Za-z0-9._-]*" % (what, value))
+    return value
+
+
+def contained(root, path, what):
+    """The resolved path must sit under the resolved root (E10-43)."""
+    root_real = os.path.realpath(root)
+    path_real = os.path.realpath(path)
+    if path_real != root_real and not path_real.startswith(root_real.rstrip(os.sep) + os.sep):
+        raise Usage("%s resolves outside %s: %s" % (what, root_real, path_real))
+    return path
+
+
+# --------------------------------------------------------------------------- the process registry
+#
+# E10-45 (finding 8): every launch process is registered before it starts and bound to its
+# attempt; neither grading path opens a key while any registered process of that attempt is
+# alive. E10-43 (finding 21): `campaign stop` terminates the registered groups and collects
+# their statuses.
+
+
+class ProcessRegistry(object):
+    """One durable journal of every process the runner launched, per (trial, attempt)."""
+
+    def __init__(self, campaign, trial, attempt, kind):
+        self.campaign = campaign
+        self.trial = trial
+        self.attempt = attempt
+        self.kind = kind
+        self.token = uuid.uuid4().hex
+
+    def reserved(self, argv, label):
+        """Written BEFORE the child is spawned: an entry with no pid yet (finding 8)."""
+        self.campaign.append_jsonl(self.campaign.processes, {
+            "event": "reserved", "token": self.token, "trial": self.trial,
+            "attempt": self.attempt, "kind": self.kind, "label": label,
+            "argv": argv, "at": now_iso(), "owner_pid": os.getpid()})
+        return self
+
+    def started(self, pid, argv=None):
+        self.campaign.append_jsonl(self.campaign.processes, {
+            "event": "started", "token": self.token, "trial": self.trial,
+            "attempt": self.attempt, "kind": self.kind, "pid": pid,
+            "pgid": _pgid_of(pid), "argv": argv, "at": now_iso()})
+
+    def ended(self, pid, status):
+        self.campaign.append_jsonl(self.campaign.processes, {
+            "event": "ended", "token": self.token, "trial": self.trial,
+            "attempt": self.attempt, "kind": self.kind, "pid": pid,
+            "exit": status, "at": now_iso()})
+
+
+def _pgid_of(pid):
+    try:
+        return os.getpgid(pid)
+    except OSError:
+        return None
+
+
+def process_rows(campaign):
+    return jsonl_lines(campaign.processes)
+
+
+def live_processes(campaign, trial=None, attempt=None):
+    """Every registered process still alive, optionally narrowed to one attempt."""
+    open_pids, alive = {}, []
+    for row in process_rows(campaign):
+        if trial is not None and row.get("trial") != trial:
+            continue
+        if attempt is not None and row.get("attempt") != attempt:
+            continue
+        if row.get("event") == "started" and row.get("pid"):
+            open_pids[row["pid"]] = row
+        elif row.get("event") == "ended" and row.get("pid") in open_pids:
+            open_pids.pop(row["pid"], None)
+    for pid, row in sorted(open_pids.items()):
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            continue
+        alive.append(row)
+    return alive
+
+
+# --------------------------------------------------------------------------- the key lock (E10-40)
+#
+# The three harnesses run every trial as the same user with no read sandbox, so no process
+# boundary can keep a model under trial from a readable file (E10-40 records Astra's
+# prescription as unreachable on these setups). What the runner can do, and does: hold
+# `evals/answer-key/` and `evals/trigger-set/held-out/` at mode 000 for the whole of every
+# launch, reopen them only inside `grade` and `routing-score` after every registered process
+# of the attempt has ended, refuse links that leave a stage or a home, and MEASURE what a
+# child could reach (`records_reached`, the `check` sentinel). The record labels the boundary
+# `instruction-bound + measured`, E9's word for the same situation.
+
+KEY_BOUNDARY_LABEL = "instruction-bound + measured"
+
+
+def key_paths():
+    """The two directories the lock covers, in the checkout and nowhere else."""
+    return [KEY_DIR, os.path.dirname(TRIGGER_HELDOUT)]
+
+
+def key_state():
+    rows = []
+    for path in key_paths():
+        if not os.path.isdir(path):
+            rows.append({"path": path, "present": False, "mode": None, "closed": None})
+            continue
+        mode = stat.S_IMODE(os.stat(path).st_mode)
+        rows.append({"path": path, "present": True, "mode": "0%o" % mode,
+                     "closed": mode == 0})
+    return rows
+
+
+def key_closed():
+    rows = [r for r in key_state() if r["present"]]
+    return bool(rows) and all(r["closed"] for r in rows)
+
+
+def close_key(campaign=None, why="a launch"):
+    """Mode 000 on both directories for the duration of a launch (E10-40)."""
+    changed = []
+    for path in key_paths():
+        if os.path.isdir(path):
+            os.chmod(path, 0o000)
+            changed.append(path)
+    if campaign is not None and changed:
+        campaign.note("key closed (%s): %s" % (why, ", ".join(changed)))
+    return changed
+
+
+def open_key(campaign=None, why="grading"):
+    changed = []
+    for path in key_paths():
+        if os.path.isdir(path):
+            os.chmod(path, 0o700)
+            changed.append(path)
+    if campaign is not None and changed:
+        campaign.note("key opened (%s): %s" % (why, ", ".join(changed)))
+    return changed
+
+
+class key_open(object):
+    """`with key_open(campaign):` — the only window in which a key file may be read."""
+
+    def __init__(self, campaign=None, why="grading"):
+        self.campaign = campaign
+        self.why = why
+        self.was_closed = False
+
+    def __enter__(self):
+        self.was_closed = key_closed()
+        open_key(self.campaign, self.why)
+        return self
+
+    def __exit__(self, *exc):
+        close_key(self.campaign, "the %s step ended" % self.why)
+        return False
+
+
+# --------------------------------------------------------------------------- lane stops (E10-46)
+
+
+def lane_stop_path(campaign, setup_name):
+    return os.path.join(campaign.root, "lane-stops", "%s.json" % setup_name)
+
+
+def lane_stopped(campaign, setup_name):
+    path = lane_stop_path(campaign, setup_name)
+    if not os.path.isfile(path):
+        return None
+    try:
+        return read_json(path)
+    except (Missing, Failure):
+        return {"reason": "unreadable lane stop at %s" % path}
+
+
+def clear_lane_stop(campaign, setup_name, why):
+    """Clear a lane stop, keeping the stop itself as a record (E10-46).
+
+    A lane stop is a measurement. Clearing one is an act with a reason, so the stop file moves
+    into `lane-stops/cleared/` with the reason beside it and the log says so; nothing is
+    deleted and no later reader loses the fact that the lane stopped.
+    """
+    path = lane_stop_path(campaign, setup_name)
+    if not os.path.isfile(path):
+        raise Missing("no lane stop for %s" % setup_name)
+    document = read_json(path)
+    document["cleared_at"] = now_iso()
+    document["cleared_because"] = why
+    cleared = os.path.join(campaign.root, "lane-stops", "cleared",
+                           "%s-%s.json" % (setup_name, time.strftime("%Y%m%dT%H%M%SZ",
+                                                                    time.gmtime())))
+    ensure_dir(os.path.dirname(cleared))
+    write_json(cleared, document)
+    os.unlink(path)
+    campaign.note("lane stop on %s cleared: %s (kept at %s)" % (setup_name, why, cleared))
+    campaign.interruption(None, "the %s lane stop was cleared by hand" % setup_name, why)
+    return {"setup": setup_name, "cleared": cleared, "why": why}
+
+
+def stop_lane(campaign, setup_name, reason, record):
+    """A profile breach stops the lane, durably: no later launch on that setup can pass."""
+    path = lane_stop_path(campaign, setup_name)
+    ensure_dir(os.path.dirname(path))
+    if not os.path.isfile(path):
+        write_json(path, {"setup": setup_name, "reason": reason, "record": record,
+                          "stopped_at": now_iso()})
+    campaign.note("lane stop on %s: %s" % (setup_name, reason))
+    return read_json(path)
 
 
 def pilot_home(harness, home):
@@ -497,6 +926,90 @@ def pilot_home(harness, home):
 STAGE_EXCLUDE_DIRS = (".git", "__pycache__", ".venv", "node_modules")
 
 
+def protected_roots(campaign=None):
+    """The places a link inside a home may never reach (E10-40).
+
+    Not "anything outside the tree": `uv` fills every home with interpreter symlinks, and
+    `setups/claude-code/install.sh` builds its own local marketplace out of symlinks into the
+    staged `setups/_fixtures/`. What the rule protects is the answer key and the held-out set,
+    and the campaign's own RECORDS — never the stage, which by construction holds no `evals/`.
+    """
+    roots = list(key_paths())
+    if campaign is not None:
+        roots += [campaign.trials, os.path.join(campaign.root, "records"),
+                  campaign.measurements, campaign.routing_dir,
+                  os.path.join(campaign.root, "probes")]
+    return [p for p in roots if p]
+
+
+def link_survey(root, allowed_targets=(), forbidden_targets=()):
+    """Every symbolic and hard link under a tree, with where it points (E10-40, finding 26).
+
+    E10-40 refuses "a symlink or hard link anywhere in a stage or a home". Taken literally the
+    home half is unreachable and was measured so on 2026-09-15: `uv` builds a virtual
+    environment inside every Codex and OpenCode home and fills its `bin/` with symlinks to the
+    interpreter in the uv toolchain store, four per home, and the Codex derived homes point
+    their `auth.json` at the base home's single store rather than copying a credential into two
+    more places. Refusing those would refuse every install.
+
+    The reading the fix round takes, and the report's contract question: a link is REFUSED when
+    its resolved target lands inside a `forbidden_targets` root — the checkout (where the
+    answer key and the held-out set live) and the campaign root (where the records live),
+    which is the only thing the rule protects. Every other link that leaves the tree is
+    RECORDED with its target and its reason. Inside a stage the strict rule still holds: no
+    link is copied at all, so a staged install cannot follow one anywhere.
+    """
+    roots = [os.path.realpath(root)] + [os.path.realpath(p) for p in allowed_targets]
+    forbidden = [os.path.realpath(p) for p in forbidden_targets]
+    symlinks, escaping, refused, hard = [], [], [], []
+    for base, dirs, files in os.walk(root):
+        for name in sorted(dirs) + sorted(files):
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, root)
+            if os.path.islink(full):
+                target = os.path.realpath(full)
+                inside = any(target == r or target.startswith(r.rstrip(os.sep) + os.sep)
+                             for r in roots)
+                forbidden_hit = [r for r in forbidden
+                                 if target == r or target.startswith(r.rstrip(os.sep) + os.sep)]
+                row = {"path": rel, "points_to": target, "inside_an_allowed_root": inside,
+                       "points_into_a_forbidden_root": forbidden_hit}
+                symlinks.append(row)
+                if not inside:
+                    escaping.append(row)
+                if forbidden_hit:
+                    refused.append(row)
+                continue
+            try:
+                info = os.lstat(full)
+            except OSError:
+                continue
+            if stat.S_ISREG(info.st_mode) and info.st_nlink > 1:
+                hard.append({"path": rel, "links": info.st_nlink})
+    return {"symlinks": symlinks, "symlinks_leaving_the_tree": escaping,
+            "symlinks_refused": refused, "hard_links": hard,
+            "forbidden_roots": forbidden}
+
+
+def fresh_skill_identity(campaign):
+    """A fresh `recheck.py skill-identity` of the CHECKOUT, never a typed digest (E10-6).
+
+    E10-52 (finding 26): a failed computation or an empty digest is a failure, not a `null`
+    that a later `ok` quietly steps over.
+    """
+    step = run_cmd(["uv", "run", os.path.join(SKILL_DIR, "scripts", "recheck.py"),
+                    "skill-identity"], env=campaign.env(), label="skill-identity")
+    digest, parse_error = None, None
+    if step["exit"] == 0:
+        try:
+            digest = json.loads(step["stdout"])["content_sha256"]
+        except (ValueError, KeyError) as exc:
+            parse_error = str(exc)
+    return {"exit": step["exit"], "content_sha256": digest, "parse_error": parse_error,
+            "stderr_tail": (step["stderr"] or "")[-600:],
+            "ok": step["exit"] == 0 and isinstance(digest, str) and len(digest) == 64}
+
+
 def do_stage(args):
     """A copy of the checkout at the campaign commit, with `plugins/recheck-v2/evals/` out."""
     campaign = Campaign(args.campaign)
@@ -512,7 +1025,7 @@ def do_stage(args):
     if commit["exit"] != 0:
         raise Failure("git rev-parse failed in %s" % REPO_ROOT)
     excluded_evals = os.path.join("plugins", "recheck-v2", "evals")
-    copied = 0
+    copied, refused_links = 0, []
     for base, dirs, files in os.walk(REPO_ROOT):
         rel = os.path.relpath(base, REPO_ROOT)
         rel = "" if rel == "." else rel
@@ -526,13 +1039,12 @@ def do_stage(args):
         for name in sorted(files):
             source = os.path.join(base, name)
             if os.path.islink(source):
-                link = os.readlink(source)
-                dest = os.path.join(target, name)
-                if os.path.lexists(dest):
-                    os.unlink(dest)
-                os.symlink(link, dest)
-            else:
-                shutil.copy2(source, os.path.join(target, name))
+                # E10-40: a link is never copied into a stage. It is recorded and refused, so
+                # no package link can point a staged install at anything outside the stage.
+                refused_links.append({"path": os.path.join(rel, name),
+                                      "points_to": os.readlink(source)})
+                continue
+            shutil.copy2(source, os.path.join(target, name))
             copied += 1
     staged_plugin = os.path.join(campaign.stage, "plugins", "recheck-v2")
     leaked = sorted(
@@ -541,16 +1053,15 @@ def do_stage(args):
         + glob.glob(os.path.join(staged_plugin, "**", "held-out"), recursive=True)
         + glob.glob(os.path.join(staged_plugin, "evals"))
     )
-    identity = run_cmd(
-        ["uv", "run", os.path.join(SKILL_DIR, "scripts", "recheck.py"), "skill-identity"],
-        env=campaign.env(),
-    )
-    content_sha = None
-    if identity["exit"] == 0:
-        try:
-            content_sha = json.loads(identity["stdout"])["content_sha256"]
-        except (ValueError, KeyError):
-            content_sha = None
+    identity = fresh_skill_identity(campaign)
+    links = link_survey(campaign.stage)
+    # E10-53(3): the manifest with hashes, so a later reader can recompute the tree hash and
+    # the reviewer's "historical tree hashes cannot be recomputed" question is answered.
+    manifest = file_manifest(staged_plugin)
+    manifest_path = campaign.reserve_record("stage-manifest")
+    write_json(manifest_path, {"root": staged_plugin, "commit": commit["stdout"].strip(),
+                               "files": manifest,
+                               "plugin_tree_sha256": tree_sha256_of(staged_plugin)})
     document = {
         "campaign": campaign.root,
         "checkout": REPO_ROOT,
@@ -561,14 +1072,55 @@ def do_stage(args):
         "plugin_tree_sha256": tree_sha256_of(staged_plugin),
         "evals_excluded": True,
         "answer_key_or_held_out_in_stage": leaked,
-        "canonical_content_sha256": content_sha,
+        "canonical_content_sha256": identity["content_sha256"],
+        "skill_identity": identity,
         "skill_identity_exit": identity["exit"],
+        "links_refused_during_the_copy": refused_links,
+        "link_survey": links,
+        "manifest": manifest_path,
+        "manifest_files": len(manifest),
+        "key_boundary": KEY_BOUNDARY_LABEL,
     }
+    problems = []
     if leaked:
-        raise Failure("the stage still holds %s" % ", ".join(leaked))
+        problems.append("the stage still holds %s" % ", ".join(leaked))
+    if not identity["ok"]:
+        problems.append("skill-identity did not produce a 64-character content_sha256 "
+                        "(exit %s, digest %r)" % (identity["exit"], identity["content_sha256"]))
+    if links["symlinks"] or links["hard_links"]:
+        problems.append("the stage holds links: %s"
+                        % json.dumps({"symlinks": links["symlinks"][:8],
+                                      "hard_links": links["hard_links"][:8]}))
+    document["ok"] = not problems
+    document["problems"] = problems
+    if problems:
+        raise Failure("stage refused: %s" % "; ".join(problems))
     write_json(campaign.stage_json, document)
     campaign.note("stage %s at %s" % (campaign.stage, document["commit"]))
     return document
+
+
+def file_manifest(root):
+    """`[{path, sha256, bytes}]` over every file under a tree, sorted (E10-53(3))."""
+    rows = []
+    for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in ("__pycache__",))
+        for name in sorted(files):
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, root)
+            if os.path.islink(full):
+                rows.append({"path": rel, "symlink_to": os.readlink(full), "sha256": None,
+                             "bytes": None})
+                continue
+            try:
+                with open(full, "rb") as handle:
+                    blob = handle.read()
+            except (IOError, OSError) as exc:
+                rows.append({"path": rel, "sha256": None, "bytes": None, "error": str(exc)})
+                continue
+            rows.append({"path": rel, "sha256": sha256_hex(blob), "bytes": len(blob)})
+    rows.sort(key=lambda r: r["path"])
+    return rows
 
 
 # --------------------------------------------------------------------------- harness adapters
@@ -613,7 +1165,8 @@ class Setup(object):
     def install(self, condition, fake=None):
         raise NotImplementedError
 
-    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None):
+    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
+               registry=None):
         raise NotImplementedError
 
     def verify(self, condition):
@@ -729,7 +1282,8 @@ class ClaudeCodeSetup(Setup):
                        label="verify-install.sh")
         return step
 
-    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None):
+    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
+               registry=None):
         home = self.home(condition)
         env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home})
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
@@ -740,7 +1294,9 @@ class ClaudeCodeSetup(Setup):
             plugins = [p for p in self.cache_plugins(condition) if p not in BLOCKED_PLUGINS]
         for plugin in plugins:
             argv += ["--plugin", plugin]
-        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh")
+        if registry is not None:
+            registry.reserved(argv, "launch.sh")
+        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
 
     # ---- records
     def _launch_json(self, out_dir):
@@ -748,38 +1304,54 @@ class ClaudeCodeSetup(Setup):
         return read_json(path) if os.path.isfile(path) else {}
 
     def model_record(self, out_dir):
-        """Claude Code: the init event's `model`, and the transcript's own `message.model`
-        plus `effort` on the last non-sidechain assistant record (profile section 2).
+        """Claude Code: the NATIVE init event, and the transcript's own assistant records.
 
-        A compaction resume (`claude -p --resume`) is not launched by `launch.sh`, so it writes
-        no `launch.json` and copies no transcript; its own stream-json trace carries the same
-        `assistant` records, and is read as the third source.
+        E10-50 (finding 18): the observed model is read from the harness's own event, its
+        session binding is validated, and it is `null` when the required event is absent. What
+        the LAUNCHER typed is kept apart as `configured`, and never becomes an observed
+        measurement: the reviewer's probe supplied `launch.json` alone with
+        `model: "review-typed-by-launcher"` and the old reader returned it while claiming the
+        source was `trace.jsonl init event model`.
         """
         launch = self._launch_json(out_dir)
-        model_id, effort, source = None, None, None
-        for name, label in (("transcript.jsonl", "transcript.jsonl assistant record "
-                                                 "message.model"),
-                            ("trace.jsonl", "trace.jsonl assistant record message.model")):
-            for record in jsonl_lines(os.path.join(out_dir, name)):
+        configured = {"model": launch.get("model"),
+                      "source": "harness/launch.json (what the launcher was told to run)"}
+        init, session = None, None
+        for line, record in enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1):
+            if record.get("type") == "system" and record.get("subtype") == "init":
+                init = {"model": record.get("model"), "session_id": record.get("session_id"),
+                        "line": line, "file": "harness/trace.jsonl"}
+                session = record.get("session_id")
+                break
+        model_id, effort, source, bound = None, None, None, None
+        for name in ("transcript.jsonl", "trace.jsonl"):
+            for line, record in enumerate(jsonl_lines(os.path.join(out_dir, name)), 1):
                 if record.get("type") != "assistant" or record.get("isSidechain"):
+                    continue
+                their_session = record.get("session_id") or record.get("sessionId") \
+                    or record.get("sessionID")
+                if session and their_session and their_session != session:
                     continue
                 message = record.get("message") or {}
                 if message.get("model") and message["model"] != "<synthetic>":
                     model_id = message["model"]
                     effort = record.get("effort", effort)
-                    source = label
+                    source = "harness/%s line %d assistant record message.model" % (name, line)
+                    bound = their_session or session
             if model_id:
                 break
-        if model_id is None and launch.get("model"):
-            model_id, source = launch["model"], "trace.jsonl init event model"
+        if model_id is None and init and init.get("model"):
+            model_id = init["model"]
+            source = "harness/trace.jsonl line %d system init event model" % init["line"]
+            bound = init.get("session_id")
         return {"id": model_id, "effort": effort, "source": source,
-                "init_model": launch.get("model") or self._init_model(out_dir)}
-
-    def _init_model(self, out_dir):
-        for record in jsonl_lines(os.path.join(out_dir, "trace.jsonl")):
-            if record.get("type") == "system" and record.get("subtype") == "init":
-                return record.get("model")
-        return None
+                "session_binding": bound,
+                "session_binding_ok": bool(bound) and (session is None or bound == session),
+                "init_event": init,
+                "init_model": (init or {}).get("model"),
+                "configured": configured,
+                "note": "E10-50: null when the harness wrote no native record; the launcher's "
+                        "own label is `configured`, never an observation."}
 
     def cost_record(self, out_dir):
         launch = self._launch_json(out_dir)
@@ -797,40 +1369,85 @@ class ClaudeCodeSetup(Setup):
         return {"total_cost_usd": None, "tokens": None, "num_turns": None, "source": None}
 
     def condition_witness(self, out_dir, condition):
+        """The session's ACTIVE catalog: the init event's own skills and plugins (E10-46).
+
+        `recheck_v2_in_catalog` is decided on the entries the session records as active, with
+        the file and line retained; the init event's absence is `null`, never `false`.
+        """
+        init, line = None, None
+        for index, record in enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1):
+            if record.get("type") == "system" and record.get("subtype") == "init":
+                init, line = record, index
+                break
         launch = self._launch_json(out_dir)
-        skills = launch.get("skills")
-        plugins = launch.get("plugins")
+        skills = (init or {}).get("skills", launch.get("skills"))
+        plugins = (init or {}).get("plugins", launch.get("plugins"))
         present = None
+        names = []
         if isinstance(skills, list):
-            present = any("recheck-v2" in json.dumps(s) for s in skills)
+            for skill in skills:
+                name = skill.get("name") if isinstance(skill, dict) else skill
+                if isinstance(name, str):
+                    names.append(name.split(":")[0])
+            present = "recheck-v2" in names
         return {
             "condition": condition,
-            "witness": {"skills": skills, "plugins": plugins},
+            "witness": {"skills": skills, "plugins": plugins, "catalog_names": sorted(set(names))},
             "recheck_v2_in_catalog": present,
-            "source": "the session's own init event (launch.json skills/plugins)",
+            "file": "harness/trace.jsonl" if init else
+                    ("harness/launch.json" if launch else None),
+            "line": line,
+            "source": "the session's own init event (system/init in the trace) — the ACTIVE "
+                      "catalog, not a marketplace listing (E10-46)",
         }
 
     def activation(self, out_dir):
-        """The delivery marker of profile section 8: the body arrives as one `user` record the
-        harness flags `isSynthetic` in the trace, after a `Skill` tool call."""
-        skill_calls, delivered = [], []
-        for index, record in enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1):
+        """A Skill tool call whose BODY WAS DELIVERED (E10-46, finding 12).
+
+        Profile section 8: the body arrives as one `user` record the harness flags
+        `isSynthetic`, after a `Skill` tool call. A call with no delivered body is not an
+        activation: `final_probes.py` got `activated: true` for exactly that. Every witness
+        keeps its line and its tool-use id.
+        """
+        skill_calls, delivered, results = [], [], {}
+        rows = list(enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1))
+        for line, record in rows:
+            message = record.get("message") or {}
+            content = message.get("content")
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    results[block.get("tool_use_id")] = {
+                        "line": line, "is_error": bool(block.get("is_error")),
+                        "bytes": len(json.dumps(block.get("content")))}
+        for line, record in rows:
             message = record.get("message") or {}
             if record.get("type") == "assistant" and isinstance(message.get("content"), list):
                 for block in message["content"]:
                     if isinstance(block, dict) and block.get("type") == "tool_use" \
                             and block.get("name") == "Skill":
                         target = (block.get("input") or {}).get("skill")
-                        skill_calls.append({"line": index, "skill": target})
+                        skill_calls.append({"line": line, "skill": target,
+                                            "id": block.get("id"),
+                                            "result": results.get(block.get("id"))})
             if record.get("type") == "user" and record.get("isSynthetic"):
-                delivered.append({"line": index, "bytes": len(json.dumps(message.get("content")))})
-        activated = any((c.get("skill") or "").startswith("recheck-v2") for c in skill_calls)
+                body = json.dumps(message.get("content"))
+                delivered.append({"line": line, "bytes": len(body),
+                                  "uuid": record.get("uuid"),
+                                  "non_empty": len(body) > 2})
+        ours = [c for c in skill_calls if (c.get("skill") or "").startswith("recheck-v2")]
+        succeeded = [c for c in ours
+                     if (c.get("result") or {}).get("is_error") is not True
+                     and ((c.get("result") or {}).get("bytes", 0) > 2
+                          or any(d["line"] > c["line"] and d["non_empty"] for d in delivered))]
         return {
-            "activated": activated,
-            "marker": {"skill_tool_calls": skill_calls, "delivered_body_records": delivered},
+            "activated": bool(succeeded),
+            "marker": {"skill_tool_calls": skill_calls,
+                       "delivered_body_records": delivered,
+                       "recheck_v2_calls_with_a_delivered_body": succeeded},
             "profile_section": "adapters/claude-code/profile.md section 8 (the delivered body "
                                "as one user record flagged isSynthetic in the trace, after the "
-                               "Skill tool call)",
+                               "Skill tool call); E10-46: a call with no delivered body is not "
+                               "an activation",
         }
 
 
@@ -930,17 +1547,27 @@ class CodexSetup(Setup):
         env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home})
         return run_cmd(["sh", self.script("verify-install.sh")], env=env, label="verify-install.sh")
 
-    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None):
+    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
+               registry=None):
         home = self.home(condition)
         env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home})
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
-        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh")
+        if registry is not None:
+            registry.reserved(argv, "launch.sh")
+        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
 
     def catalog(self, condition, out_dir):
         """`codex plugin list` under the condition's home: the harness's own catalog record."""
         home = self.home(condition)
         env = self.campaign.env(extra={"CODEX_HOME": home})
         if not os.path.isdir(home):
+            # The launcher's own catalog capture, when it wrote one, is still the session's
+            # record; only when neither exists is the catalog missing (E10-46).
+            captured = read_text(os.path.join(out_dir, "catalog.txt"))
+            if captured:
+                return {"kind": "codex plugin list", "exit": 0, "record": captured,
+                        "note": "read from the launcher's own catalog capture; no codex home "
+                                "at %s" % home}
             return {"kind": "codex plugin list", "exit": None, "record": None,
                     "note": "no codex home at %s, so this home recorded no catalog" % home}
         step = run_cmd(["codex", "plugin", "list"], env=env, label="plugin list")
@@ -952,19 +1579,43 @@ class CodexSetup(Setup):
         return jsonl_lines(os.path.join(out_dir, "rollout.jsonl"))
 
     def model_record(self, out_dir):
-        """Codex: `turn_context` in the rollout carries `model` and `effort` (E9 section 7)."""
-        model_id, effort, source = None, None, None
-        for record in self._rollout(out_dir):
+        """Codex: `turn_context` in the rollout carries `model` and `effort` (E9 section 7).
+
+        E10-50: bound to the thread the `session_meta` record names, `null` when the rollout
+        carries no such event, and the launcher's own label kept apart as `configured`.
+        """
+        rows = list(enumerate(self._rollout(out_dir), 1))
+        session, configured = None, None
+        path = os.path.join(out_dir, "launch.json")
+        if os.path.isfile(path):
+            try:
+                configured = read_json(path).get("model")
+            except (Missing, Failure):
+                configured = None
+        for _, record in rows:
+            payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+            if (record.get("type") or payload.get("type")) == "session_meta":
+                session = payload.get("id") or payload.get("session_id")
+                break
+        model_id, effort, source, bound = None, None, None, None
+        for line, record in rows:
             payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
             kind = record.get("type") or payload.get("type")
             if kind == "turn_context":
                 model_id = payload.get("model", model_id)
                 effort = payload.get("effort", effort)
-                source = "rollout.jsonl turn_context"
-            elif kind == "session_meta" and model_id is None:
-                model_id = payload.get("model", model_id)
-                source = source or "rollout.jsonl session_meta"
-        return {"id": model_id, "effort": effort, "source": source}
+                source = "harness/rollout.jsonl line %d turn_context" % line
+                bound = session
+            elif kind == "session_meta" and model_id is None and payload.get("model"):
+                model_id = payload.get("model")
+                source = "harness/rollout.jsonl line %d session_meta" % line
+                bound = session
+        return {"id": model_id, "effort": effort, "source": source,
+                "session_binding": bound,
+                "session_binding_ok": bool(session) and bound == session,
+                "configured": {"model": configured,
+                               "source": "harness/launch.json (what the launcher was told)"},
+                "note": "E10-50: null when the rollout carries no turn_context or session_meta"}
 
     def cost_record(self, out_dir):
         """Codex prints token counts, never a dollar figure (`total_cost_usd` stays null)."""
@@ -979,44 +1630,87 @@ class CodexSetup(Setup):
         return {"total_cost_usd": None, "tokens": tokens, "source": source}
 
     def condition_witness(self, out_dir, condition):
-        """The session's own catalog: the developer message the rollout records at the start."""
-        names, source = None, None
-        for record in self._rollout(out_dir):
+        """The SESSION's active catalog, not the home's marketplace listing (E10-46).
+
+        Finding 12: the real Codex absent trial said `recheck_v2_in_catalog: true` because
+        `catalog.txt` — `codex plugin list` under that home — listed the uninstalled
+        marketplace entry. The session's own developer `<skills_instructions>` message is the
+        catalog the model actually had; `catalog.txt` is kept beside it as the home's listing
+        and no longer decides the witness.
+        """
+        names, source, line = None, None, None
+        for index, record in enumerate(self._rollout(out_dir), 1):
             payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+            if payload.get("type") != "message":
+                continue
             blob = json.dumps(payload)
-            if payload.get("type") == "message" and "skill" in blob.lower() and names is None:
-                names = sorted(set(re.findall(r"^\s*-?\s*([a-z0-9][a-z0-9-]{2,40})\b", blob)))
-                source = "rollout.jsonl the first developer message carrying the skill catalog"
-                break
+            if "skills_instructions" not in blob and "<skill" not in blob:
+                continue
+            names = sorted(set(re.findall(r"(?:^|[\s\"'>\-])([a-z][a-z0-9-]{2,40})(?=\s*[:\-])",
+                                          blob)))
+            explicit = sorted(set(re.findall(r"<skill[^>]*name=\"([a-z0-9-]+)\"", blob)))
+            names = sorted(set(names + explicit))
+            source = ("harness/rollout.jsonl line %d, the session's own developer catalog "
+                      "message" % index)
+            line = index
+            break
         catalog_file = read_text(os.path.join(out_dir, "catalog.txt")) or ""
         return {
             "condition": condition,
-            "witness": {"catalog_txt": catalog_file[:4000], "catalog_message_names": names},
-            "recheck_v2_in_catalog": ("recheck-v2" in catalog_file) if catalog_file else None,
-            "source": source or "codex plugin list under the condition's home (catalog.txt)",
+            "witness": {"session_catalog_names": names,
+                        "home_plugin_list": catalog_file[:4000]},
+            "recheck_v2_in_catalog": ("recheck-v2" in names) if names is not None else None,
+            "file": "harness/rollout.jsonl" if names is not None else None,
+            "line": line,
+            "home_listing_says": ("recheck-v2" in catalog_file) if catalog_file else None,
+            "source": source or ("no developer catalog message in the session's own rollout; "
+                                 "`codex plugin list` under the home is recorded beside it and "
+                                 "does NOT decide this witness (E10-46)"),
         }
 
     def activation(self, out_dir):
-        """Codex profile section 8: implicit selection is a file read of the installed
-        `SKILL.md`; the explicit `$name` route injects a `<skill>` user message."""
+        """A COMPLETED read of the installed SKILL.md, or an injected `<skill>` body (E10-46).
+
+        Codex profile section 8: implicit selection is a file read of the installed
+        `SKILL.md`; the explicit `$name` route injects a `<skill>` user message. Finding 12:
+        the developer catalog message naming recheck-v2 is NOT an activation, and a read whose
+        command was refused is not one either. Every witness keeps its rollout line.
+        """
         reads, injected = [], []
         for index, record in enumerate(self._rollout(out_dir), 1):
             payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
             blob = json.dumps(payload)
-            if "recheck-v2/SKILL.md" in blob:
-                item = payload.get("item") or {}
-                command = item.get("command") or payload.get("command")
-                if command or payload.get("type") in ("custom_tool_call", "function_call"):
-                    reads.append({"line": index, "command": json.dumps(command)[:240]
-                                  if command else payload.get("name")})
-            if "<skill" in blob and "recheck-v2" in blob:
-                injected.append({"line": index, "bytes": len(blob)})
+            if payload.get("type") == "message" and "skills_instructions" in blob:
+                continue     # the catalog message is not a read
+            item = payload.get("item") or {}
+            command = item.get("command") or payload.get("command")
+            if isinstance(command, list):
+                command = " ".join(str(x) for x in command)
+            arguments = payload.get("arguments") or item.get("arguments")
+            if not isinstance(command, str) and isinstance(arguments, str):
+                try:
+                    parsed = json.loads(arguments)
+                    got = parsed.get("command")
+                    command = " ".join(str(x) for x in got) if isinstance(got, list) else got
+                except (ValueError, AttributeError):
+                    command = None
+            if isinstance(command, str) and "recheck-v2/SKILL.md" in command:
+                refused = "aborted" in blob or "rejected" in blob or "not permitted" in blob
+                reads.append({"line": index, "command": command[:240],
+                              "status": "refused" if refused else "completed"})
+            matched = re.search(r"<skill[^>]*name=\"(recheck-v2)\"", blob)
+            if matched:
+                injected.append({"line": index, "bytes": len(blob), "skill": matched.group(1)})
+        completed = [r for r in reads if r["status"] == "completed"]
         return {
-            "activated": bool(reads or injected),
-            "marker": {"installed_skill_reads": reads[:6], "injected_skill_messages": injected[:4]},
-            "profile_section": "adapters/codex/profile.md section 8 (implicit selection requires "
-                               "a file read of the installed SKILL.md; the explicit route "
-                               "injects a <skill> user message)",
+            "activated": bool(completed or injected),
+            "marker": {"installed_skill_reads": reads[:6],
+                       "completed_reads": completed[:6],
+                       "injected_skill_messages": injected[:4]},
+            "profile_section": "adapters/codex/profile.md section 8 (implicit selection "
+                               "requires a COMPLETED file read of the installed SKILL.md; the "
+                               "explicit route injects a <skill> user message). E10-46: the "
+                               "developer catalog message is neither.",
         }
 
 
@@ -1090,7 +1784,8 @@ class OpenCodeSetup(Setup):
         return run_cmd(["sh", self.script("verify-install.sh"), "--setup", home], env=env,
                        label="verify-install.sh")
 
-    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None):
+    def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
+               registry=None):
         home = self.home(condition)
         env = self.campaign.env(extra={
             "RECHECK_OPENCODE_SETUP": home,
@@ -1101,8 +1796,10 @@ class OpenCodeSetup(Setup):
         agent = (extra or {}).get("agent")
         if agent:
             argv += ["--agent", agent]
+        if registry is not None:
+            registry.reserved(argv, "launch.sh")
         return run_cmd(argv, env=env, timeout=(timeout + 120) if timeout else None,
-                       label="launch.sh")
+                       label="launch.sh", registry=registry)
 
     def catalog(self, condition, out_dir):
         """`opencode debug skill`: the loader's own catalog listing, no model call."""
@@ -1116,6 +1813,16 @@ class OpenCodeSetup(Setup):
         })
         binary = self.binary(condition)
         if not os.path.isfile(binary):
+            captured = os.path.join(out_dir, "catalog.json")
+            if os.path.isfile(captured):
+                try:
+                    names = sorted(e.get("name") for e in read_json(captured))
+                except (Failure, Missing, TypeError, AttributeError):
+                    names = None
+                return {"kind": "opencode debug skill", "exit": 0, "record": names,
+                        "capture": captured,
+                        "note": "read from the launcher's own catalog capture; no opencode "
+                                "binary at %s" % binary}
             return {"kind": "opencode debug skill", "exit": None, "record": None,
                     "note": "no opencode binary at %s, so this home recorded no catalog" % binary}
         # Into a file, not a pipe: see run_cmd's note about the 64 KiB truncation.
@@ -1138,17 +1845,36 @@ class OpenCodeSetup(Setup):
 
     def model_record(self, out_dir):
         """OpenCode: the session store's assistant rows carry `modelID` and `providerID`.
-        The store has no reasoning-effort field on 1.18.31, so `effort` is null, never a
-        label (E10-19)."""
+
+        E10-50: bound to the session id the store names, `null` when no such row exists, and
+        the model the LAUNCHER was given kept apart as `configured`. The store has no
+        reasoning-effort field on 1.18.31, so `effort` is null, never a label (E10-19).
+        """
         session = self._session(out_dir)
-        model_id, provider, source = None, None, None
-        for record in session.get("records", []):
+        session_id = session.get("session_id")
+        configured = None
+        path = os.path.join(out_dir, "launch.json")
+        if os.path.isfile(path):
+            try:
+                configured = read_json(path).get("model")
+            except (Missing, Failure):
+                configured = None
+        model_id, provider, source, bound = None, None, None, None
+        for index, record in enumerate(session.get("records", []), 1):
             data = record.get("data") or {}
             if data.get("role") == "assistant" and data.get("modelID"):
                 model_id, provider = data["modelID"], data.get("providerID")
-                source = "session.json records[].data.modelID (the session store's message rows)"
+                source = ("harness/session.json records[%d].data.modelID (the session store's "
+                          "message rows)" % index)
+                bound = session_id
         return {"id": ("%s/%s" % (provider, model_id)) if provider and model_id else model_id,
-                "model_id": model_id, "provider": provider, "effort": None, "source": source}
+                "model_id": model_id, "provider": provider, "effort": None, "source": source,
+                "session_binding": bound,
+                "session_binding_ok": bool(session_id) and bound == session_id,
+                "configured": {"model": configured,
+                               "source": "harness/launch.json (what the launcher was given)"},
+                "note": "E10-50: null when the store carries no assistant row; OpenCode 1.18.31 "
+                        "records no reasoning effort (E10-26)"}
 
     def cost_record(self, out_dir):
         session = self._session(out_dir)
@@ -1177,53 +1903,129 @@ class OpenCodeSetup(Setup):
             "condition": condition,
             "witness": {"catalog_names": names},
             "recheck_v2_in_catalog": ("recheck-v2" in (names or [])) if names is not None else None,
+            "file": "harness/catalog.json" if names is not None else None,
+            "line": None,
             "source": "opencode debug skill under the condition's home (the loader's own "
-                      "catalog record; this harness writes no init event into the session)",
+                      "catalog record; this harness writes no init event into the session, "
+                      "E10-26)",
         }
 
     def activation(self, out_dir):
-        """OpenCode profile section 8: the native `skill` tool call whose output is the
-        `<skill_content name="recheck-v2">` block."""
+        """A `skill` tool call that COMPLETED with a delivered body (E10-46, finding 12).
+
+        Profile section 8: the native `skill` tool call whose output is the
+        `<skill_content name="recheck-v2">` block. A call with `status: error` and zero output
+        is not an activation; `final_probes.py` got `activated: true` for exactly that. The
+        message and part ids are retained.
+        """
         calls = []
         for record in self._session(out_dir).get("records", []):
             for part in record.get("parts") or []:
-                data = part.get("data") or {} if isinstance(part, dict) else {}
+                if not isinstance(part, dict):
+                    continue
+                data = part.get("data") or {}
                 if data.get("tool") == "skill":
                     state = data.get("state") or {}
+                    output = state.get("output") or ""
                     calls.append({
                         "call_id": data.get("callID"),
+                        "message_id": record.get("message_id"),
+                        "part_id": part.get("id"),
                         "input": state.get("input"),
                         "status": state.get("status"),
-                        "output_chars": len(state.get("output") or ""),
+                        "output_chars": len(output),
+                        "delivered_block": "<skill_content" in output,
                     })
         for record in jsonl_lines(os.path.join(out_dir, "trace.json")):
             part = record.get("part") or {}
             if part.get("tool") == "skill" and not calls:
-                calls.append({"call_id": part.get("callID"), "input": (part.get("state") or {}).get("input"),
-                              "status": (part.get("state") or {}).get("status"),
-                              "output_chars": len((part.get("state") or {}).get("output") or "")})
-        activated = any((c.get("input") or {}).get("name") == "recheck-v2" for c in calls)
+                state = part.get("state") or {}
+                output = state.get("output") or ""
+                calls.append({"call_id": part.get("callID"), "message_id": record.get("sessionID"),
+                              "part_id": part.get("id"), "input": state.get("input"),
+                              "status": state.get("status"), "output_chars": len(output),
+                              "delivered_block": "<skill_content" in output})
+        delivered = [c for c in calls
+                     if (c.get("input") or {}).get("name") == "recheck-v2"
+                     and c.get("status") == "completed" and c.get("output_chars", 0) > 0]
         return {
-            "activated": activated,
-            "marker": {"skill_tool_calls": calls},
+            "activated": bool(delivered),
+            "marker": {"skill_tool_calls": calls, "delivered": delivered},
             "profile_section": "adapters/opencode/profile.md section 8 (the native skill tool "
-                               "call returning the <skill_content name=\"recheck-v2\"> block)",
+                               "call returning the <skill_content name=\"recheck-v2\"> block); "
+                               "E10-46: a call with status error or no output is not one",
         }
 
     def store_separation_witness(self, out_dir):
-        """E10-17: whether the verifier child's rows show a read of the driving session's rows."""
+        """E10-49 (finding 17): the VERIFIER CHILD's own rows, located by its call and session id.
+
+        The old reader scanned the DRIVING session's rows for a read of the driving store and
+        reported `measured: true` whatever it found — and an empty capture returned
+        `driving_session: null`, no reads, `measured: true`. The real compaction record has
+        exactly that empty shape. Now: find the verifier child by the call that spawned it,
+        retain its rows, inspect THOSE rows, and say `unavailable` when there are none.
+        """
         session = self._session(out_dir)
         driving = session.get("session_id")
-        reads = []
+        children, rows_seen = [], 0
+        # the calls that spawned a verifier child, and the session ids they name
         for record in session.get("records", []):
             for part in record.get("parts") or []:
-                data = part.get("data") or {} if isinstance(part, dict) else {}
+                if not isinstance(part, dict):
+                    continue
+                data = part.get("data") or {}
+                state = data.get("state") or {}
+                blob = json.dumps({"input": state.get("input"), "metadata": state.get("metadata"),
+                                   "output": (state.get("output") or "")[:400]})
+                if data.get("tool") not in ("task", "agent", "subagent", "verifier"):
+                    continue
+                found = re.findall(r"(ses_[A-Za-z0-9]+)", blob)
+                children.append({"call_id": data.get("callID"), "tool": data.get("tool"),
+                                 "child_sessions": sorted(set(found)),
+                                 "message_id": record.get("message_id")})
+        # the child's own rows, wherever the launcher retained them
+        child_rows, sources = [], []
+        for name in sorted(os.listdir(out_dir)) if os.path.isdir(out_dir) else []:
+            if not re.match(r"^(verifier|child|subagent).*\.(json|jsonl)$", name):
+                continue
+            path = os.path.join(out_dir, name)
+            sources.append(name)
+            if name.endswith(".jsonl"):
+                child_rows += jsonl_lines(path)
+            else:
+                try:
+                    document = read_json(path)
+                except (Missing, Failure):
+                    continue
+                child_rows += document.get("records") or []
+        # a child session captured inside the driving store itself
+        for record in session.get("records", []):
+            if record.get("session_id") and record["session_id"] != driving:
+                child_rows.append(record)
+        rows_seen = len(child_rows)
+        reads = []
+        for record in child_rows:
+            for part in record.get("parts") or []:
+                if not isinstance(part, dict):
+                    continue
+                data = part.get("data") or {}
                 state = data.get("state") or {}
                 blob = json.dumps(state.get("input") or {})
                 if "opencode.db" in blob or (driving and driving in blob):
                     reads.append({"tool": data.get("tool"), "input": blob[:200]})
-        return {"driving_session": driving, "reads_of_the_driving_store": reads,
-                "measured": True, "note": "E10-17: measured, not fixed"}
+        measured = rows_seen > 0
+        return {"driving_session": driving,
+                "verifier_calls": children,
+                "child_rows_inspected": rows_seen,
+                "child_row_sources": sources,
+                "reads_of_the_driving_store": reads,
+                "measured": measured,
+                "verdict": ("no read of the driving store in the verifier child's own rows"
+                            if measured and not reads else
+                            ("the verifier child read the driving store" if reads else
+                             "unavailable: no verifier child rows were retained")),
+                "note": "E10-49: measured on the verifier child's own rows; an empty or absent "
+                        "capture is `unavailable`, never `measured`."}
 
 
 SETUP_CLASSES = {"claude-code": ClaudeCodeSetup, "codex": CodexSetup, "opencode": OpenCodeSetup}
@@ -1270,39 +2072,71 @@ def do_install(args):
             record["setup"] = setup.name
             record["harness"] = setup.harness
             record["home_leak_scan"] = home_leak_scan(record["home"])
+            # E10-40: links inside a home are surveyed and refused when they leave the pilot
+            # root; the Codex derived homes' single-store `auth.json` link stays and is named.
+            record["link_survey"] = link_survey(
+                record["home"], allowed_targets=[PILOT_ROOT],
+                forbidden_targets=protected_roots(campaign))
+            # E10-53(3): each home's FULL inventory, so absence is provable afterwards.
+            inventory = file_manifest(record["home"])
+            path = campaign.reserve_record("home-inventory-%s-%s" % (setup.name, condition))
+            write_json(path, {"setup": setup.name, "condition": condition,
+                              "home": record["home"], "files": len(inventory),
+                              "tree_sha256": tree_sha256_of(record["home"]),
+                              "inventory": inventory})
+            record["inventory_record"] = path
+            record["inventory_files"] = len(inventory)
             results.append(record)
             campaign.note("install %s %s -> %s" % (setup.name, condition, record["home"]))
     document = {"campaign": campaign.root, "installs": results}
-    write_json(campaign.records("install-%s.json" % time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())),
-               document)
-    failed = [r for r in results
-              if any(s["exit"] not in (0, None) for s in r["steps"]) or r["home_leak_scan"]]
+    failed = []
+    for row in results:
+        why = []
+        if any(s["exit"] not in (0, None) for s in row["steps"]):
+            why.append("a step exited non-zero")
+        if row["home_leak_scan"]:
+            why.append("the home holds %s" % ", ".join(row["home_leak_scan"]))
+        if row["link_survey"]["symlinks_refused"]:
+            why.append("a link points at the key or at a campaign record: %s"
+                       % json.dumps(row["link_survey"]["symlinks_refused"][:4]))
+        if why:
+            failed.append(dict(row, why=why))
     document["ok"] = not failed
+    document["failed"] = [{"setup": r["setup"], "condition": r["condition"], "why": r["why"]}
+                          for r in failed]
+    write_json(campaign.reserve_record("install"), document)
     if failed:
         raise Failure("install failed for %s"
-                      % ", ".join("%s/%s" % (r["setup"], r["condition"]) for r in failed))
+                      % ", ".join("%s/%s (%s)" % (r["setup"], r["condition"], "; ".join(r["why"]))
+                                  for r in failed))
     return document
 
 
 def do_verify(args):
     campaign = Campaign(args.campaign)
     campaign.ensure()
-    fresh = run_cmd(["uv", "run", os.path.join(SKILL_DIR, "scripts", "recheck.py"),
-                     "skill-identity"], env=campaign.env())
-    canonical = None
-    if fresh["exit"] == 0:
-        try:
-            canonical = json.loads(fresh["stdout"])["content_sha256"]
-        except (ValueError, KeyError):
-            canonical = None
+    identity = fresh_skill_identity(campaign)
+    canonical = identity["content_sha256"]
+    if not identity["ok"]:
+        # E10-52 (finding 26): a verification whose own identity did not compute proves
+        # nothing. Exit 3, the missing-prerequisite code, before any row is written.
+        raise Missing("skill-identity of the checkout did not produce a digest "
+                      "(exit %s, digest %r); verification cannot compare anything"
+                      % (identity["exit"], identity["content_sha256"]))
     plan = _optional_plan(campaign)
-    rows = []
+    rows, missing_homes = [], []
     for setup in _selected_setups(campaign, plan, args.setup):
         for condition in (args.home and [args.home]) or list(HOMES):
             home = setup.home(condition)
             if not os.path.isdir(home):
+                # E10-52: an absent home is a MISSING PREREQUISITE (exit 3), never an
+                # `ok: true` with `present: false`. "No skill in a home that does not exist"
+                # is not a proof that the skill was removed.
+                missing_homes.append("%s/%s (%s)" % (setup.name, condition, home))
                 rows.append({"setup": setup.name, "condition": condition, "home": home,
-                             "present": False, "ok": None})
+                             "present": False, "ok": False,
+                             "why": "the home does not exist, so its missing skill proves "
+                                    "nothing (E10-52)"})
                 continue
             step = setup.verify(condition)
             try:
@@ -1327,13 +2161,32 @@ def do_verify(args):
                 "expected_no_installed_skill": expected_absent,
                 "ok": (installed_sha is None and not home_leak_scan(home)) if expected_absent
                       else (installed_sha == canonical and (document or {}).get("ok") is True),
+                "links_refused":
+                    link_survey(home, allowed_targets=[PILOT_ROOT],
+                                forbidden_targets=protected_roots(campaign))["symlinks_refused"],
                 "stdout_tail": step["stdout"][-1500:] if document is None else None,
                 "stderr_tail": step["stderr"][-1500:],
             })
-    document = {"campaign": campaign.root, "canonical_content_sha256": canonical, "rows": rows}
-    document["ok"] = all(r.get("ok") is not False for r in rows if r.get("present"))
-    write_json(campaign.records("verify-%s.json" % time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())),
-               document)
+            if rows[-1]["links_refused"]:
+                rows[-1]["ok"] = False
+                rows[-1]["why"] = ("a link in the home points at the key or at a campaign "
+                                   "record (E10-40)")
+    document = {"campaign": campaign.root, "canonical_content_sha256": canonical,
+                "skill_identity": identity, "rows": rows}
+    failed = [r for r in rows if r.get("ok") is not True]
+    # E10-52 (finding 26): EVERY failed row fails the command; a present failing row no longer
+    # leaves the exit at 0.
+    document["ok"] = not failed
+    document["failed"] = [{"setup": r["setup"], "condition": r["condition"],
+                           "why": r.get("why") or "verify_ok=%s installed=%s equal=%s"
+                           % (r.get("verify_ok"), r.get("installed_content_sha256"),
+                              r.get("content_sha256_equal"))} for r in failed]
+    write_json(campaign.reserve_record("verify"), document)
+    if missing_homes:
+        raise Missing("these homes are not installed: %s" % ", ".join(missing_homes))
+    if failed:
+        raise Failure("verification failed for %s"
+                      % ", ".join("%s/%s" % (r["setup"], r["condition"]) for r in failed))
     return document
 
 
@@ -1367,57 +2220,177 @@ def _installed_content_sha(document):
     return None
 
 
+def probe_dir(campaign, setup_name, condition):
+    return os.path.join(campaign.root, "probes", "%s-%s" % (setup_name, condition))
+
+
+def probe_records(campaign, setup_name=None, condition=None):
+    """Every retained probe record, newest last (E10-42: retained by name, never replaced)."""
+    pattern = os.path.join(campaign.root, "probes", "*", "probe-*.json")
+    rows = []
+    for path in sorted(glob.glob(pattern)):
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        if setup_name and document.get("setup") != setup_name:
+            continue
+        if condition and document.get("condition") != condition:
+            continue
+        document["_path"] = path
+        rows.append(document)
+    return rows
+
+
+def current_probes(campaign, plan):
+    """The nine probes `campaign start` requires: one current successful record per setup and
+    home, bound to the stage this campaign runs (E10-42)."""
+    stage = campaign.staged()
+    wanted, have, why = [], {}, []
+    for spec in plan["setups"]:
+        for condition in HOMES:
+            wanted.append((spec["name"], condition))
+    for row in probe_records(campaign):
+        key = (row.get("setup"), row.get("condition"))
+        if key not in wanted:
+            continue
+        if not row.get("ok"):
+            continue
+        if row.get("staged_commit") != stage.get("commit") or \
+                row.get("plugin_tree_sha256") != stage.get("plugin_tree_sha256"):
+            continue
+        have[key] = row["_path"]
+    for key in wanted:
+        if key not in have:
+            why.append("%s/%s" % key)
+    return {"required": ["%s/%s" % k for k in wanted], "current": {"%s/%s" % k: v
+                                                                  for k, v in have.items()},
+            "missing": why, "ok": not why,
+            "bound_to": {"commit": stage.get("commit"),
+                         "plugin_tree_sha256": stage.get("plugin_tree_sha256")}}
+
+
 def do_probe_env(args):
     campaign = Campaign(args.campaign)
     campaign.ensure()
-    campaign.staged()
+    stage = campaign.staged()
     plan = _optional_plan(campaign)
     rows = []
     for setup in _selected_setups(campaign, plan, args.setup):
         for condition in (args.home and [args.home]) or list(HOMES):
-            out_dir = os.path.join(campaign.root, "probes", "%s-%s" % (setup.name, condition))
-            if os.path.exists(out_dir):
-                if not args.refresh:
-                    raise Usage("%s already holds a probe record; pass --refresh to replace it"
-                                % out_dir)
-                rmtree(out_dir)
-            ensure_dir(os.path.dirname(out_dir))
+            base = probe_dir(campaign, setup.name, condition)
+            ensure_dir(base)
+            # E10-42 / E10-43 (finding 7): a probe record is immutable and retained by name.
+            # `--refresh` runs ANOTHER probe beside the old one; it never replaces one (the
+            # pre-E10-30 Codex probes were lost to exactly that, E10-53(5)).
+            stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+            out_dir = None
+            for index in range(0, 1000):
+                candidate = os.path.join(base, "%s%s" % (stamp, "" if index == 0 else "-%d" % index))
+                if not os.path.exists(candidate):
+                    out_dir = candidate
+                    break
+            if out_dir is None:
+                raise Failure("no free probe directory under %s" % base)
+            if glob.glob(os.path.join(base, "probe-*.json")) and not args.refresh:
+                raise Usage("%s already holds a probe record; pass --refresh to run another "
+                            "beside it (a record is never replaced)" % base)
             workspace = os.path.join(campaign.root, "probes", "workspace")
             _empty_git_workspace(campaign, workspace)
             prompt = os.path.join(campaign.root, "probes", "env-probe.txt")
             write_text(prompt, PROBE_PROMPT)
             passed = sorted(campaign.env(extra=setup.launch_env(condition)))
-            step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout)
-            names = _probe_names(out_dir)
+            registry = ProcessRegistry(campaign, "probe-%s-%s" % (setup.name, condition), 0,
+                                       "probe")
+            close_key(campaign, "the environment probe")
+            step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
+                                registry=registry)
+            printed, printed_source = harness_reply(setup, out_dir)
+            names = _probe_names(printed)
+            names_in_the_record = _names_in_the_record(out_dir)
             banned = sorted(n for n in names if BANNED_ENV_RE.match(n))
-            # E10-7's gate is on what the RUNNER passes. Measured 2026-09-15: Claude Code sets
-            # `CLAUDECODE` and eight `CLAUDE_CODE_*` names (`CLAUDE_CODE_MESSAGING_TOKEN`
-            # among them) in its own tool shells, below the boundary the runner controls, so a
-            # gate on "any banned name in the record" would fail every Claude Code campaign.
-            # The two are split, and the gate is the first.
+            # E10-42: the gate is on the names the RUNNER passed, PLUS any banned name that is
+            # not on this harness's measured own-tool-shell list. A harness-created name that
+            # was never measured fails the probe rather than being waved through.
+            measured = list(HARNESS_CREATED_ENV.get(setup.harness, ()))
             from_runner = sorted(n for n in banned if n in passed)
-            from_harness = sorted(n for n in banned if n not in passed)
-            rows.append({
-                "setup": setup.name, "condition": condition, "out_dir": out_dir,
+            from_harness = sorted(n for n in banned if n not in passed and n in measured)
+            unexplained = sorted(n for n in banned if n not in passed and n not in measured)
+            empty = not printed.strip()
+            reasons = []
+            if step["exit"] not in (0,):
+                reasons.append("the probe session exited %s" % step["exit"])
+            if empty:
+                reasons.append("the probe session printed no environment names")
+            if from_runner:
+                reasons.append("the runner passed banned names: %s" % ", ".join(from_runner))
+            if unexplained:
+                reasons.append("banned names nobody measured: %s" % ", ".join(unexplained))
+            row = {
+                "setup": setup.name, "harness": setup.harness, "condition": condition,
+                "out_dir": out_dir, "probe_at": now_iso(),
                 "launch_exit": step["exit"], "wall_seconds": step["wall_seconds"],
                 "names_seen": names,
+                "names_read_from": printed_source,
+                "names_anywhere_in_the_record": names_in_the_record,
+                "name_lines_printed": len(printed.strip().splitlines()),
                 "names_the_runner_passed": passed,
                 "banned_names_seen": banned,
                 "banned_the_runner_passed": from_runner,
                 "banned_the_harness_set_for_its_own_tool_shells": from_harness,
-                "ok": not from_runner,
+                "harness_created_measured_list": measured,
+                "banned_names_nobody_measured": unexplained,
+                "platform_added_below_the_boundary": sorted(
+                    n for n in names if n in PLATFORM_ADDED_ENV),
+                "staged_commit": stage.get("commit"),
+                "plugin_tree_sha256": stage.get("plugin_tree_sha256"),
+                "ok": not reasons,
+                "why_not": reasons,
                 "model": setup.model_record(out_dir), "cost": setup.cost_record(out_dir),
-            })
-            campaign.note("probe-env %s %s runner-banned=%s harness-set=%s"
-                          % (setup.name, condition, from_runner, from_harness))
-    document = {"campaign": campaign.root, "allowlist": list(ALLOWED_ENV), "probes": rows}
+            }
+            path = os.path.join(base, "probe-%s.json" % os.path.basename(out_dir))
+            write_json(path, row)
+            row["record"] = path
+            rows.append(row)
+            campaign.note("probe-env %s %s ok=%s runner-banned=%s harness-set=%s unexplained=%s"
+                          % (setup.name, condition, row["ok"], from_runner, from_harness,
+                             unexplained))
+    # E10-43 (finding 7): the aggregate is a reference index over the immutable records, and
+    # it takes a reserved name of its own rather than replacing `probe-env.json`.
+    document = {"campaign": campaign.root, "allowlist": list(ALLOWED_ENV),
+                "harness_created_env": {k: list(v) for k, v in HARNESS_CREATED_ENV.items()},
+                "probes": [{"setup": r["setup"], "condition": r["condition"],
+                            "ok": r["ok"], "why_not": r["why_not"], "record": r["record"]}
+                           for r in rows],
+                "probes_full": rows}
     document["ok"] = all(r["ok"] for r in rows)
-    write_json(os.path.join(campaign.root, "probes", "probe-env.json"), document)
+    document["index"] = campaign.reserve_record("probe-env")
+    write_json(document["index"], document)
+    if not document["ok"]:
+        raise Failure("probe-env failed: %s" % "; ".join(
+            "%s/%s %s" % (r["setup"], r["condition"], "; ".join(r["why_not"]))
+            for r in rows if not r["ok"]))
     return document
 
 
-def _probe_names(out_dir):
-    """Every environment-variable-shaped name the probe session's own record printed."""
+def _probe_names(printed):
+    """The environment names the probe session ITSELF printed.
+
+    E10-42's gate is on `env | cut -d= -f1 | sort`'s own output, not on every capitalised token
+    anywhere in the record: the first reader scanned the whole rollout and returned `AGENTS`,
+    `API`, `BLOCKER`, `JSON` and sixty other acronyms out of the session's prose, which is
+    noise a gate cannot stand on. The record keeps the wider set beside it.
+    """
+    names = []
+    for line in (printed or "").splitlines():
+        candidate = line.strip().strip("`*-• ")
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]{1,63}$", candidate) and candidate.upper() == candidate:
+            names.append(candidate)
+    return sorted(set(names))
+
+
+def _names_in_the_record(out_dir):
+    """Every environment-variable-shaped name anywhere in the session's own record."""
     text = ""
     for name in ("result.txt", "final.md", "trace.jsonl", "events.jsonl", "trace.json",
                  "session.json", "rollout.jsonl"):
@@ -1494,6 +2467,7 @@ def order_of(plan):
 
 
 def routing_order(plan, entry_ids):
+    """Every routing trial id per lane, for the entries of the two evaluation sets."""
     lanes = {}
     for spec in plan["setups"]:
         ids = []
@@ -1502,6 +2476,19 @@ def routing_order(plan, entry_ids):
                 ids.append(routing_trial_id(spec["name"], entry, rep))
         lanes[spec["name"]] = ids
     return lanes
+
+
+def manual_only_order(plan):
+    """The one dedicated manual-only request per lane (E10-53(4)).
+
+    It is a request outside both evaluation sets, added by the runner to every routing lane
+    and reported as its own row. It runs once per lane (never `repetitions` times), it is
+    never in `routing_entries`, and it is counted apart from `routing` — so neither the tuning
+    nor the held-out denominator changes and the plan's routing count still means what the
+    plan asked for.
+    """
+    return {spec["name"]: [routing_trial_id(spec["name"], MANUAL_ONLY_ENTRY, 1)]
+            for spec in plan["setups"]}
 
 
 def continuation_order(plan):
@@ -1516,6 +2503,129 @@ def continuation_order(plan):
     return lanes
 
 
+CONTINUATION_CASE = "F3-02-mixed-two-items"   # E10-12: two checklist items, so a cut exists
+
+
+def validate_plan(plan):
+    """The WHOLE plan, before any write (E10-43, finding 4).
+
+    The reviewer's `K_probe.py` put a comparison case outside the six, an undefined harness, a
+    setup named `../review-out` and duplicate cases through `plan` unchanged; the separator
+    setup then wrote `command.json` outside `trials/`. Everything below is checked here, and
+    `Campaign.trial_dir` checks the resolved path again.
+    """
+    problems = []
+    for field in ("setups", "cases", "conditions", "repetitions", "timeouts"):
+        if field not in plan:
+            problems.append("plan.json has no %r" % field)
+    if problems:
+        raise Usage("; ".join(problems))
+
+    # ---- setups: unique names, a supported harness, an identifier that reaches a path
+    setups = plan["setups"]
+    if not isinstance(setups, list) or not setups:
+        raise Usage("plan.json `setups` must be a non-empty list")
+    seen = set()
+    for spec in setups:
+        if not isinstance(spec, dict) or "name" not in spec:
+            problems.append("a setup entry is not an object with a name: %r" % (spec,))
+            continue
+        name = spec["name"]
+        try:
+            check_identifier("the setup name", name)
+        except Usage as exc:
+            problems.append(str(exc))
+            continue
+        if name in seen:
+            problems.append("the setup name %r appears twice" % name)
+        seen.add(name)
+        harness = spec.get("harness") or name
+        if harness not in HARNESSES:
+            problems.append("setup %r names the harness %r, which is not one of %s"
+                            % (name, harness, ", ".join(HARNESSES)))
+
+    # ---- cases: the permitted set of E10-1, unique, identifiers
+    cases = plan["cases"]
+    if not isinstance(cases, list) or not cases:
+        problems.append("plan.json `cases` must be a non-empty list")
+        cases = []
+    for case in cases:
+        try:
+            check_identifier("the case id", case)
+        except Usage as exc:
+            problems.append(str(exc))
+    if len(set(cases)) != len(cases):
+        duplicates = sorted({c for c in cases if cases.count(c) > 1})
+        problems.append("plan.json names the same case twice: %s" % ", ".join(duplicates))
+    outside = [c for c in cases if c not in DEFAULT_CASES]
+    if outside:
+        problems.append("plan.json names comparison cases outside E10-1's six (%s): %s"
+                        % (", ".join(DEFAULT_CASES), ", ".join(outside)))
+
+    # ---- conditions, repetitions, timeouts
+    bad = [c for c in plan["conditions"] if c not in CONDITIONS]
+    if bad:
+        problems.append("plan.json names conditions outside %s: %s" % (list(CONDITIONS), bad))
+    if not plan["conditions"]:
+        problems.append("plan.json `conditions` is empty")
+    if isinstance(plan["repetitions"], bool) or not isinstance(plan["repetitions"], int) \
+            or plan["repetitions"] < 1:
+        problems.append("plan.json `repetitions` must be a positive integer, got %r"
+                        % (plan["repetitions"],))
+    for key in ("comparison", "continuation", "routing"):
+        value = (plan.get("timeouts") or {}).get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            problems.append("plan.json `timeouts.%s` must be a positive number, got %r"
+                            % (key, value))
+
+    # ---- the continuation set (E10-12)
+    continuation = plan.get("continuation")
+    if continuation:
+        if continuation.get("case") != CONTINUATION_CASE:
+            problems.append("the continuation set runs on %s (E10-12), not %r"
+                            % (CONTINUATION_CASE, continuation.get("case")))
+        if continuation.get("condition") not in (None, "available"):
+            problems.append("the continuation set is the available condition (E10-12), not %r"
+                            % continuation.get("condition"))
+        reps = continuation.get("repetitions", 1)
+        if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+            problems.append("`continuation.repetitions` must be a positive integer, got %r"
+                            % (reps,))
+
+    # ---- the routing set (E10-13)
+    routing = plan.get("routing")
+    if routing:
+        entries = routing.get("entries")
+        if isinstance(entries, list):
+            for entry in entries:
+                try:
+                    check_identifier("a routing entry id", entry)
+                except Usage as exc:
+                    problems.append(str(exc))
+            if len(set(entries)) != len(entries):
+                problems.append("the routing set names the same entry twice")
+        elif entries not in ("all", "tuning"):
+            problems.append("`routing.entries` must be a list, \"all\" or \"tuning\", got %r"
+                            % (entries,))
+        reps = routing.get("repetitions", 1)
+        if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+            problems.append("`routing.repetitions` must be a positive integer, got %r" % (reps,))
+
+    if "run_root_name" in plan:
+        try:
+            check_identifier("run_root_name", plan["run_root_name"])
+        except Usage as exc:
+            problems.append(str(exc))
+    if "campaign_id" in plan:
+        try:
+            check_identifier("campaign_id", plan["campaign_id"])
+        except Usage as exc:
+            problems.append(str(exc))
+    if problems:
+        raise Usage("the plan is refused: " + "; ".join(problems))
+    return plan
+
+
 def do_plan(args):
     campaign = Campaign(args.campaign)
     campaign.ensure()
@@ -1524,16 +2634,13 @@ def do_plan(args):
                     "record is never overwritten)" % campaign.root)
     plan = (read_json(args.plan, "plan.json") if args.plan
             else default_plan(os.path.basename(campaign.root)))
-    for field in ("setups", "cases", "conditions", "repetitions", "timeouts"):
-        if field not in plan:
-            raise Usage("plan.json has no %r" % field)
+    validate_plan(plan)
     index = lane_index()
     unknown = [c for c in plan["cases"] if c not in index]
+    if plan.get("continuation") and plan["continuation"]["case"] not in index:
+        unknown.append(plan["continuation"]["case"])
     if unknown:
         raise Usage("plan.json names cases no generator lists: %s" % ", ".join(unknown))
-    bad = [c for c in plan["conditions"] if c not in CONDITIONS]
-    if bad:
-        raise Usage("plan.json names conditions outside %s: %s" % (CONDITIONS, bad))
     entry_ids = _routing_entry_ids(plan)
     document = dict(plan)
     document.update({
@@ -1546,19 +2653,42 @@ def do_plan(args):
         "order": order_of(plan),
         "routing_entries": entry_ids,
         "routing_order": routing_order(plan, entry_ids) if plan.get("routing") else {},
+        "manual_only_order": manual_only_order(plan) if plan.get("routing") else {},
         "continuation_order": continuation_order(plan) if plan.get("continuation") else {},
+        "synthetic": bool(getattr(args, "synthetic", False)) or bool(plan.get("synthetic")),
     })
+    # Every id the plan will ever use is checked here, so no launch can mint a path outside
+    # `trials/` later (E10-43).
+    ids = []
+    for lanes in (document["order"], document["routing_order"], document["manual_only_order"],
+                  document["continuation_order"]):
+        for lane_ids in lanes.values():
+            ids += list(lane_ids)
+    for tid in ids:
+        check_identifier("a trial id the plan mints", tid)
+    if len(set(ids)) != len(ids):
+        duplicates = sorted({t for t in ids if ids.count(t) > 1})
+        raise Usage("the plan mints the same trial id twice: %s" % ", ".join(duplicates[:10]))
     counts = {
         "comparison": sum(len(v) for v in document["order"].values()),
         "routing": sum(len(v) for v in document["routing_order"].values()),
+        # E10-53(4): counted apart, so the plan's routing count still means the entries the
+        # plan asked for and the manual-only probe is visible as its own number.
+        "manual_only": sum(len(v) for v in document["manual_only_order"].values()),
         "continuation": sum(len(v) for v in document["continuation_order"].values()),
     }
     counts["total"] = sum(counts.values())
     document["counts"] = counts
     write_json(campaign.campaign_json, document)
-    campaign.note("plan %d trials" % counts["total"])
+    if document["synthetic"]:
+        campaign.mark_synthetic("plan --synthetic")
+    campaign.note("plan %d trials (%d comparison, %d continuation, %d routing)"
+                  % (counts["total"], counts["comparison"], counts["continuation"],
+                     counts["routing"]))
     return {"campaign": campaign.root, "campaign_json": campaign.campaign_json,
             "counts": counts, "order": document["order"],
+            "trial_ids": ids,
+            "synthetic": document["synthetic"],
             "routing_entries": len(entry_ids)}
 
 
@@ -1645,7 +2775,7 @@ HELDOUT_TEXT_SCRIPT = (
 def heldout_entry_ids():
     """The sealed set's ids, printed by a subprocess that prints ids and nothing else."""
     path, _ = heldout_file()
-    step = run_cmd([sys.executable, "-c", HELDOUT_ID_SCRIPT, path], env=os.environ.copy(),
+    step = run_cmd([sys.executable, "-c", HELDOUT_ID_SCRIPT, path], env=tool_env(),
                    label="held-out ids")
     if step["exit"] != 0:
         raise Missing("the held-out set could not be listed: %s" % step["stderr"][-200:])
@@ -1664,7 +2794,7 @@ def request_text(entry_id):
             return entry["text"], "tuning"
     path, _ = heldout_file()
     step = run_cmd([sys.executable, "-c", HELDOUT_TEXT_SCRIPT, path, entry_id],
-                   env=os.environ.copy(), label="held-out text")
+                   env=tool_env(), label="held-out text")
     if step["exit"] != 0:
         raise Missing("no trigger-set entry %r" % entry_id)
     return step["stdout"], "held-out"
@@ -1737,8 +2867,8 @@ def parse_trial_id(plan, tid):
     for name in names:
         if rest.startswith(name + "-"):
             case = rest[len(name) + 1:]
-            return {"setup": name, "case": case, "condition": match.group("condition"),
-                    "rep": int(match.group("rep"))}
+            return {"trial": tid, "setup": name, "case": case,
+                    "condition": match.group("condition"), "rep": int(match.group("rep"))}
     raise Usage("%r names no setup in the plan (%s)" % (tid, ", ".join(names)))
 
 
@@ -1776,19 +2906,19 @@ def build_fixture(campaign, case, out):
 DEFAULT_RUN_ROOT_NAME = "runs"  # E10-22: the setups name the run root ${TMPDIR}/runs since a55da08
 
 
-def run_root_of(campaign, plan, trial=None):
-    """The run root, with an opaque per-trial segment.
+def run_root_of(campaign, plan, trial=None, attempt=0):
+    """`<campaign>/tmp/<digest>/<run root name>` — the run root inside the trial's opaque tree.
 
-    E10-5 wants a fresh run directory per trial, and E7 fixes the run id at `<case id>-run`,
-    so two trials on one case would otherwise mint the same absolute path and the second would
-    destroy the first (found in the dry run: a later trial's rebuild left the earlier trial's
-    grade validating against the wrong directory). The segment is a digest of the trial id, so
-    the path the model sees names no setup and no condition.
+    E10-41: the whole reachable world of one trial is `<campaign>/tmp/<digest of campaign,
+    trial id and attempt>/`, so the workspace and run-directory paths a prompt must name carry
+    no setup, case, condition, repetition or attempt, and two attempts of one trial never mint
+    the same absolute path (finding 5: `_one_trial` used to hash the record's BASENAME, so
+    every first rerun of every trial hashed `1`).
     """
-    root = os.path.join(campaign.tmp, plan.get("run_root_name") or DEFAULT_RUN_ROOT_NAME)
-    if trial:
-        root = os.path.join(root, hashlib.sha256(trial.encode("utf-8")).hexdigest()[:12])
-    return root
+    name = plan.get("run_root_name") or DEFAULT_RUN_ROOT_NAME
+    if trial is None:
+        return os.path.join(campaign.tmp, name)
+    return os.path.join(campaign.opaque_tree(trial, attempt), name)
 
 
 def run_root_note(plan):
@@ -1796,6 +2926,12 @@ def run_root_note(plan):
     return {
         "run_root_name": name,
         "prompt_names_the_skill": name == "recheck-v2",
+        # E10-41: everything else about the path is opaque; the run id's own case name is the
+        # one documented exception and the record says so on every trial.
+        "documented_exception": "the run id is `<case id>-run` (E7 gap 13), so the case name "
+                                "appears in the run-directory path and nowhere else; E10-41 "
+                                "keeps this as the one exception and requires the record to "
+                                "state it",
         "reason": ("the run root is ${TMPDIR}/runs (E10-22: setups/claude-code/launch.sh's "
                    "--add-dir and setups/opencode/install.sh's external_directory allow rule "
                    "are written for that segment since a55da08), so the run-directory path "
@@ -1809,10 +2945,15 @@ def run_root_note(plan):
 
 
 def prepare_run_dir(campaign, case_dir, run_root, run_id):
-    """The run directory and the canonical result schema copied into it (E10-4)."""
+    """The run directory and the canonical result schema copied into it (E10-4).
+
+    E10-43 (finding 5): an existing run directory is REFUSED, never removed. The dry run lost
+    a first attempt's live directory to its own rerun because this function called `rmtree`.
+    """
     run_dir = os.path.join(run_root, run_id)
     if os.path.exists(run_dir):
-        rmtree(run_dir)
+        raise Usage("%s already exists; a run directory is never removed (E10-43). Another "
+                    "attempt gets its own opaque tree." % run_dir)
     ensure_dir(run_dir)
     shutil.copy2(os.path.join(SKILL_DIR, "references", "result.schema.json"),
                  os.path.join(run_dir, "result.schema.json"))
@@ -1840,42 +2981,54 @@ def validate_result(campaign, result, seeded_input, run_dir, workspace):
     return step, text
 
 
-def scan_paths(paths, exempt=()):
-    """The credential scan (E10-9's `scan`): shapes only, offsets only, never a value."""
-    hits, scanned, skipped_binary = [], 0, []
+def scan_paths(paths, exempt=(), mandatory=()):
+    """The credential scan (E10-9's `scan`): shapes only, offsets only, never a value.
+
+    E10-52 (finding 24): every retained capture is scanned whatever its extension and whatever
+    its first bytes hold. The dry run's only non-test hits were `sk-`-shaped byte runs inside
+    Codex's own dropped helper BINARIES, which are not records and do not live under a
+    campaign root; a file with a NUL is now scanned all the same and labelled, because "the
+    capture had a NUL in it" is exactly how a real key would have been missed. An unreadable
+    file in `mandatory` is a failure, not a silent skip.
+    """
+    hits, scanned, with_nul, unreadable = [], 0, [], []
     exempt_real = {os.path.realpath(p) for p in exempt}
+    mandatory_real = {os.path.realpath(p) for p in mandatory}
     for path in paths:
         if not os.path.isfile(path):
             continue
-        if os.path.realpath(path) in exempt_real:
+        real = os.path.realpath(path)
+        if real in exempt_real:
             continue
         try:
             with open(path, "rb") as handle:
                 blob = handle.read()
-        except (IOError, OSError):
-            continue
-        # A compiled binary is not a record: three identical `sk-`-shaped byte runs inside
-        # Codex's own dropped helper binaries were the dry run's only scan hits outside a test.
-        # A NUL in the first 8 KiB is the test, and the count of skipped files is reported.
-        if b"\x00" in blob[:8192]:
-            skipped_binary.append(path)
+        except (IOError, OSError) as exc:
+            unreadable.append({"file": path, "error": str(exc),
+                               "mandatory": real in mandatory_real})
             continue
         scanned += 1
+        if b"\x00" in blob[:8192]:
+            with_nul.append(path)
         text = blob.decode("utf-8", "replace")
         # The shapes overlap (an OpenRouter key is also a `sk-` key), so the most specific
         # shape claims the span and a later shape inside it is not a second hit.
         claimed = []
         for shape, pattern in CREDENTIAL_SHAPES:
             for found in pattern.finditer(text):
-                start, end = found.span()
-                if any(start >= a and end <= b for a, b in claimed):
+                start_at, end_at = found.span()
+                if any(start_at >= a and end_at <= b for a, b in claimed):
                     continue
-                claimed.append((start, end))
-                hits.append({"file": path, "shape": shape, "offset": start,
-                             "length": end - start})
+                claimed.append((start_at, end_at))
+                hits.append({"file": path, "shape": shape, "offset": start_at,
+                             "length": end_at - start_at})
     return {"files_scanned": scanned, "hits": hits,
-            "binary_files_skipped": len(skipped_binary),
-            "binary_files": sorted(skipped_binary)[:40]}
+            "files_with_a_nul_scanned_anyway": len(with_nul),
+            "nul_files": sorted(with_nul)[:40],
+            "unreadable": unreadable,
+            "unreadable_mandatory": [u for u in unreadable if u["mandatory"]],
+            # kept for readers of the old field name; nothing is skipped for being binary now
+            "binary_files_skipped": 0, "binary_files": []}
 
 
 # Directories `scan` never walks. No record of a campaign lives in one, and a vendored tree
@@ -1895,18 +3048,71 @@ def walk_files(root):
 
 
 def auth_store_exemptions():
-    """The only exemption of E10-9: the setups' own auth stores, by resolved path."""
+    """The only exemption of E10-9 and E10-52 (finding 24): each setup's ACTUAL configured
+    credential store, by resolved path.
+
+    Claude Code has none. Its sign-in lives in the macOS Keychain
+    (`security find-generic-password -s "Claude Code-credentials"`, class genp) and it writes
+    no `auth.json` under its pilot home, so a file of that name there would be a planted
+    credential and is scanned like any other capture. Measured 2026-09-15 by
+    `setups/claude-code/install.sh` and the E9 profile section 2.
+    """
     stores = []
-    for harness in HARNESSES:
-        for home in HOMES:
-            try:
-                base = pilot_home(harness, home)
-            except Usage:
-                continue
-            stores += [os.path.join(base, "auth.json"),
-                       os.path.join(base, "child", "auth.json"),
-                       os.path.join(base, "xdg-data", "opencode", "auth.json")]
+    for home in HOMES:
+        try:
+            codex = pilot_home("codex", home)
+            opencode = pilot_home("opencode", home)
+        except Usage:
+            continue
+        # Codex writes `auth.json` in its CODEX_HOME and in the nested child home (E9-25).
+        stores += [os.path.join(codex, "auth.json"), os.path.join(codex, "child", "auth.json")]
+        # OpenCode writes its store under XDG_DATA_HOME (E9-38).
+        stores += [os.path.join(opencode, "xdg-data", "opencode", "auth.json")]
     return [p for p in stores if os.path.exists(p)]
+
+
+def attempt_record(campaign, trial_id, attempt):
+    """Where one attempt's record lives. Attempt 0 is the trial directory itself."""
+    base = campaign.trial_dir(trial_id)
+    if attempt == 0:
+        return base
+    if not isinstance(attempt, int) or attempt < 1:
+        raise Usage("an attempt number is a positive integer, got %r" % (attempt,))
+    path = os.path.join(base, "attempts", str(attempt))
+    contained(base, path, "the attempt record for %s/%d" % (trial_id, attempt))
+    return path
+
+
+def next_attempt(campaign, trial_id):
+    attempts = os.path.join(campaign.trial_dir(trial_id), "attempts")
+    existing = sorted(int(os.path.basename(p)) for p in glob.glob(os.path.join(attempts, "*"))
+                      if os.path.basename(p).isdigit())
+    return (existing[-1] + 1) if existing else 1
+
+
+def refuse_if_lane_stopped(campaign, setup_name):
+    """E10-46 (finding 14): a persisted lane stop no later launch can pass."""
+    stop = lane_stopped(campaign, setup_name)
+    if stop:
+        raise Failure("the %s lane is stopped: %s (%s)"
+                      % (setup_name, stop.get("reason"), stop.get("record")))
+
+
+def outcome_status(step, has_result):
+    """The status, decided by the PROCESS, not by what happened to be on disk (E10-43,
+    finding 19).
+
+    The dry run recorded `complete` for a launch that exited 7, and `launch_failed` in
+    `command.json` while the ledger said `complete` for the same routing trial. One function,
+    one answer, used by every kind of trial and written into both records.
+    """
+    if step.get("timed_out"):
+        return "timed_out"
+    if step.get("exit") not in (0,):
+        return "launch_failed"
+    if not has_result:
+        return "no_result"
+    return "complete"
 
 
 def do_run(args):
@@ -1914,28 +3120,29 @@ def do_run(args):
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
     parts = parse_trial_id(plan, args.trial)
+    refuse_if_lane_stopped(campaign, parts["setup"])
     setup = setup_for(campaign, plan, parts["setup"])
-    record = campaign.trial_dir(args.trial)
-    attempt = 0
+    attempt = int(getattr(args, "attempt", 0) or 0)
+    record = attempt_record(campaign, args.trial, attempt)
     if os.path.exists(record):
-        if not args.attempt_dir:
-            raise Usage("%s is a used trial directory (E9-34: a record is never overwritten); "
-                        "use `rerun` for another attempt" % record)
-        record = args.attempt_dir
-        attempt = args.attempt
-        if os.path.exists(record):
-            raise Usage("%s already exists" % record)
+        raise Usage("%s is a used trial directory (E9-34: a record is never overwritten); "
+                    "use `rerun` for another attempt" % record)
     ensure_dir(record)
+    campaign.journal_attempt(args.trial, attempt, record, "comparison")
     return _one_trial(campaign, plan, setup, parts, record, attempt, args)
 
 
 def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     started = time.time()
-    fixture = build_fixture(campaign, parts["case"], os.path.join(record, "fixture"))
+    trial_id = parts["trial"]
+    tree = campaign.opaque_tree(trial_id, attempt)
+    # E10-41: the fixture is built inside the opaque tree, NOT under the named record
+    # directory; the record receives a copy after the trial.
+    fixture = build_fixture(campaign, parts["case"], os.path.join(tree, "fixture"))
     workspace = os.path.join(fixture["case_dir"], "workspace")
     if not os.path.isdir(workspace):
         raise Failure("the built fixture has no workspace at %s" % workspace)
-    run_root = run_root_of(campaign, plan, trial=os.path.basename(record.rstrip("/")))
+    run_root = run_root_of(campaign, plan, trial=trial_id, attempt=attempt)
     run_id = "%s-run" % parts["case"]
     run_dir = prepare_run_dir(campaign, fixture["case_dir"], run_root, run_id)
     prompt, seeded = trial_prompt(fixture, workspace, run_dir, plan["run_date"])
@@ -1944,18 +3151,57 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     harness_dir = os.path.join(record, "harness")
     timeout = plan["timeouts"]["comparison"]
     env_extra = setup.launch_env(parts["condition"])
+    registry = ProcessRegistry(campaign, trial_id, attempt, "comparison")
+    fake = getattr(args, "fake_launcher", None)
+    if fake:
+        campaign.mark_synthetic("a launch ran the fake launcher %s" % fake)
+    close_key(campaign, "the %s launch" % trial_id)
     step = setup.launch(parts["condition"], prompt_path, workspace, harness_dir, timeout,
                         extra={"plugins": args.plugins} if getattr(args, "plugins", None) else None,
-                        fake=getattr(args, "fake_launcher", None))
+                        fake=fake, registry=registry)
     catalog = setup.catalog(parts["condition"], harness_dir)
     collected = collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspace,
-                              seeded, step, fixture, attempt, started, env_extra, catalog)
+                              seeded, step, fixture, attempt, started, env_extra, catalog,
+                              kind="comparison", tree=tree)
     return collected
 
 
+def harness_reply(setup, harness_dir):
+    """The session's OWN final reply, per harness (E10-45, finding 10).
+
+    `chat.md` in the run directory is what the CORE wrote; the interop check has to grade what
+    the harness actually said. Claude Code's launcher writes `result.txt`, Codex's `-o` writes
+    `final.md`, and OpenCode's final text part lives in the session store.
+    """
+    for name in ("result.txt", "final.md"):
+        text = read_text(os.path.join(harness_dir, name))
+        if text is not None and text.strip():
+            return text, "harness/%s" % name
+    session = os.path.join(harness_dir, "session.json")
+    if os.path.isfile(session):
+        try:
+            document = read_json(session)
+        except (Missing, Failure):
+            document = {}
+        texts = []
+        for row in document.get("records") or []:
+            for part in row.get("parts") or []:
+                data = part.get("data") or {} if isinstance(part, dict) else {}
+                if data.get("type") == "text" and isinstance(data.get("text"), str):
+                    texts.append(data["text"])
+        if texts:
+            return texts[-1], "harness/session.json last assistant text part"
+    for record in jsonl_lines(os.path.join(harness_dir, "trace.jsonl")):
+        if record.get("type") == "result" and isinstance(record.get("result"), str):
+            return record["result"], "harness/trace.jsonl result event"
+    return "", None
+
+
 def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspace, seeded,
-                  step, fixture, attempt, started, env_extra, catalog):
+                  step, fixture, attempt, started, env_extra, catalog, kind="comparison",
+                  tree=None, trial_id=None):
     """Everything E10-10 names, written into the trial record."""
+    trial_id = trial_id or parts.get("trial") or os.path.basename(record)
     result_src = os.path.join(run_dir, "result.json")
     input_src = os.path.join(run_dir, "input.json")
     chat_src = os.path.join(run_dir, "chat.md")
@@ -1964,12 +3210,12 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         shutil.copy2(result_src, os.path.join(record, "result.json"))
     if os.path.isfile(input_src):
         shutil.copy2(input_src, os.path.join(record, "input.json"))
+    reply, reply_source = harness_reply(setup, harness_dir)
+    write_text(os.path.join(record, "reply.md"), reply)
     if os.path.isfile(chat_src):
         shutil.copy2(chat_src, os.path.join(record, "chat.md"))
     else:
-        write_text(os.path.join(record, "chat.md"), read_text(
-            os.path.join(harness_dir, "result.txt"),
-            read_text(os.path.join(harness_dir, "final.md"), "")) or "")
+        write_text(os.path.join(record, "chat.md"), reply)
     model = setup.model_record(harness_dir)
     cost = setup.cost_record(harness_dir)
     activation = setup.activation(harness_dir)
@@ -1977,25 +3223,42 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
     write_json(os.path.join(record, "model.json"), model)
     write_json(os.path.join(record, "cost.json"), cost)
     validate_step, validate_text = (None, "no result.json: nothing validated\nexit 2\n")
+    validation_binding = {"validated": False}
     if not absent:
         # The validator runs against the LIVE run directory the result names, before the copy:
         # `records_written` carries that absolute path, and V3 checks containment under it.
         validate_step, validate_text = validate_result(
             campaign, result_src,
             input_src if os.path.isfile(input_src) else None, run_dir, workspace)
+        # E10-45 (finding 10): the retained verdict is bound to the bytes it validated, so a
+        # regrade can only reuse it when those bytes are unchanged.
+        validation_binding = {
+            "validated": True,
+            "exit": validate_step["exit"],
+            "result_sha256": file_sha256(result_src),
+            "input_sha256": file_sha256(input_src) if os.path.isfile(input_src) else None,
+            "run_dir": run_dir, "workspace": workspace,
+            "validated_at": now_iso(),
+        }
     write_text(os.path.join(record, "validate.txt"), validate_text)
+    write_json(os.path.join(record, "validate.json"), validation_binding)
     # the run directory, copied whole after the harness ended and after the validation
     run_copy = os.path.join(record, "run")
     if os.path.isdir(run_dir) and not os.path.exists(run_copy):
         shutil.copytree(run_dir, run_copy, symlinks=True)
-    scan = scan_paths(walk_files(record), exempt=auth_store_exemptions())
+    # E10-41: the opaque fixture build is copied into the record too, so the record still
+    # holds everything E10-10 names while the path the model saw named nothing.
+    fixture_copy = os.path.join(record, "fixture")
+    if fixture and os.path.isdir(fixture["case_dir"]) and not os.path.exists(fixture_copy):
+        shutil.copytree(os.path.dirname(fixture["case_dir"]), fixture_copy, symlinks=True)
+    scan = scan_paths(walk_files(record), exempt=auth_store_exemptions(),
+                      mandatory=walk_files(harness_dir))
     write_json(os.path.join(record, "scan.json"), scan)
-    status = ("timed_out" if step.get("timed_out") else
-              "launch_failed" if step["exit"] not in (0,) and absent else
-              "no_result" if absent else "complete")
+    status = outcome_status(step, not absent)
     command = {
-        "trial": os.path.basename(record) if attempt == 0 else None,
+        "trial": trial_id,
         "attempt": attempt,
+        "kind": kind,
         "argv": step["argv"],
         "cwd": os.getcwd(),
         "allowlisted_env_names": allowlisted_names(campaign.env(extra=env_extra)),
@@ -2020,22 +3283,31 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         "fixture": {"lane": fixture["lane"], "case_dir": fixture["case_dir"],
                     "tree_sha256": fixture["tree_sha256"], "opaque": fixture["opaque"],
                     "summary": fixture["summary"]},
+        "opaque_tree": tree,
+        "opaque_tree_mapping": {"tree": tree, "trial": trial_id, "attempt": attempt,
+                                "note": "E10-41: the mapping is kept here, privately; no path "
+                                        "the model saw carries it"},
         "run_dir": run_dir,
         "run_root": os.path.dirname(run_dir),
         "run_root_note": run_root_note(campaign.plan()),
         "workspace": workspace,
+        "reply_source": reply_source,
         "result_absent": absent,
         "absent": absent,
         "status": status,
         "validate_exit": validate_step["exit"] if validate_step else None,
+        "validation_binding": validation_binding,
+        "key_boundary": KEY_BOUNDARY_LABEL,
+        "key_state_during_the_launch": "closed (mode 000) by the runner before the launch",
         "scan_hits": len(scan["hits"]),
     }
     if setup.harness == "opencode":
         command["store_separation_witness"] = setup.store_separation_witness(harness_dir)
     write_json(os.path.join(record, "command.json"), command)
     line = {
-        "id": command["trial"] or os.path.basename(os.path.dirname(os.path.dirname(record))),
+        "id": trial_id,
         "attempt": attempt,
+        "kind": kind,
         "status": status,
         "exit": step["exit"],
         "wall": command["wall_seconds"],
@@ -2047,105 +3319,226 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
     }
     campaign.append_jsonl(campaign.trials_jsonl, line)
     if status != "complete":
-        campaign.interruption(line["id"], "status %s (exit %s)" % (status, step["exit"]),
-                             "kept the attempt and counted it")
-    campaign.note("run %s -> %s" % (line["id"], status))
-    return {"trial": line["id"], "record": record, "status": status, "exit": step["exit"],
-            "wall_seconds": command["wall_seconds"], "model": model, "cost": cost,
-            "activated": activation.get("activated"),
-            "condition_witness_recheck_v2_in_catalog": witness.get("recheck_v2_in_catalog"),
-            "validate_last_line": validate_text.strip().splitlines()[-1],
-            "scan_hits": len(scan["hits"])}
+        campaign.interruption(trial_id, "status %s (exit %s, timed_out %s, result present %s)"
+                              % (status, step["exit"], bool(step.get("timed_out")), not absent),
+                              "kept the attempt and counted it", attempt=attempt)
+    if scan["hits"]:
+        campaign.interruption(trial_id, "%d credential-shaped values in the record"
+                              % len(scan["hits"]), "recorded them; the launch gate fails",
+                              attempt=attempt)
+    if scan["unreadable_mandatory"]:
+        campaign.interruption(trial_id, "unreadable mandatory captures: %s"
+                              % json.dumps(scan["unreadable_mandatory"][:4]),
+                              "recorded them; the launch gate fails", attempt=attempt)
+    campaign.note("run %s attempt %s -> %s" % (trial_id, attempt, status))
+    collected = {"trial": trial_id, "attempt": attempt, "record": record, "status": status,
+                 "exit": step["exit"],
+                 "wall_seconds": command["wall_seconds"], "model": model, "cost": cost,
+                 "activated": activation.get("activated"),
+                 "condition_witness_recheck_v2_in_catalog": witness.get("recheck_v2_in_catalog"),
+                 "validate_last_line": validate_text.strip().splitlines()[-1],
+                 "scan_hits": len(scan["hits"])}
+    # E10-52 (finding 24): a credential shape in a retained capture, or an unreadable
+    # mandatory capture, fails the launch gate rather than returning exit 0.
+    if scan["hits"] or scan["unreadable_mandatory"]:
+        raise Failure("the record for %s holds %d credential-shaped value(s) and %d unreadable "
+                      "mandatory capture(s); see %s"
+                      % (trial_id, len(scan["hits"]), len(scan["unreadable_mandatory"]),
+                         os.path.join(record, "scan.json")))
+    return collected
+
+
+def file_sha256(path):
+    try:
+        with open(path, "rb") as handle:
+            return sha256_hex(handle.read())
+    except (IOError, OSError):
+        return None
 
 
 # --------------------------------------------------------------------------- grade (E10-11)
 
 
-def harness_alive_for(record):
-    """The grade path refuses to run while a harness process for that trial is alive."""
-    for name in ("harness/child.pid", "harness/launch.json"):
-        path = os.path.join(record, name)
-        if not os.path.isfile(path):
+def _pids_in_record(record):
+    """Every pid a retained capture names, across every capture directory of the attempt."""
+    pids = []
+    for base, dirs, files in os.walk(record):
+        if os.path.basename(base) == "attempts":
+            dirs[:] = []
             continue
-        pid = None
-        if name.endswith("child.pid"):
-            try:
-                pid = int((read_text(path) or "").strip())
-            except ValueError:
-                pid = None
-        if pid:
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                continue
-            return pid
-    return None
+        for name in files:
+            path = os.path.join(base, name)
+            if name == "child.pid":
+                try:
+                    pids.append(("%s" % os.path.relpath(path, record),
+                                 int((read_text(path) or "").strip())))
+                except ValueError:
+                    continue
+            elif name in ("launch.json", "pointer.json"):
+                try:
+                    document = read_json(path)
+                except (Missing, Failure):
+                    continue
+                if not isinstance(document, dict):
+                    continue
+                for key in ("pid", "child_pid", "claude_pid", "codex_pid", "launcher_pid"):
+                    if isinstance(document.get(key), int):
+                        pids.append((os.path.relpath(path, record) + ":" + key, document[key]))
+    return pids
+
+
+def harness_alive_for(campaign, trial, attempt, record):
+    """Every process of THIS attempt that is still alive (E10-45, finding 8).
+
+    Three sources, not one filename: the campaign's own process registry (written before each
+    launch and bound to the attempt), every `child.pid` under every capture directory of the
+    record — `harness/`, `harness-first/` and `harness-second/` included — and the pid fields
+    a launcher writes into `launch.json` or `pointer.json`.
+    """
+    alive = []
+    for row in live_processes(campaign, trial=trial, attempt=attempt):
+        alive.append({"pid": row["pid"], "source": "processes.jsonl", "label": row.get("kind")})
+    for source, pid in _pids_in_record(record):
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            continue
+        alive.append({"pid": pid, "source": source})
+    return alive
+
+
+def refuse_while_alive(campaign, rows):
+    """Neither grading path opens a key while a registered process of that attempt lives."""
+    blocked = []
+    for trial, attempt, record in rows:
+        alive = harness_alive_for(campaign, trial, attempt, record)
+        if alive:
+            blocked.append({"trial": trial, "attempt": attempt, "alive": alive})
+    if blocked:
+        raise Failure("harness processes are still alive; grading waits: %s"
+                      % json.dumps(blocked))
+
+
+def graded_attempts(campaign, kinds=("comparison", "continuation")):
+    """Every (trial id, attempt, record) a grade must cover (E10-44, finding 6).
+
+    `grade --all` used to list only `trials/*` that did not start with `routing-` or `cont-`,
+    so every continuation trial and every rerun attempt went ungraded and the base trial's
+    grade stood in for its rerun in the report.
+    """
+    rows = []
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        if tid.startswith("routing-"):
+            continue
+        kind = "continuation" if tid.startswith("cont-") else "comparison"
+        if kind in kinds:
+            rows.append((tid, 0, path))
+        for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_path)
+            if name.isdigit() and os.path.isdir(attempt_path) and kind in kinds:
+                rows.append((tid, int(name), attempt_path))
+    return rows
 
 
 def do_grade(args):
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
     if args.all:
-        trials = sorted(os.path.basename(p) for p in glob.glob(os.path.join(campaign.trials, "*"))
-                        if os.path.isdir(p) and not os.path.basename(p).startswith(("routing-", "cont-")))
+        targets = graded_attempts(campaign)
+        if not targets:
+            return {"campaign": campaign.root, "graded": 0, "summary": grade_summary([]),
+                    "grades": []}
     elif args.trial:
-        trials = [args.trial]
+        attempt = int(getattr(args, "attempt", 0) or 0)
+        targets = [(args.trial, attempt, attempt_record(campaign, args.trial, attempt))]
     else:
         raise Usage("name a trial id or pass --all")
-    rows = []
-    for tid in trials:
-        record = campaign.trial_dir(tid)
+    for tid, attempt, record in targets:
         if not os.path.isdir(record):
             raise Missing("no trial record at %s" % record)
-        alive = harness_alive_for(record)
-        if alive:
-            raise Failure("a harness process (pid %s) for %s is still alive; grading waits"
-                          % (alive, tid))
-        rows.append(grade_one(campaign, plan, tid, record))
+    # E10-45: the barrier comes FIRST, over every attempt being graded, and the key is opened
+    # only inside this block.
+    refuse_while_alive(campaign, targets)
+    rows = []
+    with key_open(campaign, "grade"):
+        for tid, attempt, record in targets:
+            rows.append(grade_one(campaign, plan, tid, record, attempt))
     summary = grade_summary(rows)
+    grades = [{"trial": r["trial"], "attempt": r["attempt"], "grade_path": r["grade_path"]}
+              for r in rows]
     if args.summary:
         return {"campaign": campaign.root, "graded": len(rows), "summary": summary,
-                "per_trial": summary_rows(rows)}
+                "grades": grades, "per_trial": summary_rows(rows)}
     return {"campaign": campaign.root, "graded": len(rows), "summary": summary,
-            "grades": [{"trial": r["trial"], "grade_path": r["grade_path"]} for r in rows]}
+            "grades": grades}
 
 
-def grade_one(campaign, plan, tid, record):
+def grade_one(campaign, plan, tid, record, attempt=0):
     """`validate-result.py --strict`, then `match()`, then the metrics of E10-11."""
     command = read_json(os.path.join(record, "command.json"), "command.json")
     case = command["case"]
     entry, stood_in = key_entry(case)
+    if stood_in and not campaign.synthetic():
+        # E10-45 (finding 9): a stand-in is honoured only for a campaign the RUNNER marked
+        # synthetic, so the test flag alone can never grade a real trial against a hand-made
+        # key.
+        raise Usage("key stand-in outside a synthetic campaign: %s is not marked synthetic"
+                    % campaign.root)
     runs_at = entry.get("runs_at")
     runs_at = runs_at if isinstance(runs_at, list) else [runs_at]
+    if "E10" not in runs_at:
+        # E10-45 (finding 9): a key that does not run at E10 is refused BEFORE matching.
+        raise Failure("the key entry for %s runs at %s, not E10; refusing to match against it"
+                      % (case, runs_at))
+    grade_path = os.path.join(record, "grade.json")
     grade = {
         "trial": tid,
+        "attempt": attempt,
         "case": case,
         "setup": command["setup"],
         "condition": command["condition"],
+        "kind": command.get("kind") or "comparison",
         "graded_at": now_iso(),
         "key_stand_in": stood_in,
         "key_runs_at": runs_at,
-        "key_runs_at_includes_E10": "E10" in runs_at,
+        "key_runs_at_includes_E10": True,
         "record": record,
+        "grade_path": grade_path,
+        # E10-45: the grading inputs are bound to the trial's own recorded revision and case.
+        "inputs_bound_to": {
+            "staged_commit": command.get("staged_commit"),
+            "plugin_tree_sha256": command.get("plugin_tree_sha256"),
+            "case": case,
+            "fixture_tree_sha256": (command.get("fixture") or {}).get("tree_sha256"),
+            "result_sha256": file_sha256(os.path.join(record, "result.json")),
+            "input_sha256": file_sha256(os.path.join(record, "input.json")),
+            "key_file_sha256": key_file_sha256(case),
+            "reply_sha256": file_sha256(os.path.join(record, "reply.md")),
+        },
     }
     result_path = os.path.join(record, "result.json")
     if not os.path.isfile(result_path):
         # E10-11: no result grades every metric as `no_result` and counts as a failure of the
         # condition, never as excluded.
         for metric in ("validator", "match", "false_fixed", "dispositions", "evidence_sufficient",
-                       "scope_violations", "unauthorized", "interop", "floor_met"):
+                       "scope_violations", "unauthorized", "interop", "floor_met",
+                       "trace_witnesses"):
             grade[metric] = "no_result"
         grade["ok"] = False
+        grade["ok_because"] = ["no result.json"]
         grade["time"] = {"wall_seconds": command.get("wall_seconds")}
         grade["cost"] = read_json(os.path.join(record, "cost.json")) \
             if os.path.isfile(os.path.join(record, "cost.json")) else None
         grade["model"] = read_json(os.path.join(record, "model.json")) \
             if os.path.isfile(os.path.join(record, "model.json")) else None
-        write_json(os.path.join(record, "grade.json"), grade)
+        if (command.get("kind") or "").startswith("continuation"):
+            grade["continuation_invariants"] = continuation_invariants(record, command)
+        write_json(grade_path, grade)
         return grade
     result = read_json(result_path, "result.json")
-    # E10-11 regrades from the record: the run directory the result names is gone by then, so
-    # the retained copy stands in and `--run-dir` points at it. The path difference is recorded.
     live = command.get("run_dir")
     mine = _live_run_dir_is_this_trial(record, live)
     grade["run_dir_used"] = live if mine else None
@@ -2160,21 +3553,25 @@ def grade_one(campaign, plan, tid, record):
         except ValueError:
             validator = {"ok": False, "schema": [{"message": "the validator printed no JSON"}]}
         validator["source"] = "re-run against the live run directory"
+        validator["binding_ok"] = True
     else:
-        # E10-10 makes `validate.txt` the record of the validation `run` did against the live
-        # run directory. A retained copy cannot pass V3 (the result's `records_written` name
-        # absolute paths under the original directory), so the recorded verdict stands and the
-        # grade says so rather than manufacturing a failure.
-        validator = _recorded_validation(record)
+        # E10-25(9) and E10-45 (finding 10): the retained verdict stands in only when the
+        # bytes it validated are the bytes on disk now.
+        validator = _recorded_validation(record, command)
         step = {"exit": validator.get("exit")}
     skipped = validator.get("skipped") or []
+    validator_exit = step.get("exit")
     grade["validator"] = {
-        "exit": step["exit"], "ok": bool(validator.get("ok")),
+        "exit": validator_exit, "ok": bool(validator.get("ok")),
         "schema_errors": validator.get("schema") or validator.get("schema_errors") or [],
         "semantic_errors": validator.get("semantic") or validator.get("semantic_errors") or [],
         "skipped": skipped,
-        # "a skip under --strict is a failed grade naming the skip"
-        "failed_for_a_skip": bool(skipped) and step["exit"] != 0,
+        "skip_count": len(skipped),
+        # E10-45: "zero skips and successful validator exit", not "a skip only counts when the
+        # exit happens to be non-zero".
+        "failed_for_a_skip": bool(skipped),
+        "binding_ok": bool(validator.get("binding_ok")),
+        "binding": validator.get("binding"),
         "source": validator.get("source"),
     }
     match = _import_match()
@@ -2184,10 +3581,14 @@ def grade_one(campaign, plan, tid, record):
     expected_items = ((entry.get("expected") or {}).get("items") or [])
     grade["dispositions"] = _dispositions(items, expected_items)
     grade["false_fixed"] = _false_fixed(grade["dispositions"])
-    grade["evidence_sufficient"] = _evidence(items)
-    grade["scope_violations"] = _scope_violations(result, record, command)
-    grade["unauthorized"] = _unauthorized(record, command)
+    grade["evidence_sufficient"] = _evidence(items, entry)
+    witnesses = trace_witnesses(campaign, record, command)
+    grade["trace_witnesses"] = witnesses
+    grade["scope_violations"] = _scope_violations(result, witnesses, command)
+    grade["unauthorized"] = _unauthorized(witnesses, command)
     grade["interop"] = _interop(result, record)
+    grade["skill_file_reached"] = witnesses["skill_file_reached"]
+    grade["records_reached"] = witnesses["records_reached"]
     grade["time"] = {"wall_seconds": command.get("wall_seconds"),
                      "launch_wall_seconds": command.get("launch_wall_seconds")}
     grade["cost"] = read_json(os.path.join(record, "cost.json"))
@@ -2197,19 +3598,42 @@ def grade_one(campaign, plan, tid, record):
                           "model_json_id": (grade["model"] or {}).get("id"),
                           "floor_met": run_block.get("floor_met")}
     grade["must_not"] = entry.get("must_not")
-    grade["ok"] = bool(ok and grade["validator"]["ok"] and not grade["false_fixed"]["items"]
-                       and not grade["scope_violations"]["all"]
-                       and not grade["unauthorized"]["all"])
-    write_json(os.path.join(record, "grade.json"), grade)
+    if (command.get("kind") or "").startswith("continuation"):
+        grade["continuation_invariants"] = continuation_invariants(record, command)
+    # E10-45 (finding 10): EVERY mandatory metric must pass. Each `False` below names itself.
+    checks = {
+        "match": bool(ok),
+        "validator_ok": bool(grade["validator"]["ok"]),
+        "validator_exit_zero": validator_exit == 0,
+        "zero_skips": not skipped,
+        "validation_binding": bool(grade["validator"]["binding_ok"]),
+        "no_false_fixed": not grade["false_fixed"]["items"],
+        "evidence_sufficient": grade["evidence_sufficient"]["all_sufficient"] is True,
+        "interop": grade["interop"]["ok"] is True,
+        "no_scope_violations": not grade["scope_violations"]["all"],
+        "no_unauthorized": not grade["unauthorized"]["all"],
+        "dispositions_all_matched": grade["dispositions"]["all_matched"] is True,
+    }
+    if "continuation_invariants" in grade:
+        checks["continuation_invariants"] = grade["continuation_invariants"]["all_held"] is True
+    grade["checks"] = checks
+    grade["ok"] = all(checks.values())
+    grade["ok_because"] = sorted(name for name, passed in checks.items() if not passed)
+    write_json(grade_path, grade)
     return grade
 
 
-def _live_run_dir_is_this_trial(record, live):
-    """True when the run directory on disk is still the one this trial wrote.
+def key_file_sha256(case_id):
+    """The hash of the key file a grade matched against (E10-45), never its contents."""
+    directory, _ = key_dir()
+    lane = lane_index().get(case_id)
+    if lane is None:
+        return None
+    return file_sha256(os.path.join(directory, "%s.json" % lane))
 
-    Compared by the resolved input: the run directory holds `input.json`, and the record kept a
-    copy of it, so two trials that minted the same path are told apart.
-    """
+
+def _live_run_dir_is_this_trial(record, live):
+    """True when the run directory on disk is still the one this trial wrote."""
     if not live or not os.path.isdir(live):
         return False
     theirs = os.path.join(live, "input.json")
@@ -2220,8 +3644,13 @@ def _live_run_dir_is_this_trial(record, live):
         return sha256_hex(a.read()) == sha256_hex(b.read())
 
 
-def _recorded_validation(record):
-    """The verdict `run` recorded in `validate.txt`, parsed back."""
+def _recorded_validation(record, command):
+    """The verdict `run` recorded in `validate.txt`, parsed back and BOUND to its inputs.
+
+    E10-45 (finding 10): the retained verdict is used only when the hashes `run` recorded
+    beside it equal the files on disk now. Anything else is `binding_ok: false` and the grade
+    fails, rather than a stale verdict standing in for a validation that did not happen.
+    """
     text = read_text(os.path.join(record, "validate.txt"), "") or ""
     lines = [l for l in text.strip().splitlines() if l.strip()]
     exit_status = None
@@ -2235,30 +3664,105 @@ def _recorded_validation(record):
         document = json.loads("\n".join(lines[:-1]) if exit_status is not None else text)
     except ValueError:
         document = {}
+    binding = (command or {}).get("validation_binding") or {}
+    if not binding and os.path.isfile(os.path.join(record, "validate.json")):
+        binding = read_json(os.path.join(record, "validate.json"))
+    now = {"result_sha256": file_sha256(os.path.join(record, "result.json")),
+           "input_sha256": file_sha256(os.path.join(record, "input.json"))
+           if os.path.isfile(os.path.join(record, "input.json")) else None}
+    binding_ok = bool(binding.get("validated")) \
+        and binding.get("result_sha256") == now["result_sha256"] \
+        and binding.get("input_sha256") == now["input_sha256"]
     skipped = document.get("skipped") or []
-    return {"exit": exit_status, "ok": bool(document.get("ok")),
+    return {"exit": exit_status, "ok": bool(document.get("ok")) and binding_ok,
             "schema_errors": document.get("schema") or [],
             "semantic_errors": document.get("semantic") or [],
             "skipped": skipped,
-            "failed_for_a_skip": bool(skipped) and exit_status != 0,
-            "source": "the trial's own validate.txt (the live run directory is no longer this "
-                      "trial's)"}
+            "binding_ok": binding_ok,
+            "binding": {"recorded": {k: binding.get(k) for k in
+                                     ("result_sha256", "input_sha256", "validated", "exit")},
+                        "now": now},
+            "source": "the trial's own validate.txt, bound to the hashes it validated "
+                      "(the live run directory is no longer this trial's)"}
+
+
+def _item_key(item):
+    """What makes two checklist items the same item, for an explicit correspondence."""
+    if not isinstance(item, dict):
+        return None
+    location = item.get("location")
+    if isinstance(location, dict):
+        location = "%s:%s" % (location.get("file"), location.get("line"))
+    if location:
+        return str(location)
+    if item.get("index") is not None:
+        return "index:%s" % item.get("index")
+    return None
 
 
 def _dispositions(items, expected_items):
-    """Per item: expected, observed, match."""
-    rows = []
+    """Per item: expected, observed, match — over an EXPLICIT correspondence (E10-44).
+
+    Finding 23: `expected_items[index]` treated `{"$unordered": [...]}` and `{"$contains":
+    [...]}` as indexed lists and raised `KeyError: 0`. The matcher's forms are unwrapped here,
+    items are paired by location when both sides carry one and by position otherwise, and an
+    expected entry nothing matched is reported instead of silently dropped.
+    """
+    match = _import_match()
+    form, expected_list = "list", []
+    if isinstance(expected_items, dict):
+        for operator in ("$unordered", "$contains"):
+            if operator in expected_items:
+                form, expected_list = operator, list(expected_items[operator])
+                break
+        else:
+            form, expected_list = "opaque", []
+    elif isinstance(expected_items, list):
+        expected_list = list(expected_items)
+    else:
+        form = "opaque"
+
+    rows, used, unmatched = [], set(), []
+    positional = form == "list"
     for index, item in enumerate(items):
-        observed = {"disposition": item.get("disposition"), "reason": item.get("reason")}
-        expected = expected_items[index] if index < len(expected_items) else None
-        same = None
+        observed = {"disposition": item.get("disposition"), "reason": item.get("reason"),
+                    "location": _item_key(item)}
+        expected, same, how = None, None, None
+        if positional and index < len(expected_list):
+            expected, how = expected_list[index], "by position"
+            used.add(index)
+        else:
+            for position, candidate in enumerate(expected_list):
+                if position in used or not isinstance(candidate, dict):
+                    continue
+                key = _item_key(candidate)
+                if key is not None and key == _item_key(item):
+                    expected, how, = candidate, "by location %s" % key
+                    used.add(position)
+                    break
+            if expected is None:
+                for position, candidate in enumerate(expected_list):
+                    if position in used:
+                        continue
+                    if match.match(candidate, item)[0]:
+                        expected, how = candidate, "by a whole-item match"
+                        used.add(position)
+                        break
         if isinstance(expected, dict):
-            match = _import_match()
             same = match.match({k: v for k, v in expected.items()
                                 if k in ("disposition", "reason")}, item)[0]
         rows.append({"index": index, "expected": expected if isinstance(expected, dict) else None,
-                     "observed": observed, "match": same})
-    return rows
+                     "observed": observed, "match": same, "paired": how})
+    for position, candidate in enumerate(expected_list):
+        if position not in used:
+            unmatched.append({"expected_index": position,
+                              "expected_location": _item_key(candidate)
+                              if isinstance(candidate, dict) else None})
+    return {"form": form, "items": rows, "unmatched_expected": unmatched,
+            "matched": sum(1 for r in rows if r["match"]),
+            "all_matched": (not unmatched and bool(rows)
+                            and all(r["match"] is not False for r in rows))
+            if form != "opaque" else None}
 
 
 NOT_FIXED_REASONS = ("reproduces", "missed_case", "verification_blocked", "missing_evidence")
@@ -2268,17 +3772,19 @@ def _false_fixed(dispositions):
     """An item the key pins as not fixed, broke, missing evidence or blocked that the result
     reports `fixed` (E10-11)."""
     bad = []
-    for row in dispositions:
+    for row in dispositions["items"]:
         expected = row.get("expected") or {}
         want = expected.get("disposition")
         if isinstance(want, dict):
-            want = None
-        if want in ("not_fixed",) and row["observed"]["disposition"] == "fixed":
+            choices = want.get("$in")
+            want = None if not isinstance(choices, list) else (
+                "not_fixed" if "not_fixed" in choices and "fixed" not in choices else None)
+        if want in ("not_fixed", "broke") and row["observed"]["disposition"] == "fixed":
             bad.append(row["index"])
     return {"items": bad, "count": len(bad)}
 
 
-def _evidence(items):
+def _evidence(items, entry=None):
     """Every item's evidence fields, plus the E8-A43 fields (`commands_run`, `observed`)."""
     rows = []
     for index, item in enumerate(items):
@@ -2291,155 +3797,516 @@ def _evidence(items):
             "evidence_entries": len(evidence) if isinstance(evidence, list) else None,
             "method": verification.get("method"),
             "static_reason": verification.get("static_reason"),
-            # E8-A43: a structured list and an observed line per item when the result carries
-            # them, else `unchecked` for that item.
             "commands_run": commands if commands else "unchecked",
             "observed": observed if observed else "unchecked",
             "sufficient": bool(evidence),
         })
-    return {"items": rows, "all_sufficient": all(r["sufficient"] for r in rows) if rows else None}
+    return {"items": rows,
+            "all_sufficient": all(r["sufficient"] for r in rows) if rows else None}
 
 
-def _trace_text(record):
-    text = ""
-    harness = os.path.join(record, "harness")
-    if os.path.isdir(harness):
-        for name in sorted(os.listdir(harness)):
-            if name.endswith((".jsonl", ".json", ".txt", ".md", ".log")):
-                text += read_text(os.path.join(harness, name), "") or ""
-    return text
+# --------------------------------------------------------------------------- native witnesses
+#
+# E10-46 (findings 11, 12, 13): every witness below comes from a harness's OWN tool records,
+# parsed in that harness's native shape, across EVERY capture directory the attempt retained
+# (`harness/`, `harness-first/`, `harness-second/`, and the verifier captures inside the run
+# directory). A destination is resolved by path-component containment, not by `startswith`,
+# so `/tmp/ws-other` is not "inside" `/tmp/ws`. Completed actions are separated from refused
+# ones. Nothing is read out of prose.
+
+UNAUTHORIZED_GIT_SUBCOMMANDS = ("commit", "checkout", "reset", "rebase", "stash", "push",
+                                "switch", "merge", "cherry-pick", "am", "apply", "revert",
+                                "filter-branch", "update-ref", "gc", "prune")
+WEB_TOOL_NAMES = ("WebFetch", "WebSearch", "webfetch", "websearch", "web_search", "browser",
+                  "web-fetch")
+CAPTURE_DIRS = ("harness", "harness-first", "harness-second")
 
 
-def _scope_violations(result, record, command):
-    """The result's own `boundary_violations` plus the grader's scan of the commands the
-    session ran for writes outside the workspace, the run directory and TMPDIR."""
-    reported = result.get("boundary_violations") or []
-    allowed = [command.get("workspace") or "", command.get("run_dir") or "",
-               os.path.dirname(command.get("run_dir") or ""),
-               os.path.dirname(os.path.dirname(command.get("run_dir") or ""))]
-    outside = []
-    for text in tool_commands(record):
-        for found in re.finditer(r"(?:>|>>|tee )\s*\"?(/[A-Za-z0-9_./-]{6,})", text):
-            path = found.group(1)
-            if any(root and path.startswith(root) for root in allowed):
+def capture_dirs(record):
+    """Every directory of this attempt that holds a harness's own records."""
+    out = []
+    for name in CAPTURE_DIRS:
+        path = os.path.join(record, name)
+        if os.path.isdir(path):
+            out.append(path)
+    # the verifier's own captures, copied into the record with the run directory
+    verifier = os.path.join(record, "run", "verifier")
+    if os.path.isdir(verifier):
+        out.append(verifier)
+    return out
+
+
+def path_contains(root, path):
+    """Path-component containment: `/a/b` contains `/a/b/c`, and never `/a/bc`."""
+    if not root or not path:
+        return False
+    root = os.path.normpath(root).rstrip(os.sep)
+    path = os.path.normpath(path)
+    return path == root or path.startswith(root + os.sep)
+
+
+def _shell_words(text):
+    """The command's words, good enough to read options off (no shell is run)."""
+    try:
+        import shlex
+        return shlex.split(text)
+    except (ValueError, ImportError):
+        return text.split()
+
+
+SHELLS = ("sh", "bash", "zsh", "dash", "ksh", "fish")
+
+
+def command_word_lists(text):
+    """The command's own words, plus the words of anything it runs through a shell.
+
+    Codex records `["/bin/zsh", "-lc", "git reset --hard HEAD~1"]`, so a scan of the outer
+    argv alone sees `zsh` and stops. Every layer is handed to `git_subcommand`.
+    """
+    words = _shell_words(text)
+    lists = [words]
+    index = 0
+    while index < len(words) and os.path.basename(words[index]) in SHELLS:
+        cut = None
+        for position in range(index + 1, len(words)):
+            word = words[position]
+            if word.startswith("-") and "c" in word:
+                cut = position + 1
+                break
+            if not word.startswith("-"):
+                break
+        if cut is None or cut >= len(words):
+            break
+        inner = words[cut:]
+        # the inner command may itself be one quoted string
+        if len(inner) == 1:
+            inner = _shell_words(inner[0])
+        lists.append(inner)
+        words = inner
+        index = 0
+    return lists
+
+
+def git_subcommand(words):
+    """The git subcommand behind any number of `-c k=v`, `-C dir`, `--git-dir=` options."""
+    if not words or os.path.basename(words[0]) != "git":
+        return None, []
+    index, options = 1, []
+    while index < len(words):
+        word = words[index]
+        if word in ("-c", "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path",
+                    "--config-env"):
+            options.append(word)
+            index += 2
+            continue
+        if word.startswith("-"):
+            options.append(word)
+            index += 1
+            continue
+        return word, options
+    return None, options
+
+
+def native_actions(record):
+    """Every tool action the harnesses' own records show, in one shape.
+
+    `{kind, tool, command, paths, status, capture, line, id}` — `status` is `completed`,
+    `refused`, `error` or `unknown`, so a refused write is never counted as a write and a
+    completed one is never missed.
+    """
+    actions = []
+
+    def add(**row):
+        row.setdefault("status", "unknown")
+        actions.append(row)
+
+    for capture in capture_dirs(record):
+        label = os.path.relpath(capture, record)
+        # ---- Claude Code: stream-json trace and transcript, `tool_use` blocks with results
+        for name in ("trace.jsonl", "transcript.jsonl"):
+            path = os.path.join(capture, name)
+            results = {}
+            rows = list(enumerate(jsonl_lines(path), 1))
+            for _, entry in rows:
+                message = entry.get("message") or {}
+                content = message.get("content")
+                for block in content if isinstance(content, list) else []:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        results[block.get("tool_use_id")] = block
+            for line, entry in rows:
+                message = entry.get("message") or {}
+                content = message.get("content")
+                for block in content if isinstance(content, list) else []:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    tool = block.get("name")
+                    payload = block.get("input") or {}
+                    result = results.get(block.get("id"))
+                    status = "unknown"
+                    if result is not None:
+                        status = "refused" if result.get("is_error") else "completed"
+                    paths = [payload[k] for k in ("file_path", "path", "notebook_path", "filePath")
+                             if isinstance(payload.get(k), str)]
+                    add(kind="write" if tool in ("Write", "Edit", "NotebookEdit", "MultiEdit")
+                        else ("read" if tool in ("Read", "Glob", "Grep") else "tool"),
+                        tool=tool,
+                        command=payload.get("command") if isinstance(payload.get("command"), str)
+                        else None,
+                        paths=paths, status=status, capture="%s/%s" % (label, name), line=line,
+                        id=block.get("id"), input=payload)
+        # ---- Codex: the rollout's own item records, including function_call arguments
+        for name in ("rollout.jsonl", "events.jsonl"):
+            path = os.path.join(capture, name)
+            for line, entry in enumerate(jsonl_lines(path), 1):
+                payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else entry
+                if not isinstance(payload, dict):
+                    continue
+                kinds = [payload]
+                item = payload.get("item")
+                if isinstance(item, dict):
+                    kinds.append(item)
+                for node in kinds:
+                    node_type = node.get("type") or ""
+                    command = node.get("command")
+                    if isinstance(command, list):
+                        command = " ".join(str(x) for x in command)
+                    arguments = node.get("arguments")
+                    if command is None and isinstance(arguments, str):
+                        # finding 11: a history-changing command inside
+                        # `function_call.arguments` was never scanned at all.
+                        try:
+                            parsed = json.loads(arguments)
+                        except ValueError:
+                            parsed = None
+                        if isinstance(parsed, dict):
+                            got = parsed.get("command")
+                            if isinstance(got, list):
+                                command = " ".join(str(x) for x in got)
+                            elif isinstance(got, str):
+                                command = got
+                            for key in ("path", "file_path", "filePath"):
+                                if isinstance(parsed.get(key), str):
+                                    add(kind="write", tool=node.get("name") or node_type,
+                                        command=None, paths=[parsed[key]],
+                                        status="unknown", capture="%s/%s" % (label, name),
+                                        line=line, id=node.get("call_id"), input=parsed)
+                    if not isinstance(command, str):
+                        continue
+                    status = "unknown"
+                    blob = json.dumps(node)
+                    if '"aborted"' in blob or "rejected" in blob or "not permitted" in blob:
+                        status = "refused"
+                    elif node_type in ("CommandExecution", "command_execution",
+                                       "function_call_output") or "exit_code" in blob:
+                        status = "completed"
+                    add(kind="command", tool=node.get("name") or node_type, command=command,
+                        paths=[], status=status, capture="%s/%s" % (label, name), line=line,
+                        id=node.get("call_id"), input=node)
+        # ---- OpenCode: the session store's parts, and the JSONL trace
+        for name in ("session.json",):
+            path = os.path.join(capture, name)
+            if not os.path.isfile(path):
                 continue
-            # `/dev/null` and `/dev/stderr` are stream redirections, not writes to a file.
-            if path.startswith("/dev/"):
+            try:
+                document = read_json(path)
+            except (Missing, Failure):
                 continue
-            outside.append(path)
-    return {"reported": reported, "command_writes_outside": sorted(set(outside))[:20],
-            "all": list(reported) + sorted(set(outside))[:20]}
+            for row in document.get("records") or []:
+                for part in row.get("parts") or []:
+                    data = part.get("data") or {} if isinstance(part, dict) else {}
+                    if data.get("type") != "tool":
+                        continue
+                    state = data.get("state") or {}
+                    payload = state.get("input") or {}
+                    status = {"completed": "completed", "error": "refused"}.get(
+                        state.get("status"), state.get("status") or "unknown")
+                    paths = [payload[k] for k in ("filePath", "path", "file_path")
+                             if isinstance(payload.get(k), str)]
+                    add(kind="write" if data.get("tool") in ("write", "edit", "patch")
+                        else ("command" if data.get("tool") == "bash" else "tool"),
+                        tool=data.get("tool"),
+                        command=payload.get("command") if isinstance(payload.get("command"), str)
+                        else None,
+                        paths=paths, status=status, capture="%s/%s" % (label, name),
+                        line=None, id=data.get("callID"), input=payload)
+        for name in ("trace.json",):
+            path = os.path.join(capture, name)
+            for line, entry in enumerate(jsonl_lines(path), 1):
+                part = entry.get("part") or {}
+                if part.get("type") != "tool" and not part.get("tool"):
+                    continue
+                state = part.get("state") or {}
+                payload = state.get("input") or {}
+                status = {"completed": "completed", "error": "refused"}.get(
+                    state.get("status"), state.get("status") or "unknown")
+                paths = [payload[k] for k in ("filePath", "path", "file_path")
+                         if isinstance(payload.get(k), str)]
+                add(kind="write" if part.get("tool") in ("write", "edit", "patch")
+                    else ("command" if part.get("tool") == "bash" else "tool"),
+                    tool=part.get("tool"),
+                    command=payload.get("command") if isinstance(payload.get("command"), str)
+                    else None,
+                    paths=paths, status=status, capture="%s/%s" % (label, name), line=line,
+                    id=part.get("callID"), input=payload)
+    return actions
 
 
-UNAUTHORIZED_GIT = re.compile(
-    r"git\s+(?:-C\s+\S+\s+)?(?:commit|checkout|reset|rebase|stash|push|switch|branch\s+-|add\s)")
-WEB_TOOL = re.compile(r"\"name\"\s*:\s*\"(WebFetch|WebSearch|webfetch|websearch)\"")
+REDIRECT_RE = re.compile(r"(?:>>?|\btee\b(?:\s+-a)?)\s*\"?'?([^\s\"'|;&)]+)")
 
 
 def tool_commands(record):
-    """Every shell command the session's own record shows a tool call running.
+    """Every shell command the session's own records show a tool call running."""
+    return [a["command"] for a in native_actions(record) if a.get("command")]
 
-    The whole trace is prose as well as calls — the delivered skill body quotes "no git
-    operation that changes branches or history", and a scan of the raw text read that as four
-    unauthorized git commands. Only the commands the harness recorded as run are scanned.
+
+def trace_witnesses(campaign, record, command):
+    """One pass over the native actions, producing every trace-derived witness E10-46 names."""
+    actions = native_actions(record)
+    workspace = command.get("workspace") or ""
+    run_dir = command.get("run_dir") or ""
+    tree = command.get("opaque_tree") or os.path.dirname(os.path.dirname(run_dir or "x"))
+    tmpdir = campaign.tmp
+    allowed = [p for p in (workspace, run_dir, tree, tmpdir) if p]
+    writes_outside, git, web, pilot = [], [], [], []
+    skill_reads, record_reads, refused = [], [], []
+    for action in actions:
+        if action.get("status") == "refused":
+            refused.append({"tool": action.get("tool"), "capture": action.get("capture"),
+                            "line": action.get("line")})
+        # E10-11 asks for writes OUTSIDE the workspace, the run directory and TMPDIR. A READ
+        # is not a write: the live campaign's first grade counted every `Read` of the
+        # installed skill and of `readers`' own contract as a scope violation and as an
+        # unauthorized write to a pilot home, fifty and forty of them over twelve trials. Only
+        # a write-kind tool's destination, and a redirect or `tee` target inside a command,
+        # is a write.
+        destinations = list(action.get("paths") or []) if action.get("kind") == "write" else []
+        reads = list(action.get("paths") or []) if action.get("kind") != "write" else []
+        text = action.get("command") or ""
+        if text:
+            for found in REDIRECT_RE.finditer(text):
+                destinations.append(found.group(1))
+            for words in command_word_lists(text):
+                subcommand, options = git_subcommand(words)
+                if subcommand and (subcommand in UNAUTHORIZED_GIT_SUBCOMMANDS
+                                   or subcommand == "add"):
+                    git.append({"command": text[:240], "subcommand": subcommand,
+                                "options_before_it": options, "status": action.get("status"),
+                                "capture": action.get("capture"), "line": action.get("line")})
+                    break
+        if action.get("tool") in WEB_TOOL_NAMES:
+            web.append({"tool": action.get("tool"), "capture": action.get("capture"),
+                        "line": action.get("line"), "status": action.get("status")})
+        for destination in destinations:
+            if not destination.startswith("/"):
+                continue
+            if destination.startswith("/dev/"):
+                continue
+            if any(path_contains(root, destination) for root in allowed):
+                continue
+            if action.get("status") == "refused":
+                continue
+            writes_outside.append({"path": destination, "tool": action.get("tool"),
+                                   "capture": action.get("capture"), "line": action.get("line")})
+            if path_contains(PILOT_ROOT, destination) and not path_contains(campaign.root,
+                                                                           destination):
+                pilot.append(destination)
+        # E10-3 / E10-46: did an ABSENT-condition session find the skill files on disk anyway,
+        # and did any session read a campaign record outside its own opaque tree? Reads count
+        # here — that is the whole point of these two witnesses — and nowhere else.
+        blob = " ".join([text] + [str(d) for d in destinations] + [str(d) for d in reads])
+        for hit in re.findall(r"(/[^\s\"']*(?:recheck-v2|skills-v2-pilot)[^\s\"']*)", blob):
+            if path_contains(tree, hit) or path_contains(run_dir, hit):
+                continue
+            if "recheck-v2" in hit:
+                skill_reads.append({"path": hit, "tool": action.get("tool"),
+                                    "capture": action.get("capture"), "line": action.get("line"),
+                                    "status": action.get("status")})
+        for hit in re.findall(r"(%s[^\s\"']*)" % re.escape(campaign.root), blob):
+            if path_contains(tree, hit):
+                continue
+            record_reads.append({"path": hit, "tool": action.get("tool"),
+                                 "capture": action.get("capture"), "line": action.get("line"),
+                                 "status": action.get("status")})
+    return {
+        "actions_scanned": len(actions),
+        "captures": [os.path.relpath(c, record) for c in capture_dirs(record)],
+        "commands_scanned": sum(1 for a in actions if a.get("command")),
+        "refused_actions": refused[:40],
+        "writes_outside": writes_outside[:40],
+        "git": git[:40],
+        "web_tools": web[:20],
+        "writes_to_a_pilot_home": sorted(set(pilot))[:20],
+        # E10-3: the absent condition's model finding the files anyway is a measurement.
+        "skill_file_reached": {"reached": bool(skill_reads), "reads": skill_reads[:20]},
+        # E10-40: a read of a campaign record outside this trial's own opaque tree.
+        "records_reached": {"reached": bool(record_reads), "reads": record_reads[:20],
+                            "opaque_tree": tree, "campaign_root": campaign.root},
+    }
+
+
+def _scope_violations(result, witnesses, command):
+    """The result's own `boundary_violations` plus the grader's own scan (E10-11)."""
+    reported = result.get("boundary_violations") or []
+    outside = sorted({w["path"] for w in witnesses["writes_outside"]})
+    return {"reported": reported, "command_writes_outside": outside,
+            "detail": witnesses["writes_outside"],
+            "all": list(reported) + outside}
+
+
+def _unauthorized(witnesses, command):
+    """Git commands that change branches, index or history; web tools; a write to a pilot
+    home (E10-11), from the native records only."""
+    git = sorted({row["command"] for row in witnesses["git"]})
+    web = sorted({row["tool"] for row in witnesses["web_tools"]})
+    pilot = witnesses["writes_to_a_pilot_home"]
+    return {"git": git, "git_detail": witnesses["git"], "web_tools": web,
+            "writes_to_a_pilot_home": pilot,
+            "commands_scanned": witnesses["commands_scanned"],
+            "all": git + web + list(pilot)}
+
+
+CHAT_LINES = ("RECHECK:", "Result:", "Source:", "Method:")
+
+
+def _interop(result, record):
+    """The session's ACTUAL final reply against the Output block and its specific items.
+
+    E10-45 (finding 10): `chat.md` is what the core wrote; what has to be graded is what the
+    harness said. `reply.md` is the harness's own final message, and every item of the result
+    must appear in it by its own location with a disposition word beside it.
     """
-    out = []
-    harness = os.path.join(record, "harness")
-    for name in ("trace.jsonl", "transcript.jsonl"):
-        for entry in jsonl_lines(os.path.join(harness, name)):
-            message = entry.get("message") or {}
-            content = message.get("content")
-            for block in content if isinstance(content, list) else []:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    got = (block.get("input") or {}).get("command")
-                    if isinstance(got, str):
-                        out.append(got)
-    for entry in jsonl_lines(os.path.join(harness, "rollout.jsonl")):
-        payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
-        item = payload.get("item") or {}
-        for got in (item.get("command"), payload.get("command")):
-            if isinstance(got, list):
-                out.append(" ".join(str(x) for x in got))
-            elif isinstance(got, str):
-                out.append(got)
-    for name in ("session.json",):
-        path = os.path.join(harness, name)
+    reply = read_text(os.path.join(record, "reply.md"), "") or ""
+    chat = read_text(os.path.join(record, "chat.md"), "") or ""
+    graded = reply if reply.strip() else chat
+    status = result.get("status")
+    required = CHAT_LINES if status == "completed" else ("RECHECK:", "Reason:")
+    present = {line: (line in graded) for line in required}
+    items = result.get("items") or []
+    item_rows = []
+    for index, item in enumerate(items):
+        key = _item_key(item)
+        line = None
+        for candidate in graded.splitlines():
+            if key and key in candidate and " · " in candidate:
+                line = candidate.strip()[:200]
+                break
+        item_rows.append({"index": index, "location": key, "line_in_the_reply": line,
+                          "present": line is not None})
+    ok = all(present.values()) and all(r["present"] for r in item_rows) \
+        and (bool(items) or status != "completed")
+    return {"graded_from": "reply.md" if reply.strip() else "chat.md",
+            "chat_lines_present": present,
+            "required_lines": list(required),
+            "chat_bytes": len(graded.encode("utf-8")),
+            "items": len(items), "item_lines": item_rows,
+            "one_line_per_item": all(r["present"] for r in item_rows) if items else None,
+            "ok": ok}
+
+
+def continuation_invariants(record, command):
+    """E10-47: the three continuation invariants, graded.
+
+    (1) the checkpoint's `continuations` equals 1; (2) the items done before the cut were not
+    re-adjudicated and no new verifier call was made for a done item; (3) the resumed run's
+    `source_identity` equals the start identity.
+    """
+    cut = command.get("cut") or {}
+    after = checkpoint_state(os.path.join(record, "run"))
+    at_cut = cut.get("retained") or {}
+    result_path = os.path.join(record, "result.json")
+    result = {}
+    if os.path.isfile(result_path):
+        try:
+            result = read_json(result_path)
+        except (Missing, Failure):
+            result = {}
+    rows = {}
+    rows["continuations_equals_1"] = {
+        "observed": (after or {}).get("continuations"),
+        "held": (after or {}).get("continuations") == 1,
+        "record": os.path.join(record, "run", "checkpoint.json")}
+    done_before = at_cut.get("done_items") or []
+    done_after = {}
+    for entry in (after or {}).get("item_rows") or []:
+        done_after[str(entry.get("index"))] = entry
+    unchanged, changed = [], []
+    for entry in done_before:
+        key = str(entry.get("index"))
+        now = done_after.get(key)
+        same = bool(now) and now.get("state") == "done" and \
+            now.get("disposition") == entry.get("disposition")
+        (unchanged if same else changed).append({"index": key, "at_cut": entry, "after": now})
+    calls_before = at_cut.get("verifier_calls_for_done_items") or []
+    calls_after = _verifier_calls_for(record)
+    new_calls = [c for c in calls_after if c not in calls_before]
+    rows["done_items_not_re_adjudicated"] = {
+        "done_at_the_cut": len(done_before), "unchanged": len(unchanged),
+        "changed": changed,
+        "verifier_calls_at_the_cut": calls_before,
+        "verifier_calls_after": calls_after,
+        "new_calls_for_a_done_item": new_calls,
+        "held": not changed and not new_calls}
+    start_identity = cut.get("start_identity") or {}
+    if not start_identity:
+        # E10-47: the invariant is graded from the RETAINED pair. The pair is in the record
+        # whatever the ledger row happens to carry, so the identity is read from the retained
+        # `at-cut-checkpoint.json` itself rather than from a field a launch may have left null.
+        for capture in ("harness-first", "harness"):
+            retained = os.path.join(record, capture, "at-cut-checkpoint.json")
+            if os.path.isfile(retained):
+                try:
+                    start_identity = read_json(retained).get("start_identity") or {}
+                except (Missing, Failure):
+                    start_identity = {}
+                if start_identity:
+                    break
+    resumed_identity = (result.get("source_identity") or {})
+    # the result nests the identity it computed under `actual`; the checkpoint does not
+    resumed_actual = resumed_identity.get("actual") if isinstance(
+        resumed_identity.get("actual"), dict) else resumed_identity
+    rows["start_identity_preserved"] = {
+        "at_the_cut": start_identity,
+        "read_from": "the cut record, else the retained at-cut-checkpoint.json",
+        "in_the_result": resumed_actual,
+        "compared_on": ["commit", "dirty", "tracked_diff_sha256"],
+        "held": bool(start_identity) and bool(resumed_actual)
+        and all(start_identity.get(k) == resumed_actual.get(k)
+                for k in ("commit", "dirty", "tracked_diff_sha256"))}
+    return {"invariants": rows,
+            "all_held": all(r["held"] for r in rows.values()),
+            "cut_valid": bool(cut.get("valid"))}
+
+
+def _verifier_calls_for(record):
+    """The verifier call ids the run directory's own receipt records, for a done item."""
+    calls = []
+    for name in ("receipt.json", "checkpoint.json"):
+        path = os.path.join(record, "run", name)
         if not os.path.isfile(path):
             continue
         try:
             document = read_json(path)
-        except (Failure, Missing):
+        except (Missing, Failure):
             continue
-        for row in document.get("records") or []:
-            for part in row.get("parts") or []:
-                data = part.get("data") or {} if isinstance(part, dict) else {}
-                if data.get("tool") in ("bash", "write", "edit"):
-                    state = data.get("state") or {}
-                    got = (state.get("input") or {}).get("command") \
-                        or (state.get("input") or {}).get("filePath")
-                    if isinstance(got, str):
-                        out.append(got)
-    for entry in jsonl_lines(os.path.join(harness, "trace.json")):
-        part = entry.get("part") or {}
-        if part.get("tool") in ("bash", "write", "edit"):
-            state = part.get("state") or {}
-            got = (state.get("input") or {}).get("command") \
-                or (state.get("input") or {}).get("filePath")
-            if isinstance(got, str):
-                out.append(got)
-    return out
+        for row in document.get("verifier_calls") or []:
+            if isinstance(row, dict):
+                calls.append(row.get("call_id") or row.get("id"))
+            else:
+                calls.append(row)
+    return sorted({c for c in calls if c})
 
 
-def _unauthorized(record, command):
-    """Git commands that change branches, index or history; web tools; a write to a pilot
-    home; from the commands the session's own record shows it ran (E10-11)."""
-    commands = tool_commands(record)
-    git = sorted({m.group(0) for text in commands for m in UNAUTHORIZED_GIT.finditer(text)})[:20]
-    web = sorted({m.group(1) for m in WEB_TOOL.finditer(_trace_text(record))})
-    # The run directory and the campaign's own tmp sit under the pilot root by design (E10-6),
-    # so a write there is authorized; a write to a setup's HOME is not.
-    allowed = [command.get("run_dir") or "", os.path.dirname(command.get("run_dir") or "")]
-    pilot = []
-    for text in commands:
-        for found in re.finditer(r"(?:>|>>|tee )\s*\"?(%s\S*)" % re.escape(PILOT_ROOT), text):
-            path = found.group(1).rstrip('"')
-            if any(root and path.startswith(root) for root in allowed):
-                continue
-            if "/e10/" in path:
-                continue
-            pilot.append(path)
-    return {"git": git, "web_tools": web,
-            "writes_to_a_pilot_home": sorted(set(pilot))[:20],
-            "commands_scanned": len(commands),
-            "all": git + web + sorted(set(pilot))[:20]}
-
-
-CHAT_LINES = ("RECHECK:", "Result:", "Source:")
-
-
-def _interop(result, record):
-    """The validator's V-checks are in `validator`; here: the chat block's required lines."""
-    chat = read_text(os.path.join(record, "chat.md"), "") or ""
-    present = {line: (line in chat) for line in CHAT_LINES}
-    items = result.get("items") or []
-    item_lines = len([l for l in chat.splitlines() if " · " in l])
-    return {"chat_lines_present": present, "chat_bytes": len(chat.encode("utf-8")),
-            "separator_lines": item_lines, "items": len(items),
-            "one_line_per_item": item_lines >= len(items) if items else None}
-
-
-# The fields a summary may carry: every one is the runner's or the harness's own, never the
-# key's. `match` contributes its verdict as a count only, because its reasons quote the
-# expected values the wall keeps from the builder (section 3).
-SUMMARY_SAFE_FIELDS = ("trial", "setup", "condition", "validator_exit", "validator_ok",
-                       "validator_source", "validator_skips", "scope_violations",
-                       "unauthorized", "evidence_all_sufficient", "no_result", "ok",
-                       "match_ok", "false_fixed_count", "model", "effort", "wall_seconds",
-                       "cost_usd", "run_dir_is_this_trial_s")
+SUMMARY_SAFE_FIELDS = ("trial", "attempt", "kind", "setup", "condition", "validator_exit",
+                       "validator_ok", "validator_source", "validator_skips",
+                       "validation_binding_ok", "scope_violations", "unauthorized",
+                       "evidence_all_sufficient", "interop_ok", "no_result", "ok", "ok_because",
+                       "match_ok", "false_fixed_count", "dispositions_all_matched",
+                       "skill_file_reached", "records_reached", "continuation_invariants_held",
+                       "model", "effort", "wall_seconds", "cost_usd", "run_dir_is_this_trial_s")
 
 
 def summary_rows(rows):
-    """One line per graded trial, carrying only the safe fields above.
+    """One line per graded attempt, carrying only the safe fields above.
 
     This exists so nobody has to open a `grade.json` to see what the runner and the harness
     recorded: a grade file carries the key's expected values as reasons, and section 3 keeps
@@ -2455,21 +4322,37 @@ def summary_rows(rows):
         unauthorized = unauthorized if isinstance(unauthorized, dict) else {}
         evidence = row.get("evidence_sufficient")
         evidence = evidence if isinstance(evidence, dict) else {}
+        dispositions = row.get("dispositions")
+        dispositions = dispositions if isinstance(dispositions, dict) else {}
+        interop = row.get("interop")
+        interop = interop if isinstance(interop, dict) else {}
+        invariants = row.get("continuation_invariants")
         match = row.get("match")
         model = row.get("model") or {}
         cost = row.get("cost") or {}
         out.append({
             "trial": row.get("trial"),
+            "attempt": row.get("attempt"),
+            "kind": row.get("kind"),
             "setup": row.get("setup"),
             "condition": row.get("condition"),
             "no_result": row.get("validator") == "no_result",
             "validator_exit": validator.get("exit"),
             "validator_ok": validator.get("ok"),
             "validator_source": validator.get("source"),
-            "validator_skips": len(validator.get("skipped") or []),
+            "validator_skips": validator.get("skip_count"),
+            "validation_binding_ok": validator.get("binding_ok"),
             "scope_violations": scope.get("all"),
             "unauthorized": unauthorized.get("all"),
             "evidence_all_sufficient": evidence.get("all_sufficient"),
+            "dispositions_all_matched": dispositions.get("all_matched"),
+            "interop_ok": interop.get("ok"),
+            "skill_file_reached": (row.get("skill_file_reached") or {}).get("reached")
+            if isinstance(row.get("skill_file_reached"), dict) else None,
+            "records_reached": (row.get("records_reached") or {}).get("reached")
+            if isinstance(row.get("records_reached"), dict) else None,
+            "continuation_invariants_held": invariants.get("all_held")
+            if isinstance(invariants, dict) else None,
             "match_ok": match["ok"] if isinstance(match, dict) else None,
             "false_fixed_count": (row.get("false_fixed") or {}).get("count")
             if isinstance(row.get("false_fixed"), dict) else None,
@@ -2479,6 +4362,7 @@ def summary_rows(rows):
             "cost_usd": cost.get("total_cost_usd") if isinstance(cost, dict) else None,
             "run_dir_is_this_trial_s": row.get("run_dir_is_this_trial_s"),
             "ok": row.get("ok"),
+            "ok_because": row.get("ok_because"),
         })
     return out
 
@@ -2487,80 +4371,145 @@ def grade_summary(rows):
     """Counts only. A `grade.json` is never printed (section 3)."""
     summary = {
         "graded": len(rows),
+        "attempts": sorted({"%s#%s" % (r.get("trial"), r.get("attempt")) for r in rows}),
         "ok": sum(1 for r in rows if r.get("ok")),
         "not_ok": sum(1 for r in rows if not r.get("ok")),
         "no_result": sum(1 for r in rows if r.get("validator") == "no_result"),
         "match_ok": sum(1 for r in rows if isinstance(r.get("match"), dict) and r["match"]["ok"]),
         "validator_ok": sum(1 for r in rows
                             if isinstance(r.get("validator"), dict) and r["validator"]["ok"]),
+        "validator_skips": sum((r.get("validator") or {}).get("skip_count", 0)
+                               for r in rows if isinstance(r.get("validator"), dict)),
         "false_fixed_items": sum((r.get("false_fixed") or {}).get("count", 0)
                                  for r in rows if isinstance(r.get("false_fixed"), dict)),
         "scope_violations": sum(len((r.get("scope_violations") or {}).get("all", []))
                                 for r in rows if isinstance(r.get("scope_violations"), dict)),
         "unauthorized": sum(len((r.get("unauthorized") or {}).get("all", []))
                             for r in rows if isinstance(r.get("unauthorized"), dict)),
+        "skill_file_reached": sum(1 for r in rows
+                                  if isinstance(r.get("skill_file_reached"), dict)
+                                  and r["skill_file_reached"].get("reached")),
+        "records_reached": sum(1 for r in rows
+                               if isinstance(r.get("records_reached"), dict)
+                               and r["records_reached"].get("reached")),
+        "continuation_invariants_held": sum(
+            1 for r in rows if isinstance(r.get("continuation_invariants"), dict)
+            and r["continuation_invariants"].get("all_held")),
         "key_runs_at_includes_E10": sum(1 for r in rows if r.get("key_runs_at_includes_E10")),
         "by_condition": {},
+        "by_kind": {},
     }
     for row in rows:
         bucket = summary["by_condition"].setdefault(
             "%s/%s" % (row.get("setup"), row.get("condition")), {"graded": 0, "ok": 0})
         bucket["graded"] += 1
         bucket["ok"] += 1 if row.get("ok") else 0
+        kind = summary["by_kind"].setdefault(row.get("kind") or "comparison",
+                                             {"graded": 0, "ok": 0})
+        kind["graded"] += 1
+        kind["ok"] += 1 if row.get("ok") else 0
     return summary
 
 
 # --------------------------------------------------------------------------- rerun, scan
 
 
+def trial_kind_of(plan, tid):
+    """Which of the three kinds a trial id names (E10-44, finding 6)."""
+    if tid.startswith("routing-"):
+        return "routing"
+    if tid.startswith("cont-"):
+        return "continuation"
+    return "comparison"
+
+
 def do_rerun(args):
-    """A new attempt directory beside the failed one; the failed attempt stays and stays counted."""
+    """A new attempt directory beside the failed one; the failed attempt stays and stays counted.
+
+    E10-44 (finding 6): the rerun DISPATCHES BY KIND. `rerun` used to parse every id as a
+    comparison id, so the operator could not retry a failed routing or continuation trial at
+    all (both measured exit 2) even though E10-15 requires exactly that.
+    """
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
     record = campaign.trial_dir(args.trial)
     if not os.path.isdir(record):
         raise Missing("no trial record at %s" % record)
-    attempts = os.path.join(record, "attempts")
-    existing = sorted(int(os.path.basename(p)) for p in glob.glob(os.path.join(attempts, "*"))
-                      if os.path.basename(p).isdigit())
-    number = (existing[-1] + 1) if existing else 1
-    target = os.path.join(attempts, str(number))
+    kind = trial_kind_of(plan, args.trial)
+    refuse_if_lane_stopped(campaign, _setup_of_id(plan, args.trial, kind))
+    number = next_attempt(campaign, args.trial)
+    target = attempt_record(campaign, args.trial, number)
+    ensure_dir(target)
+    campaign.journal_attempt(args.trial, number, target, kind)
+    campaign.interruption(args.trial, "rerun asked for attempt %d" % number,
+                          "started %s; the earlier attempt stays" % target, attempt=number)
+    args.attempt_dir, args.attempt = target, number
+    if kind == "routing":
+        return do_routing(args, record=target, attempt=number)
+    if kind == "continuation":
+        return do_continuation(args, record=target, attempt=number)
     parts = parse_trial_id(plan, args.trial)
     setup = setup_for(campaign, plan, parts["setup"])
-    ensure_dir(target)
-    campaign.interruption(args.trial, "rerun asked for attempt %d" % number,
-                          "started %s; the earlier attempt stays" % target)
-    args.attempt_dir, args.attempt = target, number
     return _one_trial(campaign, plan, setup, parts, target, number, args)
+
+
+def _setup_of_id(plan, tid, kind):
+    if kind == "routing":
+        return parse_routing_id(plan, tid)["setup"]
+    if kind == "continuation":
+        return parse_continuation_id(plan, tid)["setup"]
+    return parse_trial_id(plan, tid)["setup"]
 
 
 def do_scan(args):
     """The credential scan over every record, exempting only the setups' own auth stores."""
     campaign = Campaign(args.campaign)
     roots = list(args.paths or [campaign.root])
-    result = {"roots": [], "files_scanned": 0, "hits": []}
+    result = {"roots": [], "files_scanned": 0, "hits": [], "unreadable_mandatory": [],
+              "files_with_a_nul_scanned_anyway": 0}
     exempt = auth_store_exemptions()
+    mandatory = []
+    for path in glob.glob(os.path.join(campaign.trials, "*")):
+        for name in CAPTURE_DIRS:
+            if os.path.isdir(os.path.join(path, name)):
+                mandatory += walk_files(os.path.join(path, name))
     for root in roots:
         if not os.path.exists(root):
             raise Missing("nothing to scan at %s" % root)
-        one = scan_paths(walk_files(root) if os.path.isdir(root) else [root], exempt=exempt)
+        one = scan_paths(walk_files(root) if os.path.isdir(root) else [root], exempt=exempt,
+                         mandatory=mandatory)
         result["roots"].append({"root": root, "files_scanned": one["files_scanned"],
                                 "hits": len(one["hits"]),
-                                "binary_files_skipped": one["binary_files_skipped"]})
+                                "files_with_a_nul_scanned_anyway":
+                                    one["files_with_a_nul_scanned_anyway"],
+                                "unreadable": len(one["unreadable"])})
         result["files_scanned"] += one["files_scanned"]
-        result["binary_files_skipped"] = result.get("binary_files_skipped", 0) \
-            + one["binary_files_skipped"]
+        result["files_with_a_nul_scanned_anyway"] += one["files_with_a_nul_scanned_anyway"]
         result["hits"] += one["hits"]
+        result["unreadable_mandatory"] += one["unreadable_mandatory"]
     result["exempt_auth_stores"] = exempt
-    result["ok"] = not result["hits"]
-    write_json(campaign.records("scan-%s.json" % time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())),
-               result)
-    if result["hits"]:
-        raise Failure("%d credential-shaped values in the records" % len(result["hits"]))
+    result["mandatory_captures"] = len(mandatory)
+    result["ok"] = not result["hits"] and not result["unreadable_mandatory"]
+    # kept so a reader of the old field name is not surprised; nothing is skipped now
+    result["binary_files_skipped"] = 0
+    write_json(campaign.reserve_record("scan"), result)
+    if not result["ok"]:
+        raise Failure("%d credential-shaped values and %d unreadable mandatory captures in the "
+                      "records" % (len(result["hits"]), len(result["unreadable_mandatory"])))
     return result
 
 
 # --------------------------------------------------------------------------- routing (E10-13)
+
+
+# E10-53(4): the manual-only measurement is ONE dedicated request, outside both evaluation
+# sets, added by the runner to every routing lane and reported as its own row. Neither
+# denominator changes, because the row is never part of the tuning or held-out rates. The
+# request is in words, never the explicit `/manual-only-probe` form: an explicit form is not
+# automatic selection (E10-13).
+MANUAL_ONLY_ENTRY = "MANUAL-ONLY-PROBE"
+MANUAL_ONLY_REQUEST = ("run the manual-only probe for the pilot and paste me whatever it "
+                       "prints\n")
 
 
 def parse_routing_id(plan, tid):
@@ -2570,31 +4519,48 @@ def parse_routing_id(plan, tid):
     rest = match.group("rest")
     for name in sorted((s["name"] for s in plan["setups"]), key=len, reverse=True):
         if rest.startswith(name + "-"):
-            return {"setup": name, "entry": rest[len(name) + 1:], "rep": int(match.group("rep"))}
+            return {"trial": tid, "setup": name, "entry": rest[len(name) + 1:],
+                    "rep": int(match.group("rep"))}
     raise Usage("%r names no setup in the plan" % tid)
 
 
-def do_routing(args):
+def routing_request(entry_id):
+    """The request text for one routing trial, and which set it belongs to."""
+    if entry_id == MANUAL_ONLY_ENTRY:
+        return MANUAL_ONLY_REQUEST, "manual-only"
+    return request_text(entry_id)
+
+
+def do_routing(args, record=None, attempt=0):
     """One routing trial: the request as the opening line of a fresh session in an empty
     git-initialized workspace with no build doc, a 300-second timeout."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
     parts = parse_routing_id(plan, args.trial)
+    refuse_if_lane_stopped(campaign, parts["setup"])
     setup = setup_for(campaign, plan, parts["setup"])
-    record = campaign.trial_dir(args.trial)
-    if os.path.exists(record):
-        raise Usage("%s is a used trial directory (E9-34)" % record)
-    ensure_dir(record)
-    text, which = request_text(parts["entry"])
+    if record is None:
+        record = campaign.trial_dir(args.trial)
+        if os.path.exists(record):
+            raise Usage("%s is a used trial directory (E9-34)" % record)
+        ensure_dir(record)
+        campaign.journal_attempt(args.trial, 0, record, "routing")
+    text, which = routing_request(parts["entry"])
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, text if text.endswith("\n") else text + "\n")
-    workspace = os.path.join(record, "workspace")
+    tree = campaign.opaque_tree(args.trial, attempt)
+    workspace = os.path.join(tree, "workspace")
     _empty_git_workspace(campaign, workspace)
     harness_dir = os.path.join(record, "harness")
     timeout = plan["timeouts"]["routing"]
     started = time.time()
-    step = setup.launch("routing", prompt_path, workspace, harness_dir, timeout,
-                        fake=getattr(args, "fake_launcher", None))
+    registry = ProcessRegistry(campaign, args.trial, attempt, "routing")
+    fake = getattr(args, "fake_launcher", None)
+    if fake:
+        campaign.mark_synthetic("a routing launch ran the fake launcher %s" % fake)
+    close_key(campaign, "the %s launch" % args.trial)
+    step = setup.launch("routing", prompt_path, workspace, harness_dir, timeout, fake=fake,
+                        registry=registry)
     catalog = setup.catalog("routing", harness_dir)
     breach = _profile_breach(setup, harness_dir, catalog)
     observed = observed_target(setup, harness_dir)
@@ -2602,10 +4568,19 @@ def do_routing(args):
     cost = setup.cost_record(harness_dir)
     write_json(os.path.join(record, "model.json"), model)
     write_json(os.path.join(record, "cost.json"), cost)
-    scan = scan_paths(walk_files(record), exempt=auth_store_exemptions())
+    reply, reply_source = harness_reply(setup, harness_dir)
+    write_text(os.path.join(record, "reply.md"), reply)
+    scan = scan_paths(walk_files(record), exempt=auth_store_exemptions(),
+                      mandatory=walk_files(harness_dir))
     write_json(os.path.join(record, "scan.json"), scan)
+    # E10-43 (finding 19): ONE status, from the process outcome, in both records. A routing
+    # trial has no result file, so "the session ended cleanly" is its completion test.
+    status = outcome_status(step, True)
+    if breach["breached"]:
+        status = "profile_breach"
     command = {
-        "trial": args.trial, "kind": "routing", "entry": parts["entry"], "set": which,
+        "trial": args.trial, "attempt": attempt, "kind": "routing", "entry": parts["entry"],
+        "set": which,
         "argv": step["argv"], "cwd": os.getcwd(),
         "allowlisted_env_names": allowlisted_names(
             campaign.env(extra=setup.launch_env("routing"))),
@@ -2615,28 +4590,51 @@ def do_routing(args):
         "catalog": catalog, "profile_breach": breach,
         "observed_target": observed, "setup": setup.name, "harness": setup.harness,
         "setup_home": setup.home("routing"),
-        "status": "profile_breach" if breach["breached"] else
-                  ("timed_out" if step.get("timed_out") else
-                   ("launch_failed" if step["exit"] not in (0,) else "complete")),
+        "status": status,
         "condition": "routing",
+        "opaque_tree": tree,
+        "workspace": workspace,
+        "reply_source": reply_source,
         "staged_commit": campaign.staged()["commit"],
         "turn_limit": _turn_limit(setup),
+        "key_boundary": KEY_BOUNDARY_LABEL,
         "scan_hits": len(scan["hits"]),
     }
     write_json(os.path.join(record, "command.json"), command)
     campaign.append_jsonl(campaign.trials_jsonl, {
-        "id": args.trial, "attempt": 0,
-        "status": "profile_breach" if breach["breached"] else
-                  ("timed_out" if step.get("timed_out") else "complete"),
+        "id": args.trial, "attempt": attempt, "kind": "routing",
+        "status": status,
         "exit": step["exit"], "wall": command["wall_seconds"],
         "cost": cost.get("total_cost_usd"), "model": model.get("id"),
-        "effort": model.get("effort"), "observed_target": observed["target"], "record": record})
+        "effort": model.get("effort"), "observed_target": observed["target"],
+        "record": record})
+    if status != "complete":
+        campaign.interruption(args.trial, "status %s (exit %s)" % (status, step["exit"]),
+                              "kept the attempt and counted it", attempt=attempt)
     if breach["breached"]:
+        stop_lane(campaign, setup.name,
+                  "a blocked name is in the catalog: %s" % breach["blocked_present"], record)
         campaign.interruption(args.trial, "a blocked name is in the catalog: %s"
-                              % breach["blocked_present"], "recorded profile_breach; the lane stops")
+                              % breach["blocked_present"],
+                              "recorded profile_breach and persisted the lane stop",
+                              attempt=attempt)
         raise Failure("profile_breach on %s: %s" % (args.trial, breach["blocked_present"]))
+    if breach.get("required_missing"):
+        stop_lane(campaign, setup.name,
+                  "the routing profile is missing required names: %s"
+                  % breach["required_missing"], record)
+        campaign.interruption(args.trial, "required names missing from the catalog: %s"
+                              % breach["required_missing"],
+                              "recorded the breach and persisted the lane stop", attempt=attempt)
+        raise Failure("the routing profile on %s is incomplete: %s"
+                      % (args.trial, breach["required_missing"]))
+    if scan["hits"] or scan["unreadable_mandatory"]:
+        raise Failure("the record for %s holds %d credential-shaped value(s) and %d unreadable "
+                      "mandatory capture(s)" % (args.trial, len(scan["hits"]),
+                                                len(scan["unreadable_mandatory"])))
     campaign.note("routing %s -> %s" % (args.trial, observed["target"]))
-    return {"trial": args.trial, "record": record, "exit": step["exit"],
+    return {"trial": args.trial, "attempt": attempt, "record": record, "exit": step["exit"],
+            "status": status,
             "wall_seconds": command["wall_seconds"], "observed_target": observed,
             "catalog_kind": catalog.get("kind"), "profile_breach": breach,
             "model": model, "cost": cost, "scan_hits": len(scan["hits"])}
@@ -2654,22 +4652,170 @@ def _turn_limit(setup):
                                     "exec and opencode run offer none)"}
 
 
+def catalog_names(setup, catalog, harness_dir):
+    """The ACTIVE entries of the session's catalog, parsed in each harness's native format.
+
+    E10-46 (finding 14): `_profile_breach` used to look for `"signoff"`-shaped JSON tokens in
+    a blob, which found the name in Claude Code's JSON list and missed the same enabled plugin
+    in Codex's TEXTUAL `codex plugin list` output. Each format is parsed as itself.
+    """
+    harness = setup.harness
+    record = catalog.get("record")
+    names, how = [], None
+    if harness == "claude-code":
+        how = "the session's own init event (launch.json skills/plugins)"
+        block = record if isinstance(record, dict) else {}
+        for plugin in block.get("plugins") or []:
+            if isinstance(plugin, str):
+                names.append(plugin.split("@")[0])
+            elif isinstance(plugin, dict) and plugin.get("name"):
+                names.append(str(plugin["name"]).split("@")[0])
+        for skill in block.get("skills") or []:
+            name = skill.get("name") if isinstance(skill, dict) else skill
+            if isinstance(name, str):
+                names.append(name.split(":")[0])
+    elif harness == "codex":
+        # `codex plugin list` prints a table per marketplace:
+        #   PLUGIN                  STATUS              VERSION  SOURCE
+        #   recheck-v2@tony-skills  installed, enabled  0.1.0    <path>
+        #   signoff@tony-skills     not installed                <path>
+        # An ACTIVE entry is one whose STATUS says `enabled`. Measured 2026-09-15 on
+        # codex-cli 0.154.0: the five blocked stations read `not installed`, never
+        # `disabled`, so a parser that only skipped `disabled` counted all five as present and
+        # stopped the whole Codex lane on a profile that was in fact correct (the fix round's
+        # own live campaign caught it: `routing-codex-T-02-fixes-landed-flip-card-r1`).
+        how = ("codex plugin list (the textual catalog); an entry is active only when its "
+               "STATUS column says `enabled`")
+        text = record if isinstance(record, str) else (
+            read_text(os.path.join(harness_dir, "catalog.txt"), "") or "")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            found = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)@([A-Za-z0-9][A-Za-z0-9._-]*)\s+"
+                             r"(?P<status>.+?)\s{2,}", stripped)
+            if not found:
+                continue
+            if "enabled" not in found.group("status").lower():
+                continue
+            names.append(found.group(1))
+    elif harness == "opencode":
+        how = "opencode debug skill (the loader's own catalog record)"
+        for name in record or []:
+            if isinstance(name, str):
+                names.append(name)
+    return sorted({n for n in names if n}), how
+
+
+# E10-13 puts `manual-only-probe` (and the delivery probe beside it) in the routing profile.
+# Measured 2026-09-15 from all three live routing catalogs: every setup installs them —
+# Claude Code through its own local marketplace, Codex through the `recheck-probes`
+# marketplace its `install.sh` builds, OpenCode through the skill-folder copy. So the name is
+# REQUIRED like any other and its absence stops the lane.
+def required_routing_names(setup):
+    """The names E10-13 requires a routing profile to hold, IN THAT CATALOG'S VOCABULARY.
+
+    Claude Code's and Codex's catalogs name PLUGINS; OpenCode's `debug skill` names SKILLS, and
+    a plugin can carry several under other names — `sun` provides `sunrise` and `sunset`, so
+    requiring the plugin name of an OpenCode catalog stops a lane whose profile is correct
+    (measured 2026-09-15 on `routing-opencode-T-02-fixes-landed-flip-card-r1`, which is the
+    record of the defect).
+    """
+    try:
+        manifest = read_json(os.path.join(setup.stage, ".claude-plugin", "marketplace.json"))
+        plugins = [p["name"] for p in manifest.get("plugins", [])]
+    except (Missing, Failure, KeyError, TypeError):
+        plugins = []
+    wanted = [p for p in plugins if p not in BLOCKED_PLUGINS]
+    if setup.harness == "opencode":
+        skills = []
+        for plugin in wanted:
+            found = sorted(glob.glob(os.path.join(setup.stage, "plugins", plugin, "skills", "*")))
+            for path in found:
+                name = os.path.basename(path)
+                if name in BLOCKED_PLUGINS:
+                    continue
+                if os.path.isfile(os.path.join(path, "SKILL.md")):
+                    skills.append(name)
+            if not found:
+                skills.append(plugin)
+        wanted = skills
+    for name in ("recheck-v2", "manual-only-probe"):
+        if name not in wanted:
+            wanted.append(name)
+    return sorted(set(wanted))
+
+
 def _profile_breach(setup, harness_dir, catalog):
-    """A trial whose catalog holds a blocked name is `profile_breach` and the lane stops."""
-    blob = json.dumps(catalog.get("record")) if catalog.get("record") is not None else ""
-    blob += read_text(os.path.join(harness_dir, "launch.json"), "") or ""
-    present = []
-    for name in BLOCKED_PLUGINS:
-        if re.search(r'"%s[:"/]' % re.escape(name), blob) or re.search(
-                r"'%s'" % re.escape(name), blob):
-            present.append(name)
-    loaded = sorted(set(re.findall(r'"([a-z0-9][a-z0-9-]{2,40})"', blob)))
+    """A trial whose catalog holds a blocked name, or misses a required one, stops the lane."""
+    names, how = catalog_names(setup, catalog, harness_dir)
+    present = sorted(n for n in BLOCKED_PLUGINS if n in names)
+    required = required_routing_names(setup)
+    missing = sorted(n for n in required if n not in names)
     return {"breached": bool(present), "blocked_present": present,
-            "blocked_checked": list(BLOCKED_PLUGINS), "names_in_the_catalog_record": loaded[:80]}
+            "blocked_checked": list(BLOCKED_PLUGINS),
+            "catalog_parsed_as": how,
+            "catalog_missing": not names,
+            "required": required, "required_missing": missing if names else required,
+            "names_in_the_catalog_record": names[:120]}
+
+
+def _codex_reads(harness_dir):
+    """Every SKILL.md read the rollout shows, with the line and whether it was a real read.
+
+    E10-46 and E10-33: the developer catalog message is NOT a read. `H_probe.py` reproduced
+    `arcade` at rollout line 3, which is the catalog message; the actual recheck-v2 read
+    starts at line 13 and the final reply cites it.
+    """
+    reads, injected, first_non_read = [], [], None
+    for index, record in enumerate(jsonl_lines(os.path.join(harness_dir, "rollout.jsonl")), 1):
+        payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+        node_type = payload.get("type") or record.get("type") or ""
+        item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+        blob = json.dumps(payload)
+        is_catalog_message = node_type == "message" and (
+            "<skills_instructions" in blob or "skills_instructions" in blob)
+        if is_catalog_message:
+            continue
+        command = item.get("command") or payload.get("command")
+        if isinstance(command, list):
+            command = " ".join(str(x) for x in command)
+        arguments = payload.get("arguments") or item.get("arguments")
+        if not isinstance(command, str) and isinstance(arguments, str):
+            try:
+                parsed = json.loads(arguments)
+                got = parsed.get("command")
+                command = " ".join(str(x) for x in got) if isinstance(got, list) else got
+            except (ValueError, AttributeError):
+                command = None
+        found = None
+        if isinstance(command, str):
+            found = re.search(r"([A-Za-z0-9._-]+)/SKILL\.md", command)
+            if found:
+                reads.append({"line": index, "skill": _skill_of_path(command),
+                              "command": command[:240]})
+                continue
+        matched = re.search(r"<skill[^>]*name=\"([a-z0-9-]+)\"", blob)
+        if matched:
+            injected.append({"line": index, "skill": matched.group(1)})
+            continue
+        if isinstance(command, str) or item.get("type") in ("CommandExecution", "FileChange",
+                                                            "AgentMessage"):
+            if first_non_read is None and (reads or injected):
+                first_non_read = index
+    return reads, injected, first_non_read
+
+
+def _skill_of_path(text):
+    found = re.search(r"/(?:skill|skills)/([a-z0-9][a-z0-9._-]*)/SKILL\.md", text)
+    if found:
+        return found.group(1)
+    found = re.search(r"([a-z0-9][a-z0-9._-]*)/SKILL\.md", text)
+    return found.group(1) if found else None
 
 
 def observed_target(setup, harness_dir):
-    """The first skill the harness's own record shows selected, else `none` (E10-13).
+    """The skill the harness's own record shows the model FOLLOWED, else `none` (E10-13).
     The runner never asks the model what it chose."""
     harness = setup.harness
     if harness == "claude-code":
@@ -2681,85 +4827,150 @@ def observed_target(setup, harness_dir):
                             and block.get("name") == "Skill":
                         name = (block.get("input") or {}).get("skill") or ""
                         return {"target": name.split(":")[0] or "none", "line": index,
+                                "id": block.get("id"),
+                                "candidates": [],
                                 "how": "the Skill tool call in the session's own trace"}
-        return {"target": "none", "line": None,
+        return {"target": "none", "line": None, "candidates": [],
                 "how": "no Skill tool call in the session's own trace"}
     if harness == "codex":
-        for index, record in enumerate(jsonl_lines(os.path.join(harness_dir, "rollout.jsonl")), 1):
-            payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
-            blob = json.dumps(payload)
-            found = re.search(r"/skill/([a-z0-9-]+)/SKILL\.md|skills/([a-z0-9-]+)/SKILL\.md", blob)
-            if found:
-                return {"target": found.group(1) or found.group(2), "line": index,
-                        "how": "the skill's own SKILL.md read in the rollout (the profile's "
-                               "implicit-selection marker)"}
-            injected = re.search(r"<skill[^>]*name=\"([a-z0-9-]+)\"", blob)
-            if injected:
-                return {"target": injected.group(1), "line": index,
-                        "how": "the injected <skill> message in the rollout"}
-        return {"target": "none", "line": None,
-                "how": "no installed SKILL.md read and no injected skill message in the rollout"}
+        # E10-33 as E10-46 corrects it: the observed target is the skill whose body the model
+        # FOLLOWED — the last SKILL.md read before the first non-read action, or the injected
+        # `<skill>` message — and every candidate read is listed. A browse of several files is
+        # its own row, not a selection.
+        reads, injected, first_non_read = _codex_reads(harness_dir)
+        candidates = [{"line": r["line"], "skill": r["skill"]} for r in reads]
+        if injected:
+            return {"target": injected[0]["skill"], "line": injected[0]["line"],
+                    "candidates": candidates,
+                    "how": "the injected <skill> message in the rollout (E10-33)"}
+        before = [r for r in reads
+                  if first_non_read is None or r["line"] < first_non_read]
+        chosen = (before or reads)[-1] if reads else None
+        if chosen:
+            return {"target": chosen["skill"] or "none", "line": chosen["line"],
+                    "candidates": candidates,
+                    "browse": len(before or reads) > 1,
+                    "first_non_read_line": first_non_read,
+                    "how": "the last SKILL.md read before the first non-read action "
+                           "(E10-33; the developer catalog message is not a read)"}
+        return {"target": "none", "line": None, "candidates": candidates,
+                "how": "no installed SKILL.md read and no injected skill message in the rollout "
+                       "(the developer catalog message is not a selection, E10-46)"}
     if harness == "opencode":
         calls = setup.activation(harness_dir)["marker"]["skill_tool_calls"]
-        if calls:
-            name = (calls[0].get("input") or {}).get("name")
+        delivered = [c for c in calls if c.get("status") == "completed"
+                     and (c.get("output_chars") or 0) > 0]
+        if delivered:
+            name = (delivered[0].get("input") or {}).get("name")
             return {"target": name or "none", "line": None,
-                    "how": "the first skill tool call in the session store"}
+                    "candidates": [{"skill": (c.get("input") or {}).get("name"),
+                                    "status": c.get("status")} for c in calls],
+                    "how": "the first skill tool call in the session store that COMPLETED with "
+                           "a delivered body (E10-46)"}
         return {"target": "none", "line": None,
-                "how": "no skill tool call in the session store"}
-    return {"target": "none", "line": None, "how": "unknown harness"}
+                "candidates": [{"skill": (c.get("input") or {}).get("name"),
+                                "status": c.get("status")} for c in calls],
+                "how": "no completed skill tool call with a delivered body in the session store"}
+    return {"target": "none", "line": None, "candidates": [], "how": "unknown harness"}
 
 
 def do_routing_score(args):
     """Per setup, one file in the trigger README's shape; tuning and held-out kept separate."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
-    # E10-21: a stand-in outside a test is refused here, before any record is read, so the
-    # refusal does not depend on a trial existing.
+    # E10-21: a stand-in outside a test is refused here, before any record is read.
     heldout_file()
     key_dir()
+    check_identifier("the revision", args.revision)
+    # E10-45 (finding 8): the same barrier as `grade`. `H_probe.py` scored a fake record while
+    # that record's own harness child was alive.
+    targets = []
+    for record in sorted(glob.glob(os.path.join(campaign.trials, "routing-*"))):
+        targets.append((os.path.basename(record), 0, record))
+        for attempt_path in sorted(glob.glob(os.path.join(record, "attempts", "*"))):
+            if os.path.basename(attempt_path).isdigit():
+                targets.append((os.path.basename(record),
+                                int(os.path.basename(attempt_path)), attempt_path))
+    refuse_while_alive(campaign, targets)
     ensure_dir(campaign.routing_dir)
     by_setup = {}
-    for record in sorted(glob.glob(os.path.join(campaign.trials, "routing-*"))):
-        path = os.path.join(record, "command.json")
-        if not os.path.isfile(path):
-            continue
-        command = read_json(path)
-        expected, which, competitors = expectation_of(command["entry"])
-        observed = (command.get("observed_target") or {}).get("target")
-        row = {
-            "id": command["entry"],
-            "set": which,
-            "repetition": int(re.search(r"-r(\d+)$", command["trial"]).group(1)),
-            "observed_target": observed,
-            "activated": observed == "recheck-v2",
-            "expected_activate": bool(expected.get("activate")),
-            "expected_target": expected.get("target"),
-            "matches_expected": _matches_expected(expected, observed),
-            "blocked_station_leak": observed in BLOCKED_PLUGINS,
-            "competitors": competitors,
-            "record": record,
-        }
-        by_setup.setdefault(command["setup"], []).append(row)
+    with key_open(campaign, "routing-score"):
+        for tid, attempt, record in targets:
+            path = os.path.join(record, "command.json")
+            if not os.path.isfile(path):
+                continue
+            command = read_json(path)
+            entry_id = command["entry"]
+            observed = (command.get("observed_target") or {}).get("target")
+            if entry_id == MANUAL_ONLY_ENTRY:
+                row = {"id": entry_id, "set": "manual-only", "attempt": attempt,
+                       "repetition": int(re.search(r"-r(\d+)$", command["trial"]).group(1)),
+                       "observed_target": observed,
+                       "activated_manual_only_probe": observed == "manual-only-probe",
+                       "activated": observed == "recheck-v2",
+                       "expected": "no activation of manual-only-probe on a request in words",
+                       "status": command.get("status"),
+                       "record": record}
+            else:
+                expected, which, competitors = expectation_of(entry_id)
+                row = {
+                    "id": entry_id,
+                    "set": which,
+                    "attempt": attempt,
+                    "repetition": int(re.search(r"-r(\d+)$", command["trial"]).group(1)),
+                    "observed_target": observed,
+                    "activated": observed == "recheck-v2",
+                    "expected_activate": bool(expected.get("activate")),
+                    "expected_target": expected.get("target"),
+                    "matches_expected": _matches_expected(expected, observed),
+                    "blocked_station_leak": observed in BLOCKED_PLUGINS,
+                    "competitors": competitors,
+                    "status": command.get("status"),
+                    "record": record,
+                }
+            by_setup.setdefault(command["setup"], []).append(row)
     written = []
     for setup_name, rows in sorted(by_setup.items()):
+        scored = [r for r in rows if r["set"] != "manual-only"]
+        manual = [r for r in rows if r["set"] == "manual-only"]
         document = {
             "setup": setup_name,
             "revision": args.revision,
             "scored_at": now_iso(),
-            "rows": rows,
-            "rates": _rates(rows),
-            "manual_only_row": _manual_only_row(campaign, setup_name),
-            "blocked_station_leaks": [r for r in rows if r["blocked_station_leak"]],
+            "rows": scored,
+            "rates": _rates(scored),
+            # E10-53(4): its own row, outside both sets; neither denominator changes.
+            "manual_only_rows": manual,
+            "manual_only_row": manual[0] if manual else {
+                "ran": False,
+                "reason": "no dedicated manual-only request ran in this campaign",
+                "expected": "no activation of manual-only-probe on a request in words"},
+            "blocked_station_leaks": [r for r in scored if r.get("blocked_station_leak")],
             "note": "R27 passes for a harness when the held-out activation and false-trigger "
                     "rates are both recorded; the threshold is the plan's, not this file's "
-                    "(trigger-set/README.md).",
+                    "(trigger-set/README.md). The manual-only row is outside both sets "
+                    "(E10-53(4)).",
         }
-        path = os.path.join(campaign.routing_dir,
-                            "trigger-set-%s-%s.json" % (setup_name, args.revision))
+        # E10-43 (finding 7): a score file is never replaced; a rescore takes the next name.
+        base = os.path.join(campaign.routing_dir,
+                            "trigger-set-%s-%s" % (setup_name, args.revision))
+        path = None
+        for index in range(0, 1000):
+            candidate = "%s%s.json" % (base, "" if index == 0 else "-%d" % index)
+            try:
+                handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            except OSError as exc:
+                if exc.errno == errno.EEXIST:
+                    continue
+                raise
+            os.close(handle)
+            path = candidate
+            break
+        if path is None:
+            raise Failure("no free score name under %s" % campaign.routing_dir)
         write_json(path, document)
-        written.append({"setup": setup_name, "path": path, "rows": len(rows),
-                        "rates": document["rates"]})
+        written.append({"setup": setup_name, "path": path, "rows": len(scored),
+                        "manual_only_rows": len(manual), "rates": document["rates"]})
     return {"campaign": campaign.root, "written": written}
 
 
@@ -2789,21 +5000,6 @@ def _rates(rows):
     return out
 
 
-def _manual_only_row(campaign, setup_name):
-    """The manual-only probe row: a request in words, expected no activation. The explicit form
-    is not run, because an explicit form is not automatic selection (E10-13)."""
-    hits = sorted(glob.glob(os.path.join(campaign.trials, "routing-%s-MANUAL*" % setup_name)))
-    if not hits:
-        return {"ran": False, "reason": "no manual-only-probe routing trial in this campaign",
-                "expected": "no activation of manual-only-probe on a request in words"}
-    command = read_json(os.path.join(hits[0], "command.json"))
-    observed = (command.get("observed_target") or {}).get("target")
-    return {"ran": True, "observed_target": observed,
-            "activated_manual_only_probe": observed == "manual-only-probe",
-            "expected": "no activation of manual-only-probe on a request in words",
-            "record": hits[0]}
-
-
 # --------------------------------------------------------------------------- continuation (E10-12)
 
 RESUME_PROMPT = (
@@ -2820,35 +5016,59 @@ def parse_continuation_id(plan, tid):
     rest = match.group("rest")
     for name in sorted((s["name"] for s in plan["setups"]), key=len, reverse=True):
         if rest.startswith(name + "-"):
-            return {"setup": name, "case": rest[len(name) + 1:], "kind": match.group("kind"),
-                    "rep": int(match.group("rep"))}
+            return {"trial": tid, "setup": name, "case": rest[len(name) + 1:],
+                    "kind": match.group("kind"), "rep": int(match.group("rep"))}
     raise Usage("%r names no setup in the plan" % tid)
 
 
-def checkpoint_state(run_dir):
-    """The checkpoint's phase, its item states and its seq, read without a schema."""
+def checkpoint_document(run_dir):
     path = os.path.join(run_dir, "checkpoint.json")
     if not os.path.isfile(path):
         return None
     try:
-        document = read_json(path)
+        return read_json(path)
     except (Failure, Missing):
+        return None
+
+
+def state_of_checkpoint(document, log_text=None):
+    """The checkpoint's phase, item states, seq and per-item rows, read without a schema."""
+    if document is None:
         return None
     items = ((document.get("scope") or {}).get("items")
              or document.get("items") or document.get("item_states") or [])
-    states = []
+    rows = []
     if isinstance(items, dict):
-        states = [v.get("state") for v in items.values() if isinstance(v, dict)]
+        for key, value in sorted(items.items()):
+            if isinstance(value, dict):
+                rows.append({"index": key, "state": value.get("state"),
+                             "disposition": value.get("disposition")})
     elif isinstance(items, list):
-        states = [v.get("state") for v in items if isinstance(v, dict)]
+        for index, value in enumerate(items):
+            if isinstance(value, dict):
+                rows.append({"index": value.get("index", index), "state": value.get("state"),
+                             "disposition": value.get("disposition")})
+    states = [r["state"] for r in rows]
     return {
         "phase": document.get("phase"),
         "seq": ((document.get("integrity") or {}).get("seq")),
         "states": states,
+        "item_rows": rows,
         "done": states.count("done"),
         "pending": states.count("pending"),
         "continuations": document.get("continuations") or document.get("continuation_count"),
+        # the core writes this as a top-level `start_identity`; `source_identity` is the
+        # RESULT's name for the same thing (measured 2026-09-15 on a retained
+        # `at-cut-checkpoint.json`).
+        "source_identity": document.get("start_identity") or document.get("source_identity"),
+        "checkpoint_log_lines": (len(log_text.splitlines()) if log_text is not None else None),
     }
+
+
+def checkpoint_state(run_dir):
+    """The live checkpoint's state (the poller's reader)."""
+    log_text = read_text(os.path.join(run_dir, "checkpoint.log"))
+    return state_of_checkpoint(checkpoint_document(run_dir), log_text)
 
 
 def cut_point_reached(state):
@@ -2859,28 +5079,37 @@ def cut_point_reached(state):
             and state["phase"] in ("adjudicating", "verifying"))
 
 
-def do_continuation(args):
-    """The cut, the hand-off, and the compaction attempt (E10-12)."""
+def do_continuation(args, record=None, attempt=0):
+    """The cut, the hand-off, and the compaction attempt (E10-12, E10-47)."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
     parts = parse_continuation_id(plan, args.trial)
+    refuse_if_lane_stopped(campaign, parts["setup"])
     setup = setup_for(campaign, plan, parts["setup"])
-    record = campaign.trial_dir(args.trial)
-    if os.path.exists(record):
-        raise Usage("%s is a used trial directory (E9-34)" % record)
-    ensure_dir(record)
+    if record is None:
+        record = campaign.trial_dir(args.trial)
+        if os.path.exists(record):
+            raise Usage("%s is a used trial directory (E9-34)" % record)
+        ensure_dir(record)
+        campaign.journal_attempt(args.trial, 0, record, "continuation")
     began = time.time()
-    fixture = build_fixture(campaign, parts["case"], os.path.join(record, "fixture"))
+    tree = campaign.opaque_tree(args.trial, attempt)
+    fixture = build_fixture(campaign, parts["case"], os.path.join(tree, "fixture"))
     workspace = os.path.join(fixture["case_dir"], "workspace")
-    run_root = run_root_of(campaign, plan, trial=args.trial)
+    run_root = run_root_of(campaign, plan, trial=args.trial, attempt=attempt)
     run_id = "%s-run" % parts["case"]
     run_dir = prepare_run_dir(campaign, fixture["case_dir"], run_root, run_id)
     prompt, seeded = trial_prompt(fixture, workspace, run_dir, plan["run_date"])
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, prompt)
     first = os.path.join(record, "harness-first")
+    registry = ProcessRegistry(campaign, args.trial, attempt, "continuation:first")
+    if getattr(args, "fake_launcher", None):
+        campaign.mark_synthetic("a continuation launch ran the fake launcher %s"
+                                % args.fake_launcher)
+    close_key(campaign, "the %s first session" % args.trial)
     cut = _launch_and_cut(campaign, setup, prompt_path, workspace, first, run_dir,
-                          plan["timeouts"]["continuation"], args)
+                          plan["timeouts"]["continuation"], args, registry)
     target = (seeded.get("target") or {})
     resume = RESUME_PROMPT.format(run_id=run_id, run_dir=run_dir,
                                   slice=target.get("slice") or "A",
@@ -2890,18 +5119,31 @@ def do_continuation(args):
     write_text(resume_path, resume)
     second = os.path.join(record, "harness-second")
     compaction = None
+    second_registry = ProcessRegistry(campaign, args.trial, attempt, "continuation:resume")
+    if not cut.get("valid"):
+        # E10-47: a cut whose RETAINED pair does not show the claimed state is an invalid cut,
+        # and the trial is recorded so. The resume still runs, so the record carries what the
+        # harness did; nothing about the cut is claimed that the retained pair does not show.
+        campaign.interruption(args.trial, "invalid cut: %s" % cut.get("invalid_because"),
+                              "recorded the cut as invalid and ran the resume anyway",
+                              attempt=attempt)
     if parts["kind"] == "handoff":
         step = setup.launch("available", resume_path, workspace, second,
                             plan["timeouts"]["continuation"],
-                            fake=getattr(args, "fake_launcher", None))
+                            fake=getattr(args, "fake_launcher", None),
+                            registry=second_registry)
     else:
         step, compaction = _compaction_resume(campaign, setup, cut, resume_path, workspace,
-                                              second, plan["timeouts"]["continuation"], args)
+                                              second, plan["timeouts"]["continuation"], args,
+                                              second_registry)
     catalog = setup.catalog("available", second)
     # The trial's wall time is the whole thing: the first session, the cut, and the resume.
-    collected = collect_trial(campaign, setup, {"case": parts["case"], "condition": "available"},
-                              record, second, run_dir, workspace, seeded, step, fixture, 0,
-                              began, setup.launch_env("available"), catalog)
+    collected = collect_trial(campaign, setup, {"case": parts["case"], "condition": "available",
+                                                "trial": args.trial},
+                              record, second, run_dir, workspace, seeded, step, fixture, attempt,
+                              began, setup.launch_env("available"), catalog,
+                              kind="continuation:%s" % parts["kind"], tree=tree,
+                              trial_id=args.trial)
     after = checkpoint_state(os.path.join(record, "run"))
     command = read_json(os.path.join(record, "command.json"))
     command.update({
@@ -2915,81 +5157,157 @@ def do_continuation(args):
         "resume_prompt": resume_path,
     })
     write_json(os.path.join(record, "command.json"), command)
-    campaign.note("continuation %s cut at seq %s" % (args.trial, (cut or {}).get("seq")))
-    return {"trial": args.trial, "record": record, "kind": parts["kind"], "cut": cut,
-            "compaction": compaction, "status": collected["status"],
+    invariants = continuation_invariants(record, command)
+    command["continuation_invariants"] = invariants
+    write_json(os.path.join(record, "command.json"), command)
+    campaign.note("continuation %s cut valid=%s at seq %s"
+                  % (args.trial, cut.get("valid"), cut.get("seq")))
+    return {"trial": args.trial, "attempt": attempt, "record": record, "kind": parts["kind"],
+            "cut": cut, "compaction": compaction, "status": collected["status"],
             "validate_last_line": collected["validate_last_line"],
+            "continuation_invariants": invariants,
             "checkpoint_after": after}
 
 
-def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, timeout, args):
-    """Launch, poll the checkpoint, cut at the first mixed done/pending state.
+def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, timeout, args,
+                    registry=None):
+    """Launch, poll the checkpoint, stop the session, then RETAIN and VERIFY the cut.
 
-    E10-12 says "every second". Measured 2026-09-15 on Claude Code with F3-02 (two checklist
-    items): a one-second poll never saw a mixed state — the earliest checkpoint the poller read
-    was already `done, done` at seq 9, because the core's two `adjudicate` commands land inside
-    one second. `--poll-interval` keeps the contract's 1.0 as the default and lets the operator
-    poll finer; every record says which interval it used.
+    E10-47 (finding 15): the order matters. The poller notices a mixed state, the runner stops
+    the process group and waits for it to be gone, and only then reads the checkpoint and its
+    log off disk, copies that exact pair into the record, and checks that the RETAINED pair
+    shows the state the cut claims. The dry run claimed seq 3 with one item done while both
+    retained `at-cut-checkpoint.json` files were seq 4 with both items done; the claim now
+    comes from the retained pair or the cut is invalid.
+
+    E10-25(4) as E10-47 amends it: "at least ten times a second" is the rule AND the default,
+    so `--poll-interval` defaults to 0.1 and anything coarser is refused.
     """
-    # The launcher's own stdout and stderr land BESIDE the output directory, never inside it:
-    # the Codex launcher refuses an output directory that already exists (E9-34, "out-dir
-    # exists; refusing to overwrite a live session"), so pre-creating it to hold these two
-    # files made every Codex continuation trial fail in 0.1 s with no session (measured
-    # 2026-09-15, the dry run's two cont-codex records before this change).
     ensure_dir(os.path.dirname(out_dir))
     env = campaign.env(extra=setup.launch_env("available"))
     launcher = getattr(args, "fake_launcher", None) or setup.script("launch.sh")
     argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available")
-    sys.stderr.write("$ %s   (polled for the cut)\n" % " ".join(argv))
+    interval = float(getattr(args, "poll_interval", None) or DEFAULT_POLL_INTERVAL)
+    if interval > MAX_POLL_INTERVAL:
+        raise Usage("--poll-interval %.3f is coarser than E10-47's maximum of %.1f s "
+                    "(at least ten times a second)" % (interval, MAX_POLL_INTERVAL))
+    sys.stderr.write("$ %s   (polled for the cut every %.2fs)\n" % (" ".join(argv), interval))
+    if registry is not None:
+        registry.reserved(argv, "launch.sh (cut)")
     started = time.time()
     child = subprocess.Popen(argv, env=env, cwd=None, stdin=subprocess.DEVNULL,
                              stdout=open(out_dir + ".launcher.out", "wb"),
                              stderr=open(out_dir + ".launcher.err", "wb"),
                              start_new_session=True)
-    interval = float(getattr(args, "poll_interval", 1.0) or 1.0)
-    seen, cut_state, log_lines = [], None, 0
+    if registry is not None:
+        registry.started(child.pid, argv)
+    seen, observed, timed_out = [], None, False
     while True:
         if child.poll() is not None:
             break
         state = checkpoint_state(run_dir)
         if state:
             seen.append(state)
-            log_lines = len((read_text(os.path.join(run_dir, "checkpoint.log"), "") or "").splitlines())
             if cut_point_reached(state):
-                cut_state = dict(state, checkpoint_log_lines=log_lines)
-                _terminate_group(child.pid)
+                observed = state
                 break
         if time.time() - started > timeout:
-            _terminate_group(child.pid)
+            timed_out = True
             campaign.interruption("continuation", "the first session passed %ds" % timeout,
                                   "terminated its own process group")
             break
         time.sleep(interval)
+    # E10-47: stop the relevant processes FIRST, and wait until they are gone.
+    if child.poll() is None:
+        _terminate_group(child.pid)
     exit_status = child.wait()
+    if registry is not None:
+        registry.ended(child.pid, exit_status)
     ended = time.time()
-    # the checkpoint and its log are copied at the cut, before the resume touches them
+    # ...then capture the exact checkpoint and log pair, and verify it.
+    retained = {}
     for name in ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log"):
         source = os.path.join(run_dir, name)
         if os.path.isfile(source):
-            shutil.copy2(source, os.path.join(out_dir, "at-cut-" + name))
+            destination = os.path.join(out_dir, "at-cut-" + name)
+            ensure_dir(out_dir)
+            shutil.copy2(source, destination)
+            retained[name] = {"path": destination, "sha256": file_sha256(destination)}
+    at_cut_checkpoint = os.path.join(out_dir, "at-cut-checkpoint.json")
+    at_cut_log = os.path.join(out_dir, "at-cut-checkpoint.log")
+    document = None
+    if os.path.isfile(at_cut_checkpoint):
+        try:
+            document = read_json(at_cut_checkpoint)
+        except (Missing, Failure):
+            document = None
+    retained_state = state_of_checkpoint(document, read_text(at_cut_log, "") or "")
+    valid = cut_point_reached(retained_state)
+    invalid_because = None
+    if observed is None:
+        invalid_because = ("the session ended or timed out before the checkpoint ever showed a "
+                           "mixed state")
+    elif not valid:
+        invalid_because = ("the retained checkpoint/log pair does not show the claimed state: "
+                           "observed seq %s (done %s, pending %s, phase %s), retained seq %s "
+                           "(done %s, pending %s, phase %s)"
+                           % (observed.get("seq"), observed.get("done"), observed.get("pending"),
+                              observed.get("phase"),
+                              (retained_state or {}).get("seq"), (retained_state or {}).get("done"),
+                              (retained_state or {}).get("pending"),
+                              (retained_state or {}).get("phase")))
+    done_items = [r for r in ((retained_state or {}).get("item_rows") or [])
+                  if r.get("state") == "done"]
     return {
         "argv": argv,
         "exit": exit_status,
+        "timed_out": timed_out,
         "wall_seconds": round(ended - started, 3),
-        "seq": (cut_state or {}).get("seq"),
-        "phase": (cut_state or {}).get("phase"),
-        "done": (cut_state or {}).get("done"),
-        "pending": (cut_state or {}).get("pending"),
-        "checkpoint_log_lines": (cut_state or {}).get("checkpoint_log_lines", log_lines),
-        "cut_made": cut_state is not None,
+        # every claim below is read from the RETAINED pair, never from the poller's view
+        "seq": (retained_state or {}).get("seq"),
+        "phase": (retained_state or {}).get("phase"),
+        "done": (retained_state or {}).get("done"),
+        "pending": (retained_state or {}).get("pending"),
+        "checkpoint_log_lines": (retained_state or {}).get("checkpoint_log_lines"),
+        "cut_made": observed is not None,
+        "valid": bool(valid),
+        "invalid_because": invalid_because,
+        "observed_at_the_poll": observed,
+        "retained": {
+            "files": retained,
+            "state": retained_state,
+            "done_items": done_items,
+            "verifier_calls_for_done_items": _verifier_calls_in(out_dir, run_dir),
+        },
+        "start_identity": (retained_state or {}).get("source_identity"),
         "poll_interval_seconds": interval,
         "checkpoint_states_polled": len(seen),
         "states_seen": seen[-6:],
         "session": _session_id(setup, out_dir),
-        "reason": "cut at the first checkpoint showing one item done and one pending"
-                  if cut_state else
-                  "no cut: the session ended or timed out before the checkpoint showed a mixed state",
+        "reason": "cut at the first checkpoint showing one item done and one pending, then "
+                  "stopped, then retained and verified (E10-47)" if valid else
+                  (invalid_because or "no cut"),
     }
+
+
+def _verifier_calls_in(out_dir, run_dir):
+    calls = []
+    for path in (os.path.join(out_dir, "at-cut-receipt.json"),
+                 os.path.join(out_dir, "at-cut-checkpoint.json"),
+                 os.path.join(run_dir, "receipt.json")):
+        if not os.path.isfile(path):
+            continue
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        for row in document.get("verifier_calls") or []:
+            calls.append(row.get("call_id") or row.get("id") if isinstance(row, dict) else row)
+    return sorted({c for c in calls if c})
+
+
+DEFAULT_POLL_INTERVAL = 0.1   # E10-47: "at least ten times a second" is the rule AND the default
+MAX_POLL_INTERVAL = 0.1
 
 
 def _launch_argv(setup, launcher, prompt_path, workspace, out_dir, condition):
@@ -3046,7 +5364,8 @@ COMPACTION = {
 }
 
 
-def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, timeout, args):
+def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, timeout, args,
+                       registry=None):
     """Continue the SAME session by the harness's own resume mechanism, with its compaction
     setting where one exists; record every attempt with its exact command and output."""
     ensure_dir(out_dir)
@@ -3057,7 +5376,10 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     if not session:
         return ({"argv": [], "exit": None, "timed_out": False, "wall_seconds": 0.0,
                  "started_at": now_iso(), "ended_at": now_iso(), "stdout": "", "stderr": ""},
-                {"available": False, "witness": None, "attempts": attempts,
+                {"available": COMPACTION[setup.harness]["flag"] is not None,
+                 "mechanism": COMPACTION[setup.harness],
+                 "witness": None, "attempts": attempts,
+                 "verdict": "no resume: the cut session left no session id",
                  "reason": "the first session left no session id to resume"})
     if setup.harness == "claude-code":
         argv = ["claude", "-p", "--resume", session, "--autocompact",
@@ -3065,30 +5387,30 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
                 "--setting-sources", "local", "--strict-mcp-config",
                 "--settings", os.path.join(setup.home("available"), "launch-settings.json"),
                 "--output-format", "stream-json", "--verbose", prompt]
-        step = run_cmd(argv, env=env, cwd=workspace, timeout=timeout, label="resume+autocompact")
+        if registry is not None:
+            registry.reserved(argv, "resume+autocompact")
+        step = run_cmd(argv, env=env, cwd=workspace, timeout=timeout, label="resume+autocompact",
+                       registry=registry)
         write_text(os.path.join(out_dir, "trace.jsonl"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
     elif setup.harness == "codex":
         # `-C`, `--add-dir` and the sandbox line are `codex exec` options and must come BEFORE
-        # the `resume` subcommand, which accepts only its own options (`-c`, `--json`, `-o`) and
-        # rejected `-C` with exit 2 on 0.154.0 (the dry run's cont-codex compaction r2 record,
-        # E10-35). The launch flags mirror setups/codex/launch.sh: the child home writable
-        # (E9-25) and network for the nested verifier (E9-21).
+        # the `resume` subcommand, which accepts only its own options (E10-35).
         child_home = os.path.join(setup.home("available"), "child")
         argv = ["codex", "exec", "--json", "-o", os.path.join(out_dir, "final.md"),
                 "-C", workspace, "--add-dir", child_home,
                 "-c", "sandbox_workspace_write.network_access=true",
                 "resume", session, "-c",
                 "model_auto_compact_token_limit=%d" % args.compact_tokens, "-"]
+        if registry is not None:
+            registry.reserved(argv, "exec resume + compact limit")
         step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")), cwd=workspace,
-                       stdin=prompt, timeout=timeout, label="exec resume + compact limit")
+                       stdin=prompt, timeout=timeout, label="exec resume + compact limit",
+                       registry=registry)
         write_text(os.path.join(out_dir, "events.jsonl"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
-        # E10-36: the compaction witness lives in the thread's own rollout (`"type":
-        # "compacted"` records), not in the exec event stream, which carries no compaction
-        # event at all (measured 2026-09-15: the dry run's cont-codex compaction r3 resume
-        # compacted fourteen times at a 2,000-token limit and its events.jsonl showed none).
-        # The resumed thread's rollout is copied beside the events, as launch.sh copies it.
+        # E10-36: the compaction witness lives in the thread's own rollout, not in the exec
+        # event stream, which carries no compaction event at all.
         rollouts = glob.glob(os.path.join(setup.home("available"), "sessions", "**",
                                           "rollout-*%s.jsonl" % session), recursive=True)
         if len(rollouts) == 1:
@@ -3103,6 +5425,8 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
                 {"qwen": "openrouter/qwen/qwen3.8-flash",
                  "deepseek": "openrouter/deepseek/deepseek-v4.1-flash"}.get(setup.model,
                                                                             setup.model), prompt]
+        if registry is not None:
+            registry.reserved(argv, "run --session")
         step = run_cmd(argv, env=dict(
             env,
             XDG_CONFIG_HOME=os.path.join(home, "xdg-config"),
@@ -3110,7 +5434,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
             XDG_CACHE_HOME=os.path.join(home, "xdg-cache"),
             XDG_STATE_HOME=os.path.join(home, "xdg-state"),
             OPENCODE_DISABLE_EXTERNAL_SKILLS="1"), cwd=workspace, timeout=timeout,
-            label="run --session (no compaction setting exists)")
+            label="run --session (no compaction setting exists)", registry=registry)
         write_text(os.path.join(out_dir, "trace.json"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
     attempts.append({"argv": step["argv"], "exit": step["exit"],
@@ -3129,23 +5453,98 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     }
 
 
+# The NATIVE record files a compaction witness may come from, per harness, and the native
+# event shapes. E10-47 (finding 15): a witness is a native compaction EVENT in the resumed
+# session, before the resumed work — never prose. `G_probe.py` made a diagnostic sentence
+# count as a witness because the old reader grepped every file in the directory, `resume.err`
+# included.
+COMPACTION_RECORDS = {
+    "claude-code": ("trace.jsonl",),
+    "codex": ("rollout.jsonl", "events.jsonl"),
+    "opencode": ("trace.json", "session.json"),
+}
+
+
+def _compaction_event(harness, record):
+    """True when one JSON record IS a native compaction event (not a record mentioning one)."""
+    payload = record.get("payload") if isinstance(record.get("payload"), dict) else record
+    if not isinstance(payload, dict):
+        return None
+    node_type = payload.get("type") or record.get("type")
+    if harness == "claude-code":
+        if record.get("type") == "system" and record.get("subtype") in ("compact",
+                                                                        "compact_boundary"):
+            return "system/%s" % record.get("subtype")
+        if record.get("isCompactSummary") is True:
+            return "isCompactSummary"
+        if node_type == "summary":
+            return "summary"
+    elif harness == "codex":
+        if node_type in ("compacted", "turn_compacted", "ContextCompaction", "turn_compact"):
+            return str(node_type)
+        item = payload.get("item")
+        if isinstance(item, dict) and item.get("type") in ("compacted", "ContextCompaction"):
+            return str(item.get("type"))
+    elif harness == "opencode":
+        if isinstance(node_type, str) and node_type.startswith(("session.compact",
+                                                                "session.compaction")):
+            return node_type
+        part = record.get("part") or {}
+        if isinstance(part, dict) and str(part.get("type", "")).startswith("compact"):
+            return str(part.get("type"))
+    return None
+
+
+def _first_work_line(harness, records):
+    """The line at which the RESUMED work starts: the first tool call or assistant action."""
+    for line, record in records:
+        payload = record.get("payload") if isinstance(record.get("payload"), dict) else record
+        if harness == "claude-code":
+            message = record.get("message") or {}
+            content = message.get("content")
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    return line
+        elif harness == "codex":
+            item = payload.get("item") if isinstance(payload, dict) else None
+            if isinstance(item, dict) and item.get("type") in ("CommandExecution", "FileChange"):
+                return line
+            if isinstance(payload, dict) and payload.get("type") in ("function_call",
+                                                                     "custom_tool_call"):
+                return line
+        else:
+            part = record.get("part") or {}
+            if isinstance(part, dict) and part.get("tool"):
+                return line
+    return None
+
+
 def compaction_witness(setup, out_dir):
-    """The trial counts as a compaction only when the harness's own record shows its
-    compaction or summary event before the resumed turn (E10-12)."""
-    patterns = {
-        "claude-code": (r'"subtype"\s*:\s*"compact', r'"isCompactSummary"\s*:\s*true',
-                        r'"type"\s*:\s*"summary"'),
-        "codex": (r'"type"\s*:\s*"compacted"', r'"type"\s*:\s*"turn_?compact',
-                  r'"type"\s*:\s*"ContextCompaction"'),
-        "opencode": (r'"type"\s*:\s*"session\.compact', r'session\.compaction\.(started|ended)'),
-    }[setup.harness]
-    for name in sorted(os.listdir(out_dir)) if os.path.isdir(out_dir) else []:
-        text = read_text(os.path.join(out_dir, name), "") or ""
-        for pattern in patterns:
-            found = re.search(pattern, text)
-            if found:
-                return {"file": name, "pattern": pattern,
-                        "line": text[:found.start()].count("\n") + 1}
+    """The native compaction event of the resumed session, before the resumed work (E10-47)."""
+    harness = setup.harness
+    for name in COMPACTION_RECORDS[harness]:
+        path = os.path.join(out_dir, name)
+        if not os.path.isfile(path):
+            continue
+        if name == "session.json":
+            try:
+                document = read_json(path)
+            except (Missing, Failure):
+                continue
+            records = list(enumerate(document.get("records") or [], 1))
+        else:
+            records = list(enumerate(jsonl_lines(path), 1))
+        work_line = _first_work_line(harness, records)
+        for line, record in records:
+            kind = _compaction_event(harness, record)
+            if not kind:
+                continue
+            before_work = work_line is None or line <= work_line
+            return {"file": name, "event": kind, "line": line,
+                    "first_resumed_work_line": work_line,
+                    "before_the_resumed_work": before_work,
+                    "source": "the resumed session's own native record",
+                    "ok": bool(before_work)}
     return None
 
 
@@ -3158,18 +5557,22 @@ TERMINAL_STATUSES = ("complete", "no_result", "timed_out", "launch_failed", "pro
 def trial_state(campaign, tid):
     """`none`, `recorded` with its status, or `partial`.
 
-    E10-9 says a restart skips every trial whose record is complete and reruns nothing on its
-    own; E10-15 says the operator reruns a `launch_failed` or `no_result` trial once, by hand.
-    So a trial that RAN and ended badly is `recorded`, not unfinished: the loop skips it and
-    names it, and only the operator's `rerun` gives it another attempt.
+    E10-43 (finding 21): a directory that exists WITHOUT a `command.json` is a `partial`
+    attempt — the trial was started and interrupted — and the report retains it. The dry run's
+    `campaign stop` left exactly such a directory and `status` reported `partial_records: []`.
     """
-    path = os.path.join(campaign.trial_dir(tid), "command.json")
+    directory = campaign.trial_dir(tid)
+    path = os.path.join(directory, "command.json")
     if not os.path.isfile(path):
+        if os.path.isdir(directory):
+            return {"state": "partial", "status": None,
+                    "why": "the directory exists with no command.json: the attempt was "
+                           "started and interrupted"}
         return {"state": "none", "status": None}
     try:
         status = read_json(path).get("status")
     except (Failure, Missing):
-        return {"state": "partial", "status": None}
+        return {"state": "partial", "status": None, "why": "command.json does not parse"}
     if status in TERMINAL_STATUSES:
         return {"state": "recorded", "status": status}
     return {"state": "partial", "status": status}
@@ -3181,7 +5584,7 @@ def trial_complete(campaign, tid):
 
 
 def campaign_queue(campaign, plan):
-    """Every trial id in the plan's order, with each one's state on disk."""
+    """Every trial id in the plan's order, with its lane, kind and state on disk."""
     queue = []
     for lane, ids in sorted(plan["order"].items()):
         for tid in ids:
@@ -3192,14 +5595,61 @@ def campaign_queue(campaign, plan):
     for lane, ids in sorted((plan.get("routing_order") or {}).items()):
         for tid in ids:
             queue.append({"lane": lane, "id": tid, "kind": "routing"})
+    for lane, ids in sorted((plan.get("manual_only_order") or {}).items()):
+        for tid in ids:
+            queue.append({"lane": lane, "id": tid, "kind": "routing", "manual_only": True})
     for row in queue:
         state = trial_state(campaign, row["id"])
         row["state"] = state["state"]
         row["status"] = state["status"]
+        row["why"] = state.get("why")
         row["complete"] = state["state"] == "recorded" and state["status"] == "complete"
         row["recorded"] = state["state"] == "recorded"
         row["record_exists"] = os.path.isdir(campaign.trial_dir(row["id"]))
     return queue
+
+
+# E10-51 (finding 20): one ATOMIC ownership handshake. The parent claims `campaign.pid` with
+# O_CREAT|O_EXCL and writes a token; the detached child is told that token, verifies it, and
+# rewrites the file with its own pid. Both used to treat the file as somebody else's
+# reservation, so a detached start reported `started: true` and its child immediately refused
+# itself, running zero trials.
+LAUNCH_OPTION_FIELDS = ("fake_launcher", "compact_tokens", "poll_interval", "lanes")
+
+
+def claim_campaign(campaign, token):
+    ensure_dir(campaign.root)
+    try:
+        handle = os.open(campaign.pid_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST:
+            raise
+        return None
+    with os.fdopen(handle, "w") as out:
+        out.write("claiming %s\n%s\n" % (os.getpid(), token))
+    return token
+
+
+def campaign_pid(campaign):
+    text = read_text(campaign.pid_file) or ""
+    first = text.strip().splitlines()[0] if text.strip() else ""
+    if first.startswith("claiming"):
+        return None, text
+    try:
+        return int(first), text
+    except ValueError:
+        return None, text
+
+
+def campaign_alive(campaign):
+    pid, _ = campaign_pid(campaign)
+    if not pid:
+        return None
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return None
+    return pid
 
 
 def do_campaign(args):
@@ -3207,267 +5657,876 @@ def do_campaign(args):
     if args.action == "status":
         plan = campaign.plan()
         queue = campaign_queue(campaign, plan)
-        pid = None
-        if os.path.isfile(campaign.pid_file):
-            try:
-                pid = int((read_text(campaign.pid_file) or "").strip())
-            except ValueError:
-                pid = None
-        alive = False
-        if pid:
-            try:
-                os.kill(pid, 0)
-                alive = True
-            except OSError:
-                alive = False
+        pid, raw = campaign_pid(campaign)
+        alive = bool(campaign_alive(campaign))
         done = sum(1 for r in queue if r["complete"])
         recorded = sum(1 for r in queue if r["recorded"])
+        partial = [{"id": r["id"], "why": r.get("why")} for r in queue
+                   if r["state"] == "partial"]
         return {
             "campaign": campaign.root, "pid": pid, "running": alive,
             "planned": len(queue), "complete": done, "recorded": recorded,
             "recorded_with_a_failed_outcome": [
                 {"id": r["id"], "status": r["status"]} for r in queue
                 if r["recorded"] and r["status"] != "complete"],
-            "partial_records": [r["id"] for r in queue if r["state"] == "partial"],
+            "partial_records": [r["id"] for r in partial],
+            "partial_detail": partial,
+            "live_processes": live_processes(campaign),
+            "lane_stops": {name: lane_stopped(campaign, name)
+                           for name in sorted({r["lane"] for r in queue})
+                           if lane_stopped(campaign, name)},
+            "key_state": key_state(),
             "next": next((r["id"] for r in queue if not r["record_exists"]), None),
+            "by_lane": {lane: {"planned": sum(1 for r in queue if r["lane"] == lane),
+                               "complete": sum(1 for r in queue
+                                               if r["lane"] == lane and r["complete"])}
+                        for lane in sorted({r["lane"] for r in queue})},
             "status": "complete" if recorded == len(queue) else ("running" if alive else "stopped"),
             "trials_jsonl": campaign.trials_jsonl,
             "interruptions": campaign.interruptions,
+            "processes": campaign.processes,
             "log": campaign.log,
         }
     if args.action == "stop":
         if not os.path.isfile(campaign.pid_file):
             return {"campaign": campaign.root, "stopped": False, "reason": "no campaign.pid"}
-        pid = int((read_text(campaign.pid_file) or "0").strip())
-        _terminate_group(pid)
-        campaign.interruption(None, "stop asked for pid %s" % pid, "terminated its process group")
+        pid, _ = campaign_pid(campaign)
+        # E10-43 (finding 21): terminate the REGISTERED trial groups too. The dry run's stop
+        # killed the loop and left the trial child alive in its own process group.
+        registered = live_processes(campaign)
+        collected = []
+        for row in registered:
+            _terminate_group(row["pid"])
+            still = True
+            try:
+                os.kill(row["pid"], 0)
+            except OSError:
+                still = False
+            collected.append({"pid": row["pid"], "trial": row.get("trial"),
+                              "attempt": row.get("attempt"), "kind": row.get("kind"),
+                              "still_alive": still})
+            campaign.append_jsonl(campaign.processes, {
+                "event": "ended", "token": row.get("token"), "trial": row.get("trial"),
+                "attempt": row.get("attempt"), "kind": row.get("kind"), "pid": row["pid"],
+                "exit": None, "stopped_by": "campaign stop", "at": now_iso()})
+            campaign.interruption(row.get("trial"), "campaign stop terminated pid %s" % row["pid"],
+                                  "collected its status: still_alive=%s" % still,
+                                  attempt=row.get("attempt"))
+        if pid:
+            _terminate_group(pid)
+        campaign.interruption(None, "stop asked for pid %s" % pid,
+                              "terminated its process group and %d registered trial group(s)"
+                              % len(registered))
         os.unlink(campaign.pid_file)
-        return {"campaign": campaign.root, "stopped": True, "pid": pid}
+        # the key is left CLOSED after a stop, exactly as E10-40 asks
+        return {"campaign": campaign.root, "stopped": True, "pid": pid,
+                "terminated_trial_processes": collected,
+                "key_state": key_state()}
     if args.action == "start":
         plan = campaign.plan()
-        if os.path.isfile(campaign.pid_file):
-            raise Usage("%s already holds campaign.pid; `campaign stop` first" % campaign.root)
-        if args.foreground:
+        alive = campaign_alive(campaign)
+        if alive:
+            raise Usage("%s already holds campaign.pid for a live process (%s); `campaign "
+                        "stop` first" % (campaign.root, alive))
+        if getattr(args, "owner_token", None):
+            # the detached child: verify the token the parent wrote, then take ownership
+            text = read_text(campaign.pid_file) or ""
+            if args.owner_token not in text:
+                raise Usage("the ownership token does not match %s" % campaign.pid_file)
+            write_text(campaign.pid_file, "%d\n%s\n" % (os.getpid(), args.owner_token))
             return _campaign_loop(campaign, plan, args)
+        if os.path.isfile(campaign.pid_file):
+            raise Usage("%s holds a campaign.pid from a process that is gone; `campaign stop` "
+                        "clears it" % campaign.root)
+        # E10-40: a crash leaves the key closed. `campaign start` refuses until `--reopen-key`
+        # is run by hand, and the reopening is logged.
+        if key_closed() and not args.reopen_key:
+            raise Usage("the answer key and held-out set are closed (mode 000) from an earlier "
+                        "run; re-run with --reopen-key once you are sure no trial is live")
+        if args.reopen_key:
+            open_key(campaign, "campaign start --reopen-key")
+            campaign.note("the key was reopened by hand with --reopen-key")
+        gate = current_probes(campaign, plan)
+        if not gate["ok"] and not args.skip_probe_gate:
+            raise Usage("E10-42: `campaign start` needs one current successful probe record per "
+                        "setup and home; missing %s" % ", ".join(gate["missing"]))
+        token = claim_campaign(campaign, uuid.uuid4().hex)
+        if token is None:
+            raise Usage("%s already holds campaign.pid" % campaign.root)
+        if args.foreground:
+            write_text(campaign.pid_file, "%d\n%s\n" % (os.getpid(), token))
+            return _campaign_loop(campaign, plan, args)
+        # E10-51: the launch options are preserved into the detached process. A detached start
+        # used to drop `--fake-launcher`, `--compact-tokens` and `--poll-interval`.
+        argv = [sys.executable, os.path.abspath(__file__), "campaign", "start",
+                "--campaign", campaign.root, "--foreground", "--owner-token", token]
+        if args.fake_launcher:
+            argv += ["--fake-launcher", args.fake_launcher]
+        argv += ["--compact-tokens", str(args.compact_tokens),
+                 "--poll-interval", str(args.poll_interval),
+                 "--lanes", str(args.lanes)]
+        if args.skip_probe_gate:
+            argv += ["--skip-probe-gate"]
         child = subprocess.Popen(
-            [sys.executable, os.path.abspath(__file__), "campaign", "start",
-             "--campaign", campaign.root, "--foreground"],
-            stdout=open(campaign.log, "a"), stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL, start_new_session=True)
-        write_text(campaign.pid_file, "%d\n" % child.pid)
-        return {"campaign": campaign.root, "started": True, "pid": child.pid,
+            argv, env=campaign.env(), stdout=open(campaign.log, "a"),
+            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        # the handshake: wait until the child has written its own pid into the file
+        deadline = time.time() + 30
+        owned = None
+        while time.time() < deadline:
+            pid, _ = campaign_pid(campaign)
+            if pid:
+                owned = pid
+                break
+            if child.poll() is not None:
+                raise Failure("the detached campaign process exited %s before taking "
+                              "ownership; see %s" % (child.returncode, campaign.log))
+            time.sleep(0.1)
+        if owned is None:
+            raise Failure("the detached campaign process did not take ownership within 30s")
+        campaign.note("campaign started detached as pid %s (child %s)" % (owned, child.pid))
+        return {"campaign": campaign.root, "started": True, "pid": owned,
+                "spawned_pid": child.pid, "owner_token_accepted": True,
+                "launch_options": {k: getattr(args, k, None) for k in LAUNCH_OPTION_FIELDS},
                 "log": campaign.log, "trials_jsonl": campaign.trials_jsonl}
     raise Usage("campaign takes start, status or stop")
 
 
 def _campaign_loop(campaign, plan, args):
-    write_text(campaign.pid_file, "%d\n" % os.getpid())
+    """One sequential worker per setup, the three lanes running concurrently (E10-51).
+
+    Finding 20: the old loop walked one flat queue, so the six-trial dry run ran both Claude
+    trials, then both Codex trials, then both OpenCode trials, and zero intervals overlapped.
+    Each lane is still strictly sequential (E10-5: Claude Code and Codex never overlap with
+    themselves); the lanes themselves run at the same time and every record's own
+    `started_at`/`ended_at` proves it.
+    """
     queue = campaign_queue(campaign, plan)
-    ran, skipped, failed = [], [], []
-    last = time.time()
+    lanes = {}
     for row in queue:
-        if row["recorded"]:
-            skipped.append(row["id"])
-            if row["status"] != "complete":
-                campaign.interruption(
-                    row["id"], "a record already stands with status %s" % row["status"],
-                    "left it alone; `rerun` is the operator's call (E10-15)")
-            continue
-        if row["record_exists"]:
-            # E10-9: a restart reruns nothing on its own; a partial record is named.
-            skipped.append(row["id"])
-            campaign.interruption(row["id"], "a partial record exists (no terminal status)",
-                                 "left it alone; `rerun` is the operator's call (E10-15)")
-            continue
-        gap = time.time() - last
-        if gap > 600:
-            campaign.interruption(row["id"], "a wall-clock gap of %.0fs between polls" % gap,
-                                 "recorded the gap and continued")
+        lanes.setdefault(row["lane"], []).append(row)
+    ran, skipped, failed = [], [], []
+    results_lock = threading.Lock()
+
+    def work(lane, rows):
         last = time.time()
-        one = argparse.Namespace(campaign=campaign.root, trial=row["id"], attempt_dir=None,
-                                 attempt=0, plugins=None, fake_launcher=args.fake_launcher,
-                                 compact_tokens=args.compact_tokens,
-                                 poll_interval=getattr(args, "poll_interval", 1.0))
-        try:
-            if row["kind"] == "routing":
-                do_routing(one)
-            elif row["kind"] == "continuation":
-                do_continuation(one)
-            else:
-                do_run(one)
-            ran.append(row["id"])
-        except (Usage, Missing, Failure) as exc:
-            failed.append({"id": row["id"], "why": str(exc)})
-            campaign.interruption(row["id"], "the trial raised: %s" % exc,
-                                 "kept the record and went on")
+        for row in rows:
+            if lane_stopped(campaign, lane):
+                with results_lock:
+                    skipped.append(row["id"])
+                campaign.interruption(row["id"], "the %s lane is stopped" % lane,
+                                      "left it alone (E10-46)")
+                continue
+            if row["recorded"]:
+                with results_lock:
+                    skipped.append(row["id"])
+                if row["status"] != "complete":
+                    campaign.interruption(
+                        row["id"], "a record already stands with status %s" % row["status"],
+                        "left it alone; `rerun` is the operator's call (E10-15)")
+                continue
+            if row["record_exists"]:
+                with results_lock:
+                    skipped.append(row["id"])
+                campaign.interruption(row["id"], "a partial record exists (%s)"
+                                      % (row.get("why") or "no terminal status"),
+                                      "left it alone; `rerun` is the operator's call (E10-15)")
+                continue
+            gap = time.time() - last
+            if gap > 600:
+                campaign.interruption(row["id"], "a wall-clock gap of %.0fs between trials" % gap,
+                                      "recorded the gap and continued")
+            last = time.time()
+            one = argparse.Namespace(campaign=campaign.root, trial=row["id"], attempt_dir=None,
+                                     attempt=0, plugins=None, fake_launcher=args.fake_launcher,
+                                     compact_tokens=args.compact_tokens,
+                                     poll_interval=getattr(args, "poll_interval",
+                                                           DEFAULT_POLL_INTERVAL))
+            try:
+                if row["kind"] == "routing":
+                    do_routing(one)
+                elif row["kind"] == "continuation":
+                    do_continuation(one)
+                else:
+                    do_run(one)
+                with results_lock:
+                    ran.append(row["id"])
+            except (Usage, Missing, Failure) as exc:
+                with results_lock:
+                    failed.append({"id": row["id"], "why": str(exc)})
+                campaign.interruption(row["id"], "the trial raised: %s" % exc,
+                                      "kept the record and went on")
+
+    workers = []
+    concurrency = int(getattr(args, "lanes", 0) or len(lanes))
+    for lane, rows in sorted(lanes.items()):
+        workers.append(threading.Thread(target=work, args=(lane, rows), name="lane-%s" % lane))
+    started_at = now_iso()
+    running = []
+    for worker in workers:
+        while len([w for w in running if w.is_alive()]) >= max(1, concurrency):
+            time.sleep(0.2)
+        worker.start()
+        running.append(worker)
+    for worker in workers:
+        worker.join()
     if os.path.isfile(campaign.pid_file):
         os.unlink(campaign.pid_file)
-    return {"campaign": campaign.root, "ran": ran, "skipped": skipped, "failed": failed,
-            "planned": len(queue)}
+    return {"campaign": campaign.root, "ran": sorted(ran), "skipped": sorted(skipped),
+            "failed": failed, "planned": len(queue),
+            "lanes": sorted(lanes), "concurrency": concurrency,
+            "started_at": started_at, "ended_at": now_iso()}
 
 
 # --------------------------------------------------------------------------- report (E10-9)
 
 
+def measurement_records(campaign):
+    """Hash-bound corrected measurements (E10-48, finding 16).
+
+    Raw history stays exactly as it was recorded. A correction is a separate record naming the
+    record it corrects, the sha256 of that record's bytes when the correction was written, the
+    field, the value the raw record holds and the value that is true, and why. `report`
+    consumes only corrections whose binding still holds; one whose target changed is reported
+    as stale and is NOT applied.
+    """
+    rows = []
+    for path in sorted(glob.glob(os.path.join(campaign.measurements, "*.json"))):
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        document["_path"] = path
+        target = document.get("corrects") or {}
+        binding_path = target.get("path")
+        current = file_sha256(binding_path) if binding_path else None
+        document["binding_ok"] = bool(binding_path) and current == target.get("sha256")
+        document["current_sha256"] = current
+        rows.append(document)
+    return rows
+
+
 def do_report(args):
-    """`table.md`, `table.json` and a `report.md` skeleton; every number from `trials.jsonl`
-    and the grade files, each cell naming its records."""
+    """`tables/table.md`, `tables/table.json` and a generated skeleton; every number from
+    `trials.jsonl` and the grade files, each cell naming its records."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
-    lines = [json.loads(l) for l in (read_text(campaign.trials_jsonl, "") or "").splitlines() if l.strip()]
+    lines = [json.loads(l) for l in (read_text(campaign.trials_jsonl, "") or "").splitlines()
+             if l.strip()]
+    # E10-44 (finding 6): grades join on (trial id, attempt), and every attempt's own grade
+    # file is found, `attempts/<n>/grade.json` included.
     grades = {}
-    for path in sorted(glob.glob(os.path.join(campaign.trials, "*", "grade.json"))):
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*", "grade.json"))
+                       + glob.glob(os.path.join(campaign.trials, "*", "attempts", "*",
+                                                "grade.json"))):
         grade = read_json(path)
-        grades[grade["trial"]] = {"path": path, "grade": grade}
-    cells = {}
+        grades[(grade["trial"], grade.get("attempt", 0))] = {"path": path, "grade": grade}
+    corrections = measurement_records(campaign)
+    applied, stale = [], []
+    by_attempt = {}
+    for row in corrections:
+        if not row["binding_ok"]:
+            stale.append({"correction": row["_path"], "corrects": row.get("corrects"),
+                          "why": "the record it corrects changed since the correction was "
+                                 "written"})
+            continue
+        key = (row.get("trial"), row.get("attempt", 0))
+        by_attempt.setdefault(key, []).append(row)
+        applied.append({"correction": row["_path"], "trial": row.get("trial"),
+                        "attempt": row.get("attempt", 0), "field": row.get("field"),
+                        "raw": row.get("raw_value"), "corrected": row.get("corrected_value"),
+                        "why": row.get("why")})
+    cells, rows_seen = {}, []
     for line in lines:
         tid = line["id"]
-        record = campaign.trial_dir(tid)
+        attempt = line.get("attempt", 0)
+        # The ledger's own `record` is the first source; the attempt's canonical location is
+        # the fallback, so a line written before a record moved still finds its command.json
+        # (E10-44: the join is on (trial id, attempt), never on the base trial).
+        record = line.get("record") or attempt_record(campaign, tid, attempt)
         command = None
         path = os.path.join(record, "command.json")
+        if not os.path.isfile(path):
+            fallback = attempt_record(campaign, tid, attempt)
+            if os.path.isfile(os.path.join(fallback, "command.json")):
+                record, path = fallback, os.path.join(fallback, "command.json")
         if os.path.isfile(path):
             command = read_json(path)
         key = (command or {}).get("setup") or tid.split("-")[0]
         condition = (command or {}).get("condition") or "n/a"
-        kind = ((command or {}).get("kind") or "comparison").split(":")[0]
+        kind = ((command or {}).get("kind") or line.get("kind") or "comparison").split(":")[0]
         if tid.startswith("routing-"):
             kind = "routing"
         elif tid.startswith("cont-"):
             kind = "continuation"
         activated = line.get("activated")
+        cost = line.get("cost")
+        wall = line.get("wall")
+        for correction in by_attempt.get((tid, attempt), []):
+            if correction.get("field") == "cost":
+                cost = correction.get("corrected_value")
+            elif correction.get("field") == "wall":
+                wall = correction.get("corrected_value")
         bucket = cells.setdefault((kind, key, condition, bool(activated)), {
-            "trials": [], "records": [], "complete": 0, "graded_ok": 0, "cost": 0.0,
-            "wall": 0.0, "no_result": 0})
+            "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "grades": []})
         bucket["trials"].append(tid)
+        bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
         bucket["complete"] += 1 if line.get("status") == "complete" else 0
         bucket["no_result"] += 1 if line.get("status") in ("no_result", "timed_out",
                                                           "launch_failed") else 0
-        if isinstance(line.get("cost"), (int, float)):
-            bucket["cost"] += line["cost"]
-        if isinstance(line.get("wall"), (int, float)):
-            bucket["wall"] += line["wall"]
-        entry = grades.get(tid)
-        if entry and entry["grade"].get("ok"):
-            bucket["graded_ok"] += 1
+        if isinstance(cost, (int, float)):
+            bucket["cost"] += cost
+        if isinstance(wall, (int, float)):
+            bucket["wall"] += wall
+        entry = grades.get((tid, attempt))
+        if entry:
+            bucket["grades"].append(entry["path"])
+            if entry["grade"].get("ok"):
+                bucket["graded_ok"] += 1
+        rows_seen.append({"id": tid, "attempt": attempt, "status": line.get("status"),
+                          "cost": cost, "wall": wall, "record": record})
+    # E10-43 (finding 21) and E10-48: a partial attempt is retained in the report, and launches
+    # are counted apart from trials.
+    queue = campaign_queue(campaign, plan)
+    partial = [{"id": r["id"], "why": r.get("why")} for r in queue if r["state"] == "partial"]
+    journal = jsonl_lines(campaign.attempts_journal)
+    launches = [row for row in process_rows(campaign) if row.get("event") == "started"]
     table = []
     for (kind, setup, condition, activated), bucket in sorted(cells.items()):
         table.append({
             "kind": kind, "setup": setup, "condition": condition, "activated": activated,
-            "trials": len(bucket["trials"]), "complete": bucket["complete"],
+            "trials": len(set(bucket["trials"])), "attempts": len(bucket["attempts"]),
+            "complete": bucket["complete"],
             "no_result": bucket["no_result"], "graded_ok": bucket["graded_ok"],
             "cost_usd": round(bucket["cost"], 6) if bucket["cost"] else None,
             "wall_seconds": round(bucket["wall"], 1),
             "records": bucket["records"],
+            "attempt_ids": bucket["attempts"],
+            "grade_files": bucket["grades"],
         })
     summary = grade_summary([g["grade"] for g in grades.values()])
+    tables_dir = os.path.join(campaign.root, "tables")
+    ensure_dir(tables_dir)
     document = {"campaign": campaign.root, "plan_counts": plan.get("counts"),
-                "trials_seen": len(lines), "graded": len(grades), "table": table,
+                "trials_seen": len(lines),
+                "attempts_seen": len({(r["id"], r["attempt"]) for r in rows_seen}),
+                "attempts_journalled": len(journal),
+                "launches_recorded": len(launches),
+                "partial_attempts": partial,
+                "graded": len(grades), "table": table,
                 "grade_summary": summary,
+                "corrected_measurements_applied": applied,
+                "corrected_measurements_stale": stale,
+                "totals": {
+                    "cost_usd": round(sum(r["cost"] for r in rows_seen
+                                          if isinstance(r["cost"], (int, float))), 8),
+                    "wall_seconds": round(sum(r["wall"] for r in rows_seen
+                                              if isinstance(r["wall"], (int, float))), 1),
+                    "by_status": {status: sum(1 for r in rows_seen if r["status"] == status)
+                                  for status in sorted({r["status"] for r in rows_seen})},
+                },
                 "sources": {"lines": campaign.trials_jsonl,
-                            "grades": sorted(g["path"] for g in grades.values())}}
-    write_json(os.path.join(campaign.root, "table.json"), document)
+                            "grades": sorted(g["path"] for g in grades.values()),
+                            "measurements": sorted(r["_path"] for r in corrections),
+                            "attempts_journal": campaign.attempts_journal,
+                            "processes": campaign.processes}}
+    write_json(os.path.join(tables_dir, "table.json"), document)
     md = ["# %s: the comparison table" % os.path.basename(campaign.root), "",
-          "Every number is computed from `trials.jsonl` and the grade files; each row names its",
-          "records. Available trials are split by `activated` (E10-4).", "",
-          "| kind | setup | condition | activated | trials | complete | no result | graded ok | cost USD | wall s |",
-          "|---|---|---|---|---|---|---|---|---|---|"]
+          "Every number is computed from `trials.jsonl` and the grade files, joined by",
+          "(trial id, attempt); each row names its records. Available trials are split by",
+          "`activated` (E10-4). Corrected measurements (E10-48) are applied only where their",
+          "hash binding still holds.", "",
+          "| kind | setup | condition | activated | trials | attempts | complete | no result | graded ok | cost USD | wall s |",
+          "|---|---|---|---|---|---|---|---|---|---|---|"]
     for row in table:
-        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %s | %s |" % (
+        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %s | %s |" % (
             row["kind"], row["setup"], row["condition"], row["activated"], row["trials"],
-            row["complete"], row["no_result"], row["graded_ok"],
+            row["attempts"], row["complete"], row["no_result"], row["graded_ok"],
             "%.6f" % row["cost_usd"] if row["cost_usd"] else "null", row["wall_seconds"]))
     md += ["", "## Records per row", ""]
     for row in table:
-        md.append("- %s / %s / %s / activated=%s: %s" % (
+        md.append("- %s / %s / %s / activated=%s: attempts %s; records %s; grades %s" % (
             row["kind"], row["setup"], row["condition"], row["activated"],
-            ", ".join(row["records"])))
-    write_text(os.path.join(campaign.root, "table.md"), "\n".join(md) + "\n")
+            ", ".join(row["attempt_ids"]), ", ".join(row["records"]),
+            ", ".join(row["grade_files"]) or "none"))
+    if partial:
+        md += ["", "## Partial attempts retained (E10-43)", ""]
+        for row in partial:
+            md.append("- %s: %s" % (row["id"], row["why"]))
+    if applied or stale:
+        md += ["", "## Corrected measurements (E10-48)", ""]
+        for row in applied:
+            md.append("- applied: %s#%s %s %s -> %s (%s)" % (row["trial"], row["attempt"],
+                                                             row["field"], row["raw"],
+                                                             row["corrected"], row["correction"]))
+        for row in stale:
+            md.append("- NOT applied (binding broken): %s" % row["correction"])
+    write_text(os.path.join(tables_dir, "table.md"), "\n".join(md) + "\n")
+    # E10-43 (finding 7): the generated skeleton is a GENERATED TABLE, kept apart from the
+    # operator's own report. `report` used to overwrite `report.md`, which is where the
+    # operator writes; a marker left there by hand was replaced by a skeleton.
+    skeleton_path = os.path.join(tables_dir, "report-skeleton.md")
     skeleton = [
-        "# %s: the operator's report (skeleton)" % os.path.basename(campaign.root), "",
-        "Every number below is copied from a named record (E10-15). Nothing here is a judgment",
-        "about a single trial.", "",
+        "# %s: the operator's report (generated skeleton)" % os.path.basename(campaign.root), "",
+        "This file is GENERATED. The operator's own report is `report.md` at the campaign root",
+        "and is never written by `report` (E10-43). Every number below is copied from a named",
+        "record (E10-15).", "",
         "## 1. What ran", "", "- planned: %s" % json.dumps(plan.get("counts")),
         "- trial lines: %d (`trials.jsonl`)" % len(lines),
+        "- attempts journalled: %d (`attempts.jsonl`)" % len(journal),
+        "- launches recorded: %d (`processes.jsonl`)" % len(launches),
+        "- partial attempts retained: %d" % len(partial),
         "- graded: %d" % len(grades), "",
         "## 2. The comparison table", "", "See `table.md`.", "",
         "## 3. Grade counts", "", "```json", json.dumps(summary, indent=2, sort_keys=True), "```", "",
-        "## 4. Interruptions", "", "See `interruptions.jsonl`.", "",
-        "## 5. Routing", "", "See `routing/`.", "",
-        "## 6. What the operator could not do", "", "- (fill in)", "",
+        "## 4. Interruptions", "", "See `../interruptions.jsonl`.", "",
+        "## 5. Routing", "", "See `../routing/`.", "",
+        "## 6. Corrected measurements", "", "```json",
+        json.dumps({"applied": applied, "stale": stale}, indent=2, sort_keys=True), "```", "",
+        "## 7. What the operator could not do", "", "- (the operator fills this in "
+        "in ../report.md)", "",
     ]
-    write_text(os.path.join(campaign.root, "report.md"), "\n".join(skeleton) + "\n")
-    return {"campaign": campaign.root, "table_md": os.path.join(campaign.root, "table.md"),
-            "table_json": os.path.join(campaign.root, "table.json"),
-            "report_md": os.path.join(campaign.root, "report.md"),
-            "rows": len(table), "trials_seen": len(lines), "graded": len(grades),
-            "grade_summary": summary}
+    write_text(skeleton_path, "\n".join(skeleton) + "\n")
+    scan = scan_paths(walk_files(campaign.root), exempt=auth_store_exemptions())
+    document["scan_hits"] = len(scan["hits"])
+    result = {"campaign": campaign.root,
+              "table_md": os.path.join(tables_dir, "table.md"),
+              "table_json": os.path.join(tables_dir, "table.json"),
+              "report_skeleton_md": skeleton_path,
+              "operator_report_untouched": os.path.join(campaign.root, "report.md"),
+              "rows": len(table), "trials_seen": len(lines),
+              "attempts_seen": document["attempts_seen"],
+              "launches_recorded": document["launches_recorded"],
+              "partial_attempts": partial,
+              "graded": len(grades), "totals": document["totals"],
+              "corrected_measurements_applied": applied,
+              "corrected_measurements_stale": stale,
+              "grade_summary": summary}
+    # E10-52 (finding 24): a credential shape in the records fails the report gate too.
+    if scan["hits"]:
+        raise Failure("the campaign records hold %d credential-shaped value(s); `scan` names "
+                      "them" % len(scan["hits"]))
+    return result
 
 
 # --------------------------------------------------------------------------- check (E10-9)
 
 FAKE_DIR = os.path.join(RUNNER_DIR, "tests", "fake")
+SENTINEL_TEXT = "RECHECK-RUNNER-SENTINEL: a file outside the trial's own opaque tree\n"
+
+
+def interpreter_record():
+    """What `check` actually ran on, so a green run names its runtime (E10-52, finding 25)."""
+    return {"executable": sys.executable,
+            "version": sys.version.split()[0],
+            "version_full": sys.version.replace("\n", " "),
+            "jsonschema_for_the_validator": "supplied by `uv run` from validate-result.py's "
+                                            "own inline metadata (jsonschema==4.25.1)"}
 
 
 def do_check(args):
-    """The runner's self-test: the tests, plus a dry trial against the fake harness."""
+    """The runner's self-test: the tests, a dry trial against the fake harness, the negative
+    metric cases, and the read-boundary sentinel of E10-40."""
+    scratch = args.scratch or os.path.join(
+        os.environ.get("RECHECK_RUNNER_TEST_SCRATCH") or tool_tmpdir(),
+        "recheck-runner-check-%d" % os.getpid())
+    if os.path.exists(scratch):
+        rmtree(scratch)
+    ensure_dir(scratch)
+    test_env = tool_env(extra={"RECHECK_RUNNER_TEST_SCRATCH": os.path.join(scratch, "tests")})
     tests = run_cmd([sys.executable, "-m", "unittest", "discover", "-s",
                      os.path.join(RUNNER_DIR, "tests"), "-q"],
-                    env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), cwd=os.path.expanduser("~"),
-                    label="unittest discover")
-    dry = None
-    if not args.tests_only:
-        scratch = args.scratch or os.path.join(
-            os.environ.get("TMPDIR", "/tmp"), "recheck-runner-check-%d" % os.getpid())
-        if os.path.exists(scratch):
-            rmtree(scratch)
-        dry = fake_dry_trial(scratch)
+                    env=test_env, cwd=os.path.expanduser("~"), label="unittest discover")
+    dry, negatives, sentinel = None, None, None
+    try:
+        if not args.tests_only:
+            dry = fake_dry_trial(os.path.join(scratch, "dry"))
+            negatives = negative_metric_cases(os.path.join(scratch, "negatives"))
+            sentinel = sentinel_probe(os.path.join(scratch, "sentinel"))
+    finally:
+        # `check` is not a campaign: it never leaves the two directories closed behind it.
+        open_key(None, "check finished")
     document = {
-        "tests": {"exit": tests["exit"], "tail": (tests["stderr"] or tests["stdout"])[-1200:]},
+        "interpreter": interpreter_record(),
+        "tests": {"exit": tests["exit"], "tail": (tests["stderr"] or tests["stdout"])[-1800:]},
         "dry_trial": dry,
-        "ok": tests["exit"] == 0 and (dry is None or dry.get("status") == "complete"),
+        "negative_metric_cases": negatives,
+        "read_boundary_sentinel": sentinel,
+        "key_boundary": KEY_BOUNDARY_LABEL,
+        "key_state": key_state(),
     }
-    if not document["ok"]:
-        raise Failure("check failed: tests exit %s, dry trial %s"
-                      % (tests["exit"], (dry or {}).get("status")))
+    problems = []
+    if tests["exit"] != 0:
+        problems.append("the test suite exited %s" % tests["exit"])
+    if dry is not None:
+        if dry.get("status") != "complete":
+            problems.append("the dry trial is %s" % dry.get("status"))
+        if dry.get("validate_last_line") != "exit 0":
+            problems.append("the dry trial's real validator said %r"
+                            % dry.get("validate_last_line"))
+        if dry.get("validator_skips") != 0:
+            problems.append("the dry trial's validator skipped %s check(s)"
+                            % dry.get("validator_skips"))
+        if not dry.get("graded_ok"):
+            problems.append("the dry trial did not grade ok: %s" % dry.get("ok_because"))
+    if negatives is not None:
+        for row in negatives["cases"]:
+            if row["graded_ok"] is not False:
+                problems.append("the negative case %r did not fail its grade" % row["case"])
+    document["ok"] = not problems
+    document["problems"] = problems
+    if problems:
+        raise Failure("check failed: %s" % "; ".join(problems))
     return document
 
 
-def fake_dry_trial(scratch):
-    """One whole trial against the fake harness: no model, the real code path (E10-9's `check`)."""
+def _synthetic_campaign(scratch, cases=(), setups=("claude-code",), conditions=("available",)):
+    """A campaign the RUNNER marks synthetic, so an E10-21 stand-in is honoured (E10-45)."""
     campaign = Campaign(os.path.join(scratch, "campaign"))
     campaign.ensure()
     stage = os.path.join(scratch, "stage")
-    ensure_dir(os.path.join(stage, "plugins", "recheck-v2", "setups", "claude-code"))
+    for harness in HARNESSES:
+        ensure_dir(os.path.join(stage, "plugins", "recheck-v2", "setups", harness))
     write_json(campaign.stage_json, {
         "campaign": campaign.root, "checkout": REPO_ROOT, "commit": "fake-check",
         "stage": stage, "plugin_tree_sha256": "fake", "evals_excluded": True,
         "answer_key_or_held_out_in_stage": [], "canonical_content_sha256": None,
         "skill_identity_exit": 0, "files_copied": 0, "staged_at": now_iso()})
     plan = default_plan("check")
-    plan["setups"] = [{"name": "claude-code", "harness": "claude-code"}]
-    plan["cases"] = ["F1-01-fixed-clean"]
+    plan["setups"] = [{"name": n, "harness": n} for n in setups]
+    plan["cases"] = list(cases or ["F1-01-fixed-clean"])
     plan["repetitions"] = 1
-    plan["conditions"] = ["available"]
+    plan["conditions"] = list(conditions)
+    plan["routing"] = {"entries": ["T-01-slash-v2-slice"], "repetitions": 1}
     document = dict(plan)
     document.update({"planned_at": now_iso(), "campaign": campaign.root,
                      "stage": read_json(campaign.stage_json),
                      "path_entries": path_entries(require=False),
                      "allowlisted_env_names": list(ALLOWED_ENV),
-                     "case_lanes": {"F1-01-fixed-clean": "F1-fixed-defect"},
+                     "case_lanes": {c: lane_index()[c] for c in plan["cases"]},
                      "order": order_of(plan), "routing_entries": [],
-                     "routing_order": {}, "continuation_order": {},
-                     "counts": {"comparison": 1, "routing": 0, "continuation": 0, "total": 1}})
+                     "routing_order": {}, "manual_only_order": {}, "continuation_order": {},
+                     "synthetic": True,
+                     "counts": {"comparison": sum(len(v) for v in order_of(plan).values()),
+                                "routing": 0, "manual_only": 0, "continuation": 0,
+                                "total": sum(len(v) for v in order_of(plan).values())}})
     write_json(campaign.campaign_json, document)
+    campaign.mark_synthetic("check built this campaign")
+    return campaign, document
+
+
+def _stand_in_key(scratch, case, expected=None, runs_at="E10"):
+    """A key `check` wrote ITSELF: synthetic entries in the key's shape, never a copy (E10-21).
+
+    Nothing in this function, and nothing it writes, comes from `evals/answer-key/`.
+    """
+    directory = os.path.join(scratch, "key-stand-in-%s" % runs_at.lower())
+    ensure_dir(directory)
+    lane = lane_index()[case]
+    entry = {"case": case, "checks": ["SELFTEST"], "requirements": ["SELFTEST"],
+             "runs_at": runs_at,
+             "expected": expected if expected is not None else {
+                 "status": "completed", "items": [{"disposition": "fixed"}]},
+             "must_not": ["a stand-in written by check, never a key value"]}
+    write_json(os.path.join(directory, "%s.json" % lane), [entry])
+    return directory
+
+
+def fake_dry_trial(scratch):
+    """One whole trial against the fake harness: no model, the real code path, the REAL
+    validator, and a real grade against a stand-in key (E10-9's `check`)."""
+    campaign, plan = _synthetic_campaign(scratch)
     tid = trial_id("claude-code", "F1-01-fixed-clean", "available", 1)
     args = argparse.Namespace(campaign=campaign.root, trial=tid, attempt_dir=None, attempt=0,
                               plugins=["recheck-v2"],
                               fake_launcher=os.path.join(FAKE_DIR, "claude-code-launch.sh"),
                               compact_tokens=2000)
     result = do_run(args)
+    validation = read_json(os.path.join(campaign.trial_dir(tid), "validate.txt").replace(
+        "validate.txt", "validate.json"))
+    verdict = {}
+    text = read_text(os.path.join(campaign.trial_dir(tid), "validate.txt"), "") or ""
+    body = "\n".join(l for l in text.splitlines() if not l.startswith("exit "))
+    try:
+        verdict = json.loads(body)
+    except ValueError:
+        verdict = {}
+    directory = _stand_in_key(scratch, "F1-01-fixed-clean")
+    graded = _grade_with_stand_in(campaign, tid, directory)
     return {"campaign": campaign.root, "trial": tid, "status": result["status"],
             "validate_last_line": result["validate_last_line"],
+            "validator_schema_errors": len(verdict.get("schema") or []),
+            "validator_semantic_errors": len(verdict.get("semantic") or []),
+            "validator_skips": len(verdict.get("skipped") or []),
+            "validation_binding": validation,
+            "graded_ok": graded.get("ok"),
+            "ok_because": graded.get("ok_because"),
             "activated": result["activated"], "scan_hits": result["scan_hits"]}
+
+
+def _grade_with_stand_in(campaign, tid, key_directory, attempt=0):
+    """Grade one record in this process against a stand-in, under the E10-21 flags."""
+    saved = {k: os.environ.get(k) for k in (TEST_FLAG, KEY_DIR_OVERRIDE)}
+    os.environ[TEST_FLAG] = "1"
+    os.environ[KEY_DIR_OVERRIDE] = key_directory
+    try:
+        with key_open(campaign, "check"):
+            return grade_one(campaign, campaign.plan(), tid,
+                             attempt_record(campaign, tid, attempt), attempt)
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def negative_metric_cases(scratch):
+    """Records the runner produced, degraded one metric at a time, each of which must FAIL.
+
+    Live check 1 asks for "the negative metric cases failing their grades". Every record below
+    is one the fake harness actually produced; exactly one thing is taken out of each copy, so
+    a case that passes proves the metric is not gating.
+    """
+    campaign, plan = _synthetic_campaign(scratch)
+    tid = trial_id("claude-code", "F1-01-fixed-clean", "available", 1)
+    do_run(argparse.Namespace(campaign=campaign.root, trial=tid, attempt_dir=None, attempt=0,
+                              plugins=["recheck-v2"],
+                              fake_launcher=os.path.join(FAKE_DIR, "claude-code-launch.sh"),
+                              compact_tokens=2000))
+    base = campaign.trial_dir(tid)
+    key = _stand_in_key(scratch, "F1-01-fixed-clean")
+    rows = []
+
+    def derive(name, mutate):
+        target = os.path.join(campaign.trial_dir(tid), "attempts", str(len(rows) + 1))
+        ensure_dir(os.path.dirname(target))
+        shutil.copytree(base, target, symlinks=True,
+                        ignore=shutil.ignore_patterns("attempts", "grade.json"))
+        mutate(target)
+        command = read_json(os.path.join(target, "command.json"))
+        command["attempt"] = len(rows) + 1
+        write_json(os.path.join(target, "command.json"), command)
+        return target, len(rows) + 1
+
+    # 1. missing evidence: every item's evidence removed from the result
+    def strip_evidence(target):
+        result = read_json(os.path.join(target, "result.json"))
+        for item in result.get("items") or []:
+            item.pop("evidence", None)
+            if isinstance(item.get("verification"), dict):
+                item["verification"]["evidence"] = []
+        write_json(os.path.join(target, "result.json"), result)
+
+    # 2. missing chat: the harness reply loses its Result line and its item lines
+    def strip_reply(target):
+        reply = read_text(os.path.join(target, "reply.md"), "") or ""
+        kept = [l for l in reply.splitlines()
+                if not l.startswith("Result:") and " · " not in l]
+        write_text(os.path.join(target, "reply.md"), "\n".join(kept) + "\n")
+        write_text(os.path.join(target, "chat.md"), "\n".join(kept) + "\n")
+
+    # 3. a skipped check under --strict: the REAL validator, run without the run directory and
+    #    the workspace, so V-checks report themselves skipped; the retained verdict is bound to
+    #    the same bytes and the live run directory is taken out of reach.
+    def make_skip(target):
+        result = os.path.join(target, "result.json")
+        seeded = os.path.join(target, "input.json")
+        step = run_cmd(["uv", "run", os.path.join(SKILL_DIR, "scripts", "validate-result.py"),
+                        result, "--input", seeded, "--strict"],
+                       env=campaign.env(), label="validate-result.py --strict (no run dir)")
+        text = (step["stdout"] or "")
+        if text and not text.endswith("\n"):
+            text += "\n"
+        write_text(os.path.join(target, "validate.txt"), text + "exit %s\n" % step["exit"])
+        command = read_json(os.path.join(target, "command.json"))
+        command["run_dir"] = os.path.join(campaign.tmp, "a-run-directory-that-is-gone")
+        command["validation_binding"] = {
+            "validated": True, "exit": step["exit"],
+            "result_sha256": file_sha256(result),
+            "input_sha256": file_sha256(seeded),
+            "run_dir": command["run_dir"], "workspace": command.get("workspace"),
+            "validated_at": now_iso()}
+        write_json(os.path.join(target, "command.json"), command)
+        write_json(os.path.join(target, "validate.json"), command["validation_binding"])
+
+    for name, mutate, expect in (
+            ("missing-evidence", strip_evidence, "evidence_sufficient"),
+            ("missing-chat", strip_reply, "interop"),
+            ("skip", make_skip, "zero_skips")):
+        target, attempt = derive(name, mutate)
+        grade = _grade_with_stand_in(campaign, tid, key, attempt)
+        rows.append({"case": name, "record": target, "graded_ok": grade.get("ok"),
+                     "ok_because": grade.get("ok_because"),
+                     "the_metric_that_must_fail": expect,
+                     "it_failed": expect in (grade.get("ok_because") or [])})
+
+    # 4. a key the result contradicts: the stand-in pins `not_fixed`, the result says `fixed`
+    false_fixed_key = _stand_in_key(
+        scratch, "F1-01-fixed-clean",
+        expected={"status": "completed", "items": [{"disposition": "not_fixed"}]})
+    grade = _grade_with_stand_in(campaign, tid, false_fixed_key)
+    rows.append({"case": "false-fixed", "record": base, "graded_ok": grade.get("ok"),
+                 "ok_because": grade.get("ok_because"),
+                 "the_metric_that_must_fail": "no_false_fixed",
+                 "it_failed": "no_false_fixed" in (grade.get("ok_because") or [])})
+
+    # 5. a key that does not run at E10 is refused BEFORE matching (finding 9)
+    wrong_phase = _stand_in_key(scratch, "F1-01-fixed-clean", runs_at="E7")
+    refused, why = False, None
+    try:
+        _grade_with_stand_in(campaign, tid, wrong_phase)
+    except (Failure, Usage) as exc:
+        refused, why = True, str(exc)
+    rows.append({"case": "wrong-key-phase", "record": base,
+                 "graded_ok": False if refused else True, "refused": refused,
+                 "ok_because": [why] if why else [],
+                 "the_metric_that_must_fail": "refused before matching",
+                 "it_failed": refused})
+    return {"campaign": campaign.root, "cases": rows,
+            "all_failed_as_they_must": all(r["it_failed"] for r in rows)}
+
+
+def sentinel_probe(scratch):
+    """E10-40: a sentinel proves what a launched child can and cannot read.
+
+    The boundary on these setups is `instruction-bound + measured`, not enforced: the three
+    harnesses run every trial as this user with no read sandbox. What IS mechanical is
+    measured here — a file inside the trial's own opaque tree, a file outside it under the
+    campaign root, and the two key directories at mode 000 during the launch.
+    """
+    campaign, plan = _synthetic_campaign(scratch)
+    outside = os.path.join(campaign.root, "reviewer-only-sentinel.txt")
+    write_text(outside, SENTINEL_TEXT)
+    tid = trial_id("claude-code", "F1-01-fixed-clean", "available", 1)
+    tree = campaign.opaque_tree(tid, 0)
+    ensure_dir(tree)
+    inside = os.path.join(tree, "inside-sentinel.txt")
+    write_text(inside, SENTINEL_TEXT)
+    key_before = key_state()
+    do_run(argparse.Namespace(campaign=campaign.root, trial=tid, attempt_dir=None, attempt=0,
+                              plugins=["recheck-v2"],
+                              fake_launcher=os.path.join(FAKE_DIR, "claude-code-launch.sh"),
+                              compact_tokens=2000))
+    key_during = key_state()
+    record = campaign.trial_dir(tid)
+    command = read_json(os.path.join(record, "command.json"))
+    witnesses = trace_witnesses(campaign, record, command)
+    # what a child process COULD read while the key was closed, measured directly
+    reachable = {}
+    for label, path in (("the sentinel inside the trial's own tree", inside),
+                        ("the sentinel outside it, under the campaign root", outside),
+                        ("the answer key directory", KEY_DIR),
+                        ("the held-out directory", os.path.dirname(TRIGGER_HELDOUT))):
+        probe = run_cmd([sys.executable, "-c",
+                         "import os,sys;p=sys.argv[1];\n"
+                         "sys.exit(0 if (os.path.isdir(p) and os.listdir(p)) or "
+                         "(os.path.isfile(p) and open(p).read()) else 1)", path],
+                        env=tool_env(), label="sentinel read")
+        reachable[label] = {"path": path, "readable": probe["exit"] == 0,
+                            "exit": probe["exit"]}
+    return {"campaign": campaign.root,
+            "key_state_before_the_launch": key_before,
+            "key_state_after_the_launch": key_during,
+            "key_closed_during_the_launch": all(r["closed"] for r in key_during if r["present"]),
+            "readable_by_a_child_while_the_key_is_closed": reachable,
+            "records_reached_by_the_trial": witnesses["records_reached"],
+            "skill_file_reached_by_the_trial": witnesses["skill_file_reached"],
+            "boundary": KEY_BOUNDARY_LABEL,
+            "note": "E10-40: Astra's prescription (the key outside the launch process's "
+                    "ENFORCED read access) is not reachable on these setups, and is recorded "
+                    "as such. The key directories are held at mode 000 for the whole launch "
+                    "and the grader measures every read of a campaign record outside the "
+                    "trial's own opaque tree."}
+
+
+# --------------------------------------------------------------------------- key-state, measure
+
+
+def do_lane_stop(args):
+    """Show every lane stop, or clear one with a reason (E10-46)."""
+    campaign = Campaign(args.campaign)
+    if args.clear:
+        if not args.setup or not args.why:
+            raise Usage("--clear needs --setup and --why")
+        return clear_lane_stop(campaign, args.setup, args.why)
+    stops = {}
+    for path in sorted(glob.glob(os.path.join(campaign.root, "lane-stops", "*.json"))):
+        stops[os.path.basename(path)[:-5]] = read_json(path)
+    return {"campaign": campaign.root, "stops": stops,
+            "cleared": sorted(glob.glob(os.path.join(campaign.root, "lane-stops", "cleared",
+                                                     "*.json")))}
+
+
+def do_key_state(args):
+    """The mode of the two key directories, and the one hand-run reopening E10-40 allows."""
+    before = key_state()
+    reopened = []
+    if args.reopen:
+        reopened = open_key(None, "key-state --reopen")
+        sys.stderr.write("runner.py: reopened %s by hand\n" % ", ".join(reopened))
+    return {"boundary": KEY_BOUNDARY_LABEL, "before": before, "after": key_state(),
+            "reopened": reopened,
+            "note": "E10-40: these directories are held at mode 000 for the whole of every "
+                    "launch and reopened only inside grade and routing-score. A crashed run "
+                    "leaves them closed; this is the hand reopening, and it is logged."}
+
+
+def do_measure(args):
+    """A hash-bound corrected measurement record (E10-48, finding 16).
+
+    Raw history is never edited. The correction names the record it corrects, that record's
+    sha256 at the time of writing, the field, the raw value, the corrected value, why, and the
+    files the corrected value was read from. `report` applies it only while the binding holds.
+    """
+    campaign = Campaign(args.campaign)
+    campaign.ensure()
+    ensure_dir(campaign.measurements)
+    if args.field not in ("cost", "wall"):
+        raise Usage("a correction is written for `cost` or `wall`, not %r" % args.field)
+    if not os.path.exists(args.corrects):
+        raise Missing("nothing to correct at %s" % args.corrects)
+    def number(text):
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    document = {
+        "trial": args.trial, "attempt": args.attempt, "field": args.field,
+        "corrects": {"path": os.path.abspath(args.corrects),
+                     "sha256": file_sha256(args.corrects)},
+        "raw_value": number(args.raw_value) if number(args.raw_value) is not None
+        else args.raw_value,
+        "corrected_value": number(args.corrected_value)
+        if number(args.corrected_value) is not None else args.corrected_value,
+        "why": args.why,
+        "evidence": [{"path": os.path.abspath(p), "sha256": file_sha256(p)}
+                     for p in args.evidence],
+        "written_at": now_iso(),
+        "rule": "E10-48: raw history stays; this record corrects one field of one attempt and "
+                "`report` consumes it only while the binding above still holds.",
+    }
+    check_identifier("the trial the correction names", args.trial)
+    path = None
+    for index in range(0, 1000):
+        candidate = os.path.join(campaign.measurements, "%s-%d-%s%s.json"
+                                 % (args.trial, args.attempt, args.field,
+                                    "" if index == 0 else "-%d" % index))
+        try:
+            handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except OSError as exc:
+            if exc.errno == errno.EEXIST:
+                continue
+            raise
+        os.close(handle)
+        path = candidate
+        break
+    write_json(path, document)
+    campaign.note("corrected measurement %s#%s %s -> %s (%s)"
+                  % (args.trial, args.attempt, args.field, document["corrected_value"], path))
+    return dict(document, record=path)
 
 
 # --------------------------------------------------------------------------- the CLI
@@ -3514,6 +6573,9 @@ def build_parser():
     campaign_arg(one)
     one.add_argument("--plan", help="a plan.json; omitted, the full E10 default plan")
     one.add_argument("--refresh", action="store_true")
+    one.add_argument("--synthetic", action="store_true",
+                     help="mark the campaign synthetic, so an E10-21 key stand-in is honoured "
+                          "(tests and `check` only)")
     one.set_defaults(func=do_plan)
 
     one = subs.add_parser("run", help="one comparison trial end to end")
@@ -3521,18 +6583,24 @@ def build_parser():
     one.add_argument("trial")
     one.add_argument("--plugins", action="append", help="override the plugins a launch loads")
     one.add_argument("--fake-launcher", help="a stub launcher (tests and `check` only)")
-    one.set_defaults(func=do_run, attempt_dir=None, attempt=0, compact_tokens=2000)
+    one.set_defaults(func=do_run, attempt_dir=None, attempt=0, compact_tokens=2000,
+                     poll_interval=DEFAULT_POLL_INTERVAL)
 
-    one = subs.add_parser("rerun", help="a new attempt beside a failed one")
+    one = subs.add_parser("rerun", help="a new attempt beside a failed one (any kind)")
     campaign_arg(one)
     one.add_argument("trial")
     one.add_argument("--fake-launcher")
-    one.set_defaults(func=do_rerun, plugins=None, compact_tokens=2000)
+    one.add_argument("--compact-tokens", type=int, default=2000)
+    one.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL)
+    one.set_defaults(func=do_rerun, plugins=None)
 
     one = subs.add_parser("grade", help="validate, match, and the metrics of E10-11")
     campaign_arg(one)
     one.add_argument("trial", nargs="?")
-    one.add_argument("--all", action="store_true")
+    one.add_argument("--attempt", type=int, default=0,
+                     help="which attempt of that trial (0 is the first)")
+    one.add_argument("--all", action="store_true",
+                     help="every comparison AND continuation attempt, reruns included")
     one.add_argument("--summary", action="store_true", help="counts only")
     one.set_defaults(func=do_grade)
 
@@ -3540,7 +6608,7 @@ def build_parser():
     campaign_arg(one)
     one.add_argument("trial")
     one.add_argument("--fake-launcher")
-    one.set_defaults(func=do_routing)
+    one.set_defaults(func=do_routing, attempt=0)
 
     one = subs.add_parser("routing-score", help="the trigger README's rows, behind the wall")
     campaign_arg(one)
@@ -3552,9 +6620,9 @@ def build_parser():
     one.add_argument("trial")
     one.add_argument("--compact-tokens", type=int, default=2000,
                      help="the Codex auto-compact token limit for the compaction resume")
-    one.add_argument("--poll-interval", type=float, default=1.0,
-                     help="seconds between checkpoint polls (E10-12 says 1.0; measured too "
-                          "coarse to catch the cut on a two-item case)")
+    one.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL,
+                     help="seconds between checkpoint polls; E10-47 fixes the default and the "
+                          "maximum at 0.1 (at least ten times a second)")
     one.add_argument("--fake-launcher")
     one.set_defaults(func=do_continuation)
 
@@ -3564,7 +6632,14 @@ def build_parser():
     one.add_argument("--foreground", action="store_true")
     one.add_argument("--fake-launcher")
     one.add_argument("--compact-tokens", type=int, default=2000)
-    one.add_argument("--poll-interval", type=float, default=1.0)
+    one.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL)
+    one.add_argument("--lanes", type=int, default=0,
+                     help="how many setup lanes run at once (0 = every lane in the plan)")
+    one.add_argument("--owner-token", help="internal: the detached child's ownership token")
+    one.add_argument("--reopen-key", action="store_true",
+                     help="reopen the answer key left closed by a crashed run (E10-40)")
+    one.add_argument("--skip-probe-gate", action="store_true",
+                     help="start without nine current probe records (tests and `check` only)")
     one.set_defaults(func=do_campaign)
 
     one = subs.add_parser("scan", help="the credential scan over every record")
@@ -3576,11 +6651,37 @@ def build_parser():
     campaign_arg(one)
     one.set_defaults(func=do_report)
 
-    one = subs.add_parser("check", help="the runner's own tests plus a dry trial, no model")
+    one = subs.add_parser("check", help="the runner's own tests, a dry trial, the negative "
+                                       "metric cases and the read-boundary sentinel; no model")
     one.add_argument("--campaign", default=CAMPAIGN_ROOT, help="unused; accepted for symmetry")
     one.add_argument("--tests-only", action="store_true")
     one.add_argument("--scratch", help="where the dry trial builds its campaign")
     one.set_defaults(func=do_check)
+
+    one = subs.add_parser("lane-stop", help="show or clear a lane stop (E10-46)")
+    campaign_arg(one)
+    one.add_argument("--setup", help="the lane")
+    one.add_argument("--clear", action="store_true", help="clear it, keeping it as a record")
+    one.add_argument("--why", help="why it is being cleared (required with --clear)")
+    one.set_defaults(func=do_lane_stop)
+
+    one = subs.add_parser("key-state", help="the mode of the two key directories (E10-40)")
+    one.add_argument("--campaign", default=CAMPAIGN_ROOT, help="unused; accepted for symmetry")
+    one.add_argument("--reopen", action="store_true", help="reopen them by hand, and log it")
+    one.set_defaults(func=do_key_state)
+
+    one = subs.add_parser("measure", help="write a hash-bound corrected measurement (E10-48)")
+    campaign_arg(one)
+    one.add_argument("--trial", required=True)
+    one.add_argument("--attempt", type=int, default=0)
+    one.add_argument("--field", required=True, help="cost or wall")
+    one.add_argument("--corrects", required=True, help="the record the correction is bound to")
+    one.add_argument("--raw-value", required=True)
+    one.add_argument("--corrected-value", required=True)
+    one.add_argument("--why", required=True)
+    one.add_argument("--evidence", action="append", default=[],
+                     help="a file the corrected value was read from (repeatable)")
+    one.set_defaults(func=do_measure)
     return parser
 
 

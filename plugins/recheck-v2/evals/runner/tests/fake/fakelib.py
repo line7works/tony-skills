@@ -207,21 +207,45 @@ def write_claude_record(out_dir, prompt, state, steps, plugins):
     chat = read_or(os.path.join(prompt["run_dir"], "chat.md"), "")
     trace = [init]
     chosen = selected(prompt, plugins)
+    deliver = os.environ.get("RECHECK_FAKE_NO_DELIVERY") != "1"
     if chosen:
         trace.append({"type": "assistant", "isSidechain": False, "uuid": "fake-a1",
-                      "effort": model["effort"],
+                      "session_id": session, "effort": model["effort"],
                       "message": {"model": model["id"], "content": [
                           {"type": "tool_use", "name": "Skill", "id": "tu1",
                            "input": {"skill": "%s:%s" % (chosen, chosen),
                                      "args": "slice %s" % prompt.get("slice")}}]}})
-        trace.append({"type": "user", "isSynthetic": True, "uuid": "fake-u1",
-                      "message": {"content": [{"type": "text",
-                                               "text": "the delivered skill body (fake)"}]}})
+        if deliver:
+            # the harness's own delivery: the tool result, then the body as one synthetic
+            # user record (adapters/claude-code/profile.md section 8)
+            trace.append({"type": "user", "session_id": session, "uuid": "fake-r1",
+                          "message": {"content": [
+                              {"type": "tool_result", "tool_use_id": "tu1", "is_error": False,
+                               "content": "<skill_content>the delivered body (fake)"}]}})
+            trace.append({"type": "user", "isSynthetic": True, "uuid": "fake-u1",
+                          "session_id": session,
+                          "message": {"content": [{"type": "text",
+                                                   "text": "the delivered skill body (fake)"}]}})
+        else:
+            # E10-46: a Skill call whose body never arrived is NOT an activation
+            trace.append({"type": "user", "session_id": session, "uuid": "fake-r1",
+                          "message": {"content": [
+                              {"type": "tool_result", "tool_use_id": "tu1", "is_error": True,
+                               "content": ""}]}})
+    for planted in planted_actions(prompt):
+        trace.append({"type": "assistant", "isSidechain": False, "uuid": planted["uuid"],
+                      "session_id": session, "effort": model["effort"],
+                      "message": {"model": model["id"], "content": [planted["block"]]}})
+        trace.append({"type": "user", "session_id": session, "uuid": planted["uuid"] + "-r",
+                      "message": {"content": [
+                          {"type": "tool_result", "tool_use_id": planted["block"]["id"],
+                           "is_error": planted.get("refused", False),
+                           "content": "planted"}]}})
     if "routing_target" in prompt:
         skills = [{"name": "%s:%s" % (p, p)} for p in (plugins or ["recheck-v2"])]
         init["skills"] = skills
     trace.append({"type": "assistant", "isSidechain": False, "uuid": "fake-a2",
-                  "effort": model["effort"],
+                  "session_id": session, "effort": model["effort"],
                   "message": {"model": model["id"], "content": [{"type": "text", "text": chat}]}})
     trace.append({"type": "result", "session_id": session, "is_error": False, "num_turns": 4,
                   "total_cost_usd": 0.1234, "permission_denials": [], "result": chat})
@@ -229,7 +253,8 @@ def write_claude_record(out_dir, prompt, state, steps, plugins):
     transcript = [
         {"type": "user", "sessionID": session, "uuid": "fake-t0", "permissionMode": "acceptEdits",
          "cwd": prompt["workspace"], "message": {"content": read_or(prompt["prompt_file"], "")}},
-        {"type": "assistant", "sessionId": session, "uuid": "fake-t1", "isSidechain": False,
+        {"type": "assistant", "sessionId": session, "session_id": session, "uuid": "fake-t1",
+         "isSidechain": False,
          "effort": model["effort"], "message": {"model": model["id"], "content": [
              {"type": "text", "text": chat}]}},
     ]
@@ -254,6 +279,7 @@ def write_codex_record(out_dir, prompt, state, steps, home):
     chat = read_or(os.path.join(prompt["run_dir"], "chat.md"), "")
     chosen = selected(prompt, ["recheck-v2"])
     skill_md = os.path.join(home, "skills", chosen or "nothing", "SKILL.md")
+    catalog_only = os.environ.get("RECHECK_FAKE_CATALOG_ONLY") == "1"
     rollout = [
         {"type": "session_meta", "payload": {"type": "session_meta", "id": thread,
                                             "cli_version": "fake-0.0.0", "cwd": prompt["workspace"],
@@ -264,17 +290,33 @@ def write_codex_record(out_dir, prompt, state, steps, home):
                                              "effort": model["effort"],
                                              "approval_policy": "never",
                                              "sandbox_policy": "workspace-write"}},
+        # the developer catalog message: names every skill, and is NOT a read (E10-46)
+        {"type": "event_msg", "payload": {"type": "message", "role": "developer",
+                                          "content": "<skills_instructions>\n"
+                                                     "- recheck-v2: verify named fixes\n"
+                                                     "- arcade: publish a page\n"
+                                                     "</skills_instructions>"}},
         {"type": "event_msg", "payload": {"type": "item_completed",
                                          "item": {"type": "CommandExecution",
                                                   "command": ["/bin/zsh", "-lc",
-                                                              "cat %s" % skill_md]}}}
-        if chosen else
+                                                              "cat %s" % skill_md],
+                                                  "exit_code": 0}}}
+        if (chosen and not catalog_only) else
         {"type": "event_msg", "payload": {"type": "item_completed",
                                          "item": {"type": "AgentMessage",
-                                                  "text": "no skill selected"}}},
+                                                  "text": "no skill read"}}},
         {"type": "event_msg", "payload": {"type": "item_completed",
                                          "item": {"type": "AgentMessage", "text": chat}}},
     ]
+    planted = os.environ.get("RECHECK_FAKE_PLANT_GIT")
+    if planted:
+        # E10-46 (finding 11): Codex carries a command inside `function_call.arguments`
+        rollout.insert(3, {"type": "response_item", "payload": {
+            "type": "function_call", "name": "shell", "call_id": "call_planted",
+            "arguments": json.dumps({"command": ["/bin/zsh", "-lc", planted]})}})
+        rollout.insert(4, {"type": "response_item", "payload": {
+            "type": "function_call_output", "call_id": "call_planted",
+            "output": json.dumps({"exit_code": 0})}})
     write_jsonl(os.path.join(out_dir, "rollout.jsonl"), rollout)
     write_jsonl(os.path.join(out_dir, "events.jsonl"), [
         {"type": "thread.started", "thread_id": thread},
@@ -282,6 +324,22 @@ def write_codex_record(out_dir, prompt, state, steps, home):
         {"type": "turn.completed"}])
     write(os.path.join(out_dir, "final.md"), chat + "\n")
     write(os.path.join(out_dir, "stderr.log"), "")
+    # the launcher's own catalog capture, in `codex plugin list`'s TEXTUAL shape (E10-46)
+    # `codex plugin list`'s real shape on 0.154.0: a table per marketplace, STATUS reading
+    # `installed, enabled` or `not installed`.
+    listed = ["Marketplace `tony-skills`", "/a/marketplace.json", "",
+              "PLUGIN                  STATUS              VERSION  SOURCE"]
+    default = "recheck-v2 readers manual-only-probe"
+    for name in (os.environ.get("RECHECK_FAKE_CATALOG") or default).split():
+        listed.append("%-23s %-19s %-8s /a/%s" % (name + "@tony-skills", "installed, enabled",
+                                                  "1.0.0", name))
+    for name in (os.environ.get("RECHECK_FAKE_CATALOG_NOT_INSTALLED") or "").split():
+        listed.append("%-23s %-19s %-8s /a/%s" % (name + "@tony-skills", "not installed",
+                                                  "", name))
+    for name in (os.environ.get("RECHECK_FAKE_CATALOG_DISABLED") or "").split():
+        listed.append("%-23s %-19s %-8s /a/%s" % (name + "@tony-skills", "installed, disabled",
+                                                  "1.0.0", name))
+    write(os.path.join(out_dir, "catalog.txt"), "\n".join(listed) + "\n")
     write_json(os.path.join(out_dir, "command.json"), ["codex", "exec", "--json", "(fake)"])
     write_json(os.path.join(out_dir, "launch.json"), {
         "exit": 0, "thread_id": thread, "rollout": os.path.join(out_dir, "rollout.jsonl"),
@@ -294,10 +352,13 @@ def write_opencode_record(out_dir, prompt, state, steps, model_arg, setup):
     session = "ses_fake000000000000000000"
     chat = read_or(os.path.join(prompt["run_dir"], "chat.md"), "")
     chosen = selected(prompt, ["recheck-v2"])
+    errored = os.environ.get("RECHECK_FAKE_SKILL_ERROR") == "1"
     skill_call = {"id": "prt_1", "data": {
         "type": "tool", "tool": "skill", "callID": "call_fake1",
-        "state": {"status": "completed", "input": {"name": chosen or "none"},
-                  "output": "<skill_content name=\"%s\">the delivered body (fake)" % chosen,
+        "state": {"status": "error" if errored else "completed",
+                  "input": {"name": chosen or "none"},
+                  "output": "" if errored else
+                            "<skill_content name=\"%s\">the delivered body (fake)" % chosen,
                   "title": "skill", "time": {"start": 1, "end": 2}, "metadata": {}}}} \
         if chosen else {"id": "prt_1", "data": {"type": "text", "text": "no skill selected"}}
     records = [
@@ -328,6 +389,11 @@ def write_opencode_record(out_dir, prompt, state, steps, model_arg, setup):
         {"type": "step_start", "sessionID": session, "part": {"type": "step-start"}},
         {"type": "tool_use", "sessionID": session, "part": skill_call["data"]},
         {"type": "text", "sessionID": session, "part": {"type": "text", "text": chat}}])
+    # the loader's own catalog record, in `opencode debug skill`'s JSON shape (E10-46)
+    write_json(os.path.join(out_dir, "catalog.json"),
+               [{"name": n} for n in
+                (os.environ.get("RECHECK_FAKE_CATALOG")
+                 or "recheck-v2 readers manual-only-probe").split()])
     write(os.path.join(out_dir, "rc.txt"), "0\n")
     write(os.path.join(out_dir, "child.pid"), "%d\n" % os.getpid())
     write(os.path.join(out_dir, "stderr.txt"), "")
@@ -365,6 +431,36 @@ def write_jsonl(path, records):
     write(path, "".join(json.dumps(r, sort_keys=True) + "\n" for r in records))
 
 
+def planted_actions(prompt):
+    """Tool calls a stub launcher asked for, so a test can prove the trace scan sees them.
+
+    Everything here is file- and argument-driven from the stub the test wrote; nothing depends
+    on the parent's environment surviving the allowlist.
+    """
+    out = []
+    git = os.environ.get("RECHECK_FAKE_PLANT_GIT")
+    if git:
+        out.append({"uuid": "fake-git", "block": {
+            "type": "tool_use", "name": "Bash", "id": "tu-git",
+            "input": {"command": git}}})
+    write = os.environ.get("RECHECK_FAKE_PLANT_WRITE")
+    if write:
+        out.append({"uuid": "fake-write", "block": {
+            "type": "tool_use", "name": "Write", "id": "tu-write",
+            "input": {"file_path": write, "content": "planted"}}})
+    refused = os.environ.get("RECHECK_FAKE_PLANT_REFUSED_WRITE")
+    if refused:
+        out.append({"uuid": "fake-refused", "refused": True, "block": {
+            "type": "tool_use", "name": "Write", "id": "tu-refused",
+            "input": {"file_path": refused, "content": "planted"}}})
+    read = os.environ.get("RECHECK_FAKE_PLANT_READ")
+    if read:
+        out.append({"uuid": "fake-read", "block": {
+            "type": "tool_use", "name": "Read", "id": "tu-read",
+            "input": {"file_path": read}}})
+    return out
+
+
 def sleep_if_asked():
     """The timeout test's hook: a fake child that sleeps under a one-second limit."""
     seconds = os.environ.get("RECHECK_FAKE_SLEEP")
@@ -384,7 +480,10 @@ def main(argv):
         prompt_file, workspace, out_dir = rest[:3]
     plugins = [rest[i + 1] for i, a in enumerate(rest) if a == "--plugin"]
     if harness == "claude-code" and not plugins:
-        plugins = ["recheck-v2", "readers"]
+        # what the real Claude Code routing home loads: the marketplace plugins plus the two
+        # fixtures its own `install.sh` puts in its local marketplace (measured 2026-09-15)
+        plugins = (os.environ.get("RECHECK_FAKE_CATALOG")
+                   or "recheck-v2 readers manual-only-probe").split()
     for spent in ("launch.json", "rc.txt", "trace.jsonl", "trace.json"):
         if os.path.exists(os.path.join(out_dir, spent)):
             sys.stderr.write("fake launcher: %s already holds %s\n" % (out_dir, spent))
@@ -426,9 +525,13 @@ def main(argv):
     else:
         write_opencode_record(out_dir, prompt, state, steps, model_arg,
                               os.environ.get("RECHECK_OPENCODE_SETUP", "/nonexistent"))
+    planted_secret = os.environ.get("RECHECK_FAKE_PLANT_SECRET")
+    if planted_secret:
+        write(os.path.join(out_dir, "planted.jsonl"),
+              json.dumps({"text": planted_secret}) + "\n")
     sys.stdout.write(json.dumps({"fake": harness, "core_status": (state or {}).get("status"),
                                  "out": out_dir}) + "\n")
-    return 0
+    return int(os.environ.get("RECHECK_FAKE_EXIT") or 0)
 
 
 if __name__ == "__main__":
