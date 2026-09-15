@@ -472,4 +472,11 @@ stop; "PR" has not been said.
   reading of the rollout at
   `<codex home>/sessions/2026/09/15/rollout-2026-09-15T05-41-05-01a0a515-cefb-7c00-98b6-72f019053b6e.jsonl`,
   which the review copy carries. The campaign's own trials record it mechanically.
+- **E10-37 (control-room pass), the scanner's boundary.** The runner's scan over the dry run
+  flagged two copies of one verifier rollout as holding a provider key: a 307-character slice
+  beginning `sk-` inside a longer base64 blob that Codex stores as its own opaque message
+  metadata (`internal_chat_message_metadata_passthrough`). A real key never sits mid-token.
+  Every key shape now requires a non-base64 boundary before its prefix; re-scanned, the records
+  and the builder's scratch are clean. The exemption list is unchanged (the setups' own auth
+  stores by resolved path).
 

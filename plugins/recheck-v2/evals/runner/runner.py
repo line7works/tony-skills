@@ -101,10 +101,14 @@ PATH_TAIL = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
 # The credential shapes `scan` looks for (the OpenCode scanner's shapes plus JWT and sk-).
 CREDENTIAL_SHAPES = (
-    ("openrouter-key", re.compile(r"sk-or-v1-[0-9a-f]{32,}")),
-    ("provider-key", re.compile(r"sk-[A-Za-z0-9_-]{40,}")),
-    ("jwt", re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
-    ("anthropic-key", re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")),
+    # E10-37: every prefix needs a boundary before it. Codex's rollouts carry opaque base64
+    # metadata blobs (internal_chat_message_metadata_passthrough) in which `sk-` occurs
+    # mid-token; the dry run's scan flagged one 307-character slice of such a blob as a
+    # provider key. A real key never sits inside a longer base64 run.
+    ("openrouter-key", re.compile(r"(?<![A-Za-z0-9_/+=-])sk-or-v1-[0-9a-f]{32,}")),
+    ("provider-key", re.compile(r"(?<![A-Za-z0-9_/+=-])sk-[A-Za-z0-9_-]{40,}")),
+    ("jwt", re.compile(r"(?<![A-Za-z0-9_/+=-])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
+    ("anthropic-key", re.compile(r"(?<![A-Za-z0-9_/+=-])sk-ant-[A-Za-z0-9_-]{20,}")),
 )
 
 
