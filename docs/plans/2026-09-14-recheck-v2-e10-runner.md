@@ -492,4 +492,10 @@ stop; "PR" has not been said.
   an upstream interruption of the kind E10-14 records and E10-15 reruns once. The `codex
   sandbox` half of E10-8 stays unperformable on 0.154.0 (the builder's fourteen shapes).
   Astra's own final message reproduced the three JSON results verbatim and nothing else.
+- **E10-39 (Tony, 2026-09-15, ruling R1d in the plan note), Astra's effort.** "On the next
+  rotation and moving forward let's bump down Astra to high." The review that launched at
+  6:17 AM runs at max as launched; the verification round, every re-check, and the operator
+  run at high (`model_reasoning_effort=high`, real, as `codex exec` sets it). Section 6 reads
+  "high" where it says "max" for those rounds; the E10 Astra kit's launcher and operator script
+  carry the setting.
 
