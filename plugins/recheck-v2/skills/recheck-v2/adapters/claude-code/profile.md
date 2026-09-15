@@ -4,26 +4,32 @@ The recheck-v2 adapter for Claude Code (E9 lane C; the lane contract
 `docs/plans/2026-09-14-recheck-v2-e9-adapters.md` sections 5 and 6). Read this after
 `../README.md` and before step 2 of `../../SKILL.md`; read section 7 again before step 4.
 
-Every fact below was measured on 2026-09-14 on this machine. Two harness versions appear,
-because the machine updated between the two rounds: the live proofs, the delivery probes and
-the manual-only probe ran on **2.1.270**, and the fix round's gates, the three new live
-measurements and the reinstall ran on **2.1.271**. Each measurement below says which. Every
+Every fact below was measured on 2026-09-14 on this machine. Two harness versions and three
+commits appear, because the machine updated between rounds and the package changed between
+them: the live proofs, the delivery probes and the manual-only probe ran on **2.1.270** at
+commit `cd42400`; the fix round's gates, its three new live measurements and its reinstall ran
+on **2.1.271** at commit `489a5a0`; and the targeted pass's reinstall, package check and two
+real-body delivery sessions ran on **2.1.271** at commit `41261bb`, after E9-35 grew `SKILL.md`
+from 23,332 to 23,496 bytes. Each measurement below says which, and a count that depends on the
+package's content carries the commit it was counted at. Every
 claim is labelled `harness-enforced`, `helper-derived`, or `instruction-bound` (ruling E9-11)
 with the record it comes from named beside it; a claim with no record is not made. The setup
 that produced them is `../../../../setups/claude-code/` and its record is that directory's
 `RESULTS.md`.
 
 **What the executor types and what it never types.** The executor runs the three helpers and
-copies their output into the input document. Ruling E9-33: `invocation.py` prints the whole
-`invocation` object, `mode` included, and the executor **types no field of it** — not `mode`,
-not `caller`, not `resume`, and none of the facts it never typed before (a `turn_ref`, a model
-id, a harness version, an attribution, `floor_met`, a run id, a run directory, a
-`session_model`, a verifier row, model, effort, or authorization). It may type the target, the
-named items, `--session-wrote-fix` as its honest answer to the helper (ruling E9-14), and a
-grant's `quoted_words` verbatim beside the `turn_ref` that `turns.py --find` returned for
-**those words**. The helper prints a second object, `measurement`, which is never copied
-anywhere: the input schema closes `invocation` with `additionalProperties: false`, so a
-measurement key that lands there makes the document invalid (`tests/test_invocation.py`
+copies their output into the input document. Rulings E9-33 and E9-35: `invocation.py` prints the
+whole `invocation` object, `mode` included, and `SKILL.md` step 2 tells the executor to take
+that object whole and **type none of its fields** — not `mode`, not `caller`, not `resume`
+(`resume` flipped to true by the Resume step being the one exception), and none of the facts it
+never typed before (a `turn_ref`, a model id, a harness version, an attribution, `floor_met`, a
+run id, a run directory, a `session_model`, a verifier row, model, effort, or authorization). It
+may type the target, the named items, `--session-wrote-fix` as its honest answer to the helper
+(ruling E9-14), and a grant's `quoted_words` verbatim beside the `turn_ref` that
+`turns.py --find` returned for **those words**. The helper prints a second object,
+`measurement`, which is never copied anywhere: the input schema closes `invocation` with
+`additionalProperties: false`, so a measurement key that lands there makes the document invalid
+(`tests/test_invocation.py`
 composes the helper's output into an input and validates both ways against the real schema).
 
 ## 1. Identity
@@ -78,22 +84,30 @@ default floor `opus`; `claude-sonnet-*` is `sonnet` and `claude-haiku-*` is `hai
 `floor_met` false; anything else is `unknown` with `floor_met` null, which the core turns into
 `verifier_unavailable` (`unknown_capability`). None of the Claude classes is provisional.
 
-Two measured cautions, each with its record:
+Two measured points, each with its record:
 
 - The trace's `init.model` carries a context suffix the transcript drops: `live/F1-01/trace.jsonl:1`
   records `claude-opus-5[1m]` while every `message.model` in that session's transcript reads
   `claude-opus-5`. Both match `claude-opus-*`, so the class is the same; the helper reports the
   transcript's form.
-- The model a session's system prompt names can differ from the model its transcript records.
-  Witness, re-measurable: in the control-room session that wrote this round
-  (`~/.claude/projects/-Users-tonycoon/e5b093b2-021f-40f0-bbff-3755eba4be90.jsonl`, 1,431
-  records) the system prompt states `claude-opus-5[1m]` while **all 372** assistant records
-  carry `message.model: claude-fable-5-1`; the count and the scan are in the fix round's
-  `fix/own-session-model-witness.txt`. The first pass reported a 137-record version of this
-  observation with no witness in the packet, and that number is withdrawn in favour of this
-  one. The helper reads the record, never the model's account of itself (E8-A17 says the
-  adapter reports "the id the harness reports for this session"), and the same id is what
-  `verifier.py` puts in `session_model`.
+- What the packet's own records show about the model, over the three fresh live proofs
+  (`control-room/pass.*/<case>/trace.jsonl`, Claude Code 2.1.271). The launcher names no model:
+  `launch.sh` passes no `--model`, and none of the three `command.txt` files carries one. Each
+  session's `init` record names `claude-opus-5[1m]`. Every `assistant` record's `message.model`
+  reads `claude-opus-5`: 69 of 70 in F1-01 (`b0dd6791-…`), 61 of 61 in F2-01 (`8c4ed101-…`),
+  82 of 82 in F6-04 (`89129d64-…`), the subagent's records included (the 7, 7 and 10 records
+  carrying a non-null `parent_tool_use_id`). F1-01's one exception is not a model: it is the
+  synthetic record at `F1-01/trace.jsonl:32`, `is_api_error_message: true`, text
+  `API Error: Server error mid-response. The response above may be incomplete.`, whose
+  `message.model` is the literal `<synthetic>`. So across the packet the only disagreement
+  between an `init` record and a `message.model` is the `[1m]` suffix of the point above, and
+  the id is stable within each session and across all three. No record in this packet says what
+  model a **system prompt** names, so this profile makes no claim about that; the fix round's
+  372-record comparison came from the control room's own session, outside the packet, and is
+  withdrawn from this profile (it stays in the guide log as the control room's observation,
+  with its evidence named as outside the packet). The helper reads the record, never the model's
+  account of itself (E8-A17 says the adapter reports "the id the harness reports for this
+  session"), and the same id is what `verifier.py` puts in `session_model`.
 
 `effort` comes from that record's `effort` field, cross-checked against `$CLAUDE_EFFORT`;
 `provider_route` is `anthropic` unless `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
@@ -297,37 +311,59 @@ into the isolated `CLAUDE_CONFIG_DIR`), loaded into a live session with `--plugi
 the install cache because the isolated configuration directory has no sign-in (section 1);
 and **the explicit path** (`--plugin-dir <worktree>/plugins/recheck-v2`). The rendering path
 is the same on both: the harness delivers the whole `SKILL.md` body, minus the frontmatter
-block, as one `user` record of text blocks carrying `isMeta`, `turnCompanion` and
-`sourceToolUseID`, prefixed by one line naming the skill's base directory. Every count below is
-UTF-8 bytes (E9-34), recounted from the records in this round; where a count differs from the
-first pass's, the first pass's is withdrawn.
+block, prefixed by one line naming the skill's base directory, as one `user` record whose own
+fields carry `isMeta`, `turnCompanion` and `sourceToolUseID` (the harness's transcript; the
+same record reaches the stream-json trace as a `user` record flagged `isSynthetic`). Every
+count below is UTF-8 bytes (E9-34), stated beside characters, and **every row names the commit
+and the harness version it was measured at**: the file being delivered changed between rounds
+(E9-35 grew `SKILL.md` from 23,332 to 23,496 bytes), so a count without its commit is not a
+measurement.
 
-| What | Bytes | The record it was counted in |
+| What | Count | Measured at | The record it was counted in |
+|---|---|---|---|
+| delivery probe, worktree surface: the delivered record | 25,643 bytes | commit `cd42400`, Claude Code 2.1.270 | `probes/delivery-plugindir/trace.jsonl:6` |
+| delivery probe, installed surface: the delivered record | 25,659 bytes | commit `cd42400`, Claude Code 2.1.270 | `probes/P1-delivery-installed/trace.jsonl:6` and `…/transcript.jsonl:20` |
+| the probe's procedure body on disk (after the frontmatter and the blank line) | 25,490 bytes | commit `cd42400`; the fixture is byte-identical at `41261bb` | the delivery probe fixture's own SKILL.md under the plugin's `setups/_fixtures/` (340 frontmatter + 1 blank + 25,490 = 25,831) |
+| the probe's delivered directory header, worktree / installed | 153 / 169 bytes | commit `cd42400`, Claude Code 2.1.270 | the difference between each delivered record and the 25,490-byte body |
+| **the real body, installed route: the delivered record** | **22,675 bytes (22,651 characters)** | commit `41261bb`, Claude Code 2.1.271 | `targeted/live/real-body-installed/trace.jsonl:8` and `…/transcript.jsonl:20`, session `54f89b2c-b0c1-4dfe-bbb4-ca46f95d28e3` |
+| **the real body, worktree route: the delivered record** | **22,635 bytes (22,611 characters)** | commit `41261bb`, Claude Code 2.1.271 | `targeted/live/real-body-worktree/trace.jsonl:8` and `…/transcript.jsonl:20`, session `6f847a95-735f-43dc-8728-aebe0c835fa2` |
+| **the real body on disk** | **23,496 bytes (23,472 characters)** | commit `41261bb` | this skill's own [`../../SKILL.md`](../../SKILL.md) = 977 frontmatter bytes through the closing delimiter + 1 blank-line byte + 22,518 procedure bytes |
+| **the real body's delivered directory header, installed / worktree** | **157 / 117 bytes** | commit `41261bb`, Claude Code 2.1.271 | each delivered record minus the 22,518-byte body; the 40-byte spread is the two base-directory paths |
+
+Kept as history, measured at commit `cd42400` on Claude Code 2.1.270 against the 23,332-byte
+`SKILL.md` that preceded E9-35, and superseded by the four bold rows above:
+
+| What | Count | The record |
 |---|---|---|
-| delivery probe, worktree surface: the delivered record | 25,643 | `probes/delivery-plugindir/trace.jsonl:6` |
-| delivery probe, installed surface: the delivered record | 25,659 | `probes/P1-delivery-installed/trace.jsonl:6` and `…/transcript.jsonl:20` |
-| the probe's procedure body on disk (after the frontmatter and the blank line) | 25,490 | the delivery probe fixture's own SKILL.md under the plugin's `setups/_fixtures/` (340 frontmatter + 1 blank + 25,490 = 25,831) |
-| the delivered directory header, worktree / installed | 153 / 169 | the difference between each delivered record and the 25,490-byte body |
 | the real body: the delivered record | 22,511 bytes (22,487 characters) | `probes/P4-real-body/trace.jsonl:6` and `…/transcript.jsonl:20` |
-| the real body on disk | 23,332 | this skill's own [`../../SKILL.md`](../../SKILL.md) = 977 frontmatter through the closing delimiter + 1 blank-line byte + 22,354 procedure bytes |
-| the real body's delivered directory header | 157 | 22,511 − 22,354 |
+| the real body on disk | 23,332 bytes | `SKILL.md` at `cd42400` = 977 + 1 + 22,354 |
+| the real body's delivered directory header | 157 bytes | 22,511 − 22,354 |
 
 The single claim of "25,770 bytes" in the first pass's profile and RESULTS was wrong for both
-probes and is replaced by the four separate counts above; the "821-byte frontmatter" was wrong
-too (977 through the closing delimiter, plus one blank-line byte). Stronger than a byte count:
-the delivered text minus its header is **byte-identical** to the file's body on all three
-records (verified in this round by comparing the record's text against the file).
+probes and is replaced by the separate counts above; the "821-byte frontmatter" was wrong too
+(977 through the closing delimiter, plus one blank-line byte). Stronger than a byte count, and
+re-measured at commit `41261bb`: on **both** routes the delivered text minus its base-directory
+header is **byte-identical to the 22,518-byte body of the current `SKILL.md`** — 22,675 − 157 =
+22,518 on the installed route and 22,635 − 117 = 22,518 on the worktree route, with no trailing
+bytes and nothing between the header and the body. Nothing differs. The earlier sentence calling
+the delivered real body byte-identical to "the current file" was measured against the 23,332-byte
+file and is withdrawn; the claim that holds is this one, against the file at the commit named.
 
 *The delivery probe*, 25 sentinels: **25 of 25 on both surfaces**, S01 through S24 plus
 `SENTINEL S25: end of body`, cross-checked against the text the harness recorded as delivered,
 not the model's list. No cut, so no first missing sentinel.
 
-*The real body*: delivered whole. Asked to quote from the delivered text without reading any
-file, the model returned the last row of the References table, the last bullet of the Gotchas
-section, and the heading of the last numbered Procedure step, all three byte-identical to the
-canonical file; the record also carries `## Gotchas`, `## Failure handling`, `## References`
-and the output block's `SKILL NOTE:` line. The last procedure step and the Gotchas section both
-reach the model, which is what E9-6 asks.
+*The real body*: delivered whole on both routes at commit `41261bb`. The record itself is the
+proof (the byte-identity above); the quoting task is the weaker check on top of it. Asked to
+quote from the delivered text without reading any file, both sessions returned the last row of
+the References table verbatim (line 384 of the current `SKILL.md`) and the last bullet of the
+Gotchas section, whose two wrapped source lines they joined into one; on the third line the
+worktree session answered `### 8. Deliver`, the last **numbered** Procedure step (line 265), and
+the installed session answered `### Resume` (line 272), the unnumbered heading that follows it.
+That third line is an executor reading, not a delivery difference: the two delivered records are
+byte-identical to each other after their headers. The delivered text carries `## Gotchas`,
+`## Failure handling`, `## References` and the output block's `SKILL NOTE:` line, so the last
+procedure step and the Gotchas section both reach the model, which is what E9-6 asks.
 
 *A third delivery path, measured in the fix round:* an explicit slash command delivers the body
 too, even for a skill the catalog's `skills` list omits — see section 10's broken-delimiter row.
@@ -383,6 +419,31 @@ result; `RESULTS.md` carries the same rows with the full harness text.
 
 ## 11. Installed-package verification
 
+**Label (E9-11): `helper-derived`, and the harness enforces none of it.** The equality of the
+installed package with this checkout is computed by a script of this setup from the tree the
+harness's own installer wrote, never asserted by the harness: the negative tests measured
+`claude plugin install` reporting `outcome: ok` for a package whose `references/verifier.md`
+had been deleted, and `claude plugin validate` passing it (section 10). The failure modes the
+label carries: the check is a snapshot at the moment it runs, so an edit to the cache
+afterwards is invisible until it is rerun; it compares against **this** worktree only, so it
+proves the copy matches this checkout, not that this checkout is correct; and the identity
+comparison is `content_sha256` alone, `version` and `commit` being recorded and not compared
+under E9-16.
+
+**The measurement.** `verify-install.sh` run at commit `41261bb` on Claude Code 2.1.271 against
+the reinstalled cache: `targeted/verify-install.json`, exit 0, `ok: true`, `findings: []`,
+`diff_lines: 0`, 39 references checked with `references_outside_root`, `references_missing` and
+`references_through_a_symlink` all empty, `symlinks_in_the_installed_package: []`,
+`is_symlink: false`, frontmatter `name` / `description` / `metadata.version` all
+`equals_canonical: true` (description 884 characters against 884) through
+`yaml.safe_load (pyyaml 6.0.3)`, and `content_sha256`
+`4261f82ed2f63477171bb699fd5ebe5acc8989b2295501aeb5e1ffcf4ddfa427` equal on both copies with the
+installed `commit` reading `unversioned`. The control room's own run of the same script at
+commit `a36c456` is `control-room/verify-install.json`: the same `ok: true`, `findings: []`,
+`diff_lines: 0`, 39 references and `content_sha256`, differing only in the canonical `commit`
+and in the non-gating absent-path list, which this round's two new scratch records lengthened
+from 11 entries to 13. `RESULTS.md` carries this round's output in full.
+
 `../../../../setups/claude-code/verify-install.sh` prints one JSON object and exits 4 on any
 finding. What it checks, after the fix round: `diff -r -x __pycache__` of the installed plugin
 against this worktree's; the installed `SKILL.md` frontmatter `name`, `description` and
@@ -405,7 +466,11 @@ workspace paths in prose (`chat.md`, `result.json`, `docs/plans/…`), and packa
 lane's package does not carry (`codex/profile.md`, `opencode/*.py` — lanes R and Q's adapters,
 which land at integration). A backticked path whose first segment is one of the skill's own
 directories (`references/`, `adapters/`, `scripts/`, …) is **not** in that forgiving bucket: it
-must resolve, or it is a finding. The measured output is in `RESULTS.md`.
+must resolve, or it is a finding. In this round's output the two lists hold 34 artifact names
+and 13 absent package paths — the 11 lane R and lane Q adapter files, plus the two scratch
+records this section names, which are records of the measurement and not package content. Both
+lists are printed, neither gates. The measured output is the `targeted/verify-install.json`
+named above, reproduced in `RESULTS.md`.
 
 ## 12. Capability labels
 
@@ -423,6 +488,6 @@ One row per capability of pilot contract section 13.
 | Report the interaction mode | `helper-derived` (ruling E9-33) | `CLAUDE_CODE_SESSION_ATTENDED`, else `CLAUDE_CODE_ENTRYPOINT`, cross-checked against the transcript's own `entrypoint` record; a disagreement or no record at all is exit 3, never a guess. The three live proofs recorded `interactive` inside `claude -p` when the executor typed it, which is the defect the ruling closes |
 | State whether the driving session authored a fix | `instruction-bound` | ruling E9-14: an explicit flag, defaulting to false |
 | Attribute turn references to user, assistant, or station | `helper-derived` for the mapping, `instruction-bound` for the record it maps | the harness wrote every `sessionId`, `uuid`, `isSidechain` and marker the map uses (E9-22's presence rule), on a file the session could have rewritten (E9-28) |
-| Deliver the complete skill body and let the core load its references on demand | `harness-enforced` | 25 of 25 sentinels on both surfaces and the real body's tail delivered, byte-identical to the file after the directory header (section 8) |
+| Deliver the complete skill body and let the core load its references on demand | `harness-enforced` | 25 of 25 sentinels on both surfaces at commit `cd42400`; at commit `41261bb` on 2.1.271 the real body's delivered record minus its base-directory header is byte-identical to the file's 22,518-byte body on both routes (22,675 − 157 installed, 22,635 − 117 worktree; section 8) |
 | Return the result document to the caller unchanged | `instruction-bound` | the executor hands `result.json` over; nothing in the harness rewrites it. Observed in all three live sessions: the executor printed `chat.md` **verbatim but wrapped**, in a fenced block with a sentence before it and explanation after (F1-01 added one paragraph, F2-01 one, F6-04 three plus an artifact paragraph), where SKILL step 8 says `chat.md` is the whole verdict. An executor-behaviour observation, not a harness fact; the control room's fresh proofs re-measure it |
 | Refuse or surface, never silently drop, a prohibited action | `harness-enforced` for a manual-only skill; **tool removal, not refusal**, for web tools; `instruction-bound` otherwise | the Skill tool's own refusal message on `disable-model-invocation`; `--disallowed-tools` plus the settings deny leave no `WebFetch`/`WebSearch` in the session's or its subagents' catalog, so a prohibited fetch has nothing to deny (section 7's measurement); the F6-04 live case records what the session did with the bait |

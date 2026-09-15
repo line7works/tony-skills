@@ -1,14 +1,21 @@
 # Claude Code pilot setup: measured results
 
 Lane C of E9 (`docs/plans/2026-09-14-recheck-v2-e9-adapters.md`, sections 6 and 9.2). Every
-number here was measured on **2026-09-14** on the Mac Studio, in two rounds:
+number here was measured on **2026-09-14** on the Mac Studio, in three rounds. A count that
+depends on the package's content carries the commit it was counted at, because the package
+changed between rounds: E9-35 grew `SKILL.md` from 23,332 to 23,496 bytes after the fix round.
 
 - the **first round** (the live proofs, the delivery probes, the manual-only probe, the first
   install and negative tests) on **Claude Code 2.1.270**, at worktree commit `987b173` for the
   live proofs and `cd42400` for the install;
 - the **fix round**, answering the outside reviewer's verdict, on **Claude Code 2.1.271** at
   commit `489a5a0`: the reinstall, the package verification, the negative tests, the three new
-  live measurements, and every recount of a byte figure.
+  live measurements, and every recount of a byte figure;
+- the **targeted pass**, answering ruling E9-39, on **Claude Code 2.1.271** at commit
+  `41261bb`: a fresh `install.sh` and `verify-install.sh`, and two live sessions re-measuring
+  the real body's delivery on both routes against the post-E9-35 `SKILL.md`. Its records are
+  under the lane's scratch `targeted/`; the control room's own install and package check, at
+  commit `a36c456`, are under `control-room/`.
 
 `uv 0.11.18`, `git 2.50.1`, `/usr/bin/python3` 3.9.6, worktree
 `~/Developer/tony-skills-e9-claude` on `feat/recheck-v2-e9-claude`. The adapter this file
@@ -53,7 +60,9 @@ status captured before the pipe (`| head -1` hides it otherwise), each result is
 `failed_commands` naming it **and** exits 1. Before the fix round a failing install left the
 script exiting 0 with four `outcome: failed` entries in a record that read like a success.
 
-The fix round's run (2.1.271):
+The current run, at commit `41261bb` on 2.1.271, exit 0 (`targeted/install-stdout.json`,
+`targeted/install-stderr.txt`); the fix round's run at `489a5a0` printed the same lines with its
+own commit:
 
 ```
 $ sh setups/claude-code/install.sh
@@ -69,8 +78,9 @@ delivery-probe@skills-v2-pilot: exit 0: {"command":"install","outcome":"ok", …
 manual-only-probe@skills-v2-pilot: exit 0: {"command":"install","outcome":"ok", …}
 ```
 
-stdout carried `"claude_version": "2.1.271"`, `"commit": "489a5a08…"`, `"ok": true`,
-`"failed_commands": []`, and the four installed cache directories:
+stdout carried `"claude_version": "2.1.271"`, `"commit": "41261bb2…"`, `"ok": true`,
+`"failed_commands": []`, four `"outcome":"ok"` install results, and the four installed cache
+directories:
 
 ```
 <config>/plugins/cache/tony-skills/recheck-v2/0.1.0
@@ -156,8 +166,9 @@ have been a silent exit 0 with a null session.
 
 ## Installed-package verification (`verify-install.sh`)
 
-The fix round's output, at commit `489a5a0` after a fresh install (abridged only where a list
-is long):
+The current output, at commit `41261bb` on Claude Code 2.1.271 after a fresh `install.sh`
+(which uninstalls first, so the cache carries the current `SKILL.md`), exit 0 — the whole file
+is `targeted/verify-install.json`, abridged here only where a list is long:
 
 ```json
 {
@@ -177,15 +188,26 @@ is long):
   "references_outside_root": [], "references_missing": [], "references_through_a_symlink": [],
   "symlinks_in_the_installed_package": [],
   "named_but_absent_from_this_package": ["adapters/README.md -> codex/profile.md", …],
+  "artifact_names_not_references": ["SKILL.md -> chat.md", …],
   "skill_identity": {
-    "canonical": {"version": "0.1.0", "commit": "489a5a08…", "content_sha256": "ad9b596d…8446"},
-    "installed": {"version": "0.1.0", "commit": "unversioned", "content_sha256": "ad9b596d…8446"},
+    "canonical": {"version": "0.1.0", "commit": "41261bb2…", "content_sha256": "4261f82e…a427"},
+    "installed": {"version": "0.1.0", "commit": "unversioned", "content_sha256": "4261f82e…a427"},
     "canonical_command_exit": 0, "installed_command_exit": 0, "content_sha256_equal": true
   },
   "is_symlink": false,
   "findings": []
 }
 ```
+
+History: the fix round's run at commit `489a5a0` on 2.1.271 produced the same object with two
+differences — the canonical `commit` read `489a5a08…`, and both `content_sha256` fields read
+`ad9b596d…8446`, the hash of the package before E9-35 changed `SKILL.md`. The control room's run
+at commit `a36c456` (`control-room/verify-install.json`) already carries `4261f82e…a427`, because
+`SKILL.md` was identical at `a36c456` and `41261bb` (`content_sha256` is the sha256 of
+`SKILL.md` alone, so E9-35's edit is the whole of that change). Every run reported `ok: true`
+and `findings: []`. In the current run the two non-gating lists hold 13 absent package paths
+(lanes R and Q's eleven adapter files, plus the two scratch records the profile's section 11
+names) and 34 artifact names; neither list gates.
 
 What changed in the fix round, and why:
 
@@ -218,36 +240,52 @@ is recorded rather than compared.
 -type f` lists 17 files). An executor session can read its own plugin folder, so at E10 the key
 sits inside the trial's reach. Ruling E9-24 carries it.
 
-## Delivery (ruling E9-6, recounted in the fix round; E9-34's byte rule)
+## Delivery (ruling E9-6; E9-34's byte rule; the real body re-measured in the targeted pass)
 
-Every count is UTF-8 bytes, taken from the harness's own record, with the record named. The
-first pass reported a single "25,770 bytes" for the probe and an "821-byte frontmatter" for the
-real body; both are wrong and are withdrawn.
+Every count is UTF-8 bytes, taken from the harness's own record, stated beside characters, with
+the record named **and the commit and harness version it was measured at**. That column is not
+decoration: `SKILL.md` grew from 23,332 to 23,496 bytes when E9-35 landed, so a delivery count
+only means something against the file it delivered. The first pass reported a single
+"25,770 bytes" for the probe and an "821-byte frontmatter" for the real body; both are wrong and
+are withdrawn.
 
-| What | Bytes | Record |
-|---|---|---|
-| delivery probe, worktree surface: the delivered `user` record | **25,643** | `probes/delivery-plugindir/trace.jsonl:6` |
-| delivery probe, installed surface: the delivered `user` record | **25,659** | `probes/P1-delivery-installed/trace.jsonl:6`, `…/transcript.jsonl:20` |
-| the probe's body on disk, after the frontmatter and the blank line | **25,490** | `setups/_fixtures/delivery-probe/skills/delivery-probe/SKILL.md`: 340 + 1 + 25,490 = 25,831 |
-| the delivered base-directory header, worktree / installed | **153 / 169** | each delivered record minus the 25,490-byte body |
-| the real body: the delivered `user` record | **22,511** bytes (22,487 characters) | `probes/P4-real-body/trace.jsonl:6`, `…/transcript.jsonl:20` |
-| the real body on disk | **23,332** | `skills/recheck-v2/SKILL.md`: 977 through the closing delimiter + 1 blank-line byte + 22,354 body |
-| the real body's delivered header | **157** | 22,511 − 22,354 |
+| What | Count | Measured at | Record |
+|---|---|---|---|
+| delivery probe, worktree surface: the delivered `user` record | **25,643** bytes | `cd42400`, 2.1.270 | `probes/delivery-plugindir/trace.jsonl:6` |
+| delivery probe, installed surface: the delivered `user` record | **25,659** bytes | `cd42400`, 2.1.270 | `probes/P1-delivery-installed/trace.jsonl:6`, `…/transcript.jsonl:20` |
+| the probe's body on disk, after the frontmatter and the blank line | **25,490** bytes | `cd42400`; byte-identical at `41261bb` | `setups/_fixtures/delivery-probe/skills/delivery-probe/SKILL.md`: 340 + 1 + 25,490 = 25,831 |
+| the probe's delivered base-directory header, worktree / installed | **153 / 169** bytes | `cd42400`, 2.1.270 | each delivered record minus the 25,490-byte body |
+| **the real body, installed route: the delivered `user` record** | **22,675** bytes (22,651 characters) | `41261bb`, 2.1.271 | `targeted/live/real-body-installed/trace.jsonl:8`, `…/transcript.jsonl:20` |
+| **the real body, worktree route: the delivered `user` record** | **22,635** bytes (22,611 characters) | `41261bb`, 2.1.271 | `targeted/live/real-body-worktree/trace.jsonl:8`, `…/transcript.jsonl:20` |
+| **the real body on disk** | **23,496** bytes (23,472 characters) | `41261bb` | `skills/recheck-v2/SKILL.md`: 977 through the closing delimiter + 1 blank-line byte + 22,518 body |
+| **the real body's delivered header, installed / worktree** | **157 / 117** bytes | `41261bb`, 2.1.271 | each delivered record minus the 22,518-byte body |
 
-| Surface | Probe | Result |
-|---|---|---|
-| `--plugin-dir <worktree>/…/setups/_fixtures/delivery-probe` | delivery probe | **25 of 25**: `SENTINEL S01` … `SENTINEL S24`, `SENTINEL S25: end of body`, `END-OF-PROBE` |
-| `--plugin-dir <install cache>/skills-v2-pilot/delivery-probe/0.1.0` | delivery probe | **25 of 25**, same list |
-| `--plugin-dir <install cache>/tony-skills/recheck-v2/0.1.0` | the real body | whole body delivered |
+Kept as history: the real body's counts at commit `cd42400` on 2.1.270, against the 23,332-byte
+`SKILL.md` that preceded E9-35. They are superseded by the four bold rows, not corrections of
+them: **22,511** bytes (22,487 characters) delivered (`probes/P4-real-body/trace.jsonl:6`,
+`…/transcript.jsonl:20`), **23,332** bytes on disk (977 + 1 + 22,354), **157** bytes of header.
 
-The skill body arrives as one `user` record of text blocks carrying `isMeta: true`,
-`turnCompanion: true` and `sourceToolUseID`, prefixed by one line naming the skill's base
-directory. Stronger than the byte counts, and checked in the fix round: **the delivered text
-minus that header is byte-identical to the file's body** on all three records. No cut, so no
-first missing sentinel.
+| Surface (route) | Probe | Round / session | Result |
+|---|---|---|---|
+| `--plugin-dir <worktree>/…/setups/_fixtures/delivery-probe` | delivery probe | first pass, `cd42400`, 2.1.270 | **25 of 25**: `SENTINEL S01` … `SENTINEL S24`, `SENTINEL S25: end of body`, `END-OF-PROBE` |
+| `--plugin-dir <install cache>/skills-v2-pilot/delivery-probe/0.1.0` | delivery probe | first pass, `cd42400`, 2.1.270 | **25 of 25**, same list |
+| `--plugin-dir <install cache>/tony-skills/recheck-v2/0.1.0` | the real body | targeted pass, `41261bb`, 2.1.271, session `54f89b2c-b0c1-4dfe-bbb4-ca46f95d28e3`, $0.1592, 3 turns | whole body delivered |
+| `--plugin-dir <worktree>/plugins/recheck-v2` | the real body | targeted pass, `41261bb`, 2.1.271, session `6f847a95-735f-43dc-8728-aebe0c835fa2`, $0.1037, 3 turns | whole body delivered |
 
-For the real body, asked to quote from the delivered text without reading any file, the session
-returned
+The skill body arrives prefixed by one line naming the skill's base directory, as one `user`
+record whose own fields carry `isMeta: true`, `turnCompanion: true` and `sourceToolUseID` in the
+harness's transcript (the same record reaches the stream-json trace flagged `isSynthetic`; the
+three flags are fields of the record, not of its text blocks). Stronger than the byte counts,
+and re-measured at commit `41261bb` on both routes: **the delivered text minus that header is
+byte-identical to the 22,518-byte body of the current `SKILL.md`** — 22,675 − 157 = 22,518
+installed, 22,635 − 117 = 22,518 from the worktree, no trailing bytes, nothing between header and
+body, nothing differing. The fix round's sentence calling the delivered real body byte-identical
+to "the current file" was true of the 23,332-byte file it was measured against and is withdrawn;
+this is the claim that holds, against the file at the commit named. No cut, so no first missing
+sentinel.
+
+For the real body, asked to quote from the delivered text without reading any file, the first
+pass's session returned
 
 ```
 | `adapters/README.md`, then the profile it names for your harness | before step 2; again before step 4 | the invocation block (step 2); the verifier capability (step 4) |
@@ -255,9 +293,16 @@ returned
 ### 8. Deliver
 ```
 
-which are, byte for byte, the last row of the References table, the last bullet of Gotchas,
-and the heading of the last numbered Procedure step. `## Gotchas`, `## Failure handling`,
-`## References` and the output block's `SKILL NOTE:` line are all in the recorded text.
+which are the last row of the References table (line 382 of `SKILL.md` at `cd42400`, byte for
+byte), the last bullet of Gotchas with its two wrapped source lines joined into one, and the
+heading of the last numbered Procedure step (line 263 there). The targeted pass re-ran the same
+prompt on both routes at commit `41261bb`: both sessions returned the same first two lines; on
+the third the worktree session again answered `### 8. Deliver`, the last numbered step (line 265
+of the current `SKILL.md`), and the installed session answered `### Resume`, the unnumbered
+heading that follows it (line 272). That is an executor reading, not a delivery difference — the
+two delivered records are byte-identical to each other after their headers, and to the file's
+body. `## Gotchas`, `## Failure handling`, `## References` and the output block's `SKILL NOTE:`
+line are all in the recorded text on both routes.
 
 **Listing budget** (`claude plugin details recheck-v2`, in the isolated config dir):
 
@@ -383,8 +428,10 @@ acknowledged only F1-01. None of the three runs needed a question, so no run was
 qualification record was wrong for all three. The fix: `invocation.py` now supplies `mode`
 inside the invocation object from `CLAUDE_CODE_SESSION_ATTENDED` (0 headless, 1 interactive),
 falling back to `CLAUDE_CODE_ENTRYPOINT` and cross-checking the transcript's own `entrypoint`
-record, and exits 3 rather than guess; the executor types no invocation field at all. The
-control room's fresh proofs re-measure the recorded mode.
+record, and exits 3 rather than guess; the executor types no invocation field at all — `mode`,
+`caller` and `resume` included, which is what `SKILL.md` step 2 now says under ruling E9-35. The
+control room's fresh proofs re-measure the recorded mode, and record `mode: headless` on all
+three.
 
 **Delivery of the verdict (Astra's finding 17).** SKILL step 8 says `chat.md` is the whole
 verdict, printed verbatim. All three sessions printed it verbatim **inside a fenced block with
@@ -501,7 +548,7 @@ subagent).
 | user-channel measurement (hook and Bash-tool pids) | $0.085 |
 | manual-only probe, asked in words | $0.338 |
 | manual-only probe, `/manual-only-probe` | $0.044 |
-| real-body delivery | $0.141 |
+| real-body delivery (first pass, commit `cd42400`) | $0.141 |
 | negative-test catalogs (two sessions) | $0.017 |
 | **F1-01 live proof** | **$2.610** |
 | **F2-01 live proof** | **$2.776** |
@@ -512,4 +559,6 @@ subagent).
 | *fix round:* broken-delimiter, bare command | $0 (unknown command, 0 turns) |
 | *fix round:* broken-delimiter, namespaced command | $0.176 |
 | *fix round:* the empty-prompt launch that failed | $0 (the harness refused before any request) |
-| Total | **≈ $11.09** |
+| *targeted pass:* real-body delivery, installed route (`54f89b2c-…`) | $0.159 |
+| *targeted pass:* real-body delivery, worktree route (`6f847a95-…`) | $0.104 |
+| Total | **≈ $11.35** |
