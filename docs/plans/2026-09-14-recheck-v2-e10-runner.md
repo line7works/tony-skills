@@ -427,4 +427,29 @@ stop; "PR" has not been said.
   OpenCode homes and its install rewrites `opencode.json`'s default model to DeepSeek; the
   launcher takes the model as an argument, so no trial depends on that default. Recorded so a
   reader of the home's config is not misled.
+- **E10-32 (control-room pass on the Codex dry run), the polled launch.** Both Codex
+  continuation trials failed in 0.1 s: the runner pre-created `harness-first/` to hold its own
+  launcher output, and the Codex launcher refuses an existing output directory (E9-34), so no
+  first session ran and the hand-off's resume found a run directory holding only the schema
+  copy. The control room moved the launcher's own stdout and stderr beside the directory
+  (`harness-first.launcher.out|err`); the Claude Code and OpenCode launchers, which refuse only
+  named files, had hidden the defect. Re-run as `r2` records; the `r1` records stay as the
+  measurement of the defect.
+- **E10-33 (same pass), the Codex routing marker.** On T-02 the Codex routing record's observed
+  target was `arcade`: the marker takes the first `SKILL.md` read in the rollout, and the model
+  had listed or opened another plugin's file before reading recheck-v2's, which it then followed
+  (its answer cites recheck-v2 and asks for the repository). The marker over-reads a browse as a
+  selection. Carried to the fix round: the observed target on Codex is the skill whose body the
+  model followed (the last `SKILL.md` read before the first non-read action, or the injected
+  `<skill>` message), with every read listed in the record; a browse of several files is its
+  own row, not a selection.
+- **E10-34 (same pass), OpenCode under the widened rule.** With E10-23 in place the available
+  rerun of F1-01 completed and validated (344 s, activated); the absent rerun still produced
+  nothing: the model listed the directory above the workspace (the trial's fixture directory,
+  outside `TMPDIR`), the headless `ask` was auto-rejected, and the model stopped after four
+  steps. E9's lane Q records show the same auto-rejection behavior. Two readings, the fix
+  round's to choose and the review's to grade: build the fixture under the trial's `TMPDIR` so
+  the model's whole reachable world is one allowed tree, or leave the refusal as the harness's
+  measured trait and report the absent condition's `no_result` as such. The control room leans
+  to the first, because a refusal caused by the runner's own layout is not the harness's trait.
 

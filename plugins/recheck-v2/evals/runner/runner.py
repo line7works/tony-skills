@@ -2927,15 +2927,20 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     one second. `--poll-interval` keeps the contract's 1.0 as the default and lets the operator
     poll finer; every record says which interval it used.
     """
-    ensure_dir(out_dir)
+    # The launcher's own stdout and stderr land BESIDE the output directory, never inside it:
+    # the Codex launcher refuses an output directory that already exists (E9-34, "out-dir
+    # exists; refusing to overwrite a live session"), so pre-creating it to hold these two
+    # files made every Codex continuation trial fail in 0.1 s with no session (measured
+    # 2026-09-15, the dry run's two cont-codex records before this change).
+    ensure_dir(os.path.dirname(out_dir))
     env = campaign.env(extra=setup.launch_env("available"))
     launcher = getattr(args, "fake_launcher", None) or setup.script("launch.sh")
     argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available")
     sys.stderr.write("$ %s   (polled for the cut)\n" % " ".join(argv))
     started = time.time()
     child = subprocess.Popen(argv, env=env, cwd=None, stdin=subprocess.DEVNULL,
-                             stdout=open(os.path.join(out_dir, "launcher.out"), "wb"),
-                             stderr=open(os.path.join(out_dir, "launcher.err"), "wb"),
+                             stdout=open(out_dir + ".launcher.out", "wb"),
+                             stderr=open(out_dir + ".launcher.err", "wb"),
                              start_new_session=True)
     interval = float(getattr(args, "poll_interval", 1.0) or 1.0)
     seen, cut_state, log_lines = [], None, 0
