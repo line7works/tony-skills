@@ -87,10 +87,11 @@ OC="$SETUP/npm/node_modules/.bin/opencode"
 # /tmp/recheck-v2 rule for a shell without TMPDIR. Rules are evaluated last-match-wins, so
 # the broad "ask" comes first.
 RUNROOT="${TMPDIR:-/tmp}"
-RUNROOT="${RUNROOT%/}/recheck-v2"
-sed -e "s|__MODEL__|$MODEL|g" -e "s|__RUNROOT__|$RUNROOT|g" \
+RUNROOT="${RUNROOT%/}/runs"  # E10-22: a neutral name; the E10 prompt names this path
+TMPROOT="${TMPDIR:-/tmp}"; TMPROOT="${TMPROOT%/}"  # E10-23: the whole TMPDIR is allowed, so a model-chosen scratch path there is not auto-rejected
+sed -e "s|__MODEL__|$MODEL|g" -e "s|__RUNROOT__|$RUNROOT|g" -e "s|__TMPROOT__|$TMPROOT|g" \
   "$HERE/assets/opencode.json" > "$SETUP/xdg-config/opencode/opencode.json"
-echo "run root allowed: $RUNROOT"
+echo "run root allowed: $RUNROOT (and $TMPROOT/** under E10-23)"
 
 # The session pointer plugin (the user channel; see adapters/opencode/profile.md section 4).
 # It also records which CLI command started the harness process, which is where

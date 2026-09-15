@@ -94,6 +94,14 @@ for plugin in recheck-v2@tony-skills readers@tony-skills \
               delivery-probe@skills-v2-pilot manual-only-probe@skills-v2-pilot; do
   claude plugin uninstall "$plugin" >/dev/null 2>&1 || true
 done
+# E10-24 (measured on 2.1.272 by the E10 builder): `claude plugin uninstall` reports
+# success and drops the plugin from `claude plugin list` while leaving its cache
+# directory on disk, so the cache copy is removed here (never with rm -rf: the E9
+# Codex quirk) before the fresh install, else the diff below compares a stale copy.
+for plugin in recheck-v2 readers delivery-probe manual-only-probe; do
+  find "$CONFIG_DIR/plugins/cache" -mindepth 2 -maxdepth 2 -type d -name "$plugin" -print0 2>/dev/null \
+    | xargs -0 python3 -c 'import shutil,sys; [shutil.rmtree(p, ignore_errors=True) for p in sys.argv[1:]]' || true
+done
 # Each install keeps its own exit status and its own outcome; `| head -1`
 # hides the command's status behind the pipe, so the status is captured first.
 install_plugin() {  # install_plugin <spec>

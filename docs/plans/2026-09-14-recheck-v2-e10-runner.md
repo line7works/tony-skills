@@ -344,3 +344,71 @@ stop; "PR" has not been said.
   `RECHECK_ADAPTER_TEST` pattern). A grade of a real dry-run trial never uses the stand-in. This
   closes the oracle a builder would otherwise have by grading a hand-written result against the
   real key and reading the summary.
+- **E10-22 (after the builder's report), the run root's name.** The adapters' run root
+  `${TMPDIR}/recheck-v2` put the skill's name into the E10-4 prompt through the run directory
+  path. The control room applied the builder's exact edits: `setups/claude-code/launch.sh` and
+  `setups/opencode/install.sh` name the run root `${TMPDIR}/runs`; the campaign plan sets
+  `run_root_name` to `runs`; the helpers' own defaults are untouched (the prompt names the run
+  directory explicitly, so a default is never taken). The OpenCode pointer directory
+  `${TMPDIR}/recheck-v2/opencode/` is harness plumbing the model never sees in a prompt and
+  stays.
+- **E10-23 (after the builder's report), the OpenCode allow rule.** The dry run's OpenCode
+  trials produced no result because the model redirected a helper's stderr to
+  `/tmp/recheck-v2-helper.err`, outside the `external_directory` allow rule, and the headless
+  `ask` was auto-rejected. The setup's `opencode.json` now also allows `${TMPDIR}/**` (the
+  campaign's own scratch, one directory per campaign), written at install time from the same
+  `TMPDIR` as the run root. A model that writes outside TMPDIR, the workspace and the run
+  directory is still refused, and that refusal is a measurement, not a defect.
+- **E10-24 (after the builder's report), the Claude Code uninstall leftover.** Measured on
+  2.1.272: `claude plugin uninstall` reports success, drops the plugin from the list, and leaves
+  its cache directory on disk. `setups/claude-code/install.sh` removes the cache copy after the
+  uninstall loop (a Python `shutil.rmtree`, never `rm -rf`); the runner's own removal for the
+  absent homes stays as a second guard and is labeled.
+- **E10-25 (after the builder's report), the nine readings accepted.** (1) the absent home is the
+  installed home with the skill removed by the harness's own mechanism, labeled
+  `uninstalled_after_install` / `removed` / `derived_from_available`, proved by `find` and by
+  `verify-install.sh` finding no skill; no `--without` flag is required. (2) The E10-7 gate is on
+  the names the runner passed (`banned_the_runner_passed`); the names a harness sets in its own
+  tool shells (Claude Code's `CLAUDECODE` and eight `CLAUDE_CODE_*`, the messaging token among
+  them) are recorded beside it and are the harness's own act, outside the runner's reach. (3)
+  `USER` is on the allowlist, measured over four sessions as required for the Keychain sign-in.
+  (4) E10-12's poll reads "at least ten times a second"; the default interval is 0.1 s and every
+  continuation record states its interval. (5) No harness has a turn limit on the measured
+  versions; the 300-second timeout is the routing bound and `command.json.turn_limit` records the
+  absence. (6) The run directory carries an opaque per-trial segment under the run root, and
+  `grade` checks the directory is this trial's. (7) `grade` replaces `grade.json` only. (8) A
+  trial with any terminal status is `recorded` and skipped by a resumed campaign; a directory
+  with no terminal status is `partial`, skipped and named; neither is rerun on the runner's own
+  initiative. (9) `grade` re-validates from the trial's own `validate.txt` when the retained copy
+  cannot revalidate (absolute paths under the original run directory); a path-rebase flag for
+  `validate-result.py` is a core change and is carried to E11.
+- **E10-26 (after the builder's report), OpenCode witnesses.** OpenCode writes no init event
+  and records no reasoning effort: its condition and catalog witness is `opencode debug skill`
+  captured to a file (a pipe truncates at 65,536 bytes) under the trial's home with no model,
+  and its `model.json.effort` is `null`. Both are documented departures from E10-3 and E10-10
+  and are labeled in every OpenCode record. OpenCode offers no headless compaction on 1.18.31;
+  its compaction trials are `compaction unavailable headlessly` with the resume run and graded.
+  Claude Code's smallest compaction window is 100,000 tokens; the dry run observed a real
+  compaction at that window on the two-item case (`trace.jsonl` line 7, `subtype: compact`), so
+  the mechanism is proved at the window the harness allows.
+- **E10-27 (after the builder's report), a cut session's cost.** A killed session's `result`
+  event never lands, so the cut half of a continuation trial records no cost; the resumed half
+  does. The report states per-trial cost as `cut: unrecorded by the harness` plus the resume.
+- **E10-28 (after the builder's report), two recorded slips of the builder, no action.** (a)
+  Five reads of `grade.json` on the two Claude Code trials while diagnosing two runner defects,
+  printing only non-key fields (`unauthorized`, `scope_violations`, the validator block, the run
+  directory check); no expected value crossed; `grade --summary` now prints those fields as
+  `per_trial` so no builder needs the file again. (b) `codex --help`-style reads without
+  `CODEX_HOME` let the binary write its own log databases under `~/.codex`; no session, config
+  or credential was written; the next brief sets `CODEX_HOME` to scratch for every read.
+- **E10-29 (after the builder's report), the Codex account, Tony's action.** Every Codex
+  session in the dry run failed with HTTP 400 `The 'gpt-6-astra' model is not supported when
+  using Codex with a ChatGPT account`. The control room reproduced it in the machine's own home
+  and read the sign-in's claims: the 19:33 sign-in is `tonypours@gmail.com` on the free plan;
+  the account E9 ran on (36 rollouts in the pilot home) is `tonycoon@gmail.com` on Pro. Until
+  Tony signs Codex out and back in on the Pro account, the Codex lane, Astra's review, and the
+  operator cannot run; nothing is substituted. `codex sandbox` on 0.154.0 is separately
+  unusable as a no-model probe (fourteen shapes, SIGABRT on the accepted one); the `codex exec`
+  half of E10-8 is re-attempted by the control room once the account is back, before the
+  review copy is made.
+

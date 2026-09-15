@@ -44,6 +44,7 @@
         "glob": "allow",
         "external_directory": {
           "__RUNROOT__/**": "allow",
+          "__TMPROOT__/**": "allow",
           "/tmp/recheck-v2/**": "allow"
         }
       }
@@ -52,6 +53,7 @@
       "permission": {
         "external_directory": {
           "__RUNROOT__/**": "allow",
+          "__TMPROOT__/**": "allow",
           "/tmp/recheck-v2/**": "allow"
         }
       }
@@ -60,6 +62,7 @@
   "permission": {
     "external_directory": {
       "__RUNROOT__/**": "allow",
+          "__TMPROOT__/**": "allow",
       "/tmp/recheck-v2/**": "allow"
     }
   }
