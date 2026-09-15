@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "__MODEL__",
+  "small_model": "__MODEL__",
+  "share": "disabled",
+  "autoupdate": false,
+  "provider": {
+    "openrouter": {
+      "models": {
+        "qwen/qwen3.8-flash": {},
+        "deepseek/deepseek-v4.1-flash": {}
+      }
+    }
+  },
+  "agent": {
+    "recheck-verifier": {
+      "description": "recheck-v2 verifier: reads one brief file and grades a closed checklist. Read and run only; never edits, never fetches, never calls another skill or agent.",
+      "mode": "primary",
+      "model": "__MODEL__",
+      "tools": {
+        "edit": false,
+        "write": false,
+        "patch": false,
+        "webfetch": false,
+        "websearch": false,
+        "task": false,
+        "skill": false,
+        "question": false,
+        "bash": true,
+        "read": true,
+        "grep": true,
+        "glob": true
+      },
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "task": "deny",
+        "skill": "deny",
+        "bash": "allow",
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "external_directory": {
+          "__RUNROOT__/**": "allow",
+          "/tmp/recheck-v2/**": "allow"
+        }
+      }
+    },
+    "build": {
+      "permission": {
+        "external_directory": {
+          "__RUNROOT__/**": "allow",
+          "/tmp/recheck-v2/**": "allow"
+        }
+      }
+    }
+  },
+  "permission": {
+    "external_directory": {
+      "__RUNROOT__/**": "allow",
+      "/tmp/recheck-v2/**": "allow"
+    }
+  }
+}
