@@ -189,17 +189,25 @@ when the record carries any of the keys `isMeta`, `turnCompanion`, `sourceToolUs
 `toolUseResult`. The test is the key's **presence**, not its truthiness: `toolUseResult: {}`,
 `isMeta: false` and `sourceToolUseID: null` are the harness's marks as much as a truthy value
 is, and the truthiness test the first pass shipped let a planted record carrying
-`toolUseResult: {}` become a user grant. Measured across eight transcripts and 346 `user`
-records: no record carried any of the four keys with a falsy value, so presence changes nothing
-on the harness's real records and closes the forged one. `tests/test_turns.py` covers empty,
-false and null for each marker.
+`toolUseResult: {}` become a user grant. Recounted over **every** `transcript.jsonl` the packet
+holds — 21 files, 1,554 records, **263 `user` records** — 243 of those carry at least one of the
+four keys (`toolUseResult` on 223, `isMeta` on 20, `turnCompanion` on 20, `sourceToolUseID` on
+17) and **not one carries any of the four with an empty, false or null value**; the remaining 20
+carry no marker at all and are the real user turns. So presence changes nothing on the harness's
+real records and closes the forged one. The 21 files and their per-file counts are listed in the
+lane's `targeted/marker-presence-witness.txt`, which is the recount's own record; the earlier
+"eight transcripts and 346 `user` records" was counted with a session outside the packet and is
+withdrawn. `tests/test_turns.py` covers empty, false and null for each marker.
 
 The rule is load-bearing because the harness delivers a skill body as exactly the shape the
 contract calls a user turn: 25,659 bytes of text blocks carrying `isMeta`, `turnCompanion` and
-`sourceToolUseID` in the installed delivery probe's `transcript.jsonl:20`, and 26,212 bytes
-carrying `isMeta` and `turnCompanion` (no `sourceToolUseID`, because no Skill call was made)
-when the same body arrives through an explicit slash command. Without the exception a grant
-could cite a delivered body's uuid.
+`sourceToolUseID` in the installed delivery probe's `transcript.jsonl:20`, and a record carrying
+`isMeta` and `turnCompanion` but no `sourceToolUseID` (no Skill call was made) when the same body
+arrives through an explicit slash command — **25,830 bytes of body** in both packet records of
+that route, the whole record being 26,092 bytes in the fix round's session `5075834a-…` and
+26,106 in the control room's rerun, session `4724f55b-…`, the 14-byte spread being their two
+throwaway install paths in the base-directory header (262 and 276 bytes). Without the exception
+a grant could cite a delivered body's uuid.
 
 *Failure modes and the one record that still maps.* A session whose transcript has not been
 flushed has no map (exit 3, and the executor stops rather than guessing). A record with no
@@ -425,7 +433,7 @@ result; `RESULTS.md` carries the same rows with the full harness text.
 | a malformed `agents/openai.yaml` | **ignored** — installs, loads as `probe-malformed-sidecar:delivery-probe` | not enforced (Claude never reads the sidecar) | `negative-tests.jsonl`, rows `malformed-sidecar`, `catalog-loaded` |
 | the manual-only probe with no `agents/openai.yaml` | **ignored** — loads; the restriction rides on `disable-model-invocation` | `harness-enforced` restriction, sidecar-independent | rows `missing-sidecar`, `catalog-loaded` |
 | `SKILL.md` with the `name` field removed | **ignored** — loads as `probe-no-name:probe-no-name`, the name taken from the directory | not enforced | rows `no-name`, `catalog-broken` |
-| `SKILL.md` with the opening frontmatter delimiter broken | **prevented automatic activation only** — absent from `skills`, present in `slash_commands`; `/probe-broken-delim` answers `Unknown command`, and the namespaced `/probe-broken-delim:probe-broken-delim` **runs it**: 25 of 25 sentinels and `END-OF-PROBE`, the body delivered as a 26,212-byte `user` record with `isMeta` and `turnCompanion` | `harness-enforced` for the automatic route, **not enforced** for the explicit route | rows `broken-delimiter`, `catalog-broken`, `broken-delimiter-explicit-route`; sessions `08372e02-…` ($0) and `5075834a-…` ($0.176) |
+| `SKILL.md` with the opening frontmatter delimiter broken | **prevented automatic activation only** — absent from `skills`, present in `slash_commands`; `/probe-broken-delim` answers `Unknown command`, and the namespaced `/probe-broken-delim:probe-broken-delim` **runs it**: 25 of 25 sentinels and `END-OF-PROBE`, the body delivered as a `user` record with `isMeta` and `turnCompanion` — 25,830 bytes of body, a 26,092-byte record in the packet's fix-round session and 26,106 in the control room's rerun, differing only by their base-directory headers | `harness-enforced` for the automatic route, **not enforced** for the explicit route | rows `broken-delimiter`, `catalog-broken`, `broken-delimiter-explicit-route`; sessions `08372e02-…` ($0) and `5075834a-…` ($0.176) |
 | a duplicate skill name (two plugins, one skill name) | **ignored** — both load, namespaced by plugin | not enforced | rows `duplicate-name`, `catalog-loaded` |
 | `references/verifier.md` deleted from the package | **enforced by the core, ignored by the harness** — `claude plugin validate` passes, the install reports `outcome: ok`, and a live session lists the skill (`probe-missing-resource:recheck-v2` in both `skills` and `slash_commands`) and gets a plain `File does not exist` from `Read`; the core stops before any work with `reference unavailable: references/verifier.md`, exit 10 | `instruction-bound` at the harness, `harness-enforced` nowhere, enforced by the core | row `missing-resource` (core exit 10) and `missing-resource-live` (session `070606c7-…`, $0.401) |
 | a symlinked `SKILL.md` file | **prevented activation** — `install` reports `ok` and silently drops the symlinked file; the cache holds no `SKILL.md` and the skill never reaches the catalog | `harness-enforced`, silently | row `symlink-skill-file` |

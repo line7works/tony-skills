@@ -238,9 +238,14 @@ def harness_written(record):
     `toolUseResult: {}`, `isMeta: false` and `sourceToolUseID: null` are the
     harness's marks as much as a truthy value is, and a truthiness test let a
     record carrying `toolUseResult: {}` become a user grant (Astra's finding 3).
-    Measured 2026-09-14 across eight transcripts and 346 `user` records: no
-    record carried any of the four keys with a falsy value, so presence changes
-    nothing on the harness's real records and closes the forged one.
+    Recounted 2026-09-14 over every `transcript.jsonl` in the lane's packet --
+    21 files, 1,554 records, 263 `user` records, of which 243 carry at least one
+    of the four keys (`toolUseResult` 223, `isMeta` 20, `turnCompanion` 20,
+    `sourceToolUseID` 17) and not one carries any of them with an empty, false
+    or null value; the other 20 carry no marker and are the real user turns. So
+    presence changes nothing on the harness's real records and closes the forged
+    one. The file list and per-file counts are the packet's own
+    `targeted/marker-presence-witness.txt`.
     """
     for key in HARNESS_WRITTEN_KEYS:
         if key in record:

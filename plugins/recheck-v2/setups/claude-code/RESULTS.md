@@ -388,7 +388,7 @@ explicit invocation are two measurements:
 | Spelling | Session | Result |
 |---|---|---|
 | `/probe-broken-delim` | `08372e02-c9b0-48cb-9357-b34eb8ab244f`, 0 turns, **$0** | `Unknown command: /probe-broken-delim` |
-| `/probe-broken-delim:probe-broken-delim` (the form the catalog lists) | `5075834a-6ac5-45b9-ae08-435ae0665117`, 1 turn, **$0.176** | **it ran**: 25 of 25 sentinels and `END-OF-PROBE`; the body arrived as a 26,212-byte `user` record carrying `isMeta` and `turnCompanion` (no `sourceToolUseID`: no Skill call was made) |
+| `/probe-broken-delim:probe-broken-delim` (the form the catalog lists) | `5075834a-6ac5-45b9-ae08-435ae0665117`, 1 turn, **$0.176** | **it ran**: 25 of 25 sentinels and `END-OF-PROBE`; the body arrived as a `user` record carrying `isMeta` and `turnCompanion` (no `sourceToolUseID`: no Skill call was made), **25,830 bytes of body** inside a 26,092-byte record (a 262-byte base-directory header naming its throwaway install path; the control room's rerun, session `4724f55b-…`, recorded 26,106 with a 276-byte header) |
 
 The first pass's "prevented activation" is therefore too broad and is corrected to **prevented
 automatic activation**; the explicit namespaced command still runs a skill whose frontmatter
