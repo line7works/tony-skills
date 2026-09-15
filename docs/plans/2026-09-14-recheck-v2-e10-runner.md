@@ -745,3 +745,15 @@ report could not read from behind the wall.
   pilot root) join the review copy; (26) `verify` counts a verifier subprocess exit in its
   success condition. One builder round, then Astra's targeted re-check at high on those fifteen
   items.
+- **E10-60 (after Astra's targeted re-check, 2026-09-15 late afternoon, at high).** Verdict:
+  13 of the 15 items FIXED, 2 PARTLY, no NEW BLOCKER; the reviewer's own suite and `check` runs
+  stopped at the same confined-cache dependency as before (the control room's green runs are in
+  the copy). The two: (3) a reply that reports it could not run the command is a **failed**
+  probe whatever else it printed; a name printed beside such a reply (the reviewer's probe
+  printed `PATH`) proves nothing, so `reply_reports_it_could_not_run` fails the probe on its own
+  and the record says which rule failed it; (10) the retained-run tree hash covers **every**
+  entry under the run directory: `__pycache__` and every other directory are walked, a symlink
+  contributes its own target path as content and, when it names a directory, that directory's
+  contents are walked too (a changed link or a changed file behind it changes the hash), so a
+  binding is honoured only when nothing under `run/` moved. One targeted pass by the third
+  round's builder, then Astra's second re-check on items 3 and 10 alone.
