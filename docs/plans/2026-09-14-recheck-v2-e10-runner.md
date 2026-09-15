@@ -622,3 +622,65 @@ it differently. One fix round (a fresh Opus 5 at the session's effort), one veri
   are not retained; `runner.log` and E10-30 hold the observation; E10-43 makes every probe
   record immutable from here.
 
+### Rulings after the fix round (control room, 2026-09-15, after the fix-round builder's report)
+
+The fix round delivered every one of the 27 findings with a test and a record, 219 runner tests
+green under both runtimes, the shared-core and adapter suites green, the E7 check runner 9/9,
+and a real 15-trial verification campaign (`fix-2026-09-15/`, 20 attempts over 18 ids, three
+concurrent lanes) whose every count the control room reproduced from `trials.jsonl`,
+`processes.jsonl` and the grade files. The builder's four defects found live in its own new
+code, the guide lines and the "not done" list are accepted as written. The rulings below are
+the control room's answers to the report's section 7 questions and to the one measurement the
+report could not read from behind the wall.
+
+- **E10-54, `match_ok` 0 of 12: the key carries E7's trial shape, the runner must supply
+  E10's.** The control room read the twelve grades' `match.reasons`. Every one of the twelve
+  fails `$.run.invocation.mode: expected 'interactive', got 'headless'`; the two Claude Code
+  comparison grades fail on that field **alone**. Six continuation grades also fail every
+  `records_written` and `receipt_path` regex of the form `/run/<file>$` because the runner
+  names the run directory `<tree>/runs/<case id>-run/` while E7-18 promises "`workspace/` and
+  `run/` keep their names, so every key's `/run/` pattern holds"; five fail
+  `$.run.invocation.resume: expected False, got True` because the F3-02 entry describes one
+  session and the continuation trial resumes. The remaining reasons are model outcomes and stay
+  (`Slice A` for `A`, a minted run id, a phantom injection attempt, a dirty identity, a missing
+  `model.settings`). The key is correct as E7 wrote it and is not edited. Three facts are the
+  trial's, and the runner supplies them: (a) the run directory of every trial is the fixture's
+  own `run/` leaf, `<tree>/fixture/<12 hex>/run`, exactly as E7-18 lays it out; `prepare_run_dir`
+  refuses a leaf that already holds `result.schema.json` (prepared before) and never removes
+  anything; `run_root_name` remains the adapters' segment (E10-22) and the record's
+  `run_root_note` says so; (b) the E10-4 prompt names the run id `<case id>-run` in words
+  ("Use run id F1-01-fixed-clean-run and the run directory ..."), which is E10-41's documented
+  exception made explicit, since the core otherwise mints its own id and the key's `run_id`
+  can never hold; (c) `evals/trial-defaults.json` gains `invocation_mode: "headless"` with its
+  rule (every E10 harness launches headless; the core records the fact the harness reports, per
+  SKILL.md, never a guess), and `grade` substitutes, before matching, the trial's facts into the
+  expected document: `run.invocation.mode` from the default, and for a continuation trial
+  `run.invocation.resume` true; `grade.json` lists every substitution under
+  `trial_conditioned` with the key's literal beside the value used, so a reader sees what the
+  key said and what the trial supplied. The fix campaign is regraded (`grade.json` is the one
+  replaceable file, E10-43) and the new `match_ok` count is reported; its retained trials keep
+  the `runs/` layout they ran under, so their `/run/` regexes still fail on regrade and the
+  layout fix is proven by the next live trial, not by the regrade.
+- **E10-55 (report Q5), the cut is captured frozen.** The runner stops the trial's process
+  group with SIGSTOP, captures and verifies the checkpoint and log pair while nothing can write,
+  then SIGTERM and SIGKILL as E10-12 says; a pair that disagrees with the claimed state is still
+  an invalid cut and recorded so. The two invalid cuts of the fix campaign stay recorded as
+  invalid; they are the measurement that motivated this ruling.
+- **E10-56 (report Q1, Q4, Q6 and the edits outside the runner).** Q1: the reading is accepted:
+  a stage holds no link at all; in a home a link is refused only when its resolved target lies
+  in the key, the held-out set or a campaign record tree, and every escaping link is recorded
+  with its target. Q4: `--reopen-key` after any launch is the operator's documented step and
+  the operator mandate carries it; a clean campaign finish does not reopen the key. Q6: no
+  edit. Outside edits: (1) the `--without recheck-v2` flag on the three `setups/*/install.sh`
+  is authorized for the second fix round, which may edit those three files for that flag and
+  nothing else in them, so an absent home never held the skill (E10-3) and the runner drops its
+  second-guard removal; (2) `validate-result.py`'s path-rebase flag stays E11 (E10-25(9)); (3)
+  a session ignoring the named run directory is a measurement; E10-54(b)'s explicit run id is
+  the only change and the core is not edited; (4) `disable-model-invocation: true` not honoured
+  by Codex and OpenCode on an in-words request is a measurement and a guide finding, no edit.
+- **E10-57, the second fix round and what follows.** One more builder round, scoped to E10-54,
+  E10-55 and E10-56(1) with tests that prove each claim and the fix campaign regraded, under the
+  same boundary as the first (plus the three install scripts for the one flag); then live check
+  3 stands as run by the control room on the first fix round's runner (below), then Astra's
+  verification at high (R1d) over both rounds, then targeted re-checks. The first fix round is
+  committed as delivered before the second starts.
