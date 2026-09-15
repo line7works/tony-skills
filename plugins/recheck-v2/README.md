@@ -5,12 +5,15 @@ The portable recheck pilot from the skills v2 execution plan
 re-inspection skill meant to run as a native entry point on several harnesses from one shared
 core with a small adapter per harness.
 
-Status: **E8: contract revision 5, schemas, core scripts, skill body built; E9 adds the
-adapters.** The plugin is not yet listed in `.claude-plugin/marketplace.json`; E9 lists it
-with the adapters. The rulings that shaped the core (E8-1 to E8-30 and the amendments E8-A1 to
-E8-A46) are in `docs/plans/2026-09-13-recheck-v2-e8-core.md`; the contract
-(`skills/recheck-v2/references/pilot-contract.md`, revision 5) outranks that document. E7's
-fixtures, answer key, trigger set, and check runner are under `evals/` (`evals/README.md`).
+Status: **E9: the three adapters and setups built, reviewed and closed; the plugin is a genuine
+entry point on Claude Code, Codex CLI and OpenCode.** The plugin is listed in
+`.claude-plugin/marketplace.json`. The rulings that shaped the core (E8-1 to E8-30 and the
+amendments E8-A1 to E8-A51) are in `docs/plans/2026-09-13-recheck-v2-e8-core.md`; the rulings that
+shaped the adapters (E9-1 to E9-41) are in `docs/plans/2026-09-14-recheck-v2-e9-adapters.md`; the
+contract (`skills/recheck-v2/references/pilot-contract.md`, revision 5) outranks both. Each adapter's
+profile (`skills/recheck-v2/adapters/<harness>/profile.md`) and setup (`setups/<harness>/`, with its
+`RESULTS.md`) carry the lane's own measurements. E7's fixtures, answer key, trigger set, and check
+runner are under `evals/` (`evals/README.md`).
 
 Names carry the `-v2` suffix (plugin and skill) while v1 `recheck` stays installed; both are
 renamed at cutover (ruling 10, 2026-09-13).
@@ -102,3 +105,53 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
   before the leaf (E8-A9); `fixturelib`'s symlink hashing aligned with the core (E8-A46); the
   IA lane's `CASES.md` text on the pin pattern; gaps 9 and 13 as E7 carried them. Astra's prompts,
   verdicts, and logs are in the Clerk packet under `astra-outputs/e8/`.
+
+## Build record (E9)
+
+- Lane contract, 2026-09-14 (seam commit `2837cd4` on `feat/recheck-v2-e9`): the control room
+  wrote `docs/plans/2026-09-14-recheck-v2-e9-adapters.md` (rulings E9-1 to E9-14) before any
+  builder started: what an adapter is, the twelve-section profile every lane shares, the helper
+  interface (`invocation.py`, `turns.py`, `verifier.py`), the setup scripts (`install.sh`,
+  `launch.sh`, `verify-install.sh`, `negative-tests.sh`), the gates, and the review. The seam
+  commits that followed (`895132b` to `d078d1e`) carry amendments E9-15 to E9-41 as the lanes
+  reported; every lane merged each seam before its next pass.
+- Three lanes built at once (R1b) in three worktrees: lane C (Claude Code) and lane Q (OpenCode
+  with the OpenRouter provider, D3a) by Opus at high, lane R (Codex CLI) by Codex-Astra at low
+  (R1a). Each builder's brief required the deterministic gates as output: the core suite under uv
+  and `/usr/bin/python3` 3.9.6, the adapter suite, the A7b delivery fixture, the negative
+  installation tests, the installed-package diff, and live proofs on E7 fixtures inside an isolated
+  pilot setup under `~/.local/share/skills-v2-pilot/<harness>/`. Every install identifies the same
+  shared core (`content_sha256` `4261f82e…`).
+- Lane C: Astra (GPT-6, max, fresh, on a copy behind the wall) LANE REJECTED, 8 BLOCKER, 7 MAJOR,
+  3 MINOR (the first a messaging token the builder's environment probe had captured into its
+  scratch; redacted in every copy, never in the worktree). Rulings E9-28 to E9-30 and E9-33; fix
+  round `914950d`; verification 13 of 18 FIXED; E9-39; targeted pass `0ab8c02` and re-check (1, 6,
+  11, 18 cleared, 7 PARTLY); `5f3b0b7` and a second re-check (7 PARTLY: one count rested on a
+  session outside the packet); `3d3bfc4` recounted it over every transcript the packet holds;
+  third re-check: ITEM 7 CLEARED, no new BLOCKER (`3d3bfc4` is the lane's close).
+- Lane R: a fresh Fable at max LANE REJECTED, 1 BLOCKER, 8 MAJOR, 5 MINOR (the isolated home that
+  held the verifier's tool shells also held the executor's own rollout). Rulings E9-25, E9-26; fix
+  round `34c8efc`; E9-31 (`92f477e`, the executor's rollout found by `CODEX_THREAD_ID`);
+  verification 9 of 14 FIXED with a new BLOCKER; E9-35, E9-36 (`3ebdd9f`), E9-37 (`8f2d98a`),
+  E9-40 (`f15543f`, the installed helper's root from its own location, the residual named as one
+  class); three re-checks, the third ALL CLEARED; the hard-link route measured DENIED under
+  `codex sandbox`. Carried in writing: the fresh4, livecheck and third reinstall records unlisted
+  in RESULTS; `harness.entry` for a host-skill install under the child launch (latent).
+- Lane Q: Astra LANE REJECTED, 9 BLOCKER, 5 MAJOR, 2 MINOR (the builder's provider probe had
+  captured the OpenRouter key's value into two scratch records; redacted everywhere, the key
+  flagged for rotation). Rulings E9-32 to E9-34; fix round `abbcb41`; E9-35 (`00fd628`); E9-38
+  (`c2f9bf9`, the provider key lives only in the setup's auth store); verification 9 of 16 FIXED
+  with a new BLOCKER (the scanner's exemption) and a new MAJOR (the timeout loop); E9-41 targeted
+  pass `446dc94`; re-check on nine items: ALL NINE CLEARED, no new BLOCKER (`446dc94` is the lane's close). Carried to E10: item 15 (the chat prose
+  the skill body's step 8 asks for is not checked by the adapter).
+- Suites at close on the merged branch: 328 core tests OK under uv (Python 3.12) and
+  `/usr/bin/python3` 3.9.6; adapter suites 90 (Claude Code), 31 (Codex), 96 (OpenCode) OK under
+  both; `validate-examples.py` green.
+- **E9 CLOSED under plan ruling 17 on 2026-09-14**: no BLOCKER or MAJOR open on any lane; MINORs
+  carried in writing. Carried to E10: the launcher's environment (the control room's environment,
+  tokens included, reaches the tool shells on every lane; allowlist it), skill identity hashes
+  `SKILL.md` only, V3 validation in place, `evals/` packaging (E9-24), the provisional model floors
+  (E9-3, Tony's call), item 15 above, the OpenCode verifier's store separation, lane R's two
+  MINORs, and the stale "23,332" parenthetical in E9-34. The builders' briefs, Astra's and Fable's
+  prompts, verdicts, logs and the lanes' live records are in the Clerk packet under
+  `astra-outputs/e9/`.
