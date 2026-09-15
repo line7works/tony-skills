@@ -96,6 +96,13 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
 - Suites at close: 326 unit tests OK under uv (Python 3.12) and `/usr/bin/python3` 3.9.6, also
   from a standalone copy of this folder; `validate-examples.py` 14 positive, 156 negative, 33
   mutations, 15 checkpoint, 9 receipt; the E7 runner green on all nine steps.
+- Correction (2026-09-14, at the E9 close): every Claude-side agent in E7, E8 and E9 (the "Fable low"
+  builders, the "Fable high" checkers, the "Fable max" reviewers, the "Opus at high" builders) ran at
+  effort **xhigh**, the control room's own setting: an Agent-tool subagent takes a model but no
+  effort of its own and inherits the session's; the agents' transcripts (`effort` on every record)
+  are the witness. The labels in this record and the E9 record are what the briefs said, kept as
+  written; the effort that ran is xhigh throughout. Astra's labels are real (`codex exec` sets
+  `model_reasoning_effort` explicitly).
 - **E8 CLOSED under plan ruling 17 on 2026-09-14**: no BLOCKER open; every MAJOR fixed or
   carried in writing; the checks pass. Carried to E9: the adapter's reported facts (E8-13,
   E8-18, E8-24, E8-25, E8-A17), the ended-run and resume behavior the adapters branch on
@@ -147,6 +154,8 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
 - Suites at close on the merged branch: 328 core tests OK under uv (Python 3.12) and
   `/usr/bin/python3` 3.9.6; adapter suites 90 (Claude Code), 31 (Codex), 96 (OpenCode) OK under
   both; `validate-examples.py` green.
+- Effort correction: the Opus builders and the fresh Fable reviewer above ran at xhigh (see the note
+  under the E8 record); "high" and "max" are what the briefs said.
 - **E9 CLOSED under plan ruling 17 on 2026-09-14**: no BLOCKER or MAJOR open on any lane; MINORs
   carried in writing. Carried to E10: the launcher's environment (the control room's environment,
   tokens included, reaches the tool shells on every lane; allowlist it), skill identity hashes
