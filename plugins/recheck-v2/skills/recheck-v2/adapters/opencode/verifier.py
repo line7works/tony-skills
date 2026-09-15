@@ -451,7 +451,16 @@ def parse_args(argv):
 
 
 def check_paths(opts):
-    """Every path rule of finding 4, before anything is created. Returns the resolved paths."""
+    """Every path rule of finding 4, before anything is created. Returns the resolved paths.
+
+    Ruling E9-41: containment is decided **after** symlinks, against the resolved run
+    directory, not against whatever the supplied paths happen to point at. A symlinked
+    ``verifier/`` used to satisfy "inside the scratch" while writing all three captures
+    outside the run, and a symlinked ``checklist.md`` used to satisfy "equals <run>/checklist.md"
+    while supplying an outside brief, because both sides of the comparison resolved through the
+    same link. Every path below is therefore required to resolve to a path under
+    ``realpath(<run_dir>)``, and ``--raw`` may not name the trace or the child's stderr.
+    """
     call_id = opts["call-id"]
     if not CALL_ID_RE.match(call_id or ""):
         raise Usage(
@@ -466,26 +475,45 @@ def check_paths(opts):
             "--scratch must be <run_dir>/%s (contract section 9: the verifier writes only "
             "there); got %s" % (SCRATCH_NAME, scratch)
         )
-    run_dir = os.path.dirname(scratch)
-    wanted_brief = os.path.join(run_dir, BRIEF_NAME)
-    if os.path.realpath(brief) != os.path.realpath(wanted_brief):
+    # The run directory, resolved. Everything else is anchored to this, never to a supplied
+    # path that may itself be a link.
+    run_dir = os.path.realpath(os.path.dirname(scratch))
+    wanted_scratch = os.path.join(run_dir, SCRATCH_NAME)
+    if os.path.realpath(scratch) != wanted_scratch:
         raise Usage(
-            "--brief must be the core's own brief at %s (contract section 7: the brief is the "
-            "whole mandate); got %s" % (wanted_brief, brief)
-        )
-    trace_path = os.path.join(scratch, "launch-%s.json" % call_id)
-    stderr_path = os.path.join(scratch, "launch-%s.stderr" % call_id)
-    for name, path in (("--raw", raw_path), ("the trace", trace_path),
-                       ("the child's stderr", stderr_path)):
-        if not inside(scratch, path):
+            "--scratch must resolve to %s, inside the run directory; %s resolves to %s "
+            "(a symlinked scratch would put every capture outside the run, ruling E9-41)"
+            % (wanted_scratch, scratch, os.path.realpath(scratch)))
+    wanted_brief = os.path.join(run_dir, BRIEF_NAME)
+    if os.path.realpath(brief) != wanted_brief:
+        raise Usage(
+            "--brief must be the core's own brief at %s after symlinks (contract section 7: "
+            "the brief is the whole mandate); %s resolves to %s"
+            % (wanted_brief, brief, os.path.realpath(brief)))
+    trace_path = os.path.join(wanted_scratch, "launch-%s.json" % call_id)
+    stderr_path = os.path.join(wanted_scratch, "launch-%s.stderr" % call_id)
+    captures = (("--raw", raw_path), ("the trace", trace_path),
+                ("the child's stderr", stderr_path))
+    for name, path in captures:
+        if not inside(wanted_scratch, path):
             raise Usage(
-                "%s (%s) resolves outside the scratch directory %s; every capture this helper "
-                "writes stays inside it (contract section 9)" % (name, path, scratch))
+                "%s (%s) resolves to %s, outside the run's scratch directory %s; every capture "
+                "this helper writes stays inside it (contract section 9)"
+                % (name, path, os.path.realpath(path), wanted_scratch))
         if os.path.exists(path):
             raise Usage(
                 "%s already exists at %s; this helper never overwrites a retained capture "
                 "(call ids are single-use, references/verifier.md section 3)" % (name, path))
-    return brief, scratch, raw_path, trace_path, stderr_path, run_dir
+    # No two of them may be the same file: a --raw that names the trace overwrites the event
+    # capture with the report (ruling E9-41).
+    for index, (name, path) in enumerate(captures):
+        for other_name, other_path in captures[index + 1:]:
+            if os.path.realpath(path) == os.path.realpath(other_path):
+                raise Usage(
+                    "%s and %s are the same file (%s); each capture this helper writes is its "
+                    "own destination (ruling E9-41)"
+                    % (name, other_name, os.path.realpath(path)))
+    return brief, wanted_scratch, raw_path, trace_path, stderr_path, run_dir
 
 
 def main(argv):

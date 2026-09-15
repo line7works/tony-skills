@@ -13,12 +13,14 @@
 # the shape's name, never the text. Bundled dependency trees (node_modules) and git objects are
 # skipped: a library's own test fixtures are not this setup's records.
 #
-# The harness's own auth store (<XDG_DATA_HOME>/opencode/auth.json) is skipped by name, and only
-# that name: under ruling E9-38 it is the ONE place the provider key is meant to live, written
-# by install.sh at mode 0600 and never carried in a session's environment. Everything else -
-# every record, capture, trace, log and probe - must hold no key-shaped value at all, and a hit
-# anywhere else is a failure. `--include-auth-store` scans it too, for a check of the file
-# itself.
+# The CONFIGURED setup's own auth store - <setup>/xdg-data/opencode/auth.json, compared by
+# RESOLVED path - is the one file skipped: under ruling E9-38 it is the one place the provider
+# key is meant to live, written by install.sh at mode 0600 and never carried in a session's
+# environment. Ruling E9-41: every OTHER file is scanned, an `opencode/auth.json` inside a
+# capture directory included, because a capture that happens to carry that name is a leak like
+# any other. Everything else - every record, capture, trace, log and probe - must hold no
+# key-shaped value at all, and a hit anywhere else is a failure. `--include-auth-store` scans
+# the setup's store too, for a check of the file itself.
 #
 # Shapes:
 #   openrouter-key    sk-or-v1- followed by 64 hex characters (73 bytes, the shape
@@ -58,7 +60,9 @@ for d in $EXTRA; do
 $d"
 done
 
-printf '%s' "$ROOTS" | INCLUDE_AUTH="$INCLUDE_AUTH" /usr/bin/python3 -c '
+# Ruling E9-41: the one exempt file, by resolved path, is the CONFIGURED setup's own store.
+AUTH_STORE_PATH="$SETUP/xdg-data/opencode/auth.json"
+printf '%s' "$ROOTS" | INCLUDE_AUTH="$INCLUDE_AUTH" AUTH_STORE_PATH="$AUTH_STORE_PATH" /usr/bin/python3 -c '
 import json, os, re, sys
 
 SHAPES = [
@@ -67,9 +71,12 @@ SHAPES = [
     ("jwt", re.compile(rb"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
 ]
 SKIP_DIRS = {"node_modules", ".git", "__pycache__", ".venv"}
-# Ruling E9-38: the harness auth store is the one intended home for the provider key.
-AUTH_STORE = os.path.join("opencode", "auth.json")
+# Ruling E9-38: the configured setup has one auth store and that is the intended home for the
+# provider key. Ruling E9-41: it is matched by RESOLVED path, so a capture that merely carries
+# the name opencode/auth.json is scanned like every other file.
 INCLUDE_AUTH = os.environ.get("INCLUDE_AUTH") == "1"
+AUTH_STORE = os.environ.get("AUTH_STORE_PATH") or ""
+AUTH_STORE = os.path.realpath(AUTH_STORE) if AUTH_STORE else ""
 MAX_BYTES = 8 * 1024 * 1024
 
 roots = [line for line in sys.stdin.read().split("\n") if line.strip()]
@@ -84,8 +91,9 @@ for root in roots:
             try:
                 if os.path.islink(path) or not os.path.isfile(path):
                     continue
-                if not INCLUDE_AUTH and path.endswith(AUTH_STORE):
-                    skipped_auth.append(path)
+                resolved = os.path.realpath(path)
+                if not INCLUDE_AUTH and AUTH_STORE and resolved == AUTH_STORE:
+                    skipped_auth.append(resolved)
                     continue
                 if os.path.getsize(path) > MAX_BYTES:
                     continue
@@ -103,8 +111,10 @@ for root in roots:
 print(json.dumps({"ok": not hits, "roots": roots, "files_scanned": files,
                   "hits": hits, "hit_count": len(hits),
                   "auth_stores_skipped": sorted(skipped_auth),
+                  "auth_store": AUTH_STORE,
                   "note": "a hit reports the shape, the offset and the length; never the value; "
-                          "the harness auth store is skipped unless --include-auth-store (E9-38)"},
+                          "only the configured setup own auth store, matched by resolved "
+                          "path, is skipped unless --include-auth-store (E9-38, E9-41)"},
                  indent=2, sort_keys=True))
 sys.exit(0 if not hits else 5)
 ' > "${TMPDIR:-/tmp}/recheck-v2-scan-$$.json" && RC=0 || RC=$?

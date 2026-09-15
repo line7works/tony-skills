@@ -12,6 +12,11 @@ Ruling E9-38 adds two more: the launcher requires the setup's own auth store rat
 environment, so no tool shell the session opens can carry the provider key and an executor's
 own `env` probe cannot print it into the harness's records.
 
+Ruling E9-41 adds two more: the timeout loop collects a child's own exit status before it
+marks a timeout (a child that ran 0.2 s under a one-second limit was recorded as 124), and the
+secret scanner exempts only the CONFIGURED setup's own auth store by resolved path, so a
+capture that merely carries the name `opencode/auth.json` is scanned like any other file.
+
 `sh -n` over every setup script is the hermetic syntax gate of E9 section 9.1.
 """
 
@@ -165,6 +170,76 @@ class Launch(unittest.TestCase):
         # and the launcher's own scan of its captures found nothing
         with open(os.path.join(out_dir, "secret-scan.json"), encoding="utf-8") as handle:
             self.assertTrue(json.load(handle)["ok"])
+
+    def test_a_child_that_finishes_inside_the_limit_keeps_its_own_exit_status(self):
+        """Ruling E9-41: a completed child is collected before any timeout verdict."""
+        out_dir = os.path.join(self.root, "out-fast")
+        trace = os.path.join(self.root, "fast-trace.json")
+        with open(trace, "w", encoding="utf-8") as handle:
+            handle.write('{"type":"step_start","sessionID":"ses_fast"}\n')
+        started = time.time()
+        code, out, err = self.launch(
+            out_dir,
+            env={"RECHECK_STANDIN_SLEEP": "0.2", "RECHECK_STANDIN_TRACE": trace,
+                 "RECHECK_STANDIN_RC": "0"},
+            timeout="1")
+        elapsed = time.time() - started
+        self.assertEqual(code, 0, err)
+        with open(os.path.join(out_dir, "rc.txt"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read().strip(), "0",
+                             "a child that finished in 0.2 s was recorded as a timeout")
+        self.assertIn("exit=0", out)
+        self.assertLess(elapsed, 20)
+
+    def test_the_scanner_catches_a_capture_that_is_merely_named_like_an_auth_store(self):
+        """Ruling E9-41: only the configured setup's own store is exempt, by resolved path.
+
+        The planted value is SYNTHETIC: a key-shaped string of repeating hex, never a real
+        credential, and the assertions below prove the scanner never prints it.
+        """
+        planted_dir = os.path.join(self.root, "capture", "opencode")
+        os.makedirs(planted_dir)
+        synthetic = "sk-or-v1-" + ("ab12cd34" * 8)
+        with open(os.path.join(planted_dir, "auth.json"), "w", encoding="utf-8") as handle:
+            json.dump({"openrouter": {"type": "api", "key": synthetic}}, handle)
+        report = os.path.join(self.root, "scan.json")
+        with open(report, "w", encoding="utf-8") as sink:
+            proc = subprocess.Popen(
+                ["sh", os.path.join(SETUPS, "scan-secrets.sh"), "--quiet",
+                 "--setup", self.setup, os.path.join(self.root, "capture")],
+                stdout=sink, stderr=subprocess.PIPE)
+            _out, err = proc.communicate()
+        self.assertEqual(proc.returncode, 5,
+                         "a capture named opencode/auth.json was treated as the setup's store")
+        with open(report, encoding="utf-8") as handle:
+            body = handle.read()
+        document = json.loads(body)
+        self.assertFalse(document["ok"])
+        self.assertTrue(document["hits"])
+        planted = os.path.realpath(os.path.join(planted_dir, "auth.json"))
+        self.assertNotIn(planted, document["auth_stores_skipped"],
+                         "the planted capture was treated as an exempt auth store")
+        # the configured setup's own store is the only thing the scan may skip
+        self.assertEqual(document["auth_stores_skipped"], [os.path.realpath(self.auth)])
+        for hit in document["hits"]:
+            self.assertTrue(hit["file"].endswith(os.path.join("capture", "opencode", "auth.json")))
+            self.assertEqual(hit["length"], 73)
+        self.assertNotIn(synthetic, body, "the scanner printed the value")
+        self.assertNotIn(synthetic, err.decode("utf-8", "replace"))
+
+    def test_the_scanner_still_exempts_the_configured_setups_own_store(self):
+        """The auth store install.sh writes is the one file skipped (ruling E9-38)."""
+        report = os.path.join(self.root, "setup-scan.json")
+        with open(report, "w", encoding="utf-8") as sink:
+            proc = subprocess.Popen(
+                ["sh", os.path.join(SETUPS, "scan-secrets.sh"), "--quiet",
+                 "--setup", self.setup],
+                stdout=sink, stderr=subprocess.DEVNULL)
+            proc.communicate()
+        self.assertEqual(proc.returncode, 0)
+        with open(report, encoding="utf-8") as handle:
+            document = json.load(handle)
+        self.assertEqual(document["auth_stores_skipped"], [os.path.realpath(self.auth)])
 
     def test_the_timeout_leaves_another_matching_launch_alone(self):
         """The old `pkill -9 -f "<binary> run --model <model>"` could reach any launch."""

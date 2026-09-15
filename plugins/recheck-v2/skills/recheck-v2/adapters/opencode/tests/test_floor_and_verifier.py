@@ -11,7 +11,10 @@ What these tests hold the helper to, in the reviewer's own terms:
   own, read from the harness's record, and an `ok` needs the child's actual model row;
 * finding 4 — the brief must be `<run_dir>/checklist.md`, the scratch `<run_dir>/verifier`,
   every capture inside it after symlinks, the call id a call id, and no destination is ever
-  overwritten; each of those is exit 2 with nothing created;
+  overwritten; each of those is exit 2 with nothing created. Ruling E9-41 anchors all of it to
+  the **resolved** run directory: a symlinked `verifier/` and a symlinked `checklist.md` both
+  used to pass, because both sides of each comparison resolved through the same link, and
+  `--raw` could name the trace and overwrite it;
 * finding 5 — a refusal is the harness's own recorded permission outcome (a denied `bash`
   counts), and any other tool error is reported with an **unknown** side effect;
 * finding 13 — an absent binary is exit 3, not a status.
@@ -195,7 +198,7 @@ class CannedVerifier(unittest.TestCase):
         code, out, err = self.call(raw=os.path.join(self.run_dir, "input.json"))
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
-        self.assertIn("resolves outside the scratch directory", err)
+        self.assertIn("outside the run's scratch directory", err)
         self.assert_nothing_created()
 
     def test_a_raw_path_that_escapes_through_a_symlink_is_refused(self):
@@ -204,7 +207,49 @@ class CannedVerifier(unittest.TestCase):
         code, out, err = self.call(raw=os.path.join(self.scratch, "out", "input.json"))
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
-        self.assertIn("resolves outside the scratch directory", err)
+        self.assertIn("outside the run's scratch directory", err)
+
+    def test_a_symlinked_scratch_directory_is_refused(self):
+        """Ruling E9-41: containment is decided after symlinks, against the resolved run dir."""
+        outside = os.path.join(self.root, "outside-scratch")
+        os.makedirs(outside)
+        os.symlink(outside, self.scratch)
+        code, out, err = self.call()
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("--scratch must resolve to", err)
+        self.assertEqual(os.listdir(outside), [], "the launch wrote outside the run")
+        self.assertFalse(os.path.exists(self.raw))
+
+    def test_a_symlinked_checklist_is_refused(self):
+        """A brief that resolves outside the run is not the core's own brief."""
+        elsewhere = os.path.join(self.root, "someone-elses-checklist.md")
+        with open(elsewhere, "w", encoding="utf-8") as handle:
+            handle.write("someone else's mandate\n")
+        os.remove(self.brief)
+        os.symlink(elsewhere, self.brief)
+        code, out, err = self.call()
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("after symlinks", err)
+        self.assert_nothing_created()
+
+    def test_raw_may_not_name_the_trace(self):
+        """A --raw equal to the trace overwrote the event capture with the report."""
+        trace = os.path.join(self.scratch, "launch-run-verify.json")
+        code, out, err = self.call(raw=trace)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("are the same file", err)
+        self.assert_nothing_created()
+
+    def test_raw_may_not_name_the_childs_stderr(self):
+        stderr_path = os.path.join(self.scratch, "launch-run-verify.stderr")
+        code, out, err = self.call(raw=stderr_path)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("are the same file", err)
+        self.assert_nothing_created()
 
     def test_an_existing_destination_is_never_overwritten(self):
         os.makedirs(self.scratch)

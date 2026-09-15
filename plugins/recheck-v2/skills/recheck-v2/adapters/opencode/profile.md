@@ -264,11 +264,25 @@ seven verifier sessions, each child's first `user` row is exactly that constant 
 characters, differing only in the two paths it carries; the rows are kept under the lane's
 scratch `fix/child-rows/`) and every child session's `agent` is `recheck-verifier`. The fresh
 context receives the brief's path, the workspace and the scratch directory, and nothing from the
-driving session: no summary, no history, no fixer account, no orchestration text. It cannot see
-the driving conversation at all (a separate session id, a separate process), and it is never
-given the run id or the run directory, only `<run_dir>/verifier`. Whether the child can *reach*
-the driving session's store is a boundary the control room measures, not something this profile
-asserts: a separate process is not by itself a protection.
+driving session: no summary, no history, no fixer account, no orchestration text. It is never
+given the run id or the run directory, only `<run_dir>/verifier`.
+
+**What it is NOT given is not the same as what it cannot reach, and the measurement settles it**
+(ruling E9-41). The control room ran the capability probes and the records say:
+
+| probe | what the record shows |
+|---|---|
+| `control-room/capability-executor/trace.json` | `{"role": "executor", "pointer_write": "ALLOWED", "session_record_write": "ALLOWED"}` — the executor's own tools may rewrite the session pointer and write the session record |
+| `control-room/capability-verifier/trace.json` | `{"role": "verifier", "driver_session_readable": true}` — the fresh verifier child opened the shared session store and counted the driving session's rows |
+
+So the plain fact: **OpenCode applies no sandbox to either session's tools, the shared session
+store is readable by the verifier child, and the pointer and the session record are writable.**
+A separate session id and a separate process are not a boundary. The verifier's separation from
+the driving conversation is therefore **instruction-bound**: it holds because the brief is the
+whole mandate and the mandate says so, not because the harness stops the other outcome. Pilot
+contract section 13's "no access to the driving conversation" is met **by the brief alone** on
+this harness, and this profile claims nothing further. A separate store per verifier child would
+not be enforcement either and is carried to E10 as a capability question.
 
 Containment is the `recheck-verifier` agent defined in the setup's `opencode.json`: the `edit`,
 `write`, `patch`, `webfetch`, `websearch`, `task`, `skill` and `question` tools are switched off
@@ -316,8 +330,11 @@ model row in the session store** → `ok`; exit 0 with non-empty text and no mod
 not at all (ruling E9-32); exit 0 with no text → `empty`; killed at the timeout (900 s, the
 readers row value) → `timed-out`; any other non-zero exit → `transport-failed` with the child's
 stderr tail as `--note`, refined to `unknown-model`, `unauthorized` or `lane-unavailable` when
-the stderr names one; `OPENROUTER_API_KEY` absent from the environment → `unauthorized`. An
-absent binary is **not** a status: it is exit 3 (A7a, ruling E9-34). The model that ran and the
+the stderr names one; **the setup holding no auth store**
+(`<setup>/xdg-data/opencode/auth.json`) → `unauthorized`, naming the missing file. Under ruling
+E9-38 the provider key is deliberately absent from the environment the harness is given, so the
+variable is not a prerequisite and its absence is not a status: the auth store is the
+prerequisite. An absent binary is **not** a status either: it is exit 3 (A7a, ruling E9-34). The model that ran and the
 transport kind are read back from the record, not from the flags: the model from the verifier
 session's own assistant message (`providerID/modelID`) in the session store, the kind the
 constant `opencode-session`.
@@ -368,18 +385,23 @@ followed by a `<skill_files>` list of paths inside the skill folder. Delivery is
 surface. **Bytes are UTF-8 bytes and are stated beside the character counts the harness records**
 (ruling E9-34; the first pass reported the real body's character count as its byte count):
 
+Each pair carries the commit it was measured at (ruling E9-41): `SKILL.md` changed at `895132b`,
+where ruling E9-35 rewrote step 2, so the first row below is history and the second is current.
+
 | | file | what the harness recorded as delivered |
 |---|---|---|
 | delivery probe | 25,831 bytes = 25,831 characters (ASCII only) | 25,976 bytes = 25,976 characters |
-| the real recheck-v2 body | **23,332 bytes**, 23,308 characters | **24,045 bytes**, 24,021 characters |
+| the recheck-v2 body at `c1d8e77` (before E9-35) | **23,332 bytes**, 23,308 characters | **24,045 bytes**, 24,021 characters (the eight `skill` calls of the first fix round) |
+| the recheck-v2 body at `44ad5fd` (current) | **23,496 bytes**, 23,472 characters | **24,209 bytes**, 24,185 characters (`control-room/probes/real-body.store.json`, session `ses_f5d892ad5ffeXXADG1VHOiBmMe`) |
 
 The probe's tool output held the body verbatim, `SENTINEL S24` and the `END OF BODY` line
 included, and the model listed all 25 sentinels and `END-OF-PROBE`; the real body's record held
 the whole body, and the model reproduced the first sentence of step 8, the last Gotchas bullet
 and the last References row verbatim without reading a file. No cut, so no first missing
 sentinel. The delivered figures are the `skill` tool part's `state.output` length in the session
-store, counted in both units over all nine recorded `skill` calls (eight of `recheck-v2`, all
-24,021 characters / 24,045 bytes; one of `delivery-probe`, 25,976 of each).
+store, counted in both units: the eight pre-E9-35 `recheck-v2` calls are all 24,021 characters /
+24,045 bytes, the control room's fresh call is 24,185 / 24,209, and the one `delivery-probe`
+call is 25,976 of each.
 
 One gap worth naming: the `<skill_files>` list is capped (10 entries on the real body,
 all under `scripts/`) and named neither `references/` nor `adapters/`, so the executor learns the
@@ -465,7 +487,7 @@ equals the installed folder; `diff -r` of the installed folder against the canon
 excluding `__pycache__`, is empty; the installed `SKILL.md`'s `name`, `description` and
 `metadata.version` equal the canonical ones; **every referenced path resolves inside the
 installed skill root after every symlink** — the Markdown links *and* the backticked paths that
-SKILL.md, the adapter index and each `adapters/*/profile.md` actually use (12 links and 88
+SKILL.md, the adapter index and each `adapters/*/profile.md` actually use (12 links and 89
 backticked paths on this branch, none outside, none reached through a symlink); **no symlink
 anywhere in the installed tree**, because identical bytes behind a symlink pass `diff -r`
 (Astra finding 10: an installed `adapters/opencode/profile.md` symlink pointing outside the
@@ -486,7 +508,7 @@ One row per capability of pilot contract section 13.
 |---|---|---|
 | Read any file in the workspace | harness-enforced | the `read`, `grep` and `glob` tools are allowed with `read * = allow`; the live proof's verifier read `src/widget/export.py` and the build doc. A `read` outside the allowed roots is refused and recorded (four verifier sessions carry such a part) |
 | Run commands in the workspace with writes confined to scratch and ignored caches | instruction-bound for the confinement, harness-enforced for the running | `bash` is allowed and ran the scenario command. Nothing in the harness confines a `bash` write under the verifier's agent: `bash *=allow` is the last matching rule, so `external_directory` does not classify a bash path at all (measured in the fix round's refusal probe, `ses_f5dc422daffe3bQhkCng7GM9FX`: a write outside the workspace and outside every allowed root completed with exit 0). Confinement is the mandate's discipline and the core's post-run tracked-diff check is the actual guard: `boundary_violations` is `[]` on all four completed runs, and the verifier's own scratch writes are listed in section 7 |
-| Create exactly one fresh verifier context per call, with the same read-and-run capability, the mandate's restrictions, and no access to the driving conversation | harness-enforced for the fresh context and the denied tools; **unmeasured** for "no access to the driving conversation" | one `opencode run --agent recheck-verifier` per call, a separate process with its own session id, and the denied tools are absent from its roster (`opencode debug agent recheck-verifier`); each child's first `user` row is the fixed hand-off constant and nothing else (seven child sessions, `fix/child-rows/`). Separate-process creation does **not** establish that the child cannot read the shared driving-session store; that boundary is the control room's live check, and until it is run this row claims no protection for it |
+| Create exactly one fresh verifier context per call, with the same read-and-run capability, the mandate's restrictions, and no access to the driving conversation | harness-enforced for the fresh context and the denied tools; **instruction-bound** for the separation from the driving conversation | one `opencode run --agent recheck-verifier` per call, a separate process with its own session id, and the denied tools are absent from its roster (`opencode debug agent recheck-verifier`); each child's first `user` row is the fixed hand-off constant and nothing else (seven child sessions, `fix/child-rows/`). Measured, not assumed: the control room's `capability-verifier` record reads `driver_session_readable: true` — the child **can** open the shared session store — and the `capability-executor` record reads `pointer_write: ALLOWED`, `session_record_write: ALLOWED`. Contract section 13's "no access to the driving conversation" is met **by the brief alone**; a separate store per child is carried to E10 (ruling E9-41) |
 | Declare what the harness injects into that context on its own | helper-derived | `verifier.py` lists the system prompt plus the instruction files that exist, by the rule measured with sentinel files (section 7, `RESULTS.md` section 3) |
 | Supply the user channel for grants: `turn_ref` for the user's message, and forwarding for station callers | **instruction-bound** (ruling E9-32) | `turns.py` binds to the session only through the harness's own pointer, keyed by `$OPENCODE_PID`, with no `--session` at run time and no newest-session fallback; ambiguity and an absent record are exit 3. But OpenCode applies no sandbox to the executor's own tools, so the pointer file and the SQLite store both stay writable by the session: a rewritten pointer selects another session and a newly written `user` row is accepted as the user's. Both failure modes are named in section 4 and recorded by `tests/test_turns.py` and `tests/test_core_authorization.py`. Forwarding is the caller's, and the executor types no invocation field at all, `caller` and `resume` included (ruling E9-35) |
 | Assert whether the running model satisfies `policy.model_floor` | helper-derived, on a provisional map | the id from the session's own message record, the class from ruling E9-3's map, `floor_met` by rank. This harness cannot present a below-floor id under D3a; the core's stop is proved by driving it with such an input (`RESULTS.md` section 8, V1-01, validator `ok: true`) |

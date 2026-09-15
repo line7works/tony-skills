@@ -27,7 +27,8 @@
 # The timeout (default 900s, RECHECK_OPENCODE_TIMEOUT) watches THIS launch's own child by its
 # process id, not by the appearance of a result file, and kills only that child's process
 # group: no `pkill -f` pattern that could reach another launch (Astra finding 14). rc.txt
-# records 124 when it fires.
+# records 124 only when the child was still running when the limit was reached; a child that
+# finished first keeps its own exit status (ruling E9-41).
 #
 # Side effects: writes only under <out-dir>, the isolated setup, and ${TMPDIR}/recheck-v2/.
 set -eu
@@ -109,7 +110,12 @@ TIMED_OUT=0
 while kill -0 "$CHILD" 2>/dev/null; do
   sleep 1
   WAITED=$((WAITED + 1))
+  # Ruling E9-41: a child that finished during that sleep has an exit status of its own, and
+  # collecting it comes before any timeout verdict. Without this re-check a child that ran for
+  # 0.2 s under a one-second limit was recorded as 124.
+  kill -0 "$CHILD" 2>/dev/null || break
   if [ "$WAITED" -ge "$TIMEOUT" ]; then
+    # only a child that is still running is terminated, and only its own process group
     kill -TERM -"$CHILD" 2>/dev/null || kill -TERM "$CHILD" 2>/dev/null || true
     sleep 2
     kill -9 -"$CHILD" 2>/dev/null || kill -9 "$CHILD" 2>/dev/null || true

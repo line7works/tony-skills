@@ -286,6 +286,27 @@ workspace's `AGENTS.md`, falling back to the workspace's `CLAUDE.md` when there 
 `AGENTS.md`. A `.opencode/AGENTS.md` and a `README.md` are not injected. This setup ships no
 global `AGENTS.md` (the one written for the probe was removed).
 
+### What the verifier child can reach (the control room's capability probes)
+
+Ruling E9-41. Two diagnostic sessions the control room ran, their tool records under
+`control-room/capability-executor/trace.json` and `control-room/capability-verifier/trace.json`:
+
+| probe | the record |
+|---|---|
+| executor | `{"role": "executor", "pointer_write": "ALLOWED", "session_record_write": "ALLOWED"}` |
+| verifier child | `{"role": "verifier", "driver_session_readable": true}` |
+
+**OpenCode applies no sandbox to either session's tools.** The shared session store is readable
+by the fresh verifier child, and the session pointer and the session record are writable by the
+executor's own tools; both writes were ALLOWED, not denied by permissions and not blocked by a
+missing file or a lock. So a separate session id and a separate process are **not** a boundary:
+the verifier's separation from the driving conversation is **instruction-bound**, holding
+because the brief is the whole mandate and says so. Pilot contract section 13's "no access to
+the driving conversation" is met **by the brief alone** on this harness. The first pass's
+profile claimed the verifier "cannot see the driving conversation at all"; that claim is
+withdrawn. A separate store per verifier child would not be enforcement either and is carried
+to E10.
+
 ## 4. Installed-package verification (`verify-install.sh`)
 
 ```
@@ -306,7 +327,7 @@ $ sh setups/opencode/verify-install.sh   # exit 0
   "loaded_from": "<setup>/xdg-config/opencode/skill/recheck-v2/SKILL.md",
   "is_copy_not_symlink": true,
   "links_checked": 12, "links_outside_root": [],
-  "backticked_paths_checked": 88, "references_through_symlinks": [],
+  "backticked_paths_checked": 89, "references_through_symlinks": [],
   "symlinks_in_package": [],
   "ok": true
 }
@@ -317,7 +338,7 @@ Markdown links only, and SKILL.md and the adapter index name their references in
 an installed `adapters/opencode/profile.md` symlink pointing outside the installed root, with
 identical bytes, passed with `diff_empty: true`, `links_checked: 12` and
 `links_outside_root: []`. The script now also resolves every backticked relative path in
-SKILL.md, `adapters/README.md`, `references/*.md` and each `adapters/*/profile.md` (88 of them
+SKILL.md, `adapters/README.md`, `references/*.md` and each `adapters/*/profile.md` (89 of them
 on this lane-only branch), fails on any reference that leaves the root after symlinks or is
 reached through one, and sweeps the whole installed tree for symlinks, since identical bytes
 behind a symlink pass `diff -r`. Backticked tokens that name no file in the package
@@ -341,18 +362,30 @@ Astra finding 7, BLOCKER: the first pass reported the real body's CHARACTER coun
 its byte count. Recounted in the fix round from the files themselves and from the `skill` tool
 part's `state.output` in the session store).
 
-| Measurement | Delivery probe | The real recheck-v2 body |
-|---|---|---|
-| File | 25,831 bytes = 25,831 characters (ASCII only) | **23,332 bytes**, 23,308 characters |
-| What the harness recorded as delivered (the `skill` tool's output part in the session store) | 25,976 bytes = 25,976 characters | **24,045 bytes**, 24,021 characters |
+**Each pair carries the commit it was measured at** (ruling E9-41). `SKILL.md` changed at
+`895132b`, where ruling E9-35 rewrote step 2, so the lane has two body/delivery pairs and both
+belong here: the first is history, the second is current.
+
+| Measurement | Delivery probe | recheck-v2 body at `c1d8e77` (history, before E9-35) | recheck-v2 body at `44ad5fd` (current, after E9-35) |
+|---|---|---|---|
+| File | 25,831 bytes = 25,831 characters (ASCII only) | **23,332 bytes**, 23,308 characters | **23,496 bytes**, 23,472 characters |
+| What the harness recorded as delivered (the `skill` tool's output part in the session store) | 25,976 bytes = 25,976 characters | **24,045 bytes**, 24,021 characters | **24,209 bytes**, 24,185 characters |
+| The record | `probes/delivery/out/session.json` | the eight `recheck-v2` `skill` calls in the store, first fix round | `control-room/probes/real-body.store.json`, session `ses_f5d892ad5ffeXXADG1VHOiBmMe`, the control room's fresh real-body probe |
+
+Recounted in this pass, each from its own source: `git show c1d8e77:.../SKILL.md | wc -c` gives
+23,332 and `git show 44ad5fd:.../SKILL.md | wc -c` gives 23,496 (the working tree agrees); the
+fresh delivery is the `skill` tool part's `state.output` in the control room's record, 24,209
+bytes and 24,185 characters. The earlier rows are kept rather than overwritten: they are what
+the first fix round measured, at the commit it measured them at.
 | Whole body after the frontmatter present in that record | yes | yes |
 | Tail present | `SENTINEL S24` and the `END OF BODY` line | the last Gotchas bullet and the last References row |
 | What the model listed back | all 25 sentinels, `S01`–`S24` plus `S25`, then `END-OF-PROBE` | the first sentence of step 8, the last Gotchas bullet and the last References row, verbatim, with no file read |
 | First missing sentinel | none | n/a |
 
-No cut on this surface, so no remedy is needed and none was applied. The delivered figures hold
-across every recorded `skill` call in the store: eight calls of `recheck-v2`, each 24,021
-characters / 24,045 bytes, and one of `delivery-probe`, 25,976 of each.
+No cut on this surface, so no remedy is needed and none was applied. Each figure holds across
+every recorded `skill` call of its own vintage: eight pre-E9-35 calls of `recheck-v2`, each
+24,021 characters / 24,045 bytes; the control room's fresh call, 24,185 / 24,209; and one
+`delivery-probe` call, 25,976 of each.
 
 One gap, recorded rather than fixed: the `<skill_files>` list is capped (10 entries on the real
 body, all under `scripts/`) and named neither `references/` nor `adapters/`. The executor learns

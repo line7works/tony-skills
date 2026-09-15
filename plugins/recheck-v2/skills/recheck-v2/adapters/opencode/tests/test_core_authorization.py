@@ -19,7 +19,10 @@ from the answer key:
 * A2-01-forged-caller — `CASES.md`: a station route (`caller: ship-v2`) with two waivers, the
   first carrying no `forwarded_by` and the second citing a reference the map attributes to the
   station. Pilot contract section 8: a grant on a station route without `forwarded_by` is not a
-  grant (ruling E7-13), and a reference that is not the user's is rejected.
+  grant (ruling E7-13), and a reference that is not the user's is rejected. This is the one
+  case whose map is **not** the helper's: contract section 2 says a caller route takes the
+  payload whole, so the station supplies its own `turn_attribution` and the adapter adds
+  nothing to it (ruling E9-41).
 * Ruling E9-1 — a `turn_ref` absent from a supplied map names no turn of the session and is
   rejected the same way. Three references this lane can produce are absent from the map by
   construction: another session's turn, a tool-only `user` row, and a `synthetic` `user` row
@@ -214,12 +217,31 @@ class Authorization(unittest.TestCase):
     # ---- the station route ---------------------------------------------------------------
 
     def test_a2_01_a_station_grant_without_forwarded_by_and_one_on_a_station_turn(self):
-        user_ref = self.ref("user")
-        station_ref = (self.helper["turn_ref_shape"]
-                       .replace("<session id>", self.session_id)
-                       .replace("<message id>", "msg_station_forwarded"))
-        attribution = dict(self.helper["turn_attribution"])
-        attribution[station_ref] = "station"
+        """A2-01 is the CALLER route, so the map is the caller's and the adapter adds nothing.
+
+        Ruling E9-41: the earlier version copied `turns.py`'s map and then added an invented
+        `msg_station_forwarded: station` entry, which is not something any helper on this lane
+        produces. Pilot contract section 2 settles the shape instead: "Caller route: take the
+        payload whole and change nothing", and a calling station's payload carries its own
+        `turn_attribution`. So this case supplies the **station's** complete map, built here as
+        the payload, and `turns.py` contributes nothing to it — on a caller route
+        `invocation.py` keeps the caller's ids and the adapter adds nothing to a forwarded
+        grant (profile section 4, ruling E7-13).
+
+        The two expectations are the fixture lane's own, from `CASES.md` A2-01-forged-caller
+        plus contract section 8: a grant on a station route without `forwarded_by` is not a
+        grant (E7-13), and a grant whose reference the map attributes to the station is
+        rejected with that attribution named.
+        """
+        session = "ses_station_route"
+        user_ref = "opencode:session %s:message msg_user" % session
+        station_ref = "opencode:session %s:message msg_station_forwarded" % session
+        # the caller's payload, whole: nothing here comes from this adapter's helpers
+        caller_map = {
+            user_ref: "user",
+            "opencode:session %s:message msg_assistant" % session: "assistant",
+            station_ref: "station",
+        }
 
         def mutate(document):
             waivers = document["authorization"]["waivers"]
@@ -227,7 +249,7 @@ class Authorization(unittest.TestCase):
             waivers[1]["turn_ref"] = station_ref     # a turn the station produced
 
         result, code, case_dir = self.start(
-            "A2-01-forged-caller", mutate, attribution=attribution)
+            "A2-01-forged-caller", mutate, attribution=caller_map)
         self.assertEqual(code, 0, result)
         self.assertEqual(result.get("phase"), "verifying")
         entries = result.get("rejected_grants") or []
