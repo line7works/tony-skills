@@ -115,9 +115,12 @@ def _bind_session(path, session_id):
 def _bind_workspace(path, workspace):
     """One record of this session must name the workspace as its `cwd`.
 
-    Measured 2026-09-14: one session's records can carry several `cwd` values
-    (this control-room session carried seven), so the binding is "a record of
-    this session names the workspace", never "every record does".
+    Measured 2026-09-14 over the packet's six sessions: records with no `cwd`
+    field exist in every transcript (the bookkeeping types `queue-operation`,
+    `atis-latch`, `last-prompt` and `ai-title`), so the binding is "a record of
+    this session names the workspace", never "every record does", and the loop
+    below skips a record without the field rather than reading it as a
+    mismatch.
     """
     if not workspace:
         return "not checked: no --workspace was given (ruling E9-28's cwd binding did not run)"
@@ -416,14 +419,20 @@ def entry_kind(helper_path, cfg):
 def sandbox_mode(session=None):
     """The permission mode in force, read from the harness's own record.
 
-    Measured 2026-09-14: the transcript's `user` records carry `permissionMode`
-    (`acceptEdits` in each of the three live `claude -p` sessions, on the first
-    user record of each). That is a harness record the session can read about
-    itself, so it is the source; the launcher's `RECHECK_HARNESS_SANDBOX` is
-    kept only as a cross-check, and a disagreement is reported rather than
-    resolved. An interactive session's first user record can carry no
-    `permissionMode` at all (measured in this control-room session), and then
-    the launcher's value, or `unknown`, stands.
+    Measured 2026-09-14 over the packet's six `claude -p` sessions: the
+    transcript's `user` records carry `permissionMode`, `acceptEdits` on the
+    first `user` record of every one of the six. That is a harness record the
+    session can read about itself, so it is the source; the launcher's
+    `RECHECK_HARNESS_SANDBOX` is kept only as a cross-check, and a disagreement
+    is reported rather than resolved. The field is sparse, not per-record: one
+    `user` record carries it in five of the six sessions and two do in the
+    sixth, every other `user` record carries none, and the stream-json trace
+    carries it on no `user` record at all -- which is why this reads the
+    recorded values rather than the last record. Every session in the packet is
+    headless, so the packet supports no claim about what an interactive
+    session's first user record carries and none is made here. Where no
+    permission-mode record is reachable the launcher's value, or `unknown`,
+    stands.
     """
     recorded = (session or {}).get("permission_modes") or []
     launcher = os.environ.get("RECHECK_HARNESS_SANDBOX") or os.environ.get(
@@ -446,12 +455,15 @@ def mode_hint(session=None):
     """Whether a person can answer a question in this session.
 
     Measured 2026-09-14: a headless `claude -p` session's tool shell carries
-    CLAUDE_CODE_SESSION_ATTENDED=0 and CLAUDE_CODE_ENTRYPOINT=sdk-cli; an
-    interactive session carries 1 and cli. The session's own transcript records
-    carry `entrypoint` too (`sdk-cli` on all three live runs, `cli` in this
-    control-room session), which is the second reading. The executor still
-    types `invocation.mode`; this is the fact it types it from, so a headless
-    run does not ask a question into a channel nobody reads.
+    CLAUDE_CODE_SESSION_ATTENDED=0 and CLAUDE_CODE_ENTRYPOINT=sdk-cli. The
+    session's own transcript records carry `entrypoint` too, `sdk-cli` on every
+    record that has it in all six of the packet's sessions, which is the second
+    reading. Every session in the packet is headless, so the `1`/`cli` half of
+    each map below is the documented interactive value and not something the
+    packet measures. Under rulings E9-33 and E9-35 the executor types no
+    invocation field at all: this helper supplies `invocation.mode` from the
+    harness's own record, so a headless run does not ask a question into a
+    channel nobody reads.
     """
     recorded = (session or {}).get("entrypoints") or []
     record_mode = None

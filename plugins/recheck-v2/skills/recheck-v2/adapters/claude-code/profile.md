@@ -48,18 +48,29 @@ under a `.claude/skills/` or `.agents/skills/` directory is `host skill`, anythi
 by running the helper from both surfaces).
 
 `harness.sandbox` is the permission mode in force, and it **is** a harness record: the
-transcript's `user` records carry `permissionMode`, measured `acceptEdits` on the first user
-record of all three live sessions (`live/F1-01/transcript.jsonl` and its two siblings) and on
-the committed test fixture. `invocation.py` reads the last recorded value and reports it
-(`helper-derived` from the harness's own record); the launcher's `RECHECK_HARNESS_SANDBOX` is
-kept only as a cross-check and a disagreement is reported, never resolved
-(`measurement._sources.sandbox` says which was used and whether they agreed). Two measured
-limits: an interactive session's first user record can carry **no** `permissionMode` (this
-control-room session's did not) and a slash-command prompt's record carries none either, and
-then the launcher's value stands, or the field reads `unknown (no permission-mode record
-reachable from the session)`. The earlier claim that "Claude Code exports no variable naming
-it, so the value comes only from the launcher" was true of the environment and false of the
-record; the record is the source now.
+transcript's `user` records carry `permissionMode`, measured `acceptEdits` on the first `user`
+record (line 3) of all six sessions this packet holds —
+`control-room/pass.0QkI8N/F1-01/transcript.jsonl` and its F2-01 and F6-04 siblings,
+`control-room/pass.KimYYq/I1-06/transcript.jsonl`, and
+`targeted/live/real-body-installed/transcript.jsonl` and its worktree sibling — and on the
+committed test fixture. `invocation.py` reads the last recorded value and reports it
+(`helper-derived` from the harness's own record); the launcher's `RECHECK_HARNESS_SANDBOX` is kept
+only as a cross-check and a disagreement is reported, never resolved
+(`measurement._sources.sandbox` says which was used and whether they agreed). Two measured limits,
+both counted over the six sessions this packet holds (F1-01, F2-01, F6-04, I1-06 and the two
+real-body sessions): the field is **sparse, not per-record** — one `user` record carries it in
+five of the six and two do in F6-04, while every other `user` record carries none at all (29 of 30
+in F1-01, 27 of 28 in F2-01, 32 of 34 in F6-04, 17 of 18 in I1-06, 2 of 3 in each real-body
+session), and the stream-json trace carries it on **no** `user` record of any of the six, so a
+reader that expects every record to have it, or that reads the trace instead of the transcript,
+finds nothing; and a slash-command prompt's record carries none either. Where no permission-mode
+record is reachable the launcher's value stands, or the field reads
+`unknown (no permission-mode record reachable from the session)`. Every session in this packet is
+headless (`claude -p`), so the packet supports no claim about what an interactive session's first
+user record carries, and
+this profile makes none. The earlier claim that "Claude Code exports no variable naming it, so the
+value comes only from the launcher" was true of the environment and false of the record; the
+record is the source now.
 
 **Sign-in, the lane's one stop.** An isolated `CLAUDE_CONFIG_DIR` does **not** keep the
 machine's sign-in. Measured: `CLAUDE_CONFIG_DIR=~/.local/share/skills-v2-pilot/claude-code/config
@@ -151,9 +162,13 @@ unset, no file named for it, or two files named for it under different project d
 exit 3 naming the case. There is no newest-transcript candidate, no hook-payload candidate, and
 no `hooks.json` shipped; `--transcript` and `--session-id` are the fixture interface and are a
 usage error (exit 2) unless `RECHECK_ADAPTER_TEST=1`. Two measured details behind the binding:
-one session's records can carry several `cwd` values (this control-room session carried seven),
-so the cwd binding is "a record of this session names the workspace", never "every record
-does"; and the `--workspace` flag is optional, so when it is absent the helper says so in
+across the six sessions this packet holds, every session's records carry exactly **one** distinct
+`cwd`, the workspace itself, and every `user` and `assistant` record carries it — the records that
+carry none are the bookkeeping types `queue-operation`, `atis-latch`, `last-prompt` and
+`ai-title`, so the packet shows no session with a second `cwd` and this profile claims none. The
+check is still written as "a record of this session names the workspace" rather than "every record
+does", because records without the field exist and the helper skips them rather than reading one
+as a mismatch. And the `--workspace` flag is optional, so when it is absent the helper says so in
 `workspace_binding` rather than pretending the check ran.
 
 *The label is `instruction-bound`*, not `helper-derived`, and this is the honest reading the
