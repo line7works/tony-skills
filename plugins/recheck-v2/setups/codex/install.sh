@@ -18,7 +18,11 @@ root, home = map(Path, sys.argv[1:])
 source = Path.home()/'.codex'
 lines=[l for l in (source/'config.toml').read_text().splitlines() if re.match(r'^(model|model_reasoning_effort|sandbox_mode)\s*=',l)]
 if len(lines)!=3: raise SystemExit('expected exactly model, effort, sandbox lines')
-base_config='\n'.join(lines)+'\napproval_policy = "never"\nweb_search = "disabled"\n'
+# E10-30: Codex's stable shell_snapshot feature runs the user's interactive shell once and
+# injects its environment (~/.zshrc exports included) into every tool shell, so an allowlisted
+# launch still carried OPENROUTER_API_KEY into the executor's and the verifier's shells
+# (measured 2026-09-15 on 0.154.0, probe-env on all three Codex homes). Off in both configs.
+base_config='\n'.join(lines)+'\napproval_policy = "never"\nweb_search = "disabled"\n\n[features]\nshell_snapshot = false\n'
 child=home/'child';child.mkdir(exist_ok=True)
 (child/'config.toml').write_text(base_config)
 (home/'config.toml').write_text(base_config+'\n[shell_environment_policy.set]\nCODEX_HOME = '+json.dumps(str(child))+'\nUV_CACHE_DIR = '+json.dumps(str(child/'uv-cache'))+'\n')

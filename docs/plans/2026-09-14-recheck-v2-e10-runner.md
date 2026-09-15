@@ -411,4 +411,20 @@ stop; "PR" has not been said.
   unusable as a no-model probe (fourteen shapes, SIGABRT on the accepted one); the `codex exec`
   half of E10-8 is re-attempted by the control room once the account is back, before the
   review copy is made.
+- **E10-30 (after the Codex account came back), the Codex shell snapshot.** With the account
+  fixed, `probe-env` on all three Codex homes showed `OPENROUTER_API_KEY` and `GH_PAGER` in
+  every tool shell while `banned_the_runner_passed` was empty. Measured with no model: a plain
+  `zsh -lc` under the allowlist carries neither, so the profile is not sourced by the tool shell
+  itself; Codex 0.154.0's stable `shell_snapshot` feature runs the user's interactive shell
+  once, captures its environment (`~/.zshrc` line 28 exports the key), and injects it into every
+  tool shell (`<home>/child/shell_snapshots/` exists). `setups/codex/install.sh` now writes
+  `[features] shell_snapshot = false` into the pilot home's and the child's `config.toml`;
+  re-probed on all three homes: the key is gone, `GH_PAGER` remains and is Codex's own setting
+  for the GitHub CLI (no secret). E9-38's rule (the provider key never rides in a session
+  environment) now holds on the Codex lane too. The key in `~/.zshrc` is Tony's and stays his
+  to move or rotate; the E9-38 lesson says it belongs in a store, not a profile.
+- **E10-31 (same pass), the OpenCode default model.** The `opencode-deepseek` setup shares the
+  OpenCode homes and its install rewrites `opencode.json`'s default model to DeepSeek; the
+  launcher takes the model as an argument, so no trial depends on that default. Recorded so a
+  reader of the home's config is not misled.
 
