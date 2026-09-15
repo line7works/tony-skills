@@ -327,4 +327,10 @@ stop; "PR" has not been said.
 
 ## 7. Amendments (control-room rulings issued while lane S runs)
 
-(none yet)
+- **E10-20 (at the seam, before the builder launched), the one install-time credential.** The
+  OpenCode setup's `install.sh` reads `OPENROUTER_API_KEY` once and writes it to the setup's own
+  auth store (E9-38). The runner's `install` subcommand is the only path that passes that name
+  through the allowlist, to that one script, for the three OpenCode homes; `probe-env` proves it
+  is absent from every launched session afterward. The builder's own session inherits the control
+  room's environment (the E9 measurement); the builder never prints, copies or logs it, and the
+  runner's `scan` covers the builder's scratch before the review copy is made.
