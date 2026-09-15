@@ -788,6 +788,66 @@ been said.
   the profile (the re-check's NEW MINOR). After the pass: reinstall, one fresh live proof (the
   executor's real rollout must still be accepted under the live launch), then a targeted Fable
   re-check of N1, 1 and the fresh2 record.
+- **E9-38 (after the control room's lane Q proofs), the provider key never rides in the
+  session environment.** In the fresh F1-01 proof on DeepSeek the executor ran
+  `env | grep -iE 'OPENCODE|OPENROUTER|RECHECK|XDG|TMPDIR'` as its own diagnostic and printed
+  the OpenRouter key into its tool output, which the harness wrote into the session store and
+  the launcher's trace (the control room redacted every text record and scrubbed the store;
+  the rotation stays Tony's). The lane's `install.sh` and `launch.sh` hand the key to the
+  harness through `OPENROUTER_API_KEY`, so every tool shell inherits it. Ruling: the key lives
+  only in the setup's own auth store (the harness's `auth.json` under the setup's
+  `XDG_DATA_HOME`, mode 0600, written by `install.sh` from the variable without printing it),
+  `launch.sh` and the verifier's launch unset `OPENROUTER_API_KEY` for the harness process, the
+  env probe (names only) proves the tool shell does not carry it, and `scan-secrets.sh` runs
+  over the launcher's captures after every launch. A probe that dumps the environment is the
+  executor's own act; the launch shape is what keeps the value out of its reach. Applied by
+  lane Q before Astra's verification round; the profile's section 7 (containment) and
+  RESULTS record the measurement.
+- **E9-39 (after Astra's verification of lane C), the lane's targeted pass.** Thirteen of
+  eighteen findings verified FIXED, no new finding. Open, with the reading for each: 1, the
+  first pass's probe script in the lane's scratch still records values: retired by the control
+  room (its content replaced by the corrected probe with a dated note; its one record was
+  redacted earlier); the shipped probe prompt records names only. 6, the profile and RESULTS
+  call the delivered real body byte-identical to the current file, which grew from 23,332 to
+  23,496 bytes with E9-35: the lane re-measures the real-body delivery on the reinstalled cache
+  at the current commit and states every count beside the commit it was measured at. 7, the
+  372-record model witness came from a record outside the packet (the control room's own
+  session) and cannot ship: withdrawn from the profile; section 2 rests on the `model` fields
+  of the packet's own traces; the observation stays in the guide log as the control room's,
+  its evidence named as outside the packet. 11, the changed-description reproduction the
+  reviewer could not run offline: the control room runs it against a copy of the installed
+  package and keeps the record. 18, section 11 carries its E9-11 label and names its
+  measurement output. Then a targeted Astra re-check of exactly these five.
+- **E9-40 (after Fable's second targeted re-check of lane R), the root comes from the helper's
+  own installed location, and the residual is one named class.** The E9-37 append-open check
+  accepts a copy the shell creates unwritable in the same command (`umask 222; cat … > copy`,
+  or the immutable flag): a mode denial (`EACCES`) and the seatbelt's denial (`EPERM`) raise the
+  same exception, so a read-only copy under a writable root with one appended `UserMessage`
+  mapped as the user's turn and the unchanged core accepted a waiver citing it (hermetic
+  proof in the second re-check's scratch). Ruling: (a) `turns.py` derives its one root from
+  the resolved location of the helper file itself, never from `CODEX_HOME`: the ancestor
+  directly above `plugins/cache` (entry `plugin`), else the ancestor directly above
+  `skills/recheck-v2` (entry `host skill`), is the home, and the root is `<home>/sessions`;
+  a helper running from any other location is exit 3 naming it; the E9-36 `CODEX_HOME`
+  refusal and the E9-37 append-open check stay as the second and third checks. (b) The
+  `RECHECK_ADAPTER_TEST` and `RECHECK_ADAPTER_RECORD` overrides are honoured only by a helper
+  running outside an install (a worktree or test copy); an installed helper ignores them, so
+  an environment prefix cannot hand it a record. (c) Tests: a copy of the helpers placed under
+  `<tmp>/plugins/cache/m/p/v/skills/recheck-v2/adapters/codex/` finds a read-only executor
+  fixture under `<tmp>/sessions` and refuses the same fixture under `<tmp>/elsewhere/sessions`
+  with `CODEX_HOME=<tmp>/elsewhere/child` at mode 0444 and with the immutable flag; the
+  installed-location copy ignores `RECHECK_ADAPTER_RECORD`; the worktree helper without the
+  override is exit 3; every earlier locator case keeps passing. (d) Profile section 4, the
+  section 12 row and `RESULTS.md` read `helper-derived` with the residual named as one class:
+  any departure from the instructed helper command (an environment prefix, a helper copied to
+  another path, a map typed by hand) is the executor's own act and is instruction-bound, the
+  same class in every lane (lane C's E9-28, lane Q's section 4); the harness protects the
+  record (the seatbelt's DENIED), the helper protects the reading, nothing protects the
+  invocation. Under E9-11 a further shape inside that class is not a new finding. (e) The
+  fresh3 proof (`CR/fresh3-F1-01`, `CR/reinstall-targeted2.log`) is recorded like fresh2. After
+  the pass: reinstall, one fresh live proof (fresh4), the control room's live check of the
+  read-only copy under `$TMPDIR` (expected exit 3 after (a)), then a third and final targeted
+  Fable re-check of N1, 1 and the fresh3/fresh4 record, graded under (d).
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
