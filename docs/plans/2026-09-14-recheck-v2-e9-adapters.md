@@ -803,6 +803,21 @@ been said.
   executor's own act; the launch shape is what keeps the value out of its reach. Applied by
   lane Q before Astra's verification round; the profile's section 7 (containment) and
   RESULTS record the measurement.
+- **E9-39 (after Astra's verification of lane C), the lane's targeted pass.** Thirteen of
+  eighteen findings verified FIXED, no new finding. Open, with the reading for each: 1, the
+  first pass's probe script in the lane's scratch still records values: retired by the control
+  room (its content replaced by the corrected probe with a dated note; its one record was
+  redacted earlier); the shipped probe prompt records names only. 6, the profile and RESULTS
+  call the delivered real body byte-identical to the current file, which grew from 23,332 to
+  23,496 bytes with E9-35: the lane re-measures the real-body delivery on the reinstalled cache
+  at the current commit and states every count beside the commit it was measured at. 7, the
+  372-record model witness came from a record outside the packet (the control room's own
+  session) and cannot ship: withdrawn from the profile; section 2 rests on the `model` fields
+  of the packet's own traces; the observation stays in the guide log as the control room's,
+  its evidence named as outside the packet. 11, the changed-description reproduction the
+  reviewer could not run offline: the control room runs it against a copy of the installed
+  package and keeps the record. 18, section 11 carries its E9-11 label and names its
+  measurement output. Then a targeted Astra re-check of exactly these five.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
