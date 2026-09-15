@@ -502,3 +502,48 @@ E9-35/E9-36 close the remaining local changes: helper-supplied mode/caller/resum
 ## Not done and why
 
 No headless session, live negatives, fixture rebuild, new append attempt, web, MCP, other model or subagent: prohibited in this sandbox; fresh2 post-E9-36 proofs are recorded above; the E9-37 acceptance proof is recorded in "Fresh3 F1-01: post-E9-37 acceptance proof" above; the control room owns E9-40 fresh4, the live relocated-copy check and outside re-check. No core edit or core-suite rerun, no other-lane edit, no git mutation, push/PR/merge, protected-home write or credential logging. Install alone updates the isolated home. Model calls and new model-call cost: zero.
+
+## E10-56(1): `install.sh --without recheck-v2`
+
+Measured 2026-09-15 by the E10 second fix round. This script derives `CODEX_HOME` from `$HOME`
+and takes no home argument, so the proof ran with `HOME` pointed at a scratch directory holding
+a synthetic `.codex/` (the three `model` / `model_reasoning_effort` / `sandbox_mode` lines and
+an `auth.json` of the two bytes `{}` — no credential was copied, and the real pilot home was
+not touched):
+
+```
+env HOME=<scratch> sh install.sh --without recheck-v2
+```
+
+- exit 0. The step prints
+  `{"skipped":"codex plugin add recheck-v2@tony-skills","why":"--without recheck-v2 (E10-56(1))"}`
+  in place of the install, and both derived surfaces report
+  `{"surface":"plugin-only|host-only", "without":["recheck-v2"]}` — the `host-only` surface
+  copies `delivery-probe` and `manual-only-probe` and not the skill.
+- `find <scratch codex tree> -name '*recheck-v2*'` returns **0 paths**; the real pilot home
+  still holds `home/plugins/cache/tony-skills/recheck-v2`.
+- `--without` with any other name exits 2.
+
+**E10-58(2): the home pointer, and what the flag now reaches.** The one line the ruling added
+is `export CODEX_HOME="${RECHECK_CODEX_HOME:-$HOME/.local/share/skills-v2-pilot/codex/home}"`,
+the same name `verify-install.sh` and `launch.sh` already read, defaulting to the pilot home as
+before. With it the E10 runner builds the codex `absent` home by running this script into that
+home with the flag, then links `auth.json` (top level and `child/`) to the available home's
+store so the credential stays one file. That home therefore never held recheck-v2 on any
+surface: no plugin registry entry, no cache copy, no host-skill folder, and a catalog without
+it. Measured 2026-09-15 on the fix campaign, from the runner's own records:
+
+```
+install --setup codex --home absent   exit 0
+  recheck_v2_installation  {"how": "never installed", "by": "install.sh --without recheck-v2"}
+  derived_from_available   false
+  home_leak_scan           []           auth_linked_to_the_available_store  auth.json, child/auth.json
+verify  --setup codex --home absent   exit 0
+  no_installed_skill true   expected_no_installed_skill true   ok true
+find <home> -name '*recheck-v2*'      0 paths
+codex plugin list (the runner's own catalog read, no model)
+  active names   delivery-probe, manual-only-probe (plus Codex's own bundled plugins)
+  recheck-v2     not among them; its tony-skills row reads `not installed`
+```
+
+The `routing` home is still the copy of the available one.

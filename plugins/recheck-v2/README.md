@@ -164,3 +164,48 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
   MINORs, and the stale "23,332" parenthetical in E9-34. The builders' briefs, Astra's and Fable's
   prompts, verdicts, logs and the lanes' live records are in the Clerk packet under
   `astra-outputs/e9/`.
+
+## Build record (E10, lane S: the runner)
+
+- Lane contract, 2026-09-14 (seam commit `9d2d7e2` on `feat/recheck-v2-e10`): the control room
+  wrote `docs/plans/2026-09-14-recheck-v2-e10-runner.md` (rulings E10-1 to E10-19) before the
+  builder started: the campaign, the wall, the environment allowlist, the operator shape, the
+  continuation cut, the routing profile. Amendments E10-20 to E10-39 followed the builder's
+  report and the control room's own dry-run pass (`f83c64a` to `db7b37a`); rulings E10-40 to
+  E10-61 followed Astra's rounds (`bbf0dfa` to `268cbd6`).
+- One lane, one worktree (R1c: no Claude fan-out for the cross-harness campaign). The runner
+  `evals/runner/` was built by Opus 5 at high (`cf6a537`; transcript witness 430 of 430 model
+  records at `high`), then completed by the control room's dry run on the Codex and OpenCode
+  halves after Tony's Codex sign-in moved to the Pro account (E10-30 to E10-38: `shell_snapshot`
+  off, the polled launch, the resume shape, the compaction witness from the rollout, the
+  scanner boundary, the nested-launch proof).
+- Astra (GPT-6, max, fresh, on a copy behind the wall, 1 h 55 m, 206 commands): RUNNER
+  REJECTED, 20 BLOCKER, 6 MAJOR, 1 MINOR. Rulings E10-40 to E10-53; fix round by a fresh Opus 5
+  at high (`a7f852b`; 383 of 383 at `high`; 219 tests; the 15-trial verification campaign
+  `fix-2026-09-15/`, 20 attempts over 18 ids, every count reproduced by the control room).
+- The control room read that campaign's twelve grades from its side of the wall: `match_ok`
+  0 of 12 because the answer key carries E7's trial shape (interactive mode, the `run/` leaf,
+  one session). Rulings E10-54 to E10-58: the runner supplies the trial's facts and records
+  every substitution; the key is not edited. Second fix round by Opus 5 at high (`91e1174`,
+  `8ee9adf`; 843 of 843 at `high`; 244 tests; the campaign regraded, one live rerun under the
+  new layout matching with zero reasons; the Codex absent home never holds the skill).
+- Astra's verification at high (R1d): 16 of 31 FIXED, 13 BLOCKER and 2 MAJOR PARTLY, each with
+  her own probe. Ruling E10-59; third fix round by Opus 5 at high (`7f63037`; 380 of 380 at
+  `high` including the E10-60 addendum; 289 then 296 tests; her probes reproduced before and
+  after each change; invariants held 4 to 2, exactly the two invalid Codex cuts; the nine live
+  environment probes re-run under the strengthened gate). Re-check at high: 13 of 15 FIXED,
+  items 3 and 10 PARTLY; ruling E10-60; the addendum (`268cbd6`); second re-check at high:
+  **ALL CLEARED, no new BLOCKER** (E10-61, the lane's close).
+- Live checks the control room ran itself: check 3 (the nested OpenCode rerun through the
+  operator's exact shape at high, validating with zero skips, the 429 attempt kept as attempt
+  0); the E7 check runner after the second round (9 of 9, key untouched); its own runs of the
+  runner suite after every round (219, 240, 244, 289, 296: all OK under Python 3.9.6).
+- Recorded slips: the second round's builder listed the key directory's header once (no file
+  name printed, E10-28); the control room committed the third round before reading its own
+  suite result, which carried one false failure (a random scratch name holding `-r1`; the test
+  now masks the campaign root; the commit was amended to say so); Astra's confined suite runs
+  fail on a missing wheel and are not evidence either way.
+- Carried to the campaign and E11: the readers request block's temp-directory write; the
+  path-rebase flag on `validate-result.py`; the Claude Code `--add-dir` segment; pid-reuse on
+  reservations; lane R's two MINORs; E9-34's parenthetical. The campaign's own record is added
+  to this section when it has run.

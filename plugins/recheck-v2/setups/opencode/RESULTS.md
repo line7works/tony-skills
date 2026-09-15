@@ -762,3 +762,25 @@ ruling E9-38's one live session, the env probe `ses_f5d8058b7ffeNMQ2cKI2MEGIsR`,
 **$0.001818**. The fix round's other measurements — the surface matrix, the pipe capture, the V1-01 run, the five
 validators, the negative tests, the installs and the adapter suite — called no model and cost
 nothing.
+
+## E10-56(1): `install.sh --without recheck-v2`
+
+Measured 2026-09-15 by the E10 second fix round, on a throwaway setup so no pilot home changed,
+with a deliberately fake `OPENROUTER_API_KEY` value (`fix2-flag-proof-not-a-real-key`) so no
+credential was involved:
+
+```
+sh install.sh --setup ~/.local/share/skills-v2-pilot/e10/fix2-flag/opencode-without \
+   --without recheck-v2
+```
+
+- exit 0, and the install prints `skill: recheck-v2 NOT installed (--without recheck-v2,
+  E10-56(1))` and then `skills:  delivery-probe manual-only-probe`.
+- `find <setup>/xdg-config/opencode/skill -maxdepth 1 -name recheck-v2` returns **0 paths**.
+- the harness's own catalog under that setup, `opencode debug skill`, lists
+  `customize-opencode`, `delivery-probe`, `manual-only-probe` — and no `recheck-v2`.
+- the install's own secret scan is clean (12 files, 0 hits) and the auth check still reports
+  1 credential with `OPENROUTER_API_KEY` removed from the harness's environment (E9-38).
+
+The flag exists so the E10 absent home never held the skill on any surface (E10-3); the runner
+passes it and drops its own skill-folder removal.

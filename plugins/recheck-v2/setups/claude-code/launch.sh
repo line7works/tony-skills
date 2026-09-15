@@ -85,7 +85,7 @@ for dir in $PLUGIN_DIRS; do
   set -- "$@" --plugin-dir "$dir"
 done
 
-RUN_ROOT="${TMPDIR:-/tmp}/recheck-v2"
+RUN_ROOT="${TMPDIR:-/tmp}/runs"  # E10-22: a neutral name; the E10 prompt names this path
 mkdir -p "$RUN_ROOT"
 set -- "$@" --setting-sources local --strict-mcp-config \
   --settings "$PILOT_HOME/launch-settings.json" \
