@@ -803,6 +803,79 @@ been said.
   executor's own act; the launch shape is what keeps the value out of its reach. Applied by
   lane Q before Astra's verification round; the profile's section 7 (containment) and
   RESULTS record the measurement.
+- **E9-39 (after Astra's verification of lane C), the lane's targeted pass.** Thirteen of
+  eighteen findings verified FIXED, no new finding. Open, with the reading for each: 1, the
+  first pass's probe script in the lane's scratch still records values: retired by the control
+  room (its content replaced by the corrected probe with a dated note; its one record was
+  redacted earlier); the shipped probe prompt records names only. 6, the profile and RESULTS
+  call the delivered real body byte-identical to the current file, which grew from 23,332 to
+  23,496 bytes with E9-35: the lane re-measures the real-body delivery on the reinstalled cache
+  at the current commit and states every count beside the commit it was measured at. 7, the
+  372-record model witness came from a record outside the packet (the control room's own
+  session) and cannot ship: withdrawn from the profile; section 2 rests on the `model` fields
+  of the packet's own traces; the observation stays in the guide log as the control room's,
+  its evidence named as outside the packet. 11, the changed-description reproduction the
+  reviewer could not run offline: the control room runs it against a copy of the installed
+  package and keeps the record. 18, section 11 carries its E9-11 label and names its
+  measurement output. Then a targeted Astra re-check of exactly these five.
+- **E9-40 (after Fable's second targeted re-check of lane R), the root comes from the helper's
+  own installed location, and the residual is one named class.** The E9-37 append-open check
+  accepts a copy the shell creates unwritable in the same command (`umask 222; cat … > copy`,
+  or the immutable flag): a mode denial (`EACCES`) and the seatbelt's denial (`EPERM`) raise the
+  same exception, so a read-only copy under a writable root with one appended `UserMessage`
+  mapped as the user's turn and the unchanged core accepted a waiver citing it (hermetic
+  proof in the second re-check's scratch). Ruling: (a) `turns.py` derives its one root from
+  the resolved location of the helper file itself, never from `CODEX_HOME`: the ancestor
+  directly above `plugins/cache` (entry `plugin`), else the ancestor directly above
+  `skills/recheck-v2` (entry `host skill`), is the home, and the root is `<home>/sessions`;
+  a helper running from any other location is exit 3 naming it; the E9-36 `CODEX_HOME`
+  refusal and the E9-37 append-open check stay as the second and third checks. (b) The
+  `RECHECK_ADAPTER_TEST` and `RECHECK_ADAPTER_RECORD` overrides are honoured only by a helper
+  running outside an install (a worktree or test copy); an installed helper ignores them, so
+  an environment prefix cannot hand it a record. (c) Tests: a copy of the helpers placed under
+  `<tmp>/plugins/cache/m/p/v/skills/recheck-v2/adapters/codex/` finds a read-only executor
+  fixture under `<tmp>/sessions` and refuses the same fixture under `<tmp>/elsewhere/sessions`
+  with `CODEX_HOME=<tmp>/elsewhere/child` at mode 0444 and with the immutable flag; the
+  installed-location copy ignores `RECHECK_ADAPTER_RECORD`; the worktree helper without the
+  override is exit 3; every earlier locator case keeps passing. (d) Profile section 4, the
+  section 12 row and `RESULTS.md` read `helper-derived` with the residual named as one class:
+  any departure from the instructed helper command (an environment prefix, a helper copied to
+  another path, a map typed by hand) is the executor's own act and is instruction-bound, the
+  same class in every lane (lane C's E9-28, lane Q's section 4); the harness protects the
+  record (the seatbelt's DENIED), the helper protects the reading, nothing protects the
+  invocation. Under E9-11 a further shape inside that class is not a new finding. (e) The
+  fresh3 proof (`CR/fresh3-F1-01`, `CR/reinstall-targeted2.log`) is recorded like fresh2. After
+  the pass: reinstall, one fresh live proof (fresh4), the control room's live check of the
+  read-only copy under `$TMPDIR` (expected exit 3 after (a)), then a third and final targeted
+  Fable re-check of N1, 1 and the fresh3/fresh4 record, graded under (d).
+- **E9-41 (after Astra's verification of lane Q), the lane's targeted pass.** Nine of sixteen
+  findings verified FIXED (3, 5, 6, 9, 10, 11, 13, 14, 16); adapter suites green under both
+  interpreters, the core under 3.9, the reviewer's 3.12 core run stopped on its offline cache.
+  Open, with the reading for each: 1, the E9-38 measurement scratch under the lane's `fix/`
+  held a real auth store and the review copy carried it: removed by the control room; a
+  measurement of the auth store is made only inside the pilot setup, never copied to scratch,
+  and the packet scanner covers every retained capture. 2, profile section 7 still claims the
+  verifier cannot see the driving conversation while the capability record reads it: the
+  section states the measured fact (the harness applies no sandbox, the shared store is
+  readable, the pointer and store are writable), labels the verifier's separation
+  `instruction-bound`, and names pilot section 13 as met by the brief alone; a separate store
+  per verifier child is not enforcement and is carried to E10. 4, the verifier's path checks
+  resolve symlinks before containment: `--scratch`, `--brief`, `--raw` and both launch
+  captures must resolve to paths under the resolved run directory, and `--raw` may not name
+  the trace or any capture; tests for a symlinked scratch, a symlinked brief and raw equal to
+  the trace. 7, profile section 8 and RESULTS section 5 carry the body and delivery sizes
+  beside the commit each was measured at (23,332 and 24,045 before E9-35; 23,496 and 24,209
+  after, from the control room's fresh real-body record). 8, the control room reruns the
+  package stage after the final commit so the packet holds a snapshot equal to what ships. 12,
+  the station test says it exercises the caller route with a caller-supplied map (the
+  contract's caller route takes the payload whole) and adds nothing to a helper map; or it is
+  removed. 15, carried: the reply's shape is `SKILL.md` step 8's, core, E10. N1, the packet
+  scanner exempts only the configured setup's own auth store by resolved path and scans every
+  other `auth.json`; a test plants a key-shaped value in a capture named `opencode/auth.json`.
+  N2, the launcher's timeout loop collects the child's status before marking a timeout and
+  terminates only a child still running; a test with a fast child under a one-second limit
+  records its real exit. N3, the status table names an absent auth store as the prerequisite
+  failure. Then a targeted Astra re-check of 1, 2, 4, 7, 8, 12, N1, N2, N3.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
