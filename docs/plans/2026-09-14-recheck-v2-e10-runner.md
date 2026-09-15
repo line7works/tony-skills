@@ -757,3 +757,14 @@ report could not read from behind the wall.
   contents are walked too (a changed link or a changed file behind it changes the hash), so a
   binding is honoured only when nothing under `run/` moved. One targeted pass by the third
   round's builder, then Astra's second re-check on items 3 and 10 alone.
+- **E10-61, lane S closed (control room, 2026-09-15 evening, plan ruling 17).** Astra's second
+  targeted re-check at high on items 3 and 10: **ALL CLEARED, no new BLOCKER**. No BLOCKER or
+  MAJOR of the review, the verification or either re-check stays open. Carried in writing:
+  Astra's own suite and `check` runs inside her confined copy stop at the missing `jsonschema`
+  wheel (no network in her sandbox; the control room's green runs of the same suites are in the
+  copy and the packet); the readers request block written to the machine's temp directory
+  (E10-58(3), E11); `validate-result.py`'s path-rebase flag (E10-25(9), E11); the Claude Code
+  launcher's `--add-dir` segment not covering the fixture leaf (E10-58(1), measured harmless);
+  a pid-reuse hardening for reservations (third round's Q4, a guide finding); lane R's two
+  MINORs and E9-34's parenthetical (E10-17). The runner at `268cbd6` is the campaign's runner.
+  The campaign itself starts on Tony's word after he sees the plan (E10 kickoff hand-off).
