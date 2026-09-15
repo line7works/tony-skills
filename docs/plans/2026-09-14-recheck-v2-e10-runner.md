@@ -710,3 +710,38 @@ report could not read from behind the wall.
   branch stays graded and tested through `cut_verdict` on the retained shapes; the regrade
   rewrote only `grade.json`); (5) Q6 recorded; (6) the builder's one recorded slip (a header-only
   directory listing of the key, no file name printed) is accepted as recorded under E10-28.
+- **E10-59 (after Astra's verification round, 2026-09-15 afternoon, Astra at high, R1d).**
+  Verdict: 16 of 31 items FIXED (2, 4, 5, 6, 14, 16, 19, 20, 22, 23, 24, 27, and the four ruling
+  items 28 to 31); 13 BLOCKERs and 2 MAJORs PARTLY, each with a reviewer-written probe under
+  the review scratch (`verification/probes.py`, `records.py`, `run-suites.py`, `logs/`). No NEW
+  finding, no credential-shaped value. The reviewer's suite runs failed on a confined uv cache
+  (no `jsonschema` reachable inside its sandbox) and its `check` runs stopped at the same
+  dependency; those are the sandbox's limits, and the control room's own green runs of the same
+  suites are in the copy under `live/control-room/`. Every PARTLY is accepted as a third-round
+  item, read as follows. (1, 8) the grade barrier: a reserved launch whose owner is alive is a
+  live process, and the key opens only when no registered launch of the campaign is alive at
+  all, not only the graded trial's; (3) a probe passes only when it printed at least one
+  environment name, and a reply that reports it could not run the command is a failed probe;
+  (7) `report` never replaces: tables are reserved under `tables/<n>/` with the first free
+  number, and the report's stdout names the directory it wrote; (9) `grade` binds to the
+  record's own `staged_commit`: it refuses when that commit is not the campaign's staged commit
+  unless `--restaged` is given, and then records the disagreement in `grade.json`; the fix
+  campaign, restaged at `91e1174` for E10-58's live install, is that case; (10) a retained
+  validation is honoured only when the hash of every file under the run directory equals the
+  recorded tree hash, not the input and result alone; (11) `native_actions` reads Codex's
+  `exec_command` (`cmd`) beside `command`, and resolves a relative destination against the
+  session's working directory before deciding containment; (12, 13) a Codex read is delivered
+  only when its `function_call_output` reports success, and a refused read is neither an
+  activation nor a routing target; (15) `all_held` requires `cut_valid`, and the verifier-call
+  invariant is set equality against the retained prior calls, so a vanished prior call is a
+  breach; the fix campaign's two invalid Codex cuts will then read `all_held: false`, which is
+  the truth; (17) the store-separation witness inspects only rows of the child session the
+  recorded call names, and reports `unavailable` when no such rows exist; (18) a model record
+  with no session binding is `null` (E10-50), whatever the native label says; (21) a journalled
+  attempt without `command.json` is counted in the attempt total and appears in the table with
+  status `partial`; (25) the default-plan tests carry their own held-out stand-in, the detached
+  test's fake catalogs are complete, and the install-credential test runs the real install
+  scripts against a synthetic home; the first round's `check` records (`review-tests.*` under the
+  pilot root) join the review copy; (26) `verify` counts a verifier subprocess exit in its
+  success condition. One builder round, then Astra's targeted re-check at high on those fifteen
+  items.
