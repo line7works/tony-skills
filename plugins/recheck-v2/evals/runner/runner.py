@@ -3065,13 +3065,33 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         write_text(os.path.join(out_dir, "trace.jsonl"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
     elif setup.harness == "codex":
-        argv = ["codex", "exec", "resume", session, "-c",
-                "model_auto_compact_token_limit=%d" % args.compact_tokens,
-                "--json", "-o", os.path.join(out_dir, "final.md"), "-C", workspace, "-"]
+        # `-C`, `--add-dir` and the sandbox line are `codex exec` options and must come BEFORE
+        # the `resume` subcommand, which accepts only its own options (`-c`, `--json`, `-o`) and
+        # rejected `-C` with exit 2 on 0.154.0 (the dry run's cont-codex compaction r2 record,
+        # E10-35). The launch flags mirror setups/codex/launch.sh: the child home writable
+        # (E9-25) and network for the nested verifier (E9-21).
+        child_home = os.path.join(setup.home("available"), "child")
+        argv = ["codex", "exec", "--json", "-o", os.path.join(out_dir, "final.md"),
+                "-C", workspace, "--add-dir", child_home,
+                "-c", "sandbox_workspace_write.network_access=true",
+                "resume", session, "-c",
+                "model_auto_compact_token_limit=%d" % args.compact_tokens, "-"]
         step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")), cwd=workspace,
                        stdin=prompt, timeout=timeout, label="exec resume + compact limit")
         write_text(os.path.join(out_dir, "events.jsonl"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
+        # E10-36: the compaction witness lives in the thread's own rollout (`"type":
+        # "compacted"` records), not in the exec event stream, which carries no compaction
+        # event at all (measured 2026-09-15: the dry run's cont-codex compaction r3 resume
+        # compacted fourteen times at a 2,000-token limit and its events.jsonl showed none).
+        # The resumed thread's rollout is copied beside the events, as launch.sh copies it.
+        rollouts = glob.glob(os.path.join(setup.home("available"), "sessions", "**",
+                                          "rollout-*%s.jsonl" % session), recursive=True)
+        if len(rollouts) == 1:
+            shutil.copyfile(rollouts[0], os.path.join(out_dir, "rollout.jsonl"))
+        else:
+            write_text(os.path.join(out_dir, "rollout.missing"),
+                       "%d rollouts matched thread %s under the pilot home\n" % (len(rollouts), session))
     else:
         binary = setup.binary("available")
         home = setup.home("available")
@@ -3111,7 +3131,8 @@ def compaction_witness(setup, out_dir):
     patterns = {
         "claude-code": (r'"subtype"\s*:\s*"compact', r'"isCompactSummary"\s*:\s*true',
                         r'"type"\s*:\s*"summary"'),
-        "codex": (r'"type"\s*:\s*"turn_?compact', r'auto_?compact', r'"summary"\s*:\s*"'),
+        "codex": (r'"type"\s*:\s*"compacted"', r'"type"\s*:\s*"turn_?compact',
+                  r'"type"\s*:\s*"ContextCompaction"'),
         "opencode": (r'"type"\s*:\s*"session\.compact', r'session\.compaction\.(started|ended)'),
     }[setup.harness]
     for name in sorted(os.listdir(out_dir)) if os.path.isdir(out_dir) else []:

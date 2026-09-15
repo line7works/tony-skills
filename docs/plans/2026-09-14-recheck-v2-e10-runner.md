@@ -452,4 +452,24 @@ stop; "PR" has not been said.
   the model's whole reachable world is one allowed tree, or leave the refusal as the harness's
   measured trait and report the absent condition's `no_result` as such. The control room leans
   to the first, because a refusal caused by the runner's own layout is not the harness's trait.
+- **E10-35 (control-room pass), the Codex resume shape.** With E10-32 in place the Codex
+  hand-off continuation completed end to end (cut at seq 3, phase `adjudicating`, one done and
+  one pending; resumed in a fresh session; `continuations` 1; result validates, the `r2`
+  record). The compaction trial cut the same way and then its resume failed to parse:
+  `codex exec resume` accepts only its own options and rejected `-C` (exit 2, the `r2` record).
+  The runner now puts `-C`, `--add-dir <child home>` and the sandbox network line before the
+  `resume` subcommand, mirroring `setups/codex/launch.sh` (E9-25, E9-21), with the compaction
+  limit after it; the shape was parse-tested with a bogus session id and no model. Re-run as
+  `r3`; `r1` and `r2` stay as the record of the two defects.
+- **E10-36 (control-room pass), the Codex compaction witness.** The `r3` compaction trial
+  cut at seq 3, resumed the same thread under `model_auto_compact_token_limit=2000`, reached
+  `continuations` 1 and a validating result in 22 minutes, and the runner recorded no witness:
+  it searched the resume's `exec --json` event stream, which carries no compaction event. The
+  thread's own rollout under the pilot home holds fourteen `"type": "compacted"` records (and
+  matching `compaction` and `ContextCompaction` payloads). The runner now copies the resumed
+  thread's rollout beside the events (as `launch.sh` does for a first session) and reads the
+  witness from it; the `r3` record predates the change, and its witness is this ruling's
+  reading of the rollout at
+  `<codex home>/sessions/2026/09/15/rollout-2026-09-15T05-41-05-01a0a515-cefb-7c00-98b6-72f019053b6e.jsonl`,
+  which the review copy carries. The campaign's own trials record it mechanically.
 

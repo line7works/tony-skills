@@ -232,7 +232,7 @@ and one pending. What the two mechanisms did:
 |---|---|---|---|
 | claude-code | `claude -p --resume <id> --autocompact 100000 …` | `trace.jsonl:7` matching `"subtype": "compact` | compaction observed; the resumed run reached `continuations: 1`, `done: 2`, phase `committed`, and its result validates |
 | opencode | `opencode run --session <id> --format json --model …` | none | `compaction unavailable headlessly`; the resume ran and was graded, and the run reached `continuations: 1`, phase `committed` |
-| codex | `codex exec resume <thread> -c model_auto_compact_token_limit=<n>` | not reached | blocked by finding 17 |
+| codex | `codex exec --json -o … -C <ws> --add-dir <child> -c sandbox_workspace_write.network_access=true resume <thread> -c model_auto_compact_token_limit=<n> -` (the exec options before the subcommand, E10-35) | the resumed thread’s rollout, `"type": "compacted"` (E10-36; the exec event stream carries no compaction event) | compaction observed on the dry run’s r3 (fourteen `compacted` records at a 2,000-token limit); the resumed run reached `continuations: 1`, phase `committed`, and its result validates |
 
 ### `scan [PATH...]`
 
