@@ -334,3 +334,13 @@ stop; "PR" has not been said.
   is absent from every launched session afterward. The builder's own session inherits the control
   room's environment (the E9 measurement); the builder never prints, copies or logs it, and the
   runner's `scan` covers the builder's scratch before the review copy is made.
+- **E10-21 (while the builder runs; sent to it), the test-only key stand-in.** The fake harness's
+  tests and the reviewer's copy have no answer key and must never need one: `grade` and
+  `routing-score` read the key and held-out directories from their canonical locations only, and
+  accept `RECHECK_RUNNER_TEST=1` with `RECHECK_RUNNER_KEY_DIR=<dir>` and
+  `RECHECK_RUNNER_HELDOUT=<file>` naming stand-ins a test wrote itself (synthetic entries in the
+  key's shape for the fake harness's cases, never copies of real entries); set without
+  `RECHECK_RUNNER_TEST=1` the runner refuses with reason `key stand-in outside test` (the E9
+  `RECHECK_ADAPTER_TEST` pattern). A grade of a real dry-run trial never uses the stand-in. This
+  closes the oracle a builder would otherwise have by grading a hand-written result against the
+  real key and reading the summary.
