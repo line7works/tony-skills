@@ -79,7 +79,59 @@ Ruling E9-4 names `XDG_CONFIG_HOME` and `XDG_DATA_HOME` only. This setup also se
 `~/.cache/opencode` and `~/.local/state/opencode`, outside the setup and against section 3's
 isolation rule (finding Q-F1).
 
-**Credential.** `[ -n "$OPENROUTER_API_KEY" ] && echo set` → `set`. The provider facts come
+**The credential, and where it lives (ruling E9-38).** `OPENROUTER_API_KEY` is read **once**,
+by `install.sh`, and copied into the harness's own auth store; no session ever carries it.
+
+The control room's fresh F1-01 proof on DeepSeek is why: the executor ran
+`env | grep -iE 'OPENCODE|OPENROUTER|RECHECK|XDG|TMPDIR'` as its own diagnostic and printed the
+key into its tool output, so the harness wrote the value into the session store and the
+launcher's trace (the control room redacted every text record and scrubbed the store; the
+rotation stays Tony's). `install.sh` and `launch.sh` had handed the key to the harness through
+the environment, so every tool shell inherited it.
+
+Measured on 1.18.31, the store's path and shape:
+
+```
+$ strings opencode.exe | grep auth.json
+... if(X)return X7.join(X,"opencode","auth.json"); return X7.join($,".local","share","opencode","auth.json")
+                                                        # $XDG_DATA_HOME/opencode/auth.json
+
+# with the file absent and OPENROUTER_API_KEY unset:
+$ env -u OPENROUTER_API_KEY opencode providers list
+Credentials <setup>/xdg-data/opencode/auth.json
+0 credentials
+
+# with {"openrouter": {"type": "api", "key": "<value>"}} written there, same command:
+$ env -u OPENROUTER_API_KEY opencode providers list
+Credentials <setup>/xdg-data/opencode/auth.json
+●  OpenRouter api
+1 credentials
+```
+
+(`opencode models openrouter` does **not** discriminate: it lists the 367-row catalog either
+way, so the auth check is `providers list` / `auth list`.) `install.sh` writes that file at mode
+0600 from the variable inside python, through a 0600 file descriptor, never echoing it, and its
+report names the file and the mode only:
+
+```
+auth store: <setup>/xdg-data/opencode/auth.json mode 600 (contents never printed)
+auth check: the harness reports 1 credential with OPENROUTER_API_KEY removed from its environment
+```
+
+`launch.sh` and `verifier.py` launch the harness with `env -u OPENROUTER_API_KEY` /
+`env.pop("OPENROUTER_API_KEY", None)`, and their precondition is that the auth store exists, not
+that the variable is set. **The live proof**, session `ses_f5d8058b7ffeNMQ2cKI2MEGIsR`
+(`prompts/env-probe.txt` through `launch.sh` on qwen, names only, $0.001818, exit 0,
+`scan=clean`): the tool shell reported **63 variable names, and `OPENROUTER_API_KEY` is not one
+of them**, while `OPENCODE`, `OPENCODE_PID`, `OPENCODE_DISABLE_EXTERNAL_SKILLS`, `TMPDIR` and
+the four `XDG_*` roots all are. The session still reached the provider and answered `DONE`, so
+the auth store is what authorizes a run. The first pass's equivalent probe listed the variable.
+`launch.sh` now also runs `scan-secrets.sh` over its own output directory after every launch and
+exits 5 on a hit; the probe's own directory scans clean (627 files, 0 hits). A probe that dumps
+the environment is the executor's own act, and nothing in the mandate stops it: the launch shape
+is what leaves it nothing to print.
+
+**Credential facts in the records.** The provider facts come
 from the harness's own listing with the credential column left out, captured by `install.sh` to
 `<setup>/records/providers.txt`: `Credentials <setup>/xdg-data/opencode/auth.json … 0
 credentials` and `Environment … OpenRouter OPENROUTER_API_KEY … 1 environment variable`. The
@@ -254,7 +306,7 @@ $ sh setups/opencode/verify-install.sh   # exit 0
   "loaded_from": "<setup>/xdg-config/opencode/skill/recheck-v2/SKILL.md",
   "is_copy_not_symlink": true,
   "links_checked": 12, "links_outside_root": [],
-  "backticked_paths_checked": 85, "references_through_symlinks": [],
+  "backticked_paths_checked": 88, "references_through_symlinks": [],
   "symlinks_in_package": [],
   "ok": true
 }
@@ -265,7 +317,7 @@ Markdown links only, and SKILL.md and the adapter index name their references in
 an installed `adapters/opencode/profile.md` symlink pointing outside the installed root, with
 identical bytes, passed with `diff_empty: true`, `links_checked: 12` and
 `links_outside_root: []`. The script now also resolves every backticked relative path in
-SKILL.md, `adapters/README.md`, `references/*.md` and each `adapters/*/profile.md` (85 of them
+SKILL.md, `adapters/README.md`, `references/*.md` and each `adapters/*/profile.md` (88 of them
 on this lane-only branch), fails on any reference that leaves the root after symlinks or is
 reached through one, and sweeps the whole installed tree for symlinks, since identical bytes
 behind a symlink pass `diff -r`. Backticked tokens that name no file in the package
@@ -664,13 +716,16 @@ preserved or original**; the first pass's profile named one, and the claim is wi
 
 ## 11. Cost
 
-27 OpenCode sessions in all, **$0.2968** of OpenRouter spend, from the `cost` field the harness
-recorded on each assistant message (summed over the store's `session.cost` column). The eight
+The setup's store holds **41 sessions totalling $0.4971**, summed over its `session.cost`
+column on 2026-09-14 after the E9-38 round; the control room's fresh proofs are inside that
+figure and are its own record. This lane's own two passes account for **$0.2968** across 27
+sessions, plus the two single-session probes the fix rounds ran (below). The eight
 sessions of the four completed live cases (four executors and four verifiers) account for
 **$0.1814**; the six sessions of the attempts that hit the two blockers above account for
 **$0.0951**; the install proof, the delivery, real-body, manual-only, environment and
 injected-channel probes and the dry run account for **$0.0189**; and the fix round's one live
-session, the permission probe `ses_f5dc422daffe3bQhkCng7GM9FX`, accounts for **$0.001452**. The
-fix round's other measurements — the surface matrix, the pipe capture, the V1-01 run, the five
+session, the permission probe `ses_f5dc422daffe3bQhkCng7GM9FX`, accounts for **$0.001452**, and
+ruling E9-38's one live session, the env probe `ses_f5d8058b7ffeNMQ2cKI2MEGIsR`, for
+**$0.001818**. The fix round's other measurements — the surface matrix, the pipe capture, the V1-01 run, the five
 validators, the negative tests, the installs and the adapter suite — called no model and cost
 nothing.

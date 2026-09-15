@@ -13,6 +13,13 @@
 # the shape's name, never the text. Bundled dependency trees (node_modules) and git objects are
 # skipped: a library's own test fixtures are not this setup's records.
 #
+# The harness's own auth store (<XDG_DATA_HOME>/opencode/auth.json) is skipped by name, and only
+# that name: under ruling E9-38 it is the ONE place the provider key is meant to live, written
+# by install.sh at mode 0600 and never carried in a session's environment. Everything else -
+# every record, capture, trace, log and probe - must hold no key-shaped value at all, and a hit
+# anywhere else is a failure. `--include-auth-store` scans it too, for a check of the file
+# itself.
+#
 # Shapes:
 #   openrouter-key    sk-or-v1- followed by 64 hex characters (73 bytes, the shape
 #                     $OPENROUTER_API_KEY carries on this machine)
@@ -26,11 +33,13 @@ set -eu
 
 SETUP="${HOME}/.local/share/skills-v2-pilot/opencode"
 QUIET=0
+INCLUDE_AUTH=0
 EXTRA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --setup) SETUP="$2"; shift 2 ;;
     --quiet) QUIET=1; shift ;;
+    --include-auth-store) INCLUDE_AUTH=1; shift ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     --*) echo "scan-secrets.sh: unknown argument $1" >&2; exit 2 ;;
     *) EXTRA="$EXTRA
@@ -49,7 +58,7 @@ for d in $EXTRA; do
 $d"
 done
 
-printf '%s' "$ROOTS" | /usr/bin/python3 -c '
+printf '%s' "$ROOTS" | INCLUDE_AUTH="$INCLUDE_AUTH" /usr/bin/python3 -c '
 import json, os, re, sys
 
 SHAPES = [
@@ -58,10 +67,14 @@ SHAPES = [
     ("jwt", re.compile(rb"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
 ]
 SKIP_DIRS = {"node_modules", ".git", "__pycache__", ".venv"}
+# Ruling E9-38: the harness auth store is the one intended home for the provider key.
+AUTH_STORE = os.path.join("opencode", "auth.json")
+INCLUDE_AUTH = os.environ.get("INCLUDE_AUTH") == "1"
 MAX_BYTES = 8 * 1024 * 1024
 
 roots = [line for line in sys.stdin.read().split("\n") if line.strip()]
 hits = []
+skipped_auth = []
 files = 0
 for root in roots:
     for base, dirs, names in os.walk(root):
@@ -70,6 +83,9 @@ for root in roots:
             path = os.path.join(base, name)
             try:
                 if os.path.islink(path) or not os.path.isfile(path):
+                    continue
+                if not INCLUDE_AUTH and path.endswith(AUTH_STORE):
+                    skipped_auth.append(path)
                     continue
                 if os.path.getsize(path) > MAX_BYTES:
                     continue
@@ -86,7 +102,9 @@ for root in roots:
                                  "length": match.end() - match.start()})
 print(json.dumps({"ok": not hits, "roots": roots, "files_scanned": files,
                   "hits": hits, "hit_count": len(hits),
-                  "note": "a hit reports the shape, the offset and the length; never the value"},
+                  "auth_stores_skipped": sorted(skipped_auth),
+                  "note": "a hit reports the shape, the offset and the length; never the value; "
+                          "the harness auth store is skipped unless --include-auth-store (E9-38)"},
                  indent=2, sort_keys=True))
 sys.exit(0 if not hits else 5)
 ' > "${TMPDIR:-/tmp}/recheck-v2-scan-$$.json" && RC=0 || RC=$?

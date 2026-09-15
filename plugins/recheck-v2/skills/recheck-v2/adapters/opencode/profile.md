@@ -208,7 +208,38 @@ with the working directory set to the workspace, `PWD` corrected to the workspac
 takes its project directory from `$PWD`, not from the process working directory: a shell that
 `cd`-ed elsewhere before calling the helper otherwise hands the fresh session the wrong project
 and every workspace read comes back refused, measured 2026-09-14), stdin `/dev/null`, the four
-isolated `XDG_*` homes set **unconditionally**, and `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`.
+isolated `XDG_*` homes set **unconditionally**, `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`, and
+**`OPENROUTER_API_KEY` removed from the child's environment** (ruling E9-38).
+
+**The provider key is not part of the session's environment, and that is containment, not
+hygiene** (ruling E9-38). In the control room's fresh F1-01 proof on DeepSeek the executor ran
+`env | grep -iE 'OPENCODE|OPENROUTER|RECHECK|XDG|TMPDIR'` as its own diagnostic and printed the
+key into its tool output, so the harness wrote the value into the session store and the
+launcher's trace. A probe that dumps the environment is the executor's own act and nothing in
+the mandate stops it; the launch shape is what keeps the value out of its reach. So the key
+lives in the harness's own auth store and nowhere else:
+
+- `install.sh` reads `OPENROUTER_API_KEY` once, at install time, and writes
+  `<setup>/xdg-data/opencode/auth.json` at mode 0600 as `{"openrouter": {"type": "api", "key":
+  "<value>"}}` — the path and shape the installed 1.18.31 binary actually reads, measured:
+  with the file absent and the variable unset `opencode providers list` reports `0 credentials`,
+  and with it present the same command reports `OpenRouter api` and `1 credentials`. The value
+  moves from the variable to the file inside python through a 0600 file descriptor and is never
+  echoed, logged or passed as an argument; the install report names the file and its mode only.
+- `verifier.py` and `setups/opencode/launch.sh` launch the harness with the variable removed
+  (`env.pop("OPENROUTER_API_KEY", None)` and `env -u OPENROUTER_API_KEY`), and their
+  precondition is the auth store's existence, not the variable's: `verifier.py` reports
+  `unauthorized` naming the missing file, `launch.sh` exits 3 naming it.
+- Measured live on 2026-09-14, session `ses_f5d8058b7ffeNMQ2cKI2MEGIsR` (`prompts/env-probe.txt`
+  through `launch.sh`, names only, $0.001818): the tool shell carries **63 variable names and
+  `OPENROUTER_API_KEY` is not one of them**, while `OPENCODE`, `OPENCODE_PID`,
+  `OPENCODE_DISABLE_EXTERNAL_SKILLS` and the four `XDG_*` roots all are. The session still
+  reached the provider and answered, so the auth store is what authorizes a run. The first
+  pass's equivalent probe listed the variable.
+- `launch.sh` runs `scan-secrets.sh` over its own output directory after every launch and exits
+  5 on a hit, so a trace, a stderr file or a session dump that carries a key-shaped value stops
+  the launcher instead of reaching a packet. The scanner skips the auth store by name, and only
+  that name, because it is the one intended home.
 
 **Neither the model nor the agent is anyone's pick** (ruling E9-32). `verifier.py` takes no
 `--model` and no `--agent`; both flags are a usage error. The agent is `recheck-verifier`,
@@ -434,7 +465,7 @@ equals the installed folder; `diff -r` of the installed folder against the canon
 excluding `__pycache__`, is empty; the installed `SKILL.md`'s `name`, `description` and
 `metadata.version` equal the canonical ones; **every referenced path resolves inside the
 installed skill root after every symlink** — the Markdown links *and* the backticked paths that
-SKILL.md, the adapter index and each `adapters/*/profile.md` actually use (12 links and 85
+SKILL.md, the adapter index and each `adapters/*/profile.md` actually use (12 links and 88
 backticked paths on this branch, none outside, none reached through a symlink); **no symlink
 anywhere in the installed tree**, because identical bytes behind a symlink pass `diff -r`
 (Astra finding 10: an installed `adapters/opencode/profile.md` symlink pointing outside the
@@ -464,4 +495,5 @@ One row per capability of pilot contract section 13.
 | Attribute turn references to the user, the assistant, or a station | helper-derived for the attribution, instruction-bound for the channel it rests on (the row above) | the `role` field of the harness's own message records; internal-agent rows, `synthetic` rows and tool-only `user` rows left unmapped (ruling E9-22) |
 | Deliver the complete skill body and let the core load its references on demand | harness-enforced | the `skill` tool's recorded output holds the whole body: 24,045 bytes / 24,021 characters for a 23,332-byte / 23,308-character file (section 8); references are read from the installed folder, which the harness auto-allows |
 | Return the result document to the caller unchanged | instruction-bound | the executor hands `result.json` over; nothing in the harness touches it. Measured limit: in three of four live sessions the executor added fences and a sentence around `chat.md` (section 8) |
+| Keep the provider credential out of the session's reach | harness-enforced (ruling E9-38) | the key lives only in `<setup>/xdg-data/opencode/auth.json` (mode 0600, written once by `install.sh` from the variable, never printed); `launch.sh` and `verifier.py` launch the harness with `OPENROUTER_API_KEY` removed, and their precondition is that file rather than the variable. Measured live, session `ses_f5d8058b7ffeNMQ2cKI2MEGIsR`: the tool shell lists 63 variable names and the key is not among them, and the session still reached the provider. An executor probe that dumps its environment is the executor's own act; the launch shape is what leaves it nothing to print. `launch.sh` scans its own captures after every launch and exits 5 on a hit |
 | Refuse or surface, never silently drop, a prohibited action | harness-enforced for a permission refusal, instruction-bound for a `bash` action | a refusal is read from the harness's own recorded permission outcome — state `denied`/`rejected`, or the error "The user rejected permission to use this specific tool call." — and becomes one `--refused` line, a denied `bash` and a denied `read` included; any other error is reported with an **unknown** side effect, never "no side effect" (section 7, `fix/refusal-classification.txt`). A roster-denied tool such as `webfetch` is never offered to the model and leaves no part at all, so there is nothing to surface for it |

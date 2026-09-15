@@ -7,9 +7,15 @@ reach another launch. These tests hold the rewrite to: a used output directory i
 timeout fires on this launch's own child; and a process whose command line matches the old
 `pkill` pattern survives.
 
+Ruling E9-38 adds two more: the launcher requires the setup's own auth store rather than the
+`OPENROUTER_API_KEY` variable, and it removes that variable from the harness process's
+environment, so no tool shell the session opens can carry the provider key and an executor's
+own `env` probe cannot print it into the harness's records.
+
 `sh -n` over every setup script is the hermetic syntax gate of E9 section 9.1.
 """
 
+import json
 import os
 import signal
 import subprocess
@@ -50,6 +56,14 @@ class Launch(unittest.TestCase):
         self.prompt = os.path.join(self.root, "prompt.txt")
         with open(self.prompt, "w", encoding="utf-8") as handle:
             handle.write("say something\n")
+        # ruling E9-38: the launcher's precondition is the setup's own auth store
+        self.auth = os.path.join(self.setup, "xdg-data", "opencode", "auth.json")
+        if not os.path.isdir(os.path.dirname(self.auth)):
+            os.makedirs(os.path.dirname(self.auth))
+        with open(self.auth, "w", encoding="utf-8") as handle:
+            json.dump({"openrouter": {"type": "api", "key": "not-a-real-key-this-is-a-test"}},
+                      handle)
+        os.chmod(self.auth, 0o600)
         self.decoys = []
 
     def tearDown(self):
@@ -121,6 +135,36 @@ class Launch(unittest.TestCase):
         with open(os.path.join(out_dir, "rc.txt"), encoding="utf-8") as handle:
             self.assertEqual(handle.read().strip(), "124")
         self.assertLess(elapsed, 20, "the timeout did not fire promptly")
+
+    def test_the_launcher_refuses_when_the_auth_store_is_absent(self):
+        """Ruling E9-38: the auth store is the precondition, not the variable."""
+        os.remove(self.auth)
+        code, out, err = self.launch(os.path.join(self.root, "out-noauth"))
+        self.assertEqual(code, 3)
+        self.assertEqual(out, "")
+        self.assertIn("no auth store at", err)
+        self.assertIn("install.sh", err)
+
+    def test_the_child_does_not_inherit_the_provider_key(self):
+        """Ruling E9-38: set in the parent, absent from the harness process's environment."""
+        out_dir = os.path.join(self.root, "out-env")
+        names = os.path.join(self.root, "child-env-names.txt")
+        trace = os.path.join(self.root, "env-trace.json")
+        with open(trace, "w", encoding="utf-8") as handle:
+            handle.write('{"type":"step_start","sessionID":"ses_x"}\n')
+        code, _out, err = self.launch(
+            out_dir,
+            env={"RECHECK_STANDIN_ENV": names, "RECHECK_STANDIN_TRACE": trace,
+                 "OPENROUTER_API_KEY": "sk-or-v1-" + "0" * 64})
+        self.assertEqual(code, 0, err)
+        with open(names, encoding="utf-8") as handle:
+            child = [line.strip() for line in handle if line.strip()]
+        self.assertIn("XDG_DATA_HOME", child, "the child's environment was not captured")
+        self.assertNotIn("OPENROUTER_API_KEY", child,
+                         "the harness process inherited the provider key")
+        # and the launcher's own scan of its captures found nothing
+        with open(os.path.join(out_dir, "secret-scan.json"), encoding="utf-8") as handle:
+            self.assertTrue(json.load(handle)["ok"])
 
     def test_the_timeout_leaves_another_matching_launch_alone(self):
         """The old `pkill -9 -f "<binary> run --model <model>"` could reach any launch."""

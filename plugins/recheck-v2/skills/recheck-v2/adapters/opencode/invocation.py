@@ -168,11 +168,15 @@ def run_opencode(binary, args, setup):
     """Run a non-model opencode command inside the isolated setup.
 
     The four XDG roots are set unconditionally, so a helper run from any shell reports the
-    setup's own configuration and never the machine's live ~/.config/opencode (finding 9).
+    setup's own configuration and never the machine's live ~/.config/opencode (finding 9), and
+    OPENROUTER_API_KEY is removed from the child's environment (ruling E9-38).
     """
     env = dict(os.environ)
     for name, leaf in XDG_LEAVES:
         env[name] = os.path.join(setup, leaf)
+    # Ruling E9-38: no opencode process this adapter starts is given the provider key. These
+    # commands call no model and need none; the setup's auth store is the only home for it.
+    env.pop("OPENROUTER_API_KEY", None)
     env["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
     # Measured on opencode 1.18.31: a debug/list command cuts its stdout at 65,536 bytes when
     # stdout is a pipe and writes all of it to a file, so stdout is captured by redirection.

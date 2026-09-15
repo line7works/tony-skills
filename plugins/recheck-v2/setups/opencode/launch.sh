@@ -14,7 +14,12 @@
 #   <workspace>    the directory the session runs in
 #   --agent NAME   run under a configured agent instead of the default
 #
-# Environment: OPENROUTER_API_KEY must be set; it is passed through and never written down.
+# Environment: the provider key is NOT passed to the harness (ruling E9-38). The session reads
+# it from the setup's own auth store, <setup>/xdg-data/opencode/auth.json, which install.sh
+# wrote at mode 0600; this launcher requires that file and removes OPENROUTER_API_KEY from the
+# child's environment, so no tool shell inherits it and an executor's own `env` probe cannot
+# print it into the harness's records. After every launch the output directory is scanned for
+# credential-shaped values and a hit is exit 5.
 # OPENCODE_DISABLE_EXTERNAL_SKILLS=1 is set so the run's catalog holds only the skills this
 # setup installed (E9-4: a clean catalog for the trace check); measured: without it the
 # binary also scans ~/.claude/skills and ~/.agents/skills in the real home.
@@ -51,7 +56,8 @@ esac
 [ -d "$WORKSPACE" ] || { echo "launch.sh: no workspace at $WORKSPACE" >&2; exit 3; }
 OC="$SETUP/npm/node_modules/.bin/opencode"
 [ -x "$OC" ] || { echo "launch.sh: no opencode binary at $OC (run install.sh)" >&2; exit 3; }
-[ -n "${OPENROUTER_API_KEY:-}" ] || { echo "launch.sh: OPENROUTER_API_KEY is not set" >&2; exit 3; }
+AUTH="$SETUP/xdg-data/opencode/auth.json"
+[ -f "$AUTH" ] || { echo "launch.sh: no auth store at $AUTH (run install.sh once with OPENROUTER_API_KEY set)" >&2; exit 3; }
 
 # A used output directory is refused rather than reused: its rc.txt would make the monitor
 # below skip its own loop and the timeout would never fire (Astra finding 14).
@@ -79,16 +85,18 @@ PROMPT=$(cat "$PROMPT_FILE")
 # $CHILD is both the process id the pointer plugin records and the group to signal.
 set +e
 set -m
+# `env -u OPENROUTER_API_KEY` is the whole point of ruling E9-38: the child, and therefore
+# every tool shell it opens, never carries the value.
 if [ -n "$AGENT" ]; then
   (
     cd "$WORKSPACE"
-    exec "$OC" run --model "$MODEL" --agent "$AGENT" --format json "$PROMPT" \
+    exec env -u OPENROUTER_API_KEY "$OC" run --model "$MODEL" --agent "$AGENT" --format json "$PROMPT" \
       < /dev/null > "$OUT_DIR/trace.json" 2> "$OUT_DIR/stderr.txt"
   ) &
 else
   (
     cd "$WORKSPACE"
-    exec "$OC" run --model "$MODEL" --format json "$PROMPT" \
+    exec env -u OPENROUTER_API_KEY "$OC" run --model "$MODEL" --format json "$PROMPT" \
       < /dev/null > "$OUT_DIR/trace.json" 2> "$OUT_DIR/stderr.txt"
   ) &
 fi
@@ -122,7 +130,7 @@ echo "$RC" > "$OUT_DIR/rc.txt"
 SESSION_ID=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$OUT_DIR/trace.json" 2>/dev/null | head -1 || true)
 ADAPTER_DIR=$(cd "$(dirname "$0")/../../skills/recheck-v2/adapters/opencode" && pwd)
 if [ -n "$SESSION_ID" ]; then
-  RECHECK_ADAPTER_TEST=1 /usr/bin/python3 "$ADAPTER_DIR/turns.py" \
+  RECHECK_ADAPTER_TEST=1 env -u OPENROUTER_API_KEY /usr/bin/python3 "$ADAPTER_DIR/turns.py" \
     --session "$SESSION_ID" --setup "$SETUP" --raw \
     > "$OUT_DIR/session.json" 2> "$OUT_DIR/session.stderr" || true
 fi
@@ -135,5 +143,19 @@ else
   echo "launch.sh: no session pointer at $POINTER for this launch" >&2
 fi
 
-echo "model=$MODEL agent=${AGENT:-<default>} exit=$RC pid=$CHILD session=${SESSION_ID:-<none>} out=$OUT_DIR"
+# Ruling E9-38: every capture this launch wrote is scanned before the launcher reports. A
+# credential-shaped value in a trace, a stderr file or a session dump is a failure, and the
+# scan prints the shape and the offset, never the value.
+SCAN_OUT="$OUT_DIR/secret-scan.json"
+if sh "$(dirname "$0")/scan-secrets.sh" --quiet --setup "$SETUP" "$OUT_DIR" > "$SCAN_OUT" 2>/dev/null; then
+  SCAN_RC=0
+else
+  SCAN_RC=$?
+fi
+
+echo "model=$MODEL agent=${AGENT:-<default>} exit=$RC pid=$CHILD session=${SESSION_ID:-<none>} out=$OUT_DIR scan=$([ "$SCAN_RC" -eq 0 ] && echo clean || echo HIT)"
+if [ "$SCAN_RC" -ne 0 ]; then
+  echo "launch.sh: credential-shaped values in this launch's own captures; see $SCAN_OUT" >&2
+  exit 5
+fi
 exit "$RC"

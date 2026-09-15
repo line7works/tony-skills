@@ -19,7 +19,12 @@ The agent is ``recheck-verifier``, always. The model is the bound driving sessio
 from the harness's own record through the session pointer ``turns.py`` binds to; there is no
 default and no configured fallback, and when that record cannot be read the helper stops
 (exit 3) naming it. The binary is the pinned one inside the isolated setup; there is no PATH
-fallback (ruling E9-32, finding 9).
+fallback (ruling E9-32, finding 9). The provider key is never handed to the child either: ruling E9-38
+puts it in the setup's own auth store (``<setup>/xdg-data/opencode/auth.json``, mode 0600,
+written once by ``install.sh``), and this helper launches the harness with
+``OPENROUTER_API_KEY`` **removed** from its environment, so no tool shell the verifier opens
+can carry the value and an ``env`` probe inside that session cannot print it into the
+harness's records.
 
 Arguments
 ---------
@@ -50,7 +55,7 @@ exit 0, a non-empty report, and the child's model row   ``ok``
 exit 0 and nothing captured                             ``empty``
 killed at the timeout                                   ``timed-out``
 any other non-zero exit                                 ``transport-failed``
-the credential is not in the env                        ``unauthorized``
+the setup holds no auth store                           ``unauthorized``
 the agent is missing, or the child left no model row    ``lane-unavailable``
 the model is not in the catalog                         ``unknown-model``
 ======================================================  ==================
@@ -114,6 +119,9 @@ PERMISSION_REFUSAL = "rejected permission to use this specific tool call"
 # A provider key's shape, so no value of one can reach this helper's output (finding 1). The
 # value itself appears nowhere in this file.
 KEY_SHAPE = re.compile(r"sk-or-v1-[0-9a-f]{64}")
+# Ruling E9-38: the provider key lives in the setup's own auth store, never in the environment
+# the harness process is given.
+AUTH_STORE = os.path.join("xdg-data", "opencode", "auth.json")
 
 HANDOFF = (
     "Your whole task is written in the file {brief}.\n"
@@ -363,6 +371,9 @@ def launch(binary, setup, model, brief, workspace, scratch, trace_path, stderr_p
     # validated, so an absent or partial setup can never leave the child on the live home.
     for name, leaf in XDG_LEAVES:
         env[name] = os.path.join(setup, leaf)
+    # Ruling E9-38: the child reads the provider key from the setup's auth store, never from
+    # its environment, so every tool shell it opens is free of the value.
+    env.pop("OPENROUTER_API_KEY", None)
     env["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
     # opencode takes its project directory from $PWD, not from the process working directory.
     # A shell that cd-ed elsewhere before calling this helper leaves its own PWD in the
@@ -529,7 +540,8 @@ def main(argv):
             code, text, stderr_text = canned(os.path.abspath(canned_dir), trace_path)
             note("test hook: the launch was replaced by %s" % canned_dir)
         else:
-            if not os.environ.get("OPENROUTER_API_KEY"):
+            auth_store = os.path.join(setup, AUTH_STORE)
+            if not os.path.isfile(auth_store):
                 document = {
                     "status": "unauthorized",
                     "raw": None,
@@ -537,8 +549,10 @@ def main(argv):
                     "kind": HARNESS_KIND,
                     "injected": injected,
                     "refused": [],
-                    "note": "OPENROUTER_API_KEY is not set in this environment, so the "
-                            "provider cannot be reached",
+                    "note": "no auth store at %s, so the provider cannot be reached; run "
+                            "setups/opencode/install.sh once with OPENROUTER_API_KEY set "
+                            "(ruling E9-38: the key never rides in a session's environment)"
+                            % auth_store,
                 }
                 sys.stdout.write(json.dumps(document, indent=2, sort_keys=True) + "\n")
                 return 0

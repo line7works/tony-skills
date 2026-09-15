@@ -14,15 +14,21 @@
 #   --npm-cache DIR  npm's cache and log directory (default <setup>/npm-cache). Pinned so npm
 #                    writes nothing under ~/.npm or ~/.npm/_logs (E9 section 3; Astra finding 9)
 #
-# Requires OPENROUTER_API_KEY in the environment. The key is never written to disk, never
-# copied into the config, and never printed: install.sh only checks that it is set, and the
-# last step scans the setup's own records for credential-SHAPED values and refuses to report
-# success when one is present (Astra finding 1). No credential value appears in this script.
+# Requires OPENROUTER_API_KEY in the environment, ONCE, at install time. Ruling E9-38: the key
+# never rides in a session's environment, because every tool shell inherits it and a probe that
+# dumps the environment then prints it into the harness's own records. install.sh copies the
+# value out of the variable into the harness's own auth store under the setup's XDG_DATA_HOME
+# (mode 0600) without printing it, and `launch.sh` and `verifier.py` launch the harness with
+# OPENROUTER_API_KEY removed from its environment. The install report names the auth file and
+# its mode, never its contents, and the last step scans the setup's own records for
+# credential-SHAPED values and refuses to report success when one is present (Astra finding 1).
+# No credential value appears in this script.
 #
 # Side effects: creates <setup>/{npm,npm-cache,records,xdg-config,xdg-data,xdg-cache,xdg-state};
 # runs `npm install --prefix <setup>/npm opencode-ai@<pinned>` with its cache and logs pinned;
 # writes <setup>/xdg-config/opencode/{opencode.json,plugin/session-pointer.js}, the skill
-# folders under <setup>/xdg-config/opencode/skill/, and <setup>/records/providers.txt (the
+# folders under <setup>/xdg-config/opencode/skill/, <setup>/xdg-data/opencode/auth.json (mode
+# 0600, the provider key, ruling E9-38), and <setup>/records/providers.txt (the
 # harness's own provider listing, with any credential-shaped token replaced by its shape
 # name). Rerunning replaces those files and leaves the session store
 # (<setup>/xdg-data/opencode/opencode.db) alone.
@@ -50,9 +56,10 @@ FIXTURES="$PLUGIN_ROOT/setups/_fixtures"
 
 if [ -z "${OPENROUTER_API_KEY:-}" ]; then
   echo "install.sh: OPENROUTER_API_KEY is not set in the environment" >&2
+  echo "install.sh: it is read once, here, and copied into the setup's own auth store; no session ever sees it (ruling E9-38)" >&2
   exit 3
 fi
-echo "credential: OPENROUTER_API_KEY set"
+echo "credential: OPENROUTER_API_KEY set in this shell (read once, written to the auth store below)"
 
 mkdir -p "$SETUP/npm" "$SETUP/records" "$SETUP/xdg-config/opencode" \
          "$SETUP/xdg-data" "$SETUP/xdg-cache" "$SETUP/xdg-state"
@@ -108,14 +115,50 @@ export XDG_DATA_HOME="$SETUP/xdg-data"
 export XDG_CACHE_HOME="$SETUP/xdg-cache"
 export XDG_STATE_HOME="$SETUP/xdg-state"
 export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
-"$OC" --version
+
+# The auth store (ruling E9-38). Measured on 1.18.31: the harness reads
+# $XDG_DATA_HOME/opencode/auth.json, a record keyed by provider id whose api-key variant is
+# {"type": "api", "key": "<value>"}. With the file absent and OPENROUTER_API_KEY unset,
+# `opencode providers list` reports "0 credentials"; with the file present it reports
+# "OpenRouter api" and "1 credentials". The value moves from the variable to the file inside
+# python, through a 0600 file descriptor, and is never echoed, logged or passed as an argument.
+AUTH="$SETUP/xdg-data/opencode/auth.json"
+mkdir -p "$SETUP/xdg-data/opencode"
+/usr/bin/python3 - "$AUTH" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+key = os.environ.get("OPENROUTER_API_KEY") or ""
+if not key:
+    sys.stderr.write("the variable vanished before the auth store was written\n")
+    raise SystemExit(3)
+record = {}
+if os.path.isfile(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            record = json.load(handle) or {}
+    except (IOError, OSError, ValueError):
+        record = {}
+record["openrouter"] = {"type": "api", "key": key}
+fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "w") as handle:
+    json.dump(record, handle)
+    handle.write("\n")
+os.replace(path + ".tmp", path)
+os.chmod(path, 0o600)
+PY
+chmod 600 "$AUTH"
+echo "auth store: $AUTH mode $(/usr/bin/python3 -c 'import os,sys;print("%o" % (os.stat(sys.argv[1]).st_mode & 0o777))' "$AUTH") (contents never printed)"
+
+# Everything the installer runs from here on runs WITHOUT the variable, so no record it writes
+# can carry the value and the auth store is proved to be what the harness reads.
+env -u OPENROUTER_API_KEY "$OC" --version
 
 # The provider proof, read from the harness's own listing with the credential column left out
 # (Astra finding 1). `opencode providers list` prints the credential FILE and a count, never a
 # value, on 1.18.31; the filter below is the guard, not the measurement: it strips terminal
 # colour codes and replaces any credential-shaped token with the shape's name, so no value can
 # reach the record even if a later version starts printing one.
-"$OC" providers list > "$SETUP/records/providers.raw" 2>/dev/null || true
+env -u OPENROUTER_API_KEY "$OC" providers list > "$SETUP/records/providers.raw" 2>/dev/null || true
 /usr/bin/python3 - "$SETUP/records/providers.raw" "$SETUP/records/providers.txt" <<'PY'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -129,6 +172,14 @@ open(dst, "w", encoding="utf-8").write(text)
 PY
 rm -f "$SETUP/records/providers.raw"
 echo "providers: $SETUP/records/providers.txt (credential column omitted)"
+# The auth store is the only thing that authorizes a run now: with OPENROUTER_API_KEY removed
+# the harness must still report the credential, or this install is not usable.
+if grep -q "1 credentials" "$SETUP/records/providers.txt"; then
+  echo "auth check: the harness reports 1 credential with OPENROUTER_API_KEY removed from its environment"
+else
+  echo "install.sh: FAILED - with OPENROUTER_API_KEY removed the harness reports no credential; see $SETUP/records/providers.txt" >&2
+  exit 3
+fi
 
 echo "setup:   $SETUP"
 echo "binary:  $OC"

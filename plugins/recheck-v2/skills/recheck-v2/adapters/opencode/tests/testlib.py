@@ -49,9 +49,11 @@ def load_record():
 
 
 STANDIN = """#!/bin/sh
-# A stand-in for the pinned opencode binary. It calls no model: it records its arguments and
+# A stand-in for the pinned opencode binary. It calls no model: it records its arguments, and
+# on request the NAMES of the variables in its own environment (never a value, ruling E9-38),
 # emits whatever the test put in $RECHECK_STANDIN_TRACE, then exits $RECHECK_STANDIN_RC.
 printf '%s\\n' "$*" >> "${RECHECK_STANDIN_ARGS:-/dev/null}"
+if [ -n "${RECHECK_STANDIN_ENV:-}" ]; then env | cut -d= -f1 | sort > "$RECHECK_STANDIN_ENV"; fi
 if [ -n "${RECHECK_STANDIN_SLEEP:-}" ]; then sleep "$RECHECK_STANDIN_SLEEP"; fi
 if [ -n "${RECHECK_STANDIN_TRACE:-}" ] && [ -f "$RECHECK_STANDIN_TRACE" ]; then
   cat "$RECHECK_STANDIN_TRACE"
