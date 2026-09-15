@@ -848,6 +848,34 @@ been said.
   the pass: reinstall, one fresh live proof (fresh4), the control room's live check of the
   read-only copy under `$TMPDIR` (expected exit 3 after (a)), then a third and final targeted
   Fable re-check of N1, 1 and the fresh3/fresh4 record, graded under (d).
+- **E9-41 (after Astra's verification of lane Q), the lane's targeted pass.** Nine of sixteen
+  findings verified FIXED (3, 5, 6, 9, 10, 11, 13, 14, 16); adapter suites green under both
+  interpreters, the core under 3.9, the reviewer's 3.12 core run stopped on its offline cache.
+  Open, with the reading for each: 1, the E9-38 measurement scratch under the lane's `fix/`
+  held a real auth store and the review copy carried it: removed by the control room; a
+  measurement of the auth store is made only inside the pilot setup, never copied to scratch,
+  and the packet scanner covers every retained capture. 2, profile section 7 still claims the
+  verifier cannot see the driving conversation while the capability record reads it: the
+  section states the measured fact (the harness applies no sandbox, the shared store is
+  readable, the pointer and store are writable), labels the verifier's separation
+  `instruction-bound`, and names pilot section 13 as met by the brief alone; a separate store
+  per verifier child is not enforcement and is carried to E10. 4, the verifier's path checks
+  resolve symlinks before containment: `--scratch`, `--brief`, `--raw` and both launch
+  captures must resolve to paths under the resolved run directory, and `--raw` may not name
+  the trace or any capture; tests for a symlinked scratch, a symlinked brief and raw equal to
+  the trace. 7, profile section 8 and RESULTS section 5 carry the body and delivery sizes
+  beside the commit each was measured at (23,332 and 24,045 before E9-35; 23,496 and 24,209
+  after, from the control room's fresh real-body record). 8, the control room reruns the
+  package stage after the final commit so the packet holds a snapshot equal to what ships. 12,
+  the station test says it exercises the caller route with a caller-supplied map (the
+  contract's caller route takes the payload whole) and adds nothing to a helper map; or it is
+  removed. 15, carried: the reply's shape is `SKILL.md` step 8's, core, E10. N1, the packet
+  scanner exempts only the configured setup's own auth store by resolved path and scans every
+  other `auth.json`; a test plants a key-shaped value in a capture named `opencode/auth.json`.
+  N2, the launcher's timeout loop collects the child's status before marking a timeout and
+  terminates only a child still running; a test with a fast child under a one-second limit
+  records its real exit. N3, the status table names an absent auth store as the prerequisite
+  failure. Then a targeted Astra re-check of 1, 2, 4, 7, 8, 12, N1, N2, N3.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
