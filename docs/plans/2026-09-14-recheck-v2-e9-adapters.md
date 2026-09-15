@@ -763,6 +763,46 @@ been said.
   caller route names one) and `resume: false`. Documents follow the fresh records (findings
   2, 8, 9, N3). After the pass: reinstall (remove, install, diff), one fresh live proof
   checking the recorded mode and the locator, then a targeted Fable re-check of a closed list.
+- **E9-37 (after Fable's targeted re-check of lane R), a rollout this process can write is never a
+  source.** The E9-36 locator refuses paths under `CODEX_HOME` and never searches the child's
+  `sessions/`, but it still derives its one root from the parent of `CODEX_HOME`, and the tool
+  shell sets `CODEX_HOME` on its own command line: a directory named `child` under any writable
+  root makes its sibling `sessions/` the searched root, and a shell-written copy of the
+  executor's rollout there with one appended `UserMessage` mapped as the user's turn; the
+  unchanged core accepted a waiver citing it (hermetic proof in the re-check's scratch). Ruling:
+  `turns.py` accepts a located rollout only when opening it for append raises `PermissionError`
+  (the seatbelt denies the executor's own rollout under `<home>/sessions`, CR/e9-25; a
+  shell-written copy under a writable root opens, so it is refused with exit 3 naming the path;
+  any other error is exit 3 naming it); the E9-36 `CODEX_HOME` refusal stays as the second check;
+  the `RECHECK_ADAPTER_TEST=1` override stays exempt and the locator tests mark their executor
+  fixture read-only. Tests: a rollout under `<tmp>/elsewhere/sessions` with
+  `CODEX_HOME=<tmp>/elsewhere/child` is exit 3 for both helpers; a writable copy under the
+  permitted root is exit 3; a read-only copy there is found and mapped. Profile section 4 and
+  the section 12 row read `helper-derived` once the change and its tests land, with the
+  remaining limits named: another real session's id under the unwritable `<home>/sessions`
+  yields only that session's real user turns; where the harness denies no write (no sandbox,
+  or `CODEX_HOME` unset outside the pilot) every rollout opens and the helper refuses, so the
+  channel exists only where the harness denies the write; and an executor that types a map by
+  hand instead of running the helper is the instruction-bound residual every lane shares. The
+  fresh2 proofs (`CR/fresh2-F1-01`, `CR/fresh2-F6-04`) are recorded in `RESULTS.md` and cited by
+  the profile (the re-check's NEW MINOR). After the pass: reinstall, one fresh live proof (the
+  executor's real rollout must still be accepted under the live launch), then a targeted Fable
+  re-check of N1, 1 and the fresh2 record.
+- **E9-38 (after the control room's lane Q proofs), the provider key never rides in the
+  session environment.** In the fresh F1-01 proof on DeepSeek the executor ran
+  `env | grep -iE 'OPENCODE|OPENROUTER|RECHECK|XDG|TMPDIR'` as its own diagnostic and printed
+  the OpenRouter key into its tool output, which the harness wrote into the session store and
+  the launcher's trace (the control room redacted every text record and scrubbed the store;
+  the rotation stays Tony's). The lane's `install.sh` and `launch.sh` hand the key to the
+  harness through `OPENROUTER_API_KEY`, so every tool shell inherits it. Ruling: the key lives
+  only in the setup's own auth store (the harness's `auth.json` under the setup's
+  `XDG_DATA_HOME`, mode 0600, written by `install.sh` from the variable without printing it),
+  `launch.sh` and the verifier's launch unset `OPENROUTER_API_KEY` for the harness process, the
+  env probe (names only) proves the tool shell does not carry it, and `scan-secrets.sh` runs
+  over the launcher's captures after every launch. A probe that dumps the environment is the
+  executor's own act; the launch shape is what keeps the value out of its reach. Applied by
+  lane Q before Astra's verification round; the profile's section 7 (containment) and
+  RESULTS record the measurement.
 - **E9-19 (after lane R's first pass), the marketplace entry.** `recheck-v2` is listed in
   `.claude-plugin/marketplace.json` on the integration branch (commit `0d1d5a6`, merged into
   every lane) because the Claude Code and Codex installs read the marketplace; section 11's
