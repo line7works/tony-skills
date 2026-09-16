@@ -1,0 +1,1165 @@
+{
+  "blocked_station_leaks": [],
+  "manual_only_row": {
+    "activated": false,
+    "activated_manual_only_probe": true,
+    "attempt": 0,
+    "expected": "no activation of manual-only-probe on a request in words",
+    "id": "MANUAL-ONLY-PROBE",
+    "observed_target": "manual-only-probe",
+    "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-MANUAL-ONLY-PROBE-r1",
+    "repetition": 1,
+    "set": "manual-only",
+    "status": "complete"
+  },
+  "manual_only_rows": [
+    {
+      "activated": false,
+      "activated_manual_only_probe": true,
+      "attempt": 0,
+      "expected": "no activation of manual-only-probe on a request in words",
+      "id": "MANUAL-ONLY-PROBE",
+      "observed_target": "manual-only-probe",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-MANUAL-ONLY-PROBE-r1",
+      "repetition": 1,
+      "set": "manual-only",
+      "status": "complete"
+    }
+  ],
+  "note": "R27 passes for a harness when the held-out activation and false-trigger rates are both recorded; the threshold is the plan's, not this file's (trigger-set/README.md). The manual-only row is outside both sets (E10-53(4)).",
+  "rates": {
+    "held-out": {
+      "activate_entries": 12,
+      "activation_rate": 1.0,
+      "false_trigger_rate": 0.0,
+      "near_miss_entries": 12
+    },
+    "tuning": {
+      "activate_entries": 18,
+      "activation_rate": 0.9444444444444444,
+      "false_trigger_rate": 0.05555555555555555,
+      "near_miss_entries": 18
+    }
+  },
+  "revision": "rev1",
+  "rows": [
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-01-slash-v2-doc-path",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-01-slash-v2-doc-path-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-01-slash-v2-doc-path",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-01-slash-v2-doc-path-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-01-slash-v2-doc-path",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-01-slash-v2-doc-path-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-02-dictated-did-they-take",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-02-dictated-did-they-take-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-02-dictated-did-they-take",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-02-dictated-did-they-take-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-02-dictated-did-they-take",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-02-dictated-did-they-take-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "readers",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-03-verify-blockers-not-my-word",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-03-verify-blockers-not-my-word-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "readers",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-03-verify-blockers-not-my-word",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-03-verify-blockers-not-my-word-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "readers",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-03-verify-blockers-not-my-word",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-03-verify-blockers-not-my-word-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "fb",
+        "recheck-v2",
+        "digest"
+      ],
+      "expected_activate": false,
+      "expected_target": "fb",
+      "id": "H-04-fb-capture-mentions-recheck",
+      "matches_expected": true,
+      "observed_target": "fb",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-04-fb-capture-mentions-recheck-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "fb",
+        "recheck-v2",
+        "digest"
+      ],
+      "expected_activate": false,
+      "expected_target": "fb",
+      "id": "H-04-fb-capture-mentions-recheck",
+      "matches_expected": true,
+      "observed_target": "fb",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-04-fb-capture-mentions-recheck-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "fb",
+        "recheck-v2",
+        "digest"
+      ],
+      "expected_activate": false,
+      "expected_target": "fb",
+      "id": "H-04-fb-capture-mentions-recheck",
+      "matches_expected": true,
+      "observed_target": "fb",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-04-fb-capture-mentions-recheck-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-05-v1-slash-describes-job",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-05-v1-slash-describes-job-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-05-v1-slash-describes-job",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-05-v1-slash-describes-job-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "H-05-v1-slash-describes-job",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-05-v1-slash-describes-job-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "readers",
+        "recheck-v2",
+        "inspect (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "readers",
+      "id": "H-06-cold-read-of-doc",
+      "matches_expected": true,
+      "observed_target": "readers",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-06-cold-read-of-doc-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "readers",
+        "recheck-v2",
+        "inspect (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "readers",
+      "id": "H-06-cold-read-of-doc",
+      "matches_expected": true,
+      "observed_target": "readers",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-06-cold-read-of-doc-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "readers",
+        "recheck-v2",
+        "inspect (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "readers",
+      "id": "H-06-cold-read-of-doc",
+      "matches_expected": true,
+      "observed_target": "readers",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-06-cold-read-of-doc-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "signoff (blocked)",
+        "ship (blocked)",
+        "build",
+        "recheck-v2"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "H-07-signoff-then-fix",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-07-signoff-then-fix-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "signoff (blocked)",
+        "ship (blocked)",
+        "build",
+        "recheck-v2"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "H-07-signoff-then-fix",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-07-signoff-then-fix-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "signoff (blocked)",
+        "ship (blocked)",
+        "build",
+        "recheck-v2"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "H-07-signoff-then-fix",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-07-signoff-then-fix-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "H-08-recheck-everyday",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-08-recheck-everyday-r1",
+      "repetition": 1,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "H-08-recheck-everyday",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-08-recheck-everyday-r2",
+      "repetition": 2,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "H-08-recheck-everyday",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-H-08-recheck-everyday-r3",
+      "repetition": 3,
+      "set": "held-out",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-01-slash-v2-slice",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-01-slash-v2-slice-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-01-slash-v2-slice",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-01-slash-v2-slice-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-01-slash-v2-slice",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-01-slash-v2-slice-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "build"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-02-fixes-landed-flip-card",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-02-fixes-landed-flip-card-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "build"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-02-fixes-landed-flip-card",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-02-fixes-landed-flip-card-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "build"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-02-fixes-landed-flip-card",
+      "matches_expected": false,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-02-fixes-landed-flip-card-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "readers"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-03-punch-list-verify",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-03-punch-list-verify-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "readers"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-03-punch-list-verify",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-03-punch-list-verify-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)",
+        "readers"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-03-punch-list-verify",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-03-punch-list-verify-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-04-reopen-named-item",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-04-reopen-named-item-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-04-reopen-named-item",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-04-reopen-named-item-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-04-reopen-named-item",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-04-reopen-named-item-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "handoff"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-05-card-still-rejected",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-05-card-still-rejected-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "handoff"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-05-card-still-rejected",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-05-card-still-rejected-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "handoff"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-05-card-still-rejected",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-05-card-still-rejected-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-06-majors-fixed-check-each",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-06-majors-fixed-check-each-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-06-majors-fixed-check-each",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-06-majors-fixed-check-each-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "signoff (blocked)"
+      ],
+      "expected_activate": true,
+      "expected_target": "recheck-v2",
+      "id": "T-06-majors-fixed-check-each",
+      "matches_expected": true,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-06-majors-fixed-check-each-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "signoff (blocked)",
+        "recheck-v2",
+        "readers",
+        "wargame"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-07-initial-review",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-07-initial-review-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "signoff (blocked)",
+        "recheck-v2",
+        "readers",
+        "wargame"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-07-initial-review",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-07-initial-review-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "signoff (blocked)",
+        "recheck-v2",
+        "readers",
+        "wargame"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-07-initial-review",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-07-initial-review-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "vertical (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-08-whole-build",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-08-whole-build-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "vertical (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-08-whole-build",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-08-whole-build-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "vertical (blocked)",
+        "recheck-v2",
+        "signoff (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-08-whole-build",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-08-whole-build-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "inspect (blocked)",
+        "recheck-v2",
+        "blueprint",
+        "readers"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-09-plan-check",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-09-plan-check-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "inspect (blocked)",
+        "recheck-v2",
+        "blueprint",
+        "readers"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-09-plan-check",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-09-plan-check-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "inspect (blocked)",
+        "recheck-v2",
+        "blueprint",
+        "readers"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-09-plan-check",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-09-plan-check-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "T-10-recheck-non-loop",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-10-recheck-non-loop-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "T-10-recheck-non-loop",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-10-recheck-non-loop-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "T-10-recheck-non-loop",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-10-recheck-non-loop-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "build",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "T-11-fixer-rerun-tests",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-11-fixer-rerun-tests-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "build",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "T-11-fixer-rerun-tests",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-11-fixer-rerun-tests-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck-v2",
+        "build",
+        "recheck (blocked)"
+      ],
+      "expected_activate": false,
+      "expected_target": "none",
+      "id": "T-11-fixer-rerun-tests",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-11-fixer-rerun-tests-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-12-v1-slash-bare",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-12-v1-slash-bare-r1",
+      "repetition": 1,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": true,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-12-v1-slash-bare",
+      "matches_expected": false,
+      "observed_target": "recheck-v2",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-12-v1-slash-bare-r2",
+      "repetition": 2,
+      "set": "tuning",
+      "status": "complete"
+    },
+    {
+      "activated": false,
+      "attempt": 0,
+      "blocked_station_leak": false,
+      "competitors": [
+        "recheck (blocked)",
+        "recheck-v2"
+      ],
+      "expected_activate": false,
+      "expected_target": "none: v1 station blocked in this profile",
+      "id": "T-12-v1-slash-bare",
+      "matches_expected": true,
+      "observed_target": "none",
+      "record": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/trials/routing-codex-T-12-v1-slash-bare-r3",
+      "repetition": 3,
+      "set": "tuning",
+      "status": "complete"
+    }
+  ],
+  "scored_at": "2026-09-16T23:02:35Z",
+  "setup": "codex"
+}

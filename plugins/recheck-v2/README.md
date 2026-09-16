@@ -240,3 +240,18 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
   follow-up pass (E10-71: a new root at that commit, the Claude Code remainder and the 96
   held-out routing trials, the probe gate in full, the operator mandate run live once first)
   waits on Tony's go. Records: packet `fix-round-4/`, `control-room/fix-round-4/`, `recheck5/`, `recheck6/`.
+- The full fresh rerun (E10-72, E10-73, 2026-09-16 afternoon, on Tony's "Go" in a fresh control room window):
+  root `e10-rerun-2026-09-16/` staged at `669a83c` after the operator mandate's dry run finished clean
+  (3 of 3, exit 0), launched by Astra through `operate.sh`, all twelve verify rows and twelve probes clean,
+  eight held-out requests cached before the first launch, the keys closed at the four concurrent first
+  launches. Ran to `complete`: 504 attempts (321 `complete`, 138 `launch_failed`, 45 `no_result`), 156
+  reruns with every eligible trial retried exactly once, no lane stop, the root scan 16,641 files with zero
+  hits; final state per trial Claude Code 87 of 87 complete, Codex 87 of 87, qwen 76 / 10 empty / 1 failed,
+  DeepSeek 71 / 14 / 2. One outage: OpenRouter ran out of prepaid credit at 20:19:57Z and both OpenCode
+  lanes failed 135 first-pass launches with HTTP 402 at no cost; Tony's top-up landed at 20:24:42Z before
+  any rerun fired and the reruns recovered all but three (five-minute timeouts). Graded by the operator:
+  143 attempts, 20 ok (Claude Code 3 of 27, Codex 6 of 26, qwen 4 of 44, DeepSeek 7 of 46); routing
+  activation on the sealed set 0.50 / 1.00 / 0.50 / 0.46 with false-trigger 0.0 on all four, the score
+  records filed in `evals/answer-key/`. The control room's recount from the raw records matches the
+  operator's report on every count. Interpretation is E11's. Records: the root and the packet copy
+  `astra-outputs/e10/campaign-e10-rerun-2026-09-16/`; ruling E10-73 in the lane contract.

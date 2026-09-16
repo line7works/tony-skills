@@ -1045,3 +1045,48 @@ report could not read from behind the wall.
   verbatim. The real root is staged, planned and installed by the control room AFTER the dry run (E10-23:
   the pilot homes carry one root's allow rules at a time), with the grading barrier's keys reopened and the
   twelve installs and their leak scans read before the hand-off.
+- **E10-73 (control room, 2026-09-16 afternoon: the full fresh rerun ran to `complete` and is graded; the
+  record of the campaign, its one outage and Tony's rulings during it).** Root `e10-rerun-2026-09-16/`, staged
+  at `669a83c` (387 files, 348 trials, 12 installs, every leak scan empty, OpenCode prior state cleared and
+  recorded), launched by Astra through `operate.sh` on Tony's "Go" in the fresh window at 19:19Z after the
+  E10-72 dry run had finished clean (3 of 3, exit 0). Preflight: all twelve verify rows and all twelve probes
+  clean, no stop; `campaign start --reopen-key` at 19:23:32Z cached all eight held-out requests before the
+  first launch (E10-68 fix), the barrier closed both keys at the four concurrent first launches, and every
+  lane had a trial directory at 19:23:34Z. The ledger: 504 attempts, 321 `complete`, 138 `launch_failed`,
+  45 `no_result`; first pass 348 rows (192 / 135 / 21); 156 reruns, 129 `complete`, 24 `no_result`, 3
+  `launch_failed`; every eligible trial rerun exactly once, none twice, none missed; `lane-stops/` never
+  created; 349 interruption lines, all counted failures, four wall-clock gaps and six invalid continuation
+  cuts; the root scan 16,641 files, zero hits. Final state per trial: Claude Code 87 of 87 complete, Codex
+  87 of 87, qwen 76 complete / 10 `no_result` / 1 `launch_failed`, DeepSeek 71 / 14 / 2. **The outage:**
+  from 20:19:57Z OpenRouter refused every request with HTTP 402 (`in_flight_budget_exhausted`; the account
+  read 10.00 credits, 10.07 used), so both OpenCode lanes failed 135 first-pass launches in about 2.5 s each
+  at no cost (125 of them carry the 402 in `harness/trace.json`); Tony added $100 and it landed at 20:24:42Z
+  with zero reruns fired, so the operator's once-only reruns recovered all but three, each a five-minute
+  timeout (exit 124) on a model looping tool calls. Tony's rulings during the run: (1) add the credits
+  ("Wait. I'll increase the credits"); (2) "I only need to know the OpenRouter charges": the Claude Code
+  lane bills through his Anthropic plan and its metered figure is not reported to him (saved as a standing
+  preference); (3) the trial percentage settled (a trial is settled when its latest attempt is `complete` or
+  it has used its one retry) in every update. OpenRouter this run: $4.09 across 222 charged OpenCode runs.
+  **Grades (the operator's `grade --all`, `routing-score`, `report`, `scan`, all after `status-055.json`
+  showed zero live processes):** 143 attempts graded, 20 ok, 123 not ok; ok by setup Claude Code 3 of 27,
+  Codex 6 of 26, qwen 4 of 44, DeepSeek 7 of 46; 20 validator failures (exit 4), all absent-condition
+  comparison trials on Claude Code, Codex and qwen; summary fields `scope_violations` 47,
+  `skill_file_reached` 64, `records_reached` 22, `unauthorized` 1, `false_fixed_items` 2,
+  `continuation_invariants_held` 5. Routing on the sealed set: activation Claude Code 0.50, Codex 1.00,
+  qwen 0.50, DeepSeek 0.46, false-trigger 0.0 on all four; tuning set 0.67 / 0.94 / 0.50 / 0.53 with
+  false-trigger 0.0 / 0.06 / 0.03 / 0.09; the four score records are filed as
+  `evals/answer-key/trigger-set-<setup>-rev1.json`. Interpretation is E11's. The control room reproduced
+  every count from `trials.jsonl`, `interruptions.jsonl`, `processes.jsonl` and the grade files
+  (`control-room/recount.py` in the packet copy) and they match the operator's report. **Carried to E11
+  from the operator's anomaly list and the control room's watch:** (a) three reruns record exit 124 with
+  status `launch_failed` and `timeout_verdict: "within limit"`, a labelling gap; (b) the Codex compaction
+  record says `compaction observed` while its native witness says `ok: false`; (c) the mandate's `plan.json`
+  path was absent in the operator's view (she read the counts from `campaign.json` and edited nothing);
+  (d) the mandate's step 6 asked for the report repeated verbatim and the operator linked it instead;
+  (e) one control-room slip: last night's operator scratch output was not moved aside before the launch
+  (the launch hand-off's own trap), so a stale `operate.exit` tripped the first watchers for a minute;
+  nothing was lost (the packet held that output) and the root was never touched; (f) the cost line in the
+  launch hand-off called the Opus routing trials cheap; they averaged about a dollar each. Records: the
+  root; the packet copy `astra-outputs/e10/campaign-e10-rerun-2026-09-16/` (witnesses compressed, the
+  copy scanned; `control-room/` holds stage, plan, install, recount, the dry run's records and kit;
+  `operator-kit/` the mandate as run and the operator's output); this ruling.
