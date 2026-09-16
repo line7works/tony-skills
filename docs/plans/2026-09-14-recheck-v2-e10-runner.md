@@ -1006,3 +1006,24 @@ report could not read from behind the wall.
   and E10-69 named no hash for the fixed commit, which is `17e384f`, with this ruling and the E10-70 change
   landing in the commit after it. Items 2 to 5 are closed. A targeted re-check on item 1 alone (`recheck6`)
   follows; then the follow-up pass on Tony's go.
+- **E10-71 (control room, 2026-09-16 midday: Astra's recheck6 read; the fix round closes).** Verdict at
+  high on the review copy of `aacc010`, item 1 alone: **ALL CLEARED, no new BLOCKER.** Her own AST scan
+  finds no reader, hasher or copier in `cache_routing_requests` or `write_routing_prompt`; against
+  `runner.py.17e384f` it names `file_sha256` and `copyfile`; her byte-count measurement reads zero; the
+  four barrier functions are unchanged against `17e384f`; the three targeted tests record mode 0 at all
+  twelve fake launches; the subprocess sequence is write, digest, copy, digest. The fix round of E10-68 is
+  CLOSED at `aacc010` (E10-69 to E10-71). **The follow-up pass**, on Tony's go: a NEW campaign root under
+  `~/.local/share/skills-v2-pilot/e10/` staged at `aacc010` (the 2026-09-15 root is a record and is not
+  resumed: its ledger, reruns and raised trials stay as they are; E10-43/44 govern reruns inside a root and
+  nothing in this contract makes a second root a rerun of the first); `stage`, `plan` and `install` by the
+  control room (E10-65); the plan = the Claude Code lane's unrun trials (the 14 comparison, 2 continuation
+  and 60 routing trials that lane never reached after `F3-01-missed-case-available-r2`, plus that trial
+  itself, which has no record; the 10 complete Claude Code trials of the first root are not re-run) and
+  the 96 held-out routing trials on all four lanes (8 prompts × 3 reps × 4); the probe gate in full, no
+  `--skip-probe-gate` (E10-69(6)); the operator mandate run live once in a dry root before the pass
+  (E10-66, E10-67); the same operator (Astra at high, `operate.sh`), the same watch. Grading then runs over
+  BOTH roots together, and the report states per lane which root each trial came from; how the two roots
+  are merged for `grade --all`, `routing-score` and `report` is the control room's ruling to write before
+  grading, not the operator's. The 2026-09-15 campaign's `opencode` and `opencode-deepseek` trials stand
+  as run; the OpenCode homes now carry no prior-campaign state (E10-69(4)), which the follow-up records
+  as a difference in conditions between the two roots.
