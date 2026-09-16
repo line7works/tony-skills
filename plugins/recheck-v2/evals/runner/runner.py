@@ -3179,7 +3179,12 @@ def validate_plan(plan):
 
 def do_plan(args):
     campaign = Campaign(args.campaign)
-    campaign.ensure()
+    # E10-64 (Astra's recheck3, item 1): EVERY refusal comes before the first directory is
+    # made. E10-43 finding 4 says the whole plan is checked "before any write", and a
+    # directory is a write: `campaign.ensure()` used to run first, so a plan refused for a
+    # bad model, a bad effort or an unknown key still left a campaign root holding empty
+    # `records/`, `tmp/` and `trials/` behind it. `Campaign.__init__` only computes paths and
+    # `campaign_json` is one of them, so every check below reads without creating anything.
     if os.path.isfile(campaign.campaign_json) and not args.refresh:
         raise Usage("%s already holds campaign.json; pass --refresh to replace it (E9-34: a "
                     "record is never overwritten)" % campaign.root)
@@ -3192,6 +3197,7 @@ def do_plan(args):
         unknown.append(plan["continuation"]["case"])
     if unknown:
         raise Usage("plan.json names cases no generator lists: %s" % ", ".join(unknown))
+    campaign.ensure()
     entry_ids = _routing_entry_ids(plan)
     document = dict(plan)
     document.update({

@@ -835,3 +835,42 @@ report could not read from behind the wall.
   temp directory (E10-58(3), E11) and `validate-result.py`'s path-rebase flag (E10-25(9), E11).
   Astra's targeted re-check at high on this change alone comes next; the campaign then starts on
   Tony's word.
+- **E10-64 (control room, 2026-09-15 evening: Astra's recheck3 on the E10-62 pass).** Astra
+  re-checked commit `9e7b036` at high on the six E10-62 items alone and reported **no new
+  BLOCKER**, with items 2, 3 and 4 FIXED and items 1, 5 and 6 PARTLY. Her own suite runs failed
+  again on the missing `jsonschema` wheel, the absent network, the absent git metadata and the
+  absent key directories in her copy; she named all four as limits of her sandbox rather than
+  findings, and read the control room's own green tails from `live/control-room/`. That is the
+  established pattern and is not counted against the pass. The three PARTLY items are ruled here.
+  **Item 1, upheld and fixed.** `validate_plan` did check the whole plan before any record, but
+  `do_plan` called `campaign.ensure()` first, so a plan refused for a bad model, a bad effort, an
+  unknown setup key or an unknown harness still left a campaign root behind holding empty
+  `records/`, `tmp/` and `trials/`. E10-43 finding 4's own words are "before any write", and a
+  directory is a write; Astra's reading is correct and the runner's was not. Every refusal now
+  precedes the first directory. Six tests lock it, and the fix is proved by its negative: against
+  the old ordering five of the six fail, and the sixth (an accepted plan still builds its
+  skeleton) passes either way by design.
+  **Item 5, not upheld; the reviewer's reading of "exactly" is rejected.** Astra read "the floor
+  map settled to exactly these four" as meaning no other model may ever meet the floor, and
+  reported that the Codex map still accepts `gpt-6-astra` and that Claude Code's prefix map still
+  accepts other Opus-class ids. E10-62's own sentence is "`gpt-5.6-sol` **joins** lane R's map",
+  which adds rather than replaces, and the ruling's subject is which models THIS campaign pins,
+  not a restriction on what the maps may classify. Three reasons the narrow reading is refused.
+  `gpt-6-astra` must keep meeting the floor: it is the model every Astra round runs as, E9's
+  thirty-six rollouts were recorded on it, and the lane's existing tests assert it. Claude Code's
+  prefix map is E9's closed design covering the Opus family, and narrowing it would change a
+  closed lane's behaviour, which E10-62 does not order and the pass's own boundary forbids. And
+  the roster is enforced where it belongs: the plan's validation decides which setups run, while a
+  floor map answers a different question, whether a model that DID run is capable enough to be
+  believed. The safety property that matters is intact and Astra measured it herself: an unlisted
+  id still reads `unknown` with `floor_met` null on all three lanes, so nothing is waved through.
+  **Item 6, half upheld.** Its test half follows item 1 (now tested) and item 5 (ruled no change,
+  so nothing to test). Its second half is upheld and is the control room's own fault, not the
+  builder's: the four E10-62 proof trials were never copied into the review copy, so Astra could
+  not check the report's quoted `model.json` witnesses against the records and correctly declined
+  to take them on the report's word. The launcher now copies that campaign into `live/e1062-proof`
+  behind the same wall exclusions; nothing in it was graded, so those exclusions remove nothing.
+  **What did not change:** the runner's behaviour beyond the one ordering fix, the core, the
+  adapters' maps, the setups. Gates re-run in full by the control room after the fix. A short
+  targeted re-check on items 1 and 6 alone follows; items 2, 3 and 4 are closed and item 5 is
+  ruled. The campaign then starts on Tony's word.

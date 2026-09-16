@@ -685,3 +685,82 @@ class ConfiguredPairInTheRecordTest(RunnerCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ------------------------------------- E10-64: every refusal precedes the first directory
+
+
+class RefusedPlanLeavesNothingTest(RunnerCase):
+    """E10-64 (Astra's recheck3, item 1): a refused plan makes no campaign skeleton.
+
+    `validate_plan` checked the whole plan before any RECORD was written, but `do_plan` called
+    `campaign.ensure()` first, so a plan refused for a bad model, a bad effort or an unknown
+    key still left a campaign root behind holding empty `records/`, `tmp/` and `trials/`.
+    E10-43 finding 4's own words are "before any write", and a directory is a write. These
+    tests use a campaign path that does not exist yet, which is the only way the difference
+    shows: `RunnerCase.setUp` builds its own campaign, so a test that reused it would pass
+    either way.
+    """
+
+    SKELETON = ("records", "tmp", "trials")
+
+    def unused_campaign(self):
+        path = os.path.join(self.scratch, "never-made-%d" % len(os.listdir(self.scratch)))
+        self.assertFalse(os.path.exists(path))
+        return path
+
+    def refuse_into(self, path, setups):
+        plan = runner.default_plan("test")
+        plan["setups"] = setups
+        plan_path = os.path.join(self.scratch, "refused-%d.json" % len(os.listdir(self.scratch)))
+        runner.write_json(plan_path, plan)
+        got = cli(["plan", "--campaign", path, "--plan", plan_path], env=self.held_out_env())
+        self.assertEqual(got.returncode, 2, got.stdout)
+        return got
+
+    def assert_nothing_made(self, path):
+        self.assertFalse(os.path.exists(path),
+                         "the refused plan left %s behind: %s"
+                         % (path, os.listdir(path) if os.path.isdir(path) else "?"))
+
+    def test_a_bad_model_leaves_no_campaign_directory(self):
+        path = self.unused_campaign()
+        got = self.refuse_into(path, [{"name": "codex", "harness": "codex", "model": 5}])
+        self.assertIn("'model' must be a string", got.stderr)
+        self.assert_nothing_made(path)
+
+    def test_a_bad_effort_leaves_no_campaign_directory(self):
+        path = self.unused_campaign()
+        self.refuse_into(path, [{"name": "codex", "harness": "codex", "effort": ["medium"]}])
+        self.assert_nothing_made(path)
+
+    def test_an_unknown_setup_key_leaves_no_campaign_directory(self):
+        path = self.unused_campaign()
+        self.refuse_into(path, [{"name": "codex", "harness": "codex", "modle": "gpt-5.6-sol"}])
+        self.assert_nothing_made(path)
+
+    def test_an_effort_on_a_harness_that_takes_none_leaves_no_campaign_directory(self):
+        path = self.unused_campaign()
+        self.refuse_into(path, [{"name": "opencode", "harness": "opencode",
+                                 "model": "openrouter/qwen/qwen3.8-flash",
+                                 "effort": "medium"}])
+        self.assert_nothing_made(path)
+
+    def test_an_unknown_harness_leaves_no_campaign_directory(self):
+        path = self.unused_campaign()
+        self.refuse_into(path, [{"name": "nope", "harness": "nope"}])
+        self.assert_nothing_made(path)
+
+    def test_an_accepted_plan_still_makes_the_skeleton(self):
+        """The reorder must not stop `plan` building the campaign it accepts."""
+        path = self.unused_campaign()
+        plan = runner.default_plan("test")
+        plan_path = os.path.join(self.scratch, "accepted.json")
+        runner.write_json(plan_path, plan)
+        # `plan` needs the stage record the fixture campaign carries, so accept into that one.
+        got = cli(["plan", "--campaign", self.campaign, "--refresh", "--plan", plan_path],
+                  env=self.held_out_env())
+        self.assertEqual(got.returncode, 0, got.stderr)
+        for name in self.SKELETON:
+            self.assertTrue(os.path.isdir(os.path.join(self.campaign, name)), name)
+        self.assert_nothing_made(path)
