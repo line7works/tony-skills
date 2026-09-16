@@ -987,3 +987,22 @@ report could not read from behind the wall.
   slip (a `git status` with the keys closed put the key file names in its transcript; nothing crossed);
   recorded. Next: Astra's targeted re-check at high (`recheck5`) on a review copy at this commit, then the
   follow-up pass.
+- **E10-70 (control room, 2026-09-16 midday: Astra's recheck5 read).** Verdict at high on the review
+  copy of `17e384f`: items 2, 3, 4 and 5 FIXED; item 1 PARTLY; no new BLOCKER. Item 1 is UPHELD on its
+  exact point: `cache_routing_requests` and `write_routing_prompt` both called `file_sha256`, whose
+  `handle.read()` brought the complete cached request into the runner process to hash it, so the
+  E10-69(1) claim "no held-out text enters the runner process" did not hold, while the barrier invariant
+  (the sealed directory unreadable by any launched harness while any launch is alive) did. Fixed by the
+  control room, as E10-64 item 1 was: the file-writing subprocess now prints the digest and size of what
+  it wrote; the digest of a file cached by an earlier run comes from a digest subprocess
+  (`file_digest_by_subprocess`); the launch-time copy is `/bin/cp` in a subprocess
+  (`copy_file_by_subprocess`), not `shutil.copyfile`; neither function names a reader, a hasher or a
+  copier, checked by AST in `tests/test_e10_68.py` (`test_the_runner_never_reads_the_cached_text_itself`,
+  which also checks live that the subprocess digests equal the files). README section 5 reworded. Her
+  three side notes are accepted as written: the 2026-09-15 campaign would not have EXITED at 05:49Z under
+  the fix (the lane stops and the loop joins the other workers, then exits 1); the pre-fix adapter negative
+  is not reproducible from the copy (no pre-fix adapter was supplied; the fixed adapter skips `system`
+  records before the guarded sites), which limits the claimed reproduction and not the verified behaviour;
+  and E10-69 named no hash for the fixed commit, which is `17e384f`, with this ruling and the E10-70 change
+  landing in the commit after it. Items 2 to 5 are closed. A targeted re-check on item 1 alone (`recheck6`)
+  follows; then the follow-up pass on Tony's go.

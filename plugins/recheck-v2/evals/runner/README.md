@@ -68,10 +68,15 @@ so with more than one lane alive a launch was nearly always alive, the read fail
 `PermissionError`, and the trial was recorded as raised with no process started — 72 of them
 on the night of 2026-09-15. `campaign start` now writes every planned held-out request into
 `<campaign>/routing-requests/<entry id>.txt` **before the first launch, while the keys are
-open**, and a launch copies its own entry's file into `prompt.txt` byte for byte. The
-subprocess writes the file itself, so no held-out text enters the runner process at all —
-strictly less than E10-13 allowed, which was one entry at a time. `routing-requests/index.json`
-records each file, its sha256, its size and the key state at cache time, and never any text.
+open**, and a launch copies its own entry's file into `prompt.txt` with `/bin/cp`. The
+subprocess writes the file itself and prints its digest and size; the digest of a file cached
+by an earlier run comes from a digest subprocess too (E10-70, Astra's recheck5 item 1: the
+first version hashed the cached file in the runner process, which read the text to do it).
+So no held-out text enters the runner process at all, not even to hash or copy it — strictly
+less than E10-13 allowed, which was one entry at a time; `tests/test_e10_68.py` checks by AST
+that neither the cache nor the launch-time copy names a reader or a copier, and live that the
+subprocess digests match the files. `routing-requests/index.json` records each file, its
+sha256, its size and the key state at cache time, and never any text.
 The two invariants E10-40 and E10-45 name are unchanged and are re-proved by
 `tests/test_e10_68.py`: the sealed set never enters the runner process as a whole, and the
 directory is at mode 000 at every launch (the test's stub records the mode it met, at every

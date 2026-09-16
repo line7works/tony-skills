@@ -144,6 +144,45 @@ class HeldOutRequestSurvivesTheBarrierTest(RunnerCase):
         self.assertNotIn("a request this test wrote", json.dumps(index))
         self.assertEqual(index["failed"], [])
 
+    def test_the_runner_never_reads_the_cached_text_itself(self):
+        """E10-70 (Astra recheck5 item 1): hashing and copying the cached request happen in
+        subprocesses, so the sealed text never enters the runner process, not even to hash it.
+
+        Static half: neither `cache_routing_requests` nor `write_routing_prompt` names a reader
+        or a copier that would bring the bytes into this process. Live half: the digests those
+        subprocesses reported match the file, so nothing was lost by not reading it here.
+        """
+        import ast, hashlib
+        tree = ast.parse(runner.read_text(runner.__file__))
+        forbidden = {"file_sha256", "sha256_hex", "copyfile", "copy", "copy2", "open",
+                     "read_text", "read_bytes"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name in (
+                    "cache_routing_requests", "write_routing_prompt"):
+                names = set()
+                for inner in ast.walk(node):
+                    if isinstance(inner, ast.Name):
+                        names.add(inner.id)
+                    elif isinstance(inner, ast.Attribute):
+                        names.add(inner.attr)
+                self.assertFalse(names & forbidden,
+                                 "%s names %s" % (node.name, sorted(names & forbidden)))
+        self.build()
+        got = self.run_campaign()
+        self.assertEqual(got.returncode, 0, got.stderr[-3000:])
+        cached = os.path.join(self.campaign, "routing-requests", "%s.txt" % self.ENTRY)
+        with open(cached, "rb") as handle:
+            digest = hashlib.sha256(handle.read()).hexdigest()
+        index = runner.read_json(os.path.join(self.campaign, "routing-requests", "index.json"))
+        self.assertEqual([e["sha256"] for e in index["entries"]], [digest])
+        self.assertEqual([e["bytes"] for e in index["entries"]], [os.path.getsize(cached)])
+        ledger = {row["id"]: row for row in self.rows("trials.jsonl")}
+        for name in self.setups:
+            command = runner.read_json(os.path.join(
+                ledger["routing-%s-%s-r1" % (name, self.ENTRY)]["record"], "command.json"))
+            self.assertEqual(command["request_source"]["sha256"], digest)
+            self.assertIn("/bin/cp", command["request_source"]["how"])
+
     def test_the_cache_is_written_before_the_first_launch_with_the_keys_open(self):
         """The invariant re-proved: the read happens while nothing is launched (E10-40)."""
         self.build()

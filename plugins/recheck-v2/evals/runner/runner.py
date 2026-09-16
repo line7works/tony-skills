@@ -3575,19 +3575,45 @@ HELDOUT_TEXT_SCRIPT = (
 # by any launched harness while any launch is alive") without serialising every lane's launch
 # against every other, which is the concurrency the campaign exists to have.
 HELDOUT_TEXT_TO_FILE_SCRIPT = (
-    "import json,sys\n"
+    "import hashlib,json,sys\n"
     "d=json.load(open(sys.argv[1]))\n"
     "for e in d['requests']:\n"
     "    if e['id']==sys.argv[2]:\n"
     "        t=e['text']\n"
     "        if not t.endswith('\\n'):\n"
     "            t+='\\n'\n"
-    "        h=open(sys.argv[3],'w')\n"
-    "        h.write(t)\n"
+    "        b=t.encode('utf-8')\n"
+    "        h=open(sys.argv[3],'wb')\n"
+    "        h.write(b)\n"
     "        h.close()\n"
+    "        sys.stdout.write(hashlib.sha256(b).hexdigest()+' '+str(len(b)))\n"
     "        raise SystemExit(0)\n"
     "raise SystemExit(3)\n"
 )
+
+# E10-70 (Astra recheck5 item 1): the digest of a cached request file is computed by a
+# subprocess too, so the runner process never holds the sealed text, not even to hash it.
+FILE_DIGEST_SCRIPT = (
+    "import hashlib,sys\n"
+    "b=open(sys.argv[1],'rb').read()\n"
+    "sys.stdout.write(hashlib.sha256(b).hexdigest()+' '+str(len(b)))\n"
+)
+
+
+def file_digest_by_subprocess(path):
+    """`(sha256, bytes)` of a file whose content must not enter this process (E10-70)."""
+    step = run_cmd([sys.executable, "-c", FILE_DIGEST_SCRIPT, path], env=tool_env(),
+                   label="digest of a cached request")
+    parts = step["stdout"].split()
+    if step["exit"] != 0 or len(parts) != 2:
+        return None, None
+    return parts[0], int(parts[1])
+
+
+def copy_file_by_subprocess(source, target):
+    """Copy a file whose content must not enter this process (E10-70): `/bin/cp`, not Python."""
+    step = run_cmd(["/bin/cp", source, target], env=tool_env(), label="copy of a cached request")
+    return step["exit"] == 0 and os.path.isfile(target)
 
 ROUTING_REQUESTS_DIRNAME = "routing-requests"
 
@@ -3625,26 +3651,26 @@ def cache_routing_requests(campaign, entry_ids):
             continue
         target = cached_request_file(campaign, entry_id)
         if os.path.isfile(target):
+            digest, size = file_digest_by_subprocess(target)
             rows.append({"entry": entry_id, "file": target, "cached": True,
-                         "sha256": file_sha256(target),
-                         "bytes": os.path.getsize(target), "written": "before this run"})
+                         "sha256": digest, "bytes": size, "written": "before this run"})
             continue
         step = run_cmd([sys.executable, "-c", HELDOUT_TEXT_TO_FILE_SCRIPT, path, entry_id,
                         target], env=tool_env(), label="held-out text into the campaign")
-        if step["exit"] != 0 or not os.path.isfile(target):
+        parts = step["stdout"].split()
+        if step["exit"] != 0 or not os.path.isfile(target) or len(parts) != 2:
             failed.append({"entry": entry_id, "exit": step["exit"],
                            "stderr_tail": step["stderr"][-200:]})
             continue
         rows.append({"entry": entry_id, "file": target, "cached": True,
-                     "sha256": file_sha256(target),
-                     "bytes": os.path.getsize(target), "written": "this run"})
+                     "sha256": parts[0], "bytes": int(parts[1]), "written": "this run"})
     index = {
         "campaign": campaign.root,
         "cached_at": now_iso(),
         "rule": "E10-68 defect 1: every planned held-out request is written once, before the "
                 "first launch and while the keys are open, by a subprocess that writes the "
-                "file itself; a launch copies its own entry byte for byte. No request text "
-                "enters the runner process.",
+                "file itself and prints its digest; a launch copies its own entry with /bin/cp. "
+                "No request text enters the runner process, not even to hash it (E10-70).",
         "key_state_at_cache_time": key_state(),
         "stand_in": bool(stood_in),
         "entries": rows,
@@ -5805,11 +5831,14 @@ def write_routing_prompt(campaign, entry_id, prompt_path):
         return "manual-only", {"how": "the runner's own manual-only request (E10-53(4))"}
     cached = cached_request_file(campaign, entry_id)
     if os.path.isfile(cached):
-        shutil.copyfile(cached, prompt_path)
-        return "held-out", {"how": "the campaign's cached held-out request, copied byte for "
-                                   "byte; the text never entered the runner process "
-                                   "(E10-68 defect 1)",
-                            "file": cached, "sha256": file_sha256(cached)}
+        if not copy_file_by_subprocess(cached, prompt_path):
+            raise Failure("the cached held-out request could not be copied into the trial: %s"
+                          % cached)
+        digest, _ = file_digest_by_subprocess(cached)
+        return "held-out", {"how": "the campaign's cached held-out request, copied by /bin/cp; "
+                                   "the text never entered the runner process, not even to "
+                                   "hash it (E10-68 defect 1, E10-70)",
+                            "file": cached, "sha256": digest}
     text, which = routing_request(entry_id)
     write_text(prompt_path, text if text.endswith("\n") else text + "\n")
     return which, {"how": "read at launch time: the tuning file directly, or E10-13's "
