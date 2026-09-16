@@ -123,10 +123,11 @@ class UsageErrorTest(RunnerCase):
         got = cli(["plan", "--campaign", fresh], env=self.held_out_env(entries=8))
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
-        # the full E10 default plan: 6 cases x 3 setups x 2 conditions x 2 repetitions
-        self.assertEqual(document["counts"]["comparison"], 72)
-        self.assertEqual(document["counts"]["continuation"], 6)
-        self.assertEqual(len(document["order"]), 3)
+        # the full E10 default plan (E10-62's four pinned lanes):
+        # 6 cases x 4 setups x 2 conditions x 2 repetitions
+        self.assertEqual(document["counts"]["comparison"], 96)
+        self.assertEqual(document["counts"]["continuation"], 8)
+        self.assertEqual(len(document["order"]), 4)
 
     def test_stdout_is_one_json_document_and_nothing_else(self):
         got = cli(["campaign", "status", "--campaign", self.campaign])

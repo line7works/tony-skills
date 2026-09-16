@@ -14,8 +14,10 @@ that document outranks the E9 lane contract at E10. Astra's review of the first 
 E10-53 are the predicate for everything marked **fix round** below. The control room then read
 the twelve grades of that round's verification campaign and issued **E10-54 to E10-57**: the
 run directory, the run id, the trial-conditioned expected document, the frozen cut and the
-`--without recheck-v2` flag. Section 11 is the history of what the first build and the first
-fix round claimed and what replaced it.
+`--without recheck-v2` flag. Lane S then closed at E10-61, and **E10-62** ordered one scoped
+pass on top of it: Tony's four pinned lanes, each with its own model and, where the harness
+takes one, its own effort, honoured to each launcher and recorded in every trial's
+`model.json`. Section 11 is the history of what each round claimed and what replaced it.
 
 - Python 3.9 syntax, standard library only. The grading step calls the core's
   `validate-result.py` through `uv run`, the way the E7 runner calls things, and imports
@@ -127,7 +129,7 @@ source points at the stage. Per harness, measured, not assumed:
 |---|---|---|---|
 | `claude-code` | `install.sh --pilot-home <home>` | **`install.sh --pilot-home <home> --without recheck-v2`**: the skill is never installed | the same install, then `claude plugin install <name>@tony-skills` for every marketplace plugin except the five blocked |
 | `codex` | `install.sh` (the home is `$RECHECK_CODEX_HOME` when set, else `$HOME/.local/share/skills-v2-pilot/codex/home`) | **`RECHECK_CODEX_HOME=<home> install.sh --without recheck-v2`**: the script's own run into that home, the skill never installed, then `auth.json` linked to the available home's store | a copy of the available home with its absolute paths rewritten (the way `install.sh` makes its own `homes/plugin-only`), then `codex plugin add <name>@tony-skills` per plugin |
-| `opencode` | `install.sh --setup <home> --model <model>` | **`install.sh --setup <home> --model <model> --without recheck-v2`**: the skill folder is never copied in | the same install, then every unblocked plugin's skill folders copied into that directory |
+| `opencode` | `install.sh --setup <home> --model <model>` (the plan's full `openrouter/...` id, or the short `qwen` / `deepseek` name resolved to it) | **`install.sh --setup <home> --model <model> --without recheck-v2`**: the skill folder is never copied in | the same install, then every unblocked plugin's skill folders copied into that directory |
 
 **The absent home, and where the flag reaches (E10-56(1)).** All three `install.sh` scripts
 take `--without recheck-v2`, which skips the one step that installs the skill and records
@@ -156,7 +158,24 @@ path of a **full home inventory** record: every file under the home with its sha
 plus the home's tree hash (E10-53(3), so a later reader can prove what was and was not there).
 A non-empty leak scan, a failed step, or a link leaving the pilot root is exit 1.
 
-E10-20: this is the only path that passes `OPENROUTER_API_KEY`, and only to the OpenCode
+**The Codex home's model and effort lines (E10-62 item 2).** `setups/codex/install.sh` copies
+exactly three lines out of the machine's own `~/.codex/config.toml` — `model`,
+`model_reasoning_effort` and `sandbox_mode` — and fails if it does not find exactly three.
+`CodexSetup.install` then replaces the first two, from the plan, **in the pilot home and its
+child home only** (`_write_model_lines`, recorded as `model_lines` in the install record); the
+`routing` home is the copy of the `available` one and is rewritten again for the record.
+`~/.codex/config.toml` and `~/.codex/auth.json` are never written by any path here, and
+`sandbox_mode` keeps coming from the real config because the plan says nothing about it. A
+config with no line to replace is exit 1, never a silent no-op. `codex exec` takes no `-m` in
+`setups/codex/launch.sh`, so the pilot home's config is what the session runs on.
+
+**The Claude Code launcher's two flags (E10-62 item 2).** `setups/claude-code/launch.sh` takes
+`--model M` and `--effort E` and puts each, when given, on the `claude` argv; neither is
+defaulted, so an E9-shaped call runs exactly the command E9 measured. It records what it was
+told as `configured_model` and `configured_effort` in `launch.json`, apart from `model`, which
+is and stays the session's own init event.
+
+E10-20: `install` is the only path that passes `OPENROUTER_API_KEY`, and only to the OpenCode
 install script. Existence is checked, the value is never printed, logged or copied.
 
 ### `verify [--setup NAME]... [--home ...]`
@@ -535,7 +554,7 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 | `prompt.txt` | the prompt bytes, exactly as the harness received them |
 | `harness/` | everything the setup's `launch.sh` wrote: the trace, the transcript or rollout or session-store dump, `launch.json`, stderr, and the catalog capture |
 | `harness-first/`, `harness-second/` | a continuation trial's two sessions, with `at-cut-*` beside the first |
-| `model.json` | `id`, `effort`, the **record they were read from**, the session binding, the native init event, and `configured` (what the launcher was told) kept apart (E10-50). **A record with no session binding is `null` (E10-59 (18))**: the native label is not a measurement of THIS session's model, and the unbound observation is kept under `observed_without_a_session_binding` rather than promoted |
+| `model.json` | `id`, `effort`, the **record they were read from**, the session binding, the native init event, and `configured` kept apart (E10-50). **A record with no session binding is `null` (E10-59 (18))**: the native label is not a measurement of THIS session's model, and the unbound observation is kept under `observed_without_a_session_binding` rather than promoted. **`configured` is `{model, effort}` FROM THE PLAN (E10-62)**, on all three harnesses and at both write sites (the comparison path in `collect_trial` and the routing path), with its `source` naming the setup entry it came from — never an observation, never promoted into `id`. Claude Code adds `launcher_recorded`, the `--model` and `--effort` `launch.sh` itself recorded; Codex and OpenCode add `reaches_the_session_by` |
 | `cost.json` | `total_cost_usd`, token counts, and the record; `null` when the harness printed nothing |
 | `run/` | the run directory copied whole after the harness ended and after the validation, verifier captures included. It is the fixture's own `run/` leaf (E10-54(a)), so `fixture/<12 hex>/run/` below holds the same files |
 | `fixture/` | this trial's opaque fixture build, copied in after the trial |
@@ -569,8 +588,18 @@ segment, E10-22, which a trial no longer uses), `run_dir_is_the_fixture_run_leaf
 | `codex` | `turn_context.model` in the rollout, bound to the `session_meta` id | `turn_context.effort` | no dollar figure; the events stream's token counts |
 | `opencode` | `providerID/modelID` from the session store's assistant rows, bound to the store's session id | **none exists on 1.18.31 → `null`** | the assistant rows' `cost` summed, with the token totals |
 
-In every case the id is `null` when the harness wrote no native record, and the launcher's own
-label lives in `configured` and never becomes an observation (E10-50).
+In every case the id is `null` when the harness wrote no native record, and what the launcher
+was told lives in `configured` and never becomes an observation (E10-50, E10-62).
+
+**`configured` before E10-62, and why it was wrong.** Claude Code's reader built it from
+`launch.json`'s `model` key, and `setups/claude-code/launch.sh` writes that key as
+`init.get("model")` — the session's own init event — so the field labelled "what the launcher
+was told" held an observation wearing the launcher's label, the exact confusion E10-50 exists
+to prevent. Codex's `launch.json` carries `exit`, `thread_id` and `rollout` and no model key,
+and OpenCode's launcher writes no `launch.json` at all, so both read `null`. The plan is the
+one source now. `launch.sh` records the two flags it was handed under `configured_model` and
+`configured_effort`, which `model.json` carries as `launcher_recorded`, and the init event
+stays in `init_event` / `init_model`.
 
 `trials.jsonl`, one line per trial **attempt**: `id`, `attempt`, `kind`, `status` (`complete`,
 `no_result`, `timed_out`, `launch_failed`, `profile_breach`), `exit`, `wall`, `cost`, `model`,
@@ -588,9 +617,11 @@ pid and pgid, ended with its status.
   "campaign_id": "e10-2026-09-20",
   "run_date": "2026-09-20",
   "setups": [
-    {"name": "claude-code", "harness": "claude-code"},
-    {"name": "codex", "harness": "codex"},
-    {"name": "opencode", "harness": "opencode", "model": "qwen"}
+    {"name": "claude-code", "harness": "claude-code", "model": "opus", "effort": "medium"},
+    {"name": "codex", "harness": "codex", "model": "gpt-5.6-sol", "effort": "medium"},
+    {"name": "opencode", "harness": "opencode", "model": "openrouter/qwen/qwen3.8-flash"},
+    {"name": "opencode-deepseek", "harness": "opencode",
+     "model": "openrouter/deepseek/deepseek-v4.1-flash"}
   ],
   "cases": ["F1-01-fixed-clean", "F2-01-reproduces", "F3-01-missed-case",
             "F4-01-missing-fixture-file", "F5-01-outbound-required", "F6-04-verifier-override"],
@@ -604,22 +635,73 @@ pid and pgid, ended with its status.
 ```
 
 That is the full E10 campaign and the default when `--plan` is omitted: the six comparison
-fixtures of E10-1, the three setups of E10-2, the two conditions of E10-3, two repetitions —
-**6 × 3 × 2 × 2 = 72 comparison trials** — plus the continuation set on
-`F3-02-mixed-two-items`, one `handoff` and one `compaction` trial per setup, **6 continuation
+fixtures of E10-1, the **four** setups of E10-62, the two conditions of E10-3, two repetitions —
+**6 × 4 × 2 × 2 = 96 comparison trials** — plus the continuation set on
+`F3-02-mixed-two-items`, one `handoff` and one `compaction` trial per setup, **8 continuation
 trials**; plus the routing set, all twenty trigger-set entries (12 tuning, 8 held-out) at three
-repetitions per setup, **180 routing trials**; plus **3 manual-only trials**, one per lane,
-counted apart (E10-53(4)); plus the `probe-env` sessions, three setups × three homes. The
+repetitions per setup, **240 routing trials**; plus **4 manual-only trials**, one per lane,
+counted apart (E10-53(4)); plus the `probe-env` sessions, four setups × three homes. The
 timeouts are E10-14's.
 
-Optional keys: `entries` may be `"tuning"`, `"all"`, or an explicit list of ids; a setup entry
-`{"name": "opencode-deepseek", "harness": "opencode", "model": "deepseek"}` adds the DeepSeek
-setup in one line (E10-2: the runner takes its setup list from the plan, never from code);
+### `model` and `effort` per setup (E10-62)
+
+Tony pinned each lane on 2026-09-15. The plan carries the pair; the runner honours it all the
+way to the launcher, and every trial's `model.json` carries it as `configured` beside the
+harness's own native witness. Nothing is a default for a setup that named none: an omitted
+`model` leaves the harness on whatever its own sign-in or config already chooses, which is
+what E9 measured.
+
+| setup | harness | `model` | `effort` | how it reaches the session |
+|---|---|---|---|---|
+| `claude-code` | Claude Code | `opus` | `medium` | `launch.sh --model --effort` → `claude --model opus --effort medium` |
+| `codex` | Codex CLI | `gpt-5.6-sol` | `medium` | the pilot home's and the child home's `config.toml` `model` and `model_reasoning_effort` lines, written by `CodexSetup.install`; `codex exec` takes no `-m` |
+| `opencode` | OpenCode | `openrouter/qwen/qwen3.8-flash` | — | `launch.sh <model>` → `opencode run --model <id>`, and `install.sh --model` |
+| `opencode-deepseek` | OpenCode | `openrouter/deepseek/deepseek-v4.1-flash` | — | the same, in **its own three homes** |
+
+`validate_plan` checks the whole plan before any write, the existing way (collect `problems`,
+raise once):
+
+- `model` and `effort`, when present, are non-empty **strings**;
+- an `effort` is refused on a harness that takes none — OpenCode 1.18.31 records no reasoning
+  effort (E10-26), so an effort there would be a label with no record behind it (E10-19);
+- an `effort` outside the values the harness accepts is refused. `claude --help` on 2.1.272
+  prints `(low, medium, high, xhigh, max)`; Codex's `model_reasoning_effort` takes the six the
+  readers roster's codex-exec rows carry (`low, medium, high, xhigh, max, ultra`) and validates
+  none of them itself (measured: `codex -c model_reasoning_effort=bogus plugin list` exits 0),
+  so the plan is the gate;
+- an **unknown key** on a setup entry is refused rather than ignored: a misspelled `effort` a
+  plan silently dropped would run the whole lane at the harness's own default with nothing in
+  the record to say so. A setup entry takes `name`, `harness`, `model`, `effort`.
+
+The OpenCode mapping takes the plan's full `openrouter/...` id **and** the short `qwen` /
+`deepseek` names an E9-shaped plan uses; `launch.sh` documents both (`qwen | deepseek |
+provider/model`) and the launcher is always handed the resolved full id, so the record names
+the model the session ran on.
+
+**The setup NAME keys the pilot homes, not the harness name** (E10-62 item 3). Two setups of
+one harness would otherwise share one set of homes and the second install would overwrite the
+first: every OpenCode install rewrites the shared `opencode.json`'s default model (E10-31),
+which is exactly why the DeepSeek lane needs its own. For the three setups whose name equals
+their harness every path is what it was:
+
+| setup | available | absent | routing |
+|---|---|---|---|
+| `claude-code` | `<pilot>/claude-code` | `<pilot>/claude-code/absent` | `<pilot>/claude-code/routing` |
+| `codex` | `<pilot>/codex/home` | `<pilot>/codex/homes/absent` | `<pilot>/codex/homes/routing` |
+| `opencode` | `<pilot>/opencode` | `<pilot>/opencode/absent` | `<pilot>/opencode/routing` |
+| `opencode-deepseek` | `<pilot>/opencode-deepseek` | `<pilot>/opencode-deepseek/absent` | `<pilot>/opencode-deepseek/routing` |
+
+`auth_store_exemptions` takes the plan's own `(harness, setup name)` pairs so a named setup's
+credential store is exempt by its real path; a name is only ever surveyed under its own
+harness's layout, so a file called `auth.json` under a Claude Code home is still scanned
+(Claude Code has no configured store — its sign-in is the Keychain).
+
+Optional keys: `entries` may be `"tuning"`, `"all"`, or an explicit list of ids;
 `run_root_name` sets the run root's segment inside the trial's opaque tree.
 
 The order (E10-5) is written into `campaign.json` before the first launch: per setup, case by
-catalog order, then repetition 1 available, 1 absent, 2 available, 2 absent. The three setups
-are three lanes; each lane is strictly sequential and the lanes run concurrently.
+catalog order, then repetition 1 available, 1 absent, 2 available, 2 absent. The setups are
+lanes; each lane is strictly sequential and the lanes run concurrently.
 
 ## 5. The environment allowlist
 
@@ -694,7 +776,7 @@ at its own allowlist before the launcher ever ran.
 | ruling | where |
 |---|---|
 | E10-1, the six fixtures | `DEFAULT_CASES`, `default_plan`, `validate_plan` |
-| E10-2, the three setups; the setup list from the plan | `SETUP_CLASSES`, `make_setup`, `_selected_setups` |
+| E10-2, the setups; the setup list from the plan | `SETUP_CLASSES`, `make_setup`, `_selected_setups` |
 | E10-3, the two conditions; the condition witness; `skill_file_reached` | `pilot_home`, `Setup.install`, `condition_witness` per setup, `trace_witnesses` |
 | E10-4, the comparison prompt; the schema copy | `PROMPT_TEMPLATE`, `prepare_run_dir`, `activation` per setup |
 | E10-5, repetitions and order | `order_of`, `build_fixture`, `_campaign_loop`'s lanes |
@@ -709,6 +791,11 @@ at its own allowlist before the launcher ever ran.
 | E10-15, the operator's rules | `campaign status`, `rerun`, `grade --summary` |
 | E10-16, floors and provisional maps | `grade.floor_met` |
 | E10-19, the effort witness | `model.json`'s `effort` and `source`; never a label |
+| E10-62, the plan's per-setup `model` and `effort` | `SETUP_KEYS`, `HARNESS_EFFORTS`, `validate_plan`, `default_plan`, `Setup.__init__`/`resolved_model`/`configured_record`, `make_setup`, `_selected_setups` |
+| E10-62 item 2, the keys reach each launcher | `ClaudeCodeSetup.launch` + `setups/claude-code/launch.sh`'s `--model`/`--effort`; `CodexSetup._write_model_lines` on both `config.toml` files; `OpenCodeSetup.install`/`launch` with `resolved_model`; and the two paths that build their own argv, `_launch_argv` (the cut) and `_compaction_resume` |
+| E10-62 item 3, the setup NAME keys the homes | `pilot_home`'s `setup_name`, `Setup.home`, `auth_store_exemptions`, `plan_setup_pairs` |
+| E10-62 item 4, `configured` is the plan's pair at both write sites | `Setup.configured_record`, `model_record` per setup, `collect_trial`, `do_routing` |
+| E10-62 item 5, `gpt-5.6-sol` in lane R's floor map | `adapters/codex/invocation.py`'s `FLOOR_MAP` (each lane keeps its own map) |
 | E10-20, the one install-time credential | `OpenCodeSetup.install`, `DECLARED_ENV` |
 | E10-21, the test-only stand-in | `_stand_in`, `key_dir`, `heldout_file`, `Campaign.synthetic` |
 | E10-40, the wall as a measured boundary | `close_key`/`open_key`/`key_open`, `link_survey`, `records_reached`, `sentinel_probe` |
@@ -794,6 +881,7 @@ both are set. Every test restores the two key directories on the way out, whatev
 | `test_wall.py` | the key lock closing on every launch path and a real child failing to read them, `grade` reopening and re-closing, `campaign start --reopen-key`, `records_reached` / `skill_file_reached`, the AST proof of which functions can reach a reader, the E10-21 and E10-45 refusals, the grading barrier from all three pid sources, and the link survey |
 | `test_records.py` | the record layout and every `command.json` field, the opaque fixture path, the refusal to overwrite, `rerun`'s attempt directories, the timeout path driven by a sleeping **stub launcher**, the credential scan including a NUL capture and an assignment delimiter, the report's counts, and campaign resume from disk |
 | `test_fake_end_to_end.py` | one trial per setup validating end to end, the model/cost/activation/condition-witness readers per harness, the grade paths, the routing and routing-score paths, the frozen valid cut, the race of finding 15 that can no longer reach the retained pair (E10-55), the poll-interval refusal, and the compaction witness's ordering |
+| `test_e10_62.py` | E10-62: the plan's `model` and `effort` validated (`PlanModelAndEffortTest`), the setup name keying the homes with the three existing sets of paths asserted literally (`SetupNameKeysTheHomesTest`), the **real** `setups/claude-code/launch.sh` driven over a stub `claude` that records its own argv (`ClaudeCodeLauncherFlagsTest`), every launch path carrying the pair, the cut's own argv and both compaction resumes included (`EveryLaunchPathCarriesThePairTest`), the Codex `config.toml` lines (`CodexConfigLinesTest`), the OpenCode model mapping (`OpenCodeModelMappingTest`), and `configured` at both `model.json` write sites with the old defect's reproduction (`ConfiguredPairTest`, `ConfiguredPairInTheRecordTest`) |
 | `test_findings.py` | one test per finding of the review verdict, exercising the real path the finding names, plus the second fix round: `TrialShapeTest` (E10-54(a) and (b)), `TrialConditionedExpectedTest` (E10-54(c) and the summary's reasons by path segment), `FrozenCutTest` (E10-55) and `WithoutTheSkillTest` (E10-56(1)) |
 
 ## 10. What the harnesses cannot do
@@ -916,3 +1004,18 @@ re-check cleared thirteen of the fifteen items):
 |---|---|
 | a probe fails unless it printed at least one environment name, with the refusal noted beside that reason | E10-60 (3): the refusal is a **failing rule of its own**. A reply of "I could not run the requested command." followed by the single word `PATH` parsed one name and passed; a name beside a refusal proves nothing, and `why_not_rules` now names every rule that failed |
 | `run_tree_sha256` is `tree_sha256_of` over the retained run directory | E10-60 (10): that walk skipped `.git` and `__pycache__`, and `os.walk` does not follow a directory link, so `run/__pycache__/evidence.txt` and everything behind `run/linked-verifier -> …` could be rewritten under a retained validation without moving the hash. The walk now covers every entry, each directory carries an entry of its own, a link contributes its target path and a directory link's contents are walked; `plugin_tree_sha256` and `setup_tree_sha256` keep E10-6's narrower definition through `E10_6_TREE_EXCLUDED` and `follow_directory_links=False`, and the staged plugin's recorded `89925ff7…` was re-measured as unchanged |
+
+**What E10-62's pass replaced** (Tony's four pinned lanes, 2026-09-15 evening):
+
+| the rounds up to E10-61 said | what replaced it |
+|---|---|
+| "the three setups of E10-2", `6 × 3 × 2 × 2 = 72 comparison trials`, 6 continuation, 180 routing, 3 manual-only, three setups × three homes, "the three setups are three lanes" | E10-62: **four** pinned setups. `6 × 4 × 2 × 2 = 96` comparison, 8 continuation, 240 routing, 4 manual-only, four setups × three homes. `opencode-deepseek` is the fourth lane and the default plan carries it, so a campaign started without `--plan` is the campaign Tony ruled |
+| the default plan's setups carried no `model` on Claude Code and Codex and the short `"model": "qwen"` on OpenCode, and "the Claude Code setup's model is whatever the machine's sign-in defaults to" (E10-2) | E10-62: each setup is pinned — `claude-code` = `opus` at `medium`, `codex` = `gpt-5.6-sol` at `medium`, `opencode` = `openrouter/qwen/qwen3.8-flash`, `opencode-deepseek` = `openrouter/deepseek/deepseek-v4.1-flash` — and the pair is in the record, not the label |
+| `validate_plan` checked a setup entry's name and harness and nothing else, and ignored every other key | E10-62 item 1: `model` and `effort` are validated (non-empty strings, refused on a harness that takes none, refused outside the values the harness accepts) and an unknown key on a setup entry is refused rather than ignored |
+| `make_setup` passed `model` to `OpenCodeSetup` alone, defaulting it to `"qwen"`; `Setup` carried neither key | E10-62 item 2: `Setup` carries both and `make_setup` passes both to every class. The OpenCode default moved from the short `"qwen"` to the harness's own `openrouter/qwen/qwen3.8-flash`, and the launcher is handed the resolved full id |
+| `setups/claude-code/launch.sh` took no model and no effort, so the Claude Code lane ran on whatever the machine's sign-in chose | E10-62 item 2: `--model M` and `--effort E`, each put on the `claude` argv when given, with `configured_model` and `configured_effort` recorded in `launch.json` |
+| `setups/codex/install.sh`'s three copied lines were the session's model and effort, whatever `~/.codex/config.toml` held that day | E10-62 item 2: `CodexSetup.install` replaces the `model` and `model_reasoning_effort` lines from the plan, in the pilot home and its child home only; `sandbox_mode` still comes from the real config, and the machine's own Codex home is never written |
+| `Setup.home` called `pilot_home(self.harness, condition)`, so both OpenCode setups shared one set of homes and the second install would overwrite the first | E10-62 item 3: the setup NAME keys the homes. The three setups whose name equals their harness keep every path; `opencode-deepseek` gets three of its own. `auth_store_exemptions` takes the plan's pairs so the new lane's store is exempt by its real path |
+| `model.json.configured` on Claude Code was `launch.json`'s `model` key, which `launch.sh` fills from the session's own `system/init` event — an observation wearing the launcher's label; on Codex and OpenCode it was `null` (no model key, and no `launch.json` at all) | E10-62 item 4: `configured` is `{model, effort}` from the plan, on all three harnesses and at both write sites, with `launcher_recorded` beside it on Claude Code and the init event back in `init_event` / `init_model` |
+| `adapters/codex/invocation.py` classed `gpt-6-astra` as `opus` with `floor_met` true and every other id as `unknown` with `floor_met` null, so `gpt-5.6-sol` read `unknown` | E10-62 item 5: the lane's own `FLOOR_MAP` carries `gpt-6-astra` and `gpt-5.6-sol`, both class `opus`. Without it every Codex trial of the campaign would have been `verifier_unavailable` before it graded anything. The Claude Code map already covers `claude-opus-5` by prefix and the OpenCode map already carries both OpenRouter ids; each lane keeps its own map |
+| `_selected_setups` invented a spec for a `--setup` name the plan did not carry (`{"name": w, "harness": w.split("-deepseek")[0]}`) | E10-62: a campaign WITH a plan refuses a name the plan does not carry. `install --setup opencode-deepseek` against a three-setup plan used to build that home on the OpenCode default model, which is the qwen lane's model in the DeepSeek lane's home |

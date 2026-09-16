@@ -44,6 +44,30 @@ class AdapterTests(unittest.TestCase):
         self.assertIs(invocation.model_facts({}, {'model':'gpt-6-astra'})['floor_met'],True)
         self.assertIsNone(invocation.model_facts({}, {'model':'other'})['floor_met'])
 
+    def test_floor_gpt_5_6_sol(self):
+        """E10-62: the campaign's Codex model is class opus with floor_met true on this lane.
+
+        It read `unknown` / `floor_met: None` before the ruling, which would have made every
+        Codex trial of the campaign `verifier_unavailable` before it graded anything.
+        """
+        facts=invocation.model_facts({}, {'model':'gpt-5.6-sol'})
+        self.assertEqual(facts['floor_class'],'opus')
+        self.assertIs(facts['floor_met'],True)
+        self.assertEqual(facts['id'],'gpt-5.6-sol')
+
+    def test_floor_unknown_is_never_elevated(self):
+        """Every id outside the lane's own map stays unknown with a null floor."""
+        for name in ('gpt-5.6', 'gpt-5.6-sol-mini', 'sol', 'claude-opus-5'):
+            facts=invocation.model_facts({}, {'model':name})
+            self.assertEqual(facts['floor_class'],'unknown',name)
+            self.assertIsNone(facts['floor_met'],name)
+
+    def test_floor_effort_rides_with_the_model(self):
+        """E10-62 pins the Codex lane to medium; the effort is read, never defaulted."""
+        facts=invocation.model_facts({}, {'model':'gpt-5.6-sol','effort':'medium'})
+        self.assertEqual(facts['effort'],'medium')
+        self.assertNotIn('effort',invocation.model_facts({}, {'model':'gpt-5.6-sol'}))
+
     def test_statuses(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'raw.md'

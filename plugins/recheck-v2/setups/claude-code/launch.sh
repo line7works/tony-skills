@@ -2,12 +2,21 @@
 # One headless Claude Code session of the pilot setup (E9 lane C).
 #
 # Usage: launch.sh <prompt-file> <workspace> <out-dir> [--plugin NAME]...
-#                  [--plugin-dir DIR]... [--bypass]
+#                  [--plugin-dir DIR]... [--bypass] [--model M] [--effort E]
 #
 # --plugin NAME loads that plugin from the pilot's own install cache;
 # --plugin-dir DIR loads an installed copy anywhere (the negative tests' own
 # throwaway installs). Giving either one replaces the default pair
 # (recheck-v2 readers).
+#
+# --model M and --effort E go straight onto the claude argv (ruling E10-62:
+# Tony pinned this setup to Opus 5 at effort medium, `claude --model opus
+# --effort medium`). `claude --help` on 2.1.272 prints "--effort <level> ...
+# (low, medium, high, xhigh, max)". Neither is defaulted here: omitting one
+# leaves the harness on whatever the machine's sign-in chooses, which is what
+# E9 measured. What this script was TOLD is recorded in launch.json as
+# configured_model and configured_effort, apart from the `model` key, which is
+# and stays the session's own init event (E10-50, E10-62 item 4).
 #
 # Copies to <out-dir>: trace.jsonl (the stream-json trace), transcript.jsonl
 # (the harness's own record of the session), result.txt (the final text),
@@ -39,8 +48,10 @@ CACHE="$CONFIG_DIR/plugins/cache"
 BYPASS=0
 PLUGINS=""
 PLUGIN_DIRS=""
+MODEL=""          # E10-62: the plan's pinned model, or empty for the sign-in's own
+EFFORT=""         # E10-62: the plan's pinned effort, or empty for the harness's own
 
-[ $# -ge 3 ] || { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -ge 3 ] || { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 PROMPT_FILE="$1"; WORKSPACE="$2"; OUT_DIR="$3"; shift 3
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,6 +60,12 @@ while [ $# -gt 0 ]; do
       [ -d "$2" ] || { echo "launch.sh: no plugin directory: $2" >&2; exit 3; }
       PLUGIN_DIRS="$PLUGIN_DIRS $2"; shift 2 ;;
     --bypass) BYPASS=1; shift ;;
+    --model)
+      [ $# -ge 2 ] || { echo "launch.sh: --model takes a value" >&2; exit 2; }
+      MODEL="$2"; shift 2 ;;
+    --effort)
+      [ $# -ge 2 ] || { echo "launch.sh: --effort takes a value" >&2; exit 2; }
+      EFFORT="$2"; shift 2 ;;
     *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -87,6 +104,10 @@ done
 
 RUN_ROOT="${TMPDIR:-/tmp}/runs"  # E10-22: a neutral name; the E10 prompt names this path
 mkdir -p "$RUN_ROOT"
+# E10-62: the plan's pinned pair, on the claude argv. Each is added only when
+# it was given, so an E9-shaped call runs exactly the command E9 measured.
+if [ -n "$MODEL" ]; then set -- "$@" --model "$MODEL"; fi
+if [ -n "$EFFORT" ]; then set -- "$@" --effort "$EFFORT"; fi
 set -- "$@" --setting-sources local --strict-mcp-config \
   --settings "$PILOT_HOME/launch-settings.json" \
   --disallowed-tools WebFetch WebSearch \
@@ -114,7 +135,7 @@ if [ "$CLAUDE_STATUS" -ne 0 ]; then
 fi
 
 python3 - "$OUT_DIR" "$WORKSPACE" "$PROMPT_FILE" "$SANDBOX" "$START" "$END" "$CONFIG_DIR" \
-  "$CLAUDE_STATUS" <<'PY'
+  "$CLAUDE_STATUS" "$MODEL" "$EFFORT" <<'PY'
 import glob
 import json
 import os
@@ -122,7 +143,7 @@ import shutil
 import sys
 
 (out_dir, workspace, prompt_file, sandbox, start, end, config_dir,
- claude_status) = sys.argv[1:9]
+ claude_status, configured_model, configured_effort) = sys.argv[1:11]
 trace = os.path.join(out_dir, "trace.jsonl")
 init = {}
 result = {}
@@ -173,7 +194,11 @@ document = {
     "sandbox": sandbox,
     "started_at": start,
     "ended_at": end,
+    # The session's own init event. E10-50 and E10-62 item 4: this is an
+    # OBSERVATION and stays one; what this script was TOLD is the two keys below.
     "model": init.get("model"),
+    "configured_model": configured_model or None,
+    "configured_effort": configured_effort or None,
     "permission_mode": init.get("permissionMode"),
     "plugins": init.get("plugins"),
     "skills": init.get("skills"),

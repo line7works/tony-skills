@@ -81,6 +81,33 @@ HOMES = ("available", "absent", "routing")
 # E10-13: the five v1 back-half stations the routing profile blocks.
 BLOCKED_PLUGINS = ("signoff", "recheck", "vertical", "inspect", "ship")
 
+# --------------------------------------------------------------- the model and effort (E10-62)
+#
+# Tony pinned each setup to one model and, where the harness takes one, one effort. The plan
+# carries the pair per setup; nothing here is a default for a setup that named none, and no
+# label anywhere stands in for a record (E10-19): `model.json.configured` is what the launcher
+# was TOLD and the native witness beside it is what the harness recorded.
+#
+# The keys a setup entry of `plan.json` may carry. An unknown key is refused rather than
+# ignored (E10-62 item 1): a misspelled `effort` that a plan silently dropped would run the
+# whole lane at the harness's own default and nothing in the record would say so.
+SETUP_KEYS = ("name", "harness", "model", "effort")
+# What each harness accepts as an effort, and what it records.
+#   claude-code  `claude --help` on 2.1.272 prints
+#                "--effort <level>  Effort level for the current session (low, medium, high,
+#                xhigh, max)" (measured 2026-09-15, this machine).
+#   codex        `model_reasoning_effort`, the six values the readers roster's two codex-exec
+#                rows carry (`plugins/readers/skills/readers/assets/roster.json`, `efforts`).
+#                Codex 0.154.0 validates none of them at parse time (measured: `codex -c
+#                model_reasoning_effort=bogus plugin list` exits 0), so the plan is the gate.
+#   opencode     none exists on 1.18.31 (E10-26), so an `effort` on an OpenCode setup is
+#                refused rather than silently dropped.
+HARNESS_EFFORTS = {
+    "claude-code": ("low", "medium", "high", "xhigh", "max"),
+    "codex": ("low", "medium", "high", "xhigh", "max", "ultra"),
+    "opencode": (),
+}
+
 # --------------------------------------------------------------------------- environment
 
 # E10-7. Names the runner passes; everything else is dropped by starting from `env -i`.
@@ -997,15 +1024,23 @@ def stop_lane(campaign, setup_name, reason, record):
     return read_json(path)
 
 
-def pilot_home(harness, home):
+def pilot_home(harness, home, setup_name=None):
     """The pilot home for one setup and one of the three homes of E10-3 and E10-13.
 
     `available` is the home E9 built and closed; `absent` and `routing` are the second and
     third homes beside it under the same pilot root.
+
+    **The SETUP NAME keys the paths, not the harness (E10-62 item 3).** Two setups of one
+    harness — `opencode` on qwen and `opencode-deepseek` on DeepSeek — would otherwise share
+    one set of homes, and the second install would overwrite the first: the shared OpenCode
+    `opencode.json` is rewritten by every install with that install's own default model
+    (E10-31), so the fourth lane needs three homes of its own. For the three setups whose name
+    equals their harness the layout is unchanged, path for path, which is why the name falls
+    back to the harness when none is given.
     """
     if home not in HOMES:
         raise Usage("home must be one of %s" % ", ".join(HOMES))
-    base = os.path.join(PILOT_ROOT, harness)
+    base = os.path.join(PILOT_ROOT, setup_name or harness)
     if harness == "claude-code":
         return base if home == "available" else os.path.join(base, home)
     if harness == "codex":
@@ -1233,11 +1268,18 @@ def file_manifest(root):
 class Setup(object):
     harness = None
     name = None
+    # The default model of a setup that named none, per harness. `None` means "whatever the
+    # harness's own sign-in or config already says", which is what E10-2 measured for Claude
+    # Code and Codex before Tony pinned them.
+    default_model = None
 
-    def __init__(self, campaign, stage=None, name=None):
+    def __init__(self, campaign, stage=None, name=None, model=None, effort=None):
         self.campaign = campaign
         self.stage = stage or campaign.stage
         self.name = name or self.harness
+        # E10-62: the plan's pair, carried by EVERY class, not only OpenCode's.
+        self.model = model
+        self.effort = effort
 
     # ---- paths
     @property
@@ -1251,7 +1293,35 @@ class Setup(object):
         return path
 
     def home(self, condition):
-        return pilot_home(self.harness, condition)
+        # E10-62 item 3: the SETUP NAME keys the homes, so a second setup of one harness never
+        # overwrites the first's install.
+        return pilot_home(self.harness, condition, setup_name=self.name)
+
+    # ---- what the launcher was told (E10-50, E10-62 item 4)
+    def resolved_model(self):
+        """The model id this setup launches on: the plan's, else the harness's own default."""
+        return self.model or self.default_model
+
+    def configured_record(self):
+        """`model.json.configured`: the plan's pair, on every harness, at every write site.
+
+        E10-50 keeps configured and observed apart, and this is the configured half. It is
+        **never** an observation: before E10-62 the Claude Code reader built it out of
+        `launch.json`'s `model` key, which `setups/claude-code/launch.sh` fills from the
+        session's own `system/init` event, so the field labelled "what the launcher was told"
+        held what the harness reported. Codex's `launch.json` carries no model key at all and
+        OpenCode's launcher writes no `launch.json`, so both read `null`. The plan is the one
+        source now, and each launcher's own record of what it was handed sits beside it as
+        `launcher_recorded` where the launcher writes one.
+        """
+        return {
+            "model": self.resolved_model(),
+            "effort": self.effort,
+            "source": "the plan's setup entry for %r (E10-62), passed to the launcher"
+                      % self.name,
+            "note": "what the launcher was TOLD, never an observation (E10-50); the harness's "
+                    "own witness is `id`/`effort` beside it",
+        }
 
     def setup_tree_sha256(self):
         # E10-6's definition, as above.
@@ -1391,6 +1461,15 @@ class ClaudeCodeSetup(Setup):
             plugins = [p for p in self.cache_plugins(condition) if p not in BLOCKED_PLUGINS]
         for plugin in plugins:
             argv += ["--plugin", plugin]
+        # E10-62 item 2: the plan's pair reaches the `claude` argv through the launcher's own
+        # two flags. `launch.sh` puts them on the command line and records what it was told
+        # under its own keys, so `configured` never has to read the init event again.
+        model = (extra or {}).get("model") or self.resolved_model()
+        effort = (extra or {}).get("effort") or self.effort
+        if model:
+            argv += ["--model", model]
+        if effort:
+            argv += ["--effort", effort]
         if registry is not None:
             registry.reserved(argv, "launch.sh")
         return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
@@ -1409,10 +1488,23 @@ class ClaudeCodeSetup(Setup):
         measurement: the reviewer's probe supplied `launch.json` alone with
         `model: "review-typed-by-launcher"` and the old reader returned it while claiming the
         source was `trace.jsonl init event model`.
+
+        E10-62 item 4 closes the other half of that confusion. `configured` used to be built
+        from `launch.json`'s `model` key, and `setups/claude-code/launch.sh` writes that key as
+        `init.get("model")` — the session's own init event — so the field that says "what the
+        launcher was told" held an observation wearing the launcher's label, which is the exact
+        confusion E10-50 exists to prevent. `configured` is now the plan's pair; the launcher's
+        own record of the two flags it was handed is `launcher_recorded`; and the init event
+        stays where it belongs, in `init_event` and `init_model`.
         """
         launch = self._launch_json(out_dir)
-        configured = {"model": launch.get("model"),
-                      "source": "harness/launch.json (what the launcher was told to run)"}
+        configured = self.configured_record()
+        launcher_recorded = {
+            "model": launch.get("configured_model"),
+            "effort": launch.get("configured_effort"),
+            "source": "harness/launch.json configured_model / configured_effort (the --model "
+                      "and --effort launch.sh was handed, E10-62 item 2)",
+        }
         init, session = None, None
         for line, record in enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1):
             if record.get("type") == "system" and record.get("subtype") == "init":
@@ -1448,9 +1540,11 @@ class ClaudeCodeSetup(Setup):
             "init_event": init,
             "init_model": (init or {}).get("model"),
             "configured": configured,
+            "launcher_recorded": launcher_recorded,
             "note": "E10-50: null when the harness wrote no native record, and null when the "
-                    "record carries no session binding (E10-59 (18)); the launcher's own "
-                    "label is `configured`, never an observation."})
+                    "record carries no session binding (E10-59 (18)); `configured` is the "
+                    "plan's pair (E10-62), never an observation, and the init event stays in "
+                    "`init_event`."})
 
     def cost_record(self, out_dir):
         launch = self._launch_json(out_dir)
@@ -1700,6 +1794,50 @@ class CodexSetup(Setup):
             linked.append(os.path.relpath(auth, home))
         return linked
 
+    def _write_model_lines(self, home):
+        """E10-62 item 2: the plan's model and effort, in THIS home's two `config.toml` files.
+
+        `setups/codex/install.sh` copies exactly three lines out of the machine's own
+        `~/.codex/config.toml` — `model`, `model_reasoning_effort` and `sandbox_mode` — and
+        fails if it does not find exactly three. The plan replaces the first two, in the pilot
+        home and its child home only. `~/.codex/config.toml` and `~/.codex/auth.json` are
+        never written by any path here (the script reads the first and copies the second), and
+        `sandbox_mode` keeps coming from the real config because the plan says nothing about
+        it. `codex exec` takes no `-m` in `setups/codex/launch.sh`, so the config is what the
+        session runs on.
+        """
+        written = []
+        if not (self.model or self.effort):
+            return {"written": written,
+                    "why_not": "the plan's setup entry named no model and no effort"}
+        wanted = []
+        if self.model:
+            wanted.append(("model", self.model))
+        if self.effort:
+            wanted.append(("model_reasoning_effort", self.effort))
+        for path in (os.path.join(home, "config.toml"),
+                     os.path.join(home, "child", "config.toml")):
+            if not os.path.isfile(path):
+                continue
+            text = read_text(path) or ""
+            lines, changed = text.splitlines(), {}
+            for index, line in enumerate(lines):
+                for key, value in wanted:
+                    if re.match(r"^%s\s*=" % re.escape(key), line):
+                        lines[index] = '%s = %s' % (key, json.dumps(value))
+                        changed[key] = value
+            missing = [k for k, _ in wanted if k not in changed]
+            if missing:
+                raise Failure("%s holds no %s line to replace; `install.sh` writes the three "
+                              "lines it copies from the real config (E10-62 item 2)"
+                              % (path, " or ".join(missing)))
+            write_text(path, "\n".join(lines) + "\n")
+            written.append({"file": os.path.relpath(path, home), "keys": sorted(changed)})
+        return {"written": written, "model": self.model, "effort": self.effort,
+                "sandbox_mode": "untouched: still the line install.sh copied from the real "
+                                "config (E10-62 item 2)",
+                "machine_codex_home": "never written"}
+
     def install(self, condition, fake=None):
         """`available` and `absent` are each their own `install.sh` run; `routing` is derived.
 
@@ -1718,9 +1856,12 @@ class CodexSetup(Setup):
         env = self.campaign.env()
         steps = []
         if condition == "available":
-            steps.append(run_cmd(["sh", self.script("install.sh")], env=env, label="install.sh"))
+            steps.append(run_cmd(["sh", self.script("install.sh")],
+                                 env=self.campaign.env(extra={"RECHECK_CODEX_HOME": base}),
+                                 label="install.sh"))
             return {"home": base, "condition": condition, "derived_from_available": False,
                     "recheck_v2_installation": {"how": "installed", "by": "install.sh"},
+                    "model_lines": self._write_model_lines(base),
                     "steps": [_step_summary(s) for s in steps]}
         if not os.path.isdir(base):
             raise Missing("install the codex `available` home before %r" % condition)
@@ -1750,6 +1891,7 @@ class CodexSetup(Setup):
                                                   "the host-skill folder", "the session catalog"],
                 },
                 "auth_linked_to_the_available_store": linked,
+                "model_lines": self._write_model_lines(home),
                 "added": [], "steps": [_step_summary(s) for s in steps],
             }
         if os.path.isdir(home):
@@ -1780,6 +1922,9 @@ class CodexSetup(Setup):
                 "removed": removed,
                 "recheck_v2_installation": {"how": "installed",
                                             "by": "the copy of the available home"},
+                # The copy already carries the available home's two lines; rewriting them here
+                # keeps the record explicit and survives a plan change between the two installs.
+                "model_lines": self._write_model_lines(home),
                 "added": added, "steps": [_step_summary(s) for s in steps]}
 
     def verify(self, condition):
@@ -1825,13 +1970,15 @@ class CodexSetup(Setup):
         carries no such event, and the launcher's own label kept apart as `configured`.
         """
         rows = list(enumerate(self._rollout(out_dir), 1))
-        session, configured = None, None
-        path = os.path.join(out_dir, "launch.json")
-        if os.path.isfile(path):
-            try:
-                configured = read_json(path).get("model")
-            except (Missing, Failure):
-                configured = None
+        session = None
+        # E10-62 item 4: the plan's pair. `setups/codex/launch.sh`'s `launch.json` carries
+        # `exit`, `thread_id` and `rollout` and no model key at all, so this read was `null`
+        # on every Codex trial; the model and the effort reach the session through the pilot
+        # home's `config.toml`, which `CodexSetup.install` writes from the plan.
+        configured = self.configured_record()
+        configured["reaches_the_session_by"] = (
+            "the pilot home's config.toml `model` and `model_reasoning_effort` lines, written "
+            "by CodexSetup.install (E10-62 item 2); `codex exec` takes no -m")
         for _, record in rows:
             payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
             if (record.get("type") or payload.get("type")) == "session_meta":
@@ -1854,8 +2001,7 @@ class CodexSetup(Setup):
             "id": model_id, "effort": effort, "source": source,
             "session_binding": bound,
             "session_binding_ok": bool(session) and bound == session,
-            "configured": {"model": configured,
-                           "source": "harness/launch.json (what the launcher was told)"},
+            "configured": configured,
             "note": "E10-50: null when the rollout carries no turn_context or session_meta, "
                     "and null when the record carries no session binding (E10-59 (18))"})
 
@@ -1974,10 +2120,17 @@ class CodexSetup(Setup):
 
 class OpenCodeSetup(Setup):
     harness = "opencode"
+    # `setups/opencode/install.sh`'s own `--model` default, and `launch.sh`'s `qwen` alias.
+    default_model = "openrouter/qwen/qwen3.8-flash"
+    # The two sub-setups the OpenCode scripts carry. `launch.sh` takes `qwen`, `deepseek` or a
+    # full `provider/model` id; `install.sh --model` takes the full id only. E10-62 pins the
+    # plan to the full ids, and the short names stay accepted so an E9-shaped plan still runs.
+    MODEL_ALIASES = {"qwen": "openrouter/qwen/qwen3.8-flash",
+                     "deepseek": "openrouter/deepseek/deepseek-v4.1-flash"}
 
-    def __init__(self, campaign, stage=None, name=None, model="qwen"):
-        Setup.__init__(self, campaign, stage=stage, name=name)
-        self.model = model
+    def resolved_model(self):
+        """The full `provider/model` id, from a short alias or from the plan's own id."""
+        return self.MODEL_ALIASES.get(self.model, self.model or self.default_model)
 
     def launch_env(self, condition):
         return {"RECHECK_OPENCODE_SETUP": self.home(condition)}
@@ -2002,8 +2155,9 @@ class OpenCodeSetup(Setup):
         if credential:
             extra[INSTALL_CREDENTIAL] = credential
         env = self.campaign.env(extra=extra)
-        model = {"qwen": "openrouter/qwen/qwen3.8-flash",
-                 "deepseek": "openrouter/deepseek/deepseek-v4.1-flash"}.get(self.model, self.model)
+        # E10-62 item 2: the plan's own `openrouter/...` id passes through as it is written,
+        # and the short `qwen` / `deepseek` names an E9-shaped plan uses still resolve.
+        model = self.resolved_model()
         argv = ["sh", self.script("install.sh"), "--setup", home, "--model", model]
         # E10-56(1): the absent home's install never copies the skill folder in, so the runner
         # no longer removes one afterwards.
@@ -2054,7 +2208,10 @@ class OpenCodeSetup(Setup):
             "RECHECK_OPENCODE_SETUP": home,
             "RECHECK_OPENCODE_TIMEOUT": str(int(timeout)) if timeout else "900",
         })
-        model = (extra or {}).get("model") or self.model
+        # The full id, not the alias: `launch.sh` takes either (`qwen | deepseek | provider/
+        # model`), and the record then names the model the session actually ran on.
+        model = self.MODEL_ALIASES.get((extra or {}).get("model"), (extra or {}).get("model")) \
+            or self.resolved_model()
         argv = ["sh", fake or self.script("launch.sh"), model, prompt_file, workspace, out_dir]
         agent = (extra or {}).get("agent")
         if agent:
@@ -2115,13 +2272,13 @@ class OpenCodeSetup(Setup):
         """
         session = self._session(out_dir)
         session_id = session.get("session_id")
-        configured = None
-        path = os.path.join(out_dir, "launch.json")
-        if os.path.isfile(path):
-            try:
-                configured = read_json(path).get("model")
-            except (Missing, Failure):
-                configured = None
+        # E10-62 item 4: the plan's pair. `setups/opencode/launch.sh` writes no `launch.json`
+        # at all, so this read was `null` on every OpenCode trial; the model reaches the
+        # session as the launcher's first argument. `effort` is `null` on both OpenCode lanes
+        # because the plan may not carry one (E10-26, validate_plan refuses it).
+        configured = self.configured_record()
+        configured["reaches_the_session_by"] = (
+            "launch.sh's first argument, `opencode run --model <id>` (E10-62 item 2)")
         model_id, provider, source, bound = None, None, None, None
         for index, record in enumerate(session.get("records", []), 1):
             data = record.get("data") or {}
@@ -2135,8 +2292,7 @@ class OpenCodeSetup(Setup):
             "model_id": model_id, "provider": provider, "effort": None, "source": source,
             "session_binding": bound,
             "session_binding_ok": bool(session_id) and bound == session_id,
-            "configured": {"model": configured,
-                           "source": "harness/launch.json (what the launcher was given)"},
+            "configured": configured,
             "note": "E10-50: null when the store carries no assistant row, and null when the "
                     "record carries no session binding (E10-59 (18)); OpenCode 1.18.31 "
                     "records no reasoning effort (E10-26)"})
@@ -2322,16 +2478,20 @@ SETUP_CLASSES = {"claude-code": ClaudeCodeSetup, "codex": CodexSetup, "opencode"
 
 
 def make_setup(campaign, spec):
-    """One setup object from a plan entry (`{name, harness, model}`) or a bare harness name."""
+    """One setup object from a plan entry (`{name, harness, model, effort}`) or a harness name.
+
+    E10-62 item 2: `model` and `effort` reach EVERY class, not only OpenCode's. Each subclass
+    then uses them its own way — Claude Code's two launcher flags, Codex's two `config.toml`
+    lines, OpenCode's `--model` — and all three carry the pair into `model.json.configured`.
+    """
     if isinstance(spec, str):
         spec = {"name": spec, "harness": spec}
     harness = spec.get("harness") or spec["name"]
     cls = SETUP_CLASSES.get(harness)
     if cls is None:
         raise Usage("unknown harness %r (one of %s)" % (harness, ", ".join(HARNESSES)))
-    if cls is OpenCodeSetup:
-        return cls(campaign, name=spec["name"], model=spec.get("model", "qwen"))
-    return cls(campaign, name=spec["name"])
+    return cls(campaign, name=spec["name"], model=spec.get("model"),
+               effort=spec.get("effort"))
 
 
 # --------------------------------------------------------------------------- install / verify
@@ -2772,15 +2932,26 @@ DEFAULT_CASES = ("F1-01-fixed-clean", "F2-01-reproduces", "F3-01-missed-case",
 
 
 def default_plan(campaign_id):
-    """The full E10 campaign plan (E10-1 to E10-5, E10-12 to E10-14), the README's example."""
+    """The full E10 campaign plan (E10-1 to E10-5, E10-12 to E10-14), the README's example.
+
+    E10-62: FOUR setups, each pinned to one model and, where the harness takes one, one
+    effort, in Tony's own words ("opus medium for claude, sol medium for codex, qwen 3.8 flash
+    for opencode, deep seek 4.1 for new lane"). The fourth lane is the second OpenCode setup
+    and it has three homes of its own (`pilot_home`'s setup-name keying). The counts grow with
+    it: 6 × 4 × 2 × 2 = 96 comparison trials, 8 continuation trials, 240 routing trials.
+    """
     return {
         "plan_version": 1,
         "campaign_id": campaign_id,
         "run_date": read_json(TRIAL_DEFAULTS)["run_date"],
         "setups": [
-            {"name": "claude-code", "harness": "claude-code"},
-            {"name": "codex", "harness": "codex"},
-            {"name": "opencode", "harness": "opencode", "model": "qwen"},
+            {"name": "claude-code", "harness": "claude-code", "model": "opus",
+             "effort": "medium"},
+            {"name": "codex", "harness": "codex", "model": "gpt-5.6-sol", "effort": "medium"},
+            {"name": "opencode", "harness": "opencode",
+             "model": "openrouter/qwen/qwen3.8-flash"},
+            {"name": "opencode-deepseek", "harness": "opencode",
+             "model": "openrouter/deepseek/deepseek-v4.1-flash"},
         ],
         "cases": list(DEFAULT_CASES),
         "conditions": list(CONDITIONS),
@@ -2895,6 +3066,34 @@ def validate_plan(plan):
         if harness not in HARNESSES:
             problems.append("setup %r names the harness %r, which is not one of %s"
                             % (name, harness, ", ".join(HARNESSES)))
+            continue
+        # ---- E10-62 item 1: the per-setup model and effort.
+        #
+        # An unknown key is REFUSED, not ignored: a misspelled `effort` a plan silently
+        # dropped would run the lane at the harness's own default with nothing in the record
+        # to say so, and the whole point of E10-62 is that the pinned pair is a record.
+        unknown = sorted(k for k in spec if k not in SETUP_KEYS)
+        if unknown:
+            problems.append("setup %r carries the unknown key%s %s (a setup entry takes %s)"
+                            % (name, "" if len(unknown) == 1 else "s",
+                               ", ".join(repr(k) for k in unknown), ", ".join(SETUP_KEYS)))
+        for key in ("model", "effort"):
+            if key in spec and not isinstance(spec[key], str):
+                problems.append("setup %r's %r must be a string, got %r"
+                                % (name, key, spec[key]))
+            elif key in spec and not spec[key].strip():
+                problems.append("setup %r's %r is empty" % (name, key))
+        effort = spec.get("effort")
+        if isinstance(effort, str) and effort.strip():
+            accepted = HARNESS_EFFORTS.get(harness, ())
+            if not accepted:
+                problems.append(
+                    "setup %r names the effort %r, and the %s harness takes none: OpenCode "
+                    "1.18.31 records no reasoning effort (E10-26), so an effort here would be "
+                    "a label with no record behind it (E10-19)" % (name, effort, harness))
+            elif effort not in accepted:
+                problems.append("setup %r names the effort %r, which %s does not accept (%s)"
+                                % (name, effort, harness, ", ".join(accepted)))
 
     # ---- cases: the permitted set of E10-1, unique, identifiers
     cases = plan["cases"]
@@ -3052,8 +3251,21 @@ def _optional_plan(campaign):
 
 
 def _selected_setups(campaign, plan, wanted):
+    """The setups a subcommand was pointed at, from the PLAN's own entries where there is one.
+
+    E10-62: a setup's model and effort live in the plan entry, so a `--setup <name>` that a
+    plan does not carry can no longer be invented — `install --setup opencode-deepseek`
+    against a plan without that entry used to build a home named `opencode-deepseek` on the
+    OpenCode default model, which is the qwen lane's model in the DeepSeek lane's home. Only a
+    campaign with no plan at all still falls back to a bare harness name.
+    """
     specs = (plan or {}).get("setups") or [{"name": h, "harness": h} for h in HARNESSES]
     if wanted:
+        known = [s["name"] for s in specs]
+        missing = [w for w in wanted if w not in known]
+        if missing and plan:
+            raise Usage("the plan has no setup %s (it names %s)"
+                        % (", ".join(sorted(missing)), ", ".join(known)))
         specs = [s for s in specs if s["name"] in wanted] or \
                 [{"name": w, "harness": w.split("-deepseek")[0]} for w in wanted]
     return [make_setup(campaign, s) for s in specs]
@@ -3453,7 +3665,7 @@ def walk_files(root):
     return out
 
 
-def auth_store_exemptions():
+def auth_store_exemptions(setups=()):
     """The only exemption of E10-9 and E10-52 (finding 24): each setup's ACTUAL configured
     credential store, by resolved path.
 
@@ -3462,19 +3674,37 @@ def auth_store_exemptions():
     no `auth.json` under its pilot home, so a file of that name there would be a planted
     credential and is scanned like any other capture. Measured 2026-09-15 by
     `setups/claude-code/install.sh` and the E9 profile section 2.
+
+    `setups` carries extra `(harness, setup name)` pairs, because E10-62 keys the homes by
+    the SETUP NAME: `opencode-deepseek`'s store sits under its own home and the three
+    harness-named ones no longer cover it. A name is only ever added by its own harness's
+    layout, so a file named `auth.json` under a Claude Code home is still scanned.
     """
+    pairs = [("codex", "codex"), ("opencode", "opencode")]
+    for harness, name in setups:
+        if harness in ("codex", "opencode") and (harness, name) not in pairs:
+            pairs.append((harness, name))
     stores = []
-    for home in HOMES:
-        try:
-            codex = pilot_home("codex", home)
-            opencode = pilot_home("opencode", home)
-        except Usage:
-            continue
-        # Codex writes `auth.json` in its CODEX_HOME and in the nested child home (E9-25).
-        stores += [os.path.join(codex, "auth.json"), os.path.join(codex, "child", "auth.json")]
-        # OpenCode writes its store under XDG_DATA_HOME (E9-38).
-        stores += [os.path.join(opencode, "xdg-data", "opencode", "auth.json")]
+    for harness, name in pairs:
+        for home in HOMES:
+            try:
+                base = pilot_home(harness, home, setup_name=name)
+            except Usage:
+                continue
+            if harness == "codex":
+                # Codex writes `auth.json` in its CODEX_HOME and in the nested child (E9-25).
+                stores += [os.path.join(base, "auth.json"),
+                           os.path.join(base, "child", "auth.json")]
+            else:
+                # OpenCode writes its store under XDG_DATA_HOME (E9-38).
+                stores += [os.path.join(base, "xdg-data", "opencode", "auth.json")]
     return [p for p in stores if os.path.exists(p)]
+
+
+def plan_setup_pairs(campaign):
+    """Every `(harness, setup name)` the campaign's plan names, for the exemption survey."""
+    plan = _optional_plan(campaign)
+    return [(s.get("harness") or s["name"], s["name"]) for s in (plan or {}).get("setups", [])]
 
 
 def attempt_record(campaign, trial_id, attempt):
@@ -3669,7 +3899,8 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
     fixture_copy = os.path.join(record, "fixture")
     if fixture and os.path.isdir(fixture["case_dir"]) and not os.path.exists(fixture_copy):
         shutil.copytree(os.path.dirname(fixture["case_dir"]), fixture_copy, symlinks=True)
-    scan = scan_paths(walk_files(record), exempt=auth_store_exemptions(),
+    scan = scan_paths(walk_files(record),
+                      exempt=auth_store_exemptions([(setup.harness, setup.name)]),
                       mandatory=walk_files(harness_dir))
     write_json(os.path.join(record, "scan.json"), scan)
     status = outcome_status(step, not absent)
@@ -5169,7 +5400,7 @@ def do_scan(args):
     roots = list(args.paths or [campaign.root])
     result = {"roots": [], "files_scanned": 0, "hits": [], "unreadable_mandatory": [],
               "files_with_a_nul_scanned_anyway": 0}
-    exempt = auth_store_exemptions()
+    exempt = auth_store_exemptions(plan_setup_pairs(campaign))
     mandatory = []
     for path in glob.glob(os.path.join(campaign.trials, "*")):
         for name in CAPTURE_DIRS:
@@ -5272,7 +5503,8 @@ def do_routing(args, record=None, attempt=0):
     write_json(os.path.join(record, "cost.json"), cost)
     reply, reply_source = harness_reply(setup, harness_dir)
     write_text(os.path.join(record, "reply.md"), reply)
-    scan = scan_paths(walk_files(record), exempt=auth_store_exemptions(),
+    scan = scan_paths(walk_files(record),
+                      exempt=auth_store_exemptions([(setup.harness, setup.name)]),
                       mandatory=walk_files(harness_dir))
     write_json(os.path.join(record, "scan.json"), scan)
     # E10-43 (finding 19): ONE status, from the process outcome, in both records. A routing
@@ -6115,12 +6347,25 @@ MAX_POLL_INTERVAL = 0.1
 
 
 def _launch_argv(setup, launcher, prompt_path, workspace, out_dir, condition):
+    """The continuation cut's own argv: `Setup.launch` cannot be used because the cut needs
+    the `Popen` handle to freeze and kill the process group (E10-47, E10-55).
+
+    E10-62 item 2: the plan's pair rides here too. A continuation trial is a launch, so a
+    launcher that did not carry the pinned model would put one lane of the campaign on the
+    harness's own default with `configured` still saying the plan's.
+    """
     if setup.harness == "opencode":
-        return ["sh", launcher, setup.model, prompt_path, workspace, out_dir]
+        return ["sh", launcher, setup.resolved_model(), prompt_path, workspace, out_dir]
     argv = ["sh", launcher, prompt_path, workspace, out_dir]
     if setup.harness == "claude-code":
         for plugin in (["readers"] if condition == "absent" else ["recheck-v2", "readers"]):
             argv += ["--plugin", plugin]
+        if setup.resolved_model():
+            argv += ["--model", setup.resolved_model()]
+        if setup.effort:
+            argv += ["--effort", setup.effort]
+    # Codex takes neither: its model and effort are the pilot home's `config.toml` lines,
+    # written from the plan by `CodexSetup.install` (E10-62 item 2).
     return argv
 
 
@@ -6190,7 +6435,15 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
                 COMPACTION["claude-code"]["smallest_window"],
                 "--setting-sources", "local", "--strict-mcp-config",
                 "--settings", os.path.join(setup.home("available"), "launch-settings.json"),
-                "--output-format", "stream-json", "--verbose", prompt]
+                "--output-format", "stream-json", "--verbose"]
+        # E10-62 item 2: the resumed half of a continuation trial is a launch too, and the
+        # two flags are session options (`claude --help`: "for the current session"), so the
+        # resumed turn runs on the pinned pair rather than the sign-in's own.
+        if setup.resolved_model():
+            argv += ["--model", setup.resolved_model()]
+        if setup.effort:
+            argv += ["--effort", setup.effort]
+        argv += [prompt]
         if registry is not None:
             registry.reserved(argv, "resume+autocompact")
         step = run_cmd(argv, env=env, cwd=workspace, timeout=timeout, label="resume+autocompact",
@@ -6225,10 +6478,10 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     else:
         binary = setup.binary("available")
         home = setup.home("available")
+        # E10-62: one mapping, `resolved_model`, so the resumed turn runs on the same id the
+        # first session did. This duplicated the alias map inline and took `self.model` raw.
         argv = [binary, "run", "--session", session, "--format", "json", "--model",
-                {"qwen": "openrouter/qwen/qwen3.8-flash",
-                 "deepseek": "openrouter/deepseek/deepseek-v4.1-flash"}.get(setup.model,
-                                                                            setup.model), prompt]
+                setup.resolved_model(), prompt]
         if registry is not None:
             registry.reserved(argv, "run --session")
         step = run_cmd(argv, env=dict(
@@ -7002,7 +7255,8 @@ def do_report(args):
         "in ../report.md)", "",
     ]
     write_text(skeleton_path, "\n".join(skeleton) + "\n")
-    scan = scan_paths(walk_files(campaign.root), exempt=auth_store_exemptions())
+    scan = scan_paths(walk_files(campaign.root),
+                      exempt=auth_store_exemptions(plan_setup_pairs(campaign)))
     document["scan_hits"] = len(scan["hits"])
     result = {"campaign": campaign.root,
               # E10-59 (7): the report's stdout NAMES THE DIRECTORY IT WROTE.

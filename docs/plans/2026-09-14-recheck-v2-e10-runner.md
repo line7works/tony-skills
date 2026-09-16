@@ -788,3 +788,50 @@ report could not read from behind the wall.
   Opus 5 at the session's effort as before. The campaign plan (`plan.json`) carries the four
   setups and the timeouts unchanged; the estimate grows by about a third of the OpenCode lane
   for the fourth setup.
+- **E10-63 (control room, 2026-09-15 evening: the E10-62 pass read and accepted).** The builder
+  pass E10-62 ordered is done and verified by the control room against its own runs, not against
+  the report's claims: the transcript witness is 324 records, every one Opus 5 at effort high;
+  `~/.codex/config.toml` and `~/.codex/auth.json` are untouched (mtimes predate the pass); the
+  worktree carries exactly the nine files the report names. Five questions the pass hit are ruled
+  here.
+  **Q1, the default plan.** `default_plan` becomes E10-62's four pinned lanes, with E10-1's six
+  cases, E10-3's two conditions, E10-5's two repetitions and E10-14's timeouts unchanged; the
+  counts follow (96 comparison, 8 continuation, 240 routing, 4 manual-only). An operator who omits
+  `--plan` must get the campaign Tony ruled, not a three-lane one; E10-62's "the campaign plan
+  carries the four setups and the timeouts unchanged" reads on the default as well as on the file.
+  **Q2, where the Codex model and effort lines are written.** By the runner (`CodexSetup.install`),
+  not by `setups/codex/install.sh`. The script keeps reading exactly its three lines and keeps
+  failing when it does not find three, so `sandbox_mode` still comes from the real config and
+  `~/.codex/` is never written, and one fewer setup script changes immediately before a live
+  campaign. Carried, not fixed: the `homes/plugin-only` and `homes/host-only` surfaces that
+  `install.sh` builds for E9's own comparisons still carry the real config's model, because the
+  script copies `config.toml` in before the runner rewrites it. No E10 trial launches from those
+  two surfaces. The exact edit, if a later step wants it, is `--model` and `--effort` options on
+  `install.sh` writing into `base_config` before the surfaces are made (E11).
+  **Q3, the accepted efforts.** Claude Code takes `low, medium, high, xhigh, max` (its own
+  `--help`); Codex's `model_reasoning_effort` takes those five plus `ultra` and validates none at
+  parse time, so the plan is the only gate there; OpenCode takes none (E10-26). The plan's
+  validation is the gate on all three.
+  **Q4, the three consequences beyond the six items** are ruled correct and kept: the auth-store
+  exemptions take the plan's own `(harness, name)` pairs; a campaign that has a plan refuses a
+  `--setup` name the plan does not carry; `CodexSetup.install` passes its home explicitly.
+  **Q5** is ruled correct: the launcher is handed the resolved full model id, and the record names
+  the model the session actually ran on.
+  **The campaign's own `plan.json` is aligned to the proven path.** The kit's file named the
+  OpenCode models by their short aliases (`qwen`, `deepseek`); the four live proof trials ran on
+  the full identifiers. The file now carries the full identifiers, so `configured.model` in every
+  campaign record is the identifier the session ran on rather than an alias that resolves to it.
+  **Two findings of the pass are carried into the campaign's own conduct, not fixed here.** The
+  OpenCode homes carry the campaign's own scratch directory in their allow rules (E10-23), so
+  `install` runs for all four setups and all three homes inside the campaign's own root before its
+  first trial; the `opencode-deepseek` lane's `absent` and `routing` homes do not exist yet and are
+  built there. Both are written into the operator's mandate.
+  **The builder's own recorded slip** (a `git status` run while the key directories were held at
+  mode 000 made git print a permission line per key file, and those lines carry the key files'
+  names) is recorded as its own kind: no expected value, entry or coverage figure crossed, and the
+  builder opened nothing. The cheap guard for a later builder is to reopen before any `git status`
+  or to scope it to the three directories it is working in. No code change.
+  **Still open and unchanged by this pass:** the readers request block written to the machine's
+  temp directory (E10-58(3), E11) and `validate-result.py`'s path-rebase flag (E10-25(9), E11).
+  Astra's targeted re-check at high on this change alone comes next; the campaign then starts on
+  Tony's word.

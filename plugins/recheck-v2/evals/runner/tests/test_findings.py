@@ -237,12 +237,13 @@ class PlanValidationTest(RunnerCase):
         got = cli(["plan", "--campaign", fresh], env=self.held_out_env(entries=8))
         self.assertEqual(got.returncode, 0, got.stderr)
         document = parse_stdout(got)
-        self.assertEqual(document["counts"]["comparison"], 72)
-        self.assertEqual(document["counts"]["continuation"], 6)
+        # E10-62: FOUR pinned lanes. 6 cases x 4 setups x 2 conditions x 2 repetitions.
+        self.assertEqual(document["counts"]["comparison"], 96)
+        self.assertEqual(document["counts"]["continuation"], 8)
         self.assertEqual(document["routing_entries"], 20)
-        self.assertEqual(document["counts"]["routing"], 180)
+        self.assertEqual(document["counts"]["routing"], 240)
         # E10-53(4): one dedicated manual-only request per lane, counted apart
-        self.assertEqual(document["counts"]["manual_only"], 3)
+        self.assertEqual(document["counts"]["manual_only"], 4)
         self.assertEqual(len(set(document["trial_ids"])), len(document["trial_ids"]))
 
     def test_a_trial_id_that_would_leave_the_trials_directory_is_refused(self):
@@ -735,11 +736,19 @@ class ModelProvenanceTest(RunnerCase):
         runner.write_json(os.path.join(out, "launch.json"),
                           {"model": "review-typed-by-launcher"})
         setup = runner.make_setup(runner.Campaign(self.campaign),
-                                  {"name": "claude-code", "harness": "claude-code"})
+                                  {"name": "claude-code", "harness": "claude-code",
+                                   "model": "opus", "effort": "medium"})
         model = setup.model_record(out)
         self.assertIsNone(model["id"])
         self.assertIsNone(model["source"])
-        self.assertEqual(model["configured"]["model"], "review-typed-by-launcher")
+        # E10-62 item 4: `configured` is the PLAN's pair now, never `launch.json`'s `model`
+        # key, which `setups/claude-code/launch.sh` fills from the session's own init event.
+        # What the launcher itself recorded is `launcher_recorded`, and this document has
+        # neither of its two keys, so both read null.
+        self.assertEqual(model["configured"]["model"], "opus")
+        self.assertEqual(model["configured"]["effort"], "medium")
+        self.assertIsNone(model["launcher_recorded"]["model"])
+        self.assertIsNone(model["launcher_recorded"]["effort"])
 
     def test_the_native_init_event_supplies_the_model_and_its_session_binding(self):
         tid, got = self.run_trial()
