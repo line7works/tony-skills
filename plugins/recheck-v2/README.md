@@ -209,3 +209,22 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
   path-rebase flag on `validate-result.py`; the Claude Code `--add-dir` segment; pid-reuse on
   reservations; lane R's two MINORs; E9-34's parenthetical. The campaign's own record is added
   to this section when it has run.
+- The campaign (E10-62 to E10-68, 2026-09-15 night): staged by the control room at `872fda3`
+  (`e10-2026-09-15/`: 387 files, twelve installs, 348 trials planned over the four pinned setups)
+  and run by Astra at high through `operate.sh` on Tony's go from a fresh Fable 5.1 control room.
+  Two operator stops before any runner command, both defects in the kit's `mandate-operate.md`
+  (a contract path that only exists in a review copy; a stop sentence stricter than the runner's
+  probe rule), each fixed on Tony's word and both attempts kept (E10-66, E10-67). The third
+  launch ran three and three-quarter hours and ended stopped, never `complete`: 228 ledger rows,
+  175 complete, 53 `no_result`, 29 reruns, $30.05 metered, every count reproduced by the control
+  room (`control-room/recount.py` in the packet). Three runner defects, none reachable by a
+  single-lane proof (E10-68): the held-out barrier collides with concurrent launches, so 72 of
+  the 96 held-out routing trials raised before launch and the rest were never reached;
+  `activation()` crashes on a Claude Code `permission_denied` event whose message is a string,
+  which killed the Claude Code lane at 10 of 87; and a dead lane thread is invisible to
+  `campaign status`. Lane results on record: Codex 63 of 63 reachable complete; DeepSeek gave up
+  on most comparison trials (`no_result`, prompt echoed, no work); the OpenCode absent condition
+  is discoverable on disk and held only at the permission gate; the OpenCode homes carry
+  prior-campaign `xdg-data`. Tony's ruling: nothing graded; fix round for the three defects, then
+  one follow-up pass (the Claude Code remainder and the held-out routing trials), then grading
+  together. Records: the campaign root and the packet copy `astra-outputs/e10/campaign-e10-2026-09-15/`.

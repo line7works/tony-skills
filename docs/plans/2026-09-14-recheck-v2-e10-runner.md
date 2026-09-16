@@ -893,3 +893,56 @@ report could not read from behind the wall.
   under the pilot home at mode 0600 and the install record names the file and its mode, never its
   contents. `mandate-operate.md` steps 1 and 2 rewritten to match. The proof campaign of E10-62 ran
   exactly this order (stage, plan, install, then trials) and is the precedent.
+- **E10-66 (control room, Fable 5.1 at high, 2026-09-15 9:46 PM: the operator's first stop).** Launched
+  on Tony's "GO! LETS COOK!" in the fresh window. Two minutes in, Astra stopped before any runner command
+  (`operator/stop.attempt1.md`): `mandate-operate.md` named the lane contract at `__COPY__/docs/e10-lane-contract.md`,
+  and `operate.sh` fills `__COPY__` with the live plugin directory, where no `docs/` exists; that file is what
+  `launch.sh copy` creates inside a review copy. Ruled a kit defect (the operate path was never exercised live
+  before this night; the E10-62 proof trials were run by the control room directly): the mandate now names the
+  contract by its real path, `docs/plans/2026-09-14-recheck-v2-e10-runner.md`, sections 3, 4 and 5; the other
+  two `__COPY__` uses (the key and the held-out set under the live plugin directory) resolve correctly and stand.
+  Relaunched on Tony's "relaunch"; attempt one's output kept beside the kit as `out-attempt1`.
+- **E10-67 (control room, 2026-09-15 9:57 PM: the operator's second stop).** Astra ran `verify` (ok, hashes equal,
+  leak scans empty) and `probe-env` on all twelve homes (ok; `banned_the_runner_passed` and
+  `banned_names_nobody_measured` empty everywhere), then stopped (`stop.attempt2.md`) because mandate step 1
+  read "a probe-env with a banned name" is a stop, with no exception, while the Claude Code and Codex probes
+  record the names those harnesses set in their own tool shells under `banned_names_seen`, which README section
+  5 and E10-42 accept. Ruled a second kit defect of the same origin: the sentence now states the runner's rule
+  (stop on `ok` false or on any name under the two gated fields; harness-set names are the harness's own act;
+  `banned_names_seen` is the raw union and not the gate). Relaunched on Tony's word; attempt two's output and an
+  operator-directory snapshot kept as `out-attempt2`. The third launch reached `campaign start --reopen-key`
+  and the first trial of every lane at 05:06:55Z.
+- **E10-68 (control room, 2026-09-16 2:30 AM, on Tony's ruling "fix everything first, then run a follow-up":
+  the campaign's end and the three runner defects).** The campaign ended on its own at 08:48Z, stopped and never
+  `complete`: the three live lanes exhausted every reachable trial, the runner exited, Astra wrote
+  `operator/report.md` and exited 0 with no stop. Ledger 228 rows: 175 complete, 53 `no_result`, 29 reruns
+  (each eligible trial exactly once, per her mandate), 0 timed out; $30.05 metered plus $0.39 of probes, Codex
+  unpriced; every number reproduced by the control room from `trials.jsonl`, `processes.jsonl`,
+  `interruptions.jsonl` and the trial directories (`control-room/recount.py`). By lane of 87 planned:
+  `claude-code` 10 complete, `codex` 63, `opencode` 54 + 18 `no_result`, `opencode-deepseek` 48 + 35. Three runner
+  defects, none seen by the proof or dry runs because none of those had another lane's launch alive:
+  (1) **the held-out barrier collides with concurrency**: the barrier holds `trigger-set/held-out/` at mode 000
+  while any registered launch is alive (E10-40) and `request_text` reads a held-out entry by subprocess at
+  launch time (E10-13); with four lanes alive the read fails with `PermissionError`, the runner records "the
+  trial raised: no trigger-set entry" and goes on; 72 held-out routing trials (8 prompts, 3 reps, three lanes)
+  raised with no process launched, the fourth lane's 24 never reached; the 144 tuning-set routing trials read
+  outside the wall and ran. (2) **`activation()` crashes on a string message**: a Claude Code system event of
+  subtype `permission_denied` (an Edit auto-denied headless) carries `message` as a plain string; `runner.py`
+  1609 calls `.get` on it; the first such event in any trace (`claude-code-F3-01-missed-case-available-r2`, its
+  eleventh trial) killed the `lane-claude-code` thread at 05:49Z, leaving that trial without `command.json` and
+  the lane at 10 of 87. (3) **a dead lane thread is invisible**: `campaign status` kept saying `running` with
+  `lane_stops` empty for three hours after the thread died, and the campaign ended only when the other lanes
+  ran dry. Two observations for the record and E11: the DeepSeek `no_result` transcripts echo the prompt and do
+  no work (a lane result, not a runner fault; all 7 absent and 4 of 7 available comparison trials, reruns
+  mostly the same); in the OpenCode absent trials the model ran `find` over the whole `skills-v2-pilot` tree,
+  listed recheck-v2 in other setups' homes and in older campaign roots (`fix-2026-09-15` among them), and asked
+  for those directories; OpenCode auto-rejected every request (14 trials), so no skill content reached an
+  absent trial, but the absent condition on OpenCode holds only at the permission gate, and the OpenCode
+  homes' `xdg-data` (log, snapshot, `opencode.db`) carries state from earlier campaigns that `install` did not
+  clear. Also observed by the operator: `codex-F1-01-fixed-clean-absent-r1` records `activated: true` under the
+  absent condition. Ruled by Tony: nothing is graded on this campaign; a fix round for the three defects (fresh
+  builder, Astra re-check at high), then one follow-up pass for the Claude Code remainder (77 trials) and the
+  96 held-out routing trials, then grading of everything together. The records of this campaign stay exactly
+  as they are (`~/.local/share/skills-v2-pilot/e10/e10-2026-09-15/`, packet copy
+  `astra-outputs/e10/campaign-e10-2026-09-15/`, fixture, tmp, stage and nested `.git` stripped, large
+  witnesses gzipped, scanned clean).
