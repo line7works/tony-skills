@@ -874,3 +874,22 @@ report could not read from behind the wall.
   adapters' maps, the setups. Gates re-run in full by the control room after the fix. A short
   targeted re-check on items 1 and 6 alone follows; items 2, 3 and 4 are closed and item 5 is
   ruled. The campaign then starts on Tony's word.
+- **E10-65 (control room, 2026-09-15 evening: who runs `install` for the campaign).** The operator's
+  launch (`operate.sh`) starts Astra's session under `env -i` with an allowlist of `PATH`, `HOME`,
+  `USER`, `TMPDIR`, the locale and the shell, and nothing else; that is E10-7 and it is correct. The
+  OpenCode install script needs `OPENROUTER_API_KEY` once, at install time, to write the harness's
+  own auth store, and exits 3 when the variable is absent; by E9-38 and E10-20 that key never rides
+  in any session's environment, the operator's included, because every tool shell inherits it and a
+  probe that dumps the environment prints it into the records. So the operator cannot run `install`
+  for the two OpenCode setups, and the mandate's step 1 as first written (and as amended for the
+  fourth lane) would have stopped her at the first OpenCode install with a spurious stop. Ruled:
+  `stage`, `plan` and `install` for all four setups and all three homes are the CONTROL ROOM's, run
+  in the campaign's own root before the operator is launched, from the one shell that holds the key
+  (the runner still passes it only to the OpenCode install script, E10-20). The operator reads
+  `stage.json`, `campaign.json` and the twelve home inventories, runs `verify` and `probe-env`
+  herself (both launch the harnesses with the key removed from the environment and read the auth
+  store), confirms the four setups and the counts (96, 8, 240), and proceeds to `campaign start
+  --reopen-key`. The key does not reach the campaign root's records: `install` writes the auth store
+  under the pilot home at mode 0600 and the install record names the file and its mode, never its
+  contents. `mandate-operate.md` steps 1 and 2 rewritten to match. The proof campaign of E10-62 ran
+  exactly this order (stage, plan, install, then trials) and is the precedent.
