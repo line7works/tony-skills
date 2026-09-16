@@ -1027,3 +1027,21 @@ report could not read from behind the wall.
   grading, not the operator's. The 2026-09-15 campaign's `opencode` and `opencode-deepseek` trials stand
   as run; the OpenCode homes now carry no prior-campaign state (E10-69(4)), which the follow-up records
   as a difference in conditions between the two roots.
+- **E10-72 (Tony, 2026-09-16 about noon, in discussion with the control room: a FULL FRESH RERUN, not the
+  follow-up pass of E10-71).** The control room laid out the two shapes with their costs (the missing pieces
+  alone, about $60 to $80 and two hours, leaving two roots, a merge ruling and two OpenCode lanes run under
+  mixed home conditions; a full clean rerun, about $85 to $110 and four hours, one root and one set of
+  conditions) and recommended the full rerun; Tony: "I want to do it right in a full fresh rerun." Ruled:
+  the next campaign is the WHOLE E10 plan again (the kit's `plan.json`: four setups, 348 trials) in a new
+  root staged from the fixed branch, run by the same operator through the same `operate.sh`, from a fresh
+  control room window on Tony's go there. The 2026-09-15 root stays as the record of the three defects and
+  of how the tools behaved on homes carrying prior state; nothing in it is graded or merged. E10-71's
+  follow-up shape is superseded; its other requirements stand: the probe gate in full, no
+  `--skip-probe-gate`, and the operator mandate run live once before the campaign. That dry run is
+  `dry-operate-2026-09-16/`: a one-lane, three-trial root (`opencode`, `F1-01-fixed-clean` available,
+  `H-01-slash-v2-doc-path` once, the manual-only probe) staged at `d03f71a`, run through `operate.sh` with a
+  copy of `mandate-operate.md` whose step-2 counts are the dry plan's and every other line identical, so
+  that steps 1 and 2 (the two stops of E10-66 and E10-67) and the probe-env sentence are exercised
+  verbatim. The real root is staged, planned and installed by the control room AFTER the dry run (E10-23:
+  the pilot homes carry one root's allow rules at a time), with the grading barrier's keys reopened and the
+  twelve installs and their leak scans read before the hand-off.
