@@ -17,7 +17,11 @@ run directory, the run id, the trial-conditioned expected document, the frozen c
 `--without recheck-v2` flag. Lane S then closed at E10-61, and **E10-62** ordered one scoped
 pass on top of it: Tony's four pinned lanes, each with its own model and, where the harness
 takes one, its own effort, honoured to each launcher and recorded in every trial's
-`model.json`. Section 11 is the history of what each round claimed and what replaced it.
+`model.json`. The campaign then ran on the night of 2026-09-15 with all four lanes concurrent
+for the first time and surfaced three runner defects no single-lane proof could reach;
+**E10-68** is that fix round (the held-out barrier and concurrency, a string `message`, a dead
+lane thread, and the OpenCode homes' prior-campaign state). Section 11 is the history of what
+each round claimed and what replaced it.
 
 - Python 3.9 syntax, standard library only. The grading step calls the core's
   `validate-result.py` through `uv run`, the way the E7 runner calls things, and imports
@@ -51,10 +55,31 @@ all of them below the `the wall` marker in `runner.py`:
 |---|---|---|
 | `grade` (`key_entry`) | the lane's key file, for the case being graded | E10-11 |
 | `routing-score` (`expectation_of`) | both files, for the expected target per entry | E10-13 |
-| `routing` (`request_text`) | the tuning file directly; a **held-out** entry's text through a subprocess that prints that one entry's text and nothing else | E10-13 |
+| `routing` (`request_text`) | the tuning file directly; a **held-out** entry's text through a subprocess that prints that one entry's text and nothing else — the FALLBACK since E10-68, used only outside a campaign start | E10-13 |
+| `campaign start` (`cache_routing_requests`) | every PLANNED held-out entry's text, once, before the first launch, through a subprocess that writes the file itself | E10-68 (1) |
 
 `plan` reaches the held-out **ids** the same way (a subprocess that prints ids only), so the
 sealed text never enters the runner's own process.
+
+**How a held-out request reaches a launch, and why the invariant still holds (E10-68 (1)).**
+The lock below holds the held-out directory at mode 000 for the whole of every launch and
+while any registered launch is alive. `routing` used to read the entry's text at LAUNCH time,
+so with more than one lane alive a launch was nearly always alive, the read failed with
+`PermissionError`, and the trial was recorded as raised with no process started — 72 of them
+on the night of 2026-09-15. `campaign start` now writes every planned held-out request into
+`<campaign>/routing-requests/<entry id>.txt` **before the first launch, while the keys are
+open**, and a launch copies its own entry's file into `prompt.txt` byte for byte. The
+subprocess writes the file itself, so no held-out text enters the runner process at all —
+strictly less than E10-13 allowed, which was one entry at a time. `routing-requests/index.json`
+records each file, its sha256, its size and the key state at cache time, and never any text.
+The two invariants E10-40 and E10-45 name are unchanged and are re-proved by
+`tests/test_e10_68.py`: the sealed set never enters the runner process as a whole, and the
+directory is at mode 000 at every launch (the test's stub records the mode it met, at every
+launch of both lanes). The alternative shape — reopen the directory under the lock for the read
+— is NOT taken, because reopening it while another lane's harness is alive is exactly what the
+barrier forbids, and serialising every lane's launch against every other to avoid that would
+remove the concurrency the campaign exists to have. The prompt text of a held-out routing
+trial is a campaign record either way: once a trial runs, its `prompt.txt` holds it.
 
 **The boundary is `instruction-bound + measured`, not enforced (E10-40).** The three harnesses
 run every trial as the same user with no read sandbox — the E9 profiles record unrestricted
@@ -151,6 +176,22 @@ available one.
 on every `absent` home, with the flag that did it and, on Codex, the name the home was pointed
 by. The home inventory carries that same field beside every path under the home whose name holds
 `recheck-v2` (empty on all three absent homes).
+
+**The OpenCode home's prior-campaign state (E10-68, item (e) of the close hand-off).** Before
+it runs the script, `OpenCodeSetup.install` clears everything under the home's
+`xdg-data/opencode/` and `xdg-state/opencode/` except the harness's own auth store — the log,
+the snapshot tree, `opencode.db` and its `-shm`/`-wal` siblings, `tool-output/`, `repos/` and
+the lock directory. The 2026-09-15 campaign found that state still in place from earlier
+campaigns, and in the absent trials the model reached prior campaign roots' paths through the
+harness. `prior_state_cleared` in the install record names every path removed with its size in
+bytes, every path kept with why, and the rule. **`xdg-cache/` is deliberately NOT cleared and
+the record says so**: `xdg-cache/uv` is the uv wheel, sdist and interpreter cache that every
+`uv run` of a trial and of `verify-install.sh` resolves against, and `xdg-cache/opencode/bin`
+is the harness's own downloaded binary, which E10-68 names as off limits; clearing either
+turns every install and every verifier call into a fresh network fetch immediately before a
+campaign, and neither holds a session, a transcript or an earlier campaign root's path. The
+`npm/` tree (the binary and its modules) and the auth store are untouched, so the one
+install-time credential of E10-20 survives a reinstall.
 
 Every install record carries `home_leak_scan` (the walk that proves no `answer-key`,
 `held-out` or `evals` name exists anywhere under the home, E10-6), a `link_survey`, and the
@@ -289,8 +330,25 @@ Resumable from disk: a restart **skips** every trial whose record carries a term
 without a `command.json` is a **partial** attempt: skipped, named in `status`, and retained by
 `report` (E10-43).
 
+**A lane thread cannot die silently (E10-68 (3)).** Each lane worker is wrapped: any uncaught
+exception becomes a **lane stop of kind `runner_error`** under `<campaign>/lane-stops/<setup>.json`
+carrying the traceback, the trial in flight and the time; an interruption line; a `command.json`
+for the trial in flight with status **`runner_error`** and a ledger line of its own, so the
+ledger never holds a directory without a record; and a **non-zero exit** from `campaign start`
+(the returned document carries `runner_exit_nonzero_because`, which `main` turns into exit 1
+after printing the one JSON document A7a requires). `runner_error` is a status of its own
+because none of the five existing ones fits: `launch_failed`, `timed_out` and `no_result` all
+describe a process that ran, and `profile_breach` is a measured catalog fault. On 2026-09-15
+`activation()` raised, the `lane-claude-code` thread died with a traceback on stderr and
+nothing else, and `campaign status` said `running` with `lane_stops {}` for three hours.
+
+**Every planned held-out request is cached before the first launch** (E10-68 (1), section 1):
+`_campaign_loop` calls `cache_routing_requests` before any lane starts, while the keys are
+open, and the returned document reports `held_out_requests_cached`.
+
 `status` prints the planned count, the complete and recorded counts, the failed outcomes, the
-partial records with their reasons, the live registered processes, the lane stops, the key
+partial records with their reasons, the live registered processes, the lane stops (with their
+`kind`), the key
 state, the per-lane counts and the next trial. `stop` terminates the campaign's own process
 group **and every registered trial process group**, collects each one's status, writes an
 interruption line per process, and leaves the key closed.
@@ -391,6 +449,13 @@ One routing trial: the request as the opening line of a fresh session in an empt
 git-initialized workspace inside the trial's own opaque tree, with no build doc, the plan's
 300-second timeout, and the harness's own turn limit where it has one — **on this machine none
 of the three has one**, recorded per trial in `command.json.turn_limit` with the measurement.
+
+**Where the request text comes from (E10-68 (1)).** `command.json.request_source` says, per
+trial: the campaign's cached held-out file copied byte for byte (the campaign path, section 1),
+the tuning file read at launch time, the one-entry subprocess at launch time (the fallback,
+outside a campaign start), or the runner's own manual-only request. A `rerun` of a held-out
+routing trial takes the cache the campaign already wrote, so it does not depend on the barrier
+either.
 
 The observed target comes from the harness's own record, never by asking the model:
 
@@ -570,15 +635,39 @@ campaign's own `tmp/<digest>/` and are copied into the record afterwards.
 `command.json`: `trial`, `attempt`, `kind`, `argv`, `cwd`, `allowlisted_env_names` (names,
 never values), `launcher_env_names`, `started_at`, `ended_at`, `wall_seconds`,
 `launch_wall_seconds`, `exit`, `timeout_verdict`, `condition_witness`, `catalog`, `activated`,
+`permission_denials`,
 `setup_home`, `setup`, `harness`, `condition`, `case`, `staged_commit`, `plugin_tree_sha256`,
 `setup_tree_sha256`, `fixture`, `opaque_tree` and `opaque_tree_mapping`, `run_dir`, `run_root`
 (the leaf's parent, the opaque case directory), `adapters_run_root` (`${TMPDIR}`'s own `runs`
 segment, E10-22, which a trial no longer uses), `run_dir_is_the_fixture_run_leaf`,
 `run_root_note`, `workspace`, `reply_source`, `result_absent`, `absent`, `status`,
 `validate_exit`, `validation_binding`, `key_boundary`, `scan_hits`, and on OpenCode
-`store_separation_witness` (E10-49). A continuation trial adds `cut`, `compaction`,
+`store_separation_witness` (E10-49). A routing trial adds `entry`, `set` and
+`request_source` (E10-68 (1)). A continuation trial adds `cut`, `compaction`,
 `compaction_witness`, `checkpoint_after`, `continuations_equals_1`, `resume_prompt` and
 `continuation_invariants`.
+
+**`permission_denials`, the headless-denial witness (E10-68 (2)).** `{count, tools, by_tool,
+events, how}` on every comparison, continuation and routing record. Claude Code writes one
+`system` event of subtype `permission_denied` per tool call auto-denied because a headless
+session has no approval surface; each event contributes its file, line, `tool_name`,
+`tool_use_id`, `decision_reason_type` and whether its `message` was a plain string. **No
+message text is copied**: the sentence carries the path the model was denied, which is the
+trial's own opaque tree. Codex and OpenCode write no such event on the measured versions, so
+their record is `count: 0` with `how` saying so and their refusals stay measured per call by
+`native_actions`'s `refused` rows. The count is what lets the E11 report say how often headless
+denial happened per harness.
+
+**Every reader of a native record tolerates a `message` that is not an object** (E10-68 (2)):
+`native_message` and `message_content` are the two functions each reader goes through, and a
+record whose `message` is a string, a list, a number or absent reads as carrying no message
+instead of raising `AttributeError` inside a lane thread. The readers that go through them:
+`ClaudeCodeSetup.model_record`, `ClaudeCodeSetup.activation`, `native_actions`,
+`observed_target` and `_first_work_line`. `adapters/claude-code/_common.py`'s `user_text` and
+`read_session` take the same guard through its own `_message_content`; its `is_user_turn` was
+already safe (it tests `isinstance(message, dict)`), and `adapters/opencode/verifier.py`'s
+`state.get("message")` reads a dict field of a tool state and only stringifies it, so it was
+safe too.
 
 `model.json` per harness, measured (see section 10 for the effort gap):
 
@@ -602,7 +691,8 @@ one source now. `launch.sh` records the two flags it was handed under `configure
 stays in `init_event` / `init_model`.
 
 `trials.jsonl`, one line per trial **attempt**: `id`, `attempt`, `kind`, `status` (`complete`,
-`no_result`, `timed_out`, `launch_failed`, `profile_breach`), `exit`, `wall`, `cost`, `model`,
+`no_result`, `timed_out`, `launch_failed`, `profile_breach`, `runner_error`), `exit`, `wall`,
+`cost`, `model`,
 `effort`, `activated`, `record`. `interruptions.jsonl` carries every timeout, launch failure,
 rerun, stop, wall-clock gap, invalid cut, credential hit and skipped record, each against its
 own `(trial, attempt)`. `attempts.jsonl` journals every attempt's creation before it runs.
@@ -838,6 +928,11 @@ at its own allowlist before the launcher ever ran.
 | E10-59 (26), the verifier subprocess exit | `do_verify`'s `verify_exit_ok` |
 | E10-60 (3), a refusal fails the probe whatever it printed | `do_probe_env`'s `could_not_run` rule, `why_not_rules`, `COULD_NOT_RUN_RE` |
 | E10-60 (10), every entry under the run directory | `tree_sha256_of` (the complete walk is the default; `E10_6_TREE_EXCLUDED` and `follow_directory_links=False` keep E10-6's two hashes byte for byte) |
+| E10-68 (1), the held-out request reaches a launch regardless of the barrier | `HELDOUT_TEXT_TO_FILE_SCRIPT`, `cache_routing_requests`, `routing_requests_dir`, `cached_request_file`, `write_routing_prompt`, `_campaign_loop`'s first line, `command.json.request_source` |
+| E10-68 (2), a non-dict `message` and a non-list `content` | `native_message`, `message_content`, and the five readers that go through them (`ClaudeCodeSetup.model_record`, `ClaudeCodeSetup.activation`, `native_actions`, `observed_target`, `_first_work_line`); `adapters/claude-code/_common.py`'s `_message_content`, `user_text`, `read_session` |
+| E10-68 (2), the headless-denial witness | `Setup.permission_denials` and `ClaudeCodeSetup.permission_denials`, written by `collect_trial` and `do_routing` into `command.json.permission_denials` |
+| E10-68 (3), a dead lane thread is a record | `_campaign_loop`'s `work` wrapper and `in_flight`, `record_lane_runner_error`, `stop_lane`'s `kind`, `RUNNER_ERROR`, `FAIL_EXIT_KEY` and `main`'s exit rule, `campaign status`'s `lane_stops` |
+| E10-68, item (e), the OpenCode homes' prior state | `OpenCodeSetup._clear_prior_state`, `OPENCODE_CLEARED_STATE`, `OPENCODE_STATE_KEPT`, `OPENCODE_CACHE_NOT_CLEARED`, `install`'s `prior_state_cleared` |
 | E9-34, a record is never overwritten | every subcommand's refusal, `reserve_record` |
 | E9-41, the timeout verdict | `run_cmd` collects the child's status before any verdict |
 | E7-18, the opaque mount and the run date | `build_fixture`, `Campaign.opaque_tree`, `default_plan` |
@@ -882,6 +977,7 @@ both are set. Every test restores the two key directories on the way out, whatev
 | `test_records.py` | the record layout and every `command.json` field, the opaque fixture path, the refusal to overwrite, `rerun`'s attempt directories, the timeout path driven by a sleeping **stub launcher**, the credential scan including a NUL capture and an assignment delimiter, the report's counts, and campaign resume from disk |
 | `test_fake_end_to_end.py` | one trial per setup validating end to end, the model/cost/activation/condition-witness readers per harness, the grade paths, the routing and routing-score paths, the frozen valid cut, the race of finding 15 that can no longer reach the retained pair (E10-55), the poll-interval refusal, and the compaction witness's ordering |
 | `test_e10_62.py` | E10-62: the plan's `model` and `effort` validated (`PlanModelAndEffortTest`), the setup name keying the homes with the three existing sets of paths asserted literally (`SetupNameKeysTheHomesTest`), the **real** `setups/claude-code/launch.sh` driven over a stub `claude` that records its own argv (`ClaudeCodeLauncherFlagsTest`), every launch path carrying the pair, the cut's own argv and both compaction resumes included (`EveryLaunchPathCarriesThePairTest`), the Codex `config.toml` lines (`CodexConfigLinesTest`), the OpenCode model mapping (`OpenCodeModelMappingTest`), and `configured` at both `model.json` write sites with the old defect's reproduction (`ConfiguredPairTest`, `ConfiguredPairInTheRecordTest`) |
+| `test_e10_68.py` | E10-68's three defects and item (e): `HeldOutRequestSurvivesTheBarrierTest` (two lanes launching concurrently with a held-out routing trial each, the barrier closed at every launch — the stub records the mode it met — and the prompt byte-equal to the cached file), `AStringMessageDoesNotKillAReaderTest` (the verbatim `permission_denied` record of the 2026-09-15 campaign's trace line 74, in `tests/fake/permission-denied-system-event.jsonl`, fed to every reader, plus the denial witness), `ADeadLaneIsRecordedTest` (a setup raising inside collection: the lane stop, the status output, the in-flight `command.json` and the non-zero exit), `OpenCodeInstallClearsPriorStateTest` (what `install` clears and what it keeps) |
 | `test_findings.py` | one test per finding of the review verdict, exercising the real path the finding names, plus the second fix round: `TrialShapeTest` (E10-54(a) and (b)), `TrialConditionedExpectedTest` (E10-54(c) and the summary's reasons by path segment), `FrozenCutTest` (E10-55) and `WithoutTheSkillTest` (E10-56(1)) |
 
 ## 10. What the harnesses cannot do
@@ -940,7 +1036,13 @@ opencode-ai 1.18.31):
 16. **`codex sandbox` cannot be driven on 0.154.0.** It requires `--permission-profile` naming
     a profile in an undocumented `[permissions]` table; fourteen shapes were tried, and the one
     the deserializer accepts aborts with signal 6. The no-model half of E10-8 is not performed.
-17. **The Codex account must be the Pro one** (E10-29). `The 'gpt-6-astra' model is not
+17. **Claude Code denies a tool call it cannot get approval for, in a record whose `message`
+    is a plain string.** Measured on 2.1.272 across the 2026-09-15 campaign: a `system` event
+    of subtype `permission_denied`, `decision_reason_type: asyncAgent`, for an `Edit` outside
+    the allowed working directories. The event is the harness's own act and a measurement, not
+    a runner defect; what was a defect was reading it (E10-68 (2)). `permission_denials` in
+    every trial record counts them per harness.
+18. **The Codex account must be the Pro one** (E10-29). `The 'gpt-6-astra' model is not
     supported when using Codex with a ChatGPT account` (HTTP 400) on every Codex session while
     the free account is signed in.
 
@@ -1019,3 +1121,15 @@ re-check cleared thirteen of the fifteen items):
 | `model.json.configured` on Claude Code was `launch.json`'s `model` key, which `launch.sh` fills from the session's own `system/init` event — an observation wearing the launcher's label; on Codex and OpenCode it was `null` (no model key, and no `launch.json` at all) | E10-62 item 4: `configured` is `{model, effort}` from the plan, on all three harnesses and at both write sites, with `launcher_recorded` beside it on Claude Code and the init event back in `init_event` / `init_model` |
 | `adapters/codex/invocation.py` classed `gpt-6-astra` as `opus` with `floor_met` true and every other id as `unknown` with `floor_met` null, so `gpt-5.6-sol` read `unknown` | E10-62 item 5: the lane's own `FLOOR_MAP` carries `gpt-6-astra` and `gpt-5.6-sol`, both class `opus`. Without it every Codex trial of the campaign would have been `verifier_unavailable` before it graded anything. The Claude Code map already covers `claude-opus-5` by prefix and the OpenCode map already carries both OpenRouter ids; each lane keeps its own map |
 | `_selected_setups` invented a spec for a `--setup` name the plan did not carry (`{"name": w, "harness": w.split("-deepseek")[0]}`) | E10-62: a campaign WITH a plan refuses a name the plan does not carry. `install --setup opencode-deepseek` against a three-setup plan used to build that home on the OpenCode default model, which is the qwen lane's model in the DeepSeek lane's home |
+
+**What E10-68's fix round replaced** (the three defects the first four-lane campaign found,
+2026-09-15/16). Every one of them survived the review, the verification, two re-checks and the
+E10-62 pass because no proof or dry run before that night had another lane's launch alive.
+
+| the rounds up to E10-63 said | what replaced it |
+|---|---|
+| "`routing` (`request_text`) — a **held-out** entry's text through a subprocess that prints that one entry's text and nothing else … at launch time only, to obtain the request text for the trial being launched" (E10-13) | E10-68 (1): with four lanes alive a launch is nearly always alive and the barrier is therefore nearly always shut, so that read failed with `PermissionError` on all 72 held-out routing trials of the three live lanes and none of them launched. `campaign start` now writes every planned held-out request into `<campaign>/routing-requests/` before the first launch, while the keys are open, through a subprocess that writes the file itself; a launch copies its own entry's file. The launch-time read stays as the fallback outside a campaign start |
+| the trace and transcript readers took `record.get("message") or {}` and then `.get(...)` | E10-68 (2): Claude Code writes `system` events of subtype `permission_denied` whose `message` is a plain STRING, and the first such event in any trace killed the `lane-claude-code` thread at 05:49Z, leaving `claude-code-F3-01-missed-case-available-r2` without a `command.json` and the lane at 10 of 87. Every reader goes through `native_message` and `message_content`, and the denial is kept as a witness in `command.json.permission_denials` |
+| "one sequential worker per setup, the three running concurrently" with no account of a worker that raises | E10-68 (3): a lane thread that raised died with a traceback on stderr and nothing else — `campaign status` said `running` with `lane_stops {}` for three hours and the campaign ended only when the other lanes ran dry. An uncaught exception is now a lane stop of kind `runner_error` with its traceback, an interruption line, a `command.json` and ledger line for the trial in flight, and a non-zero exit from `campaign start` |
+| `install` for `opencode` and `opencode-deepseek` left the home's own `xdg-data/opencode/` (log, snapshot, `opencode.db`) and `xdg-state/opencode/` from earlier campaigns in place | E10-68 item (e): `install` clears both, keeping the auth store; `prior_state_cleared` names every path removed with its size and every path kept with why. `xdg-cache/` is deliberately left (the uv cache and the harness's own binary) and the record says so |
+| the statuses were `complete`, `no_result`, `timed_out`, `launch_failed`, `profile_breach` | E10-68 (3): `runner_error` joins them, for a trial the RUNNER failed rather than the harness |

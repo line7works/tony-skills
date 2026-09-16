@@ -159,6 +159,9 @@ class WallStructureTest(unittest.TestCase):
         "do_routing", "routing_request",
         # `plan` needs the entry ids to write the order; the ids come from a subprocess
         "do_plan",
+        # E10-68 defect 1: the campaign caches every planned held-out request once, before its
+        # first launch, through a subprocess that writes the file itself
+        "cache_routing_requests",
     }
     # E10-40's lock. These name the two DIRECTORIES to change their mode or report it; none of
     # them opens a file inside either one.

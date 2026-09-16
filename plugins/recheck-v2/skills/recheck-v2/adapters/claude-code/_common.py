@@ -253,6 +253,17 @@ def harness_written(record):
     return None
 
 
+def _message_content(record):
+    """The `content` of a record's message, or None when `message` is not an object.
+
+    E10-68 defect 2: Claude Code writes `system` events of subtype `permission_denied` whose
+    `message` is a plain STRING, and `(record.get("message") or {}).get("content")` raises
+    `AttributeError: 'str' object has no attribute 'get'` on one.
+    """
+    message = record.get("message")
+    return message.get("content") if isinstance(message, dict) else None
+
+
 def is_user_turn(record):
     """Contract E9 section 6, with the harness-written records kept out."""
     message = record.get("message")
@@ -273,8 +284,10 @@ def is_user_turn(record):
 
 
 def user_text(record):
-    message = record.get("message") or {}
-    content = message.get("content")
+    # E10-68 defect 2: a `message` that is not an object (Claude Code's system
+    # `permission_denied` events carry a plain string) is read as carrying no content.
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -332,7 +345,8 @@ def read_session(path, session_id, station_refs=()):
         if kind == "assistant":
             attribution[ref] = "assistant"
             counts["assistant_turns"] += 1
-            message = record.get("message") or {}
+            message = record.get("message")
+            message = message if isinstance(message, dict) else {}
             if message.get("model"):
                 models.append(message["model"])
             if record.get("effort"):
@@ -346,7 +360,7 @@ def read_session(path, session_id, station_refs=()):
             counts["unmapped_tool_results"] += 1
         elif harness_written(record):
             counts["unmapped_harness_written"] += 1
-        elif isinstance((record.get("message") or {}).get("content"), list):
+        elif isinstance(_message_content(record), list):
             counts["unmapped_tool_results"] += 1
         else:
             counts["unmapped_other"] += 1

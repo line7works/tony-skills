@@ -946,3 +946,44 @@ report could not read from behind the wall.
   as they are (`~/.local/share/skills-v2-pilot/e10/e10-2026-09-15/`, packet copy
   `astra-outputs/e10/campaign-e10-2026-09-15/`, fixture, tmp, stage and nested `.git` stripped, large
   witnesses gzipped, scanned clean).
+- **E10-69 (control room, Fable 5.1 at high, 2026-09-16 late morning, on Tony's "go for fix": the fix
+  round accepted).** The fix-round-4 builder (Opus 5, Agent tool, effort inherited: 223 of 223 model
+  records at `high` in its transcript) delivered the three E10-68 fixes with tests that fail against
+  `1911199` and pass after, the hygiene item, and a live proof; the control room re-ran every gate itself:
+  runner suite 357 of 357 OK under `/usr/bin/python3` 3.9.6 and `uv run python3`; `check` ok with no problems
+  under both; adapters 34 / 96 / 90 OK; core 328 OK (2 skipped); the proof root read from its own records
+  (`complete` 6 of 6, no `interruptions.jsonl`, no `lane-stops/`, both held-out routing trials complete, the
+  keys closed from 17:10:58Z to 17:22:51Z across every launch, `routing/` holding both trigger-set records,
+  $0.054 metered). Accepted, with these rulings: (1) **Defect 1 takes shape (a)**: `campaign start` caches
+  every planned held-out request's text into `<campaign>/routing-requests/` before the first launch and
+  while the keys are open, through a subprocess that writes each file itself; a launch copies its entry's
+  file into `prompt.txt`; `key_paths`, `close_key`, `open_key` and `key_open` are unchanged; the wall test
+  lists `cache_routing_requests` as the only new reader. This is stronger than E10-13 (no held-out text ever
+  enters the runner process) and shape (b) is refused for the reason the builder gave (it would reopen the
+  directory while another lane's harness is alive). **`routing-requests/` holds sealed text and joins the
+  review-copy exclusions** (`launch.sh copy`), beside the key, the held-out set and the grade-derived files; a
+  packet copy of a campaign may hold it, as it already holds every trial's `prompt.txt`. (2) **Defect 2's fix
+  reaches one adapter.** E10-68 named `runner.py` 1609; the builder's brief widened it to every reader of a
+  trace or transcript record, and `adapters/claude-code/_common.py` `read_session` would raise on the same
+  record. The +18 −4 type guard there is accepted as part of E10-68 (the defect is the same record shape,
+  the change is behaviour-preserving for every well-formed record, and the 90 adapter tests are green); it
+  is the one edit outside section 5's boundary this round and Astra re-checks it. The `permission_denials`
+  witness (count and tool names, never message text) is a new `command.json` key. (3) **`runner_error` is a
+  sixth ledger status**, for a trial the runner failed rather than the harness; a lane worker's uncaught
+  exception writes that record, an interruption line and `lane-stops/<setup>.json` of kind `runner_error`,
+  `campaign status` reports it, and `campaign start` exits 1. (4) **Hygiene**: `install` clears the OpenCode
+  home's `xdg-data/opencode/` and `xdg-state/opencode/` except the auth store and records every path and
+  size; `xdg-cache` (the uv caches and the harness binary) is deliberately kept, reason recorded. The builder
+  cleared the `opencode/absent` and `opencode/routing` sub-homes without a backup; no campaign record was
+  lost (every trial keeps its own harness dumps) and those homes are the campaign's working state, not
+  records; noted, not upheld as a fault. (5) **The proof's shape**: six trials (one comparison, one held-out
+  routing, one manual-only per lane), because `validate_plan` requires a case and the runner adds the
+  manual-only probe; accepted, and the comparison trials are what kept another lane alive across each
+  held-out launch. (6) **`--skip-probe-gate`** was used for the proof and is accepted for a proof only; the
+  follow-up pass runs the probe gate in full. The runner writes no record of the skip: a pre-existing gap,
+  carried to E11 (record the skip in `campaign.json` or the log). (7) The proof's `stage.json` names commit
+  `1911199` with the fixed working tree's `plugin_tree_sha256`; the fixed tree is committed as the commit
+  this ruling lands in, and the follow-up pass stages from that commit. (8) The builder repeated the E10-63
+  slip (a `git status` with the keys closed put the key file names in its transcript; nothing crossed);
+  recorded. Next: Astra's targeted re-check at high (`recheck5`) on a review copy at this commit, then the
+  follow-up pass.

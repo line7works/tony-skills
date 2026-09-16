@@ -34,6 +34,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import uuid
 
 # --------------------------------------------------------------------------- exits
@@ -1013,15 +1014,83 @@ def clear_lane_stop(campaign, setup_name, why):
     return {"setup": setup_name, "cleared": cleared, "why": why}
 
 
-def stop_lane(campaign, setup_name, reason, record):
-    """A profile breach stops the lane, durably: no later launch on that setup can pass."""
+def stop_lane(campaign, setup_name, reason, record, kind="profile_breach", extra=None):
+    """A lane stop, durably: no later launch on that setup can pass.
+
+    `kind` says what stopped it. `profile_breach` is E10-46's; `runner_error` is E10-68
+    defect 3's — the runner itself raised inside the lane worker and the thread would
+    otherwise have died with nothing in any record.
+    """
     path = lane_stop_path(campaign, setup_name)
     ensure_dir(os.path.dirname(path))
     if not os.path.isfile(path):
-        write_json(path, {"setup": setup_name, "reason": reason, "record": record,
-                          "stopped_at": now_iso()})
-    campaign.note("lane stop on %s: %s" % (setup_name, reason))
+        document = {"setup": setup_name, "kind": kind, "reason": reason, "record": record,
+                    "stopped_at": now_iso()}
+        document.update(extra or {})
+        write_json(path, document)
+    campaign.note("lane stop on %s (%s): %s" % (setup_name, kind, reason))
     return read_json(path)
+
+
+# E10-68 defect 3. The status of a trial the RUNNER, not the harness, failed: the lane worker
+# raised before `collect_trial` could write `command.json`, so the ledger held a directory
+# with no record at all (`claude-code-F3-01-missed-case-available-r2` of the 2026-09-15
+# campaign). None of the five existing statuses fits — `launch_failed`, `timed_out` and
+# `no_result` all describe a process that ran, and `profile_breach` is a measured catalog
+# fault — so E10-68's own word is the status.
+RUNNER_ERROR = "runner_error"
+# `main` turns this key into a non-zero exit while still printing the one JSON document on
+# stdout that A7a requires.
+FAIL_EXIT_KEY = "runner_exit_nonzero_because"
+
+
+def record_lane_runner_error(campaign, lane, row, exc):
+    """An uncaught exception in a lane worker becomes a record (E10-68 defect 3).
+
+    Three records, in this order: the trial in flight gets a `command.json` with status
+    `runner_error` (so the ledger never has a directory without a record) and a ledger line of
+    its own; `interruptions.jsonl` gets the line E10-14 asks of every interruption; and
+    `lane-stops/<setup>.json` gets the stop `campaign status` reports, carrying the traceback,
+    the trial in flight and the time.
+    """
+    detail = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    trial_id = (row or {}).get("id")
+    kind = (row or {}).get("kind") or "comparison"
+    record = (row or {}).get("record") or (campaign.trial_dir(trial_id) if trial_id else None)
+    written = None
+    if trial_id and record:
+        try:
+            ensure_dir(record)
+            command_json = os.path.join(record, "command.json")
+            if not os.path.isfile(command_json):
+                write_json(command_json, {
+                    "trial": trial_id, "attempt": 0, "kind": kind,
+                    "setup": lane, "status": RUNNER_ERROR,
+                    "runner_error": {"exception": "%s: %s" % (type(exc).__name__, exc),
+                                     "traceback": detail, "lane": lane, "at": now_iso()},
+                    "note": "E10-68 defect 3: the RUNNER failed inside this trial, not the "
+                            "harness. Nothing here was measured from a session; the record "
+                            "exists so the ledger has no directory without one.",
+                    "key_boundary": KEY_BOUNDARY_LABEL,
+                })
+                campaign.append_jsonl(campaign.trials_jsonl, {
+                    "id": trial_id, "attempt": 0, "kind": kind, "status": RUNNER_ERROR,
+                    "exit": None, "wall": None, "cost": None, "model": None, "effort": None,
+                    "activated": None, "record": record})
+                written = command_json
+        except (Usage, Missing, Failure, OSError) as inner:
+            campaign.note("could not write a runner_error record for %s: %s"
+                          % (trial_id, inner))
+    campaign.interruption(trial_id, "the %s lane worker raised %s: %s"
+                          % (lane, type(exc).__name__, exc),
+                          "recorded a lane stop of kind %s and stopped the lane" % RUNNER_ERROR,
+                          attempt=0 if trial_id else None)
+    return stop_lane(campaign, lane,
+                     "the lane worker raised %s: %s" % (type(exc).__name__, exc),
+                     record, kind=RUNNER_ERROR,
+                     extra={"traceback": detail, "trial_in_flight": trial_id,
+                            "trial_kind": kind, "at": now_iso(),
+                            "command_json_written": written})
 
 
 def pilot_home(harness, home, setup_name=None):
@@ -1265,6 +1334,42 @@ def file_manifest(root):
 # and the activation marker (the delivery marker each E9 profile section 8 names).
 
 
+def native_message(record):
+    """The `message` OBJECT of a native harness record, or `{}` when there is not one.
+
+    E10-68 defect 2. Claude Code writes `system` events of subtype `permission_denied` — an
+    `Edit` auto-denied because a headless session has no approval surface — whose `message`
+    is a plain STRING, not an object. `record.get("message") or {}` hands that string straight
+    through, and the next `.get` raises `AttributeError: 'str' object has no attribute 'get'`.
+    The first such event in any trace killed the `lane-claude-code` thread of the 2026-09-15
+    campaign (`runner.log` lines 503 to 519), leaving `claude-code-F3-01-missed-case-available-r2`
+    without a `command.json` and the lane at 10 of 87.
+
+    Every reader of a trace or transcript record goes through this and through
+    `message_content`, so a record whose `message` is a string, a list, a number or absent is
+    read as carrying no message rather than crashing the reader that touched it.
+    """
+    message = record.get("message") if isinstance(record, dict) else None
+    return message if isinstance(message, dict) else {}
+
+
+def message_content(record):
+    """The `content` BLOCKS of a native record's message, or `[]` when there are none.
+
+    Tolerant of a non-dict `message` and a non-list `content` alike (E10-68 defect 2): a
+    string `content` (Claude Code's plain user turns carry one) is not a block list, and the
+    callers here all want blocks.
+    """
+    content = native_message(record).get("content")
+    return content if isinstance(content, list) else []
+
+
+# The harness records of a denied tool call. E10-68 defect 2 asks for the denial to be KEPT as
+# a witness, not merely survived: `permission_denials` counts the events and names the tools,
+# so the E11 report can say how often a headless session was denied per harness.
+PERMISSION_DENIED_SUBTYPE = "permission_denied"
+
+
 class Setup(object):
     harness = None
     name = None
@@ -1359,6 +1464,17 @@ class Setup(object):
 
     def activation(self, out_dir):
         return {"activated": None, "marker": None, "profile_section": None}
+
+    def permission_denials(self, out_dir):
+        """Tool calls this harness denied to the session itself (E10-68 defect 2).
+
+        The base answer is "this harness writes no such event on the measured version"; the
+        refusals it DOES record are already measured per action by `native_actions`'s
+        `refused` rows. Claude Code overrides it.
+        """
+        return {"count": 0, "tools": [], "events": [],
+                "how": "%s writes no permission-denied event on the measured version; a "
+                       "refused action is measured per call by native_actions" % self.harness}
 
     def trace_paths(self, out_dir):
         """Every file of the harness's own record, for the trace scans."""
@@ -1521,7 +1637,7 @@ class ClaudeCodeSetup(Setup):
                     or record.get("sessionID")
                 if session and their_session and their_session != session:
                     continue
-                message = record.get("message") or {}
+                message = native_message(record)
                 if message.get("model") and message["model"] != "<synthetic>":
                     model_id = message["model"]
                     effort = record.get("effort", effort)
@@ -1605,17 +1721,14 @@ class ClaudeCodeSetup(Setup):
         skill_calls, delivered, results = [], [], {}
         rows = list(enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1))
         for line, record in rows:
-            message = record.get("message") or {}
-            content = message.get("content")
-            for block in content if isinstance(content, list) else []:
+            for block in message_content(record):
                 if isinstance(block, dict) and block.get("type") == "tool_result":
                     results[block.get("tool_use_id")] = {
                         "line": line, "is_error": bool(block.get("is_error")),
                         "bytes": len(json.dumps(block.get("content")))}
         for line, record in rows:
-            message = record.get("message") or {}
-            if record.get("type") == "assistant" and isinstance(message.get("content"), list):
-                for block in message["content"]:
+            if record.get("type") == "assistant":
+                for block in message_content(record):
                     if isinstance(block, dict) and block.get("type") == "tool_use" \
                             and block.get("name") == "Skill":
                         target = (block.get("input") or {}).get("skill")
@@ -1623,7 +1736,7 @@ class ClaudeCodeSetup(Setup):
                                             "id": block.get("id"),
                                             "result": results.get(block.get("id"))})
             if record.get("type") == "user" and record.get("isSynthetic"):
-                body = json.dumps(message.get("content"))
+                body = json.dumps(native_message(record).get("content"))
                 delivered.append({"line": line, "bytes": len(body),
                                   "uuid": record.get("uuid"),
                                   "non_empty": len(body) > 2})
@@ -1642,6 +1755,35 @@ class ClaudeCodeSetup(Setup):
                                "Skill tool call); E10-46: a call with no delivered body is not "
                                "an activation",
         }
+
+    def permission_denials(self, out_dir):
+        """The `system` / `permission_denied` events of this session's own trace (E10-68 (2)).
+
+        A denial is the measurement that a headless session had no approval surface: Claude
+        Code writes one `system` record per auto-denied tool call, carrying `tool_name`,
+        `tool_use_id`, `decision_reason_type` and a plain-STRING `message`. The string is what
+        crashed `activation`; the event itself is worth keeping, so the count and the tool
+        names go into `command.json` under `permission_denials` and the E11 report can say how
+        often headless denial happened per harness. No message text is copied — the sentence
+        carries the path the model was denied, which is the trial's own opaque tree.
+        """
+        events, tools = [], {}
+        for name in ("trace.jsonl", "transcript.jsonl"):
+            path = os.path.join(out_dir, name)
+            for line, record in enumerate(jsonl_lines(path), 1):
+                if record.get("type") != "system" \
+                        or record.get("subtype") != PERMISSION_DENIED_SUBTYPE:
+                    continue
+                tool = record.get("tool_name") or "unknown"
+                tools[tool] = tools.get(tool, 0) + 1
+                events.append({"file": "harness/%s" % name, "line": line, "tool": tool,
+                               "tool_use_id": record.get("tool_use_id"),
+                               "decision_reason_type": record.get("decision_reason_type"),
+                               "message_is_a_string": isinstance(record.get("message"), str)})
+        return {"count": len(events), "tools": sorted(tools),
+                "by_tool": tools, "events": events,
+                "how": "system events of subtype permission_denied in the session's own trace "
+                       "and transcript (E10-68 defect 2)"}
 
 
 def bound_model_record(record):
@@ -2118,6 +2260,47 @@ class CodexSetup(Setup):
 # ------------------------------------------------------------------ OpenCode
 
 
+# E10-68's close hand-off, item (e). `install` used to leave the OpenCode home's own working
+# state — `xdg-data/opencode/{log, snapshot, opencode.db, tool-output, repos}` and
+# `xdg-state/opencode/locks` — from earlier campaigns in place, and in the absent trials of
+# 2026-09-15 the model reached prior campaign roots' paths through the harness. `install` now
+# clears that state before it runs the script, keeping exactly two things: the harness's own
+# auth store (E9-38, E10-20 — the credential is written once at install time and must survive
+# a reinstall) and anything outside those two directories.
+#
+# `xdg-cache/` is DELIBERATELY NOT CLEARED, and the install record says so: `xdg-cache/uv`
+# holds the uv wheel, sdist and interpreter caches every `uv run` of a trial and of
+# `verify-install.sh` resolves against, and `xdg-cache/opencode/bin` holds the harness's own
+# downloaded binaries. Clearing either turns each install and each verifier call into a fresh
+# network fetch immediately before a campaign, which is a new failure mode rather than a
+# cleaner one, and the binary is the one thing E10-68 names as off limits. Neither holds a
+# session, a transcript or a path from an earlier campaign root.
+OPENCODE_CLEARED_STATE = ("xdg-data", "xdg-state")
+OPENCODE_STATE_KEPT = ("auth.json",)
+OPENCODE_CACHE_NOT_CLEARED = (
+    "xdg-cache/ is not cleared: xdg-cache/uv is the uv wheel and interpreter cache every "
+    "`uv run` resolves against and xdg-cache/opencode/bin is the harness's own binary "
+    "(E10-68 names the binary as off limits); neither carries a session or a prior campaign "
+    "root's path.")
+
+
+def _tree_bytes(path):
+    """The size of one file, link or tree, for the install record's own account."""
+    if os.path.islink(path) or os.path.isfile(path):
+        try:
+            return os.path.getsize(path)
+        except OSError:
+            return None
+    total = 0
+    for base, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(base, name))
+            except OSError:
+                continue
+    return total
+
+
 class OpenCodeSetup(Setup):
     harness = "opencode"
     # `setups/opencode/install.sh`'s own `--model` default, and `launch.sh`'s `qwen` alias.
@@ -2150,6 +2333,7 @@ class OpenCodeSetup(Setup):
         OPENROUTER_API_KEY, and only to this script.
         """
         home = self.home(condition)
+        cleared = self._clear_prior_state(home)
         credential = os.environ.get(INSTALL_CREDENTIAL)
         extra = {"RECHECK_OPENCODE_SETUP": home}
         if credential:
@@ -2192,8 +2376,40 @@ class OpenCodeSetup(Setup):
         return {"home": home, "condition": condition, "model": model,
                 "credential_passed": bool(credential),
                 "removed": removed, "recheck_v2_installation": installation,
+                "prior_state_cleared": cleared,
                 "added": sorted(set(added)),
                 "steps": [_step_summary(s) for s in steps]}
+
+    def _clear_prior_state(self, home):
+        """Clear this home's prior-campaign working state (E10-68's item (e)).
+
+        Everything under `xdg-data/opencode/` and `xdg-state/opencode/` goes except the auth
+        store; `xdg-cache/` and the `npm/` binary tree are left alone, for the reason
+        `OPENCODE_CACHE_NOT_CLEARED` states. The record names every path removed and its size,
+        and every path kept with why.
+        """
+        removed, kept = [], []
+        for sub_dir in OPENCODE_CLEARED_STATE:
+            base = os.path.join(home, sub_dir, "opencode")
+            if not os.path.isdir(base):
+                continue
+            for name in sorted(os.listdir(base)):
+                path = os.path.join(base, name)
+                if name in OPENCODE_STATE_KEPT or name.startswith("auth"):
+                    kept.append({"path": path,
+                                 "why": "the harness's own auth store; the credential is "
+                                        "written once at install time (E9-38, E10-20)"})
+                    continue
+                size = _tree_bytes(path)
+                rmtree(path)
+                removed.append({"path": path, "bytes": size})
+        return {"removed": removed, "kept": kept,
+                "directories": [os.path.join(home, d, "opencode")
+                                for d in OPENCODE_CLEARED_STATE],
+                "not_cleared": OPENCODE_CACHE_NOT_CLEARED,
+                "rule": "E10-68 item (e): `install` clears the OpenCode home's own prior-"
+                        "campaign state so no trial reaches an earlier campaign root through "
+                        "the harness; the auth store and the binary stay."}
 
     def verify(self, condition):
         home = self.home(condition)
@@ -3342,6 +3558,107 @@ HELDOUT_TEXT_SCRIPT = (
 )
 
 
+# E10-68 defect 1. The barrier of E10-40 holds `evals/trigger-set/held-out/` at mode 000 for
+# the whole of every launch and while ANY registered launch is alive; `request_text` read a
+# held-out entry through a subprocess at LAUNCH time (E10-13). With four lanes alive a launch
+# is nearly always alive, so on the night of 2026-09-15 that read failed with `PermissionError`
+# on every one of the 72 held-out routing trials of the three live lanes (`runner.log` lines
+# 840, 851, 862 onward; `interruptions.jsonl`, 72 rows reading "the trial raised: no
+# trigger-set entry 'H-NN-...'"), and not one of them launched a process.
+#
+# The fix is shape (a) of E10-68: every planned held-out request is written ONCE, at
+# `campaign start`, before the first launch and while the keys are open, into the campaign's
+# own `routing-requests/` — by a SUBPROCESS that writes the file itself, so the sealed text
+# never enters the runner process at all, not even one entry at a time as E10-13 allowed. A
+# launch then copies its own entry's file into `prompt.txt` byte for byte. Shape (b) — reopen
+# the directory under the lock for the read — cannot hold E10-68's own invariant ("unreadable
+# by any launched harness while any launch is alive") without serialising every lane's launch
+# against every other, which is the concurrency the campaign exists to have.
+HELDOUT_TEXT_TO_FILE_SCRIPT = (
+    "import json,sys\n"
+    "d=json.load(open(sys.argv[1]))\n"
+    "for e in d['requests']:\n"
+    "    if e['id']==sys.argv[2]:\n"
+    "        t=e['text']\n"
+    "        if not t.endswith('\\n'):\n"
+    "            t+='\\n'\n"
+    "        h=open(sys.argv[3],'w')\n"
+    "        h.write(t)\n"
+    "        h.close()\n"
+    "        raise SystemExit(0)\n"
+    "raise SystemExit(3)\n"
+)
+
+ROUTING_REQUESTS_DIRNAME = "routing-requests"
+
+
+def routing_requests_dir(campaign):
+    return os.path.join(campaign.root, ROUTING_REQUESTS_DIRNAME)
+
+
+def cached_request_file(campaign, entry_id):
+    """Where one entry's request text is kept for the campaign's own launches."""
+    check_identifier("a trigger-set entry id", entry_id)
+    return os.path.join(routing_requests_dir(campaign), "%s.txt" % entry_id)
+
+
+def cache_routing_requests(campaign, entry_ids):
+    """Write every planned held-out request into the campaign, once, keys open (E10-68 (1)).
+
+    Called by `_campaign_loop` before the first lane starts. A tuning id is not cached: the
+    tuning file is not behind the barrier and `request_text` reads it directly. The manual-only
+    request is the runner's own words and is not in either set.
+
+    The index record names each file, its sha256 and its size, and never its text.
+    """
+    directory = routing_requests_dir(campaign)
+    ensure_dir(directory)
+    try:
+        tuning = {e["id"] for e in read_json(TRIGGER_TUNING,
+                                             "trigger-set/requests.json")["requests"]}
+    except (Missing, Failure, KeyError, TypeError):
+        tuning = set()
+    path, stood_in = heldout_file()
+    rows, failed = [], []
+    for entry_id in entry_ids:
+        if entry_id == MANUAL_ONLY_ENTRY or entry_id in tuning:
+            continue
+        target = cached_request_file(campaign, entry_id)
+        if os.path.isfile(target):
+            rows.append({"entry": entry_id, "file": target, "cached": True,
+                         "sha256": file_sha256(target),
+                         "bytes": os.path.getsize(target), "written": "before this run"})
+            continue
+        step = run_cmd([sys.executable, "-c", HELDOUT_TEXT_TO_FILE_SCRIPT, path, entry_id,
+                        target], env=tool_env(), label="held-out text into the campaign")
+        if step["exit"] != 0 or not os.path.isfile(target):
+            failed.append({"entry": entry_id, "exit": step["exit"],
+                           "stderr_tail": step["stderr"][-200:]})
+            continue
+        rows.append({"entry": entry_id, "file": target, "cached": True,
+                     "sha256": file_sha256(target),
+                     "bytes": os.path.getsize(target), "written": "this run"})
+    index = {
+        "campaign": campaign.root,
+        "cached_at": now_iso(),
+        "rule": "E10-68 defect 1: every planned held-out request is written once, before the "
+                "first launch and while the keys are open, by a subprocess that writes the "
+                "file itself; a launch copies its own entry byte for byte. No request text "
+                "enters the runner process.",
+        "key_state_at_cache_time": key_state(),
+        "stand_in": bool(stood_in),
+        "entries": rows,
+        "failed": failed,
+    }
+    write_json(os.path.join(directory, "index.json"), index)
+    campaign.note("cached %d held-out request(s) into %s before the first launch (E10-68)"
+                  % (len(rows), directory))
+    if failed:
+        campaign.note("could not cache %d held-out request(s): %s"
+                      % (len(failed), ", ".join(r["entry"] for r in failed)))
+    return index
+
+
 def heldout_entry_ids():
     """The sealed set's ids, printed by a subprocess that prints ids and nothing else."""
     path, _ = heldout_file()
@@ -3862,6 +4179,8 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
     model = setup.model_record(harness_dir)
     cost = setup.cost_record(harness_dir)
     activation = setup.activation(harness_dir)
+    # E10-68 defect 2: the denial is kept as a witness, not merely survived.
+    denials = setup.permission_denials(harness_dir)
     witness = setup.condition_witness(harness_dir, parts["condition"])
     write_json(os.path.join(record, "model.json"), model)
     write_json(os.path.join(record, "cost.json"), cost)
@@ -3927,6 +4246,7 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         "condition_witness": witness,
         "catalog": catalog,
         "activated": activation,
+        "permission_denials": denials,
         "setup_home": setup.home(parts["condition"]),
         "setup": setup.name,
         "harness": setup.harness,
@@ -4739,15 +5059,11 @@ def native_actions(record):
             results = {}
             rows = list(enumerate(jsonl_lines(path), 1))
             for _, entry in rows:
-                message = entry.get("message") or {}
-                content = message.get("content")
-                for block in content if isinstance(content, list) else []:
+                for block in message_content(entry):
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         results[block.get("tool_use_id")] = block
             for line, entry in rows:
-                message = entry.get("message") or {}
-                content = message.get("content")
-                for block in content if isinstance(content, list) else []:
+                for block in message_content(entry):
                     if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
                     tool = block.get("name")
@@ -5470,6 +5786,36 @@ def routing_request(entry_id):
     return request_text(entry_id)
 
 
+def write_routing_prompt(campaign, entry_id, prompt_path):
+    """This trial's request into `prompt.txt`, and where it came from (E10-68 defect 1).
+
+    The campaign's own cache first: `campaign start` wrote every planned held-out request into
+    `<campaign>/routing-requests/` before the first launch, while the keys were open, so the
+    barrier's state at launch time no longer decides whether a held-out trial can run. The
+    file is COPIED, so the sealed text does not enter this process even for the one entry the
+    trial is launching.
+
+    The read at launch time stays as the fallback for a `routing` run outside a campaign start
+    (a `rerun`, or the subcommand invoked by hand): a tuning entry is read from the tuning file
+    as before, and a held-out entry through E10-13's one-entry subprocess, which succeeds
+    exactly when no launch is holding the barrier closed.
+    """
+    if entry_id == MANUAL_ONLY_ENTRY:
+        write_text(prompt_path, MANUAL_ONLY_REQUEST)
+        return "manual-only", {"how": "the runner's own manual-only request (E10-53(4))"}
+    cached = cached_request_file(campaign, entry_id)
+    if os.path.isfile(cached):
+        shutil.copyfile(cached, prompt_path)
+        return "held-out", {"how": "the campaign's cached held-out request, copied byte for "
+                                   "byte; the text never entered the runner process "
+                                   "(E10-68 defect 1)",
+                            "file": cached, "sha256": file_sha256(cached)}
+    text, which = routing_request(entry_id)
+    write_text(prompt_path, text if text.endswith("\n") else text + "\n")
+    return which, {"how": "read at launch time: the tuning file directly, or E10-13's "
+                          "one-entry subprocess for a held-out id (no cache for this entry)"}
+
+
 def do_routing(args, record=None, attempt=0):
     """One routing trial: the request as the opening line of a fresh session in an empty
     git-initialized workspace with no build doc, a 300-second timeout."""
@@ -5484,9 +5830,8 @@ def do_routing(args, record=None, attempt=0):
             raise Usage("%s is a used trial directory (E9-34)" % record)
         ensure_dir(record)
         campaign.journal_attempt(args.trial, 0, record, "routing")
-    text, which = routing_request(parts["entry"])
     prompt_path = os.path.join(record, "prompt.txt")
-    write_text(prompt_path, text if text.endswith("\n") else text + "\n")
+    which, request_source = write_routing_prompt(campaign, parts["entry"], prompt_path)
     tree = campaign.opaque_tree(args.trial, attempt)
     workspace = os.path.join(tree, "workspace")
     _empty_git_workspace(campaign, workspace)
@@ -5521,6 +5866,7 @@ def do_routing(args, record=None, attempt=0):
     command = {
         "trial": args.trial, "attempt": attempt, "kind": "routing", "entry": parts["entry"],
         "set": which,
+        "request_source": request_source,
         "argv": step["argv"], "cwd": os.getcwd(),
         "allowlisted_env_names": allowlisted_names(
             campaign.env(extra=setup.launch_env("routing"))),
@@ -5528,6 +5874,7 @@ def do_routing(args, record=None, attempt=0):
         "wall_seconds": round(time.time() - started, 3), "exit": step["exit"],
         "timeout_verdict": "timed_out" if step.get("timed_out") else "within limit",
         "catalog": catalog, "profile_breach": breach,
+        "permission_denials": setup.permission_denials(harness_dir),
         "observed_target": observed, "setup": setup.name, "harness": setup.harness,
         "setup_home": setup.home("routing"),
         "status": status,
@@ -5768,9 +6115,8 @@ def observed_target(setup, harness_dir):
     harness = setup.harness
     if harness == "claude-code":
         for index, record in enumerate(jsonl_lines(os.path.join(harness_dir, "trace.jsonl")), 1):
-            message = record.get("message") or {}
-            if record.get("type") == "assistant" and isinstance(message.get("content"), list):
-                for block in message["content"]:
+            if record.get("type") == "assistant":
+                for block in message_content(record):
                     if isinstance(block, dict) and block.get("type") == "tool_use" \
                             and block.get("name") == "Skill":
                         name = (block.get("input") or {}).get("skill") or ""
@@ -6563,9 +6909,7 @@ def _first_work_line(harness, records):
     for line, record in records:
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else record
         if harness == "claude-code":
-            message = record.get("message") or {}
-            content = message.get("content")
-            for block in content if isinstance(content, list) else []:
+            for block in message_content(record):
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     return line
         elif harness == "codex":
@@ -6865,13 +7209,41 @@ def _campaign_loop(campaign, plan, args):
     `started_at`/`ended_at` proves it.
     """
     queue = campaign_queue(campaign, plan)
+    # E10-68 defect 1: before the FIRST launch, while the keys are still open (`campaign
+    # start` refuses to start with them closed unless `--reopen-key` was given and logged),
+    # every planned held-out request is written into the campaign's own `routing-requests/`.
+    # After this line the barrier may stay shut for the rest of the campaign and every lane's
+    # held-out routing trial still has its text.
+    request_cache = cache_routing_requests(campaign, plan.get("routing_entries") or [])
     lanes = {}
     for row in queue:
         lanes.setdefault(row["lane"], []).append(row)
     ran, skipped, failed = [], [], []
     results_lock = threading.Lock()
+    in_flight = {}
 
     def work(lane, rows):
+        """The lane's own queue, wrapped so a dead thread can never be invisible (E10-68 (3)).
+
+        On the night of 2026-09-15 `activation()` raised `AttributeError` inside `do_run`,
+        the `lane-claude-code` thread died with a traceback on stderr and nothing else,
+        `campaign status` said `running` with `lane_stops {}` for three hours, and the
+        campaign ended only when the other lanes ran dry. Any uncaught exception now becomes
+        a lane stop with its traceback, the trial in flight and the time; `campaign status`
+        reports it under `lane_stops` and `campaign start` exits non-zero.
+        """
+        try:
+            _lane_work(lane, rows)
+        except BaseException as exc:            # noqa: BLE001 — a thread must not die silently
+            record_lane_runner_error(campaign, lane, in_flight.get(lane), exc)
+            with results_lock:
+                failed.append({"id": (in_flight.get(lane) or {}).get("id"),
+                               "why": "the %s lane stopped: %s" % (lane, exc),
+                               "lane_stop": "runner_error"})
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+
+    def _lane_work(lane, rows):
         last = time.time()
         for row in rows:
             if lane_stopped(campaign, lane):
@@ -6900,6 +7272,8 @@ def _campaign_loop(campaign, plan, args):
                 campaign.interruption(row["id"], "a wall-clock gap of %.0fs between trials" % gap,
                                       "recorded the gap and continued")
             last = time.time()
+            with results_lock:
+                in_flight[lane] = row
             one = argparse.Namespace(campaign=campaign.root, trial=row["id"], attempt_dir=None,
                                      attempt=0, plugins=None, fake_launcher=args.fake_launcher,
                                      compact_tokens=args.compact_tokens,
@@ -6919,6 +7293,11 @@ def _campaign_loop(campaign, plan, args):
                     failed.append({"id": row["id"], "why": str(exc)})
                 campaign.interruption(row["id"], "the trial raised: %s" % exc,
                                       "kept the record and went on")
+            # NOT a `finally`: an UNCAUGHT exception must leave the row in flight, because
+            # that is what names the trial in the lane stop (E10-68 defect 3). A `finally`
+            # runs while the exception is propagating and cleared it.
+            with results_lock:
+                in_flight.pop(lane, None)
 
     workers = []
     concurrency = int(getattr(args, "lanes", 0) or len(lanes))
@@ -6935,10 +7314,24 @@ def _campaign_loop(campaign, plan, args):
         worker.join()
     if os.path.isfile(campaign.pid_file):
         os.unlink(campaign.pid_file)
-    return {"campaign": campaign.root, "ran": sorted(ran), "skipped": sorted(skipped),
-            "failed": failed, "planned": len(queue),
-            "lanes": sorted(lanes), "concurrency": concurrency,
-            "started_at": started_at, "ended_at": now_iso()}
+    stops = {name: lane_stopped(campaign, name) for name in sorted(lanes)
+             if lane_stopped(campaign, name)}
+    document = {"campaign": campaign.root, "ran": sorted(ran), "skipped": sorted(skipped),
+                "failed": failed, "planned": len(queue),
+                "lanes": sorted(lanes), "concurrency": concurrency,
+                "held_out_requests_cached": {
+                    "directory": routing_requests_dir(campaign),
+                    "entries": len(request_cache.get("entries") or []),
+                    "failed": request_cache.get("failed") or []},
+                "lane_stops": stops,
+                "started_at": started_at, "ended_at": now_iso()}
+    # E10-68 defect 3: a lane the RUNNER killed is not a quiet ending. `campaign start` exits
+    # non-zero and says which lane, so an operator watching the exit status sees it.
+    broken = sorted(n for n, stop in stops.items() if (stop or {}).get("kind") == RUNNER_ERROR)
+    if broken:
+        document[FAIL_EXIT_KEY] = ("the %s lane(s) stopped on a runner error; see "
+                                   "lane-stops/ and %s" % (", ".join(broken), campaign.log))
+    return document
 
 
 # --------------------------------------------------------------------------- report (E10-9)
@@ -7891,6 +8284,12 @@ def main(argv=None):
         sys.stderr.write("runner.py: interrupted\n")
         return EXIT_FAIL
     sys.stdout.write(json.dumps(document, indent=2, sort_keys=True, default=str) + "\n")
+    # E10-68 defect 3: a subcommand that finished but whose WORK failed says so in its exit
+    # status without breaking A7a's one-JSON-document-on-stdout rule. `campaign start` sets
+    # it when a lane stopped on a runner error.
+    if isinstance(document, dict) and document.get(FAIL_EXIT_KEY):
+        sys.stderr.write("runner.py: %s\n" % document[FAIL_EXIT_KEY])
+        return EXIT_FAIL
     return EXIT_OK
 
 
