@@ -228,3 +228,15 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
   prior-campaign `xdg-data`. Tony's ruling: nothing graded; fix round for the three defects, then
   one follow-up pass (the Claude Code remainder and the held-out routing trials), then grading
   together. Records: the campaign root and the packet copy `astra-outputs/e10/campaign-e10-2026-09-15/`.
+- Fix round 4 (E10-69 to E10-71, 2026-09-16 morning, on Tony's "go for fix"): a fresh Opus 5 builder
+  (223 of 223 at high) fixed the three E10-68 defects and the OpenCode home hygiene item with 12
+  tests that fail at `1911199` (`17e384f`); the control room re-ran every gate itself (357 then 358
+  runner tests under both interpreters, `check` ok under both, adapters 34/96/90, core 328) and
+  read the live proof `fix4-proof-2026-09-16/` from its records (two concurrent lanes, both
+  held-out routing trials complete with the keys closed throughout). Astra at high: recheck5 four
+  of five FIXED, item 1 PARTLY and upheld (the cache hashed the sealed text in-process); the
+  control room fixed it (`aacc010`: subprocess digest, `/bin/cp` copy, AST plus live test); recheck6
+  on that item alone **ALL CLEARED, no new BLOCKER**. The fix round is closed at `aacc010`; the
+  follow-up pass (E10-71: a new root at that commit, the Claude Code remainder and the 96
+  held-out routing trials, the probe gate in full, the operator mandate run live once first)
+  waits on Tony's go. Records: packet `fix-round-4/`, `control-room/fix-round-4/`, `recheck5/`, `recheck6/`.
