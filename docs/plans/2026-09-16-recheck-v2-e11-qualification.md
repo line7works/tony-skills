@@ -517,3 +517,20 @@ to exactly the held-out request text.
   environment. The control room's records of every bench step are in the packet under
   `astra-outputs/e11/control-room/rerun/`. From here the operator's log and report are the record; the
   control room watches `operate.sh status`, touches no trial, and recounts from the raw records at the end.
+- **E11-24, the first operator stopped on the mandate's wording; the mandate corrected; relaunched (2026-09-17 about 4:45 PM).**
+  Astra's first operator run (launched 4:37 PM, exit 0 at 4:39 PM, packet
+  `astra-outputs/e11/rerun/operate-attempt1/`) stopped at step 1 before `campaign start`: the mandate said a
+  probe-env record whose top-level `ok` is false is a stop, and ten retained aggregate records
+  (`records/probe-env.json` through `probe-env-9.json`, the rate-limited rounds of E11-20 and E11-21) carry
+  `ok: false`. Her stop note states that the two later records are `ok: true`, names the current successful
+  probes of 4:36 PM, and says the stop is about the mandate as written, not a failing gate; she launched
+  nothing, wrote only under `operator/`, and no record changed. The control room's reading: the runner's own
+  gate is the authority and it reads the current probe per setup and home (README `probe-env`; `campaign
+  start` refuses without one current successful record each), and earlier rounds are retained beside it by
+  design (E10-43, E10-53(5)); the mandate's sentence predated a bench that had ever kept failed rounds, so
+  it was out of step with the runner, the same class as the two E10 operator stops (E10-73). The control
+  room reworded step 1 of `mandate-operate.md` to read the current probe as the runner does, to treat older
+  rounds and older aggregates as history, and to add a false `allow_rules.ok` to the stop list; nothing else
+  in the mandate changed. Attempt 1's outputs stay on record. `s/out` moved to `s/out-operate-attempt1`;
+  `operate.sh <root> start` again. Decided by the control room as kit maintenance inside the standing goal
+  line and flagged to Tony.
