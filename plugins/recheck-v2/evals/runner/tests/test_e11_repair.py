@@ -401,6 +401,70 @@ class Item1InteropAndContinuation(RunnerCase):
         self.assertTrue(rows["invariants"]["done_items_not_re_adjudicated"]["held"])
         self.assertTrue(rows["all_held"])
 
+    def test_a_cut_that_retained_only_a_summary_is_compared_on_that_summary(self):
+        """E11-7 item 1, corrected 2026-09-17: a shape difference is not a re-adjudication.
+
+        `cont-codex-F3-02-mixed-two-items-handoff-r1` flipped from held to not held because
+        the E10 cut retained `{index, state, disposition}` per done item and the full-object
+        comparison read every one of them as changed.
+        """
+        record = os.path.join(self.scratch, "summary-cut")
+        runner.ensure_dir(os.path.join(record, "run"))
+        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same",
+                    "untracked": [], "untracked_sha256": "same", "submodules": []}
+        after_result = {"index": 0, "location": {"file": "src/x.py", "line": 1},
+                        "disposition": "fixed",
+                        "verification": {"evidence": [{"kind": "command", "detail": "ran it"}]}}
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
+            "phase": "completed", "continuations": 1, "verifier_calls": [],
+            "scope": {"items": [{"index": 0, "state": "done", "retries": 0,
+                                 "result": after_result}]}})
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"source_identity": {"actual": identity}})
+        # the shape an E10 cut retained: no result object at all
+        legacy = [{"index": 0, "state": "done", "disposition": "fixed"}]
+        command = {"cut": {"valid": True, "start_identity": identity,
+                           "retained": {"done_items": legacy,
+                                        "verifier_calls_for_done_items": []}}}
+        rows = runner.continuation_invariants(record, command)
+        row = rows["invariants"]["done_items_not_re_adjudicated"]
+        self.assertTrue(row["held"], row)
+        self.assertEqual(row["unchanged"], 1)
+        self.assertEqual(row["cuts_carrying_a_summary_only"], 1)
+        self.assertEqual(row["cuts_carrying_the_full_done_item_object"], 0)
+        self.assertTrue(rows["all_held"])
+
+    def test_a_summary_cut_still_catches_a_changed_disposition(self):
+        record = os.path.join(self.scratch, "summary-cut-changed")
+        runner.ensure_dir(os.path.join(record, "run"))
+        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same",
+                    "untracked": [], "untracked_sha256": "same", "submodules": []}
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
+            "phase": "completed", "continuations": 1, "verifier_calls": [],
+            "scope": {"items": [{"index": 0, "state": "done", "retries": 0,
+                                 "result": {"index": 0, "disposition": "not_fixed"}}]}})
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"source_identity": {"actual": identity}})
+        legacy = [{"index": 0, "state": "done", "disposition": "fixed"}]
+        command = {"cut": {"valid": True, "start_identity": identity,
+                           "retained": {"done_items": legacy,
+                                        "verifier_calls_for_done_items": []}}}
+        row = runner.continuation_invariants(
+            record, command)["invariants"]["done_items_not_re_adjudicated"]
+        self.assertFalse(row["held"])
+        self.assertEqual(row["changed"][0]["compared_on"], ["state", "disposition"])
+
+    def test_a_fresh_cut_retains_the_complete_done_item_object(self):
+        """So the full comparison applies to the rerun, not the summary one."""
+        rows = runner.state_of_checkpoint(
+            {"scope": {"items": [{"index": 0, "state": "done", "retries": 0,
+                                  "result": {"index": 0, "disposition": "fixed"}},
+                                 {"index": 1, "state": "pending", "retries": 0}]}})["item_rows"]
+        done = [r for r in rows if r["state"] == "done"]
+        self.assertEqual(len(done), 1)
+        self.assertIsNotNone(done[0]["result"])
+        self.assertIsNotNone(done[0]["result_sha256"])
+
     def test_all_six_identity_fields_are_compared(self):
         same = {"index": 0, "location": {"file": "src/x.py", "line": 1},
                 "disposition": "fixed"}
@@ -413,6 +477,55 @@ class Item1InteropAndContinuation(RunnerCase):
         self.assertEqual(sorted(row["fields_that_differ"]),
                          ["untracked", "untracked_sha256"])
         self.assertEqual(len(row["compared_on"]), 6)
+
+
+class Item1ModelBindingAfterTheRealRun(RunnerCase):
+    """E11-7 item 1, corrected 2026-09-17: the provider route is not the model's identity.
+
+    The control room ran the derived grade on the E10 root and 13 qwen plus 11 DeepSeek
+    attempts read `ids_agree: false` over a prefix: the native witness joins `providerID` to
+    `modelID` for its own display (`openrouter/deepseek/deepseek-v4.1-flash`) while the result
+    reports the profile's own form (`deepseek/deepseek-v4.1-flash`). The Codex mismatch must
+    stay a failure.
+    """
+
+    OPENCODE_NATIVE = {"id": "openrouter/deepseek/deepseek-v4.1-flash",
+                       "model_id": "deepseek/deepseek-v4.1-flash", "provider": "openrouter"}
+    OPENCODE_RESULT = {"id": "deepseek/deepseek-v4.1-flash"}
+
+    def test_the_provider_route_is_not_part_of_the_identity(self):
+        native, how = runner.canonical_model_id(self.OPENCODE_NATIVE)
+        reported, _how = runner.canonical_model_id(self.OPENCODE_RESULT)
+        self.assertEqual(native, "deepseek/deepseek-v4.1-flash")
+        self.assertEqual(native, reported)
+        self.assertIn("canonical form", how)
+
+    def test_qwen_agrees_the_same_way(self):
+        native, _ = runner.canonical_model_id(
+            {"id": "openrouter/qwen/qwen3.8-flash", "model_id": "qwen/qwen3.8-flash",
+             "provider": "openrouter"})
+        reported, _ = runner.canonical_model_id({"id": "qwen/qwen3.8-flash"})
+        self.assertEqual(native, reported)
+
+    def test_a_session_misreporting_its_own_model_is_still_a_mismatch(self):
+        """Codex: the result says `gpt-5`, the native witness says `gpt-5.6-sol`."""
+        native, _ = runner.canonical_model_id({"id": "gpt-5.6-sol"})
+        for reported_id in ("gpt-5", "GPT-5"):
+            reported, _ = runner.canonical_model_id({"id": reported_id})
+            self.assertNotEqual(native, reported, reported_id)
+
+    def test_an_id_with_no_route_and_no_model_id_is_untouched(self):
+        value, how = runner.canonical_model_id({"id": "claude-opus-5"})
+        self.assertEqual(value, "claude-opus-5")
+        self.assertIn("as recorded", how)
+
+    def test_a_route_is_only_stripped_when_the_record_names_it(self):
+        """Nothing is stripped by shape: only the record's OWN provider route comes off."""
+        value, _ = runner.canonical_model_id({"id": "openrouter/qwen/qwen3.8-flash"})
+        self.assertEqual(value, "openrouter/qwen/qwen3.8-flash")
+        value, _ = runner.canonical_model_id(
+            {"id": "openrouter/qwen/qwen3.8-flash", "provider": "anthropic"})
+        self.assertEqual(value, "openrouter/qwen/qwen3.8-flash")
 
 
 class Item2Separation(RunnerCase):

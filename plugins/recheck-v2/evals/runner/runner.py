@@ -1883,6 +1883,37 @@ class ClaudeCodeSetup(Setup):
                        "and transcript (E10-68 defect 2)"}
 
 
+# E11-7 item 1, corrected 2026-09-17 after the control room ran the derived grade on the E10
+# root: 13 qwen and 11 DeepSeek attempts read `ids_agree: false` over a provider prefix.
+#
+# `adapters/opencode/profile.md` section 2 keeps the two apart: the MODEL's identity is the
+# session's own `modelID` (`qwen/qwen3.8-flash`, `deepseek/deepseek-v4.1-flash`, the form the
+# id-to-class map of ruling E9-3 is keyed on) and `providerID` (`openrouter`) is the provider
+# ROUTE, reported separately as `provider_route`. `OpenCodeSetup.model_record` joins the two
+# into its `id` for the record's own display and keeps the profile's form beside it as
+# `model_id`; the result reports the profile's form. Comparing the joined string against the
+# profile's form is a comparison of two different fields, not of two models.
+#
+# So the comparison is made on the profile's canonical form: the record's own `model_id` when
+# it carries one, else the id with its own named provider route removed. A `/`-less id is
+# never touched, and nothing is case-folded or matched by prefix — a session that reports
+# `gpt-5` while its native witness says `gpt-5.6-sol` is still a mismatch, which is the case
+# the gate exists for.
+def canonical_model_id(record, fallback=None):
+    """`(the profile's canonical model id, which form it came from)`."""
+    record = record if isinstance(record, dict) else {}
+    named = record.get("model_id")
+    if isinstance(named, str) and named:
+        return named, "the record's own model_id (the profile's canonical form)"
+    value = fallback if isinstance(fallback, str) else record.get("id")
+    if not isinstance(value, str) or not value:
+        return None, "no model id in this record"
+    route = record.get("provider") or record.get("provider_route")
+    if isinstance(route, str) and route and value.startswith(route + "/"):
+        return value[len(route) + 1:], ("the id with its own provider route %r removed" % route)
+    return value, "the id as recorded"
+
+
 def bound_model_record(record):
     """A model record with NO SESSION BINDING is `null` (E10-50, E10-59 (18)).
 
@@ -5107,20 +5138,27 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     observed_id = observed_model.get("id")
     reported_id = run_block.get("id")
     binding_ok = bool(observed_model.get("session_binding_ok"))
+    # The PROVIDER ROUTE is not part of the model's identity, so it is not part of the
+    # comparison (the control room's run of this grade on the E10 root, 2026-09-17).
+    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id)
+    reported_canonical, reported_form = canonical_model_id(run_block, reported_id)
     agrees = None
-    if observed_id and reported_id:
-        agrees = str(observed_id) == str(reported_id)
+    if observed_canonical and reported_canonical:
+        agrees = observed_canonical == reported_canonical
     grade["floor_met"] = {"result_run_model": run_block,
                           "model_json_id": observed_id,
                           "floor_met": run_block.get("floor_met")}
     grade["model_binding"] = {
         "observed_id": observed_id,
         "reported_in_the_result": reported_id,
+        "compared_on": {"observed": observed_canonical, "reported": reported_canonical},
+        "compared_form": {"observed": observed_form, "reported": reported_form},
         "session_binding_ok": binding_ok,
         "ids_agree": agrees,
         "held": binding_ok and agrees is True,
         "why": "E11-7 item 1: the session-bound native witness and the result's run.model.id "
-               "must name the same model",
+               "must name the same model, compared on the profile's canonical model id (the "
+               "provider route is the launcher's, not the model's identity)",
     }
     grade["must_not"] = entry.get("must_not")
     if (command.get("kind") or "").startswith("continuation"):
@@ -6196,19 +6234,42 @@ def continuation_invariants(record, command):
         key = str(entry.get("index"))
         now = done_after.get(key)
         # E11-7 item 1: the COMPLETE done-item result object is compared, by the hash of its
-        # canonical serialization, and a missing result on either side is a difference. A
-        # changed done item now fails the invariant; the disposition alone did not.
+        # canonical serialization, and a changed done item fails the invariant; the
+        # disposition alone did not.
+        #
+        # Corrected 2026-09-17 after the control room ran the derived grade on the E10 root:
+        # the comparison is made ON WHAT THE RETAINED CUT ACTUALLY CARRIES. A cut taken by the
+        # E10 runner retained a SUMMARY per done item (index, state, disposition) because the
+        # reader of the day produced no more, so demanding the full object there reads every
+        # item as changed — `cont-codex-F3-02-mixed-two-items-handoff-r1` flipped from held to
+        # not held on a shape difference. A shape difference is not a re-adjudication. A cut
+        # taken by THIS runner retains the complete object (`state_of_checkpoint`'s `row_of`,
+        # which `_launch_and_cut` retains whole), so the full comparison applies to the rerun.
         before_hash = entry.get("result_sha256")
         after_hash = (now or {}).get("result_sha256")
-        same = bool(now) and now.get("state") == "done" \
-            and before_hash is not None and after_hash is not None \
-            and before_hash == after_hash
+        full = before_hash is not None
+        if full:
+            same = bool(now) and now.get("state") == "done" \
+                and after_hash is not None and before_hash == after_hash
+            compared_on = ["the canonical hash of the complete done-item result object"]
+        else:
+            # the summary the cut carries, and only that
+            fields = [f for f in ("state", "disposition") if f in entry]
+            same = bool(now) and now.get("state") == "done" \
+                and all(now.get(f) == entry.get(f) for f in fields)
+            compared_on = fields
         (unchanged if same else changed).append(
             {"index": key, "at_cut": entry, "after": now,
              "result_sha256_at_the_cut": before_hash,
              "result_sha256_after": after_hash,
-             "compared_by": "the canonical hash of the complete done-item result object "
-                            "(E11-7 item 1)"})
+             "cut_carried_the_full_object": full,
+             "compared_on": compared_on,
+             "compared_by": ("the canonical hash of the complete done-item result object "
+                             "(E11-7 item 1)" if full else
+                             "the summary fields this cut retained (%s); a cut that carried "
+                             "no result object cannot be compared on one, and a shape "
+                             "difference is not a re-adjudication"
+                             % ", ".join(compared_on) or "none")})
     calls_before = at_cut.get("verifier_calls_for_done_items") or []
     calls_after = _verifier_calls_for(record)
     # E10-59 (15): the verifier-call invariant is SET EQUALITY against the retained prior
@@ -6224,6 +6285,10 @@ def continuation_invariants(record, command):
         "verifier_calls_after": calls_after,
         "new_calls_for_a_done_item": new_calls,
         "prior_calls_that_vanished": missing_calls,
+        "cuts_carrying_the_full_done_item_object": sum(
+            1 for row in unchanged + changed if row.get("cut_carried_the_full_object")),
+        "cuts_carrying_a_summary_only": sum(
+            1 for row in unchanged + changed if not row.get("cut_carried_the_full_object")),
         "compared_by": "set equality against the retained prior calls (E10-59 (15))",
         "held": not changed and not new_calls and not missing_calls}
     start_identity = cut.get("start_identity") or {}
