@@ -209,3 +209,49 @@ under `uv run --python /usr/bin/python3 --with jsonschema==4.25.1`.
   path-rebase flag on `validate-result.py`; the Claude Code `--add-dir` segment; pid-reuse on
   reservations; lane R's two MINORs; E9-34's parenthetical. The campaign's own record is added
   to this section when it has run.
+- The campaign (E10-62 to E10-68, 2026-09-15 night): staged by the control room at `872fda3`
+  (`e10-2026-09-15/`: 387 files, twelve installs, 348 trials planned over the four pinned setups)
+  and run by Astra at high through `operate.sh` on Tony's go from a fresh Fable 5.1 control room.
+  Two operator stops before any runner command, both defects in the kit's `mandate-operate.md`
+  (a contract path that only exists in a review copy; a stop sentence stricter than the runner's
+  probe rule), each fixed on Tony's word and both attempts kept (E10-66, E10-67). The third
+  launch ran three and three-quarter hours and ended stopped, never `complete`: 228 ledger rows,
+  175 complete, 53 `no_result`, 29 reruns, $30.05 metered, every count reproduced by the control
+  room (`control-room/recount.py` in the packet). Three runner defects, none reachable by a
+  single-lane proof (E10-68): the held-out barrier collides with concurrent launches, so 72 of
+  the 96 held-out routing trials raised before launch and the rest were never reached;
+  `activation()` crashes on a Claude Code `permission_denied` event whose message is a string,
+  which killed the Claude Code lane at 10 of 87; and a dead lane thread is invisible to
+  `campaign status`. Lane results on record: Codex 63 of 63 reachable complete; DeepSeek gave up
+  on most comparison trials (`no_result`, prompt echoed, no work); the OpenCode absent condition
+  is discoverable on disk and held only at the permission gate; the OpenCode homes carry
+  prior-campaign `xdg-data`. Tony's ruling: nothing graded; fix round for the three defects, then
+  one follow-up pass (the Claude Code remainder and the held-out routing trials), then grading
+  together. Records: the campaign root and the packet copy `astra-outputs/e10/campaign-e10-2026-09-15/`.
+- Fix round 4 (E10-69 to E10-71, 2026-09-16 morning, on Tony's "go for fix"): a fresh Opus 5 builder
+  (223 of 223 at high) fixed the three E10-68 defects and the OpenCode home hygiene item with 12
+  tests that fail at `1911199` (`17e384f`); the control room re-ran every gate itself (357 then 358
+  runner tests under both interpreters, `check` ok under both, adapters 34/96/90, core 328) and
+  read the live proof `fix4-proof-2026-09-16/` from its records (two concurrent lanes, both
+  held-out routing trials complete with the keys closed throughout). Astra at high: recheck5 four
+  of five FIXED, item 1 PARTLY and upheld (the cache hashed the sealed text in-process); the
+  control room fixed it (`aacc010`: subprocess digest, `/bin/cp` copy, AST plus live test); recheck6
+  on that item alone **ALL CLEARED, no new BLOCKER**. The fix round is closed at `aacc010`; the
+  follow-up pass (E10-71: a new root at that commit, the Claude Code remainder and the 96
+  held-out routing trials, the probe gate in full, the operator mandate run live once first)
+  waits on Tony's go. Records: packet `fix-round-4/`, `control-room/fix-round-4/`, `recheck5/`, `recheck6/`.
+- The full fresh rerun (E10-72, E10-73, 2026-09-16 afternoon, on Tony's "Go" in a fresh control room window):
+  root `e10-rerun-2026-09-16/` staged at `669a83c` after the operator mandate's dry run finished clean
+  (3 of 3, exit 0), launched by Astra through `operate.sh`, all twelve verify rows and twelve probes clean,
+  eight held-out requests cached before the first launch, the keys closed at the four concurrent first
+  launches. Ran to `complete`: 504 attempts (321 `complete`, 138 `launch_failed`, 45 `no_result`), 156
+  reruns with every eligible trial retried exactly once, no lane stop, the root scan 16,641 files with zero
+  hits; final state per trial Claude Code 87 of 87 complete, Codex 87 of 87, qwen 76 / 10 empty / 1 failed,
+  DeepSeek 71 / 14 / 2. One outage: OpenRouter ran out of prepaid credit at 20:19:57Z and both OpenCode
+  lanes failed 135 first-pass launches with HTTP 402 at no cost; Tony's top-up landed at 20:24:42Z before
+  any rerun fired and the reruns recovered all but three (five-minute timeouts). Graded by the operator:
+  143 attempts, 20 ok (Claude Code 3 of 27, Codex 6 of 26, qwen 4 of 44, DeepSeek 7 of 46); routing
+  activation on the sealed set 0.50 / 1.00 / 0.50 / 0.46 with false-trigger 0.0 on all four, the score
+  records filed in `evals/answer-key/`. The control room's recount from the raw records matches the
+  operator's report on every count. Interpretation is E11's. Records: the root and the packet copy
+  `astra-outputs/e10/campaign-e10-rerun-2026-09-16/`; ruling E10-73 in the lane contract.

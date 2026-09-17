@@ -788,3 +788,305 @@ report could not read from behind the wall.
   Opus 5 at the session's effort as before. The campaign plan (`plan.json`) carries the four
   setups and the timeouts unchanged; the estimate grows by about a third of the OpenCode lane
   for the fourth setup.
+- **E10-63 (control room, 2026-09-15 evening: the E10-62 pass read and accepted).** The builder
+  pass E10-62 ordered is done and verified by the control room against its own runs, not against
+  the report's claims: the transcript witness is 324 records, every one Opus 5 at effort high;
+  `~/.codex/config.toml` and `~/.codex/auth.json` are untouched (mtimes predate the pass); the
+  worktree carries exactly the nine files the report names. Five questions the pass hit are ruled
+  here.
+  **Q1, the default plan.** `default_plan` becomes E10-62's four pinned lanes, with E10-1's six
+  cases, E10-3's two conditions, E10-5's two repetitions and E10-14's timeouts unchanged; the
+  counts follow (96 comparison, 8 continuation, 240 routing, 4 manual-only). An operator who omits
+  `--plan` must get the campaign Tony ruled, not a three-lane one; E10-62's "the campaign plan
+  carries the four setups and the timeouts unchanged" reads on the default as well as on the file.
+  **Q2, where the Codex model and effort lines are written.** By the runner (`CodexSetup.install`),
+  not by `setups/codex/install.sh`. The script keeps reading exactly its three lines and keeps
+  failing when it does not find three, so `sandbox_mode` still comes from the real config and
+  `~/.codex/` is never written, and one fewer setup script changes immediately before a live
+  campaign. Carried, not fixed: the `homes/plugin-only` and `homes/host-only` surfaces that
+  `install.sh` builds for E9's own comparisons still carry the real config's model, because the
+  script copies `config.toml` in before the runner rewrites it. No E10 trial launches from those
+  two surfaces. The exact edit, if a later step wants it, is `--model` and `--effort` options on
+  `install.sh` writing into `base_config` before the surfaces are made (E11).
+  **Q3, the accepted efforts.** Claude Code takes `low, medium, high, xhigh, max` (its own
+  `--help`); Codex's `model_reasoning_effort` takes those five plus `ultra` and validates none at
+  parse time, so the plan is the only gate there; OpenCode takes none (E10-26). The plan's
+  validation is the gate on all three.
+  **Q4, the three consequences beyond the six items** are ruled correct and kept: the auth-store
+  exemptions take the plan's own `(harness, name)` pairs; a campaign that has a plan refuses a
+  `--setup` name the plan does not carry; `CodexSetup.install` passes its home explicitly.
+  **Q5** is ruled correct: the launcher is handed the resolved full model id, and the record names
+  the model the session actually ran on.
+  **The campaign's own `plan.json` is aligned to the proven path.** The kit's file named the
+  OpenCode models by their short aliases (`qwen`, `deepseek`); the four live proof trials ran on
+  the full identifiers. The file now carries the full identifiers, so `configured.model` in every
+  campaign record is the identifier the session ran on rather than an alias that resolves to it.
+  **Two findings of the pass are carried into the campaign's own conduct, not fixed here.** The
+  OpenCode homes carry the campaign's own scratch directory in their allow rules (E10-23), so
+  `install` runs for all four setups and all three homes inside the campaign's own root before its
+  first trial; the `opencode-deepseek` lane's `absent` and `routing` homes do not exist yet and are
+  built there. Both are written into the operator's mandate.
+  **The builder's own recorded slip** (a `git status` run while the key directories were held at
+  mode 000 made git print a permission line per key file, and those lines carry the key files'
+  names) is recorded as its own kind: no expected value, entry or coverage figure crossed, and the
+  builder opened nothing. The cheap guard for a later builder is to reopen before any `git status`
+  or to scope it to the three directories it is working in. No code change.
+  **Still open and unchanged by this pass:** the readers request block written to the machine's
+  temp directory (E10-58(3), E11) and `validate-result.py`'s path-rebase flag (E10-25(9), E11).
+  Astra's targeted re-check at high on this change alone comes next; the campaign then starts on
+  Tony's word.
+- **E10-64 (control room, 2026-09-15 evening: Astra's recheck3 on the E10-62 pass).** Astra
+  re-checked commit `9e7b036` at high on the six E10-62 items alone and reported **no new
+  BLOCKER**, with items 2, 3 and 4 FIXED and items 1, 5 and 6 PARTLY. Her own suite runs failed
+  again on the missing `jsonschema` wheel, the absent network, the absent git metadata and the
+  absent key directories in her copy; she named all four as limits of her sandbox rather than
+  findings, and read the control room's own green tails from `live/control-room/`. That is the
+  established pattern and is not counted against the pass. The three PARTLY items are ruled here.
+  **Item 1, upheld and fixed.** `validate_plan` did check the whole plan before any record, but
+  `do_plan` called `campaign.ensure()` first, so a plan refused for a bad model, a bad effort, an
+  unknown setup key or an unknown harness still left a campaign root behind holding empty
+  `records/`, `tmp/` and `trials/`. E10-43 finding 4's own words are "before any write", and a
+  directory is a write; Astra's reading is correct and the runner's was not. Every refusal now
+  precedes the first directory. Six tests lock it, and the fix is proved by its negative: against
+  the old ordering five of the six fail, and the sixth (an accepted plan still builds its
+  skeleton) passes either way by design.
+  **Item 5, not upheld; the reviewer's reading of "exactly" is rejected.** Astra read "the floor
+  map settled to exactly these four" as meaning no other model may ever meet the floor, and
+  reported that the Codex map still accepts `gpt-6-astra` and that Claude Code's prefix map still
+  accepts other Opus-class ids. E10-62's own sentence is "`gpt-5.6-sol` **joins** lane R's map",
+  which adds rather than replaces, and the ruling's subject is which models THIS campaign pins,
+  not a restriction on what the maps may classify. Three reasons the narrow reading is refused.
+  `gpt-6-astra` must keep meeting the floor: it is the model every Astra round runs as, E9's
+  thirty-six rollouts were recorded on it, and the lane's existing tests assert it. Claude Code's
+  prefix map is E9's closed design covering the Opus family, and narrowing it would change a
+  closed lane's behaviour, which E10-62 does not order and the pass's own boundary forbids. And
+  the roster is enforced where it belongs: the plan's validation decides which setups run, while a
+  floor map answers a different question, whether a model that DID run is capable enough to be
+  believed. The safety property that matters is intact and Astra measured it herself: an unlisted
+  id still reads `unknown` with `floor_met` null on all three lanes, so nothing is waved through.
+  **Item 6, half upheld.** Its test half follows item 1 (now tested) and item 5 (ruled no change,
+  so nothing to test). Its second half is upheld and is the control room's own fault, not the
+  builder's: the four E10-62 proof trials were never copied into the review copy, so Astra could
+  not check the report's quoted `model.json` witnesses against the records and correctly declined
+  to take them on the report's word. The launcher now copies that campaign into `live/e1062-proof`
+  behind the same wall exclusions; nothing in it was graded, so those exclusions remove nothing.
+  **What did not change:** the runner's behaviour beyond the one ordering fix, the core, the
+  adapters' maps, the setups. Gates re-run in full by the control room after the fix. A short
+  targeted re-check on items 1 and 6 alone follows; items 2, 3 and 4 are closed and item 5 is
+  ruled. The campaign then starts on Tony's word.
+- **E10-65 (control room, 2026-09-15 evening: who runs `install` for the campaign).** The operator's
+  launch (`operate.sh`) starts Astra's session under `env -i` with an allowlist of `PATH`, `HOME`,
+  `USER`, `TMPDIR`, the locale and the shell, and nothing else; that is E10-7 and it is correct. The
+  OpenCode install script needs `OPENROUTER_API_KEY` once, at install time, to write the harness's
+  own auth store, and exits 3 when the variable is absent; by E9-38 and E10-20 that key never rides
+  in any session's environment, the operator's included, because every tool shell inherits it and a
+  probe that dumps the environment prints it into the records. So the operator cannot run `install`
+  for the two OpenCode setups, and the mandate's step 1 as first written (and as amended for the
+  fourth lane) would have stopped her at the first OpenCode install with a spurious stop. Ruled:
+  `stage`, `plan` and `install` for all four setups and all three homes are the CONTROL ROOM's, run
+  in the campaign's own root before the operator is launched, from the one shell that holds the key
+  (the runner still passes it only to the OpenCode install script, E10-20). The operator reads
+  `stage.json`, `campaign.json` and the twelve home inventories, runs `verify` and `probe-env`
+  herself (both launch the harnesses with the key removed from the environment and read the auth
+  store), confirms the four setups and the counts (96, 8, 240), and proceeds to `campaign start
+  --reopen-key`. The key does not reach the campaign root's records: `install` writes the auth store
+  under the pilot home at mode 0600 and the install record names the file and its mode, never its
+  contents. `mandate-operate.md` steps 1 and 2 rewritten to match. The proof campaign of E10-62 ran
+  exactly this order (stage, plan, install, then trials) and is the precedent.
+- **E10-66 (control room, Fable 5.1 at high, 2026-09-15 9:46 PM: the operator's first stop).** Launched
+  on Tony's "GO! LETS COOK!" in the fresh window. Two minutes in, Astra stopped before any runner command
+  (`operator/stop.attempt1.md`): `mandate-operate.md` named the lane contract at `__COPY__/docs/e10-lane-contract.md`,
+  and `operate.sh` fills `__COPY__` with the live plugin directory, where no `docs/` exists; that file is what
+  `launch.sh copy` creates inside a review copy. Ruled a kit defect (the operate path was never exercised live
+  before this night; the E10-62 proof trials were run by the control room directly): the mandate now names the
+  contract by its real path, `docs/plans/2026-09-14-recheck-v2-e10-runner.md`, sections 3, 4 and 5; the other
+  two `__COPY__` uses (the key and the held-out set under the live plugin directory) resolve correctly and stand.
+  Relaunched on Tony's "relaunch"; attempt one's output kept beside the kit as `out-attempt1`.
+- **E10-67 (control room, 2026-09-15 9:57 PM: the operator's second stop).** Astra ran `verify` (ok, hashes equal,
+  leak scans empty) and `probe-env` on all twelve homes (ok; `banned_the_runner_passed` and
+  `banned_names_nobody_measured` empty everywhere), then stopped (`stop.attempt2.md`) because mandate step 1
+  read "a probe-env with a banned name" is a stop, with no exception, while the Claude Code and Codex probes
+  record the names those harnesses set in their own tool shells under `banned_names_seen`, which README section
+  5 and E10-42 accept. Ruled a second kit defect of the same origin: the sentence now states the runner's rule
+  (stop on `ok` false or on any name under the two gated fields; harness-set names are the harness's own act;
+  `banned_names_seen` is the raw union and not the gate). Relaunched on Tony's word; attempt two's output and an
+  operator-directory snapshot kept as `out-attempt2`. The third launch reached `campaign start --reopen-key`
+  and the first trial of every lane at 05:06:55Z.
+- **E10-68 (control room, 2026-09-16 2:30 AM, on Tony's ruling "fix everything first, then run a follow-up":
+  the campaign's end and the three runner defects).** The campaign ended on its own at 08:48Z, stopped and never
+  `complete`: the three live lanes exhausted every reachable trial, the runner exited, Astra wrote
+  `operator/report.md` and exited 0 with no stop. Ledger 228 rows: 175 complete, 53 `no_result`, 29 reruns
+  (each eligible trial exactly once, per her mandate), 0 timed out; $30.05 metered plus $0.39 of probes, Codex
+  unpriced; every number reproduced by the control room from `trials.jsonl`, `processes.jsonl`,
+  `interruptions.jsonl` and the trial directories (`control-room/recount.py`). By lane of 87 planned:
+  `claude-code` 10 complete, `codex` 63, `opencode` 54 + 18 `no_result`, `opencode-deepseek` 48 + 35. Three runner
+  defects, none seen by the proof or dry runs because none of those had another lane's launch alive:
+  (1) **the held-out barrier collides with concurrency**: the barrier holds `trigger-set/held-out/` at mode 000
+  while any registered launch is alive (E10-40) and `request_text` reads a held-out entry by subprocess at
+  launch time (E10-13); with four lanes alive the read fails with `PermissionError`, the runner records "the
+  trial raised: no trigger-set entry" and goes on; 72 held-out routing trials (8 prompts, 3 reps, three lanes)
+  raised with no process launched, the fourth lane's 24 never reached; the 144 tuning-set routing trials read
+  outside the wall and ran. (2) **`activation()` crashes on a string message**: a Claude Code system event of
+  subtype `permission_denied` (an Edit auto-denied headless) carries `message` as a plain string; `runner.py`
+  1609 calls `.get` on it; the first such event in any trace (`claude-code-F3-01-missed-case-available-r2`, its
+  eleventh trial) killed the `lane-claude-code` thread at 05:49Z, leaving that trial without `command.json` and
+  the lane at 10 of 87. (3) **a dead lane thread is invisible**: `campaign status` kept saying `running` with
+  `lane_stops` empty for three hours after the thread died, and the campaign ended only when the other lanes
+  ran dry. Two observations for the record and E11: the DeepSeek `no_result` transcripts echo the prompt and do
+  no work (a lane result, not a runner fault; all 7 absent and 4 of 7 available comparison trials, reruns
+  mostly the same); in the OpenCode absent trials the model ran `find` over the whole `skills-v2-pilot` tree,
+  listed recheck-v2 in other setups' homes and in older campaign roots (`fix-2026-09-15` among them), and asked
+  for those directories; OpenCode auto-rejected every request (14 trials), so no skill content reached an
+  absent trial, but the absent condition on OpenCode holds only at the permission gate, and the OpenCode
+  homes' `xdg-data` (log, snapshot, `opencode.db`) carries state from earlier campaigns that `install` did not
+  clear. Also observed by the operator: `codex-F1-01-fixed-clean-absent-r1` records `activated: true` under the
+  absent condition. Ruled by Tony: nothing is graded on this campaign; a fix round for the three defects (fresh
+  builder, Astra re-check at high), then one follow-up pass for the Claude Code remainder (77 trials) and the
+  96 held-out routing trials, then grading of everything together. The records of this campaign stay exactly
+  as they are (`~/.local/share/skills-v2-pilot/e10/e10-2026-09-15/`, packet copy
+  `astra-outputs/e10/campaign-e10-2026-09-15/`, fixture, tmp, stage and nested `.git` stripped, large
+  witnesses gzipped, scanned clean).
+- **E10-69 (control room, Fable 5.1 at high, 2026-09-16 late morning, on Tony's "go for fix": the fix
+  round accepted).** The fix-round-4 builder (Opus 5, Agent tool, effort inherited: 223 of 223 model
+  records at `high` in its transcript) delivered the three E10-68 fixes with tests that fail against
+  `1911199` and pass after, the hygiene item, and a live proof; the control room re-ran every gate itself:
+  runner suite 357 of 357 OK under `/usr/bin/python3` 3.9.6 and `uv run python3`; `check` ok with no problems
+  under both; adapters 34 / 96 / 90 OK; core 328 OK (2 skipped); the proof root read from its own records
+  (`complete` 6 of 6, no `interruptions.jsonl`, no `lane-stops/`, both held-out routing trials complete, the
+  keys closed from 17:10:58Z to 17:22:51Z across every launch, `routing/` holding both trigger-set records,
+  $0.054 metered). Accepted, with these rulings: (1) **Defect 1 takes shape (a)**: `campaign start` caches
+  every planned held-out request's text into `<campaign>/routing-requests/` before the first launch and
+  while the keys are open, through a subprocess that writes each file itself; a launch copies its entry's
+  file into `prompt.txt`; `key_paths`, `close_key`, `open_key` and `key_open` are unchanged; the wall test
+  lists `cache_routing_requests` as the only new reader. This is stronger than E10-13 (no held-out text ever
+  enters the runner process) and shape (b) is refused for the reason the builder gave (it would reopen the
+  directory while another lane's harness is alive). **`routing-requests/` holds sealed text and joins the
+  review-copy exclusions** (`launch.sh copy`), beside the key, the held-out set and the grade-derived files; a
+  packet copy of a campaign may hold it, as it already holds every trial's `prompt.txt`. (2) **Defect 2's fix
+  reaches one adapter.** E10-68 named `runner.py` 1609; the builder's brief widened it to every reader of a
+  trace or transcript record, and `adapters/claude-code/_common.py` `read_session` would raise on the same
+  record. The +18 −4 type guard there is accepted as part of E10-68 (the defect is the same record shape,
+  the change is behaviour-preserving for every well-formed record, and the 90 adapter tests are green); it
+  is the one edit outside section 5's boundary this round and Astra re-checks it. The `permission_denials`
+  witness (count and tool names, never message text) is a new `command.json` key. (3) **`runner_error` is a
+  sixth ledger status**, for a trial the runner failed rather than the harness; a lane worker's uncaught
+  exception writes that record, an interruption line and `lane-stops/<setup>.json` of kind `runner_error`,
+  `campaign status` reports it, and `campaign start` exits 1. (4) **Hygiene**: `install` clears the OpenCode
+  home's `xdg-data/opencode/` and `xdg-state/opencode/` except the auth store and records every path and
+  size; `xdg-cache` (the uv caches and the harness binary) is deliberately kept, reason recorded. The builder
+  cleared the `opencode/absent` and `opencode/routing` sub-homes without a backup; no campaign record was
+  lost (every trial keeps its own harness dumps) and those homes are the campaign's working state, not
+  records; noted, not upheld as a fault. (5) **The proof's shape**: six trials (one comparison, one held-out
+  routing, one manual-only per lane), because `validate_plan` requires a case and the runner adds the
+  manual-only probe; accepted, and the comparison trials are what kept another lane alive across each
+  held-out launch. (6) **`--skip-probe-gate`** was used for the proof and is accepted for a proof only; the
+  follow-up pass runs the probe gate in full. The runner writes no record of the skip: a pre-existing gap,
+  carried to E11 (record the skip in `campaign.json` or the log). (7) The proof's `stage.json` names commit
+  `1911199` with the fixed working tree's `plugin_tree_sha256`; the fixed tree is committed as the commit
+  this ruling lands in, and the follow-up pass stages from that commit. (8) The builder repeated the E10-63
+  slip (a `git status` with the keys closed put the key file names in its transcript; nothing crossed);
+  recorded. Next: Astra's targeted re-check at high (`recheck5`) on a review copy at this commit, then the
+  follow-up pass.
+- **E10-70 (control room, 2026-09-16 midday: Astra's recheck5 read).** Verdict at high on the review
+  copy of `17e384f`: items 2, 3, 4 and 5 FIXED; item 1 PARTLY; no new BLOCKER. Item 1 is UPHELD on its
+  exact point: `cache_routing_requests` and `write_routing_prompt` both called `file_sha256`, whose
+  `handle.read()` brought the complete cached request into the runner process to hash it, so the
+  E10-69(1) claim "no held-out text enters the runner process" did not hold, while the barrier invariant
+  (the sealed directory unreadable by any launched harness while any launch is alive) did. Fixed by the
+  control room, as E10-64 item 1 was: the file-writing subprocess now prints the digest and size of what
+  it wrote; the digest of a file cached by an earlier run comes from a digest subprocess
+  (`file_digest_by_subprocess`); the launch-time copy is `/bin/cp` in a subprocess
+  (`copy_file_by_subprocess`), not `shutil.copyfile`; neither function names a reader, a hasher or a
+  copier, checked by AST in `tests/test_e10_68.py` (`test_the_runner_never_reads_the_cached_text_itself`,
+  which also checks live that the subprocess digests equal the files). README section 5 reworded. Her
+  three side notes are accepted as written: the 2026-09-15 campaign would not have EXITED at 05:49Z under
+  the fix (the lane stops and the loop joins the other workers, then exits 1); the pre-fix adapter negative
+  is not reproducible from the copy (no pre-fix adapter was supplied; the fixed adapter skips `system`
+  records before the guarded sites), which limits the claimed reproduction and not the verified behaviour;
+  and E10-69 named no hash for the fixed commit, which is `17e384f`, with this ruling and the E10-70 change
+  landing in the commit after it. Items 2 to 5 are closed. A targeted re-check on item 1 alone (`recheck6`)
+  follows; then the follow-up pass on Tony's go.
+- **E10-71 (control room, 2026-09-16 midday: Astra's recheck6 read; the fix round closes).** Verdict at
+  high on the review copy of `aacc010`, item 1 alone: **ALL CLEARED, no new BLOCKER.** Her own AST scan
+  finds no reader, hasher or copier in `cache_routing_requests` or `write_routing_prompt`; against
+  `runner.py.17e384f` it names `file_sha256` and `copyfile`; her byte-count measurement reads zero; the
+  four barrier functions are unchanged against `17e384f`; the three targeted tests record mode 0 at all
+  twelve fake launches; the subprocess sequence is write, digest, copy, digest. The fix round of E10-68 is
+  CLOSED at `aacc010` (E10-69 to E10-71). **The follow-up pass**, on Tony's go: a NEW campaign root under
+  `~/.local/share/skills-v2-pilot/e10/` staged at `aacc010` (the 2026-09-15 root is a record and is not
+  resumed: its ledger, reruns and raised trials stay as they are; E10-43/44 govern reruns inside a root and
+  nothing in this contract makes a second root a rerun of the first); `stage`, `plan` and `install` by the
+  control room (E10-65); the plan = the Claude Code lane's unrun trials (the 14 comparison, 2 continuation
+  and 60 routing trials that lane never reached after `F3-01-missed-case-available-r2`, plus that trial
+  itself, which has no record; the 10 complete Claude Code trials of the first root are not re-run) and
+  the 96 held-out routing trials on all four lanes (8 prompts × 3 reps × 4); the probe gate in full, no
+  `--skip-probe-gate` (E10-69(6)); the operator mandate run live once in a dry root before the pass
+  (E10-66, E10-67); the same operator (Astra at high, `operate.sh`), the same watch. Grading then runs over
+  BOTH roots together, and the report states per lane which root each trial came from; how the two roots
+  are merged for `grade --all`, `routing-score` and `report` is the control room's ruling to write before
+  grading, not the operator's. The 2026-09-15 campaign's `opencode` and `opencode-deepseek` trials stand
+  as run; the OpenCode homes now carry no prior-campaign state (E10-69(4)), which the follow-up records
+  as a difference in conditions between the two roots.
+- **E10-72 (Tony, 2026-09-16 about noon, in discussion with the control room: a FULL FRESH RERUN, not the
+  follow-up pass of E10-71).** The control room laid out the two shapes with their costs (the missing pieces
+  alone, about $60 to $80 and two hours, leaving two roots, a merge ruling and two OpenCode lanes run under
+  mixed home conditions; a full clean rerun, about $85 to $110 and four hours, one root and one set of
+  conditions) and recommended the full rerun; Tony: "I want to do it right in a full fresh rerun." Ruled:
+  the next campaign is the WHOLE E10 plan again (the kit's `plan.json`: four setups, 348 trials) in a new
+  root staged from the fixed branch, run by the same operator through the same `operate.sh`, from a fresh
+  control room window on Tony's go there. The 2026-09-15 root stays as the record of the three defects and
+  of how the tools behaved on homes carrying prior state; nothing in it is graded or merged. E10-71's
+  follow-up shape is superseded; its other requirements stand: the probe gate in full, no
+  `--skip-probe-gate`, and the operator mandate run live once before the campaign. That dry run is
+  `dry-operate-2026-09-16/`: a one-lane, three-trial root (`opencode`, `F1-01-fixed-clean` available,
+  `H-01-slash-v2-doc-path` once, the manual-only probe) staged at `d03f71a`, run through `operate.sh` with a
+  copy of `mandate-operate.md` whose step-2 counts are the dry plan's and every other line identical, so
+  that steps 1 and 2 (the two stops of E10-66 and E10-67) and the probe-env sentence are exercised
+  verbatim. The real root is staged, planned and installed by the control room AFTER the dry run (E10-23:
+  the pilot homes carry one root's allow rules at a time), with the grading barrier's keys reopened and the
+  twelve installs and their leak scans read before the hand-off.
+- **E10-73 (control room, 2026-09-16 afternoon: the full fresh rerun ran to `complete` and is graded; the
+  record of the campaign, its one outage and Tony's rulings during it).** Root `e10-rerun-2026-09-16/`, staged
+  at `669a83c` (387 files, 348 trials, 12 installs, every leak scan empty, OpenCode prior state cleared and
+  recorded), launched by Astra through `operate.sh` on Tony's "Go" in the fresh window at 19:19Z after the
+  E10-72 dry run had finished clean (3 of 3, exit 0). Preflight: all twelve verify rows and all twelve probes
+  clean, no stop; `campaign start --reopen-key` at 19:23:32Z cached all eight held-out requests before the
+  first launch (E10-68 fix), the barrier closed both keys at the four concurrent first launches, and every
+  lane had a trial directory at 19:23:34Z. The ledger: 504 attempts, 321 `complete`, 138 `launch_failed`,
+  45 `no_result`; first pass 348 rows (192 / 135 / 21); 156 reruns, 129 `complete`, 24 `no_result`, 3
+  `launch_failed`; every eligible trial rerun exactly once, none twice, none missed; `lane-stops/` never
+  created; 349 interruption lines, all counted failures, four wall-clock gaps and six invalid continuation
+  cuts; the root scan 16,641 files, zero hits. Final state per trial: Claude Code 87 of 87 complete, Codex
+  87 of 87, qwen 76 complete / 10 `no_result` / 1 `launch_failed`, DeepSeek 71 / 14 / 2. **The outage:**
+  from 20:19:57Z OpenRouter refused every request with HTTP 402 (`in_flight_budget_exhausted`; the account
+  read 10.00 credits, 10.07 used), so both OpenCode lanes failed 135 first-pass launches in about 2.5 s each
+  at no cost (125 of them carry the 402 in `harness/trace.json`); Tony added $100 and it landed at 20:24:42Z
+  with zero reruns fired, so the operator's once-only reruns recovered all but three, each a five-minute
+  timeout (exit 124) on a model looping tool calls. Tony's rulings during the run: (1) add the credits
+  ("Wait. I'll increase the credits"); (2) "I only need to know the OpenRouter charges": the Claude Code
+  lane bills through his Anthropic plan and its metered figure is not reported to him (saved as a standing
+  preference); (3) the trial percentage settled (a trial is settled when its latest attempt is `complete` or
+  it has used its one retry) in every update. OpenRouter this run: $4.09 across 222 charged OpenCode runs.
+  **Grades (the operator's `grade --all`, `routing-score`, `report`, `scan`, all after `status-055.json`
+  showed zero live processes):** 143 attempts graded, 20 ok, 123 not ok; ok by setup Claude Code 3 of 27,
+  Codex 6 of 26, qwen 4 of 44, DeepSeek 7 of 46; 20 validator failures (exit 4), all absent-condition
+  comparison trials on Claude Code, Codex and qwen; summary fields `scope_violations` 47,
+  `skill_file_reached` 64, `records_reached` 22, `unauthorized` 1, `false_fixed_items` 2,
+  `continuation_invariants_held` 5. Routing on the sealed set: activation Claude Code 0.50, Codex 1.00,
+  qwen 0.50, DeepSeek 0.46, false-trigger 0.0 on all four; tuning set 0.67 / 0.94 / 0.50 / 0.53 with
+  false-trigger 0.0 / 0.06 / 0.03 / 0.09; the four score records are filed as
+  `evals/answer-key/trigger-set-<setup>-rev1.json`. Interpretation is E11's. The control room reproduced
+  every count from `trials.jsonl`, `interruptions.jsonl`, `processes.jsonl` and the grade files
+  (`control-room/recount.py` in the packet copy) and they match the operator's report. **Carried to E11
+  from the operator's anomaly list and the control room's watch:** (a) three reruns record exit 124 with
+  status `launch_failed` and `timeout_verdict: "within limit"`, a labelling gap; (b) the Codex compaction
+  record says `compaction observed` while its native witness says `ok: false`; (c) the mandate's `plan.json`
+  path was absent in the operator's view (she read the counts from `campaign.json` and edited nothing);
+  (d) the mandate's step 6 asked for the report repeated verbatim and the operator linked it instead;
+  (e) one control-room slip: last night's operator scratch output was not moved aside before the launch
+  (the launch hand-off's own trap), so a stale `operate.exit` tripped the first watchers for a minute;
+  nothing was lost (the packet held that output) and the root was never touched; (f) the cost line in the
+  launch hand-off called the Opus routing trials cheap; they averaged about a dollar each. Records: the
+  root; the packet copy `astra-outputs/e10/campaign-e10-rerun-2026-09-16/` (witnesses compressed, the
+  copy scanned; `control-room/` holds stage, plan, install, recount, the dry run's records and kit;
+  `operator-kit/` the mandate as run and the operator's output); this ruling.

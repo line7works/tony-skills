@@ -199,7 +199,7 @@ def selected(prompt, plugins, default="recheck-v2"):
     return default if default in plugins else None
 
 
-def write_claude_record(out_dir, prompt, state, steps, plugins):
+def write_claude_record(out_dir, prompt, state, steps, plugins, configured=None):
     """A stream-json trace, a transcript, result.txt and launch.json in Claude Code's shapes."""
     model = FAKE_MODEL["claude-code"]
     session = "fake0000-0000-4000-8000-00000000cafe"
@@ -268,7 +268,12 @@ def write_claude_record(out_dir, prompt, state, steps, plugins):
     write_json(os.path.join(out_dir, "launch.json"), {
         "ok": True, "problems": [], "claude_exit": 0, "session_id": session,
         "workspace": prompt["workspace"], "prompt_file": prompt["prompt_file"],
-        "sandbox": "acceptEdits", "model": model["init"], "permission_mode": "acceptEdits",
+        "sandbox": "acceptEdits", "model": model["init"],
+        # E10-62 item 4: the real launch.sh records the --model and --effort it was
+        # HANDED under their own keys, apart from `model`, which is the init event.
+        "configured_model": (configured or {}).get("model"),
+        "configured_effort": (configured or {}).get("effort"),
+        "permission_mode": "acceptEdits",
         "plugins": list(plugins), "skills": skills, "slash_commands": [], "mcp_servers": [],
         "tools": ["Bash", "Read", "Write"], "is_error": False, "num_turns": 4,
         "total_cost_usd": 0.1234, "permission_denials": [],
@@ -484,6 +489,12 @@ def main(argv):
         model_arg = None
         prompt_file, workspace, out_dir = rest[:3]
     plugins = [rest[i + 1] for i, a in enumerate(rest) if a == "--plugin"]
+    # E10-62 item 2: the two flags the real `setups/claude-code/launch.sh` now takes.
+    configured = {}
+    for flag in ("--model", "--effort"):
+        for index, word in enumerate(rest):
+            if word == flag and index + 1 < len(rest):
+                configured[flag[2:]] = rest[index + 1]
     if harness == "claude-code" and not plugins:
         # what the real Claude Code routing home loads: the marketplace plugins plus the two
         # fixtures its own `install.sh` puts in its local marketplace (measured 2026-09-15)
@@ -523,7 +534,7 @@ def main(argv):
         steps, state = drive_core(harness, prompt, out_dir)
     write_json(os.path.join(out_dir, "core-steps.json"), steps)
     if harness == "claude-code":
-        write_claude_record(out_dir, prompt, state, steps, plugins)
+        write_claude_record(out_dir, prompt, state, steps, plugins, configured)
     elif harness == "codex":
         write_codex_record(out_dir, prompt, state, steps,
                            os.environ.get("RECHECK_CODEX_HOME", "/nonexistent"))

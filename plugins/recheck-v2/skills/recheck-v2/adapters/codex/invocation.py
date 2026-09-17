@@ -7,10 +7,19 @@ import sys
 from turns import Missing, attribution, facts, locate, parser, read_records, run
 
 
+# Ruling E9-3, settled for this lane by E10-62: each id Tony pinned is class `opus` with
+# `floor_met` true on its own lane. `gpt-5.6-sol` is the E10 campaign's Codex model and read
+# `unknown` before this line, which would have made every Codex trial `verifier_unavailable`
+# before it graded anything. Each lane keeps its own map; there is no shared one.
+FLOOR_MAP={'gpt-6-astra':'opus','gpt-5.6-sol':'opus'}
+UNKNOWN_CLASS='unknown'
+
+
 def model_facts(meta,ctx,records=()):
     name=ctx.get('model')
     if not name:raise Missing('absent model in turn_context')
-    model={'id':name,'floor_class':'opus' if name=='gpt-6-astra' else 'unknown','floor_met':True if name=='gpt-6-astra' else None}
+    klass=FLOOR_MAP.get(name,UNKNOWN_CLASS)
+    model={'id':name,'floor_class':klass,'floor_met':True if klass!=UNKNOWN_CLASS else None}
     if meta.get('model_provider'):model['provider_route']=meta['model_provider']
     if isinstance(meta.get('context_window'),int):model['context_tokens']=meta['context_window']
     for record in records:
