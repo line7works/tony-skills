@@ -344,3 +344,33 @@ to exactly the held-out request text.
   accepted as such; the consumer's isolation check is false because a child in its launch environment can
   read a record outside its pair). The rerun set is unchanged. Astra's re-check (`launch.sh recheck`, E11-8
   high) launches on a fresh verify copy at `6013f35` behind the E11-1 wall; then carry under ruling 17.
+- **E11-14, Astra's re-check (delivered 2026-09-17 about 8:00 AM, at high, in twenty-five minutes; packet
+  `astra-outputs/e11/recheck/`), the carry under ruling 17, and the scope question put to Tony (control
+  room, about 8:10 AM).** On the fresh scrubbed copy at `6013f35`: FIXED 3, 4, 7, and all five NEW findings
+  of E11-12 (the repeated revision, the failed manual-only qualification, the listing, the compaction
+  reader, the forty-character prefix); no new BLOCKER; open 1, 2, 5, 6 (BLOCKER) and NEW 9 (MAJOR). Her
+  own suite runs failed on her sandbox's limits as every round; she read the control room's gates-H tails.
+  What remains open, sorted by what it touches. (i) Bench layout, carried to Tony since E11-12: 2, read
+  access shared across trials and accepted as unseparated; 5, another setup's station copy readable; 6,
+  the consumer's isolation false. (ii) Derived grading, re-derivable on the retained records with a later
+  `--revision`, so carried into the rerun's reading without loss: 1, an interpreter told only to print the
+  source (`python3 -c "print(open(...).read())"`, `sh -c 'cat ...'`) still satisfies `scenario_executed`; 6,
+  the consumer grader compares `artifact` where the schema says `artifact_path`, and the continuation
+  comparison accepts swapped done and pending items. (iii) Live behavior or launch control, which the
+  rerun's records would carry and no later derivation can undo: NEW 9, the item-3 phrase list treats "no
+  service observation" as a stopped execution, so a legitimate prose-only static clearance (X2-01, whose
+  first report says it needs no service observation) is downgraded to `not_fixed`; 6, `stage_consumer_pair`
+  copies no verifier evidence files, so the twelve live consumer trials would re-inspect pairs missing the
+  artifacts their evidence names; 2, `require_preflight` accepts a retained preflight whose allow-rule
+  check failed once the unseparated state is accepted (the control room reads the preflight record itself
+  before any launch, so this one is operationally controlled either way). Ruling 17's one fix round is
+  spent. The control room does not launch the rerun with the (iii) defects in the skill and the runner on
+  its own reading, and does not open a second fix round on its own: the choice is Tony's, put to him on
+  the board's You card. (A) A narrow second fix of the three (iii) items only, each with a
+  failing-then-passing test, the control room's gates, derived revision 6, and Astra's re-check limited to
+  those three; then the rerun. About an hour and a half. (B) Carry everything and launch the rerun now at
+  `6013f35`, reading the affected subset (prose-only static clearances; the twelve consumer trials) with the
+  limitation named. (C) Something else he names. The control room's pick is (A): two of the three change
+  what the rerun records, and the rerun costs hours and OpenRouter money to repeat. Until he rules:
+  nothing launches, no campaign root is created, the rerun set stays as confirmed (348 plus twelve
+  consumers plus twelve probes), the three local branches wait for "PR".
