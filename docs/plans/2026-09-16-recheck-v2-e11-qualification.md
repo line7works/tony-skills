@@ -493,7 +493,7 @@ to exactly the held-out request text.
   Tony's, put to him at 12:33 PM in chat, on the board's You card at 1:31 PM, by the Board window's push,
   and again now by a picker: keep waiting; add his own Qwen key on OpenRouter (the provider's own advice);
   drop or swap the lane (a plan change, his ruling). Nothing launched; no record changed.
-- **E11-22, Tony's ruling on the qwen lane (2026-09-17 about 2:36 PM): "Add my own Qwen key."** Tony adds an Alibaba
+- **E11-22, Tony's ruling on the qwen lane (2026-09-17 about 3:50 PM; the picker was put at 2:35 PM and his answer arrived about an hour later): "Add my own Qwen key."** Tony adds an Alibaba
   Model Studio key under OpenRouter's integrations so the lane runs on his own rate limit instead of the
   shared one, the provider's own advice in its 429 text. The plan is unchanged: the same four setups, the
   same pinned model for the lane. The control room keeps pinging the route every minute; on a window that
