@@ -534,3 +534,27 @@ to exactly the held-out request text.
   in the mandate changed. Attempt 1's outputs stay on record. `s/out` moved to `s/out-operate-attempt1`;
   `operate.sh <root> start` again. Decided by the control room as kit maintenance inside the standing goal
   line and flagged to Tony.
+- **E11-25, the campaign stopped by the control room at 4:55 PM: the codex lane cannot write its run directory (a repair regression).**
+  Attempt 2's campaign ran fourteen minutes. Every codex trial ended `no_result` in about 150 seconds with the
+  skill's own STOPPED message: the Codex sandbox refused the first write into the run directory ("patch
+  rejected: writing outside of the project; rejected by user approval settings", `harness/stderr.log`).
+  Diagnosis from the records, nothing changed: E10's codex sessions wrote the same sibling `run/` leaf
+  under the same launch argv, the same `workspace-write` policy with the child home as the only writable
+  root, the same git root (the workspace) and the same CLI 0.154.0; the one difference is `TMPDIR`. Every
+  E10 launch received `TMPDIR=<campaign>/tmp`, which contains the fixture's `run/` leaf, and Codex treats
+  `TMPDIR` as writable (`exclude_tmpdir_env_var: false` in both sessions' turn context); the E11-7 item 2
+  fix (`trial_scratch`: one private scratch per trial-attempt handed to the launch as `TMPDIR`, so no session
+  can list another's) moved `TMPDIR` to `<opaque tree>/scratch`, a sibling of `fixture/<12 hex>/run`, so
+  the run directory is now outside every writable root of a Codex session. Claude Code and OpenCode reach
+  it by their own routes (the `--add-dir` and the `external_directory` allow rule are written for the
+  campaign scratch root) and complete. The fix round's live proofs never launched a Codex comparison trial
+  after that change, so the regression reached the rerun. Ledger at the stop (`trials.jsonl`): claude-code
+  3 complete; opencode 1 complete; opencode-deepseek 2 complete and 4 `no_result` (its absent-condition
+  replies end within 25 seconds with no result, to be read separately); codex 3 `no_result`; the four
+  trials in flight at the stop recorded `launch_failed`, one per lane. `campaign stop` terminated four trial
+  processes and left the key closed; every record stays. The operator's session was left to end its turn
+  on its own. The choice is Tony's, put to him by picker: repair the runner so a Codex session can write the
+  fixture's run leaf (the control room's reading: hand the launch the opaque case directory, or place the
+  scratch above the fixture, with a live Codex proof this time), gate, a fresh root and a full restart; or
+  something he names. Charges so far this rerun: OpenRouter under a dollar (read at the reconvene from the
+  records); the Claude lane is on his plan and is not reported (E11-5).
