@@ -349,6 +349,76 @@ class BlockedThenStaticClearance(unittest.TestCase):
         self.assertTrue(any(phrase in blocked.lower()
                             for phrase in verifier.BLOCK_DECLARATIONS))
 
+    # E11 second fix, NEW 9: "no service observation" was in BLOCK_DECLARATIONS, and a
+    # prose-only report saying no execution was NEEDED read as an execution that was stopped.
+    PROSE_ONLY_FIRST_REPORT = ("This is a prose-only specification. It needs no service "
+                               "observation. The structured report is missing.\n")
+
+    def test_a_prose_only_first_report_does_not_block_the_static_clearance(self):
+        """Her X2-01 sequence, quoted from recheck/scratch/core-static-control.py.
+
+        The first report is incomplete (no tail), so the core retains it and permits the
+        re-send that supplies the ordinary static clearance. No execution was required and
+        none was stopped: the clearance stands.
+        """
+        run_dir, started = self.drive("VXUM-verifier-execution",
+                                      "X2-01-non-executable-artifact")
+        items = started["checklist"]
+        document = self.record(run_dir, started["call_id"], self.PROSE_ONLY_FIRST_REPORT,
+                               "supplied-prose.md")
+        self.assertEqual(document["next"], "verify", document)
+        static = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "fixed",
+             "method": "static", "static_reason": "non_executable_artifact",
+             "evidence": [{"kind": "read", "artifact": None,
+                           "detail": "static source inspection only; no service observation "
+                                     "obtained"}]}])
+        self.record(run_dir, document["call_id"], static, "supplied-static.md")
+        self.step(["adjudicate", "--run-dir", run_dir, "--item", "0", "--action",
+                   "confirmed"])
+        done = self.step(["record", "--run-dir", run_dir])
+        result = testlib.load_json(done["result"])
+        item = result["items"][0]
+        self.assertEqual(item["disposition"], "fixed")
+        self.assertIsNone(item.get("reason"))
+        self.assertEqual(item["verification"]["method"], "static")
+        self.assertEqual(item["adjudication"]["driver_action"], "confirmed")
+        self.assertNotIn("static_clearance_refused", item["adjudication"])
+        self.assertIsNone(item["verification"].get("blocked"))
+        self.validates(run_dir, done["result"])
+
+    def test_a_sentence_saying_no_execution_was_needed_is_not_a_declaration(self):
+        self.assertIsNone(verifier.declared_block(self.PROSE_ONLY_FIRST_REPORT)[0])
+        self.assertNotIn("no service observation", verifier.BLOCK_DECLARATIONS)
+
+    def test_a_negated_phrase_is_not_a_declaration(self):
+        """Every remaining phrase reads naturally negated; a plain substring match took both."""
+        for text in ("No execution was refused.",
+                     "Nothing the environment stopped.",
+                     "Neither the sandbox stopped it nor the environment stopped it.",
+                     "This run was not verification blocked.",
+                     "The report is missing; no execution was stopped."):
+            self.assertIsNone(verifier.declared_block(text)[0], text)
+
+    def test_a_negation_after_the_phrase_is_deliberately_not_caught(self):
+        """The window looks BACKWARD only, and this records why.
+
+        A forward window would cancel real declarations: "the sandbox stopped it; nothing
+        else ran" is a block, and any negation word a few words later would erase it. The
+        cost is that "the sandbox stopped nothing" still reads as a declaration. No retained
+        report in this pilot writes a block that way, and the false direction that matters —
+        a legitimate clearance falsely blocked, NEW 9 — is the leading one.
+        """
+        self.assertEqual(verifier.declared_block("The sandbox stopped nothing.")[0],
+                         "the sandbox stopped")
+
+    def test_a_real_declaration_still_reads_as_one(self):
+        for text, phrase in (("The required execution was refused.", "execution was refused"),
+                             ("The sandbox stopped the outbound call.", "the sandbox stopped"),
+                             ("The environment stopped it.", "the environment stopped"),
+                             ("Result: verification blocked.", "verification blocked")):
+            self.assertEqual(verifier.declared_block(text)[0], phrase, text)
+
     def test_a_static_clearance_with_no_prior_block_stays_fixed(self):
         """The control: the contract's own static route is untouched."""
         run_dir, started = self.drive("VXUM-verifier-execution",

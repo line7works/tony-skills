@@ -375,16 +375,62 @@ def save_sidecar(run_dir, doc):
 #   - structured: the report's own tail gives that item reason `verification_blocked`;
 #   - declared: the retained text carries the vocabulary contract section 5 and verifier.md
 #     fix for a stopped execution. The list is closed and is quoted from those two documents.
+# E11 second fix, NEW 9 (Astra's re-check of the fix round). "no service observation" was in
+# this list and is not a declaration of a stopped execution: her prose-only X2-01 report says
+# "It needs no service observation", a sentence stating that NO execution was needed, and the
+# core downgraded the ordinary static clearance that followed. A declared block is a statement
+# that a REQUIRED EXECUTION WAS REFUSED OR STOPPED, never a vocabulary word that can appear in
+# a sentence saying no execution was needed. Dropped, with "execution the sandbox stopped",
+# which only ever matched where the shorter "the sandbox stopped" already did.
 BLOCK_DECLARATIONS = (
     "verification blocked",
     "verification_blocked",
     "execution was refused",
     "execution was stopped",
-    "execution the sandbox stopped",
     "the sandbox stopped",
     "the environment stopped",
-    "no service observation",
 )
+
+# The same trap in the other direction: every remaining phrase reads naturally negated with
+# the negator in FRONT of it — "no execution was refused", "nothing the environment stopped" —
+# and a plain substring scan matches both. So a match is refused when a negation stands within
+# a few words before the phrase inside the same sentence. (The other permitted route, keeping
+# only phrases that cannot be negated, does not exist for this vocabulary: contract section 5
+# and verifier.md write the block in exactly these words.)
+BLOCK_NEGATIONS = ("no", "not", "never", "nothing", "none", "without", "nor", "neither",
+                   "cannot", "n't")
+BLOCK_NEGATION_WINDOW = 4          # words between the negation and the phrase
+_SENTENCE_BREAK = ".;:!?\n\r"
+
+
+def _negated_before(text_lower, at):
+    """Does a negation stand within a few words before `at`, in the same sentence?"""
+    start = 0
+    for index in range(at - 1, -1, -1):
+        if text_lower[index] in _SENTENCE_BREAK:
+            start = index + 1
+            break
+    words = [w.strip("\"'(),[]{}") for w in text_lower[start:at].split()]
+    for word in [w for w in words if w][-BLOCK_NEGATION_WINDOW:]:
+        if word in BLOCK_NEGATIONS or word.endswith("n't"):
+            return True
+    return False
+
+
+def declared_block(text):
+    """The first phrase in `text` that DECLARES a stopped execution, with its quote.
+
+    Returns `(phrase, quote)`, or `(None, None)` when the text carries none — including a
+    text where every occurrence is negated.
+    """
+    lowered = text.lower()
+    for phrase in BLOCK_DECLARATIONS:
+        at = lowered.find(phrase)
+        while at != -1:
+            if not _negated_before(lowered, at):
+                return phrase, text[max(0, at - 40):at + len(phrase) + 40].strip()
+            at = lowered.find(phrase, at + 1)
+    return None, None
 
 
 def blocked_history(run_dir, checkpoint_doc, index):
@@ -417,13 +463,10 @@ def blocked_history(run_dir, checkpoint_doc, index):
                     quote = row.get("blocked") or "reason verification_blocked"
                     break
         if how is None:
-            lowered = text.lower()
-            for phrase in BLOCK_DECLARATIONS:
-                if phrase in lowered:
-                    at = lowered.index(phrase)
-                    how = "the retained report declares a stopped execution"
-                    quote = text[max(0, at - 40):at + len(phrase) + 40].strip()
-                    break
+            phrase, said = declared_block(text)
+            if phrase:
+                how = "the retained report declares a stopped execution"
+                quote = said
         if how:
             found.append({"call_id": call.get("call_id") or call.get("id"),
                           "raw_path": path, "how": how, "quote": quote})

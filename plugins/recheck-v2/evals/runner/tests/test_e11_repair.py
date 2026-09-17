@@ -1379,6 +1379,228 @@ class FixItem1Observation(RunnerCase):
                              for a in runner.simple_commands(self.CONTROL)]))
 
 
+class Fix2ConsumerEvidence(RunnerCase):
+    """The narrow second fix, item B (Astra's re-check of the fix round).
+
+    The pair carried no evidence files, the grade read `artifact` while the result schema
+    names `artifact_path`, and the continuation comparison counted done and pending instead
+    of keying them by item index.
+    """
+
+    setups = ("claude-code", "codex")
+
+    def producer_with_an_artifact(self, name="producer"):
+        """A stand-in producer record whose evidence names a real file, as her probe does."""
+        record = os.path.join(self.scratch, name)
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        artifact = os.path.join(record, "run", "verifier", "observation.txt")
+        runner.ensure_dir(os.path.dirname(artifact))
+        runner.write_text(artifact, "observed seven\n")
+        runner.write_json(os.path.join(record, "result.json"), {
+            "items": [{"location": {"file": "src/demo.py", "line": 7},
+                       "claim": "a stand-in claim", "failure_scenario": "run the counter",
+                       "severity": "MAJOR", "disposition": "not_fixed",
+                       "reason": "reproduces",
+                       "verification": {"evidence": [
+                           {"kind": "command", "artifact_path": artifact,
+                            "detail": "The observed counter remained at seven after the "
+                                      "operation; expected eight."}]}}],
+            "cards": []})
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"),
+                          {"phase": "completed", "continuations": 0, "scope": {"items": []}})
+        return {"record": record, "trial": "standin-producer",
+                "command": {"workspace": os.path.join(record, "workspace")}}, artifact
+
+    def staged(self, producer, leaf="pair"):
+        campaign = runner.Campaign(self.campaign)
+        return runner.stage_consumer_pair(campaign, producer,
+                                          os.path.join(self.scratch, leaf))
+
+    def test_the_pair_carries_the_file_the_evidence_names(self):
+        """Her artifact_recovery probe: `artifact_copied` was false."""
+        producer, artifact = self.producer_with_an_artifact()
+        pair = self.staged(producer)
+        copy = os.path.join(pair["producer_dir"], "run", "verifier", "observation.txt")
+        self.assertTrue(os.path.isfile(copy), pair["copied"])
+        self.assertEqual(runner.file_sha256(copy), runner.file_sha256(artifact))
+        rows = pair["artifacts"]
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["copied"])
+        self.assertEqual(rows[0]["artifact_path"], artifact)
+        self.assertEqual(rows[0]["sha256"], runner.file_sha256(artifact))
+        self.assertIn(os.path.join("run", "verifier", "observation.txt"), pair["copied"])
+
+    def test_the_expected_reference_reads_the_schemas_field(self):
+        producer, artifact = self.producer_with_an_artifact("named")
+        expected = runner._consumer_expected(producer)
+        reference = expected["items"][0]["evidence"][0]
+        self.assertEqual(reference["artifact_path"], artifact)
+        self.assertEqual(reference["named_by"], "artifact_path")
+
+    def test_a_changed_artifact_path_fails_the_evidence_check(self):
+        """Her probe: `changed_path_accepted` was true."""
+        producer, _artifact = self.producer_with_an_artifact("changed")
+        pair = self.staged(producer, "changed-pair")
+        expected = runner._consumer_expected(producer)
+        answer = {"items": expected["items"], "cards": []}
+        answer["items"][0]["evidence"][0]["artifact_path"] = "different-observation.txt"
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        runner.write_json(answer_path, answer)
+        grade = runner.consumer_grade(pair, producer, answer_path)
+        self.assertFalse(grade["checks"]["evidence_references"])
+        self.assertFalse(grade["checks"]["evidence_artifacts_recovered"])
+        self.assertFalse(grade["ok"])
+
+    def test_the_honest_answer_recovers_the_reference_and_the_file(self):
+        producer, _artifact = self.producer_with_an_artifact("honest")
+        pair = self.staged(producer, "honest-pair")
+        expected = runner._consumer_expected(producer)
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        runner.write_json(answer_path, {"items": expected["items"], "cards": []})
+        grade = runner.consumer_grade(pair, producer, answer_path)
+        self.assertTrue(grade["checks"]["evidence_references"])
+        self.assertTrue(grade["checks"]["evidence_artifacts_recovered"])
+        row = grade["evidence_artifacts"][0]
+        self.assertTrue(row["content_matches"])
+        self.assertEqual(row["producer_sha256"], row["consumer_sha256"])
+
+    def test_an_answer_naming_a_file_the_pair_does_not_hold_fails(self):
+        """The reference is right, the file is gone: the content check is what catches it."""
+        producer, _artifact = self.producer_with_an_artifact("missing")
+        pair = self.staged(producer, "missing-pair")
+        expected = runner._consumer_expected(producer)
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        runner.write_json(answer_path, {"items": expected["items"], "cards": []})
+        os.remove(os.path.join(pair["producer_dir"], "run", "verifier", "observation.txt"))
+        grade = runner.consumer_grade(pair, producer, answer_path)
+        self.assertTrue(grade["checks"]["evidence_references"])
+        self.assertFalse(grade["checks"]["evidence_artifacts_recovered"])
+
+    # ---- the continuation comparison, keyed by item index
+    def continuation_producer(self):
+        record = os.path.join(self.scratch, "cont-producer")
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        items = [{"location": {"file": "src/demo.py", "line": line},
+                  "claim": "stand-in claim %d" % line,
+                  "failure_scenario": "run the counter", "severity": "MAJOR",
+                  "disposition": "not_fixed", "reason": "reproduces",
+                  "verification": {"evidence": [{"kind": "command",
+                                                 "detail": "observed counter at seven"}]}}
+                 for line in (7, 8)]
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"items": items, "cards": []})
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"),
+                          {"phase": "adjudicating", "continuations": 1,
+                           "items": [{"state": "done", "result": items[0]},
+                                     {"state": "pending", "result": None}]})
+        return {"record": record, "trial": "standin-producer",
+                "command": {"workspace": os.path.join(record, "workspace"),
+                            "kind": "continuation-handoff"}}
+
+    def graded_continuation(self, mutate=None, leaf="cont-pair"):
+        import copy
+        producer = self.continuation_producer()
+        pair = self.staged(producer, leaf)
+        expected = runner._consumer_expected(producer)
+        answer = {"items": expected["items"], "cards": [],
+                  "continuation": copy.deepcopy(expected["continuation"])}
+        if mutate:
+            mutate(answer["continuation"])
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        runner.write_json(answer_path, answer)
+        return runner.consumer_grade(pair, producer, answer_path), answer, expected
+
+    def test_the_honest_continuation_answer_still_passes(self):
+        grade, _answer, _expected = self.graded_continuation(leaf="cont-control")
+        self.assertTrue(grade["checks"]["continuation_state"])
+
+    def test_a_swapped_done_and_pending_fails_the_continuation_state(self):
+        """Her consumer_swapped_item_states: counts unchanged, the assignment reversed."""
+        def swap(state):
+            state["states"] = ["pending", "done"]
+            for row, value in zip(state["item_rows"], ["pending", "done"]):
+                row["state"] = value
+        grade, answer, expected = self.graded_continuation(swap, "cont-swapped")
+        # the counts really are unchanged: this is what passed before
+        for field in ("continuations", "phase", "done", "pending"):
+            self.assertEqual(answer["continuation"][field],
+                             expected["continuation"][field], field)
+        self.assertTrue(grade["continuation"]["counts_held"])
+        self.assertFalse(grade["continuation"]["indexes_held"])
+        self.assertFalse(grade["checks"]["continuation_state"])
+        self.assertEqual(grade["continuation"]["expected_indexes"]["done"], [0])
+        self.assertEqual(grade["continuation"]["observed_indexes"]["done"], [1])
+
+
+class Fix2PreflightAllowRules(RunnerCase):
+    """The narrow second fix, item C: an acceptance never covers a failed allow rule."""
+
+    setups = ("opencode",)
+    preflight_accepted = False
+
+    def record_preflight(self, allow, separated=False, accepted=True):
+        campaign = runner.Campaign(self.campaign)
+        document = {"separated": separated, "accepted_unseparated": accepted, "rows": [],
+                    "not_separated": [] if separated else ["opencode"]}
+        if allow is not None:
+            document["allow_rules"] = allow
+        runner.write_json(os.path.join(campaign.records("read-boundary"),
+                                       "preflight-check.json"), document)
+        return campaign
+
+    FOREIGN = {"ok": False, "rows": [], "homes_written_for_another_campaign": [
+        {"setup": "opencode", "home": "available",
+         "config": "/some/home/xdg-config/opencode/opencode.json",
+         "present": True, "covers_this_campaigns_scratch_root": False,
+         "carries_allow_rules_for": ["/some/other/campaign/tmp/**"]}]}
+
+    def test_a_failed_allow_rule_refuses_every_launch(self):
+        """Her failed_allow_rules case: the preflight refused, the launch proceeded."""
+        campaign = self.record_preflight(self.FOREIGN)
+        state = runner.preflight_state(campaign)
+        self.assertTrue(state["accepted_unseparated"])
+        self.assertFalse(state["allow_rules_ok"])
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "a trial")
+        message = str(caught.exception)
+        self.assertIn("allow-rule preflight", message)
+        self.assertIn("opencode/available", message)
+        self.assertIn("/some/other/campaign/tmp/**", message)
+        self.assertIn("install", message)
+        self.assertIn("accept-unseparated accepts only", message)
+
+    def test_the_launch_itself_is_refused(self):
+        self.record_preflight(self.FOREIGN)
+        tid = runner.trial_id("opencode", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("opencode")])
+        self.assertEqual(got.returncode, 2, got.stdout[-800:])
+        self.assertIn("allow-rule preflight", got.stderr)
+
+    def test_a_passed_allow_rule_still_launches(self):
+        campaign = self.record_preflight({"ok": True, "rows": [],
+                                          "homes_written_for_another_campaign": []})
+        state = runner.require_preflight(campaign, "a trial")
+        self.assertTrue(state["allow_rules_checked"])
+        self.assertTrue(state["allow_rules_ok"])
+
+    def test_a_record_with_no_allow_rules_key_is_not_checked(self):
+        """The older record shape: `.get("ok", True)` read it as passing."""
+        campaign = self.record_preflight(None)
+        state = runner.preflight_state(campaign)
+        self.assertFalse(state["allow_rules_checked"])
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "a trial")
+        message = str(caught.exception)
+        self.assertIn("predates the allow-rule check", message)
+        self.assertIn("never covers an unchecked allow rule", message)
+
+    def test_the_acceptance_says_what_it_does_not_cover(self):
+        got = cli(["preflight", "--campaign", self.campaign, "--accept-unseparated"])
+        said = got.stdout + got.stderr
+        self.assertIn("never covers a failed or unchecked allow rule", said)
+
+
 class FixItem2Separation(RunnerCase):
     """Item 2(a)-(d): the preflight gate, the exclusion, the report, the listing."""
 

@@ -10124,6 +10124,18 @@ json.dump(out, sys.stdout)
 """
 
 
+def _external_directory_rules(text):
+    """The `external_directory` patterns an OpenCode config grants, as written."""
+    if not text:
+        return []
+    try:
+        document = json.loads(text)
+    except ValueError:
+        return []
+    rules = ((document.get("permission") or {}).get("external_directory") or {})
+    return sorted(rules) if isinstance(rules, dict) else []
+
+
 def allow_rule_check(campaign, plan, setups=None):
     """Does each OpenCode home's own allow rule cover THIS campaign's scratch root?
 
@@ -10155,6 +10167,9 @@ def allow_rule_check(campaign, plan, setups=None):
             rows.append({"setup": spec["name"], "home": home, "config": path,
                          "present": text is not None,
                          "covers_this_campaigns_scratch_root": covered,
+                         # E11 second fix, item C: the refusal names the campaign whose rule
+                         # this home actually carries, so the message says what to reinstall
+                         "carries_allow_rules_for": _external_directory_rules(text),
                          "scratch_root": campaign.tmp})
     missing = [r for r in rows if r["present"] and not r["covers_this_campaigns_scratch_root"]]
     return {"rows": rows, "ok": not missing,
@@ -10174,10 +10189,17 @@ def preflight_state(campaign):
             document = read_json(path)
         except (Missing, Failure):
             continue
+        allow = document.get("allow_rules")
         best = {"record": path,
                 "separated": bool(document.get("separated")),
                 "accepted_unseparated": bool(document.get("accepted_unseparated")),
-                "allow_rules_ok": bool((document.get("allow_rules") or {}).get("ok", True))}
+                # E11 second fix, item C: an older record with no `allow_rules` key was read
+                # as passing (`.get("ok", True)`). It was never checked, and a launch under it
+                # is a launch under an unchecked bench.
+                "allow_rules_checked": isinstance(allow, dict) and "ok" in allow,
+                "allow_rules_ok": bool(isinstance(allow, dict) and allow.get("ok")),
+                "homes_written_for_another_campaign": (
+                    (allow or {}).get("homes_written_for_another_campaign") or [])}
     return best
 
 
@@ -10202,7 +10224,39 @@ def require_preflight(campaign, what):
             "was recorded. Re-run it, or accept it with `preflight --campaign %s "
             "--accept-unseparated` (E11-7 item 2(a))."
             % (what, state["record"], campaign.root))
+    # E11 second fix, item C (Astra's re-check): accepting the unseparated bench state accepts
+    # ONLY that. A home carrying another campaign's allow rule auto-rejects every write to
+    # this campaign's run directory, so the session ends with no result — a launch under it
+    # produces nothing, whatever was accepted about the read boundary.
+    if not state["allow_rules_checked"]:
+        raise Usage(
+            "refusing to run %s: the read-boundary record at %s predates the allow-rule "
+            "check, so no allow rule has been checked for this campaign. Re-run `preflight "
+            "--campaign %s` (E11-7 item 2; an acceptance never covers an unchecked allow "
+            "rule)." % (what, state["record"], campaign.root))
+    if not state["allow_rules_ok"]:
+        raise Usage(
+            "refusing to run %s: the allow-rule preflight recorded at %s FAILED, and "
+            "--accept-unseparated accepts only the read-boundary state, never this. %s Run "
+            "`runner.py install --campaign %s --setup <setup> --home <home>` for each of them "
+            "from THIS campaign, then re-run `preflight --campaign %s` (E11-7 item 2)."
+            % (what, state["record"], _allow_rule_failures(state), campaign.root,
+               campaign.root))
     return state
+
+
+def _allow_rule_failures(state):
+    """Which homes carry another campaign's rule, and whose rule each carries."""
+    rows = state.get("homes_written_for_another_campaign") or []
+    if not rows:
+        return "The record names no home, so re-run the preflight to see which."
+    said = []
+    for row in rows:
+        carries = row.get("carries_allow_rules_for") or []
+        said.append("%s/%s (%s) carries the allow rule of %s"
+                    % (row.get("setup"), row.get("home"), row.get("config"),
+                       ", ".join(carries) if carries else "another campaign"))
+    return "; ".join(said) + "."
 
 
 def do_preflight(args):
@@ -10215,15 +10269,20 @@ def do_preflight(args):
                                                setups=getattr(args, "setup", None))
     document["campaign"] = campaign.root
     document["accepted_unseparated"] = bool(getattr(args, "accept_unseparated", False))
+    document["what_the_acceptance_covers"] = (
+        "--accept-unseparated accepts the READ-BOUNDARY state of this bench and nothing "
+        "else: it never covers a failed or unchecked allow rule, and every launch is refused "
+        "while one stands (E11 second fix, item C)")
     if not document["allow_rules"]["ok"]:
         write_json(os.path.join(campaign.records("read-boundary"),
                                 "preflight-%s.json" % now_iso().replace(":", "")), document)
         raise Failure(
             "the allow-rule preflight failed: %s carries the allow rule of another campaign, "
             "so every write to this campaign's run directory is auto-rejected. Run `install` "
-            "for each of them from this campaign first (E11-7 item 2)."
-            % ", ".join("%s/%s" % (r["setup"], r["home"])
-                        for r in document["allow_rules"]["homes_written_for_another_campaign"]))
+            "for each of them from this campaign first (E11-7 item 2). %s"
+            % (", ".join("%s/%s" % (r["setup"], r["home"])
+                         for r in document["allow_rules"]["homes_written_for_another_campaign"]),
+               document["what_the_acceptance_covers"]))
     if not document["separated"] and not document["accepted_unseparated"]:
         write_json(os.path.join(campaign.records("read-boundary"),
                                 "preflight-%s.json" % now_iso().replace(":", "")), document)
@@ -10395,6 +10454,40 @@ def producer_record_for(campaign, plan, producer):
                    "trials first (they carry a continuation state to recover)"}
 
 
+# The result schema (references/result.schema.json) names the evidence reference
+# `artifact_path` and forbids additional properties, so a schema-valid retained result can
+# never carry `artifact`: that is the VERIFIER REPORT's field name (references/verifier.md),
+# which the core maps into `artifact_path` when it records. `artifact` is read only as a
+# fallback, and a grade that used it says so.
+EVIDENCE_ARTIFACT_FIELDS = ("artifact_path", "artifact")
+
+
+def _evidence_artifact(entry):
+    """The file an evidence reference names, and which field named it."""
+    if not isinstance(entry, dict):
+        return None, None
+    for field in EVIDENCE_ARTIFACT_FIELDS:
+        value = entry.get(field)
+        if isinstance(value, str) and value.strip():
+            return value, field
+    return None, None
+
+
+def _evidence_artifacts(record):
+    """Every file the producer's own result names by `artifact_path`, in order."""
+    try:
+        result = read_json(os.path.join(record, "result.json"))
+    except (Missing, Failure):
+        return []
+    named = []
+    for item in result.get("items") or []:
+        for entry in ((item.get("verification") or {}).get("evidence") or []):
+            value, _field = _evidence_artifact(entry)
+            if value and value not in named:
+                named.append(value)
+    return named
+
+
 CONSUMER_COPIED = ("result.json", "reply.md", "chat.md")
 CONSUMER_RUN_COPIED = ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log")
 
@@ -10425,6 +10518,48 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
             if os.path.isfile(source):
                 shutil.copy2(source, os.path.join(producer_dir, "run", name))
                 copied.append("run/%s" % name)
+    # E11 second fix, item B (Astra's re-check): the pair carried NO evidence files, so a
+    # consumer re-inspecting it could not open a single artifact its evidence names. The
+    # producer's retained verifier directory is where they live (the schema: "bulk output
+    # redirected to a file under run_dir"), and every path the evidence names by
+    # `artifact_path` is copied at its own relative place under the pair.
+    verifier_source = os.path.join(run_source, "verifier")
+    if os.path.isdir(verifier_source):
+        for base, _dirs, files in os.walk(verifier_source):
+            for name in sorted(files):
+                full = os.path.join(base, name)
+                relative = os.path.relpath(full, record)
+                destination = os.path.join(producer_dir, relative)
+                ensure_dir(os.path.dirname(destination))
+                if not os.path.isfile(destination):
+                    shutil.copy2(full, destination)
+                    copied.append(relative)
+    artifacts = []
+    for named in _evidence_artifacts(record):
+        relative = named
+        if os.path.isabs(named):
+            if not path_contains(record, named):
+                artifacts.append({"artifact_path": named, "relative": None, "staged": None,
+                                  "copied": False, "sha256": None,
+                                  "why": "the reference names a path outside the producer's "
+                                         "own record; nothing outside it is copied"})
+                continue
+            relative = os.path.relpath(named, record)
+        source = os.path.join(record, relative)
+        destination = os.path.join(producer_dir, relative)
+        row = {"artifact_path": named, "relative": relative, "staged": destination,
+               "copied": False, "sha256": None}
+        if os.path.isfile(source):
+            ensure_dir(os.path.dirname(destination))
+            if not os.path.isfile(destination):
+                shutil.copy2(source, destination)
+                copied.append(relative)
+            row["copied"] = True
+            # the hash of the PRODUCER's own file, so the pair's copy can be proved identical
+            row["sha256"] = file_sha256(source)
+        else:
+            row["why"] = "the producer's evidence names a file its record does not hold"
+        artifacts.append(row)
     # the workspace as the producer left it: its records are what the consumer reads
     workspace = os.path.join(pair_dir, "workspace")
     source_workspace = producer_row["command"].get("workspace")
@@ -10455,6 +10590,7 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
     return {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
             "run_dir": run_dir, "run_id": run_id, "input": input_path,
             "copied": copied,
+            "artifacts": artifacts,
             "producer_hashes_before": producer_hashes,
             "unrelated_records_present": [
                 name for name in sorted(os.listdir(producer_dir))
@@ -10500,8 +10636,13 @@ def _consumer_expected(producer_row):
         evidence = []
         for entry in ((item.get("verification") or {}).get("evidence") or []):
             if isinstance(entry, dict):
+                # E11 second fix, item B: the schema's field is `artifact_path`; the grader
+                # read `artifact`, which a valid result never carries, so a changed reference
+                # passed.
+                named, field = _evidence_artifact(entry)
                 evidence.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
-                                 "artifact": entry.get("artifact")})
+                                 "artifact_path": named,
+                                 "named_by": field})
         items.append({"location": "%s:%s" % (location.get("file"), location.get("line")),
                       "claim": item.get("claim"),
                       "disposition": item.get("disposition"),
@@ -10537,14 +10678,16 @@ def _same_evidence(theirs, ours):
     """
     if not isinstance(theirs, list):
         return False, "the consumer recorded no evidence list"
-    wanted = [dict(e) for e in ours]
+    wanted = [{"kind": e.get("kind"), "detail": e.get("detail"),
+               "artifact_path": e.get("artifact_path")} for e in ours]
     got = []
     for entry in theirs:
         if isinstance(entry, dict):
+            named, _field = _evidence_artifact(entry)
             got.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
-                        "artifact": entry.get("artifact")})
+                        "artifact_path": named})
         else:
-            got.append({"kind": None, "detail": entry, "artifact": None})
+            got.append({"kind": None, "detail": entry, "artifact_path": None})
     for reference in wanted:
         if reference not in got:
             # a reference whose detail alone matches is named, so a truncation is legible
@@ -10554,6 +10697,76 @@ def _same_evidence(theirs, ours):
                            % (str(reference.get("detail"))[:60],
                               "; one matches only its first forty characters" if near else ""))
     return True, "every reference of the producer's appears whole"
+
+
+def _states_by_index(state):
+    """Which item INDEXES are in each state, from the retained per-item rows.
+
+    E11 second fix, item B: `done: 1, pending: 1` is the same pair of counts however the two
+    items are assigned, so an answer that swapped them passed.
+    """
+    out = {}
+    rows = (state or {}).get("item_rows")
+    if isinstance(rows, list) and rows:
+        for row in rows:
+            if isinstance(row, dict):
+                out.setdefault(str(row.get("state")), []).append(row.get("index"))
+    else:
+        states = (state or {}).get("states")
+        if isinstance(states, list):
+            for index, value in enumerate(states):
+                out.setdefault(str(value), []).append(index)
+    return {key: sorted(values, key=lambda v: (str(type(v)), str(v)))
+            for key, values in out.items()}
+
+
+def _artifact_rows(pair, ours, theirs):
+    """Every artifact the producer's evidence names, resolved inside the pair and hashed.
+
+    The consumer reaches the producer's files only through the pair, so the reference it
+    gives is resolved against the staged copy and that copy's content is compared, by hash,
+    with the producer's own file as it was when the pair was staged.
+    """
+    staged = {}
+    for row in pair.get("artifacts") or []:
+        for key in (row.get("artifact_path"), row.get("relative")):
+            if key:
+                staged[key] = row
+    theirs = theirs if isinstance(theirs, list) else []
+    rows = []
+    for position, reference in enumerate(ours):
+        named = reference.get("artifact_path")
+        if not named:
+            continue
+        got = theirs[position] if position < len(theirs) else None
+        their_named, _field = _evidence_artifact(got) if isinstance(got, dict) else (None,
+                                                                                     None)
+        row = {"producer_named": named, "consumer_named": their_named,
+               "in_the_pair": False, "producer_sha256": None, "consumer_sha256": None}
+        source = staged.get(named)
+        if source:
+            row["in_the_pair"] = bool(source.get("copied"))
+            row["producer_sha256"] = source.get("sha256")
+            row["staged"] = source.get("staged")
+        resolved = None
+        if their_named:
+            candidate = staged.get(their_named)
+            if candidate and candidate.get("staged"):
+                resolved = candidate["staged"]
+            else:
+                direct = their_named if os.path.isabs(their_named) else os.path.join(
+                    pair.get("producer_dir") or "", their_named)
+                resolved = direct
+        if resolved and os.path.isfile(resolved):
+            row["consumer_sha256"] = file_sha256(resolved)
+            row["consumer_resolved"] = resolved
+        row["content_matches"] = bool(row["producer_sha256"]
+                                      and row["producer_sha256"] == row["consumer_sha256"])
+        if not row["content_matches"]:
+            row["why"] = ("the artifact the consumer's reference names is not the producer's "
+                          "file, or is not in the pair at all")
+        rows.append(row)
+    return rows
 
 
 def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path=None,
@@ -10582,7 +10795,7 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
             by_location[str(row["location"])] = row
     checks["original_scope"] = sorted(by_location) == sorted(
         i["location"] for i in expected["items"])
-    identity_rows, evidence_rows = [], []
+    identity_rows, evidence_rows, artifact_rows = [], [], []
     for item in expected["items"]:
         got = by_location.get(item["location"]) or {}
         identity_rows.append({
@@ -10592,15 +10805,25 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
             "disposition_recovered": got.get("disposition") == item["disposition"],
             "reason_recovered": (got.get("reason") or None) == (item["reason"] or None)})
         same, why = _same_evidence(got.get("evidence"), item["evidence"])
+        artifacts = _artifact_rows(pair, item["evidence"], got.get("evidence"))
         evidence_rows.append({"location": item["location"], "references_the_record": same,
                               "why": why,
-                              "producer_evidence_entries": len(item["evidence"])})
+                              "producer_evidence_entries": len(item["evidence"]),
+                              "artifacts": artifacts,
+                              "artifacts_recovered": all(a["content_matches"]
+                                                         for a in artifacts)})
+        artifact_rows.extend(artifacts)
     checks["item_identity"] = bool(identity_rows) and all(
         r["claim_recovered"] and r["disposition_recovered"] and r["reason_recovered"]
         for r in identity_rows)
     # Item 6(a): every reference, whole, and bound to the producer's own artifacts.
     checks["evidence_references"] = bool(evidence_rows) and all(
         r["references_the_record"] for r in evidence_rows)
+    # Item B: every artifact the producer's evidence names is IN the pair, and the file the
+    # consumer's reference names is byte-identical to the producer's own. Vacuously true when
+    # the producer's evidence names no artifact.
+    checks["evidence_artifacts_recovered"] = all(row["content_matches"]
+                                                 for row in artifact_rows)
     got_cards = {str(c.get("slice")): c for c in ((answer or {}).get("cards") or [])
                  if isinstance(c, dict)}
     card_rows = []
@@ -10617,13 +10840,25 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
         theirs = (answer or {}).get("continuation")
         ours = expected["continuation"] or {}
         fields = ("continuations", "phase", "done", "pending")
+        # E11 second fix, item B: counts alone accepted an answer that swapped WHICH item was
+        # done and which was pending (her consumer_swapped_item_states). The comparison keys
+        # by item index.
+        ours_at = _states_by_index(ours)
+        theirs_at = _states_by_index(theirs if isinstance(theirs, dict) else None)
+        keyed = ("done", "pending")
         continuation = {
             "expected": {k: ours.get(k) for k in fields},
             "observed": ({k: theirs.get(k) for k in fields}
                          if isinstance(theirs, dict) else theirs),
-            "compared_on": list(fields)}
-        continuation["held"] = isinstance(theirs, dict) and all(
+            "expected_indexes": {k: ours_at.get(k, []) for k in keyed},
+            "observed_indexes": {k: theirs_at.get(k, []) for k in keyed},
+            "compared_on": list(fields) + ["the item indexes in each state"]}
+        continuation["counts_held"] = isinstance(theirs, dict) and all(
             theirs.get(k) == ours.get(k) for k in fields)
+        continuation["indexes_held"] = all(ours_at.get(k, []) == theirs_at.get(k, [])
+                                           for k in keyed)
+        continuation["held"] = bool(continuation["counts_held"]
+                                    and continuation["indexes_held"])
         checks["continuation_state"] = continuation["held"]
     # ---- Item 6(b): a validating result and an actual reply
     result = None
@@ -10671,6 +10906,7 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
         "checks": checks,
         "items": identity_rows,
         "evidence": evidence_rows,
+        "evidence_artifacts": artifact_rows,
         "cards": card_rows,
         "continuation": continuation,
         "source_identity": identity_row,
