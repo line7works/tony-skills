@@ -444,3 +444,17 @@ to exactly the held-out request text.
   (`mandate-recheck3.md`, `launch.sh recheck3`), her verdict filed as E11-19, then the rerun on Tony's
   standing goal line. The 10:34 AM push to Tony offering a launch at `9368509` instead drew no answer; the
   send-back stood.
+- **E11-19, Astra's re-check of the send-back: BOTH CLEARED (2026-09-17 about 11:40 AM).** Astra (GPT-6 at
+  high, `launch.sh recheck3`, mandate `mandate-recheck3.md`, 5 minutes, exit 0; packet
+  `astra-outputs/e11/recheck3/` with her probe scripts) on A2 and B2 against `8b6beda`: A2 FIXED (the guard
+  stops at unrelated words: "No output because execution was refused" is a block and downgrades the later
+  static clearance; "no execution was refused", "the execution was not blocked" and X2-01 stay fixed,
+  confirmed, no refusal; F5 and the structured tail still downgrade). B2 FIXED (reversed references recover
+  with both files unchanged; a wrong file, changed content and a missing reference fail; swapped item
+  states still fail `continuation_state`). No new BLOCKER, no new MAJOR. Her runner E11 suite again showed
+  four failures from her sandbox refusing the fake producer's uv cache, confirmed by her own diagnostic;
+  chain J ran the same suite green. That closes the E11-15 narrow round: the three live-record items hold on
+  the reviewer's own probes, the runner and the skill at `8b6beda` are what the rerun runs, and everything
+  E11-14 carried still carries to the reconvene. The rerun starts now on Tony's standing goal line
+  ("finish the build and Astra check, then run the rerun"), the control room staging, planning, installing,
+  verifying, probing and preflighting the new root `e11-repair-qualification` before the operator is launched.
