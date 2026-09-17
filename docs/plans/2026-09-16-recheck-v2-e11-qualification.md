@@ -477,3 +477,19 @@ to exactly the held-out request text.
   under `astra-kit/s/rerun-cr/` and is copied to the packet at the launch. If the route stays down past
   about fifty minutes the hold goes to Tony with the options (wait longer; run the other three lanes first;
   something he names), not decided here.
+- **E11-21, the qwen lane held for three hours; the call put to Tony (2026-09-17 about 2:35 PM).** Since the E11-20
+  hold the control room pinged the route (one-token completion) every one to two minutes: HTTP 429 on all
+  but eight of about a hundred pings between 11:48 AM and 2:30 PM; the windows (12:00, 12:30, 1:18, 1:46,
+  1:57, 2:08, 2:28) each closed within the minute. `probe-env --setup opencode --home <h> --refresh` ran
+  inside every caught window from 1:46 PM on: every probe session got 429 from the same provider within
+  its 80 seconds (six failed records each under `probes/opencode-absent/` and `probes/opencode-routing/`,
+  all retained). The `available` home holds its one ok probe from the 12:00 window. OpenRouter lists one
+  provider for `qwen/qwen3.8-flash` (Alibaba) and reports its uptime at 100 for the last 30 minutes, a
+  metric that does not count rate limiting. Two control-room loops before the Python one wasted the 12:30
+  and 1:18 windows on a zsh word-splitting defect of the control room's own (an unquoted variable handed
+  the runner one malformed `--home` value, which it correctly refused); recorded here as the control room's
+  slip, not the runner's. The other three setups have every probe current. `campaign start` needs one
+  current successful probe per home, so the campaign cannot start with this lane as planned. The choice is
+  Tony's, put to him at 12:33 PM in chat, on the board's You card at 1:31 PM, by the Board window's push,
+  and again now by a picker: keep waiting; add his own Qwen key on OpenRouter (the provider's own advice);
+  drop or swap the lane (a plan change, his ruling). Nothing launched; no record changed.
