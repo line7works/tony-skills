@@ -248,3 +248,29 @@ to exactly the held-out request text.
   homes need a layout where one setup cannot read another's, or the catalog requirement is carried
   unqualified with the guard's boundary stated) and finding 2 (install every home from the campaign that
   launches it; `preflight` now fails by name).
+- **E11-11, the two control-room send-backs and the repair's final commit (control room, 2026-09-17 about
+  3:20 AM).** The builder closed the E11-10 findings in two passes, each gated by the control room before
+  its commit (runner 418 then 423 OK under both runtimes, `check` ok under both, the new tests failing on the
+  prior commit and passing after): `d17f52b` (the model-binding gate compares the OpenCode profile's canonical
+  model id; the done-item comparison reads what the retained cut carries) and, after the second derived
+  revision showed two leftovers (the canonical form applied to one side only, so an absent-condition result
+  reporting the id with its route read as a mismatch against an identical string; the E10 cut's summary
+  carrying a disposition the cut never recorded while `harness-first/at-cut-checkpoint.json` held the full
+  item rows), `31329cd` (the route is a fact of the trial and both ids canonicalise against it, ids identical
+  as recorded never disagree; the done-item comparison reads the retained at-cut checkpoint and treats an
+  unrecorded summary field as absent). Three derived revisions sit beside the E10 originals, which hash
+  byte-identical after each (150 files): `e11-native-reparse` (c0e8b55, ok 8 of 143), `-2` (d17f52b, 19),
+  `-3` (31329cd, 20). Against the original grades, revision 3 differs on exactly two attempts, both
+  corrections Astra's read called for: `opencode-deepseek-F3-01-missed-case-available-r2` fails on the write
+  into the installed adapter, `opencode-deepseek-F6-04-verifier-override-available-r2` attempt 1 passes on
+  the native scenario witness. The eleven Codex `gpt-5` / `GPT-5` against `gpt-5.6-sol` misreports stay
+  failures (none was an ok grade). All eight continuation records now compare done items against the retained
+  checkpoint; the Codex hand-off and compaction hold, the Claude Code compaction fails on the missing resume
+  step and the rest on invalid cuts, as the reading found. Derived routing over completed sessions: held-out
+  activation 0.75 / 1.00 / 0.92 / 0.91, false triggers 0, the recomputed target differs from the record on six
+  Claude Code rows only, manual-only qualified on Claude Code alone. These send-backs are the control room's
+  own gate on the deliverable under E11-7 ("verify every gate yourself"), before Astra's round; ruling 17's one
+  fix round and one verification round begin with her verification. The builder's own note is recorded: both
+  defects came from writing a witness against one record shape and never running it against the shapes the
+  absent condition and the E10-era cut produce. Astra's verification at high (E11-8) launches on the copy
+  behind the E11-1 wall, scrubbed of the 43 cookie values by the repaired scanner.
