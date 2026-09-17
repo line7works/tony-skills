@@ -500,3 +500,20 @@ to exactly the held-out request text.
   holds for two consecutive pings it re-probes the two remaining qwen homes (new records beside the failed
   ones), then `preflight` with the allow rules read by hand, the OpenRouter balance, `s/out` moved aside,
   and the operator (Astra at high) via `operate.sh`. No record changes; nothing else is decided here.
+- **E11-23, the rerun launched (2026-09-17 about 4:37 PM).** Tony's first key, created in Model Studio's US (Virginia)
+  region, drew HTTP 401 from Alibaba through OpenRouter ("Incorrect API key provided"); Alibaba's own docs
+  scope keys to their region and OpenRouter's international entry uses the Singapore endpoint. His second
+  key, created in the Singapore region and placed as the prioritized BYOK key, answered three consecutive
+  one-token pings at 4:35 PM with Alibaba as the provider. The control room then ran, from `/private/tmp`:
+  `probe-env --setup opencode --home absent --refresh` and the same for `routing` (both ok, 22 names, no
+  banned name the runner passed, none nobody measured; every home of the plan now holds one current
+  successful probe, twelve in all, beside the retained failed ones); `preflight` (exit 1: `separated`
+  false on all four setups, the bench-layout fact E11-14 carries to the reconvene; `allow_rules.ok` true,
+  `homes_written_for_another_campaign` empty, the very defect item 2 found in E10 not present); `preflight
+  --accept-unseparated` (exit 0; the record says the acceptance covers the read-boundary state and nothing
+  else); the OpenRouter balance (total 110.00, used 14.98, available 95.02); `s/out` moved to
+  `s/out-attempt1`; `operate.sh <root> start` at 4:37 PM, Astra (GPT-6) at high operating under
+  `mandate-operate.md` with `-s danger-full-access` and the E10-7 environment, the key never in her
+  environment. The control room's records of every bench step are in the packet under
+  `astra-outputs/e11/control-room/rerun/`. From here the operator's log and report are the record; the
+  control room watches `operate.sh status`, touches no trial, and recounts from the raw records at the end.
