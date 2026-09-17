@@ -149,4 +149,57 @@ to exactly the held-out request text.
 
 ## 7. Amendments (control-room rulings issued while E11 runs)
 
-(none yet)
+- **E11-6, the decision (Tony, 2026-09-16 night).** Both readings were put to Tony side by side:
+  the control room's (Clerk packet `astra-outputs/e11/control-room/reading.md`) and Astra's
+  independent read at max (`astra-outputs/e11/read/read.md`: DOES NOT QUALIFY on claude-code,
+  codex, opencode and opencode-deepseek and for the pilot; a seven-item bounded repair proposal;
+  a disclosed rerun of 360 trials, OpenRouter estimate $6 to $11). Three options were offered
+  (repair and re-run; repair only; stop here). Tony's ruling: **"Repair and re-run"**, the
+  recommended option: no-go as it stands; the seven-item repair round (a fresh builder on a brief,
+  Astra verifies at max, ruling 17) and the disclosed 360-trial rerun on a clean bench; E11
+  reconvenes on the new records. D2 is satisfied for that rerun by this ruling; the launch itself
+  still waits for his "go" in the window that runs it. D4 unchanged: production review eligibility
+  does not move.
+- **E11-7, the crew and the shape of the repair round (Tony, same night: "lets compact before u
+  start, prep the thread and hand me a handoff. im going to bump down to fable 5.1 high for fix
+  build").** Nothing starts in the E11 reading thread. A fresh window opens the repair round from
+  the hand-off `~/Documents/handoffs/2026-09-16-skills-v2-e11-repair-handoff.md`. Crew (ruling R1g
+  in the plan note): the control room is **Fable 5.1 at high**; the builder is an Agent-tool
+  subagent that inherits the session's effort (high), model per the brief; Astra stays at **max**
+  for the verification and every E11 review (R1f). The repair's scope is Astra's seven items as
+  written in her section 6, read together with the control room's reading: (1) observation and
+  grading: the activation and observed-target witnesses per harness (body-only delivery on Claude
+  Code; the Codex custom-tool route; OpenCode's delivered block), verifier captures scanned by the
+  boundary witness, resolved working directories, the actual reply required, complete done-item
+  comparison, model binding gated, scenario execution judged from the native report and output
+  rather than a module-name substring; (2) the shared resources and the absent condition: per-trial
+  scratch and run root, other trials' records and other conditions' installs unreadable, a preflight
+  read-boundary check, the same neutral output and record contract in both conditions; (3) the
+  skill: canonical slice resolution before a run directory is spent, a bounded correction path for
+  the input, helper and readers files inside the run's own scratch, the grant-claim rule narrowed so
+  a recorded project state is not a claimed grant (`references/verifier.md` lines 24 to 29,
+  `scripts/recheck.py` line 1065), the four reason definitions in the fresh verifier's brief with an
+  evidenced correction path between `not_fixed` reasons, the resume step required after compaction;
+  (4) continuation control and identity: stop the real OpenCode child group at the cut, prove no
+  writer progresses between cut and resume, keep zero continuation counts, read item results from
+  `items[].result`, start Codex's compaction ordering check at the resumed turn and test
+  `witness.ok`, report the stored transaction identity on committed-run reassembly; (5) the catalog:
+  after the witness fix, a real manual-only selection guard on Codex and OpenCode that also covers
+  discovery by file reads, v1 exclusions preserved, no description tuning; (6) the consumer test:
+  twelve directed producer-to-consumer trials through the declared input route; (7) reporting and
+  hygiene: honest exit-124 labels, the gap logger reading the previous trial's duration
+  (`runner.py` around line 7300), the table's no-result column, `__cf_bm` cookie values (43 files)
+  covered by the scan and scrubbed from derivative copies while originals stay untouched, E10-73's
+  "222 charged runs" corrected to 197 positive-cost OpenRouter attempts. Deliverables: every change
+  with a test that fails before and passes after; the deterministic controls Astra named in her
+  section 7 (changed done-item evidence fails, a successful read containing "rejected" stays
+  successful, an empty reply fails delivery, a quoted sed replacement is not a write, verifier
+  captures contribute actions, a refused operation is not a side effect); a native re-score of the
+  existing routing traces (`routing-score --revision e11-native-reparse`, zero new trials, the
+  original score files preserved); then Astra's verification at max on a copy, re-checks, close
+  under ruling 17; then the rerun in a new root (`e11-repair-qualification`, Astra's saved plan
+  `e11-rerun-plan.json` beside her read: 96 comparison, 8 continuation, 240 routing, 4 manual-only,
+  plus 12 consumer trials and 12 environment probes) on Tony's "go". The plan's prohibitions stand:
+  no instructions to manufacture an uplift, no indefinite prompt tuning, no lowered floors, no
+  fewer reviewers, no edited sealed requests. Every root under `~/.local/share/skills-v2-pilot/e10/`
+  stays a record.
