@@ -493,3 +493,10 @@ to exactly the held-out request text.
   Tony's, put to him at 12:33 PM in chat, on the board's You card at 1:31 PM, by the Board window's push,
   and again now by a picker: keep waiting; add his own Qwen key on OpenRouter (the provider's own advice);
   drop or swap the lane (a plan change, his ruling). Nothing launched; no record changed.
+- **E11-22, Tony's ruling on the qwen lane (2026-09-17 about 2:36 PM): "Add my own Qwen key."** Tony adds an Alibaba
+  Model Studio key under OpenRouter's integrations so the lane runs on his own rate limit instead of the
+  shared one, the provider's own advice in its 429 text. The plan is unchanged: the same four setups, the
+  same pinned model for the lane. The control room keeps pinging the route every minute; on a window that
+  holds for two consecutive pings it re-probes the two remaining qwen homes (new records beside the failed
+  ones), then `preflight` with the allow rules read by hand, the OpenRouter balance, `s/out` moved aside,
+  and the operator (Astra at high) via `operate.sh`. No record changes; nothing else is decided here.
