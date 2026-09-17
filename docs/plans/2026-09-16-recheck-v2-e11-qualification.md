@@ -382,3 +382,22 @@ to exactly the held-out request text.
   and passes after; the control room's gates; commit; derived revision 6 on the real root; Astra's re-check
   limited to the three; then the rerun on Tony's standing goal line. Everything else open in E11-14 carries
   to the reconvene unchanged.
+- **E11-16, the narrow second fix gated, committed and re-derived (2026-09-17 about 10:10 AM).** The builder
+  delivered the three E11-15 items as four files on top of `6013f35` (report section 13). Before gating, the
+  control room re-drove Astra's own re-check probes against the working tree: X2-01 now reads `fixed`,
+  `confirmed`, no refusal; the F5 refused case still downgrades; the consumer pair copies its artifact and
+  refuses a changed path; swapped item states fail the per-item continuation comparison; a failed allow-rule
+  check makes the launch exit 2. Gate chain I green end to end (`control-room/verify/gates-I.log`): runner
+  469 under both interpreters, `check` clean under both, core 359 twice, the three adapters, the examples,
+  E7 nine for nine; the runner E11 suite fails on `6013f35` (5 failures, 6 errors) and passes after, the
+  core E11 suite fails on the `6013f35` core (1 failure, 4 errors) and passes after. Commit `9368509` on
+  `feat/recheck-v2-e11-repair`. Derived revision `e11-native-reparse-6` on the real E10 root: 143 grades and
+  four routing files written beside the originals, the 150 originals byte-identical again
+  (`rescore-real-root-6.log`, `after-originals-6.sha256`). Revision 6 equals revision 5 on every grade field
+  except the derived file's own path, no flip against revision 5 or revision 3, the same two flips against
+  the originals as revisions 3 and 5, the routing files identical to revision 5
+  (`grade-flips-e11-native-reparse-6.txt`, `routing-rates-e11-native-reparse-6.txt`). That is the expected
+  shape: the three items change what a live consumer trial, a live launch and a live prose-only clearance
+  would record, not what the E10 records already hold. Next: the verify copy refreshed at `9368509` behind the
+  E11-1 wall, Astra's re-check limited to the three (mandate `mandate-recheck2.md`), her verdict filed as
+  E11-17, then the rerun on Tony's standing goal line.
