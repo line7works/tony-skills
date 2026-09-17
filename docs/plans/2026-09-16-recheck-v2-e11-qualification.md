@@ -302,3 +302,45 @@ to exactly the held-out request text.
   with the guard covering this setup's root and the campaign stage, and let the catalog requirement carry
   unqualified on any setup where the station stays reachable, which is Astra's own recommendation; a home
   layout where one setup cannot read another's is a scope change for Tony to rule on, not a fix-round item.
+- **E11-13, the fix round's commits, the control room's gate and send-back, and the derived revisions 4 and
+  5 (control room, 2026-09-17 about 7:40 AM).** The builder closed the eight E11-12 findings in one pass
+  (its report section 11): a derived `grade --revision` claims its name and never overwrites; a write
+  counts only when the harness's own record says it completed and the call's own working directory
+  resolves its relative destinations; every launch refuses without a passed or accepted read-boundary
+  record, `usable_as_comparison_evidence` is a grade check, and only a completed read of another trial's
+  contents excludes (a listing is a listing); catalog qualification needs a completed, guarded, witnessed
+  non-selection and a provider-failed launch qualifies nothing; the report derives a retained row's label
+  from its exit code without editing the ledger; the compaction reader takes the first user turn carrying
+  the resume request and records the three-line ordering; the consumer grade compares whole evidence
+  references, hands the producer's findings over as explicit items, and reads a validating result and a
+  delivered reply; and the core downgrades a static `fixed` to `not_fixed` / `verification_blocked` when a
+  retained report of the run recorded a stopped execution for the item. One live OpenCode hand-off rerun
+  on the proof root made the cut the E10-era run could not (attempt 1: cut valid, both process groups
+  signalled and gone, sixteen files unchanged across the cut, invariants held). The control room gated it
+  from another directory (runner 452 OK both runtimes, `check` ok both, core 351 both interpreters,
+  adapters 90/34/96, examples clean, E7 nine PASS, the E11 file failing on 31329cd and passing after) and
+  committed it as `60a36a1`. The derived revision `e11-native-reparse-4` on the real root (150 originals
+  byte-identical) then flipped three real F6-04 verifier runs on the OpenCode setups from ok to not ok on
+  `scenario_executed`: the item 1(c) judgement walked a compound line as one command, saw `cd`, `mkdir` or a
+  variable assignment as its head, never reached the `python3 -m widget.export` inside, and blamed a
+  read-only utility that was not there. Sent back inside the fix round (the E11-10 pattern); the builder
+  split a line into its simple commands and applied the head rule to each, with the three real command
+  shapes as tests (report section 12), and on the control room's request added the missing
+  failing-then-passing core test for the item-3 downgrade (the brief's rule; the addendum). Gated again
+  (runner 457 OK both, `check` ok both, core 354 both, adapters, examples, E7; the runner E11 file fails on
+  60a36a1 and the core E11 file fails on 31329cd's core, both pass after) and committed as `6013f35`, the
+  commit under re-check. Derived revision `e11-native-reparse-5` on the real root: every grade equal to
+  revision 3 (the three flips gone, nothing else moved), routing identical to revision 4. **Three
+  observations carried to the reviewer, not fixes:** (a) the item-3 downgrade reads a retained report's
+  wording against a closed list quoted from contract section 5 when the report has no structured tail, the
+  one place the repair reads report text rather than a field, and the record names which signal fired;
+  (b) the runner's liveness check before a derived measurement compares a recorded child pid against the
+  process table without a start-time check, so a reused pid reads as alive (a stale watcher shell from the
+  builder's session had taken an E10 trial's recorded pid and made `routing-score` refuse once; the control
+  room stopped the shell and re-ran); (c) claude-code's manual-only qualification now reads unqualified on
+  the E10 record because no guard was recorded as applied there, which the rerun's per-attempt guard record
+  answers. **Carried to Tony unchanged from E11-12:** the three faces of one bench-layout fact (another
+  setup's station copy stays readable; the read-boundary preflight reports `separated: false` and is
+  accepted as such; the consumer's isolation check is false because a child in its launch environment can
+  read a record outside its pair). The rerun set is unchanged. Astra's re-check (`launch.sh recheck`, E11-8
+  high) launches on a fresh verify copy at `6013f35` behind the E11-1 wall; then carry under ruling 17.
