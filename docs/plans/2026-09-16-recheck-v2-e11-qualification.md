@@ -458,3 +458,22 @@ to exactly the held-out request text.
   E11-14 carried still carries to the reconvene. The rerun starts now on Tony's standing goal line
   ("finish the build and Astra check, then run the rerun"), the control room staging, planning, installing,
   verifying, probing and preflighting the new root `e11-repair-qualification` before the operator is launched.
+- **E11-20, the rerun bench staged; held on the qwen route (2026-09-17 about 11:50 AM).** On the standing goal line
+  the control room created `~/.local/share/skills-v2-pilot/e10/e11-repair-qualification` and ran, from
+  `/private/tmp` with the repair worktree's runner: `stage` (exit 0, commit `8b6beda`, no links, tree hash
+  recorded), `plan --plan astra-kit/plan.json` (exit 0: comparison 96, continuation 8, routing 240,
+  manual-only 4, consumer 12, total 360; four setups, the pinned models), `install` (exit 0, twelve homes,
+  every `home_leak_scan` empty, the four absent homes `never installed`, the key passed once to the OpenCode
+  install script), `verify` (exit 0, twelve rows, identity equal on the eight installed homes, the four
+  absent homes failing to find a skill as required), `probe-env` (exit 1: nine of twelve probes ok with no
+  banned name the runner passed and none nobody measured; the three `opencode` probes, the qwen setup,
+  exited 1 with no environment name because OpenRouter answered HTTP 429 for every call: "[Alibaba]
+  qwen/qwen3.8-flash is temporarily rate-limited upstream. Please retry shortly"; the three failed probe
+  records stay on disk under `probes/opencode-*/`). A one-token ping of the route from the control room
+  answered 429 again. OpenRouter balance read: total 110.00, used 14.96, available 95.04. Under the E10
+  outage lesson nothing launches into a failing provider: the control room holds before `preflight`, polls
+  the route every two minutes, and on a 200 runs `probe-env --setup opencode --refresh` (new records beside
+  the failed ones, E10-43), then `preflight`, then the operator. Every control-room record of these steps is
+  under `astra-kit/s/rerun-cr/` and is copied to the packet at the launch. If the route stays down past
+  about fifty minutes the hold goes to Tony with the options (wait longer; run the other three lanes first;
+  something he names), not decided here.
