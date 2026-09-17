@@ -208,3 +208,15 @@ to exactly the held-out request text.
   **high** for the verification, the re-checks and every review of the repair; R1f's "max" stays the
   record for E11's independent read already delivered. The control room is Fable 5.1 at high, the
   builder inherits high. Every other part of E11-7 stands.
+- **E11-9, the builder's model and the "go" (Tony, 2026-09-16 night: "Use opus High as the builder. This
+  stays as the control room. Go").** The repair round's builder is Opus 5 at high (the same model and
+  effort as the E10 runner's builder, R1c); the control room stays Fable 5.1 at high (R1g); Astra at high
+  (E11-8). Launched at once as one Agent-tool subagent in the repair worktree
+  `~/Developer/tony-skills-e11-repair` (branch `feat/recheck-v2-e11-repair` from `6d617b5`) on the brief
+  at Clerk packet `astra-outputs/e11/briefs/e11-repair-builder.md`. Two control-room readings the brief
+  carries, flagged to Tony with the ask and not objected to: the builder never writes under the E10
+  campaign root (derived re-grades and the native re-score are proved on a synthetic campaign and run on
+  the real root by the control room after the commit); the builder may run at most four live proof
+  sessions under a new proof root `e11-repair-proof-2026-09-16` (one OpenCode hand-off cut, one manual-only
+  request each on Codex and OpenCode, one Claude Code slash request), proofs of the fix and never
+  qualification trials. The rerun still waits for a separate "go".
