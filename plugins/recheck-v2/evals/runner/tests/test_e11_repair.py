@@ -454,6 +454,94 @@ class Item1InteropAndContinuation(RunnerCase):
         self.assertFalse(row["held"])
         self.assertEqual(row["changed"][0]["compared_on"], ["state", "disposition"])
 
+    def test_the_retained_at_cut_checkpoint_is_preferred_over_the_summary(self):
+        """E11-7 item 1, corrected 2026-09-17: the checkpoint is the retained record.
+
+        `cont-codex-F3-02-mixed-two-items-handoff-r1` kept both: `command.json`'s
+        `cut.retained.done_items` summary, which the E10 cut built from a top-level
+        `disposition` the checkpoint never had (so it reads `null`), and
+        `harness-first/at-cut-checkpoint.json`, which holds the complete item rows. Reading
+        the summary compared `null` against the real `fixed` and called it a change.
+        """
+        record = os.path.join(self.scratch, "at-cut-checkpoint")
+        runner.ensure_dir(os.path.join(record, "run"))
+        runner.ensure_dir(os.path.join(record, "harness-first"))
+        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same",
+                    "untracked": [], "untracked_sha256": "same", "submodules": []}
+        result = {"index": 0, "location": {"file": "src/x.py", "line": 1},
+                  "disposition": "fixed"}
+        # the checkpoint retained at the cut: the real item rows, no top-level disposition
+        runner.write_json(os.path.join(record, "harness-first", "at-cut-checkpoint.json"), {
+            "phase": "adjudicating",
+            "scope": {"items": [{"state": "done", "retries": 0, "result": result},
+                                {"state": "pending", "retries": 0}]}})
+        # the run after the resume: the same done item, untouched
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
+            "phase": "completed", "continuations": 1, "verifier_calls": [],
+            "scope": {"items": [{"index": 0, "state": "done", "retries": 0,
+                                 "result": result}]}})
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"source_identity": {"actual": identity}})
+        # the summary the E10 cut wrote beside it, with the field it never had
+        command = {"cut": {"valid": True, "start_identity": identity, "retained": {
+            "done_items": [{"index": 0, "state": "done", "disposition": None}],
+            "verifier_calls_for_done_items": []}}}
+        rows = runner.continuation_invariants(record, command)
+        row = rows["invariants"]["done_items_not_re_adjudicated"]
+        self.assertTrue(row["held"], row)
+        self.assertIn("at-cut-checkpoint.json", row["done_items_at_the_cut_read_from"])
+        self.assertEqual(row["cuts_carrying_the_full_done_item_object"], 1)
+        self.assertEqual(row["cuts_carrying_a_summary_only"], 0)
+        self.assertTrue(rows["all_held"])
+
+    def test_the_checkpoint_path_still_catches_a_changed_done_item(self):
+        """Preferring the checkpoint must not weaken the strong comparison."""
+        record = os.path.join(self.scratch, "at-cut-checkpoint-changed")
+        runner.ensure_dir(os.path.join(record, "run"))
+        runner.ensure_dir(os.path.join(record, "harness-first"))
+        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same",
+                    "untracked": [], "untracked_sha256": "same", "submodules": []}
+        runner.write_json(os.path.join(record, "harness-first", "at-cut-checkpoint.json"), {
+            "scope": {"items": [{"state": "done", "retries": 0,
+                                 "result": {"index": 0, "disposition": "fixed"}}]}})
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
+            "phase": "completed", "continuations": 1, "verifier_calls": [],
+            "scope": {"items": [{"index": 0, "state": "done", "retries": 0,
+                                 "result": {"index": 0, "disposition": "not_fixed"}}]}})
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"source_identity": {"actual": identity}})
+        command = {"cut": {"valid": True, "start_identity": identity,
+                           "retained": {"done_items": [], "verifier_calls_for_done_items": []}}}
+        row = runner.continuation_invariants(
+            record, command)["invariants"]["done_items_not_re_adjudicated"]
+        self.assertFalse(row["held"])
+        self.assertEqual(row["changed"][0]["compared_on"],
+                         ["the canonical hash of the complete done-item result object"])
+
+    def test_a_summary_field_the_cut_never_recorded_is_absent_not_a_value(self):
+        record = os.path.join(self.scratch, "null-summary-field")
+        runner.ensure_dir(os.path.join(record, "run"))
+        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same",
+                    "untracked": [], "untracked_sha256": "same", "submodules": []}
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
+            "phase": "completed", "continuations": 1, "verifier_calls": [],
+            "scope": {"items": [{"index": 0, "state": "done", "retries": 0,
+                                 "result": {"index": 0, "disposition": "fixed"}}]}})
+        runner.write_json(os.path.join(record, "result.json"),
+                          {"source_identity": {"actual": identity}})
+        command = {"cut": {"valid": True, "start_identity": identity, "retained": {
+            "done_items": [{"index": 0, "state": "done", "disposition": None}],
+            "verifier_calls_for_done_items": []}}}
+        row = runner.continuation_invariants(
+            record, command)["invariants"]["done_items_not_re_adjudicated"]
+        # the summary's `disposition` is null because the cut never recorded one, so `state`
+        # is the only field there is to compare — and the item holds
+        self.assertTrue(row["held"], row)
+        self.assertEqual(row["unchanged"], 1)
+        self.assertEqual(row["changed"], [])
+        self.assertEqual(row["cuts_carrying_a_summary_only"], 1)
+        self.assertIn("command.json", row["done_items_at_the_cut_read_from"])
+
     def test_a_fresh_cut_retains_the_complete_done_item_object(self):
         """So the full comparison applies to the rerun, not the summary one."""
         rows = runner.state_of_checkpoint(
@@ -518,6 +606,34 @@ class Item1ModelBindingAfterTheRealRun(RunnerCase):
         value, how = runner.canonical_model_id({"id": "claude-opus-5"})
         self.assertEqual(value, "claude-opus-5")
         self.assertIn("as recorded", how)
+
+    def test_identical_ids_never_disagree(self):
+        """The two OpenCode ABSENT attempts: both sides read the same string.
+
+        The session hand-wrote a minimal `run.model` — `openrouter/qwen/qwen3.8-flash` with no
+        `provider_route` — so a rule that strips only a side's OWN named route canonicalised
+        the observed side and left the reported side joined, and two identical strings
+        disagreed (the control room's second derived run on the E10 root).
+        """
+        native = {"id": "openrouter/qwen/qwen3.8-flash",
+                  "model_id": "qwen/qwen3.8-flash", "provider": "openrouter"}
+        reported = {"id": "openrouter/qwen/qwen3.8-flash", "floor_class": "opus"}
+        route = runner.model_provider_route(native, reported)
+        self.assertEqual(route, "openrouter")
+        observed, _ = runner.canonical_model_id(native, native["id"], route=route)
+        got, how = runner.canonical_model_id(reported, reported["id"], route=route)
+        self.assertEqual(observed, "qwen/qwen3.8-flash")
+        self.assertEqual(got, "qwen/qwen3.8-flash")
+        self.assertIn("trial's provider route", how)
+
+    def test_the_route_is_read_from_whichever_record_names_it(self):
+        """The reported side need not name its own route; the trial has one."""
+        self.assertEqual(
+            runner.model_provider_route({"id": "openrouter/qwen/qwen3.8-flash"},
+                                        {"id": "x", "provider_route": "openrouter"}),
+            "openrouter")
+        self.assertIsNone(
+            runner.model_provider_route({"id": "gpt-5.6-sol"}, {"id": "gpt-5"}))
 
     def test_a_route_is_only_stripped_when_the_record_names_it(self):
         """Nothing is stripped by shape: only the record's OWN provider route comes off."""

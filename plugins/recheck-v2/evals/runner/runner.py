@@ -1899,8 +1899,31 @@ class ClaudeCodeSetup(Setup):
 # never touched, and nothing is case-folded or matched by prefix — a session that reports
 # `gpt-5` while its native witness says `gpt-5.6-sol` is still a mismatch, which is the case
 # the gate exists for.
-def canonical_model_id(record, fallback=None):
-    """`(the profile's canonical model id, which form it came from)`."""
+def model_provider_route(*records):
+    """The provider route of this trial, from whichever record names it (E11-7 item 1).
+
+    Corrected 2026-09-17 (the control room's second derived run): the route is a fact of the
+    TRIAL, not of one side of the comparison. `adapters/opencode/profile.md` section 2 names
+    it `providerID`, reported as `provider_route`; the native witness always carries it, and
+    the result carries it only when the adapter filled the block. On the two OpenCode ABSENT
+    attempts the session hand-wrote a minimal block — `id: openrouter/qwen/qwen3.8-flash`,
+    no `provider_route` — so a rule that strips only a side's OWN named route stripped the
+    observed side and left the reported side joined, and two identical strings disagreed.
+    """
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        route = record.get("provider") or record.get("provider_route")
+        if isinstance(route, str) and route:
+            return route
+    return None
+
+
+def canonical_model_id(record, fallback=None, route=None):
+    """`(the profile's canonical model id, which form it came from)`.
+
+    `route` is the trial's provider route, applied to BOTH sides of the comparison.
+    """
     record = record if isinstance(record, dict) else {}
     named = record.get("model_id")
     if isinstance(named, str) and named:
@@ -1908,9 +1931,12 @@ def canonical_model_id(record, fallback=None):
     value = fallback if isinstance(fallback, str) else record.get("id")
     if not isinstance(value, str) or not value:
         return None, "no model id in this record"
-    route = record.get("provider") or record.get("provider_route")
-    if isinstance(route, str) and route and value.startswith(route + "/"):
-        return value[len(route) + 1:], ("the id with its own provider route %r removed" % route)
+    own = record.get("provider") or record.get("provider_route")
+    for candidate, whose in ((own, "its own provider route"),
+                             (route, "the trial's provider route")):
+        if isinstance(candidate, str) and candidate and value.startswith(candidate + "/"):
+            return value[len(candidate) + 1:], ("the id with %s %r removed"
+                                                % (whose, candidate))
     return value, "the id as recorded"
 
 
@@ -5139,11 +5165,19 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     reported_id = run_block.get("id")
     binding_ok = bool(observed_model.get("session_binding_ok"))
     # The PROVIDER ROUTE is not part of the model's identity, so it is not part of the
-    # comparison (the control room's run of this grade on the E10 root, 2026-09-17).
-    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id)
-    reported_canonical, reported_form = canonical_model_id(run_block, reported_id)
+    # comparison (the control room's run of this grade on the E10 root, 2026-09-17). The
+    # route is read once, from whichever record names it, and applied to BOTH sides.
+    route = model_provider_route(observed_model, run_block)
+    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id,
+                                                           route=route)
+    reported_canonical, reported_form = canonical_model_id(run_block, reported_id, route=route)
     agrees = None
-    if observed_canonical and reported_canonical:
+    identical = bool(observed_id) and bool(reported_id) \
+        and str(observed_id) == str(reported_id)
+    if identical:
+        # Two identical strings never disagree, whatever any canonical form makes of them.
+        agrees = True
+    elif observed_canonical and reported_canonical:
         agrees = observed_canonical == reported_canonical
     grade["floor_met"] = {"result_run_model": run_block,
                           "model_json_id": observed_id,
@@ -5153,6 +5187,8 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
         "reported_in_the_result": reported_id,
         "compared_on": {"observed": observed_canonical, "reported": reported_canonical},
         "compared_form": {"observed": observed_form, "reported": reported_form},
+        "provider_route": route,
+        "ids_are_identical_as_recorded": identical,
         "session_binding_ok": binding_ok,
         "ids_agree": agrees,
         "held": binding_ok and agrees is True,
@@ -6225,12 +6261,13 @@ def continuation_invariants(record, command):
         "observed": (after or {}).get("continuations"),
         "held": (after or {}).get("continuations") == 1,
         "record": os.path.join(record, "run", "checkpoint.json")}
-    done_before = at_cut.get("done_items") or []
+    done_before, done_before_source = _done_items_at_the_cut(record, at_cut)
     done_after = {}
     for entry in (after or {}).get("item_rows") or []:
         done_after[str(entry.get("index"))] = entry
     unchanged, changed = [], []
     for entry in done_before:
+        entry = dict(entry)
         key = str(entry.get("index"))
         now = done_after.get(key)
         # E11-7 item 1: the COMPLETE done-item result object is compared, by the hash of its
@@ -6253,8 +6290,14 @@ def continuation_invariants(record, command):
                 and after_hash is not None and before_hash == after_hash
             compared_on = ["the canonical hash of the complete done-item result object"]
         else:
-            # the summary the cut carries, and only that
-            fields = [f for f in ("state", "disposition") if f in entry]
+            # The summary the cut carries, and only that — and only the fields it actually
+            # RECORDED. Corrected 2026-09-17: the E10 cut wrote a top-level `disposition` the
+            # checkpoint never had, so the summary carries `disposition: null`; comparing that
+            # null against the real `fixed` read as a change on every done item of
+            # `cont-codex-F3-02-mixed-two-items-handoff-r1`. A field the cut never recorded is
+            # absent, not a value.
+            fields = [f for f in ("state", "disposition")
+                      if f in entry and entry.get(f) is not None]
             same = bool(now) and now.get("state") == "done" \
                 and all(now.get(f) == entry.get(f) for f in fields)
             compared_on = fields
@@ -6264,6 +6307,7 @@ def continuation_invariants(record, command):
              "result_sha256_after": after_hash,
              "cut_carried_the_full_object": full,
              "compared_on": compared_on,
+             "compared_against": done_before_source,
              "compared_by": ("the canonical hash of the complete done-item result object "
                              "(E11-7 item 1)" if full else
                              "the summary fields this cut retained (%s); a cut that carried "
@@ -6285,6 +6329,7 @@ def continuation_invariants(record, command):
         "verifier_calls_after": calls_after,
         "new_calls_for_a_done_item": new_calls,
         "prior_calls_that_vanished": missing_calls,
+        "done_items_at_the_cut_read_from": done_before_source,
         "cuts_carrying_the_full_done_item_object": sum(
             1 for row in unchanged + changed if row.get("cut_carried_the_full_object")),
         "cuts_carrying_a_summary_only": sum(
@@ -6341,6 +6386,37 @@ def continuation_invariants(record, command):
             "invariants_held_ignoring_the_cut": all(r["held"] for r in rows.values()),
             "cut_valid": cut_valid,
             "all_held_requires_cut_valid": "E10-59 (15)"}
+
+
+def _done_items_at_the_cut(record, at_cut):
+    """The done items as the cut retained them, best source first (E11-7 item 1).
+
+    Corrected 2026-09-17 (the control room's second derived run). Two things were retained at
+    every cut, and the weaker one was being read: `command.json`'s
+    `cut.retained.done_items`, a SUMMARY the E10 cut built from a top-level `disposition` the
+    checkpoint never had (so it reads `null`), and `harness-first/at-cut-checkpoint.json`, the
+    checkpoint file itself, which holds the complete item rows with their results. The
+    checkpoint is the retained record; the summary is a derivation of it that lost a field.
+
+    Returns `(rows, where they came from)`. The rows are `state_of_checkpoint`'s own shape, so
+    a retained checkpoint yields the full object and its canonical hash and the comparison is
+    the strong one — the same path a cut taken by this runner takes.
+    """
+    for capture in ("harness-first", "harness"):
+        path = os.path.join(record, capture, "at-cut-checkpoint.json")
+        if not os.path.isfile(path):
+            continue
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        state = state_of_checkpoint(document)
+        rows = [r for r in ((state or {}).get("item_rows") or [])
+                if r.get("state") == "done"]
+        if rows:
+            return rows, "the retained %s/at-cut-checkpoint.json (the full item rows)" % capture
+    return (at_cut.get("done_items") or []), ("the cut record's own summary in command.json "
+                                              "(no retained at-cut checkpoint)")
 
 
 def _verifier_calls_for(record):
