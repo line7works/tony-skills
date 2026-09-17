@@ -1,0 +1,152 @@
+# recheck-v2 E11: the qualification decision (lane contract)
+
+Control room (Clerk; Fable 5.1 at max under ruling R1f), written 2026-09-16 evening in a fresh
+window opened from `~/Documents/handoffs/2026-09-16-skills-v2-e11-handoff.md`, after the negative
+test (9 of 9) and before any reading was written down. E11 builds nothing. It reads the E10
+records, produces the capability matrix and the diagnosis, obtains the reviewer's independent read,
+and puts the go/no-go to Tony. Precedence: the plan of record binds everything here (the E11 step,
+amendments A6b, A6c and A12a, decisions D2 and D4, ruling 17, crew ruling R1f); the pilot contract
+(`plugins/recheck-v2/skills/recheck-v2/references/pilot-contract.md`, revision 5) outranks this
+document; the E10 lane contract (`docs/plans/2026-09-14-recheck-v2-e10-runner.md`) is the record
+of the campaign this step reads, and its ruling E10-73 is the campaign's own record.
+
+## 1. What E11 delivers
+
+- **The control room's reading**, in chat before any file: the capability matrix by mandatory
+  check and setup, with the record behind every cell; the diagnosis of every grade that is not
+  `ok` into one of four classes (section 4, E11-4); the routing reading per A6c.
+- **The reviewer's independent read**: Astra (GPT-6) at max (R1f) on a review copy, with a
+  mandate that carries the plan's criteria and none of the control room's findings. Verdict in
+  Clerk's packet under `astra-outputs/e11/`.
+- **The two readings side by side** to Tony, then his go/no-go. A failure produces a bounded
+  repair proposal with a disclosed, priced rerun set; it is a proposal, never a change (D2, D4).
+- **After the decision:** A12a, the first compile of the guide findings log, reported in chat,
+  written on Tony's word.
+
+## 2. Evidence every participant reads
+
+This document; the plan's E11 step, A6b, A6c, A12a, D2, D4 and ruling 17 (quoted in section 6 so
+the reviewer's copy carries them); the E10 lane contract sections 3 and 4 and amendments E10-40 to
+E10-73; the pilot contract sections 2, 4, 7, 8, 9, 11, 13, 14 and 16; `SKILL.md`; the three
+profiles (sections 1, 2, 4, 7, 8, 9); `evals/README.md`, `evals/answer-key/README.md` and every
+answer-key lane file the campaign graded; `evals/trigger-set/README.md` and the tuning set; the
+runner's grading half (`grade_one`, `trace_witnesses`, `_scope_violations`, `_unauthorized`,
+`_interop`, `_dispositions`, `_false_fixed`, `_evidence`, `continuation_invariants`, each setup's
+`activation` and `observed_target`, `routing_score`); the campaign root
+`~/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/`: `operator/report.md` whole,
+`tables/1/table.md`, the four score records under `routing/`, the ledgers, and every comparison
+and continuation trial record with its `grade.json`.
+
+## 3. The wall at E11
+
+Until E11, no reviewer saw a `grade.json`, a comparison table, a routing score record or the answer
+key (E10 section 3). E11 is the step that reads them, so the wall narrows by Tony's ruling below
+to exactly the held-out request text.
+
+- **Opens to the reviewer (E11-1):** every comparison and continuation trial directory as
+  recorded (104 trials, their `attempts/`, about 257 MB and 12,000 files: `command.json`,
+  `prompt.txt`, `result.json`, `reply.md`, `chat.md`, `validate.*`, `grade.json`, `model.json`,
+  `cost.json`, `scan.json`, the harness captures with transcripts and traces, the fixture snapshot
+  and the run directory); the ledgers (`trials.jsonl`, `attempts.jsonl`, `interruptions.jsonl`,
+  `processes.jsonl`), `campaign.json`, `stage.json`, `runner.log`; `records/`, `probes/`,
+  `stage/`; `tables/1/`; the four score records; the operator's report and her summary files;
+  the plugin at `main` `6d617b5` including `evals/answer-key/`; the control room's recount script.
+- **Stays closed, and is never reconstructed:** `evals/trigger-set/held-out/`, `routing-requests/`
+  (the cached held-out text), every `trials/routing-*` directory (each `prompt.txt` carries one
+  request's text, held-out or tuning; the whole class stays out so the copy rule needs no
+  per-entry judgment), the operator's `log.md` and every `*.stderr.txt` (not needed and not
+  checked line by line), and `tmp/` (the live fixture workspaces; the trial directories hold their
+  own snapshots). Routing reaches the reviewer through the four score records, the ledger's
+  routing rows, and the runner's routing code.
+- **The copy** is made by `astra-outputs/e11/astra-kit/launch.sh copy` in Clerk's packet: rsync
+  with the exclusions above, a check that fails the copy if a `held-out` directory, a
+  `routing-requests` directory or a `routing-` trial directory is present, and a credential-shaped
+  string scan. The copy records the commit and the file count.
+- The control room's own reading opens the same files and no more.
+
+## 4. Rulings (control room, 2026-09-16 evening, before the reading)
+
+- **E11-1, the opening (Tony, 2026-09-16 evening).** Put to Tony as three options (full records;
+  grades and keys only; hold until the control room has read). His ruling: **"Open: full
+  records"**, the recommended option: "Review copy with the 104 comparison and continuation trial
+  directories as recorded, the table, the four score records and the answer key. Never the
+  held-out text or any routing trial directory." Section 3 is that ruling written out.
+- **E11-2, the order of the two readings (control room).** The hand-off said the control room
+  reads first and the reviewer after. The control room instead launches the reviewer's read on the
+  copy at the same time as its own reading, with a mandate that carries the plan's criteria, the
+  evidence list and the checks to run, and none of the control room's findings. Reason:
+  independence is served by the reviewer not seeing the control room's reading, not by waiting for
+  it; and the reviewer's read at max is the long pole. Neither reading is amended by the other
+  before both exist; then they go side by side to Tony. Flagged to Tony as the control room's call.
+- **E11-3, nothing changes.** No builders, no subagents, no new trials, and no change to the skill,
+  the runner, the answer key, the fixtures or the campaign records in E11 without Tony's word (D2
+  for trials, D4 before any change to production review eligibility). Every root under
+  `~/.local/share/skills-v2-pilot/e10/` is a record. A repair is a proposal with a priced rerun set.
+- **E11-4, the diagnosis classes.** Every grade that is not `ok` is classified into exactly one of:
+  (1) **the model**: its judgment or behavior in the session (a wrong disposition or reason, a
+  false `fixed`, a boundary crossing of its own choosing, a session that returned nothing);
+  (2) **the skill text**: `SKILL.md`, the core's CLI and scripts, an adapter or profile (a
+  procedure the session followed into a wrong result, a CLI rule the session could not satisfy);
+  (3) **the answer key or the grading apparatus**: the key's expectations, the runner's checks and
+  witnesses, the campaign's design (an expectation stricter than the contract, a witness that does
+  not measure what the profile says, a shared resource across lanes);
+  (4) **the run's conditions**: the provider outage, a timeout, a launch failure. A grade is read
+  against its own record, never against the operator's report, a grade's `ok_because` alone, or a
+  reply's prose. When a grade fails for reasons in more than one class, the class of the reason
+  that alone would have failed it is recorded, and the others are noted.
+- **E11-5, the numbers Tony reads.** OpenRouter charges only (his standing ruling of 2026-09-16);
+  the Claude Code lane's metered dollars are never reported. Trial percentages are of settled
+  trials. Every count in the reading is reproduced from `trials.jsonl` and the grade files by the
+  control room's own script, and the script is kept.
+
+## 5. Boundaries the control room keeps
+
+- The E10 worktree `~/Developer/tony-skills-e10` stays until E11 rules on the runner. This
+  document lives on branch `docs/recheck-v2-e11` in `~/Developer/tony-skills-e11`, cut from `main`
+  `6d617b5`; local commits only; `git push` and a PR on Tony's "PR", merge on "merge".
+- The board (`~/Developer/spine-board/state.js`) gets one write per state change, all seven
+  fields, `round` moved, `plain_lint.py` PASS, the feed entry through `note.py`, then a message to
+  the board window; the board window builds, publishes and commits.
+- The review copy lives in the session scratchpad and is deleted with it; the kit, the mandate as
+  sent, the verdict, the event stream and the exit code go into Clerk's packet.
+
+## 6. The plan's own words (so the reviewer's copy carries the criteria)
+
+> **E11. Make the pilot qualification decision.** Artifact: A capability matrix and a go/no-go
+> decision linked to the failing or passing checks. Done when: Every mandatory check has evidence;
+> no tested setup falsely clears an unresolved item or crosses its access boundary; all three
+> consume each other's records; continuation checks recover the required contract and state. R
+> examines the implementation and grading evidence independently. Runs: R + O. Dependencies: E10.
+> Owner gate: D2 for additional trials; D4 before changing production review eligibility.
+> If the skill adds no benefit over the baseline, retain only the useful routing, domain contract,
+> and executable support. Do not add instructions to manufacture an uplift. A failure produces a
+> bounded repair proposal and a disclosed rerun set. It does not produce indefinite prompt tuning.
+> Qualification covers these setups and this closed-checklist role. It does not certify the local
+> model for general signoff.
+
+> **Amendment A6b.** Run the trigger set at three repetitions per setup, about 180 routing trials
+> on top of the 78 above. Measure activation rate and false-trigger rate separately from task
+> correctness. Manual-only stations must fail automatic selection; v1 back-half stations stay
+> blocked in the v2 test profiles. D2 as ruled: no ceiling.
+
+> **Amendment A6c.** Qualification also needs the measured activation and false-trigger rates for
+> this setup's catalog. The directive "ALWAYS invoke" description form stays an experiment: tried
+> only after a measured under-trigger, adopted only with a false-trigger count, never as the
+> prescribed fallback.
+
+> **E10's measures.** Measure false "fixed" claims, correct dispositions, evidence sufficiency,
+> scope violations, unauthorized actions, record interoperability, time, and available token/cost
+> data. The comparison is within each setup. It is not a Claude-versus-Astra-versus-Qwen
+> leaderboard.
+
+> **D2** (Tony): "There is no budget." No ceiling on trials or reviewer calls. **D4** (Tony, with
+> Clerk's recommendation): keep reviewer counts, model floors and suite reruns as they are until
+> E13 measures an alternative. **Ruling 17**: a step closes when the outside reviewer reports no
+> BLOCKER, every MAJOR is fixed or carried in writing, and the deterministic checks pass; one fix
+> round, one verification round, then carry. **R1f** (Tony, 2026-09-16): the E11 control room is
+> Fable 5.1 at max; Astra at max for E11's independent read of the grading evidence and every E11
+> review.
+
+## 7. Amendments (control-room rulings issued while E11 runs)
+
+(none yet)
