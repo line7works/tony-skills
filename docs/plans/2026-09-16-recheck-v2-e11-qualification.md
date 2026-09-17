@@ -401,3 +401,25 @@ to exactly the held-out request text.
   would record, not what the E10 records already hold. Next: the verify copy refreshed at `9368509` behind the
   E11-1 wall, Astra's re-check limited to the three (mandate `mandate-recheck2.md`), her verdict filed as
   E11-17, then the rerun on Tony's standing goal line.
+- **E11-17, Astra's narrow re-check of `9368509` and the control room's send-back (2026-09-17 about 10:30 AM).**
+  Astra (GPT-6 at high, `launch.sh recheck2`, mandate `mandate-recheck2.md`, 8 minutes, exit 0; packet
+  `astra-outputs/e11/recheck2/` with her probe scripts) on the three E11-15 items: C FIXED (a retained
+  failed allow-rule check refuses the launch, exit 2, with the unseparated state accepted; a passed
+  preflight on a fresh campaign permits it). A PARTLY, NEW MAJOR: X2-01 stays `fixed` and the F5 refused
+  and structured-tail cases still downgrade, but the new negation guard cancels a declaration on any
+  negation within four words, so "No output because execution was refused" reads as no block and a later
+  prose-only clearance passes as `fixed`; the previous verifier downgraded it. B PARTLY, NEW MAJOR: staging
+  carries the evidence, `artifact_path` and content are checked and swapped item states fail, but
+  `_artifact_rows` pairs the consumer's references by list position while `_same_evidence` accepts any
+  order, so two correct references in the other order fail `evidence_artifacts_recovered` with both files
+  unchanged. No new BLOCKER. Her runner E11 suite showed four failures from her sandbox refusing the fake
+  producer's uv cache; the control room's chain I ran the same suite green from `/private/tmp`. The
+  control room read both findings against the code and confirms them: both sit inside the items E11-15
+  ordered fixed and both change what a live trial records (a real refusal graded fixed; a live consumer
+  trial failed on evidence order). The control room's call, made on E11-15's intent and flagged to Tony
+  rather than put to him: the narrow round is not complete until the three items hold, so the two go back
+  to the same builder as a send-back within the round (brief `briefs/e11-repair-fix3.md`: A2 the guard
+  negates only the phrase itself, B2 the rows pair by the named artifact; one failing-then-passing test
+  each against `9368509`), then the control room's gates, commit, derived revision 7, Astra's re-check on
+  the two, then the rerun. About an hour. The rerun stays behind its gate; Tony can rule to launch at
+  `9368509` instead at any point, carrying the two with the affected subset named. Nothing else changes.
