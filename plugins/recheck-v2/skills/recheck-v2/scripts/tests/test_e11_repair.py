@@ -400,6 +400,73 @@ class BlockedThenStaticClearance(unittest.TestCase):
                      "The report is missing; no execution was stopped."):
             self.assertIsNone(verifier.declared_block(text)[0], text)
 
+    # E11-15 send-back, A2: the guard cancelled a declared block on ANY negation within four
+    # words, whatever it negated, so "No output because execution was refused" read as none.
+    NO_OUTPUT_BECAUSE = ("No output because execution was refused. The structured report is "
+                         "missing.\n")
+
+    def test_a_negation_of_something_else_leaves_the_block_standing(self):
+        """Her core-block-context.py text: the `no` negates the output, not the refusal."""
+        self.assertEqual(verifier.declared_block(self.NO_OUTPUT_BECAUSE)[0],
+                         "execution was refused")
+
+    def test_that_block_downgrades_the_later_static_clearance(self):
+        """The whole sequence, exactly as the F5 refused case does."""
+        run_dir, started = self.drive("F5-blocked-execution", "F5-01-outbound-required")
+        items = started["checklist"]
+        document = self.record(run_dir, started["call_id"], self.NO_OUTPUT_BECAUSE,
+                               "supplied-blocked.md")
+        self.assertEqual(document["next"], "verify", document)
+        static = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "fixed",
+             "method": "static", "static_reason": "non_executable_artifact",
+             "evidence": [{"kind": "read", "artifact": None,
+                           "detail": "static source inspection only; no service observation "
+                                     "obtained"}]}])
+        self.record(run_dir, document["call_id"], static, "supplied-static.md")
+        self.step(["adjudicate", "--run-dir", run_dir, "--item", "0", "--action",
+                   "confirmed"])
+        done = self.step(["record", "--run-dir", run_dir])
+        result = testlib.load_json(done["result"])
+        self.assert_refused(result, self.NO_OUTPUT_BECAUSE,
+                            "the retained report declares a stopped execution")
+        self.validates(run_dir, done["result"])
+
+    def test_a_negation_of_the_phrase_itself_still_cancels_it(self):
+        self.assertIsNone(verifier.declared_block("no execution was refused")[0])
+
+    def test_a_report_saying_the_execution_was_not_blocked_is_not_a_block(self):
+        """Its static clearance goes through: fixed, confirmed, no refusal."""
+        self.assertIsNone(verifier.declared_block("the execution was not blocked")[0])
+        run_dir, started = self.drive("VXUM-verifier-execution",
+                                      "X2-01-non-executable-artifact")
+        items = started["checklist"]
+        document = self.record(run_dir, started["call_id"],
+                               "The execution was not blocked. The structured report is "
+                               "missing.\n", "supplied-not-blocked.md")
+        self.assertEqual(document["next"], "verify", document)
+        static = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "fixed",
+             "method": "static", "static_reason": "non_executable_artifact",
+             "evidence": [{"kind": "read", "artifact": None,
+                           "detail": "Read the prose specification; its two statements now "
+                                     "agree"}]}])
+        self.record(run_dir, document["call_id"], static, "supplied-static.md")
+        self.step(["adjudicate", "--run-dir", run_dir, "--item", "0", "--action",
+                   "confirmed"])
+        done = self.step(["record", "--run-dir", run_dir])
+        item = testlib.load_json(done["result"])["items"][0]
+        self.assertEqual(item["disposition"], "fixed")
+        self.assertEqual(item["adjudication"]["driver_action"], "confirmed")
+        self.assertNotIn("static_clearance_refused", item["adjudication"])
+        self.validates(run_dir, done["result"])
+
+    def test_a_negation_in_an_earlier_sentence_leaves_the_block_standing(self):
+        """The sentence break already did this; the test keeps it that way."""
+        self.assertEqual(
+            verifier.declared_block("Not blocked earlier. The execution was refused.")[0],
+            "execution was refused")
+
     def test_a_negation_after_the_phrase_is_deliberately_not_caught(self):
         """The window looks BACKWARD only, and this records why.
 

@@ -1464,6 +1464,62 @@ class Fix2ConsumerEvidence(RunnerCase):
         self.assertTrue(row["content_matches"])
         self.assertEqual(row["producer_sha256"], row["consumer_sha256"])
 
+    def producer_with_two_artifacts(self, name="two-artifacts"):
+        """Her consumer-artifact-order.py producer: two references, two distinct files."""
+        producer, first = self.producer_with_an_artifact(name)
+        record = producer["record"]
+        second = os.path.join(record, "run", "verifier", "second.txt")
+        runner.write_text(second, "a second distinct observation\n")
+        result = runner.read_json(os.path.join(record, "result.json"))
+        result["items"][0]["verification"]["evidence"].append(
+            {"kind": "command", "detail": "a second observation", "artifact_path": second})
+        runner.write_json(os.path.join(record, "result.json"), result)
+        return producer, first, second
+
+    def test_two_references_given_in_the_other_order_still_recover(self):
+        """E11-15 send-back, B2: `_artifact_rows` paired by list position.
+
+        `_same_evidence` accepts the consumer's references in any order, so an answer that
+        listed two CORRECT references reversed passed `evidence_references` and failed
+        `evidence_artifacts_recovered` with both files unchanged.
+        """
+        producer, _first, _second = self.producer_with_two_artifacts()
+        pair = self.staged(producer, "order-pair")
+        expected = runner._consumer_expected(producer)
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        # the control: both references, in the producer's own order
+        runner.write_json(answer_path, {"items": expected["items"], "cards": []})
+        grade = runner.consumer_grade(pair, producer, answer_path)
+        self.assertTrue(grade["checks"]["evidence_references"])
+        self.assertTrue(grade["checks"]["evidence_artifacts_recovered"])
+        # the same two references, reversed
+        answer = runner.read_json(answer_path)
+        answer["items"][0]["evidence"].reverse()
+        runner.write_json(answer_path, answer)
+        grade = runner.consumer_grade(pair, producer, answer_path)
+        self.assertTrue(grade["checks"]["evidence_references"])
+        self.assertTrue(grade["checks"]["evidence_artifacts_recovered"])
+        # and both staged files really are the producer's, untouched
+        self.assertTrue(all(runner.file_sha256(row["staged"]) == row["sha256"]
+                            for row in pair["artifacts"]))
+        for row in grade["evidence_artifacts"]:
+            self.assertEqual(row["producer_named"], row["consumer_named"])
+            self.assertTrue(row["content_matches"])
+
+    def test_one_of_two_references_naming_the_wrong_file_still_fails(self):
+        """The pairing is by name, so a wrong name has no counterpart at all."""
+        producer, _first, _second = self.producer_with_two_artifacts("wrong-of-two")
+        pair = self.staged(producer, "wrong-of-two-pair")
+        expected = runner._consumer_expected(producer)
+        answer = {"items": expected["items"], "cards": []}
+        answer["items"][0]["evidence"][1]["artifact_path"] = "different-observation.txt"
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        runner.write_json(answer_path, answer)
+        grade = runner.consumer_grade(pair, producer, answer_path)
+        self.assertFalse(grade["checks"]["evidence_artifacts_recovered"])
+        unpaired = [r for r in grade["evidence_artifacts"] if r["consumer_named"] is None]
+        self.assertEqual(len(unpaired), 1)
+
     def test_an_answer_naming_a_file_the_pair_does_not_hold_fails(self):
         """The reference is right, the file is gone: the content check is what catches it."""
         producer, _artifact = self.producer_with_an_artifact("missing")

@@ -393,27 +393,47 @@ BLOCK_DECLARATIONS = (
 
 # The same trap in the other direction: every remaining phrase reads naturally negated with
 # the negator in FRONT of it — "no execution was refused", "nothing the environment stopped" —
-# and a plain substring scan matches both. So a match is refused when a negation stands within
-# a few words before the phrase inside the same sentence. (The other permitted route, keeping
-# only phrases that cannot be negated, does not exist for this vocabulary: contract section 5
-# and verifier.md write the block in exactly these words.)
+# and a plain substring scan matches both. So a match is refused when a negation NEGATES THE
+# PHRASE ITSELF. (The other permitted route, keeping only phrases that cannot be negated, does
+# not exist for this vocabulary: contract section 5 and verifier.md write the block in exactly
+# these words.)
+#
+# THE RULE (E11-15 send-back, A2). Walk backwards from the phrase, word by word, without
+# leaving the sentence (the scan stops at . ; : ! ? or a newline):
+#   - a negation word reached this way negates the phrase: no block;
+#   - a word from BLOCK_NEGATION_CARRIERS — the determiners and copulas a negation may legally
+#     carry across — is stepped over, up to BLOCK_NEGATION_WINDOW of them;
+#   - ANY other word (a noun, a verb, a connector: "output", "because", "required") means the
+#     negation, if there is one further back, belongs to something else, and the block stands.
+# So "no execution was refused" is not a block, and "No output because execution was refused"
+# is: the "no" there negates the output, not the refusal. The first form was the sent case;
+# the second was Astra's adjacent one.
 BLOCK_NEGATIONS = ("no", "not", "never", "nothing", "none", "without", "nor", "neither",
                    "cannot", "n't")
-BLOCK_NEGATION_WINDOW = 4          # words between the negation and the phrase
+BLOCK_NEGATION_CARRIERS = ("the", "a", "an", "any", "such", "actual", "real", "this", "that",
+                           "its", "their", "ever", "been", "being", "be", "was", "were",
+                           "is", "are")
+BLOCK_NEGATION_WINDOW = 4          # carrier words a negation may reach across
 _SENTENCE_BREAK = ".;:!?\n\r"
 
 
 def _negated_before(text_lower, at):
-    """Does a negation stand within a few words before `at`, in the same sentence?"""
+    """Does a negation before `at`, in the same sentence, negate the phrase AT `at`?"""
     start = 0
     for index in range(at - 1, -1, -1):
         if text_lower[index] in _SENTENCE_BREAK:
             start = index + 1
             break
     words = [w.strip("\"'(),[]{}") for w in text_lower[start:at].split()]
-    for word in [w for w in words if w][-BLOCK_NEGATION_WINDOW:]:
+    carried = 0
+    for word in reversed([w for w in words if w]):
         if word in BLOCK_NEGATIONS or word.endswith("n't"):
             return True
+        if word not in BLOCK_NEGATION_CARRIERS:
+            return False         # the negation, if any, negates that word, not the phrase
+        carried += 1
+        if carried > BLOCK_NEGATION_WINDOW:
+            return False
     return False
 
 

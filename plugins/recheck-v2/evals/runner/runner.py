@@ -10732,15 +10732,26 @@ def _artifact_rows(pair, ours, theirs):
         for key in (row.get("artifact_path"), row.get("relative")):
             if key:
                 staged[key] = row
+    # E11-15 send-back (B2): the consumer's references were taken by LIST POSITION while
+    # `_same_evidence` accepts them in any order, so two correct references given in the other
+    # order failed here with both files unchanged. Each producer reference is paired with the
+    # consumer reference that names the SAME artifact — the match `_same_evidence` makes —
+    # and each consumer reference is spent once, so two references to one file still need two.
     theirs = theirs if isinstance(theirs, list) else []
+    unspent = {}
+    for entry in theirs:
+        if isinstance(entry, dict):
+            their_named, _field = _evidence_artifact(entry)
+            if their_named:
+                unspent.setdefault(their_named, []).append(their_named)
     rows = []
-    for position, reference in enumerate(ours):
+    for reference in ours:
         named = reference.get("artifact_path")
         if not named:
             continue
-        got = theirs[position] if position < len(theirs) else None
-        their_named, _field = _evidence_artifact(got) if isinstance(got, dict) else (None,
-                                                                                     None)
+        their_named = None
+        if unspent.get(named):
+            their_named = unspent[named].pop(0)
         row = {"producer_named": named, "consumer_named": their_named,
                "in_the_pair": False, "producer_sha256": None, "consumer_sha256": None}
         source = staged.get(named)
