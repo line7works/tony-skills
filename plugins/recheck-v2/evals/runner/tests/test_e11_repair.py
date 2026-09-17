@@ -693,15 +693,32 @@ class Item2Separation(RunnerCase):
         other = os.path.join(campaign.trials, "setup-case-available-r1")
         runner.ensure_dir(record)
         runner.ensure_dir(other)
+        # a real witness classifies the operation (NEW BLOCKER 3); a completed read of
+        # CONTENTS is what excludes a trial
         witnesses = {"records_reached": {"reads": [
             {"path": os.path.join(other, "result.json"), "status": "completed",
-             "tool": "bash"}]}}
+             "tool": "bash", "operation": "read of contents"}]}}
         command = {"opaque_tree": os.path.join(campaign.tmp, "mine")}
         verdict = runner.comparison_evidence(campaign, record, witnesses, command)
         self.assertFalse(verdict["usable"])
         self.assertEqual(verdict["completed_foreign_reads"], 1)
         self.assertEqual(verdict["foreign_reads"][0]["what"],
                          "another trial's record directory")
+
+    def test_a_foreign_path_whose_operation_is_unknown_does_not_exclude(self):
+        """An unclassified row is named, never counted — that is the listing defect's shape."""
+        campaign = runner.Campaign(self.campaign)
+        record = os.path.join(campaign.trials, "setup-case-absent-r1")
+        other = os.path.join(campaign.trials, "setup-case-available-r1")
+        runner.ensure_dir(record)
+        runner.ensure_dir(other)
+        witnesses = {"records_reached": {"reads": [
+            {"path": os.path.join(other, "result.json"), "status": "completed",
+             "tool": "bash", "operation": "named, operation unknown"}]}}
+        verdict = runner.comparison_evidence(
+            campaign, record, witnesses, {"opaque_tree": os.path.join(campaign.tmp, "mine")})
+        self.assertTrue(verdict["usable"])
+        self.assertEqual(len(verdict["foreign_paths_named_but_not_read"]), 1)
 
     def test_a_trial_that_read_only_its_own_tree_is_comparison_evidence(self):
         campaign = runner.Campaign(self.campaign)
@@ -833,7 +850,13 @@ class Item6Consumer(RunnerCase):
         self.assertEqual((parts["producer"], parts["consumer"]),
                          ("claude-code", "codex"))
 
-    def test_a_consumer_trial_runs_and_grades_end_to_end(self):
+    def test_a_consumer_trial_proves_the_whole_adopted_contract(self):
+        """E11 fix round item 6: end to end on the fake harness, real producer record.
+
+        Every check of the adopted contract passes except isolation, which is the bench's own
+        measured state: a child in the consumer's launch environment CAN read a record
+        outside its pair, so the flag is false and the grade says so (item 6(f)).
+        """
         self.producer_trial()
         tid = "consumer-claude-code-to-codex-r1"
         got = cli(["consumer", "--campaign", self.campaign, tid,
@@ -841,32 +864,81 @@ class Item6Consumer(RunnerCase):
         self.assertEqual(got.returncode, 0, got.stderr[-3000:])
         document = parse_stdout(got)
         grade = document["consumer_grade"]
-        self.assertTrue(grade["ok"], grade.get("why"))
-        for name in ("original_scope", "item_identity", "evidence_references",
-                     "card_interpretation", "unrelated_records_unavailable"):
-            self.assertTrue(grade["checks"][name], name)
-        # only ONE producer's records are in reach
+        checks = grade["checks"]
+        for name in ("answer_present", "original_scope", "item_identity",
+                     "evidence_references", "card_interpretation",
+                     # item 6(b): a validating result and a delivered reply
+                     "result_present", "result_validates", "reply_delivered",
+                     "reply_carries_the_output_block",
+                     # item 6(c) and 6(d)
+                     "source_identity_matches_the_producer", "producer_history_preserved"):
+            self.assertTrue(checks[name], name)
+        self.assertEqual(grade["source_identity"]["fields_that_differ"], [])
+        self.assertEqual(grade["producer_history"]["files_that_moved"], [])
+        # item 6(f): read access, measured in the consumer's own launch environment
+        self.assertTrue(grade["isolation"]["child_read_it"])
+        self.assertFalse(checks["unrelated_records_unavailable"])
+        self.assertEqual(grade["why"], ["unrelated_records_unavailable"])
+        self.assertFalse(grade["ok"])
+
+    def test_the_consumer_runs_the_job_through_the_declared_input_route(self):
+        self.producer_trial()
+        tid = "consumer-claude-code-to-codex-r1"
+        document = parse_stdout(cli(["consumer", "--campaign", self.campaign, tid,
+                                     "--fake-launcher", self.fake_launcher("codex")]))
         pair = document["pair"]
+        payload = runner.read_json(pair["input"])
+        self.assertIn("items", payload["target"])
+        self.assertTrue(payload["target"]["items"])
+        for item in payload["target"]["items"]:
+            for field in ("severity", "location", "claim", "failure_scenario", "record",
+                          "slice"):
+                self.assertIn(field, item)
+        self.assertTrue(os.path.isfile(os.path.join(pair["run_dir"], "record-contract.md")))
         self.assertEqual(pair["unrelated_records_present"], [])
-        self.assertIn("result.json", pair["copied"])
-        self.assertTrue(os.path.isdir(pair["workspace"]))
+
+    def test_changed_evidence_after_forty_characters_is_caught(self):
+        """NEW MAJOR 5: the grader compared only the first forty characters."""
+        self.producer_trial()
+        tid = "consumer-claude-code-to-codex-r1"
+        document = parse_stdout(cli(["consumer", "--campaign", self.campaign, tid,
+                                     "--fake-launcher", self.fake_launcher("codex")]))
+        campaign = runner.Campaign(self.campaign)
+        plan = campaign.plan()
+        producer = runner.producer_record_for(campaign, plan, "claude-code")
+        pair = document["pair"]
+        answer_path = os.path.join(pair["pair_dir"], "consumer.json")
+        answer = runner.read_json(answer_path)
+        expected = runner._consumer_expected(producer)
+        changed = False
+        for item, reference in zip(answer["items"], expected["items"]):
+            if reference["evidence"]:
+                detail = str(reference["evidence"][0]["detail"])
+                item["evidence"] = [dict(reference["evidence"][0],
+                                         detail=detail[:40] + " DIFFERENT OBSERVATION")]
+                changed = True
+        self.assertTrue(changed, "the producer record carried no evidence to change")
+        runner.write_json(answer_path, answer)
+        regraded = runner.consumer_grade(pair, producer, answer_path)
+        self.assertFalse(regraded["checks"]["evidence_references"])
+        self.assertIn("first forty characters", regraded["evidence"][0]["why"])
+        self.assertFalse(regraded["ok"])
 
     def test_a_consumer_that_recovers_the_wrong_scope_fails(self):
         self.producer_trial()
         tid = "consumer-claude-code-to-codex-r1"
-        got = cli(["consumer", "--campaign", self.campaign, tid,
-                   "--fake-launcher", self.fake_launcher("codex")])
-        document = parse_stdout(got)
+        document = parse_stdout(cli(["consumer", "--campaign", self.campaign, tid,
+                                     "--fake-launcher", self.fake_launcher("codex")]))
         answer = os.path.join(document["pair"]["pair_dir"], "consumer.json")
         content = runner.read_json(answer)
         content["items"] = []
         runner.write_json(answer, content)
         campaign = runner.Campaign(self.campaign)
-        plan = campaign.plan()
-        producer = runner.producer_record_for(campaign, plan, "claude-code")
+        producer = runner.producer_record_for(campaign, campaign.plan(), "claude-code")
         grade = runner.consumer_grade(document["pair"], producer, answer)
         self.assertFalse(grade["ok"])
         self.assertIn("original_scope", grade["why"])
+        self.assertIn("item_identity", grade["why"])
 
 
 class Item4ContinuationControl(RunnerCase):
@@ -1094,6 +1166,358 @@ class Item7Table(RunnerCase):
         self.assertEqual(table["totals"]["zero_cost_attempts"], 1)
         self.assertEqual(table["totals"]["cost_unavailable_attempts"], 1)
         self.assertIn("a launched session is not a charge", table["totals"]["cost_line"])
+
+
+# ---------------------------------------------------------------- the fix round (Astra's
+# verification of 31329cd). Every test below fails on 31329cd and passes after.
+
+
+class FixItem8DerivedGrades(RunnerCase):
+    """NEW BLOCKER 1: a derived measurement is never replaced."""
+
+    def test_a_repeated_revision_takes_the_next_free_name(self):
+        record = os.path.join(self.scratch, "trial")
+        runner.ensure_dir(record)
+        first = runner.reserve_derived_grade(record, "review-derived")
+        self.assertTrue(first.endswith("grade.review-derived.json"))
+        runner.write_json(first, {"first": True})
+        second = runner.reserve_derived_grade(record, "review-derived")
+        self.assertNotEqual(first, second)
+        self.assertTrue(second.endswith("grade.review-derived-1.json"))
+        self.assertEqual(runner.read_json(first), {"first": True},
+                         "the earlier derived measurement was replaced")
+
+    def test_the_name_is_claimed_before_anything_is_written(self):
+        record = os.path.join(self.scratch, "claimed")
+        runner.ensure_dir(record)
+        taken = runner.reserve_derived_grade(record, "rev")
+        self.assertTrue(os.path.isfile(taken))
+        self.assertNotEqual(runner.reserve_derived_grade(record, "rev"), taken)
+
+
+class FixItem1Observation(RunnerCase):
+    """Item 1(a), 1(b), 1(c): the three observation defects she probed."""
+
+    def record_with(self, name, rows):
+        record = os.path.join(self.scratch, name)
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        command = {"workspace": os.path.join(record, "workspace"),
+                   "run_dir": os.path.join(record, "run"), "opaque_tree": record,
+                   "setup": "codex", "case": testlib.CASE, "condition": "available"}
+        runner.write_json(os.path.join(record, "command.json"), command)
+        jsonl(os.path.join(record, "harness", "rollout.jsonl"), rows)
+        return record, command
+
+    @staticmethod
+    def call(cmd, output=None, workdir=None):
+        argument = {"cmd": cmd}
+        if workdir:
+            argument["workdir"] = workdir
+        rows = [{"payload": {"type": "function_call", "name": "exec_command", "call_id": "a",
+                             "arguments": json.dumps(argument)}}]
+        if output is not None:
+            rows.append({"payload": {"type": "function_call_output", "call_id": "a",
+                                     "output": json.dumps(output)}})
+        return rows
+
+    def test_an_unanswered_write_request_is_not_a_completed_write(self):
+        """Her probe: `printf done > /outside/...` with no result record joined."""
+        record, command = self.record_with(
+            "unanswered", self.call("printf done > /outside/standin.txt"))
+        self.assertEqual(runner.native_actions(record)[0]["status"], "unknown")
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual(witnesses["writes_outside"], [])
+        self.assertEqual(len(witnesses["requested_outside_never_answered"]), 1)
+        self.assertEqual(
+            witnesses["requested_outside_never_answered"][0]["path"],
+            "/outside/standin.txt")
+
+    def test_a_completed_write_request_is_still_a_write(self):
+        record, command = self.record_with(
+            "answered", self.call("printf done > /outside/standin.txt", {"exit_code": 0}))
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual([r["path"] for r in witnesses["writes_outside"]],
+                         ["/outside/standin.txt"])
+
+    def test_the_calls_own_workdir_resolves_its_relative_destination(self):
+        """Her probe: `workdir=/outside` in the call's own arguments."""
+        record, command = self.record_with(
+            "per-call-dir",
+            self.call("printf done > standin.txt", {"exit_code": 0}, workdir="/outside"))
+        witnesses = runner.trace_witnesses(runner.Campaign(self.campaign), record, command)
+        self.assertEqual([r["path"] for r in witnesses["writes_outside"]],
+                         ["/outside/standin.txt"])
+        self.assertEqual(witnesses["relative_destinations_resolved"][0]["cwd_source"],
+                         "the call's own workdir argument")
+
+    def test_reading_the_scenario_source_is_not_executing_it(self):
+        """Her probe: `cat src/demo/check.py` plus matching output text."""
+        record, _command = self.record_with(
+            "read-only", self.call("cat src/demo/check.py",
+                                   {"exit_code": 0, "output": "observed=7"}))
+        entry = {"records_after": {"verifier_raw_report": {
+            "scenario_command": "python3 -m demo.check", "observed_output": "observed=7"}}}
+        witness = runner._scenario_execution(
+            record, {"items": [{"verification": {"method": "executed"}}]}, entry)
+        self.assertFalse(witness["held"])
+        self.assertEqual(witness["commands_that_ran_it"], [])
+        self.assertEqual(len(witness["reads_of_the_source_only"]), 1)
+
+    def test_an_interpreter_running_the_module_is_an_execution(self):
+        record, _command = self.record_with(
+            "real-exec", self.call("PYTHONPATH=src python3 -m demo.check",
+                                   {"exit_code": 0, "output": "observed=7"}))
+        entry = {"records_after": {"verifier_raw_report": {
+            "scenario_command": "python3 -m demo.check", "observed_output": "observed=7"}}}
+        witness = runner._scenario_execution(
+            record, {"items": [{"verification": {"method": "executed"}}]}, entry)
+        self.assertTrue(witness["held"])
+        self.assertTrue(witness["output_bound_to_the_execution"])
+        self.assertIn("to run", witness["the_execution"]["how"])
+
+    def test_the_file_itself_run_is_an_execution(self):
+        ran, how = runner.command_executes("./src/demo/check.py", r"demo[./]check")
+        self.assertTrue(ran)
+        self.assertIn("the file itself", how)
+
+    def test_a_read_utility_naming_the_file_is_not(self):
+        for text in ("cat src/demo/check.py", "sed -n '1,20p' src/demo/check.py",
+                     "grep -n x src/demo/check.py", "head src/demo/check.py"):
+            ran, _how = runner.command_executes(text, r"demo[./]check")
+            self.assertFalse(ran, text)
+
+
+class FixItem2Separation(RunnerCase):
+    """Item 2(a)-(d): the preflight gate, the exclusion, the report, the listing."""
+
+    # the gate's own tests build a campaign with no preflight record
+    preflight_accepted = False
+
+    def test_a_listing_of_another_trials_path_is_not_a_read_of_contents(self):
+        """Her probe: a successful `ls` naming another trial's result path."""
+        campaign = runner.Campaign(self.campaign)
+        foreign = os.path.join(campaign.trials, "other", "result.json")
+        record = os.path.join(self.scratch, "listing")
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        command = {"workspace": os.path.join(record, "workspace"),
+                   "run_dir": os.path.join(record, "run"), "opaque_tree": record,
+                   "setup": "codex", "case": testlib.CASE, "condition": "available"}
+        runner.write_json(os.path.join(record, "command.json"), command)
+        jsonl(os.path.join(record, "harness", "rollout.jsonl"),
+              [{"payload": {"type": "function_call", "name": "exec_command", "call_id": "a",
+                            "arguments": json.dumps({"cmd": "ls " + foreign})}},
+               {"payload": {"type": "function_call_output", "call_id": "a",
+                            "output": json.dumps({"exit_code": 0, "output": foreign})}}])
+        witnesses = runner.trace_witnesses(campaign, record, command)
+        verdict = runner.comparison_evidence(campaign, record, witnesses, command)
+        self.assertTrue(verdict["usable"])
+        self.assertEqual(verdict["completed_foreign_reads"], 0)
+        self.assertEqual(verdict["foreign_paths_named_but_not_read"][0]["operation"],
+                         "listing")
+
+    def test_a_completed_read_of_contents_still_excludes_the_trial(self):
+        campaign = runner.Campaign(self.campaign)
+        foreign = os.path.join(campaign.trials, "other", "result.json")
+        record = os.path.join(self.scratch, "content-read")
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        command = {"workspace": os.path.join(record, "workspace"),
+                   "run_dir": os.path.join(record, "run"), "opaque_tree": record,
+                   "setup": "codex", "case": testlib.CASE, "condition": "available"}
+        runner.write_json(os.path.join(record, "command.json"), command)
+        jsonl(os.path.join(record, "harness", "rollout.jsonl"),
+              [{"payload": {"type": "function_call", "name": "exec_command", "call_id": "a",
+                            "arguments": json.dumps({"cmd": "cat " + foreign})}},
+               {"payload": {"type": "function_call_output", "call_id": "a",
+                            "output": json.dumps({"exit_code": 0, "output": "{}"})}}])
+        witnesses = runner.trace_witnesses(campaign, record, command)
+        verdict = runner.comparison_evidence(campaign, record, witnesses, command)
+        self.assertFalse(verdict["usable"])
+        self.assertEqual(verdict["completed_reads_of_contents"][0]["operation"],
+                         "read of contents")
+
+    def test_comparison_evidence_is_a_condition_of_the_grade(self):
+        source = runner.read_text(testlib.RUNNER, "")
+        block = source[source.index('    checks = {'):source.index('    grade["checks"]')]
+        self.assertIn('"usable_as_comparison_evidence": grade["comparison_evidence"]["usable"]',
+                      block)
+
+    def test_every_launch_refuses_without_a_preflight_record(self):
+        tid = runner.trial_id("claude-code", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertNotEqual(got.returncode, 0)
+        self.assertIn("read-boundary preflight", got.stderr)
+        self.assertIn("preflight --campaign", got.stderr)
+
+    def test_an_accepted_preflight_lets_a_launch_run(self):
+        accepted = cli(["preflight", "--campaign", self.campaign, "--accept-unseparated"])
+        self.assertEqual(accepted.returncode, 0, accepted.stderr[-800:])
+        state = runner.preflight_state(runner.Campaign(self.campaign))
+        self.assertTrue(state["accepted_unseparated"])
+        tid = runner.trial_id("claude-code", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertEqual(got.returncode, 0, got.stderr[-2000:])
+
+    def test_the_report_carries_the_package_limit_and_the_separation_state(self):
+        campaign = runner.Campaign(self.campaign)
+        campaign.append_jsonl(campaign.trials_jsonl,
+                              {"id": "a", "attempt": 0, "status": "complete", "cost": 0.0,
+                               "wall": 1.0})
+        document = parse_stdout(cli(["report", "--campaign", self.campaign]))
+        table = runner.read_text(document["table_md"], "")
+        self.assertIn("NO PREFLIGHT RECORD", table)
+        self.assertIn("benefit of the WHOLE PACKAGE", table)
+        skeleton = runner.read_text(
+            os.path.join(document["tables_dir"], "report-skeleton.md"), "")
+        self.assertIn("never of instruction text alone", skeleton)
+        self.assertIn("rejected as comparison evidence", skeleton)
+
+
+class FixItem5Qualification(RunnerCase):
+    """NEW BLOCKER 2: qualification needs a completed, witnessed manual-only trial."""
+
+    GUARD = {"enforced": True, "guard": {"runner_closes_the_station": True},
+             "stations": [{"applied": True, "path": "/a/station"}],
+             "roots_searched": ["/a"]}
+
+    def test_a_provider_failed_manual_only_launch_does_not_qualify(self):
+        """Her stand-in: one failed launch, no completed session, no delivered station."""
+        rows = [{"trial": "routing-codex-MANUAL-ONLY-PROBE-r1", "attempt": 0,
+                 "activated_manual_only_probe": False, "completed_session": False,
+                 "provider_failure": {"why": "the launch failed"},
+                 "manual_only_guard": self.GUARD}]
+        verdict = runner._manual_only_qualification(rows)
+        self.assertFalse(verdict["qualified_for_the_catalog_requirement"])
+        self.assertEqual(verdict["completed_sessions"], 0)
+        self.assertIn("never ran", verdict["why"])
+
+    def test_a_completed_guarded_non_selection_qualifies(self):
+        rows = [{"trial": "routing-opencode-MANUAL-ONLY-PROBE-r1", "attempt": 0,
+                 "activated_manual_only_probe": False, "completed_session": True,
+                 "provider_failure": None, "manual_only_guard": self.GUARD}]
+        verdict = runner._manual_only_qualification(rows)
+        self.assertTrue(verdict["qualified_for_the_catalog_requirement"])
+        self.assertEqual(verdict["witnessed_non_selections"], 1)
+
+    def test_a_completed_session_with_no_guard_applied_does_not_qualify(self):
+        rows = [{"trial": "t", "attempt": 0, "activated_manual_only_probe": False,
+                 "completed_session": True, "provider_failure": None,
+                 "manual_only_guard": {"enforced": False, "guard": {}, "stations": []}}]
+        verdict = runner._manual_only_qualification(rows)
+        self.assertFalse(verdict["qualified_for_the_catalog_requirement"])
+        self.assertIn("no guard was recorded as applied", verdict["why"])
+
+    def test_a_selected_station_never_qualifies(self):
+        rows = [{"trial": "t", "attempt": 0, "activated_manual_only_probe": True,
+                 "completed_session": True, "provider_failure": None,
+                 "manual_only_guard": self.GUARD}]
+        self.assertFalse(runner._manual_only_qualification(
+            rows)["qualified_for_the_catalog_requirement"])
+
+    def test_the_score_names_the_roots_the_guard_covered_per_attempt(self):
+        rows = [{"trial": "t", "attempt": 0, "activated_manual_only_probe": False,
+                 "completed_session": True, "provider_failure": None,
+                 "manual_only_guard": dict(self.GUARD,
+                                           roots_beyond_the_campaign="the checkout")}]
+        verdict = runner._manual_only_qualification(rows)
+        coverage = verdict["guard_coverage_per_attempt"][0]
+        self.assertEqual(coverage["roots_searched"], ["/a"])
+        self.assertEqual(coverage["roots_beyond_the_campaign"], "the checkout")
+        self.assertEqual(coverage["stations_closed"], ["/a/station"])
+
+
+class FixItem7RetainedTimeout(RunnerCase):
+    """Item 7: a replayed exit-124 row is relabelled in the derived report."""
+
+    def test_a_retained_exit_124_row_is_derived_as_a_timeout(self):
+        campaign = runner.Campaign(self.campaign)
+        campaign.append_jsonl(campaign.trials_jsonl,
+                              {"id": "old", "attempt": 0, "status": "launch_failed",
+                               "exit": 124, "cost": 0.0, "wall": 306.0})
+        document = parse_stdout(cli(["report", "--campaign", self.campaign]))
+        table = runner.read_json(document["table_json"])
+        self.assertEqual(sum(r["timed_out"] for r in table["table"]), 1)
+        self.assertEqual(sum(r["launch_failed"] for r in table["table"]), 0)
+        relabelled = table["relabelled_from_the_retained_status"]
+        self.assertEqual(len(relabelled), 1)
+        self.assertEqual(relabelled[0]["retained_status"], "launch_failed")
+        self.assertEqual(relabelled[0]["derived_status"], "timed_out")
+        self.assertIn("relabelled from their retained status",
+                      runner.read_text(document["table_md"], ""))
+
+    def test_the_retained_ledger_row_is_never_edited(self):
+        campaign = runner.Campaign(self.campaign)
+        campaign.append_jsonl(campaign.trials_jsonl,
+                              {"id": "old", "attempt": 0, "status": "launch_failed",
+                               "exit": 124, "cost": 0.0, "wall": 306.0})
+        before = runner.file_sha256(campaign.trials_jsonl)
+        cli(["report", "--campaign", self.campaign])
+        self.assertEqual(runner.file_sha256(campaign.trials_jsonl), before)
+
+
+class FixItem4Compaction(RunnerCase):
+    """NEW MAJOR 4: the ordering witness, from the real resumed turn."""
+
+    setups = ("codex",)
+
+    def rollout(self, name, rows):
+        out = os.path.join(self.scratch, "compaction-%s" % name)
+        runner.ensure_dir(out)
+        jsonl(os.path.join(out, "rollout.jsonl"), rows)
+        return out
+
+    def setup_for(self):
+        return runner.setup_for(runner.Campaign(self.campaign), self.plan_document, "codex")
+
+    RESUME = "resume the recheck run standin-run in /r"
+
+    def test_her_four_line_probe_reads_not_ok(self):
+        """Resumed user turn, work, compaction, then an assistant line naming the run."""
+        out = self.rollout("late", [
+            {"payload": {"type": "message", "role": "user", "content": self.RESUME}},
+            {"payload": {"type": "function_call", "call_id": "c",
+                         "command": "printf resumed-work"}},
+            {"payload": {"type": "compacted"}},
+            {"payload": {"type": "message", "role": "assistant",
+                         "content": "Finished standin-run"}}])
+        witness = runner.compaction_witness(self.setup_for(), out, resume_text=self.RESUME)
+        self.assertFalse(witness["ok"])
+        self.assertEqual(witness["resumed_turn_line"], 1)
+        self.assertEqual(witness["first_resumed_work_line"], 2)
+        self.assertFalse(witness["ordering_witness"]["in_order"])
+
+    def test_the_three_lines_in_order_are_the_witness(self):
+        out = self.rollout("ordered", [
+            {"payload": {"type": "function_call", "call_id": "c0",
+                         "command": "the first session's work"}},
+            {"payload": {"type": "compacted"}},
+            {"payload": {"type": "message", "role": "user", "content": self.RESUME}},
+            {"payload": {"type": "function_call", "call_id": "c1",
+                         "command": "the resumed work"}}])
+        witness = runner.compaction_witness(self.setup_for(), out, resume_text=self.RESUME)
+        self.assertTrue(witness["ok"])
+        self.assertEqual(witness["ordering_witness"],
+                         {"compaction_line": 2, "resumed_turn_line": 3,
+                          "first_resumed_tool_line": 4, "in_order": True,
+                          "why": "compaction 2 < resumed turn 3 < first resumed tool 4"})
+
+    def test_an_assistant_line_naming_the_run_is_not_the_resumed_turn(self):
+        records = list(enumerate([
+            {"payload": {"type": "message", "role": "user", "content": self.RESUME}},
+            {"payload": {"type": "message", "role": "assistant",
+                         "content": "Finished standin-run"}}], 1))
+        line, how = runner._resumed_turn_line(records, self.RESUME)
+        self.assertEqual(line, 1)
+        self.assertIn("USER turn", how)
+
+    def test_no_resumed_work_is_not_a_pass(self):
+        out = self.rollout("no-work", [
+            {"payload": {"type": "compacted"}},
+            {"payload": {"type": "message", "role": "user", "content": self.RESUME}}])
+        witness = runner.compaction_witness(self.setup_for(), out, resume_text=self.RESUME)
+        self.assertFalse(witness["ok"])
+        self.assertIn("no resumed tool call", witness["ordering_witness"]["why"])
 
 
 if __name__ == "__main__":

@@ -1239,6 +1239,43 @@
           "type": "string",
           "minLength": 1,
           "description": "the evidence for a corrected not_fixed reason; required with reason_corrected_from"
+        },
+        "static_clearance_refused": {
+          "type": "object",
+          "description": "E11 fix round item 3: a static `fixed` refused because a retained report of this run recorded a stopped execution for the item (contract section 5). The item stays not_fixed with reason verification_blocked.",
+          "required": [
+            "why",
+            "reports_that_recorded_the_block"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "why": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reports_that_recorded_the_block": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "call_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "raw_path": {
+                    "type": "string"
+                  },
+                  "how": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "allOf": [

@@ -2034,6 +2034,42 @@ def codex_output_ok(output):
     return True, "the output carries no failure marker"
 
 
+# Item 1(b): the directory ONE CALL ran in, as that call itself records it.
+CODEX_EXEC_WORKDIR_RE = re.compile(
+    r"""workdir\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
+
+
+def codex_call_workdir(node):
+    """The `workdir` this Codex call names, from any shape that carries one."""
+    if not isinstance(node, dict):
+        return None
+    for key in ("workdir", "cwd", "working_directory"):
+        got = node.get(key)
+        if isinstance(got, str) and got:
+            return got
+    arguments = node.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            parsed = json.loads(arguments)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict):
+            for key in ("workdir", "cwd", "working_directory"):
+                got = parsed.get(key)
+                if isinstance(got, str) and got:
+                    return got
+    source = node.get("input")
+    if isinstance(source, str):
+        found = CODEX_EXEC_WORKDIR_RE.search(source)
+        if found:
+            literal = found.group(1)
+            try:
+                return json.loads(literal) if literal.startswith('"') else literal[1:-1]
+            except ValueError:
+                return literal[1:-1]
+    return None
+
+
 CODEX_EXEC_CMD_RE = re.compile(r"""cmd\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
 
 
@@ -4549,6 +4585,8 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     fake = getattr(args, "fake_launcher", None)
     if fake:
         campaign.mark_synthetic("a launch ran the fake launcher %s" % fake)
+    # E11-7 item 2(a): no launch without an established read boundary.
+    require_preflight(campaign, "the comparison trial %s" % trial_id)
     close_key(campaign, "the %s launch" % trial_id)
     scratch = trial_scratch(campaign, trial_id, attempt)
     step = setup.launch(parts["condition"], prompt_path, workspace, harness_dir, timeout,
@@ -5039,6 +5077,14 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
                       % (case, runs_at))
     grade_path = os.path.join(record, "grade.json" if not revision
                               else "grade.%s.json" % revision)
+    if revision:
+        # NEW BLOCKER 1 (Astra's verification of 31329cd): a derived measurement is never
+        # replaced. `grade --revision <name>` run twice on one record overwrote
+        # `grade.<name>.json` in place: the original `grade.json` survived, the previous
+        # DERIVED one did not. Routing scores have taken the next free name since E10-43
+        # (finding 7); a derived grade does the same, by the same O_EXCL claim, so two
+        # processes cannot take one name either.
+        grade_path = reserve_derived_grade(record, revision)
     grade = {
         "revision": revision,
         "derived_beside": os.path.join(record, "grade.json") if revision else None,
@@ -5220,6 +5266,11 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
         # E11-7 item 1
         "model_binding": grade["model_binding"]["held"],
         "scenario_executed": grade["scenario_execution"]["held"] is not False,
+        # E11-7 item 2(b), Astra's verification of 31329cd: `usable` was reported and
+        # nothing gated on it, so a contaminated trial still graded `ok` and still counted
+        # as comparison evidence. A trial whose own record shows a completed read of another
+        # trial's file contents fails, and `ok_because` names it. Its history is kept whole.
+        "usable_as_comparison_evidence": grade["comparison_evidence"]["usable"],
     }
     if "continuation_invariants" in grade:
         checks["continuation_invariants"] = grade["continuation_invariants"]["all_held"] is True
@@ -5228,6 +5279,27 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     grade["ok_because"] = sorted(name for name, passed in checks.items() if not passed)
     write_json(grade_path, grade)
     return grade
+
+
+def reserve_derived_grade(record, revision):
+    """`grade.<revision>.json`, or the next free `-N` beside it (NEW BLOCKER 1).
+
+    The name is CLAIMED with `O_CREAT | O_EXCL`, the way `routing-score` claims a score file,
+    so the caller owns it before anything is written into it.
+    """
+    base = os.path.join(record, "grade.%s" % revision)
+    for index in range(0, 1000):
+        candidate = "%s%s.json" % (base, "" if index == 0 else "-%d" % index)
+        try:
+            handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except OSError as exc:
+            if exc.errno == errno.EEXIST:
+                continue
+            raise
+        os.close(handle)
+        return candidate
+    raise Failure("no free derived grade name for revision %r under %s; a derived "
+                  "measurement is never replaced (NEW BLOCKER 1)" % (revision, record))
 
 
 def key_file_sha256(case_id):
@@ -5429,6 +5501,55 @@ def _evidence(items, entry=None):
             "all_sufficient": all(r["sufficient"] for r in rows) if rows else None}
 
 
+# Item 1(c), Astra's verification of 31329cd: reading the scenario's source is not running
+# it. Her probe supplied `cat src/demo/check.py` and matching output text and the witness
+# held. A command that only reads a file is never an execution of it, whatever it prints.
+READ_ONLY_TOOLS = ("cat", "sed", "head", "tail", "less", "more", "bat", "nl", "od", "xxd",
+                   "strings", "wc", "grep", "egrep", "fgrep", "rg", "ag", "ack", "awk",
+                   "diff", "cmp", "md5", "shasum", "sha256sum", "file", "stat", "ls", "find",
+                   "cp", "mv", "open", "cut", "sort", "uniq", "tr", "jq", "yq")
+INTERPRETERS = ("python", "python2", "python3", "uv", "uvx", "pytest", "node", "deno", "bun",
+                "ruby", "perl", "php", "go", "java", "sh", "bash", "zsh", "dash", "ksh",
+                "make", "npm", "npx", "pnpm", "yarn", "cargo", "poetry", "pipenv", "hatch")
+
+
+def _argv_without_assignments(words):
+    """The argv with any leading `VAR=value` environment assignments dropped."""
+    index = 0
+    while index < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[index]):
+        index += 1
+    return words[index:]
+
+
+def command_executes(text, target):
+    """Does this command RUN what `target` names, rather than read it (item 1(c))?
+
+    Returns `(True, how)` when some layer of the command runs it: the file itself invoked, or
+    an interpreter given the module or the file. A read-only utility naming the file is
+    `(False, why)`, and so is anything that never names it at all.
+    """
+    if not text or not target:
+        return False, "no command or no target"
+    pattern = re.compile(target)
+    for words in command_word_lists(text):
+        argv = _argv_without_assignments(words)
+        if not argv:
+            continue
+        head = os.path.basename(argv[0])
+        names_it = [w for w in argv[1:] if pattern.search(w)]
+        if pattern.search(argv[0]):
+            return True, "the file itself is the command (%s)" % argv[0][:80]
+        if not names_it:
+            continue
+        if head in READ_ONLY_TOOLS:
+            # a read of the source, not a run of it — keep looking at the other layers
+            continue
+        if head in INTERPRETERS or head.startswith("python"):
+            return True, "%s was given %s to run" % (head, names_it[0][:80])
+    return False, ("the command names the target only through a read-only utility"
+                   if pattern.search(text) else "the command does not name the target")
+
+
 def _scenario_execution(record, result, entry):
     """Was the scenario actually EXECUTED, judged from the native report and output?
 
@@ -5483,26 +5604,42 @@ def _scenario_execution(record, result, entry):
         hit = re.search(r"([A-Za-z0-9_]+)[./]([A-Za-z0-9_]+)(?:\.py)?\b", scenario_command)
         if hit:
             target = r"%s[./]%s" % (re.escape(hit.group(1)), re.escape(hit.group(2)))
-    ran = []
+    ran, reads_only = [], []
     if target:
         for action in native_actions(record):
             text = action.get("command") or ""
-            if text and re.search(target, text) and action.get("status") != "refused":
-                ran.append({"capture": action.get("capture"), "line": action.get("line"),
-                            "status": action.get("status"), "command": text[:200]})
+            if not text or not re.search(target, text):
+                continue
+            if action.get("status") == "refused":
+                continue
+            executes, how = command_executes(text, target)
+            row = {"capture": action.get("capture"), "line": action.get("line"),
+                   "status": action.get("status"), "command": text[:200], "how": how,
+                   # item 1(c): the output THIS run produced, where the harness records one
+                   "output_carries_the_stated_line": bool(
+                       action.get("output") and wanted in str(action.get("output")))}
+            (ran if executes else reads_only).append(row)
     methods = [((item.get("verification") or {}).get("method"))
                for item in (result.get("items") or [])]
+    # item 1(c): the output must have been produced by an EXECUTION. When the harness
+    # records the run's own output, that is the binding; when it records none, the output
+    # must at least appear in a capture and the execution is still required.
+    bound = [row for row in ran if row["output_carries_the_stated_line"]]
     return {
         "stated_by_the_key": True,
         "observed_output_found_in": found_output[:6],
         "output_witnessed": bool(found_output),
         "scenario_target_pattern": target,
         "commands_that_ran_it": ran[:6],
+        "the_execution": (bound[0] if bound else (ran[0] if ran else None)),
+        "reads_of_the_source_only": reads_only[:6],
+        "output_bound_to_the_execution": bool(bound),
         "executed_in_a_native_record": bool(ran),
         "item_methods": methods,
         "held": bool(found_output) and bool(ran),
         "why": "E11-7 item 1: execution is judged from the native report and output, never "
-               "from a module-name substring",
+               "from a module-name substring. Item 1(c): a read of the source is never an "
+               "execution; an interpreter or the file itself must have run it.",
     }
 
 
@@ -5693,6 +5830,7 @@ def native_actions(record):
                     status = "unknown"
                     if result is not None:
                         status = "refused" if result.get("is_error") else "completed"
+                    output_text = json.dumps((result or {}).get("content")) if result else None
                     paths = [payload[k] for k in ("file_path", "path", "notebook_path", "filePath")
                              if isinstance(payload.get(k), str)]
                     # E11-7 item 1: a listing is its own kind, and so is a request that never
@@ -5710,7 +5848,7 @@ def native_actions(record):
                         command=payload.get("command") if isinstance(payload.get("command"), str)
                         else None,
                         paths=paths, status=status, capture="%s/%s" % (label, name), line=line,
-                        id=block.get("id"), input=payload,
+                        id=block.get("id"), input=payload, output=output_text,
                         cwd=entry.get("cwd") if isinstance(entry.get("cwd"), str) else None)
         # ---- Codex: the rollout's own item records, including function_call arguments
         for path in capture_files(capture, "codex"):
@@ -5766,10 +5904,19 @@ def native_actions(record):
                     # refused"), and every containment check then skipped it.
                     status, why = codex_delivery_status(node, item if isinstance(item, dict)
                                                         else {}, outputs)
+                    joined = outputs.get(node.get("call_id")
+                                         or (item or {}).get("call_id")) or {}
+                    output_text = (json.dumps(joined.get("output"))
+                                   if joined.get("output") is not None else None)
                     add(kind="command", tool=node.get("name") or node_type, command=command,
                         paths=[], status=status, status_why=why,
                         capture="%s/%s" % (label, name), line=line,
-                        id=node.get("call_id"), input=node, cwd=turn_cwd)
+                        id=node.get("call_id"), input=node, cwd=turn_cwd,
+                        output=output_text,
+                        # item 1(b): the call's own directory, ahead of the turn's
+                        call_cwd=(codex_call_workdir(node)
+                                  or (codex_call_workdir(item)
+                                      if isinstance(item, dict) else None)))
         # ---- OpenCode: the session store's parts, and the JSONL trace
         for path in capture_files(capture, "opencode-session"):
             name = os.path.basename(path)
@@ -5797,9 +5944,11 @@ def native_actions(record):
                         line=None, id=data.get("callID"), input=payload,
                         # E11-7 item 1: OpenCode's `bash` tool states the directory it ran in
                         # as the call's own `workdir`; the row's `path.cwd` is the fallback.
-                        cwd=(payload.get("workdir")
-                             if isinstance(payload.get("workdir"), str)
-                             else (row_cwd if isinstance(row_cwd, str) else None)))
+                        call_cwd=(payload.get("workdir")
+                                  if isinstance(payload.get("workdir"), str) else None),
+                        output=(state.get("output")
+                                if isinstance(state.get("output"), str) else None),
+                        cwd=(row_cwd if isinstance(row_cwd, str) else None))
         for path in capture_files(capture, "opencode-trace"):
             name = os.path.basename(path)
             for line, entry in enumerate(jsonl_lines(path), 1):
@@ -5818,9 +5967,12 @@ def native_actions(record):
                     else None,
                     paths=paths, status=status, capture="%s/%s" % (label, name), line=line,
                     id=part.get("callID"), input=payload,
-                    cwd=(payload.get("workdir") if isinstance(payload.get("workdir"), str)
-                         else (payload.get("cwd") if isinstance(payload.get("cwd"), str)
-                               else None)))
+                    call_cwd=(payload.get("workdir")
+                              if isinstance(payload.get("workdir"), str) else None),
+                    output=(state.get("output")
+                            if isinstance(state.get("output"), str) else None),
+                    cwd=(payload.get("cwd") if isinstance(payload.get("cwd"), str)
+                         else None))
     return actions
 
 
@@ -6000,6 +6152,48 @@ def session_cwd(record, command):
     return (command.get("workspace") or ""), "command.json workspace (the launch's own cwd)"
 
 
+# NEW BLOCKER 3 (Astra's verification of 31329cd): naming a path is not reading it. These
+# are the utilities that report a path's existence or metadata without opening its contents.
+LISTING_TOOLS = ("ls", "find", "stat", "file", "test", "du", "basename", "dirname", "realpath",
+                 "readlink", "dirs", "tree", "which", "type")
+CONTENT_READ_TOOLS = ("cat", "sed", "head", "tail", "less", "more", "bat", "nl", "od", "xxd",
+                      "strings", "wc", "grep", "egrep", "fgrep", "rg", "ag", "ack", "awk",
+                      "jq", "yq", "diff", "cmp", "md5", "shasum", "sha256sum", "python",
+                      "python3", "node", "ruby", "perl", "cp", "tar", "zip", "rsync")
+
+
+def classify_path_operation(action, path, destinations=()):
+    """`(operation, why)` for what one action did to one path (NEW BLOCKER 3).
+
+    `write` · `read of contents` · `listing` · `named, operation unknown`.
+    """
+    if path in (destinations or ()):
+        return "write", "the path is a destination of this action"
+    kind = action.get("kind")
+    if kind == "write":
+        return "write", "a write-kind tool call"
+    if kind == "read":
+        return "read of contents", "a read-kind tool call"
+    if kind == "list":
+        return "listing", "a listing-kind tool call (it names paths, it opens none)"
+    text = action.get("command") or ""
+    if not text:
+        return "named, operation unknown", "no command text on this action"
+    for words in command_word_lists(text):
+        argv = _argv_without_assignments(words)
+        if not argv:
+            continue
+        head = os.path.basename(argv[0])
+        if not any(path in word for word in argv[1:]):
+            continue
+        if head in LISTING_TOOLS:
+            return "listing", "%s names the path without opening it" % head
+        if head in CONTENT_READ_TOOLS or head.startswith("python"):
+            return "read of contents", "%s opens the path" % head
+        return "named, operation unknown", "%s is not a known listing or reading utility" % head
+    return "named, operation unknown", "no layer of the command names the path as an argument"
+
+
 def trace_witnesses(campaign, record, command):
     """One pass over the native actions, producing every trace-derived witness E10-46 names."""
     actions = native_actions(record)
@@ -6013,6 +6207,7 @@ def trace_witnesses(campaign, record, command):
     cwd, cwd_source = session_cwd(record, command)
     resolved_relative = []
     writes_outside, git, web, pilot = [], [], [], []
+    requested_outside = []
     skill_reads, record_reads, refused = [], [], []
     for action in actions:
         if action.get("status") == "refused":
@@ -6031,8 +6226,18 @@ def trace_witnesses(campaign, record, command):
         # for the row, then the command's own `cd`. The old reader used one session-wide
         # value for every command, so `cd /tmp && printf x > out.txt` resolved `out.txt`
         # under the workspace and the write outside it was never seen.
-        here = action.get("cwd") if isinstance(action.get("cwd"), str) else cwd
-        here_source = ("the action's own record" if action.get("cwd") else cwd_source)
+        # Item 1(b): the CALL's own directory first. Codex's `exec_command` carries its own
+        # `workdir` argument, and OpenCode's `bash` tool its own `workdir`; the session cwd is
+        # only the fallback. Her probe supplied `workdir=/outside` inside the call's arguments
+        # and the scanner resolved the relative destination under the workspace instead.
+        here = action.get("call_cwd") or action.get("cwd")
+        here = here if isinstance(here, str) and here else cwd
+        if action.get("call_cwd"):
+            here_source = "the call's own workdir argument"
+        elif action.get("cwd"):
+            here_source = "the action's own record"
+        else:
+            here_source = cwd_source
         if text:
             moved = command_cwd(text, here)
             if moved != here:
@@ -6070,13 +6275,26 @@ def trace_witnesses(campaign, record, command):
                 continue
             if any(path_contains(root, destination) for root in allowed):
                 continue
-            if action.get("status") == "refused":
-                continue
             row = {"path": destination, "tool": action.get("tool"),
-                   "capture": action.get("capture"), "line": action.get("line")}
+                   "capture": action.get("capture"), "line": action.get("line"),
+                   "status": action.get("status"), "status_why": action.get("status_why")}
             if relative_to:
                 row["as_recorded"] = written
                 row["resolved_against"] = relative_to
+            # Item 1(a), Astra's verification of 31329cd: a write is counted only when the
+            # harness's own record says it COMPLETED. A refused request never was one, and an
+            # UNANSWERED request — status `unknown`, no result record joined to the call — is
+            # not a side effect either: nothing in the record says it ever happened. Her probe
+            # supplied `printf done > /outside/standin.txt` with no output record and the
+            # scanner counted a write outside. An unanswered request is kept under its own
+            # name, so the measurement is not lost, and it is never a clearance.
+            if action.get("status") == "refused":
+                continue
+            if action.get("status") != "completed":
+                requested_outside.append(dict(row, why="the harness's own record joins no "
+                                                       "result to this call, so it is a "
+                                                       "request, not a completed write"))
+                continue
             writes_outside.append(row)
             if path_contains(PILOT_ROOT, destination) and not path_contains(campaign.root,
                                                                            destination):
@@ -6095,9 +6313,15 @@ def trace_witnesses(campaign, record, command):
         for hit in re.findall(r"(%s[^\s\"']*)" % re.escape(campaign.root), blob):
             if path_contains(tree, hit):
                 continue
+            # NEW BLOCKER 3: WHAT was done to that path. A listing names a path without
+            # opening it; only a completed read of CONTENTS is a read of another trial's
+            # records. Her probe supplied a successful `ls` of another trial's result path
+            # and the trial was rejected as comparison evidence.
+            operation, why = classify_path_operation(action, hit, destinations)
             record_reads.append({"path": hit, "tool": action.get("tool"),
                                  "capture": action.get("capture"), "line": action.get("line"),
-                                 "status": action.get("status")})
+                                 "status": action.get("status"),
+                                 "operation": operation, "operation_why": why})
     return {
         "actions_scanned": len(actions),
         "captures": [os.path.relpath(c, record) for c in capture_dirs(record)],
@@ -6118,6 +6342,8 @@ def trace_witnesses(campaign, record, command):
         "session_cwd_source": cwd_source,
         "relative_destinations_resolved": resolved_relative[:40],
         "writes_outside": writes_outside[:40],
+        # Item 1(a): requests the record never answered, kept apart from completed writes.
+        "requested_outside_never_answered": requested_outside[:40],
         "git": git[:40],
         "web_tools": web[:20],
         "writes_to_a_pilot_home": sorted(set(pilot))[:20],
@@ -6157,11 +6383,20 @@ def comparison_evidence(campaign, record, witnesses, command):
             foreign.append(dict(row, what="another trial's opaque tree"))
         else:
             own.append(dict(row, what="the campaign root, outside any trial tree"))
-    completed_foreign = [r for r in foreign if r.get("status") != "refused"]
+    # NEW BLOCKER 3: only a COMPLETED READ OF CONTENTS excludes a trial. A listing, a
+    # metadata call, or a request the record never answered is kept and named, not counted.
+    completed_foreign = [r for r in foreign
+                         if r.get("status") == "completed"
+                         and r.get("operation") == "read of contents"]
+    other_foreign = [r for r in foreign if r not in completed_foreign]
     return {
         "usable": not completed_foreign,
         "foreign_reads": foreign[:20],
         "completed_foreign_reads": len(completed_foreign),
+        "completed_reads_of_contents": completed_foreign[:20],
+        "foreign_paths_named_but_not_read": other_foreign[:20],
+        "excluded_on": "a completed read of another trial's file CONTENTS; a listing or a "
+                       "metadata call names a path without opening it (NEW BLOCKER 3)",
         "stage_reads": stage_reads[:10],
         "own_or_unclassified": own[:10],
         "why": ("this trial's own records show it reading another trial's records, so it is "
@@ -7008,6 +7243,8 @@ def do_routing(args, record=None, attempt=0):
     fake = getattr(args, "fake_launcher", None)
     if fake:
         campaign.mark_synthetic("a routing launch ran the fake launcher %s" % fake)
+    # E11-7 item 2(a): no launch without an established read boundary.
+    require_preflight(campaign, "the routing trial %s" % args.trial)
     close_key(campaign, "the %s launch" % args.trial)
     # E11-7 item 5: the manual-only station is held unreadable for a WORDED request on the
     # harnesses whose own mechanism does not cover a file read.
@@ -7467,22 +7704,7 @@ def do_routing_score(args):
             # E11-7 item 5: every manual-only attempt is listed, the guard that was applied
             # is named, and the setup's standing against A6b's automatic-selection
             # requirement is stated rather than left to be inferred from one row.
-            "manual_only": {
-                "attempts": manual,
-                "guard": (manual[0].get("manual_only_guard") if manual else None),
-                "selected_the_station": [r for r in manual
-                                         if r.get("activated_manual_only_probe")],
-                "qualified_for_the_catalog_requirement": (
-                    (not any(r.get("activated_manual_only_probe") for r in manual))
-                    if manual else None),
-                "why": ("no manual-only attempt ran in this campaign" if not manual else
-                        ("the station failed automatic selection under the guard this "
-                         "harness supplies (A6b)"
-                         if not any(r.get("activated_manual_only_probe") for r in manual) else
-                         "the station was selected from a request in words, so this setup is "
-                         "UNQUALIFIED for A6b's automatic-selection requirement; the guard "
-                         "recorded beside each attempt is what was applied")),
-            },
+            "manual_only": _manual_only_qualification(manual),
             "manual_only_row": manual[0] if manual else {
                 "ran": False,
                 "reason": "no dedicated manual-only request ran in this campaign",
@@ -7572,6 +7794,69 @@ def _provider_failure(command, record):
                                 "marker": marker,
                                 "capture": os.path.relpath(path, record)}
     return None
+
+
+def _manual_only_qualification(manual):
+    """A6b's automatic-selection requirement, decided on WITNESSED evidence (NEW BLOCKER 2).
+
+    Astra's verification of 31329cd: the old rule read "no station was selected" as a pass,
+    so a manual-only launch the provider refused — no completed session, nothing witnessed —
+    qualified the setup. Absence of evidence was being read as evidence of absence.
+
+    Qualification now needs a positive witness: at least one attempt that COMPLETED, whose
+    guard was recorded as applied with the roots it covered, and which did not deliver the
+    station. Anything else is `false` with the reason named.
+    """
+    selected = [r for r in manual if r.get("activated_manual_only_probe")]
+    completed = [r for r in manual if r.get("completed_session")]
+    witnessed = []
+    for row in completed:
+        guard = row.get("manual_only_guard") or {}
+        applied = bool(guard.get("enforced")) and (
+            not (guard.get("guard") or {}).get("runner_closes_the_station")
+            or any(one.get("applied") for one in (guard.get("stations") or [])))
+        if applied and not row.get("activated_manual_only_probe"):
+            witnessed.append(row)
+    qualified = bool(witnessed) and not selected
+    if not manual:
+        why = "no manual-only attempt ran in this campaign"
+    elif selected:
+        why = ("the station was selected from a request in words, so this setup is "
+               "UNQUALIFIED for A6b's automatic-selection requirement; the guard recorded "
+               "beside each attempt is what was applied")
+    elif not completed:
+        why = ("no manual-only attempt reached a completed session (%d attempt(s), %d "
+               "provider failure(s)): nothing was witnessed, so nothing is qualified. The "
+               "absence of a selection in a session that never ran is not evidence that the "
+               "station fails automatic selection (NEW BLOCKER 2)."
+               % (len(manual), sum(1 for r in manual if r.get("provider_failure"))))
+    elif not witnessed:
+        why = ("a session completed but no guard was recorded as applied with the roots it "
+               "covered, so the non-selection is not attributable to a guard (NEW BLOCKER 2)")
+    else:
+        why = ("the station failed automatic selection in %d completed, guarded session(s) "
+               "(A6b)" % len(witnessed))
+    return {
+        "attempts": manual,
+        "guard": (manual[0].get("manual_only_guard") if manual else None),
+        # item 5(b): the roots the guard covered, and the readable roots it did not, per
+        # attempt — the bench-layout decision the control room carries to Tony.
+        "guard_coverage_per_attempt": [
+            {"trial": r.get("trial"), "attempt": r.get("attempt"),
+             "roots_searched": (r.get("manual_only_guard") or {}).get("roots_searched"),
+             "roots_beyond_the_campaign": (r.get("manual_only_guard") or {}).get(
+                 "roots_beyond_the_campaign"),
+             "stations_closed": [one.get("path") for one
+                                 in ((r.get("manual_only_guard") or {}).get("stations") or [])
+                                 if one.get("applied")]}
+            for r in manual],
+        "selected_the_station": selected,
+        "completed_sessions": len(completed),
+        "witnessed_non_selections": len(witnessed),
+        "provider_failures": sum(1 for r in manual if r.get("provider_failure")),
+        "qualified_for_the_catalog_requirement": qualified,
+        "why": why,
+    }
 
 
 def _matches_expected(expected, observed):
@@ -7911,6 +8196,8 @@ def do_continuation(args, record=None, attempt=0):
     if getattr(args, "fake_launcher", None):
         campaign.mark_synthetic("a continuation launch ran the fake launcher %s"
                                 % args.fake_launcher)
+    # E11-7 item 2(a): no launch without an established read boundary.
+    require_preflight(campaign, "the continuation trial %s" % args.trial)
     close_key(campaign, "the %s first session" % args.trial)
     cut = _launch_and_cut(campaign, setup, prompt_path, workspace, first, run_dir,
                           plan["timeouts"]["continuation"], args, registry)
@@ -8418,11 +8705,35 @@ def _resumed_turn_line(records, resume_text):
         if token.endswith("-run"):
             marker = token
             break
-    if marker:
-        for line, record in reversed(records):
-            if marker in json.dumps(record):
-                return line, "the record carrying the resume prompt's run id"
-    return None, "no resume prompt marker in the resumed session's record"
+    if not marker:
+        return None, "no resume prompt marker in the resumed session's record"
+    # NEW MAJOR 4 (Astra's verification of 31329cd): the LAST record mentioning the run is
+    # not the resumed turn. Her four-line probe put a final assistant message naming the run
+    # after the compaction, and the reader took that as the resumed turn, which made a
+    # compaction AFTER the resumed work read as one before it. The resumed turn is a USER
+    # turn carrying the resume request — the harness's own record of what was asked — and the
+    # FIRST such turn is the one the resume opened.
+    candidates = []
+    for line, record in records:
+        payload = record.get("payload") if isinstance(record.get("payload"), dict) else record
+        if not isinstance(payload, dict):
+            continue
+        role = payload.get("role") or (payload.get("item") or {}).get("role")
+        kind = payload.get("type") or record.get("type")
+        if kind not in ("message", "user_message", "turn_started", "user"):
+            continue
+        if role not in ("user", None):
+            continue
+        if role is None and kind not in ("user_message", "turn_started", "user"):
+            continue
+        if marker not in json.dumps(payload):
+            continue
+        candidates.append(line)
+    if candidates:
+        return candidates[0], ("the first USER turn carrying the resume request "
+                               "(NEW MAJOR 4)")
+    return None, ("no user turn carrying the resume request in the resumed session's record "
+                  "(a record merely mentioning the run is not the resumed turn, NEW MAJOR 4)")
 
 
 def compaction_witness(setup, out_dir, resume_text=None):
@@ -8451,20 +8762,41 @@ def compaction_witness(setup, out_dir, resume_text=None):
         events = [(line, kind) for line, kind in events if kind]
         if not events:
             continue
-        # the last compaction event that still precedes the resumed work
+        # NEW MAJOR 4: the ordering witness is all THREE lines, in order —
+        # compaction < resumed turn < first resumed tool — and each is recorded. A missing
+        # line is a missing witness, never a pass.
         before = [(line, kind) for line, kind in events
-                  if work_line is None or line <= work_line]
+                  if resumed_from is not None and line < resumed_from]
         line, kind = (before[-1] if before else events[-1])
-        before_work = work_line is None or line <= work_line
+        ordered = (resumed_from is not None and work_line is not None
+                   and line < resumed_from < work_line)
+        if resumed_from is None:
+            why = "no resumed turn was located, so nothing orders the compaction against it"
+        elif work_line is None:
+            why = "no resumed tool call after the resumed turn, so there is no resumed work "\
+                  "for the compaction to precede"
+        elif not before:
+            why = "every compaction event in this record is at or after the resumed turn"
+        elif not ordered:
+            why = "the three lines are not in the order compaction < resumed turn < "\
+                  "first resumed tool"
+        else:
+            why = "compaction %d < resumed turn %d < first resumed tool %d" % (
+                line, resumed_from, work_line)
         return {"file": name, "event": kind, "line": line,
                 "resumed_turn_line": resumed_from,
                 "resumed_turn_found_by": how,
                 "first_resumed_work_line": work_line,
-                "before_the_resumed_work": before_work,
+                "before_the_resumed_work": ordered,
+                "ordering_witness": {"compaction_line": line,
+                                     "resumed_turn_line": resumed_from,
+                                     "first_resumed_tool_line": work_line,
+                                     "in_order": ordered, "why": why},
                 "every_compaction_event": events[:8],
-                "source": "the resumed session's own native record; the ordering check "
-                          "starts at the resumed turn (E11-7 item 4)",
-                "ok": bool(before_work)}
+                "source": "the resumed session's own native record; the ordering witness is "
+                          "compaction < resumed turn < first resumed tool, all three "
+                          "recorded (E11-7 item 4; NEW MAJOR 4)",
+                "ok": bool(ordered)}
     return None
 
 
@@ -8713,6 +9045,8 @@ def do_campaign(args):
 
 
 def _campaign_loop(campaign, plan, args):
+    # E11-7 item 2(a): the whole campaign refuses before its first launch.
+    require_preflight(campaign, "this campaign")
     """One sequential worker per setup, the three lanes running concurrently (E10-51).
 
     Finding 20: the old loop walked one flat queue, so the six-trial dry run ran both Claude
@@ -8937,6 +9271,23 @@ def _identity_of_id(plan, tid):
     return setup_name, condition
 
 
+def _separation_line(campaign):
+    """One line saying whether this campaign's comparisons are controlled (E11-7 item 2(c))."""
+    state = preflight_state(campaign)
+    if state is None:
+        return ("Separation: NO PREFLIGHT RECORD — nothing established that one trial cannot "
+                "read another's records, so no comparison here is controlled.")
+    if state["separated"]:
+        return ("Separation: the read-boundary preflight PASSED (%s); trials could not reach "
+                "each other's records." % os.path.basename(state["record"]))
+    if state["accepted_unseparated"]:
+        return ("Separation: the read-boundary preflight FAILED and the operator ACCEPTED it "
+                "(%s). Every comparison in this campaign is UNCONTROLLED: a trial could read "
+                "another trial's records." % os.path.basename(state["record"]))
+    return ("Separation: the read-boundary preflight FAILED and was not accepted (%s)."
+            % os.path.basename(state["record"]))
+
+
 def do_report(args):
     """`tables/<n>/table.md`, `tables/<n>/table.json` and a generated skeleton; every number
     from `trials.jsonl` and the grade files, each cell naming its records."""
@@ -8968,6 +9319,8 @@ def do_report(args):
                         "raw": row.get("raw_value"), "corrected": row.get("corrected_value"),
                         "why": row.get("why")})
     cells, rows_seen = {}, []
+    # E11-7 item 7: rows the derivation relabelled from their retained status.
+    relabelled = []
     for line in lines:
         tid = line["id"]
         attempt = line.get("attempt", 0)
@@ -9009,12 +9362,21 @@ def do_report(args):
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
         bucket["complete"] += 1 if line.get("status") == "complete" else 0
-        # E11-7 item 7: the no-result column counts `no_result` and NOTHING ELSE. It used to
-        # fold `timed_out` and `launch_failed` into the same number, so a lane's provider
-        # outage read as a lane of sessions that answered nothing.
-        bucket["no_result"] += 1 if line.get("status") == "no_result" else 0
-        bucket["timed_out"] += 1 if line.get("status") == "timed_out" else 0
-        bucket["launch_failed"] += 1 if line.get("status") == "launch_failed" else 0
+        # E11-7 item 7, corrected after Astra's verification of 31329cd: the DERIVED report
+        # labels the row from the retained EXIT CODE. A row recorded before the timeout fix
+        # carries `launch_failed` beside `exit: 124`, which is the launcher's own timeout
+        # kill; replaying it must not reproduce the old label. The ledger row itself is never
+        # edited — the relabelling lives here, in the derivation, and is listed.
+        status = line.get("status")
+        if line.get("exit") == TIMEOUT_EXIT and status in ("launch_failed", "no_result"):
+            relabelled.append({"id": tid, "attempt": attempt, "exit": line.get("exit"),
+                               "retained_status": status, "derived_status": "timed_out",
+                               "why": "exit %d is the launcher's own timeout kill; the "
+                                      "retained row is unchanged" % TIMEOUT_EXIT})
+            status = "timed_out"
+        bucket["no_result"] += 1 if status == "no_result" else 0
+        bucket["timed_out"] += 1 if status == "timed_out" else 0
+        bucket["launch_failed"] += 1 if status == "launch_failed" else 0
         if isinstance(cost, (int, float)):
             bucket["cost"] += cost
         if isinstance(wall, (int, float)):
@@ -9024,7 +9386,8 @@ def do_report(args):
             bucket["grades"].append(entry["path"])
             if entry["grade"].get("ok"):
                 bucket["graded_ok"] += 1
-        rows_seen.append({"id": tid, "attempt": attempt, "status": line.get("status"),
+        rows_seen.append({"id": tid, "attempt": attempt, "status": status,
+                          "retained_status": line.get("status"),
                           "cost": cost, "wall": wall, "record": record})
     # E10-43 (finding 21) and E10-48: a partial attempt is retained in the report, and launches
     # are counted apart from trials.
@@ -9108,6 +9471,9 @@ def do_report(args):
                 # is stated here. Astra's section 8 measured the consequence: the E10 table's
                 # trial counts summed to 356 over 348 distinct ids.
                 "distinct_trials": len({r["id"] for r in rows_seen}),
+                # E11-7 item 7: every row this derivation labelled differently from the
+                # retained ledger, and why. The ledger itself is untouched.
+                "relabelled_from_the_retained_status": relabelled,
                 "table_trials_column_sums_to": sum(r["trials"] for r in table),
                 "trial_counts_are_not_additive_across_activation_buckets": (
                     "one trial id can appear in more than one row; use distinct_trials"),
@@ -9148,6 +9514,11 @@ def do_report(args):
           "`activated` (E10-4). Corrected measurements (E10-48) are applied only where their",
           "hash binding still holds. A journalled attempt with no `command.json` is counted",
           "here with status `partial` (E10-59 (21)).", "",
+          _separation_line(campaign), "",
+          "E11-7 item 2: any benefit these columns show is a benefit of the WHOLE PACKAGE —",
+          "the instructions, the executable support and the record contract together. Nothing",
+          "here attributes it to instruction text alone, and no number here is a controlled",
+          "comparison unless the row above says the campaign was separated.", "",
           "E11-7 item 7: the `trials` column counts DISTINCT trial ids IN THAT ROW. One trial",
           "id can appear in more than one activation bucket, so the column does not add up",
           "across rows; `distinct_trials` in `table.json` is the campaign's own total. `no",
@@ -9169,6 +9540,14 @@ def do_report(args):
             row["kind"], row["setup"], row["condition"], row["activated"],
             ", ".join(row["attempt_ids"]), ", ".join(row["records"]),
             ", ".join(row["grade_files"]) or "none"))
+    if relabelled:
+        md += ["", "## Rows relabelled from their retained status (E11-7 item 7)", "",
+               "The retained ledger rows are unchanged; the labels below are this "
+               "derivation's, taken from the retained exit code.", ""]
+        for row in relabelled:
+            md.append("- %s#%s: retained `%s`, derived `%s` (exit %s) — %s"
+                      % (row["id"], row["attempt"], row["retained_status"],
+                         row["derived_status"], row["exit"], row["why"]))
     if partial:
         md += ["", "## Partial attempts retained (E10-43, E10-59 (21))", ""]
         for row in partial:
@@ -9214,6 +9593,15 @@ def do_report(args):
         "- journalled attempts counted as `partial`: %d" % len(partial_attempts),
         "- graded: %d" % len(grades), "",
         "## 2. The comparison table", "", "See `table.md`.", "",
+        "- separation: %s" % _separation_line(campaign),
+        "- benefit: any difference between the conditions is a benefit of the whole package "
+        "(instructions, executable support and the record contract together), never of "
+        "instruction text alone (E11-7 item 2).",
+        "- trials rejected as comparison evidence: %d (a completed read of another trial's "
+        "file contents; their history is retained)"
+        % sum(1 for g in grades.values()
+              if isinstance((g["grade"].get("comparison_evidence") or {}), dict)
+              and (g["grade"].get("comparison_evidence") or {}).get("usable") is False), "",
         "## 3. Grade counts", "", "```json", json.dumps(summary, indent=2, sort_keys=True), "```", "",
         "## 4. Interruptions", "", "See `../interruptions.jsonl`.", "",
         "## 5. Routing", "", "See `../routing/`.", "",
@@ -9357,6 +9745,16 @@ def _synthetic_campaign(scratch, cases=(), setups=("claude-code",), conditions=(
                                 "total": sum(len(v) for v in order_of(plan).values())}})
     write_json(campaign.campaign_json, document)
     campaign.mark_synthetic("check built this campaign")
+    # E11 fix round item 2(a): every launch path refuses without a read-boundary record, so
+    # `check`'s own synthetic campaign records the acceptance an operator would record. These
+    # setups run every trial as this user with no read sandbox (E10-40); the acceptance is
+    # the honest state and the campaign carries it.
+    write_json(os.path.join(campaign.records("read-boundary"), "preflight-check.json"),
+               {"separated": False, "accepted_unseparated": True,
+                "allow_rules": {"ok": True}, "rows": [],
+                "measured": "recorded by `check` for its own synthetic campaign",
+                "why": "E10-40: no read sandbox on these setups; `check` accepts that state "
+                       "the way an operator does"})
     return campaign, document
 
 
@@ -9647,7 +10045,14 @@ def allow_rule_check(campaign, plan, setups=None):
         if spec.get("harness") != "opencode":
             continue
         setup = setup_for(campaign, plan, spec["name"])
-        for home in HOMES:
+        # only the homes THIS plan will launch: a home the campaign never uses cannot void
+        # any of its results, and refusing on one is a false refusal.
+        wanted = [c for c in (plan.get("conditions") or list(CONDITIONS))]
+        if plan.get("routing") is not None or plan.get("continuation") is not None:
+            wanted.append("routing")
+        if plan.get("continuation") is not None and "available" not in wanted:
+            wanted.append("available")
+        for home in [h for h in HOMES if h in set(wanted)]:
             path = os.path.join(setup.home(home), "xdg-config", "opencode", "opencode.json")
             text = read_text(path, None)
             covered = None if text is None else (campaign.tmp in text)
@@ -9657,10 +10062,51 @@ def allow_rule_check(campaign, plan, setups=None):
                          "scratch_root": campaign.tmp})
     missing = [r for r in rows if r["present"] and not r["covers_this_campaigns_scratch_root"]]
     return {"rows": rows, "ok": not missing,
+            "homes_checked": "only the homes this plan launches",
             "homes_written_for_another_campaign": missing,
             "why": "an OpenCode home carries the allow rule of the campaign that installed "
                    "it; install every home from THIS campaign before a launch (E11-7 item 2, "
                    "measured 2026-09-17)"}
+
+
+def preflight_state(campaign):
+    """The campaign's own read-boundary record, if it has one (E11-7 item 2(a))."""
+    directory = campaign.records("read-boundary")
+    best = None
+    for path in sorted(glob.glob(os.path.join(directory, "preflight-*.json"))):
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        best = {"record": path,
+                "separated": bool(document.get("separated")),
+                "accepted_unseparated": bool(document.get("accepted_unseparated")),
+                "allow_rules_ok": bool((document.get("allow_rules") or {}).get("ok", True))}
+    return best
+
+
+PREFLIGHT_REFUSAL = (
+    "this campaign carries no read-boundary preflight record, so nothing has established "
+    "that one trial cannot read another's records (E11-7 item 2(a)). Run:\n"
+    "    %s preflight --campaign %s\n"
+    "and, if this bench cannot separate them and that is accepted, run it with "
+    "--accept-unseparated; the acceptance is recorded in the campaign and every comparison "
+    "it produces is reported as uncontrolled.")
+
+
+def require_preflight(campaign, what):
+    """Refuse `what` unless this campaign's preflight passed or was accepted."""
+    state = preflight_state(campaign)
+    if state is None:
+        raise Usage("refusing to run %s: %s" % (what, PREFLIGHT_REFUSAL
+                                                % ("runner.py", campaign.root)))
+    if not state["separated"] and not state["accepted_unseparated"]:
+        raise Usage(
+            "refusing to run %s: the read-boundary preflight at %s failed and no acceptance "
+            "was recorded. Re-run it, or accept it with `preflight --campaign %s "
+            "--accept-unseparated` (E11-7 item 2(a))."
+            % (what, state["record"], campaign.root))
+    return state
 
 
 def do_preflight(args):
@@ -9762,19 +10208,37 @@ def sentinel_probe(scratch):
 # card interpretation, and the continuation state where the producer had one.
 
 CONSUMER_ANSWER = "consumer.json"
+# Item 6(b), Astra's verification of 31329cd: `consumer.json` alone proves nothing about the
+# adopted contract. The consumer RUNS the job on the pair through the declared input route —
+# the producer's findings handed over as an explicit `items` payload (contract section 2: "a
+# caller that holds a chat verdict passes its findings as explicit items") — and the grade
+# reads a validating result and an actual delivered reply, with the recovery answer beside
+# them.
 CONSUMER_PROMPT_TEMPLATE = (
-    "read the re-inspection records under {producer} and the build doc {build_doc} in "
-    "{workspace}, then write {answer} and print nothing else.\n"
+    "re-inspect the findings in {input} against {workspace}: the records the caller holds are "
+    "under {producer}, and its input document is {input}. Use run id {run_id} and the run "
+    "directory {run_dir}; run date {run_date}.\n"
     "\n"
-    "{answer} is one JSON document:\n"
+    "Write result.json in the run directory validating against {run_dir}/result.schema.json "
+    "and print the chat block.\n"
+    "\n"
+    "The run directory also holds {run_dir}/record-contract.md with "
+    "{run_dir}/checkpoint.schema.json and {run_dir}/receipt.schema.json: the records and the "
+    "chat block the output must carry.\n"
+    "\n"
+    "Then write {answer}, one JSON document saying what the caller's own records carry:\n"
     "{{\"items\": [{{\"location\": \"<file:line>\", \"claim\": \"<the claim>\", \"disposition\": "
-    "\"fixed | not_fixed\", \"reason\": \"<the reason or null>\", \"evidence\": [\"<one detail "
-    "the record gives for it>\"]}}],\n"
+    "\"fixed | not_fixed\", \"reason\": \"<the reason or null>\", \"evidence\": [{{\"kind\": "
+    "\"<kind>\", \"detail\": \"<the detail, whole>\", \"artifact\": \"<the artifact or null>\"}}]}}],\n"
     " \"cards\": [{{\"slice\": \"<name>\", \"before\": \"<value>\", \"after\": \"<value>\"}}],\n"
-    " \"continuation\": {{\"continuations\": <the count the records carry, or null>}}}}\n"
+    " \"source_identity\": {{\"commit\": \"<the commit those records name>\"}},\n"
+    " \"continuation\": <the whole continuation state those records carry, or null>}}\n"
     "\n"
-    "Take every value from those records. Add nothing they do not carry.\n"
+    "Take every value from those records, whole. Add nothing they do not carry, and shorten "
+    "nothing.\n"
 )
+
+CONSUMER_SENTINEL = "consumer-isolation-sentinel.txt"
 
 
 def consumer_trial_id(producer, consumer, rep=1):
@@ -9879,12 +10343,55 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
     else:
         raise Missing("the producer %s left no readable workspace to copy"
                       % producer_row["trial"])
+    # Item 6(b): the pair's own run directory, with the same neutral contract every trial
+    # gets, and the input document the caller hands over — the declared input route.
+    run_dir = prepare_run_dir(os.path.join(pair_dir, "run"))
+    run_id = "%s-run" % os.path.basename(pair_dir)
+    document = consumer_input(producer_row, workspace, run_dir, run_id)
+    input_path = os.path.join(pair_dir, "input.json")
+    write_json(input_path, document)
+    # Item 6(d): the producer's copied files, hashed before the consumer runs.
+    producer_hashes = {}
+    for base, _dirs, files in os.walk(producer_dir):
+        for name in sorted(files):
+            full = os.path.join(base, name)
+            producer_hashes[os.path.relpath(full, producer_dir)] = file_sha256(full)
     return {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
+            "run_dir": run_dir, "run_id": run_id, "input": input_path,
             "copied": copied,
+            "producer_hashes_before": producer_hashes,
             "unrelated_records_present": [
                 name for name in sorted(os.listdir(producer_dir))
                 if name not in CONSUMER_COPIED and name != "run"],
             "from": producer_row["record"], "producer_trial": producer_row["trial"]}
+
+
+def consumer_input(producer_row, workspace, run_dir, run_id):
+    """The producer's findings as an explicit `items` payload (contract section 2).
+
+    Item 6(b): this IS the declared input route for a caller that holds a verdict — "a caller
+    that holds a chat verdict passes its findings as explicit items" — so the consumer runs
+    the job on records it did not produce, which is what the criterion asks.
+    """
+    result = read_json(os.path.join(producer_row["record"], "result.json"))
+    items = []
+    for item in result.get("items") or []:
+        location = item.get("location") or {}
+        items.append({
+            "severity": item.get("severity") or "BLOCKER",
+            "location": {"file": location.get("file"), "line": location.get("line")},
+            "claim": item.get("claim"),
+            "failure_scenario": item.get("failure_scenario"),
+            "record": item.get("record") or {"document": "docs/punch-list.md",
+                                             "heading": "", "date": ""},
+            "slice": item.get("slice") or "none"})
+    return {
+        "protocol_version": 1,
+        "invocation": {"mode": "headless", "caller": "consumer-test",
+                       "run_id": run_id, "run_dir": run_dir, "resume": False},
+        "workspace": workspace,
+        "target": {"items": items},
+    }
 
 
 def _consumer_expected(producer_row):
@@ -9893,45 +10400,92 @@ def _consumer_expected(producer_row):
     items = []
     for item in result.get("items") or []:
         location = item.get("location") or {}
-        details = []
+        # Item 6(a): the COMPLETE evidence reference, every field, not a detail string.
+        evidence = []
         for entry in ((item.get("verification") or {}).get("evidence") or []):
-            if isinstance(entry, dict) and entry.get("detail"):
-                details.append(entry["detail"])
+            if isinstance(entry, dict):
+                evidence.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
+                                 "artifact": entry.get("artifact")})
         items.append({"location": "%s:%s" % (location.get("file"), location.get("line")),
                       "claim": item.get("claim"),
                       "disposition": item.get("disposition"),
                       "reason": item.get("reason"),
-                      "evidence": details})
+                      "evidence": evidence})
     cards = [{"slice": c.get("slice"), "before": c.get("before"), "after": c.get("after")}
              for c in (result.get("cards") or [])]
     state = checkpoint_state(os.path.join(producer_row["record"], "run"))
-    return {"items": items, "cards": cards,
-            "continuations": (state or {}).get("continuations"),
+    identity = (result.get("source_identity") or {})
+    # Item 6(c): the identity the consumer RECEIVED. The producer's `actual` is its
+    # start-of-run identity, taken before its own recording transaction wrote the block and
+    # the card into the build document; the workspace the pair copies is the one AFTER those
+    # writes. `after_run` is that state where the result reports it (contract section 6).
+    actual = identity.get("after_run") if isinstance(identity.get("after_run"), dict) else None
+    which = "the producer's after_run identity"
+    if actual is None:
+        actual = identity.get("actual") if isinstance(identity.get("actual"), dict) \
+            else identity
+        which = "the producer's actual identity (its result reports no after_run)"
+    return {"items": items, "cards": cards, "source_identity_is": which,
+            # Item 6(e): the whole retained state, not a count.
+            "continuation": state,
+            "source_identity": actual,
             "is_a_continuation": (producer_row["command"].get("kind")
                                   or "").startswith("continuation")}
 
 
-def consumer_grade(pair, producer_row, answer_path):
-    """Grade one consumer trial against the producer's own records (E11-7 item 6)."""
+def _same_evidence(theirs, ours):
+    """Item 6(a): one evidence reference against another, every field, whole.
+
+    Astra's verification of 31329cd: the grader compared the first forty characters of the
+    detail, so an observation changed after that prefix still passed.
+    """
+    if not isinstance(theirs, list):
+        return False, "the consumer recorded no evidence list"
+    wanted = [dict(e) for e in ours]
+    got = []
+    for entry in theirs:
+        if isinstance(entry, dict):
+            got.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
+                        "artifact": entry.get("artifact")})
+        else:
+            got.append({"kind": None, "detail": entry, "artifact": None})
+    for reference in wanted:
+        if reference not in got:
+            # a reference whose detail alone matches is named, so a truncation is legible
+            near = [g for g in got
+                    if str(g.get("detail") or "")[:40] == str(reference.get("detail") or "")[:40]]
+            return False, ("the reference %r is not among the consumer's, whole%s"
+                           % (str(reference.get("detail"))[:60],
+                              "; one matches only its first forty characters" if near else ""))
+    return True, "every reference of the producer's appears whole"
+
+
+def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path=None,
+                   validator=None, isolation=None, producer_hashes_after=None):
+    """Grade one consumer trial against the producer's own records (E11-7 item 6).
+
+    Rewritten after Astra's verification of 31329cd: a passing grade must prove the adopted
+    contract, not the presence of an answer file.
+    """
     expected = _consumer_expected(producer_row)
     grade = {"producer_trial": producer_row["trial"], "answer": answer_path,
              "expected_item_count": len(expected["items"])}
-    if not os.path.isfile(answer_path):
-        grade.update({"ok": False, "why": ["the consumer wrote no %s" % CONSUMER_ANSWER],
-                      "checks": {"answer_present": False}})
-        return grade
-    try:
-        answer = read_json(answer_path)
-    except (Missing, Failure) as exc:
-        grade.update({"ok": False, "why": ["the consumer's answer is not JSON: %s" % exc],
-                      "checks": {"answer_present": False}})
-        return grade
-    got_items = answer.get("items") if isinstance(answer.get("items"), list) else []
+    checks = {}
+    # ---- the recovery answer
+    answer = None
+    if os.path.isfile(answer_path):
+        try:
+            answer = read_json(answer_path)
+        except (Missing, Failure):
+            answer = None
+    checks["answer_present"] = answer is not None
+    got_items = (answer or {}).get("items")
     by_location = {}
-    for row in got_items:
+    for row in got_items if isinstance(got_items, list) else []:
         if isinstance(row, dict) and row.get("location"):
             by_location[str(row["location"])] = row
-    scope_ok = sorted(by_location) == sorted(i["location"] for i in expected["items"])
+    checks["original_scope"] = sorted(by_location) == sorted(
+        i["location"] for i in expected["items"])
     identity_rows, evidence_rows = [], []
     for item in expected["items"]:
         got = by_location.get(item["location"]) or {}
@@ -9941,13 +10495,17 @@ def consumer_grade(pair, producer_row, answer_path):
                                 == str(item["claim"] or "").strip()),
             "disposition_recovered": got.get("disposition") == item["disposition"],
             "reason_recovered": (got.get("reason") or None) == (item["reason"] or None)})
-        theirs = got.get("evidence") if isinstance(got.get("evidence"), list) else []
-        hit = any(any(str(detail)[:40] and str(detail)[:40] in str(one)
-                      for one in theirs)
-                  for detail in item["evidence"]) if item["evidence"] else None
-        evidence_rows.append({"location": item["location"], "references_the_record": hit,
+        same, why = _same_evidence(got.get("evidence"), item["evidence"])
+        evidence_rows.append({"location": item["location"], "references_the_record": same,
+                              "why": why,
                               "producer_evidence_entries": len(item["evidence"])})
-    got_cards = {str(c.get("slice")): c for c in (answer.get("cards") or [])
+    checks["item_identity"] = bool(identity_rows) and all(
+        r["claim_recovered"] and r["disposition_recovered"] and r["reason_recovered"]
+        for r in identity_rows)
+    # Item 6(a): every reference, whole, and bound to the producer's own artifacts.
+    checks["evidence_references"] = bool(evidence_rows) and all(
+        r["references_the_record"] for r in evidence_rows)
+    got_cards = {str(c.get("slice")): c for c in ((answer or {}).get("cards") or [])
                  if isinstance(c, dict)}
     card_rows = []
     for card in expected["cards"]:
@@ -9955,31 +10513,81 @@ def consumer_grade(pair, producer_row, answer_path):
         card_rows.append({"slice": card["slice"],
                           "before_recovered": got.get("before") == card["before"],
                           "after_recovered": got.get("after") == card["after"]})
-    continuation = answer.get("continuation") or {}
-    continuation_ok = None
+    checks["card_interpretation"] = all(r["before_recovered"] and r["after_recovered"]
+                                        for r in card_rows) if card_rows else True
+    # Item 6(e): the whole retained continuation state, not a count.
+    continuation = None
     if expected["is_a_continuation"]:
-        continuation_ok = continuation.get("continuations") == expected["continuations"]
-    checks = {
-        "answer_present": True,
-        "unrelated_records_unavailable": not pair["unrelated_records_present"],
-        "original_scope": scope_ok,
-        "item_identity": all(r["claim_recovered"] and r["disposition_recovered"]
-                             and r["reason_recovered"] for r in identity_rows)
-        if identity_rows else False,
-        "evidence_references": all(r["references_the_record"] is not False
-                                   for r in evidence_rows) if evidence_rows else False,
-        "card_interpretation": all(r["before_recovered"] and r["after_recovered"]
-                                   for r in card_rows) if card_rows else True,
-    }
-    if continuation_ok is not None:
-        checks["continuation_state"] = continuation_ok
-    grade.update({"checks": checks, "items": identity_rows, "evidence": evidence_rows,
-                  "cards": card_rows, "continuation": {"expected": expected["continuations"],
-                                                       "observed": continuation.get(
-                                                           "continuations"),
-                                                       "graded": continuation_ok},
-                  "ok": all(checks.values()),
-                  "why": sorted(name for name, passed in checks.items() if not passed)})
+        theirs = (answer or {}).get("continuation")
+        ours = expected["continuation"] or {}
+        fields = ("continuations", "phase", "done", "pending")
+        continuation = {
+            "expected": {k: ours.get(k) for k in fields},
+            "observed": ({k: theirs.get(k) for k in fields}
+                         if isinstance(theirs, dict) else theirs),
+            "compared_on": list(fields)}
+        continuation["held"] = isinstance(theirs, dict) and all(
+            theirs.get(k) == ours.get(k) for k in fields)
+        checks["continuation_state"] = continuation["held"]
+    # ---- Item 6(b): a validating result and an actual reply
+    result = None
+    if result_path and os.path.isfile(result_path):
+        try:
+            result = read_json(result_path)
+        except (Missing, Failure):
+            result = None
+    checks["result_present"] = result is not None
+    checks["result_validates"] = bool(validator and validator.get("ok")
+                                      and validator.get("exit") == 0
+                                      and not validator.get("skipped"))
+    interop = _interop(result or {}, os.path.dirname(reply_path)) if reply_path else None
+    checks["reply_delivered"] = bool(interop and interop.get("reply_delivered"))
+    checks["reply_carries_the_output_block"] = bool(interop and interop.get("ok"))
+    # ---- Item 6(c): the identity the consumer reports is the producer's
+    consumer_identity = None
+    if result:
+        block = result.get("source_identity") or {}
+        consumer_identity = block.get("actual") if isinstance(block.get("actual"), dict) \
+            else block
+    identity_fields = ("commit", "dirty", "tracked_diff_sha256", "untracked",
+                       "untracked_sha256", "submodules")
+    identity_row = {
+        "producer": expected["source_identity"],
+        "producer_identity_is": expected["source_identity_is"],
+        "consumer": consumer_identity,
+        "compared_on": list(identity_fields),
+        "fields_that_differ": [k for k in identity_fields
+                               if (expected["source_identity"] or {}).get(k)
+                               != (consumer_identity or {}).get(k)]}
+    checks["source_identity_matches_the_producer"] = bool(
+        expected["source_identity"] and consumer_identity
+        and not identity_row["fields_that_differ"])
+    # ---- Item 6(d): the producer's history is preserved byte for byte
+    before = pair.get("producer_hashes_before") or {}
+    after = producer_hashes_after if producer_hashes_after is not None else {}
+    moved = sorted(set([k for k in before if before[k] != after.get(k)]
+                       + [k for k in after if k not in before]))
+    checks["producer_history_preserved"] = bool(before) and not moved
+    # ---- Item 6(f): isolation is read access, not folder contents
+    isolation = isolation or {}
+    checks["unrelated_records_unavailable"] = isolation.get("separated") is True
+    grade.update({
+        "checks": checks,
+        "items": identity_rows,
+        "evidence": evidence_rows,
+        "cards": card_rows,
+        "continuation": continuation,
+        "source_identity": identity_row,
+        "producer_history": {"files": len(before), "files_that_moved": moved,
+                             "why": "item 6(d): the producer's copied records are hashed "
+                                    "before the consumer runs and again after"},
+        "isolation": isolation,
+        "validator": validator,
+        "reply": interop,
+        "unrelated_records_present_in_the_pair": pair.get("unrelated_records_present"),
+        "ok": all(v is True for v in checks.values()),
+        "why": sorted(name for name, passed in checks.items() if passed is not True),
+    })
     return grade
 
 
@@ -10001,12 +10609,11 @@ def do_consumer(args, record=None, attempt=0):
     tree = campaign.opaque_tree(args.trial, attempt)
     pair_dir = os.path.join(tree, "pair")
     pair = stage_consumer_pair(campaign, producer_row, pair_dir)
-    build_doc = (read_json(os.path.join(producer_row["record"], "result.json"))
-                 .get("checklist") or {}).get("build_doc") or "docs/punch-list.md"
     answer_path = os.path.join(pair_dir, CONSUMER_ANSWER)
     prompt = CONSUMER_PROMPT_TEMPLATE.format(
-        producer=pair["producer_dir"], workspace=pair["workspace"], build_doc=build_doc,
-        answer=answer_path)
+        producer=pair["producer_dir"], workspace=pair["workspace"],
+        input=pair["input"], run_dir=pair["run_dir"], run_id=pair["run_id"],
+        run_date=plan["run_date"], answer=answer_path)
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, prompt)
     harness_dir = os.path.join(record, "harness")
@@ -10014,20 +10621,65 @@ def do_consumer(args, record=None, attempt=0):
     fake = getattr(args, "fake_launcher", None)
     if fake:
         campaign.mark_synthetic("a consumer launch ran the fake launcher %s" % fake)
+    # E11-7 item 2(a): no launch without an established read boundary.
+    require_preflight(campaign, "the consumer trial %s" % args.trial)
     close_key(campaign, "the %s launch" % args.trial)
+    # Item 6(f): a sentinel OUTSIDE the pair, inside the campaign. Isolation is read access.
+    sentinel = os.path.join(campaign.trials, CONSUMER_SENTINEL)
+    write_text(sentinel, READ_BOUNDARY_SENTINEL)
     step = setup.launch("available", prompt_path, pair["workspace"], harness_dir,
                         plan["timeouts"]["comparison"], fake=fake, registry=registry,
                         scratch=trial_scratch(campaign, args.trial, attempt))
-    grade = consumer_grade(pair, producer_row, answer_path)
+    # the same measurement the read-boundary preflight makes, in the consumer's own launch
+    # environment: can a child of this launch read a record outside its pair?
+    probe = run_cmd([sys.executable, "-c",
+                     "import sys;print('READ' if open(sys.argv[1]).read().strip() else 'EMPTY')",
+                     sentinel],
+                    env=campaign.env(extra=setup.launch_env("available"),
+                                     scratch=trial_scratch(campaign, args.trial, attempt),
+                                     require_binaries=False),
+                    cwd=pair["workspace"], label="consumer isolation probe")
+    isolation = {
+        "sentinel": sentinel,
+        "child_read_it": probe["exit"] == 0 and "READ" in (probe["stdout"] or ""),
+        "exit": probe["exit"],
+        "separated": not (probe["exit"] == 0 and "READ" in (probe["stdout"] or "")),
+        "measured": "a child in this consumer's own launch environment, item 6(f); the flag "
+                    "is read ACCESS, never the pair folder's contents",
+    }
+    # Item 6(b): the consumer's own result, validated the way every other result is.
+    result_path = os.path.join(pair["run_dir"], "result.json")
+    validator = None
+    if os.path.isfile(result_path):
+        vstep, _text = validate_result(campaign, result_path, pair["input"],
+                                       pair["run_dir"], pair["workspace"])
+        try:
+            validator = json.loads(vstep["stdout"])
+        except ValueError:
+            validator = {"ok": False, "schema": [{"message": "the validator printed no JSON"}]}
+        validator["exit"] = vstep["exit"]
+        validator["skipped"] = validator.get("skipped") or []
     reply, reply_source = harness_reply(setup, harness_dir)
     write_text(os.path.join(record, "reply.md"), reply)
+    # Item 6(d): the producer's copied records, hashed again after the session.
+    after_hashes = {}
+    for base, _dirs, files in os.walk(pair["producer_dir"]):
+        for name in sorted(files):
+            full = os.path.join(base, name)
+            after_hashes[os.path.relpath(full, pair["producer_dir"])] = file_sha256(full)
+    grade = consumer_grade(pair, producer_row, answer_path, result_path=result_path,
+                           reply_path=os.path.join(record, "reply.md"), validator=validator,
+                           isolation=isolation, producer_hashes_after=after_hashes)
     model = setup.model_record(harness_dir)
     cost = setup.cost_record(harness_dir)
     write_json(os.path.join(record, "model.json"), model)
     write_json(os.path.join(record, "cost.json"), cost)
     if os.path.isfile(answer_path):
         shutil.copy2(answer_path, os.path.join(record, CONSUMER_ANSWER))
-    status = outcome_status(step, os.path.isfile(answer_path))
+    if os.path.isfile(result_path):
+        shutil.copy2(result_path, os.path.join(record, "result.json"))
+    status = outcome_status(step, os.path.isfile(answer_path)
+                            and os.path.isfile(result_path))
     command = {
         "trial": args.trial, "attempt": attempt, "kind": "consumer",
         "setup": setup.name, "harness": setup.harness, "condition": "available",

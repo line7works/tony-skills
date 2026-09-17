@@ -450,8 +450,25 @@ class ContinuationTest(RunnerCase):
         witness = runner.compaction_witness(setup, out)
         self.assertEqual(witness["file"], "trace.jsonl")
         self.assertEqual(witness["line"], 1)
-        self.assertEqual(witness["first_resumed_work_line"], 2)
-        self.assertTrue(witness["before_the_resumed_work"])
+        # NEW MAJOR 4 (Astra's verification of 31329cd): the ordering verdict needs all three
+        # lines — compaction < resumed turn < first resumed tool. This record names no
+        # resumed turn, so the event is found and the ORDERING is not claimed.
+        self.assertFalse(witness["ok"])
+        self.assertIsNone(witness["resumed_turn_line"])
+        self.assertIn("no resumed turn", witness["ordering_witness"]["why"])
+        # with the resume request in the record, the three lines are there and in order
+        runner.write_text(os.path.join(out, "trace.jsonl"), "\n".join([
+            '{"type": "system", "subtype": "compact_boundary", "session_id": "s"}',
+            '{"type": "user", "message": {"content": [{"type": "text",'
+            ' "text": "resume the recheck run standin-run in /r"}]}}',
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash",'
+            ' "id": "t1", "input": {"command": "ls"}}]}}']) + "\n")
+        witness = runner.compaction_witness(
+            setup, out, resume_text="resume the recheck run standin-run in /r")
+        self.assertTrue(witness["ok"], witness)
+        self.assertEqual(witness["ordering_witness"]["compaction_line"], 1)
+        self.assertEqual(witness["ordering_witness"]["resumed_turn_line"], 2)
+        self.assertEqual(witness["ordering_witness"]["first_resumed_tool_line"], 3)
 
     def test_a_compaction_event_after_the_resumed_work_is_not_ok(self):
         setup = runner.make_setup(runner.Campaign(self.campaign),

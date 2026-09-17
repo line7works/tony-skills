@@ -820,6 +820,36 @@ def item_result_from(run, index, action, reason=None, note=None, upgrade_evidenc
     verification = m["verification"]
     if action == "confirmed":
         disposition, item_reason = said, m["reason"]
+        # E11 fix round, item 3: contract section 5 — "An execution the sandbox or environment
+        # stopped is `verification_blocked`, never `static`." When a retained report of THIS
+        # RUN recorded a stopped execution for this item, a later static `fixed` does not
+        # remove it: the item stays not_fixed with reason verification_blocked, and the
+        # refusal is recorded in the checkpoint and in the result. The E10 campaign's Codex
+        # F5 clearance is the record this closes.
+        if disposition == "fixed" and verification.get("method") == "static":
+            # the report supplying THIS clearance is not its own history
+            history = [row for row in vmod.blocked_history(run.run_dir, cp, index)
+                       if row.get("call_id") != call.get("call_id")]
+            if history:
+                first = history[0]
+                note = ("a retained report of this run recorded a stopped execution for this "
+                        "item (%s, %s); a static clearance does not remove it (contract "
+                        "section 5)" % (first.get("call_id"), first.get("how")))
+                # Contract section 7's own move: the core DOWNGRADES the verifier's `fixed`
+                # to `not_fixed` on evidence the verifier's later report did not carry — the
+                # run's own retained history.
+                disposition, item_reason = "not_fixed", "verification_blocked"
+                adjudication["driver_action"] = "downgraded"
+                adjudication["note"] = note
+                verification["blocked"] = note
+                verification.pop("missing", None)
+                adjudication["static_clearance_refused"] = {
+                    "why": "contract section 5: an execution the sandbox or environment "
+                           "stopped is verification_blocked, never static",
+                    "reports_that_recorded_the_block": [
+                        {k: row.get(k) for k in ("call_id", "raw_path", "how")}
+                        for row in history],
+                }
         # E11-7 item 3: an EVIDENCED correction between `not_fixed` reasons. The CLI's
         # `--reason` served only a downgrade of a verifier `fixed`, so a verifier that
         # reported `reproduces` for a partial fix, or `missing_evidence` for a blocked

@@ -364,6 +364,72 @@ def save_sidecar(run_dir, doc):
     canon.atomic_write(sidecar_path(run_dir), (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
+# E11 fix round, item 3 (Astra's verification of 31329cd). Contract section 5: "An execution
+# the sandbox or environment stopped is `verification_blocked`, never `static`." The core
+# retained a first report for an item saying the required execution was refused, took the
+# permitted retry's static `fixed`, and completed — the block was in the run's own history
+# and nothing read it.
+#
+# A block is recognised two ways, both from the RETAINED REPORT itself, never from a reply or
+# the executor's account:
+#   - structured: the report's own tail gives that item reason `verification_blocked`;
+#   - declared: the retained text carries the vocabulary contract section 5 and verifier.md
+#     fix for a stopped execution. The list is closed and is quoted from those two documents.
+BLOCK_DECLARATIONS = (
+    "verification blocked",
+    "verification_blocked",
+    "execution was refused",
+    "execution was stopped",
+    "execution the sandbox stopped",
+    "the sandbox stopped",
+    "the environment stopped",
+    "no service observation",
+)
+
+
+def blocked_history(run_dir, checkpoint_doc, index):
+    """Every retained report of this run that recorded a blocked execution for `index`.
+
+    Returns a list of `{call_id, raw_path, how, quote}`; empty when none did.
+    """
+    found = []
+    for call in checkpoint_doc.get("verifier_calls") or []:
+        path = call.get("raw_path")
+        if not path or not os.path.isfile(path):
+            continue
+        covers = call.get("items")
+        if covers and index not in covers:
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                text = fh.read()
+        except (IOError, OSError):
+            continue
+        how, quote = None, None
+        # the history scan reads whatever tail is there; it never grades coverage, so the
+        # index bound is only "at least this item".
+        parsed = parse_report_tail(text, index + 1, ANY_INDEXES)
+        tail = parsed.get("tail") if isinstance(parsed, dict) else None
+        if tail:
+            for row in tail.get("items") or []:
+                if row.get("index") == index and row.get("reason") == "verification_blocked":
+                    how = "the retained report's own structured tail"
+                    quote = row.get("blocked") or "reason verification_blocked"
+                    break
+        if how is None:
+            lowered = text.lower()
+            for phrase in BLOCK_DECLARATIONS:
+                if phrase in lowered:
+                    at = lowered.index(phrase)
+                    how = "the retained report declares a stopped execution"
+                    quote = text[max(0, at - 40):at + len(phrase) + 40].strip()
+                    break
+        if how:
+            found.append({"call_id": call.get("call_id") or call.get("id"),
+                          "raw_path": path, "how": how, "quote": quote})
+    return found
+
+
 def retained_report(run_dir, checkpoint_doc, index=None):
     """The call whose retained report adjudication uses (E8-7): the last call recorded complete
     whose file still hashes to raw_sha256 and, when `index` is given, whose items cover it
