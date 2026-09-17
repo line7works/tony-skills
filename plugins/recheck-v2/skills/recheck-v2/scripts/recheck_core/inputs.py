@@ -363,6 +363,7 @@ def resolve_scope(doc, workspace, accepted_reopenings):
                 "question": "The record line at %s:%d matches no Appendix A shape (%s); supply or confirm its fields." % (rel, opened["ambiguities"][0]["line_no"], opened["ambiguities"][0]["reason"])}
     entries = opened["entries"]
     slice_name = target.get("slice")
+    canonical_because = None
     candidates = []
     deferred = None  # E8-A29: an empty automatic selection is nothing_open only after the named entries and reopenings
     if slice_name is None:
@@ -370,10 +371,20 @@ def resolve_scope(doc, workspace, accepted_reopenings):
         if problem and problem["status"] != "nothing_open":
             return problem
         deferred = problem
-    elif slice_name not in ledger.slice_names(parsed) and os.path.normpath(rel) != ledger.PUNCH_LIST_DOC:
-        return {"status": "missing_input", "fields": ["target.slice"],
-                "ambiguity": ["slice %s has no heading in %s (slices: %s)" % (slice_name, rel, ", ".join(ledger.slice_names(parsed)) or "none")],
-                "question": "Slice %s has no heading in %s; which slice should this recheck cover?" % (slice_name, rel)}
+    elif os.path.normpath(rel) != ledger.PUNCH_LIST_DOC:
+        # E11-7 item 3: the CANONICAL slice, resolved against the document's own headings,
+        # before anything is spent. `Slice A` is the heading's words for the slice `A`.
+        names = ledger.slice_names(parsed)
+        resolved, why = ledger.canonical_slice(slice_name, names)
+        if resolved is None:
+            return {"status": "missing_input", "fields": ["target.slice"],
+                    "ambiguity": ["slice %s has no heading in %s (slices: %s): %s" % (
+                        slice_name, rel, ", ".join(names) or "none", why)],
+                    "slice_candidates": names,
+                    "question": "Slice %s has no heading in %s; the slices are %s. Which slice should this recheck cover?" % (
+                        slice_name, rel, ", ".join(names) or "none")}
+        slice_name = resolved
+        canonical_because = why
     checklist, reopened = [], {}
     selected = []
     for e in entries:
@@ -439,6 +450,7 @@ def resolve_scope(doc, workspace, accepted_reopenings):
     # E8-26: named_items when every checklist entry entered by naming, else build_doc
     source = "named_items" if all(id(e) in entered_by_name for e in selected) else "build_doc"
     return {"status": "ok", "checklist": checklist, "source": source, "document": rel, "slice": slice_name,
+            "slice_as_given": target.get("slice"), "slice_resolved_because": canonical_because,
             "parsed": parsed, "entries": entries, "reopened": {id(e): reopened[id(e)] for e in selected if id(e) in reopened},
             "selected": selected, "candidates": candidates}
 

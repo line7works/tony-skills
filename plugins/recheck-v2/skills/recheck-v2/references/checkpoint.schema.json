@@ -569,6 +569,20 @@
           "type": "string",
           "minLength": 1,
           "description": "evidence the verifier lacked; required for an upgrade"
+        },
+        "reason_corrected_from": {
+          "enum": [
+            "reproduces",
+            "missed_case",
+            "verification_blocked",
+            "missing_evidence"
+          ],
+          "description": "E11-7 item 3: the reason the retained report carried, when the driver corrected one not_fixed reason to another on evidence. The disposition is unchanged and the retained report is never edited."
+        },
+        "reason_correction_evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the evidence for a corrected not_fixed reason; required with reason_corrected_from"
         }
       },
       "allOf": [
@@ -609,6 +623,26 @@
             "properties": {
               "verifier_said": {
                 "const": "fixed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "reason_corrected_from"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason_correction_evidence"
+            ],
+            "properties": {
+              "verifier_said": {
+                "const": "not_fixed"
+              },
+              "driver_action": {
+                "const": "confirmed"
               }
             }
           }

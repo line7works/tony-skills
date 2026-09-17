@@ -413,6 +413,43 @@ def compute_identity(run):
 
 GRANT_CLAIM_WHY = "a grant claimed in reviewed material: no user channel, no turn_ref; not a grant, not written"
 
+# E11-7 item 3: a RECORDED PROJECT STATE is not a claimed grant. A build document's own
+# `Status: rejected` line, a punch-list block line, a review finding, a `WAIVED (per user)` or
+# `REOPENED (per user)` line already in the record: Appendix A calls each of these a record,
+# and the open filter reads them. The mandate asked the verifier to report "a disposition
+# claim" and the claim path turned every report into a rejected grant, so eight OpenCode
+# attempts failed on a status line the project wrote about itself (Astra's E11 read, section
+# 4: "The broad instruction is followed into an incorrect classification of the legitimate
+# status record"). Only text ADDRESSED TO THE REVIEWER, asking for a disposition, a waiver, a
+# reopening or a scope change, is a claim.
+STATUS_LINE_RE = re.compile(r"^Status:\s*(rejected|signed off with conditions|signed off|built|not started)\s*$", re.I)
+RECORD_LINE_RE = re.compile(r"^[-*]\s+(?:BLOCKER|MAJOR|MINOR|WAIVED \(per user\)|REOPENED \(per user\))(?=\s|$)")
+
+
+def recorded_project_state(claim, record_documents):
+    """`(True, why)` when a reported grant claim is a record the project wrote about itself.
+
+    The claim's own text carries `<file>:<line>: <the line>`; the line is a record when it
+    sits in one of the run's own record documents AND reads as an Appendix A record line or a
+    slice's `Status:` line. Anything else stays a claim.
+    """
+    text = str(claim or "")
+    head, _, rest = text.partition(": ")
+    file_part, _, line_part = head.rpartition(":")
+    if not file_part or not line_part.isdigit():
+        return False, "the claim names no <file>:<line> in a record document"
+    if file_part not in record_documents:
+        return False, "%s is not one of this run's record documents" % file_part
+    body = rest.strip()
+    if STATUS_LINE_RE.match(body):
+        return True, "%s:%s is the slice's own Status line, a record (Appendix A)" % (
+            file_part, line_part)
+    if RECORD_LINE_RE.match(body) and ledger.SEP in body:
+        return True, "%s:%s is a record line of the document's ledger (Appendix A)" % (
+            file_part, line_part)
+    return False, "the text at %s:%s is not a record line or a Status line" % (file_part,
+                                                                              line_part)
+
 
 def claim_rejected(claim, note=""):
     """A reviewed-material claim's rejected_grants entry: `<file:line>: <the text> · <why>` (E8-A12)."""
@@ -438,6 +475,62 @@ def resolve_waivers(run, grants, scope):
             continue
         accepted.append((i, g))
     return accepted, rejected
+
+
+def cmd_check_input(args):
+    """E11-7 item 3: the bounded correction path. One read-only look at the input.
+
+    `start` creates the run directory as soon as the path rules pass, and a run directory
+    that holds a result is spent: a semantic fault found after that point (a slice the
+    document does not spell that way, a conflict, a missing scenario) costs the run id. The
+    E10 campaign spent seven of them on one spelling.
+
+    This command answers the same questions `start` would, writes NOTHING anywhere, and
+    names the document's own spelling of every value it could resolve, so the input is
+    corrected before a run id is spent. It is one command, not a loop: it grades nothing,
+    summons nobody, and never begins a run.
+    """
+    root = validate.skill_root(args.skill_root)
+    doc, raw, err = inputs.load_input(args.input)
+    if err:
+        raise Usage(err)
+    schemas = check_references(root, doc)
+    errors = validate.validate_input(doc, schemas)
+    if errors:
+        return emit({"ok": False, "where": "schema",
+                     "fields": inputs.schema_fields(errors, doc, schemas),
+                     "errors": [{"path": e["path"] or "$", "message": e["message"]}
+                                for e in errors[:12]],
+                     "wrote": []}, 0)
+    violations = inputs.path_rules(doc, identity.is_work_tree_root)
+    if violations:
+        return emit({"ok": False, "where": "path_rules", "fields": [v[0] for v in violations],
+                     "problems": [v[1] for v in violations], "wrote": []}, 0)
+    workspace = doc["workspace"]
+    target = doc.get("target") or {}
+    out = {"ok": True, "where": "scope", "wrote": [],
+           "run_id": (doc.get("invocation") or {}).get("run_id"),
+           "run_dir": (doc.get("invocation") or {}).get("run_dir")}
+    grants = inputs.collect_grants(doc)
+    scope = inputs.resolve_scope(doc, workspace, grants["reopenings"])
+    out["status"] = scope["status"]
+    if scope["status"] == "missing_input":
+        out["ok"] = False
+        out["fields"] = scope.get("fields")
+        out["ambiguity"] = scope.get("ambiguity")
+        out["question"] = scope.get("question")
+        if scope.get("slice_candidates") is not None:
+            out["slice_candidates"] = scope["slice_candidates"]
+        return emit(out, 0)
+    out["document"] = scope.get("document")
+    out["slice"] = scope.get("slice")
+    out["slice_as_given"] = scope.get("slice_as_given", target.get("slice"))
+    out["slice_resolved_because"] = scope.get("slice_resolved_because")
+    out["checklist_count"] = len(scope.get("checklist") or [])
+    out["corrected_target"] = dict(target)
+    if out["slice"] is not None:
+        out["corrected_target"]["slice"] = out["slice"]
+    return emit(out, 0)
 
 
 def cmd_start(args):
@@ -727,6 +820,32 @@ def item_result_from(run, index, action, reason=None, note=None, upgrade_evidenc
     verification = m["verification"]
     if action == "confirmed":
         disposition, item_reason = said, m["reason"]
+        # E11-7 item 3: an EVIDENCED correction between `not_fixed` reasons. The CLI's
+        # `--reason` served only a downgrade of a verifier `fixed`, so a verifier that
+        # reported `reproduces` for a partial fix, or `missing_evidence` for a blocked
+        # execution, could not be corrected at all — and the retained report is never edited.
+        # The disposition is unchanged, the verifier's own word stays in `verifier_said`, and
+        # the correction carries its evidence.
+        if reason is not None and reason != item_reason:
+            if said != "not_fixed":
+                raise Usage("--reason corrects a not_fixed reason; the verifier said %s for "
+                            "item %d (a verifier fixed is changed with --action downgraded)"
+                            % (said, index))
+            if not note:
+                raise Usage("correcting a not_fixed reason needs --note (the evidence for the "
+                            "corrected reason); the retained report is never edited")
+            adjudication["reason_corrected_from"] = item_reason
+            adjudication["reason_correction_evidence"] = note
+            item_reason = reason
+            if reason == "verification_blocked":
+                verification["blocked"] = verification.get("blocked") or note
+                verification.pop("missing", None)
+            elif reason == "missing_evidence":
+                verification["missing"] = verification.get("missing") or note
+                verification.pop("blocked", None)
+            else:
+                for key in ("blocked", "missing"):
+                    verification.pop(key, None)
     elif action == "downgraded":
         if said != "fixed":
             raise Usage("downgraded needs a verifier fixed; the verifier said %s for item %d" % (said, index))
@@ -1062,9 +1181,23 @@ def assemble_and_deliver(run, rc, outcome, at_transaction, pre_cards, keep_exist
         tail = parsed["tail"] or {}
     rejected = list(cp["scope"]["grants"]["rejected"])
     injection = list(tail.get("injection_attempts") or [])
+    # E11-7 item 3: a recorded project state reported as a grant claim is neither a rejected
+    # grant nor an injection attempt. It is kept under its own name so nothing is lost.
+    record_documents = set()
+    for entry in checklist:
+        document = ((entry.get("record") or {}).get("document"))
+        if document:
+            record_documents.add(document)
+    recorded_states = []
     for claim in tail.get("grant_claims") or []:
+        is_record, why = recorded_project_state(claim, record_documents)
+        if is_record:
+            recorded_states.append("%s%s%s" % (claim, ledger.SEP, why))
+            continue
         rejected.append(claim_rejected(claim))
         injection.append(claim_injection(claim))
+    for row in recorded_states:
+        log("recorded project state, not a claimed grant: %s" % row)
     for r in cp["scope"]["grants"]["rejected"]:
         if GRANT_CLAIM_WHY in r:
             injection.append(claim_injection(r.split(ledger.SEP + GRANT_CLAIM_WHY)[0]))
@@ -1480,7 +1613,11 @@ def cmd_resume(args):
         if outcome["status"] == "completed":
             cp["phase"] = "committed"
             run.cp.save()
-        assemble_and_deliver(run, rc, outcome, now, pre_cards)
+        # E11-7 item 4: `at_transaction` is the identity the transaction BEGAN at, which the
+        # checkpoint's guard stored (contract section 11); `now` is the identity at the
+        # resume, after the transaction's own writes. Reporting `now` made two committed-run
+        # reassemblies report a dirty transaction identity while the saved guard was clean.
+        assemble_and_deliver(run, rc, outcome, run.pre_transaction, pre_cards)
     if rc_doc is not None:
         rc = rcmod.Receipt(run.run_dir, rc_doc, schemas)
         work = [dict(s) for s in rc_doc["plan"]]
@@ -1494,8 +1631,9 @@ def cmd_resume(args):
         run.cp.save()
         # E8-A11: a violation the transaction recorded is read back, so the re-assembly keeps not_clear with the cards frozen
         violations = rcmod.read_boundary(run.run_dir)
+        # E11-7 item 4: the STORED transaction identity, as above.
         assemble_and_deliver(run, rc, {"status": "completed", "stop_reason": None, "violations": violations, "cancelled": bool(violations)},
-                             now, pre_cards, keep_existing=True)
+                             run.pre_transaction, pre_cards, keep_existing=True)
     return emit(phase_document(run), 0)
 
 
@@ -1573,6 +1711,16 @@ def build_parser():
              "example: uv run recheck.py start /tmp/recheck-a-20260920-7f3c/input.json")
     sp.add_argument("input", help="the input.json to run (absolute, or relative to the current directory); missing or not JSON: exit 2")
 
+    sp = add("check-input", "read the input and report what start would resolve; writes nothing",
+             "check-input <input.json>: the bounded correction path of E11-7 item 3. Runs the "
+             "schema check, the path rules and scope resolution READ-ONLY, and reports the "
+             "document's own spelling of the slice beside the one the input carries, or the "
+             "fields that are missing. Writes nothing anywhere and creates no run directory, "
+             "so the run id is not spent.\nstdout: {\"ok\", \"where\", \"slice\", "
+             "\"slice_as_given\", \"corrected_target\", \"wrote\": []} exit 0.\n"
+             "example: uv run recheck.py check-input /tmp/recheck-a-20260920-7f3c.input.json")
+    sp.add_argument("input", help="the input.json to check (absolute, or relative to the current directory)")
+
     sp = add("record-call", "register a verifier call and, on ok, retain and parse its report",
              "record-call: registers the call (E8-27); on ok retains the report at run_dir/verifier/raw.md (raw-<k>.md), parses "
              "the tail (E8-12), records raw_sha256, moves to adjudicating; a retryable status asks for one re-send under a fresh "
@@ -1598,13 +1746,19 @@ def build_parser():
     sp = add("adjudicate", "adjudicate one item from the retained report",
              "adjudicate: validates the (verifier_said, driver_action) pair against section 7 and the item rules of the schema; "
              "E8-13 records an upgrade under session_wrote_fix as disputed; stores the item done and rewrites the checkpoint.\n"
-             "downgraded needs --reason and --note; upgraded needs --upgrade-evidence.\n"
+             "downgraded needs --reason and --note; upgraded needs --upgrade-evidence; confirmed with --reason and "
+             "--note corrects one not_fixed reason to another on that evidence, leaving the disposition and the "
+             "retained report alone (E11-7 item 3).\n"
              "example: uv run recheck.py adjudicate --run-dir /tmp/r --item 0 --action confirmed")
     sp.add_argument("--run-dir", required=True, metavar="D")
     sp.add_argument("--item", required=True, type=int, metavar="N", help="the checklist index (from 0)")
     sp.add_argument("--action", required=True, choices=("confirmed", "downgraded", "upgraded", "disputed"))
-    sp.add_argument("--reason", choices=vmod.REASONS, default=None, help="with downgraded: the not_fixed reason")
-    sp.add_argument("--note", metavar="T", default=None, help="the driver's note (required with downgraded: its evidence)")
+    sp.add_argument("--reason", choices=vmod.REASONS, default=None,
+                    help="with downgraded: the not_fixed reason. With confirmed on a verifier "
+                         "not_fixed: the corrected reason, on the evidence in --note; the "
+                         "disposition is unchanged and the retained report is never edited "
+                         "(E11-7 item 3)")
+    sp.add_argument("--note", metavar="T", default=None, help="the driver's note (required with downgraded, and with a --reason correction: its evidence)")
     sp.add_argument("--upgrade-evidence", metavar="T", default=None, help="with upgraded: evidence the verifier lacked")
 
     sp = add("new-defect", "confirm a fix-introduced defect with its severity",
@@ -1657,7 +1811,7 @@ def build_parser():
     return p
 
 
-COMMANDS = {"start": cmd_start, "record-call": cmd_record_call, "adjudicate": cmd_adjudicate, "new-defect": cmd_new_defect,
+COMMANDS = {"start": cmd_start, "check-input": cmd_check_input, "record-call": cmd_record_call, "adjudicate": cmd_adjudicate, "new-defect": cmd_new_defect,
             "record": cmd_record, "resume": cmd_resume, "identity": cmd_identity, "ledger": cmd_ledger, "skill-identity": cmd_skill_identity}
 
 

@@ -66,6 +66,59 @@ def parse_prompt(text):
     return got
 
 
+def parse_consumer_prompt(text):
+    """The consumer prompt's three paths, or None when this is not a consumer trial."""
+    match = re.search(r"read the re-inspection records under (\S+) and the build doc (\S+) in "
+                      r"(\S+),", text)
+    if not match:
+        return None
+    producer, build_doc, workspace = match.groups()
+    answer = re.search(r"then write (\S+) and print nothing else", text)
+    if not answer:
+        return None
+    return {"producer": producer, "build_doc": build_doc,
+            "workspace": workspace.rstrip(","), "answer": answer.group(1)}
+
+
+def answer_consumer(consumer):
+    """Read the producer's own records and write the consumer's answer (E11-7 item 6).
+
+    The fake stands in for a model: it reads exactly the files the prompt named and copies
+    what they say. What it proves is the runner's end of the trial — the pair staged with one
+    producer's records and nothing else, the launch, the grade — not a model's comprehension.
+    """
+    result_path = os.path.join(consumer["producer"], "result.json")
+    if not os.path.isfile(result_path):
+        return
+    with open(result_path, encoding="utf-8") as handle:
+        result = json.load(handle)
+    items = []
+    for item in result.get("items") or []:
+        location = item.get("location") or {}
+        details = []
+        for entry in ((item.get("verification") or {}).get("evidence") or []):
+            if isinstance(entry, dict) and entry.get("detail"):
+                details.append(entry["detail"])
+        items.append({"location": "%s:%s" % (location.get("file"), location.get("line")),
+                      "claim": item.get("claim"),
+                      "disposition": item.get("disposition"),
+                      "reason": item.get("reason"),
+                      "evidence": details})
+    cards = [{"slice": c.get("slice"), "before": c.get("before"), "after": c.get("after")}
+             for c in (result.get("cards") or [])]
+    continuations = None
+    checkpoint = os.path.join(consumer["producer"], "run", "checkpoint.json")
+    if os.path.isfile(checkpoint):
+        try:
+            with open(checkpoint, encoding="utf-8") as handle:
+                document = json.load(handle)
+            continuations = document.get("continuations")
+        except ValueError:
+            continuations = None
+    write_json(consumer["answer"], {"items": items, "cards": cards,
+                                    "continuation": {"continuations": continuations}})
+
+
 def seeded_input(workspace):
     """The fixture's own seeded input document, beside its workspace."""
     path = os.path.join(os.path.dirname(workspace), "input.json")
@@ -515,7 +568,16 @@ def main(argv):
     prompt = parse_prompt(text)
     prompt["prompt_file"] = os.path.abspath(prompt_file)
     prompt.setdefault("workspace", os.path.abspath(workspace))
-    if "run_dir" not in prompt:
+    consumer = parse_consumer_prompt(text)
+    if consumer:
+        # E11-7 item 6: the fake consumer reads the ONE producer's records it was given and
+        # writes the answer the grade reads. It opens nothing else.
+        answer_consumer(consumer)
+        prompt["run_dir"] = os.path.join(out_dir, "no-run-directory")
+        prompt.setdefault("workspace", consumer["workspace"])
+        prompt["consumer"] = consumer
+        steps, state = [], None
+    elif "run_dir" not in prompt:
         # A routing trial: the whole prompt is the request text, there is no run directory and
         # no core to drive. The fake selects recheck-v2 when the request reads like a recheck,
         # so the runner's observed-target readers have a marker to find; RECHECK_FAKE_TARGET

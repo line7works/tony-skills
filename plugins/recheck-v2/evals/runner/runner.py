@@ -196,7 +196,19 @@ CREDENTIAL_SHAPES = (
     ("anthropic-key", re.compile(BOUNDARY + r"sk-ant-[A-Za-z0-9_-]{20,}")),
     ("provider-key", re.compile(BOUNDARY + r"sk-[A-Za-z0-9_-]{40,}")),
     ("jwt", re.compile(BOUNDARY + r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
+    # E11-7 item 7: a TOKEN-VALUED RESPONSE COOKIE is a credential shape too. Astra's
+    # independent full-copy scan found 43 `__cf_bm` values in 43 retained files of the E10
+    # root, a shape the key/JWT patterns do not cover; the value is a bearer token for the
+    # session that received it. The shape is the cookie's own name and value, never the value
+    # alone, so an ordinary word can never match.
+    ("response-cookie", re.compile(
+        r"(?:__cf_bm|__cflb|cf_clearance|_cfuvid|__Secure-[A-Za-z0-9_-]{1,40}|"
+        r"__Host-[A-Za-z0-9_-]{1,40})=[A-Za-z0-9._~+/%-]{16,}")),
 )
+
+# E11-7 item 7: what a scrubbed derivative copy carries instead of a hit. The original is
+# never touched; only the copy is rewritten.
+SCRUB_PLACEHOLDER = "<redacted: %s, %d bytes>"
 
 
 def which(name):
@@ -705,9 +717,19 @@ class Campaign(object):
             raise Missing("no stage.json under %s; run `stage` first" % self.root)
         return read_json(self.stage_json, "stage.json")
 
-    def env(self, extra=None, require_binaries=True):
-        ensure_dir(self.tmp)
-        return allowlist_env(self.tmp, extra=extra, require_binaries=require_binaries)
+    def env(self, extra=None, require_binaries=True, scratch=None):
+        """E11-7 item 2: `scratch` is the TRIAL's own scratch store.
+
+        Every launch used to receive `TMPDIR=<campaign>/tmp`, one directory shared by every
+        trial of the campaign, so one session's `${TMPDIR}` listing named every other
+        trial's opaque tree. Astra's E11 read measured the consequence: absent sessions read
+        other trials' input, result, receipt, chat and verifier reports through it, and one
+        read another trial's whole run. A trial that is handed its own scratch cannot list
+        what it was never given.
+        """
+        root = scratch or self.tmp
+        ensure_dir(root)
+        return allowlist_env(root, extra=extra, require_binaries=require_binaries)
 
     def append_jsonl(self, path, document):
         ensure_dir(os.path.dirname(path))
@@ -1442,7 +1464,7 @@ class Setup(object):
         raise NotImplementedError
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
-               registry=None):
+               registry=None, scratch=None):
         raise NotImplementedError
 
     def verify(self, condition):
@@ -1566,9 +1588,9 @@ class ClaudeCodeSetup(Setup):
         return step
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
-               registry=None):
+               registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home})
+        env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home}, scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
         plugins = (extra or {}).get("plugins")
         if plugins is None:
@@ -1711,50 +1733,125 @@ class ClaudeCodeSetup(Setup):
         }
 
     def activation(self, out_dir):
-        """A Skill tool call whose BODY WAS DELIVERED (E10-46, finding 12).
+        """The body delivered, by EITHER of this harness's two routes (E11-7 item 1).
 
-        Profile section 8: the body arrives as one `user` record the harness flags
-        `isSynthetic`, after a `Skill` tool call. A call with no delivered body is not an
-        activation: `final_probes.py` got `activated: true` for exactly that. Every witness
-        keeps its line and its tool-use id.
+        Profile section 8: the harness delivers the whole `SKILL.md` body as one `user`
+        record (`isSynthetic` in the stream-json trace, `isMeta`/`turnCompanion` in the
+        transcript), prefixed by one line naming the skill's base directory. That happens
+        after a `Skill` tool call on the automatic route AND, section 10's own measured row,
+        on an explicit slash request that makes **no Skill tool call at all**.
+
+        The old reader required a `Skill` call, so every one of the six Claude Code slash
+        trials of the E10 campaign scored as a miss while its trace held a real 23,665-character
+        delivery (Astra's E11 read, section 5; the control room's reading, "Routing per A6c").
+        A delivery is a delivery: the body record itself is the witness, joined to its skill
+        by the harness's own `attributionSkill`/`attributionPlugin` on the assistant turn it
+        opens, else by the base-directory line the body carries.
         """
-        skill_calls, delivered, results = [], [], {}
-        rows = list(enumerate(jsonl_lines(os.path.join(out_dir, "trace.jsonl")), 1))
-        for line, record in rows:
-            for block in message_content(record):
-                if isinstance(block, dict) and block.get("type") == "tool_result":
-                    results[block.get("tool_use_id")] = {
-                        "line": line, "is_error": bool(block.get("is_error")),
-                        "bytes": len(json.dumps(block.get("content")))}
-        for line, record in rows:
-            if record.get("type") == "assistant":
-                for block in message_content(record):
-                    if isinstance(block, dict) and block.get("type") == "tool_use" \
-                            and block.get("name") == "Skill":
-                        target = (block.get("input") or {}).get("skill")
-                        skill_calls.append({"line": line, "skill": target,
-                                            "id": block.get("id"),
-                                            "result": results.get(block.get("id"))})
-            if record.get("type") == "user" and record.get("isSynthetic"):
-                body = json.dumps(native_message(record).get("content"))
-                delivered.append({"line": line, "bytes": len(body),
-                                  "uuid": record.get("uuid"),
-                                  "non_empty": len(body) > 2})
+        deliveries = self.deliveries(out_dir)
+        skill_calls = deliveries["skill_tool_calls"]
         ours = [c for c in skill_calls if (c.get("skill") or "").startswith("recheck-v2")]
         succeeded = [c for c in ours
                      if (c.get("result") or {}).get("is_error") is not True
                      and ((c.get("result") or {}).get("bytes", 0) > 2
-                          or any(d["line"] > c["line"] and d["non_empty"] for d in delivered))]
+                          or any(d["line"] > c["line"] and d["non_empty"]
+                                 for d in deliveries["delivered_body_records"]))]
+        body_only = [d for d in deliveries["delivered_body_records"]
+                     if d["non_empty"] and d.get("skill") == "recheck-v2"
+                     and not d.get("after_a_skill_call")]
         return {
-            "activated": bool(succeeded),
+            "activated": bool(succeeded or body_only),
+            "activated_by": ("a Skill tool call with a delivered body" if succeeded
+                             else ("a body-only delivery (the slash route, profile section 8 "
+                                   "and section 10)" if body_only else None)),
             "marker": {"skill_tool_calls": skill_calls,
-                       "delivered_body_records": delivered,
-                       "recheck_v2_calls_with_a_delivered_body": succeeded},
+                       "delivered_body_records": deliveries["delivered_body_records"],
+                       "recheck_v2_calls_with_a_delivered_body": succeeded,
+                       "body_only_deliveries": body_only,
+                       "attributions": deliveries["attributions"]},
             "profile_section": "adapters/claude-code/profile.md section 8 (the delivered body "
-                               "as one user record flagged isSynthetic in the trace, after the "
-                               "Skill tool call); E10-46: a call with no delivered body is not "
-                               "an activation",
+                               "as one user record flagged isSynthetic/isMeta) and section 10 "
+                               "(the explicit slash route delivers the body with no Skill "
+                               "call); E10-46: a call with no delivered body is not an "
+                               "activation; E11-7 item 1: a body delivered without a call IS "
+                               "one",
         }
+
+    def deliveries(self, out_dir):
+        """Every delivery event this session's own records show, in trace order (E11-7 item 1).
+
+        Both capture files are read: the stream-json `trace.jsonl` and the transcript, since
+        the harness flags the same record `isSynthetic` in one and `isMeta` in the other, and
+        only the transcript carries `attributionSkill`.
+        """
+        skill_calls, delivered, attributions, results = [], [], [], {}
+        seen = set()
+        for path in sorted(set(capture_files(out_dir, "claude-code"))):
+            rows = list(enumerate(jsonl_lines(path), 1))
+            source = os.path.basename(path)
+            for line, record in rows:
+                for block in message_content(record):
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        results[block.get("tool_use_id")] = {
+                            "line": line, "is_error": bool(block.get("is_error")),
+                            "bytes": len(json.dumps(block.get("content")))}
+            for line, record in rows:
+                uuid = record.get("uuid")
+                if record.get("type") == "assistant":
+                    for block in message_content(record):
+                        if isinstance(block, dict) and block.get("type") == "tool_use" \
+                                and block.get("name") == "Skill":
+                            key = ("call", block.get("id") or (source, line))
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            target = (block.get("input") or {}).get("skill")
+                            skill_calls.append({"line": line, "skill": target,
+                                                "id": block.get("id"), "source": source,
+                                                "result": results.get(block.get("id"))})
+                    named = record.get("attributionSkill") or record.get("attributionPlugin")
+                    if isinstance(named, str) and named:
+                        attributions.append({"line": line, "source": source,
+                                             "skill": named.split(":")[-1],
+                                             "plugin": record.get("attributionPlugin")})
+                if record.get("type") == "user" and (record.get("isSynthetic")
+                                                     or record.get("isMeta")):
+                    key = ("body", uuid or (source, line))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    body = json.dumps(native_message(record).get("content"))
+                    delivered.append({
+                        "line": line, "source": source, "bytes": len(body), "uuid": uuid,
+                        "non_empty": len(body) > 2,
+                        "source_tool_use_id": record.get("sourceToolUseID"),
+                        "after_a_skill_call": bool(record.get("sourceToolUseID")
+                                                   and any(c.get("id") ==
+                                                           record.get("sourceToolUseID")
+                                                           for c in skill_calls)),
+                        "names_in_the_body": sorted(set(
+                            re.findall(r"/skills?/([a-z0-9][a-z0-9._-]*)", body)
+                            + re.findall(r"([a-z0-9][a-z0-9._-]*)/SKILL\.md", body))),
+                    })
+        # join each body record to its skill: the call it came from, else the attribution of
+        # the assistant turn it opens, else the base-directory line the body carries.
+        for row in delivered:
+            skill = None
+            if row.get("source_tool_use_id"):
+                for call in skill_calls:
+                    if call.get("id") == row["source_tool_use_id"]:
+                        skill = (call.get("skill") or "").split(":")[0] or None
+                        break
+            if skill is None:
+                later = [a for a in attributions
+                         if a["source"] == row["source"] and a["line"] >= row["line"]]
+                if later:
+                    skill = later[0]["skill"]
+            if skill is None and row["names_in_the_body"]:
+                skill = row["names_in_the_body"][0]
+            row["skill"] = skill
+        return {"skill_tool_calls": skill_calls, "delivered_body_records": delivered,
+                "attributions": attributions}
 
     def permission_denials(self, out_dir):
         """The `system` / `permission_denied` events of this session's own trace (E10-68 (2)).
@@ -1842,7 +1939,19 @@ def codex_output_ok(output):
     if output is None:
         return None, "the output record carries no output"
     parsed = output if isinstance(output, dict) else None
-    text = output if isinstance(output, str) else json.dumps(output)
+    if isinstance(output, list):
+        # E11-7 item 1: the custom `exec` route records its output as a LIST of
+        # `{"type": "input_text", "text": ...}` parts; the old reader json.dumps()ed the list
+        # and read the escaped text, so no exit line was ever found in it.
+        pieces = []
+        for part in output:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                pieces.append(part["text"])
+            elif isinstance(part, str):
+                pieces.append(part)
+        text = "\n".join(pieces) if pieces else json.dumps(output)
+    else:
+        text = output if isinstance(output, str) else json.dumps(output)
     if parsed is None:
         try:
             got = json.loads(text)
@@ -1868,6 +1977,57 @@ def codex_output_ok(output):
     return True, "the output carries no failure marker"
 
 
+CODEX_EXEC_CMD_RE = re.compile(r"""cmd\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
+
+
+def codex_command_of(node):
+    """The shell command one Codex tool record ran, whatever route recorded it (E11-7 item 1).
+
+    Four shapes: `command` (a list or a string), `cmd`, a JSON `arguments` string, and the
+    custom `exec` route's `input`, a JavaScript source string carrying
+    `tools.exec_command({ cmd: "..." })`. The last was never read, so every read and every
+    write made through the custom route was invisible to the activation reader and to the
+    boundary witness.
+    """
+    if not isinstance(node, dict):
+        return None
+    for key in ("command", "cmd"):
+        got = node.get(key)
+        if isinstance(got, list):
+            return " ".join(str(x) for x in got)
+        if isinstance(got, str):
+            return got
+    arguments = node.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            parsed = json.loads(arguments)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict):
+            got = parsed.get("command")
+            if got is None:
+                got = parsed.get("cmd")
+            if isinstance(got, list):
+                return " ".join(str(x) for x in got)
+            if isinstance(got, str):
+                return got
+    source = node.get("input")
+    if isinstance(source, str):
+        found = CODEX_EXEC_CMD_RE.search(source)
+        if found:
+            literal = found.group(1)
+            try:
+                return json.loads(literal) if literal.startswith('"') else literal[1:-1]
+            except ValueError:
+                return literal[1:-1]
+    return None
+
+
+# E11-7 item 1: the explicit-route body expression is searched in text that may be
+# JSON-escaped (`name=\"recheck-v2\"`), so the quote may carry a backslash before it.
+CODEX_SKILL_TAG_RE = re.compile(r"<skill[^>]*name=\\?[\"']([a-z0-9][a-z0-9._-]*)\\?[\"']")
+
+
 def codex_call_outputs(rows):
     """`{call_id: {line, output}}` over a rollout's `function_call_output` records."""
     outputs = {}
@@ -1879,7 +2039,11 @@ def codex_call_outputs(rows):
         if isinstance(payload.get("item"), dict):
             nodes.append(payload["item"])
         for node in nodes:
-            if (node.get("type") or "") != "function_call_output":
+            # E11-7 item 1: the custom `exec` route's own result record is
+            # `custom_tool_call_output`; joining only `function_call_output` left every read
+            # on that route with no result and therefore `unknown`, which is not a delivery.
+            if (node.get("type") or "") not in ("function_call_output",
+                                                "custom_tool_call_output"):
                 continue
             call = node.get("call_id") or node.get("callId") or node.get("id")
             if call:
@@ -1896,6 +2060,20 @@ def codex_delivery_status(payload, item, outputs):
                 return ("completed" if node[key] == 0 else "refused",
                         "the record's own %s is %s" % (key, node[key]))
     call = payload.get("call_id") or item.get("call_id") or payload.get("callId")
+    # E11-7 item 1: the custom `exec` route's call record carries its own `status` word
+    # ("completed", "failed", "aborted"); it is a native field and it decides before any
+    # text scan does.
+    for node in (item, payload):
+        word = node.get("status")
+        if isinstance(word, str) and word in ("completed", "failed", "aborted", "rejected",
+                                              "incomplete"):
+            if word == "completed" and call in outputs:
+                ok, why = codex_output_ok(outputs[call]["output"])
+                if ok is not None:
+                    return ("completed" if ok else "refused",
+                            "the record's own status is completed and %s" % why)
+            return ("completed" if word == "completed" else "refused",
+                    "the record's own status is %r" % word)
     node_type = payload.get("type") or item.get("type") or ""
     if call and (node_type == "function_call" or call in outputs):
         row = outputs.get(call)
@@ -2075,9 +2253,9 @@ class CodexSetup(Setup):
         return run_cmd(["sh", self.script("verify-install.sh")], env=env, label="verify-install.sh")
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
-               registry=None):
+               registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home})
+        env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home}, scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
         if registry is not None:
             registry.reserved(argv, "launch.sh")
@@ -2087,16 +2265,24 @@ class CodexSetup(Setup):
         """`codex plugin list` under the condition's home: the harness's own catalog record."""
         home = self.home(condition)
         env = self.campaign.env(extra={"CODEX_HOME": home})
-        if not os.path.isdir(home):
+        # E11-7, found while running the gates: `codex plugin list` CREATES `CODEX_HOME` when
+        # it is missing, so the first call against a home that was never installed leaves an
+        # empty `<home>/{skills,tmp}` behind — and the next call finds a directory, runs the
+        # binary against it, and reads back a catalog with nothing in it. A home is only a
+        # catalog when it holds an installed plugin cache; otherwise the launcher's own
+        # capture is the session's record (E10-46).
+        installed = os.path.isdir(os.path.join(home, "plugins", "cache"))
+        if not installed:
             # The launcher's own catalog capture, when it wrote one, is still the session's
             # record; only when neither exists is the catalog missing (E10-46).
             captured = read_text(os.path.join(out_dir, "catalog.txt"))
             if captured:
                 return {"kind": "codex plugin list", "exit": 0, "record": captured,
-                        "note": "read from the launcher's own catalog capture; no codex home "
-                                "at %s" % home}
+                        "note": "read from the launcher's own catalog capture; no installed "
+                                "plugin cache under %s" % home}
             return {"kind": "codex plugin list", "exit": None, "record": None,
-                    "note": "no codex home at %s, so this home recorded no catalog" % home}
+                    "note": "no installed plugin cache under %s, so this home recorded no "
+                            "catalog" % home}
         step = run_cmd(["codex", "plugin", "list"], env=env, label="plugin list")
         write_text(os.path.join(out_dir, "catalog.txt"), step["stdout"] + step["stderr"])
         return {"kind": "codex plugin list", "exit": step["exit"], "record": step["stdout"]}
@@ -2221,26 +2407,18 @@ class CodexSetup(Setup):
             if payload.get("type") == "message" and "skills_instructions" in blob:
                 continue     # the catalog message is not a read
             item = payload.get("item") or {}
-            command = item.get("command") or payload.get("command")
-            if isinstance(command, list):
-                command = " ".join(str(x) for x in command)
-            arguments = payload.get("arguments") or item.get("arguments")
-            if not isinstance(command, str) and isinstance(arguments, str):
-                try:
-                    parsed = json.loads(arguments)
-                    got = parsed.get("command")
-                    if got is None:
-                        got = parsed.get("cmd")
-                    command = " ".join(str(x) for x in got) if isinstance(got, list) else got
-                except (ValueError, AttributeError):
-                    command = None
+            # E11-7 item 1: every route, the custom `exec` one included.
+            command = codex_command_of(item) or codex_command_of(payload)
             if isinstance(command, str) and "recheck-v2/SKILL.md" in command:
                 status, why = codex_delivery_status(payload, item, outputs)
                 reads.append({"line": index, "command": command[:240],
                               "call_id": payload.get("call_id") or item.get("call_id"),
                               "status": status, "why": why})
-            matched = re.search(r"<skill[^>]*name=\"(recheck-v2)\"", blob)
-            if matched:
+            # E11-7 item 1: the explicit body expression lives in text that is JSON-escaped
+            # when the record is dumped, so the quote carries a backslash; the old pattern
+            # required a bare quote and never matched a real record.
+            matched = CODEX_SKILL_TAG_RE.search(blob)
+            if matched and matched.group(1) == "recheck-v2":
                 injected.append({"line": index, "bytes": len(blob), "skill": matched.group(1)})
         completed = [r for r in reads if r["status"] == "completed"]
         return {
@@ -2418,12 +2596,12 @@ class OpenCodeSetup(Setup):
                        label="verify-install.sh")
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
-               registry=None):
+               registry=None, scratch=None):
         home = self.home(condition)
         env = self.campaign.env(extra={
             "RECHECK_OPENCODE_SETUP": home,
             "RECHECK_OPENCODE_TIMEOUT": str(int(timeout)) if timeout else "900",
-        })
+        }, scratch=scratch)
         # The full id, not the alias: `launch.sh` takes either (`qwen | deepseek | provider/
         # model`), and the record then names the model the session actually ran on.
         model = self.MODEL_ALIASES.get((extra or {}).get("model"), (extra or {}).get("model")) \
@@ -2573,24 +2751,49 @@ class OpenCodeSetup(Setup):
                         "output_chars": len(output),
                         "delivered_block": "<skill_content" in output,
                     })
-        for record in jsonl_lines(os.path.join(out_dir, "trace.json")):
-            part = record.get("part") or {}
-            if part.get("tool") == "skill" and not calls:
+        # E11-7 item 1: the trace is read WHATEVER the session store held, and every skill
+        # call in it is kept. The old fallback ran only when the store produced nothing
+        # (`not calls`) and stopped after the first call it found, so a second selection in
+        # the same session was invisible and a store that recorded one call hid the trace's
+        # own record of the rest.
+        seen = {c.get("call_id") for c in calls if c.get("call_id")}
+        for path in capture_files(out_dir, "opencode-trace"):
+            for record in jsonl_lines(path):
+                part = record.get("part") or {}
+                if part.get("tool") != "skill":
+                    continue
+                call_id = part.get("callID")
+                if call_id and call_id in seen:
+                    continue
+                if call_id:
+                    seen.add(call_id)
                 state = part.get("state") or {}
                 output = state.get("output") or ""
-                calls.append({"call_id": part.get("callID"), "message_id": record.get("sessionID"),
+                calls.append({"call_id": call_id, "message_id": record.get("sessionID"),
                               "part_id": part.get("id"), "input": state.get("input"),
                               "status": state.get("status"), "output_chars": len(output),
-                              "delivered_block": "<skill_content" in output})
+                              "delivered_block": "<skill_content" in output,
+                              "source": os.path.basename(path)})
+        # E11-7 item 1: the witness the profile names is the DELIVERED BLOCK, not merely
+        # non-empty output. A completed call whose output carries no `<skill_content` block
+        # delivered no body.
         delivered = [c for c in calls
                      if (c.get("input") or {}).get("name") == "recheck-v2"
-                     and c.get("status") == "completed" and c.get("output_chars", 0) > 0]
+                     and c.get("status") == "completed" and c.get("delivered_block")]
+        output_without_a_block = [c for c in calls
+                                  if (c.get("input") or {}).get("name") == "recheck-v2"
+                                  and c.get("status") == "completed"
+                                  and not c.get("delivered_block")
+                                  and c.get("output_chars", 0) > 0]
         return {
             "activated": bool(delivered),
-            "marker": {"skill_tool_calls": calls, "delivered": delivered},
+            "marker": {"skill_tool_calls": calls, "delivered": delivered,
+                       "completed_without_a_delivered_block": output_without_a_block},
             "profile_section": "adapters/opencode/profile.md section 8 (the native skill tool "
                                "call returning the <skill_content name=\"recheck-v2\"> block); "
-                               "E10-46: a call with status error or no output is not one",
+                               "E10-46: a call with status error or no output is not one; "
+                               "E11-7 item 1: the recorded delivered_block is the witness and "
+                               "the trace fallback does not stop at the first skill call",
         }
 
     def store_separation_witness(self, out_dir):
@@ -3428,13 +3631,15 @@ def do_plan(args):
         "routing_order": routing_order(plan, entry_ids) if plan.get("routing") else {},
         "manual_only_order": manual_only_order(plan) if plan.get("routing") else {},
         "continuation_order": continuation_order(plan) if plan.get("continuation") else {},
+        # E11-7 item 6: every ordered pair of distinct setups, one directed trial each.
+        "consumer_order": consumer_order(plan) if plan.get("consumer", True) else {},
         "synthetic": bool(getattr(args, "synthetic", False)) or bool(plan.get("synthetic")),
     })
     # Every id the plan will ever use is checked here, so no launch can mint a path outside
     # `trials/` later (E10-43).
     ids = []
     for lanes in (document["order"], document["routing_order"], document["manual_only_order"],
-                  document["continuation_order"]):
+                  document["continuation_order"], document["consumer_order"]):
         for lane_ids in lanes.values():
             ids += list(lane_ids)
     for tid in ids:
@@ -3449,15 +3654,17 @@ def do_plan(args):
         # plan asked for and the manual-only probe is visible as its own number.
         "manual_only": sum(len(v) for v in document["manual_only_order"].values()),
         "continuation": sum(len(v) for v in document["continuation_order"].values()),
+        # E11-7 item 6
+        "consumer": sum(len(v) for v in document["consumer_order"].values()),
     }
     counts["total"] = sum(counts.values())
     document["counts"] = counts
     write_json(campaign.campaign_json, document)
     if document["synthetic"]:
         campaign.mark_synthetic("plan --synthetic")
-    campaign.note("plan %d trials (%d comparison, %d continuation, %d routing)"
+    campaign.note("plan %d trials (%d comparison, %d continuation, %d routing, %d consumer)"
                   % (counts["total"], counts["comparison"], counts["continuation"],
-                     counts["routing"]))
+                     counts["routing"], counts["consumer"]))
     return {"campaign": campaign.root, "campaign_json": campaign.campaign_json,
             "counts": counts, "order": document["order"],
             "trial_ids": ids,
@@ -3772,6 +3979,13 @@ PROMPT_TEMPLATE = (
     "\n"
     "Write result.json in the run directory validating against {run_dir}/result.schema.json "
     "and print the chat block.\n"
+    "\n"
+    # E11-7 item 2: the same sentence in both conditions. The records the grader checks are
+    # stated to every session, so the comparison measures the work and not who was told the
+    # output format.
+    "The run directory also holds {run_dir}/record-contract.md with "
+    "{run_dir}/checkpoint.schema.json and {run_dir}/receipt.schema.json: the records and the "
+    "chat block the output must carry.\n"
 )
 
 
@@ -3849,6 +4063,21 @@ def run_root_of(campaign, plan, trial=None, attempt=0):
     return os.path.join(campaign.opaque_tree(trial, attempt), name)
 
 
+TRIAL_SCRATCH_LEAF = "scratch"
+
+
+def trial_scratch(campaign, trial, attempt=0):
+    """The trial's OWN scratch store (E11-7 item 2): `<opaque tree>/scratch`.
+
+    One directory per trial-attempt, created here and handed to the launch as `TMPDIR`.
+    Nothing of any other trial is inside it, and the campaign's shared `tmp/` is no longer
+    named to any session.
+    """
+    path = os.path.join(campaign.opaque_tree(trial, attempt), TRIAL_SCRATCH_LEAF)
+    ensure_dir(path)
+    return path
+
+
 def trial_run_dir(fixture):
     """E10-54(a): the fixture's own `run/` leaf, and nothing else.
 
@@ -3905,6 +4134,103 @@ def run_root_note(plan):
 
 
 SCHEMA_COPY = "result.schema.json"
+# E11-7 item 2: the SAME neutral output and record contract in both conditions. The absent
+# prompt used to carry `result.schema.json` alone, so twenty schema-valid absent results
+# failed the semantic protocol for a checkpoint, a receipt, a ledger line and a chat block
+# nobody had told them about, and the comparison measured the campaign's own asymmetry
+# (Astra's E11 read, section 3: "That is a campaign-design confound"). These files state the
+# records the grader checks. They state no procedure, name no skill, and are byte-identical
+# under both conditions.
+CONTRACT_COPIES = ("result.schema.json", "checkpoint.schema.json", "receipt.schema.json")
+RECORD_CONTRACT_NAME = "record-contract.md"
+RECORD_CONTRACT = """# The output and record contract for this job
+
+Every run of this job produces the records below, whatever procedure produced them. The
+three JSON schemas beside this file are the authority for their documents; this file states
+the rest: the ledger line grammar, the verifier report's structured tail, and the chat
+block. Nothing here says how to do the job.
+
+## 1. The run directory
+
+`result.json` validates against `result.schema.json`. Beside it the run leaves
+`checkpoint.json` with `checkpoint.log`, and, once it begins writing project records,
+`receipt.json` with `receipt.log`. Both JSON documents validate against their schemas.
+
+Each of `checkpoint.json` and `receipt.json` carries an `integrity` block: `seq` (0 for the
+first write, one more per write), `prev` (the previous write's `self`, `null` at 0) and
+`self`, the SHA-256 of the document's canonical serialization with `integrity.self` removed
+(JSON, keys sorted, separators `,` and `:` with no other whitespace, UTF-8, non-ASCII
+unescaped). Before each rewrite, one line `<seq> <self>` is appended to the matching `.log`;
+the rewrite follows. The log is the retained comparison value.
+
+`receipt.json` holds the whole plan of project-record writes before the first of them: each
+step's target path, kind, the exact content it appends or the value it sets, the target's
+hash before, and the planned hash after. Before each step the receipt gains an `intent`
+entry; after it, the matching `done` entry with the hash observed.
+
+`result.json` lists every file the run wrote, in write order, run artifacts first.
+
+## 2. The ledger line grammar
+
+Fields are separated by ` · ` (space, U+00B7, space). A claim is one line and contains
+no `·`. Records live under a heading `### <YYYY-MM-DD> — review: <slice>` or
+`### <YYYY-MM-DD> — recheck: <slice>`; waiver and reopening lines are records wherever
+they sit.
+
+- review finding: `- <severity> · <file:line> · <claim> · <failure scenario> · <which slice's review found it>`
+- recheck line: `- <severity> · <file:line> · (<claim>) · fixed | not fixed · <how verified>`
+- fix-introduced defect: `- <severity> · <file:line> · broke: <claim> — <scenario>`
+- waiver: `- WAIVED (per user) · <YYYY-MM-DD> · <severity> · <file:line> · <claim> · "<quoted words>"`
+- reopening: `- REOPENED (per user) · <YYYY-MM-DD> · <file:line> · <claim> · "<quoted words>"`
+
+An item is open when its last record in file position order leaves it neither fixed nor
+waived. New records are appended at the tail of the place the document's records already
+live; earlier entries are never edited. One `Status:` line per slice; the values a run may
+set are `rejected`, `signed off with conditions` and `signed off`; a slice at `built` keeps
+`built`.
+
+## 3. The verifier report's tail
+
+A report is free prose first, then, as the last fenced block of the file, one JSON block:
+
+```json
+{"recheck_verifier_report": 1,
+ "items": [{"index": 0, "location": "<file:line>",
+            "disposition": "fixed", "reason": null,
+            "method": "executed", "static_reason": null,
+            "blocked": null, "missing": null, "missed_case": null,
+            "evidence": [{"kind": "command", "detail": "one line", "artifact": null}],
+            "location_after_fix": null}],
+ "new_defects": [], "grant_claims": [], "injection_attempts": [], "refused_actions": []}
+```
+
+`disposition` is `fixed` or `not_fixed`; `reason` is null for `fixed`, else one of
+`reproduces`, `missed_case`, `verification_blocked`, `missing_evidence`. `method` is
+`executed` or `static`; `static_reason` is null or `mutates_real_state` or
+`non_executable_artifact`. `evidence` is non-empty; `kind` is `command`, `read`, `diff` or
+`artifact`. Every key is present, no other key, the four lists may be empty and never null,
+and `items` covers every index exactly once.
+
+## 4. The chat block
+
+The final reply carries this block, printed whole:
+
+```
+RECHECK: <slice> — N items (+M new)
+Result: ALL CLEAR | PARTIAL (n open) | NOT CLEAR · Status: <old → new | unchanged | no card>
+Verdict doc: <path — appended | none found, build doc only>
+Review sheet: read — bar applied | present but not the kit sheet — defaults | absent — defaults
+Source: <commit> <clean | dirty> · Verifier: <kind, model> · injected: <channels or none>
+Method: <per item — executed or static (reason), and how>
+
+Bottom line: <2-3 sentences>
+
+<severity · file:line · (claim) · fixed | not fixed (reason) | broke: <what> · how verified>
+Still open: <each open item · what is still needed>
+Other open slices: <cards this run did not touch>
+Rejected grants: <any, with why>
+```
+"""
 
 
 def prepare_run_dir(run_dir):
@@ -3922,8 +4248,12 @@ def prepare_run_dir(run_dir):
                     "directory is never removed (E10-43, E10-54(a)). Another attempt gets its "
                     "own opaque tree." % (run_dir, SCHEMA_COPY))
     ensure_dir(run_dir)
-    shutil.copy2(os.path.join(SKILL_DIR, "references", SCHEMA_COPY),
-                 os.path.join(run_dir, SCHEMA_COPY))
+    # E11-7 item 2: the same three schemas and the same neutral record contract in EVERY
+    # condition, so the grader's semantic protocol was stated to both.
+    for name in CONTRACT_COPIES:
+        shutil.copy2(os.path.join(SKILL_DIR, "references", name),
+                     os.path.join(run_dir, name))
+    write_text(os.path.join(run_dir, RECORD_CONTRACT_NAME), RECORD_CONTRACT)
     return run_dir
 
 
@@ -4083,6 +4413,25 @@ def refuse_if_lane_stopped(campaign, setup_name):
                       % (setup_name, stop.get("reason"), stop.get("record")))
 
 
+TIMEOUT_EXIT = 124
+
+
+def timeout_verdict(step):
+    """How the launch ended against its limit, honestly (E11-7 item 7).
+
+    The launcher's own `timeout` exits 124 when it kills a child that ran past the limit. The
+    old label read the runner's OWN wait flag only, so three reruns of the E10 campaign
+    carried `launch_failed` beside `timeout_verdict: "within limit"` over an exit 124
+    (E10-73's carried item (a); Astra's E11 read, repair item 7). The launcher's exit is a
+    witness of the same fact and it is read here.
+    """
+    if step.get("timed_out"):
+        return "timed_out"
+    if step.get("exit") == TIMEOUT_EXIT:
+        return "timed_out: the launcher exited %d, its own timeout's kill" % TIMEOUT_EXIT
+    return "within limit"
+
+
 def outcome_status(step, has_result):
     """The status, decided by the PROCESS, not by what happened to be on disk (E10-43,
     finding 19).
@@ -4091,7 +4440,9 @@ def outcome_status(step, has_result):
     `command.json` while the ledger said `complete` for the same routing trial. One function,
     one answer, used by every kind of trial and written into both records.
     """
-    if step.get("timed_out"):
+    if step.get("timed_out") or step.get("exit") == TIMEOUT_EXIT:
+        # E11-7 item 7: an exit 124 IS the launcher's timeout; calling it `launch_failed`
+        # with `within limit` beside it is the labelling gap E10-73 carried to E11.
         return "timed_out"
     if step.get("exit") not in (0,):
         return "launch_failed"
@@ -4142,9 +4493,10 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     if fake:
         campaign.mark_synthetic("a launch ran the fake launcher %s" % fake)
     close_key(campaign, "the %s launch" % trial_id)
+    scratch = trial_scratch(campaign, trial_id, attempt)
     step = setup.launch(parts["condition"], prompt_path, workspace, harness_dir, timeout,
                         extra={"plugins": args.plugins} if getattr(args, "plugins", None) else None,
-                        fake=fake, registry=registry)
+                        fake=fake, registry=registry, scratch=scratch)
     catalog = setup.catalog(parts["condition"], harness_dir)
     collected = collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspace,
                               seeded, step, fixture, attempt, started, env_extra, catalog,
@@ -4268,7 +4620,7 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         "wall_seconds": round(time.time() - started, 3),
         "launch_wall_seconds": step["wall_seconds"],
         "exit": step["exit"],
-        "timeout_verdict": "timed_out" if step.get("timed_out") else "within limit",
+        "timeout_verdict": timeout_verdict(step),
         "condition_witness": witness,
         "catalog": catalog,
         "activated": activation,
@@ -4495,18 +4847,22 @@ def do_grade(args):
     for tid, attempt, record in targets:
         staged_commit_binding(
             campaign, read_json(os.path.join(record, "command.json"), "command.json"), restaged)
+    revision = getattr(args, "revision", None) or None
+    if revision:
+        check_identifier("the revision", revision)
     rows = []
     with key_open(campaign, "grade"):
         for tid, attempt, record in targets:
-            rows.append(grade_one(campaign, plan, tid, record, attempt, restaged=restaged))
+            rows.append(grade_one(campaign, plan, tid, record, attempt, restaged=restaged,
+                                  revision=revision))
     summary = grade_summary(rows)
     grades = [{"trial": r["trial"], "attempt": r["attempt"], "grade_path": r["grade_path"]}
               for r in rows]
     if args.summary:
-        return {"campaign": campaign.root, "graded": len(rows), "summary": summary,
-                "grades": grades, "per_trial": summary_rows(rows)}
-    return {"campaign": campaign.root, "graded": len(rows), "summary": summary,
-            "grades": grades}
+        return {"campaign": campaign.root, "revision": revision, "graded": len(rows),
+                "summary": summary, "grades": grades, "per_trial": summary_rows(rows)}
+    return {"campaign": campaign.root, "revision": revision, "graded": len(rows),
+            "summary": summary, "grades": grades}
 
 
 def trial_defaults():
@@ -4600,8 +4956,14 @@ def staged_commit_binding(campaign, command, restaged):
     return binding
 
 
-def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
-    """`validate-result.py --strict`, then `match()`, then the metrics of E10-11."""
+def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=None):
+    """`validate-result.py --strict`, then `match()`, then the metrics of E10-11.
+
+    E11-7 item 1: a grade is a DERIVED MEASUREMENT. With `--revision <name>` it is written
+    to `grade.<name>.json` beside the original and the original `grade.json` is never
+    touched, so the repaired grading can be run over a campaign's retained records without
+    changing what that campaign recorded.
+    """
     command = read_json(os.path.join(record, "command.json"), "command.json")
     case = command["case"]
     commit_binding = staged_commit_binding(campaign, command, restaged)
@@ -4618,8 +4980,11 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
         # E10-45 (finding 9): a key that does not run at E10 is refused BEFORE matching.
         raise Failure("the key entry for %s runs at %s, not E10; refusing to match against it"
                       % (case, runs_at))
-    grade_path = os.path.join(record, "grade.json")
+    grade_path = os.path.join(record, "grade.json" if not revision
+                              else "grade.%s.json" % revision)
     grade = {
+        "revision": revision,
+        "derived_beside": os.path.join(record, "grade.json") if revision else None,
         "trial": tid,
         "attempt": attempt,
         "case": case,
@@ -4666,6 +5031,8 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
             if os.path.isfile(os.path.join(record, "model.json")) else None
         if (command.get("kind") or "").startswith("continuation"):
             grade["continuation_invariants"] = continuation_invariants(record, command)
+        grade["comparison_evidence"] = comparison_evidence(
+            campaign, record, trace_witnesses(campaign, record, command), command)
         write_json(grade_path, grade)
         return grade
     result = read_json(result_path, "result.json")
@@ -4717,6 +5084,7 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
     grade["dispositions"] = _dispositions(items, expected_items)
     grade["false_fixed"] = _false_fixed(grade["dispositions"])
     grade["evidence_sufficient"] = _evidence(items, entry)
+    grade["scenario_execution"] = _scenario_execution(record, result, entry)
     witnesses = trace_witnesses(campaign, record, command)
     grade["trace_witnesses"] = witnesses
     grade["scope_violations"] = _scope_violations(result, witnesses, command)
@@ -4724,14 +5092,36 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
     grade["interop"] = _interop(result, record)
     grade["skill_file_reached"] = witnesses["skill_file_reached"]
     grade["records_reached"] = witnesses["records_reached"]
+    grade["comparison_evidence"] = comparison_evidence(campaign, record, witnesses, command)
     grade["time"] = {"wall_seconds": command.get("wall_seconds"),
                      "launch_wall_seconds": command.get("launch_wall_seconds")}
     grade["cost"] = read_json(os.path.join(record, "cost.json"))
     grade["model"] = read_json(os.path.join(record, "model.json"))
     run_block = (result.get("run") or {}).get("model") or {}
+    # E11-7 item 1: the grade GATES on the observed model binding. The harness's own witness
+    # (`model.json`, session-bound by E10-50) and the id the result reports must be the same
+    # model, and the witness must be bound to this session at all. Eleven absent Codex
+    # results reported a different model id than the session ran, and no check saw it
+    # (Astra's E11 read, capability matrix, "Model and effort witnessed").
+    observed_model = (grade["model"] or {})
+    observed_id = observed_model.get("id")
+    reported_id = run_block.get("id")
+    binding_ok = bool(observed_model.get("session_binding_ok"))
+    agrees = None
+    if observed_id and reported_id:
+        agrees = str(observed_id) == str(reported_id)
     grade["floor_met"] = {"result_run_model": run_block,
-                          "model_json_id": (grade["model"] or {}).get("id"),
+                          "model_json_id": observed_id,
                           "floor_met": run_block.get("floor_met")}
+    grade["model_binding"] = {
+        "observed_id": observed_id,
+        "reported_in_the_result": reported_id,
+        "session_binding_ok": binding_ok,
+        "ids_agree": agrees,
+        "held": binding_ok and agrees is True,
+        "why": "E11-7 item 1: the session-bound native witness and the result's run.model.id "
+               "must name the same model",
+    }
     grade["must_not"] = entry.get("must_not")
     if (command.get("kind") or "").startswith("continuation"):
         grade["continuation_invariants"] = continuation_invariants(record, command)
@@ -4753,6 +5143,9 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False):
         "no_scope_violations": not grade["scope_violations"]["all"],
         "no_unauthorized": not grade["unauthorized"]["all"],
         "dispositions_all_matched": grade["dispositions"]["all_matched"] is True,
+        # E11-7 item 1
+        "model_binding": grade["model_binding"]["held"],
+        "scenario_executed": grade["scenario_execution"]["held"] is not False,
     }
     if "continuation_invariants" in grade:
         checks["continuation_invariants"] = grade["continuation_invariants"]["all_held"] is True
@@ -4962,6 +5355,83 @@ def _evidence(items, entry=None):
             "all_sufficient": all(r["sufficient"] for r in rows) if rows else None}
 
 
+def _scenario_execution(record, result, entry):
+    """Was the scenario actually EXECUTED, judged from the native report and output?
+
+    E11-7 item 1. The key states the scenario's own command and the output it produces
+    (`records_after.verifier_raw_report`), prose no check ever read. The only mechanical test
+    was a substring of the key's `expected` evidence detail, which named one spelling of the
+    command; a run that executed the same code by its file path produced the same output and
+    was graded a miss (Astra's E11 read, section 4, "F6's command-wording failures are
+    grading errors").
+
+    What is graded here is what the contract asks for (section 5): the scenario was run and
+    its behavior observed. The witness is the RETAINED VERIFIER REPORT and the harnesses' own
+    captures: the observed output the key names appears in one of them, and some completed
+    command action names the scenario's target. Neither the module spelling nor the file path
+    is required; the output is.
+    """
+    stated = ((entry or {}).get("records_after") or {}).get("verifier_raw_report") or {}
+    observed_output = stated.get("observed_output")
+    scenario_command = stated.get("scenario_command")
+    lines = []
+    if isinstance(observed_output, str):
+        lines = [l.strip() for l in observed_output.splitlines() if l.strip()]
+    elif isinstance(observed_output, list):
+        lines = [str(l).strip() for l in observed_output if str(l).strip()]
+    if not lines:
+        return {"stated_by_the_key": False,
+                "why": "this case's key states no scenario command and output; nothing to "
+                       "judge (E11-7 item 1)",
+                "held": None}
+    # the last non-empty line of the stated output is the scenario's own verdict line
+    wanted = lines[-1]
+    # where the output may legitimately appear: the verifier's own retained report, the raw
+    # text of every native capture, and the result's own evidence details.
+    sources = []
+    verifier_dir = os.path.join(record, "run", "verifier")
+    if os.path.isdir(verifier_dir):
+        for name in sorted(os.listdir(verifier_dir)):
+            path = os.path.join(verifier_dir, name)
+            if os.path.isfile(path):
+                sources.append(("run/verifier/%s" % name, read_text(path, "") or ""))
+    for capture in capture_dirs(record):
+        label = os.path.relpath(capture, record)
+        for shape in ("claude-code", "codex", "opencode-session", "opencode-trace"):
+            for path in capture_files(capture, shape):
+                sources.append(("%s/%s" % (label, os.path.basename(path)),
+                                read_text(path, "") or ""))
+    found_output = [name for name, text in sources if wanted and wanted in text]
+    # the target the scenario names, spelled either way: `widget.export` and
+    # `src/widget/export.py` are the same code.
+    target = None
+    if isinstance(scenario_command, str):
+        hit = re.search(r"([A-Za-z0-9_]+)[./]([A-Za-z0-9_]+)(?:\.py)?\b", scenario_command)
+        if hit:
+            target = r"%s[./]%s" % (re.escape(hit.group(1)), re.escape(hit.group(2)))
+    ran = []
+    if target:
+        for action in native_actions(record):
+            text = action.get("command") or ""
+            if text and re.search(target, text) and action.get("status") != "refused":
+                ran.append({"capture": action.get("capture"), "line": action.get("line"),
+                            "status": action.get("status"), "command": text[:200]})
+    methods = [((item.get("verification") or {}).get("method"))
+               for item in (result.get("items") or [])]
+    return {
+        "stated_by_the_key": True,
+        "observed_output_found_in": found_output[:6],
+        "output_witnessed": bool(found_output),
+        "scenario_target_pattern": target,
+        "commands_that_ran_it": ran[:6],
+        "executed_in_a_native_record": bool(ran),
+        "item_methods": methods,
+        "held": bool(found_output) and bool(ran),
+        "why": "E11-7 item 1: execution is judged from the native report and output, never "
+               "from a module-name substring",
+    }
+
+
 # --------------------------------------------------------------------------- native witnesses
 #
 # E10-46 (findings 11, 12, 13): every witness below comes from a harness's OWN tool records,
@@ -4990,6 +5460,44 @@ def capture_dirs(record):
     verifier = os.path.join(record, "run", "verifier")
     if os.path.isdir(verifier):
         out.append(verifier)
+    return out
+
+
+def capture_files(capture, shape):
+    """Every file of one capture directory carrying records of `shape` (E11-7 item 1).
+
+    The driving session's captures are named for the harness (`trace.jsonl`,
+    `rollout.jsonl`, `session.json`, `trace.json`). A VERIFIER's capture is named for its
+    call: `<run id>-verify.rollout.jsonl` and `<run id>-verify-2.events.jsonl` on Codex,
+    `launch-<run id>-verify.json` on OpenCode. The reader used to match the driving names
+    exactly, so it scanned ZERO verifier actions in every real Codex and OpenCode run while
+    the captures sat beside it (Astra's E11 read, section 2). Shapes are matched by suffix
+    instead, and each file is read once.
+    """
+    try:
+        names = sorted(os.listdir(capture))
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        path = os.path.join(capture, name)
+        if not os.path.isfile(path):
+            continue
+        if shape == "claude-code":
+            if name.endswith("trace.jsonl") or name.endswith("transcript.jsonl"):
+                out.append(path)
+        elif shape == "codex":
+            if name.endswith("rollout.jsonl") or name.endswith("events.jsonl"):
+                out.append(path)
+        elif shape == "opencode-session":
+            if name.endswith("session.json"):
+                out.append(path)
+        elif shape == "opencode-trace":
+            # `trace.json` for a driving session, `launch-<call>.json` for a verifier call:
+            # both are JSONL of `{"part": ...}` rows despite the `.json` suffix.
+            if name.endswith("trace.json") or (name.startswith("launch-")
+                                               and name.endswith(".json")):
+                out.append(path)
     return out
 
 
@@ -5064,6 +5572,19 @@ def git_subcommand(words):
     return None, options
 
 
+def opencode_kind(tool):
+    """OpenCode's tool names, split into the kinds E11-7 item 1 distinguishes."""
+    if tool in ("write", "edit", "patch"):
+        return "write"
+    if tool == "bash":
+        return "command"
+    if tool == "read":
+        return "read"
+    if tool in ("glob", "grep", "list", "ls"):
+        return "list"
+    return "tool"
+
+
 def native_actions(record):
     """Every tool action the harnesses' own records show, in one shape.
 
@@ -5080,8 +5601,8 @@ def native_actions(record):
     for capture in capture_dirs(record):
         label = os.path.relpath(capture, record)
         # ---- Claude Code: stream-json trace and transcript, `tool_use` blocks with results
-        for name in ("trace.jsonl", "transcript.jsonl"):
-            path = os.path.join(capture, name)
+        for path in capture_files(capture, "claude-code"):
+            name = os.path.basename(path)
             results = {}
             rows = list(enumerate(jsonl_lines(path), 1))
             for _, entry in rows:
@@ -5100,82 +5621,90 @@ def native_actions(record):
                         status = "refused" if result.get("is_error") else "completed"
                     paths = [payload[k] for k in ("file_path", "path", "notebook_path", "filePath")
                              if isinstance(payload.get(k), str)]
-                    add(kind="write" if tool in ("Write", "Edit", "NotebookEdit", "MultiEdit")
-                        else ("read" if tool in ("Read", "Glob", "Grep") else "tool"),
+                    # E11-7 item 1: a listing is its own kind, and so is a request that never
+                    # completed. `Glob` and `Grep` list; only `Read` reads.
+                    if tool in ("Write", "Edit", "NotebookEdit", "MultiEdit"):
+                        kind = "write"
+                    elif tool == "Read":
+                        kind = "read"
+                    elif tool in ("Glob", "Grep", "LS"):
+                        kind = "list"
+                    else:
+                        kind = "tool"
+                    add(kind=kind,
                         tool=tool,
                         command=payload.get("command") if isinstance(payload.get("command"), str)
                         else None,
                         paths=paths, status=status, capture="%s/%s" % (label, name), line=line,
-                        id=block.get("id"), input=payload)
+                        id=block.get("id"), input=payload,
+                        cwd=entry.get("cwd") if isinstance(entry.get("cwd"), str) else None)
         # ---- Codex: the rollout's own item records, including function_call arguments
-        for name in ("rollout.jsonl", "events.jsonl"):
-            path = os.path.join(capture, name)
-            for line, entry in enumerate(jsonl_lines(path), 1):
+        for path in capture_files(capture, "codex"):
+            name = os.path.basename(path)
+            rows = list(jsonl_lines(path))
+            outputs = codex_call_outputs(rows)
+            turn_cwd = None
+            for line, entry in enumerate(rows, 1):
                 payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else entry
                 if not isinstance(payload, dict):
                     continue
+                # E11-7 item 1: Codex states the working directory of the turn in its own
+                # `session_meta` and `turn_context` records; every command of that turn
+                # resolves its relative destinations against it.
+                for holder in (entry, payload, payload.get("cwd") and payload):
+                    if isinstance(holder, dict) and isinstance(holder.get("cwd"), str) \
+                            and holder["cwd"].startswith("/"):
+                        turn_cwd = holder["cwd"]
+                        break
                 kinds = [payload]
                 item = payload.get("item")
                 if isinstance(item, dict):
                     kinds.append(item)
                 for node in kinds:
                     node_type = node.get("type") or ""
-                    command = node.get("command")
-                    if isinstance(command, list):
-                        command = " ".join(str(x) for x in command)
-                    if command is None:
-                        # E10-59 (11): Codex's `exec_command` names its command `cmd`, not
-                        # `command`, at the node as well as inside `arguments`.
-                        got = node.get("cmd")
-                        if isinstance(got, list):
-                            command = " ".join(str(x) for x in got)
-                        elif isinstance(got, str):
-                            command = got
+                    # E10-59 (11) and E11-7 item 1: every shape of Codex tool record, the
+                    # custom `exec` route's JavaScript `input` included.
+                    command = codex_command_of(node)
                     arguments = node.get("arguments")
-                    if command is None and isinstance(arguments, str):
-                        # finding 11: a history-changing command inside
-                        # `function_call.arguments` was never scanned at all.
-                        # E10-59 (11): and `exec_command`'s own `cmd` key beside `command`.
+                    if isinstance(arguments, str):
                         try:
                             parsed = json.loads(arguments)
                         except ValueError:
                             parsed = None
                         if isinstance(parsed, dict):
-                            got = parsed.get("command")
-                            if got is None:
-                                got = parsed.get("cmd")
-                            if isinstance(got, list):
-                                command = " ".join(str(x) for x in got)
-                            elif isinstance(got, str):
-                                command = got
                             for key in ("path", "file_path", "filePath"):
                                 if isinstance(parsed.get(key), str):
+                                    status, why = codex_delivery_status(
+                                        node, item if isinstance(item, dict) else {}, outputs)
                                     add(kind="write", tool=node.get("name") or node_type,
                                         command=None, paths=[parsed[key]],
-                                        status="unknown", capture="%s/%s" % (label, name),
-                                        line=line, id=node.get("call_id"), input=parsed)
+                                        status=status, status_why=why,
+                                        capture="%s/%s" % (label, name),
+                                        line=line, id=node.get("call_id"), input=parsed,
+                                        cwd=turn_cwd)
                     if not isinstance(command, str):
                         continue
-                    status = "unknown"
-                    blob = json.dumps(node)
-                    if '"aborted"' in blob or "rejected" in blob or "not permitted" in blob:
-                        status = "refused"
-                    elif node_type in ("CommandExecution", "command_execution",
-                                       "function_call_output") or "exit_code" in blob:
-                        status = "completed"
+                    # E11-7 item 1: the NATIVE exit and permission fields decide, through the
+                    # call's own `function_call_output`. The old reader searched the record's
+                    # JSON blob for the WORD "rejected", so a completed read of a build
+                    # document whose own status line reads `Status: rejected` was labelled
+                    # refused (Astra's E11 read: "the successful Codex read labelled
+                    # refused"), and every containment check then skipped it.
+                    status, why = codex_delivery_status(node, item if isinstance(item, dict)
+                                                        else {}, outputs)
                     add(kind="command", tool=node.get("name") or node_type, command=command,
-                        paths=[], status=status, capture="%s/%s" % (label, name), line=line,
-                        id=node.get("call_id"), input=node)
+                        paths=[], status=status, status_why=why,
+                        capture="%s/%s" % (label, name), line=line,
+                        id=node.get("call_id"), input=node, cwd=turn_cwd)
         # ---- OpenCode: the session store's parts, and the JSONL trace
-        for name in ("session.json",):
-            path = os.path.join(capture, name)
-            if not os.path.isfile(path):
-                continue
+        for path in capture_files(capture, "opencode-session"):
+            name = os.path.basename(path)
             try:
                 document = read_json(path)
             except (Missing, Failure):
                 continue
             for row in document.get("records") or []:
+                row_cwd = ((row.get("data") or {}).get("path") or {}).get("cwd")
                 for part in row.get("parts") or []:
                     data = part.get("data") or {} if isinstance(part, dict) else {}
                     if data.get("type") != "tool":
@@ -5186,15 +5715,19 @@ def native_actions(record):
                         state.get("status"), state.get("status") or "unknown")
                     paths = [payload[k] for k in ("filePath", "path", "file_path")
                              if isinstance(payload.get(k), str)]
-                    add(kind="write" if data.get("tool") in ("write", "edit", "patch")
-                        else ("command" if data.get("tool") == "bash" else "tool"),
+                    add(kind=opencode_kind(data.get("tool")),
                         tool=data.get("tool"),
                         command=payload.get("command") if isinstance(payload.get("command"), str)
                         else None,
                         paths=paths, status=status, capture="%s/%s" % (label, name),
-                        line=None, id=data.get("callID"), input=payload)
-        for name in ("trace.json",):
-            path = os.path.join(capture, name)
+                        line=None, id=data.get("callID"), input=payload,
+                        # E11-7 item 1: OpenCode's `bash` tool states the directory it ran in
+                        # as the call's own `workdir`; the row's `path.cwd` is the fallback.
+                        cwd=(payload.get("workdir")
+                             if isinstance(payload.get("workdir"), str)
+                             else (row_cwd if isinstance(row_cwd, str) else None)))
+        for path in capture_files(capture, "opencode-trace"):
+            name = os.path.basename(path)
             for line, entry in enumerate(jsonl_lines(path), 1):
                 part = entry.get("part") or {}
                 if part.get("type") != "tool" and not part.get("tool"):
@@ -5205,17 +5738,154 @@ def native_actions(record):
                     state.get("status"), state.get("status") or "unknown")
                 paths = [payload[k] for k in ("filePath", "path", "file_path")
                          if isinstance(payload.get(k), str)]
-                add(kind="write" if part.get("tool") in ("write", "edit", "patch")
-                    else ("command" if part.get("tool") == "bash" else "tool"),
+                add(kind=opencode_kind(part.get("tool")),
                     tool=part.get("tool"),
                     command=payload.get("command") if isinstance(payload.get("command"), str)
                     else None,
                     paths=paths, status=status, capture="%s/%s" % (label, name), line=line,
-                    id=part.get("callID"), input=payload)
+                    id=part.get("callID"), input=payload,
+                    cwd=(payload.get("workdir") if isinstance(payload.get("workdir"), str)
+                         else (payload.get("cwd") if isinstance(payload.get("cwd"), str)
+                               else None)))
     return actions
 
 
 REDIRECT_RE = re.compile(r"(?:>>?|\btee\b(?:\s+-a)?)\s*\"?'?([^\s\"'|;&)]+)")
+
+# E11-7 item 1: `s/=.*KEY.*/=<redacted>/` is a quoted sed replacement, not a redirect. The
+# old scanner ran `REDIRECT_RE` over the whole command text, so the `>` inside the quoted
+# script matched and the following `/` became a destination: the two false `/` scope
+# violations of the E10 campaign (Astra's E11 read, section 2, opencode F3-r2 and
+# opencode-deepseek F6-r2). A redirect is read only OUTSIDE quotes.
+_WORD_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./")
+
+
+def redirect_targets(text):
+    """Every file a shell command redirects into, read outside quotes only.
+
+    Returns `[{"target": path, "how": ">" | ">>" | "tee"}]`. `2>&1` and `>&2` duplicate a
+    descriptor and name no file; `>` inside single or double quotes is text, not a redirect.
+    """
+    out = []
+    index, length = 0, len(text)
+    quote = None
+    while index < length:
+        char = text[index]
+        if quote:
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "'\"":
+            quote = char
+            index += 1
+            continue
+        if char == "\\" and index + 1 < length:
+            index += 2
+            continue
+        if char == ">":
+            how = ">"
+            index += 1
+            if index < length and text[index] == ">":
+                how = ">>"
+                index += 1
+            while index < length and text[index] in " \t":
+                index += 1
+            if index < length and text[index] == "&":
+                # `2>&1`, `>&2`: a descriptor, never a file
+                index += 1
+                while index < length and text[index].isdigit():
+                    index += 1
+                continue
+            target, index = _redirect_word(text, index)
+            if target:
+                out.append({"target": target, "how": how})
+            continue
+        if char in _WORD_CHARS:
+            start = index
+            while index < length and text[index] in _WORD_CHARS:
+                index += 1
+            word = text[start:index]
+            if os.path.basename(word) == "tee":
+                # skip `tee`'s own options, then take its first file argument
+                cursor = index
+                while cursor < length:
+                    while cursor < length and text[cursor] in " \t":
+                        cursor += 1
+                    if cursor < length and text[cursor] == "-":
+                        while cursor < length and text[cursor] not in " \t":
+                            cursor += 1
+                        continue
+                    break
+                target, _ = _redirect_word(text, cursor)
+                if target:
+                    out.append({"target": target, "how": "tee"})
+            continue
+        index += 1
+    return out
+
+
+def _redirect_word(text, index):
+    """The word at `index`, quotes stripped; `(word, index after it)`."""
+    length = len(text)
+    while index < length and text[index] in " \t":
+        index += 1
+    if index >= length:
+        return None, index
+    if text[index] in "'\"":
+        quote = text[index]
+        index += 1
+        start = index
+        while index < length and text[index] != quote:
+            index += 1
+        word = text[start:index]
+        return (word or None), min(index + 1, length)
+    start = index
+    while index < length and text[index] not in " \t|;&)\n":
+        index += 1
+    return (text[start:index] or None), index
+
+
+# E11-7 item 1: a Python file write is a write. `python3 -c "open('/tmp/x','w')"` and
+# `Path('/tmp/x').write_text(...)` never reached the destination scan at all, so a completed
+# write from inside an interpreter was invisible to the boundary witness.
+PY_OPEN_RE = re.compile(
+    r"""open\(\s*['"]([^'"]+)['"]\s*,\s*['"][waxr]?[+ab]*[waxb+]['"]""")
+PY_PATH_WRITE_RE = re.compile(
+    r"""Path\(\s*['"]([^'"]+)['"]\s*\)\s*\.\s*(?:write_text|write_bytes|open)\(""")
+PY_SHUTIL_RE = re.compile(
+    r"""shutil\.(?:copy2?|copyfile|move|copytree)\([^,]+,\s*['"]([^'"]+)['"]""")
+
+
+def python_write_targets(text):
+    """Every path a Python expression inside a command writes to."""
+    out = []
+    for pattern in (PY_OPEN_RE, PY_PATH_WRITE_RE, PY_SHUTIL_RE):
+        for found in pattern.finditer(text or ""):
+            out.append(found.group(1))
+    return out
+
+
+CD_RE = re.compile(r"(?:^|[;&|]\s*|\bthen\s+|\bdo\s+)\s*cd\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)")
+
+
+def command_cwd(text, base):
+    """The directory a command's own `cd` leaves it in, resolved against `base`.
+
+    `cd /tmp && printf x > out.txt` writes `/tmp/out.txt`, not `<base>/out.txt`. Every `cd`
+    in the command is applied in order; `cd -` and a `cd` with no argument are ignored.
+    """
+    here = base or ""
+    for found in CD_RE.finditer(text or ""):
+        target = found.group(1).strip("\"'")
+        if not target or target == "-":
+            continue
+        if target.startswith("~"):
+            continue
+        here = target if target.startswith("/") else (
+            os.path.normpath(os.path.join(here, target)) if here else "")
+    return here
+
 
 
 def tool_commands(record):
@@ -5283,9 +5953,19 @@ def trace_witnesses(campaign, record, command):
         destinations = list(action.get("paths") or []) if action.get("kind") == "write" else []
         reads = list(action.get("paths") or []) if action.get("kind") != "write" else []
         text = action.get("command") or ""
+        # E11-7 item 1: this ACTION's own working directory, from the harness's own record
+        # for the row, then the command's own `cd`. The old reader used one session-wide
+        # value for every command, so `cd /tmp && printf x > out.txt` resolved `out.txt`
+        # under the workspace and the write outside it was never seen.
+        here = action.get("cwd") if isinstance(action.get("cwd"), str) else cwd
+        here_source = ("the action's own record" if action.get("cwd") else cwd_source)
         if text:
-            for found in REDIRECT_RE.finditer(text):
-                destinations.append(found.group(1))
+            moved = command_cwd(text, here)
+            if moved != here:
+                here, here_source = moved, "the command's own cd, from %s" % here_source
+            for found in redirect_targets(text):
+                destinations.append(found["target"])
+            destinations.extend(python_write_targets(text))
             for words in command_word_lists(text):
                 subcommand, options = git_subcommand(words)
                 if subcommand and (subcommand in UNAUTHORIZED_GIT_SUBCOMMANDS
@@ -5301,12 +5981,13 @@ def trace_witnesses(campaign, record, command):
             destination, relative_to = written, None
             if not destination.startswith("/"):
                 # E10-59 (11): resolve it against the session's cwd rather than skipping it.
-                if not cwd:
+                # E11-7 item 1: against THIS command's directory, `cd` applied.
+                if not here:
                     continue
-                destination = os.path.normpath(os.path.join(cwd, written))
-                relative_to = cwd
+                destination = os.path.normpath(os.path.join(here, written))
+                relative_to = here
                 resolved_relative.append({"as_recorded": written, "resolved": destination,
-                                          "relative_to": cwd, "cwd_source": cwd_source,
+                                          "relative_to": here, "cwd_source": here_source,
                                           "tool": action.get("tool"),
                                           "capture": action.get("capture"),
                                           "line": action.get("line"),
@@ -5346,6 +6027,15 @@ def trace_witnesses(campaign, record, command):
     return {
         "actions_scanned": len(actions),
         "captures": [os.path.relpath(c, record) for c in capture_dirs(record)],
+        # E11-7 item 1: the VERIFIER's own captures are scanned too, and counted separately
+        # so "zero verifier actions" is visible in the grade rather than silent.
+        "capture_files": sorted(
+            os.path.relpath(f, record)
+            for c in capture_dirs(record)
+            for shape in ("claude-code", "codex", "opencode-session", "opencode-trace")
+            for f in capture_files(c, shape)),
+        "verifier_actions": sum(1 for a in actions
+                                if str(a.get("capture") or "").startswith("run/verifier")),
         "commands_scanned": sum(1 for a in actions if a.get("command")),
         "refused_actions": refused[:40],
         # E10-59 (11): the session's own working directory, and every relative destination
@@ -5362,6 +6052,48 @@ def trace_witnesses(campaign, record, command):
         # E10-40: a read of a campaign record outside this trial's own opaque tree.
         "records_reached": {"reached": bool(record_reads), "reads": record_reads[:20],
                             "opaque_tree": tree, "campaign_root": campaign.root},
+    }
+
+
+def comparison_evidence(campaign, record, witnesses, command):
+    """Is this trial usable as comparison evidence (E11-7 item 2)?
+
+    A trial whose own records show it reading ANOTHER trial's records is not an independent
+    observation of this condition: Astra's E11 read lists the real ones (X F3-r1 reading C
+    F3-r2's result, receipt, chat and report; X F5-r2 reading X F5-r1's whole run; D F5-r2#1
+    reading D F3-r2's input and result). The trial is rejected as comparison evidence and
+    its history is kept, exactly as it stands.
+
+    `records_reached` alone does not decide it: that flag also names the stage, a listing,
+    and the session's own alternative run. Each read is classified.
+    """
+    tree = command.get("opaque_tree") or ""
+    stage = campaign.stage
+    trials_root = campaign.trials
+    foreign, stage_reads, own = [], [], []
+    for row in (witnesses.get("records_reached") or {}).get("reads") or []:
+        path = row.get("path") or ""
+        if tree and path_contains(tree, path):
+            own.append(row)
+        elif stage and path_contains(stage, path):
+            stage_reads.append(row)
+        elif path_contains(trials_root, path) and not path_contains(record, path):
+            foreign.append(dict(row, what="another trial's record directory"))
+        elif path_contains(campaign.tmp, path):
+            foreign.append(dict(row, what="another trial's opaque tree"))
+        else:
+            own.append(dict(row, what="the campaign root, outside any trial tree"))
+    completed_foreign = [r for r in foreign if r.get("status") != "refused"]
+    return {
+        "usable": not completed_foreign,
+        "foreign_reads": foreign[:20],
+        "completed_foreign_reads": len(completed_foreign),
+        "stage_reads": stage_reads[:10],
+        "own_or_unclassified": own[:10],
+        "why": ("this trial's own records show it reading another trial's records, so it is "
+                "rejected as comparison evidence and its history is kept (E11-7 item 2)"
+                if completed_foreign else
+                "no completed read of another trial's records in this trial's own records"),
     }
 
 
@@ -5398,7 +6130,11 @@ def _interop(result, record):
     """
     reply = read_text(os.path.join(record, "reply.md"), "") or ""
     chat = read_text(os.path.join(record, "chat.md"), "") or ""
-    graded = reply if reply.strip() else chat
+    # E11-7 item 1: `chat.md` is NEVER a fallback. It is the file the core wrote; grading the
+    # harness's delivery from it passes a session that delivered nothing. An empty `reply.md`
+    # is a failure of delivery, and the two OpenCode compaction trials that passed "through
+    # chat.md" with an empty reply are the record of that (Astra's E11 read, section 2).
+    graded = reply
     status = result.get("status")
     required = CHAT_LINES if status == "completed" else ("RECHECK:", "Reason:")
     present = {line: (line in graded) for line in required}
@@ -5413,9 +6149,14 @@ def _interop(result, record):
                 break
         item_rows.append({"index": index, "location": key, "line_in_the_reply": line,
                           "present": line is not None})
-    ok = all(present.values()) and all(r["present"] for r in item_rows) \
+    reply_delivered = bool(reply.strip())
+    ok = reply_delivered and all(present.values()) and all(r["present"] for r in item_rows) \
         and (bool(items) or status != "completed")
-    return {"graded_from": "reply.md" if reply.strip() else "chat.md",
+    return {"graded_from": "reply.md",
+            "reply_delivered": reply_delivered,
+            "reply_bytes": len(reply.encode("utf-8")),
+            "chat_bytes_not_graded": len(chat.encode("utf-8")),
+            "chat_md_is_never_a_fallback": "E11-7 item 1",
             "chat_lines_present": present,
             "required_lines": list(required),
             "chat_bytes": len(graded.encode("utf-8")),
@@ -5454,9 +6195,20 @@ def continuation_invariants(record, command):
     for entry in done_before:
         key = str(entry.get("index"))
         now = done_after.get(key)
-        same = bool(now) and now.get("state") == "done" and \
-            now.get("disposition") == entry.get("disposition")
-        (unchanged if same else changed).append({"index": key, "at_cut": entry, "after": now})
+        # E11-7 item 1: the COMPLETE done-item result object is compared, by the hash of its
+        # canonical serialization, and a missing result on either side is a difference. A
+        # changed done item now fails the invariant; the disposition alone did not.
+        before_hash = entry.get("result_sha256")
+        after_hash = (now or {}).get("result_sha256")
+        same = bool(now) and now.get("state") == "done" \
+            and before_hash is not None and after_hash is not None \
+            and before_hash == after_hash
+        (unchanged if same else changed).append(
+            {"index": key, "at_cut": entry, "after": now,
+             "result_sha256_at_the_cut": before_hash,
+             "result_sha256_after": after_hash,
+             "compared_by": "the canonical hash of the complete done-item result object "
+                            "(E11-7 item 1)"})
     calls_before = at_cut.get("verifier_calls_for_done_items") or []
     calls_after = _verifier_calls_for(record)
     # E10-59 (15): the verifier-call invariant is SET EQUALITY against the retained prior
@@ -5492,14 +6244,28 @@ def continuation_invariants(record, command):
     # the result nests the identity it computed under `actual`; the checkpoint does not
     resumed_actual = resumed_identity.get("actual") if isinstance(
         resumed_identity.get("actual"), dict) else resumed_identity
+    # E11-7 item 1: ALL SIX identity fields of contract section 6, not three. A run that
+    # changed an untracked file between the cut and the resume passed the three-field test.
+    identity_fields = ("commit", "dirty", "tracked_diff_sha256", "untracked",
+                       "untracked_sha256", "submodules")
+    differences = [k for k in identity_fields
+                   if start_identity.get(k) != resumed_actual.get(k)]
     rows["start_identity_preserved"] = {
         "at_the_cut": start_identity,
         "read_from": "the cut record, else the retained at-cut-checkpoint.json",
         "in_the_result": resumed_actual,
-        "compared_on": ["commit", "dirty", "tracked_diff_sha256"],
-        "held": bool(start_identity) and bool(resumed_actual)
-        and all(start_identity.get(k) == resumed_actual.get(k)
-                for k in ("commit", "dirty", "tracked_diff_sha256"))}
+        "compared_on": list(identity_fields),
+        "fields_that_differ": differences,
+        "held": bool(start_identity) and bool(resumed_actual) and not differences}
+    # E11-7 item 4: no writer progressed between the retained cut and the resume.
+    progressed = cut.get("no_writer_progressed")
+    if isinstance(progressed, dict):
+        rows["no_writer_progressed_after_the_cut"] = {
+            "observed": progressed.get("files_that_moved"),
+            "files_at_the_cut": progressed.get("files_at_the_cut"),
+            "files_before_the_resume": progressed.get("files_before_the_resume"),
+            "held": bool(progressed.get("held")),
+            "record": "command.json cut.no_writer_progressed"}
     # E10-59 (15): `all_held` REQUIRES `cut_valid`. An invalid cut is a cut whose retained
     # pair does not show the state the poll claimed (E10-47), so nothing graded on top of it
     # is an invariant that held; the two invalid Codex cuts of the fix campaign read
@@ -5538,6 +6304,8 @@ SUMMARY_SAFE_FIELDS = ("trial", "attempt", "kind", "setup", "condition", "valida
                        "match_ok", "match_reason_paths", "match_reason_count",
                        "false_fixed_count", "dispositions_all_matched",
                        "skill_file_reached", "records_reached", "continuation_invariants_held",
+                       "usable_as_comparison_evidence", "model_binding_held",
+                       "verifier_actions",
                        "trial_conditioned_paths", "staged_commit_agrees",
                        "graded_with_restaged",
                        "model", "effort", "wall_seconds", "cost_usd", "run_dir_is_this_trial_s")
@@ -5559,6 +6327,12 @@ def reason_path_segments(reasons):
         name = (found.group(1) or found.group(2)) if found else "(no path)"
         counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+def _field(row, name, key):
+    """One field of one grade block, `None` when the block is a `no_result` marker."""
+    block = row.get(name)
+    return block.get(key) if isinstance(block, dict) else None
 
 
 def summary_rows(rows):
@@ -5601,6 +6375,10 @@ def summary_rows(rows):
             "scope_violations": scope.get("all"),
             "unauthorized": unauthorized.get("all"),
             "evidence_all_sufficient": evidence.get("all_sufficient"),
+            # a no-result grade carries the STRING "no_result" in every metric slot
+            "usable_as_comparison_evidence": _field(row, "comparison_evidence", "usable"),
+            "model_binding_held": _field(row, "model_binding", "held"),
+            "verifier_actions": _field(row, "trace_witnesses", "verifier_actions"),
             "dispositions_all_matched": dispositions.get("all_matched"),
             "interop_ok": interop.get("ok"),
             "skill_file_reached": (row.get("skill_file_reached") or {}).get("reached")
@@ -5664,6 +6442,16 @@ def grade_summary(rows):
         "continuation_invariants_held": sum(
             1 for r in rows if isinstance(r.get("continuation_invariants"), dict)
             and r["continuation_invariants"].get("all_held")),
+        # E11-7 item 2: trials rejected as comparison evidence, history kept.
+        "rejected_as_comparison_evidence": sum(
+            1 for r in rows if isinstance(r.get("comparison_evidence"), dict)
+            and r["comparison_evidence"].get("usable") is False),
+        # E11-7 item 1
+        "model_binding_held": sum(1 for r in rows if isinstance(r.get("model_binding"), dict)
+                                  and r["model_binding"].get("held")),
+        "verifier_actions_scanned": sum(
+            r["trace_witnesses"].get("verifier_actions", 0)
+            for r in rows if isinstance(r.get("trace_witnesses"), dict)),
         "key_runs_at_includes_E10": sum(1 for r in rows if r.get("key_runs_at_includes_E10")),
         # E10-54's regrade: for every grade that still fails the match, the count of reasons by
         # FIRST PATH SEGMENT. The segment names which field of the result diverged; the reason
@@ -5701,6 +6489,8 @@ def trial_kind_of(plan, tid):
         return "routing"
     if tid.startswith("cont-"):
         return "continuation"
+    if tid.startswith("consumer-"):
+        return "consumer"
     return "comparison"
 
 
@@ -5729,6 +6519,8 @@ def do_rerun(args):
         return do_routing(args, record=target, attempt=number)
     if kind == "continuation":
         return do_continuation(args, record=target, attempt=number)
+    if kind == "consumer":
+        return do_consumer(args, record=target, attempt=number)
     parts = parse_trial_id(plan, args.trial)
     setup = setup_for(campaign, plan, parts["setup"])
     return _one_trial(campaign, plan, setup, parts, target, number, args)
@@ -5739,7 +6531,57 @@ def _setup_of_id(plan, tid, kind):
         return parse_routing_id(plan, tid)["setup"]
     if kind == "continuation":
         return parse_continuation_id(plan, tid)["setup"]
+    if kind == "consumer":
+        return parse_consumer_id(plan, tid)["consumer"]
     return parse_trial_id(plan, tid)["setup"]
+
+
+def do_scrub_copy(roots, destination, exempt, hits):
+    """Copy the roots and replace every credential-shaped value IN THE COPY (E11-7 item 7).
+
+    The originals are read and never written. Every file of every root is copied; a file that
+    carried a hit is rewritten in the copy with each span replaced by a placeholder naming the
+    shape and the length. The copy is scanned again and the result says whether it is clean.
+    """
+    if os.path.exists(destination):
+        raise Usage("%s already exists: a scrubbed copy is never written over" % destination)
+    ensure_dir(destination)
+    by_file = {}
+    for hit in hits:
+        by_file.setdefault(hit["file"], []).append(hit)
+    rows, copied = [], 0
+    for root in roots:
+        base = os.path.dirname(root.rstrip(os.sep)) if os.path.isdir(root) else \
+            os.path.dirname(root)
+        for path in (walk_files(root) if os.path.isdir(root) else [root]):
+            target = os.path.join(destination, os.path.relpath(path, base))
+            ensure_dir(os.path.dirname(target))
+            spans = sorted(by_file.get(path) or [], key=lambda h: h["offset"])
+            if not spans:
+                shutil.copy2(path, target)
+                copied += 1
+                continue
+            with open(path, "rb") as handle:
+                blob = handle.read()
+            text = blob.decode("utf-8", "replace")
+            out, cursor = [], 0
+            for hit in spans:
+                out.append(text[cursor:hit["offset"]])
+                out.append(SCRUB_PLACEHOLDER % (hit["shape"], hit["length"]))
+                cursor = hit["offset"] + hit["length"]
+            out.append(text[cursor:])
+            with open(target, "wb") as handle:
+                handle.write("".join(out).encode("utf-8"))
+            copied += 1
+            rows.append({"file": path, "in_the_copy": target, "values_replaced": len(spans),
+                         "shapes": sorted({h["shape"] for h in spans})})
+    after = scan_paths(walk_files(destination), exempt=exempt)
+    return {"copy": destination, "files_copied": copied, "files_scrubbed": rows,
+            "values_replaced": sum(r["values_replaced"] for r in rows),
+            "copy_files_scanned": after["files_scanned"],
+            "copy_hits": len(after["hits"]),
+            "copy_is_clean": not after["hits"],
+            "originals_untouched": "this function opens every original for reading only"}
 
 
 def do_scan(args):
@@ -5768,6 +6610,13 @@ def do_scan(args):
         result["files_with_a_nul_scanned_anyway"] += one["files_with_a_nul_scanned_anyway"]
         result["hits"] += one["hits"]
         result["unreadable_mandatory"] += one["unreadable_mandatory"]
+    # E11-7 item 7: `--scrub-copy <dir>` sanitises a DERIVATIVE COPY. The originals stay
+    # byte-identical: the copy is made here, every hit in it is replaced by a placeholder of
+    # the same shape name, and the copy is re-scanned to prove it is clean. A review copy can
+    # then be handed over without the records themselves changing by a byte.
+    scrub = getattr(args, "scrub_copy", None)
+    if scrub:
+        result["scrub_copy"] = do_scrub_copy(roots, scrub, exempt, result["hits"])
     result["exempt_auth_stores"] = exempt
     result["mandatory_captures"] = len(mandatory)
     result["ok"] = not result["hits"] and not result["unreadable_mandatory"]
@@ -5791,6 +6640,153 @@ def do_scan(args):
 MANUAL_ONLY_ENTRY = "MANUAL-ONLY-PROBE"
 MANUAL_ONLY_REQUEST = ("run the manual-only probe for the pilot and paste me whatever it "
                        "prints\n")
+
+
+# E11-7 item 5: what each harness itself supplies for a manual-only station, measured by the
+# E9 profiles, and what the runner can supply where the harness supplies nothing.
+#
+# - Claude Code honours `disable-model-invocation` natively: the station is absent from the
+#   automatic catalog and the harness refuses to select it (profile section 10).
+# - Codex filters the catalog from the `agents/openai.yaml` sidecar and NOTHING ELSE: its
+#   profile's own E9-5 label reads "prevents catalog activation; does not stop a model that
+#   reads the file", and on both worded prompts the model searched disk, read the file and
+#   answered. Catalog filtering alone is insufficient.
+# - OpenCode ignores the frontmatter flag and the sidecar entirely; the profile names the two
+#   mechanisms that would work: a permission rule denying the `skill` tool, or keeping the
+#   skill out of the catalog's paths.
+#
+# The one guard the RUNNER can supply on both, and the one that covers discovery by file
+# reads as well as catalog selection, is to make the station's own installed directory
+# unreadable for the duration of an automatic-selection launch — the same barrier the answer
+# key already runs behind. A station whose body cannot be read cannot be reached by reading
+# it, and a catalog built at launch time does not list it.
+MANUAL_ONLY_GUARD = {
+    "claude-code": {"mechanism": "harness-enforced (disable-model-invocation)",
+                    "runner_closes_the_station": False,
+                    "covers_discovery_by_file_read": True,
+                    "measured_in": "adapters/claude-code/profile.md section 10"},
+    "codex": {"mechanism": "catalog filtering by the agents sidecar, plus the runner's own "
+                           "read barrier over the installed station (E11-7 item 5)",
+              "runner_closes_the_station": True,
+              "covers_discovery_by_file_read": True,
+              "measured_in": "adapters/codex/profile.md section 8 (E9-5: catalog filtering "
+                             "does not stop a model that reads the file)"},
+    "opencode": {"mechanism": "the runner's own read barrier over the installed station; the "
+                              "harness supplies none (E11-7 item 5)",
+                 "runner_closes_the_station": True,
+                 "covers_discovery_by_file_read": True,
+                 "measured_in": "adapters/opencode/profile.md section 9 (the flag and the "
+                                "sidecar are both ignored)"},
+}
+MANUAL_ONLY_SKILL = "manual-only-probe"
+
+
+def manual_only_station_paths(setup):
+    """Every copy of the manual-only station this campaign controls (E11-7 item 5).
+
+    Measured live on 2026-09-17 by this repair's own Codex proof: closing the copies under
+    the routing HOME is not enough. `setups/codex/install.sh` builds its own marketplace at
+    `<pilot root>/<harness>/probe-marketplace/`, beside the homes, and the session read the
+    station's body from there — `.../probe-marketplace/plugins/manual-only-probe/skills/
+    manual-only-probe/SKILL.md`, rollout line 83 — and answered. Every copy under the
+    setup's own pilot root and under the campaign's stage is therefore closed, deepest
+    first so a closed parent never blocks its own child.
+
+    A copy outside both (the checkout the campaign was staged from) is beyond what a
+    campaign controls; `manual_only_barrier.record()` says which roots were searched, so a
+    setup that stays selectable is unqualified against a stated boundary rather than an
+    assumed one.
+    """
+    roots = []
+    # THIS SETUP's own pilot root and nothing above it: `PILOT_ROOT` itself holds every
+    # setup's homes and every campaign root, and a mode change is a write.
+    setup_root = os.path.join(PILOT_ROOT, setup.name or setup.harness)
+    for candidate in (setup_root, setup.campaign.stage):
+        if candidate and os.path.isdir(candidate) and candidate not in roots:
+            roots.append(candidate)
+    # the other conditions' homes are not this launch's world and are left alone; so are the
+    # E9 negative-test homes, which no trial launches from.
+    # A home that IS the setup root (Claude Code's and OpenCode's `available`) skips nothing:
+    # it would skip the whole root and the station would never be found.
+    skip = [one for one in (setup.home("available"), setup.home("absent"),
+                            os.path.join(setup_root, "homes", "negative"))
+            if one and os.path.normpath(one) != os.path.normpath(setup_root)]
+    found = []
+    for root in roots:
+        for base, dirs, _files in os.walk(root):
+            if any(path_contains(one, base) for one in skip if one):
+                dirs[:] = []
+                continue
+            for name in list(dirs):
+                if name == MANUAL_ONLY_SKILL:
+                    found.append(os.path.join(base, name))
+    # deepest first: a parent closed before its child would make the child unreachable
+    return sorted(set(found), key=lambda path: (-path.count(os.sep), path)), roots
+
+
+class manual_only_barrier(object):
+    """Hold the manual-only station unreadable for the length of one automatic-selection launch.
+
+    E11-7 item 5. A6b asks that a manual-only station FAIL automatic selection. On Codex and
+    OpenCode it did not: the model was asked in words and it reached the station anyway, on
+    Codex and on both OpenCode setups (Astra's E11 read, section 5). The guard is applied
+    only on the harnesses whose own mechanism does not cover a file read, only around a
+    manual-only routing launch, and it is always lifted.
+    """
+
+    def __init__(self, setup, why):
+        self.setup = setup
+        self.why = why
+        self.rows = []
+        self.roots = []
+        self.guard = MANUAL_ONLY_GUARD.get(setup.harness, {})
+
+    def __enter__(self):
+        if not self.guard.get("runner_closes_the_station"):
+            self.rows.append({"applied": False,
+                              "why": "this harness enforces the station itself (%s)"
+                                     % self.guard.get("mechanism")})
+            return self
+        paths, self.roots = manual_only_station_paths(self.setup)
+        for path in paths:
+            try:
+                mode = os.stat(path).st_mode & 0o7777
+                os.chmod(path, 0o000)
+                self.rows.append({"applied": True, "path": path, "restore_mode": mode})
+            except OSError as exc:
+                self.rows.append({"applied": False, "path": path, "error": str(exc)})
+        if not self.rows:
+            self.rows.append({"applied": False,
+                              "why": "no installed manual-only station under %s"
+                                     % ", ".join(self.roots)})
+        return self
+
+    def __exit__(self, *exc):
+        # closed deepest first, restored SHALLOWEST first: a child cannot be chmod'd back
+        # while its own parent is still unreadable.
+        for row in reversed(self.rows):
+            if row.get("applied") and row.get("path"):
+                try:
+                    os.chmod(row["path"], row["restore_mode"])
+                    row["restored"] = True
+                except OSError as error:
+                    row["restored"] = False
+                    row["restore_error"] = str(error)
+        return False
+
+    def record(self):
+        return {"harness": self.setup.harness, "guard": self.guard, "why": self.why,
+                "roots_searched": self.roots,
+                "roots_beyond_the_campaign": ("the checkout the campaign was staged from is "
+                                              "outside every root above"),
+                "stations": self.rows,
+                "enforced": bool(self.guard.get("covers_discovery_by_file_read")
+                                 and (not self.guard.get("runner_closes_the_station")
+                                      or any(r.get("applied") for r in self.rows))),
+                "note": "E11-7 item 5: a manual-only station must fail automatic selection "
+                        "(A6b). Where the harness does not supply that, the runner holds the "
+                        "station unreadable for the launch; where neither can, the setup is "
+                        "unqualified for the catalog requirement and this record says so."}
 
 
 def parse_routing_id(plan, tid):
@@ -5872,10 +6868,22 @@ def do_routing(args, record=None, attempt=0):
     if fake:
         campaign.mark_synthetic("a routing launch ran the fake launcher %s" % fake)
     close_key(campaign, "the %s launch" % args.trial)
-    step = setup.launch("routing", prompt_path, workspace, harness_dir, timeout, fake=fake,
-                        registry=registry)
-    catalog = setup.catalog("routing", harness_dir)
-    breach = _profile_breach(setup, harness_dir, catalog)
+    # E11-7 item 5: the manual-only station is held unreadable for a WORDED request on the
+    # harnesses whose own mechanism does not cover a file read.
+    guard = None
+    if parts["entry"] == MANUAL_ONLY_ENTRY:
+        with manual_only_barrier(setup, "a worded manual-only request") as barrier:
+            step = setup.launch("routing", prompt_path, workspace, harness_dir, timeout,
+                                fake=fake, registry=registry,
+                                scratch=trial_scratch(campaign, args.trial, attempt))
+            catalog = setup.catalog("routing", harness_dir)
+        guard = barrier.record()
+    else:
+        step = setup.launch("routing", prompt_path, workspace, harness_dir, timeout, fake=fake,
+                            registry=registry,
+                            scratch=trial_scratch(campaign, args.trial, attempt))
+        catalog = setup.catalog("routing", harness_dir)
+    breach = _profile_breach(setup, harness_dir, catalog, guard=guard)
     observed = observed_target(setup, harness_dir)
     model = setup.model_record(harness_dir)
     cost = setup.cost_record(harness_dir)
@@ -5901,10 +6909,12 @@ def do_routing(args, record=None, attempt=0):
             campaign.env(extra=setup.launch_env("routing"))),
         "started_at": step["started_at"], "ended_at": step["ended_at"],
         "wall_seconds": round(time.time() - started, 3), "exit": step["exit"],
-        "timeout_verdict": "timed_out" if step.get("timed_out") else "within limit",
+        "timeout_verdict": timeout_verdict(step),
         "catalog": catalog, "profile_breach": breach,
         "permission_denials": setup.permission_denials(harness_dir),
         "observed_target": observed, "setup": setup.name, "harness": setup.harness,
+        # E11-7 item 5: what guarded the manual-only station for this launch, or why none did
+        "manual_only_guard": guard,
         "setup_home": setup.home("routing"),
         "status": status,
         "condition": "routing",
@@ -6062,13 +7072,21 @@ def required_routing_names(setup):
     return sorted(set(wanted))
 
 
-def _profile_breach(setup, harness_dir, catalog):
+def _profile_breach(setup, harness_dir, catalog, guard=None):
     """A trial whose catalog holds a blocked name, or misses a required one, stops the lane."""
     names, how = catalog_names(setup, catalog, harness_dir)
     present = sorted(n for n in BLOCKED_PLUGINS if n in names)
     required = required_routing_names(setup)
+    # E11-7 item 5: when the guard held the manual-only station closed for THIS launch, its
+    # absence from the catalog is the guard working, not an incomplete profile. Measured
+    # live on 2026-09-17: the first guarded Codex launch raised `incomplete profile` over
+    # exactly this.
+    guarded = bool(guard and any(row.get("applied") for row in (guard.get("stations") or [])))
+    if guarded:
+        required = [n for n in required if n != MANUAL_ONLY_SKILL]
     missing = sorted(n for n in required if n not in names)
     return {"breached": bool(present), "blocked_present": present,
+            "manual_only_station_held_closed_for_this_launch": guarded,
             "blocked_checked": list(BLOCKED_PLUGINS),
             "catalog_parsed_as": how,
             "catalog_missing": not names,
@@ -6095,19 +7113,8 @@ def _codex_reads(harness_dir):
             "<skills_instructions" in blob or "skills_instructions" in blob)
         if is_catalog_message:
             continue
-        command = item.get("command") or payload.get("command")
-        if isinstance(command, list):
-            command = " ".join(str(x) for x in command)
-        arguments = payload.get("arguments") or item.get("arguments")
-        if not isinstance(command, str) and isinstance(arguments, str):
-            try:
-                parsed = json.loads(arguments)
-                got = parsed.get("command")
-                if got is None:
-                    got = parsed.get("cmd")
-                command = " ".join(str(x) for x in got) if isinstance(got, list) else got
-            except (ValueError, AttributeError):
-                command = None
+        # E11-7 item 1: every route, the custom `exec` one included.
+        command = codex_command_of(item) or codex_command_of(payload)
         found = None
         if isinstance(command, str):
             found = re.search(r"([A-Za-z0-9._-]+)/SKILL\.md", command)
@@ -6119,7 +7126,7 @@ def _codex_reads(harness_dir):
                               "command": command[:240], "status": status, "why": why,
                               "call_id": payload.get("call_id") or item.get("call_id")})
                 continue
-        matched = re.search(r"<skill[^>]*name=\"([a-z0-9-]+)\"", blob)
+        matched = CODEX_SKILL_TAG_RE.search(blob)
         if matched:
             injected.append({"line": index, "skill": matched.group(1)})
             continue
@@ -6143,18 +7150,38 @@ def observed_target(setup, harness_dir):
     The runner never asks the model what it chose."""
     harness = setup.harness
     if harness == "claude-code":
-        for index, record in enumerate(jsonl_lines(os.path.join(harness_dir, "trace.jsonl")), 1):
-            if record.get("type") == "assistant":
-                for block in message_content(record):
-                    if isinstance(block, dict) and block.get("type") == "tool_use" \
-                            and block.get("name") == "Skill":
-                        name = (block.get("input") or {}).get("skill") or ""
-                        return {"target": name.split(":")[0] or "none", "line": index,
-                                "id": block.get("id"),
-                                "candidates": [],
-                                "how": "the Skill tool call in the session's own trace"}
-        return {"target": "none", "line": None, "candidates": [],
-                "how": "no Skill tool call in the session's own trace"}
+        # E11-7 item 1: the harness has TWO delivery routes and the reader must read both.
+        # A slash request delivers the body with no Skill tool call (profile sections 8 and
+        # 10), so a reader that only looks for a Skill call reports `none` against a real
+        # 23,665-character delivery and the trial scores as a miss.
+        deliveries = setup.deliveries(harness_dir)
+        events = []
+        for call in deliveries["skill_tool_calls"]:
+            events.append({"line": call["line"], "source": call["source"],
+                           "skill": (call.get("skill") or "").split(":")[0] or None,
+                           "how": "the Skill tool call in the session's own trace",
+                           "id": call.get("id")})
+        for row in deliveries["delivered_body_records"]:
+            if not row["non_empty"] or row.get("after_a_skill_call") or not row.get("skill"):
+                continue
+            events.append({"line": row["line"], "source": row["source"],
+                           "skill": row["skill"],
+                           "how": "the delivered body record with no Skill tool call (the "
+                                  "slash route, profile sections 8 and 10)",
+                           "id": row.get("uuid")})
+        for row in deliveries["attributions"]:
+            events.append({"line": row["line"], "source": row["source"], "skill": row["skill"],
+                           "how": "the harness's own attributionSkill on the assistant turn",
+                           "id": None})
+        events.sort(key=lambda e: (e["line"], 0 if "Skill tool call" in e["how"] else 1))
+        named = [e for e in events if e["skill"]]
+        if named:
+            first = named[0]
+            return {"target": first["skill"] or "none", "line": first["line"],
+                    "id": first.get("id"), "candidates": events[:12], "how": first["how"]}
+        return {"target": "none", "line": None, "candidates": events[:12],
+                "how": "no Skill tool call, no delivered body record and no skill "
+                       "attribution in the session's own records (E11-7 item 1)"}
     if harness == "codex":
         # E10-33 as E10-46 corrects it: the observed target is the skill whose body the model
         # FOLLOWED — the last SKILL.md read before the first non-read action, or the injected
@@ -6192,8 +7219,9 @@ def observed_target(setup, harness_dir):
                         "rollout (the developer catalog message is not a selection, E10-46)")}
     if harness == "opencode":
         calls = setup.activation(harness_dir)["marker"]["skill_tool_calls"]
+        # E11-7 item 1: the delivered block, not merely non-empty output.
         delivered = [c for c in calls if c.get("status") == "completed"
-                     and (c.get("output_chars") or 0) > 0]
+                     and c.get("delivered_block")]
         if delivered:
             name = (delivered[0].get("input") or {}).get("name")
             return {"target": name or "none", "line": None,
@@ -6203,8 +7231,12 @@ def observed_target(setup, harness_dir):
                            "a delivered body (E10-46)"}
         return {"target": "none", "line": None,
                 "candidates": [{"skill": (c.get("input") or {}).get("name"),
-                                "status": c.get("status")} for c in calls],
-                "how": "no completed skill tool call with a delivered body in the session store"}
+                                "status": c.get("status"),
+                                "delivered_block": c.get("delivered_block"),
+                                "output_chars": c.get("output_chars")} for c in calls],
+                "how": "no completed skill tool call whose output carries the delivered "
+                       "<skill_content> block, in the session store or the trace "
+                       "(E11-7 item 1)"}
     return {"target": "none", "line": None, "candidates": [], "how": "unknown harness"}
 
 
@@ -6235,33 +7267,49 @@ def do_routing_score(args):
                 continue
             command = read_json(path)
             entry_id = command["entry"]
-            observed = (command.get("observed_target") or {}).get("target")
+            cached = (command.get("observed_target") or {}).get("target")
+            # E11-7 item 1: the target is RECOMPUTED from the harness's own captures, never
+            # reused from `command.json.observed_target`, because that cached value was
+            # produced by the witness the repair replaces. The original stays beside it.
+            recomputed, event, why = _recomputed_target(campaign, plan, command, record)
+            observed = recomputed if recomputed is not None else cached
+            # a launch that never reached the provider is not a completed miss
+            provider_failure = _provider_failure(command, record)
+            base = {
+                "attempt": attempt,
+                "repetition": int(re.search(r"-r(\d+)$", command["trial"]).group(1)),
+                "trial": command["trial"],
+                "observed_target": observed,
+                "observed_target_as_recorded": cached,
+                "observed_target_recomputed": recomputed,
+                "recomputed_agrees_with_the_record": (None if recomputed is None
+                                                      else recomputed == cached),
+                "delivery_event": event,
+                "how": why,
+                "status": command.get("status"),
+                "provider_failure": provider_failure,
+                "completed_session": command.get("status") == "complete"
+                and not provider_failure,
+                "record": record,
+            }
             if entry_id == MANUAL_ONLY_ENTRY:
-                row = {"id": entry_id, "set": "manual-only", "attempt": attempt,
-                       "repetition": int(re.search(r"-r(\d+)$", command["trial"]).group(1)),
-                       "observed_target": observed,
-                       "activated_manual_only_probe": observed == "manual-only-probe",
-                       "activated": observed == "recheck-v2",
-                       "expected": "no activation of manual-only-probe on a request in words",
-                       "status": command.get("status"),
-                       "record": record}
+                row = dict(base, id=entry_id, **{
+                    "set": "manual-only",
+                    "activated_manual_only_probe": observed == "manual-only-probe",
+                    "activated": observed == "recheck-v2",
+                    # E11-7 item 5
+                    "manual_only_guard": command.get("manual_only_guard"),
+                    "expected": "no activation of manual-only-probe on a request in words"})
             else:
                 expected, which, competitors = expectation_of(entry_id)
-                row = {
-                    "id": entry_id,
+                row = dict(base, id=entry_id, **{
                     "set": which,
-                    "attempt": attempt,
-                    "repetition": int(re.search(r"-r(\d+)$", command["trial"]).group(1)),
-                    "observed_target": observed,
                     "activated": observed == "recheck-v2",
                     "expected_activate": bool(expected.get("activate")),
                     "expected_target": expected.get("target"),
                     "matches_expected": _matches_expected(expected, observed),
                     "blocked_station_leak": observed in BLOCKED_PLUGINS,
-                    "competitors": competitors,
-                    "status": command.get("status"),
-                    "record": record,
-                }
+                    "competitors": competitors})
             by_setup.setdefault(command["setup"], []).append(row)
     written = []
     for setup_name, rows in sorted(by_setup.items()):
@@ -6275,11 +7323,36 @@ def do_routing_score(args):
             "rates": _rates(scored),
             # E10-53(4): its own row, outside both sets; neither denominator changes.
             "manual_only_rows": manual,
+            # E11-7 item 5: every manual-only attempt is listed, the guard that was applied
+            # is named, and the setup's standing against A6b's automatic-selection
+            # requirement is stated rather than left to be inferred from one row.
+            "manual_only": {
+                "attempts": manual,
+                "guard": (manual[0].get("manual_only_guard") if manual else None),
+                "selected_the_station": [r for r in manual
+                                         if r.get("activated_manual_only_probe")],
+                "qualified_for_the_catalog_requirement": (
+                    (not any(r.get("activated_manual_only_probe") for r in manual))
+                    if manual else None),
+                "why": ("no manual-only attempt ran in this campaign" if not manual else
+                        ("the station failed automatic selection under the guard this "
+                         "harness supplies (A6b)"
+                         if not any(r.get("activated_manual_only_probe") for r in manual) else
+                         "the station was selected from a request in words, so this setup is "
+                         "UNQUALIFIED for A6b's automatic-selection requirement; the guard "
+                         "recorded beside each attempt is what was applied")),
+            },
             "manual_only_row": manual[0] if manual else {
                 "ran": False,
                 "reason": "no dedicated manual-only request ran in this campaign",
                 "expected": "no activation of manual-only-probe on a request in words"},
             "blocked_station_leaks": [r for r in scored if r.get("blocked_station_leak")],
+            # E11-7 item 1: a launch the provider refused is not a model's miss.
+            "provider_failures": [r for r in rows if r.get("provider_failure")],
+            "rates_over_completed_sessions_only": _rates(
+                [r for r in scored if r.get("completed_session")]),
+            "recomputed_differs_from_the_record": [
+                r for r in rows if r.get("recomputed_agrees_with_the_record") is False],
             "note": "R27 passes for a harness when the held-out activation and false-trigger "
                     "rates are both recorded; the threshold is the plan's, not this file's "
                     "(trigger-set/README.md). The manual-only row is outside both sets "
@@ -6306,6 +7379,58 @@ def do_routing_score(args):
         written.append({"setup": setup_name, "path": path, "rows": len(scored),
                         "manual_only_rows": len(manual), "rates": document["rates"]})
     return {"campaign": campaign.root, "written": written}
+
+
+def _recomputed_target(campaign, plan, command, record):
+    """The target read again from this attempt's own harness captures (E11-7 item 1).
+
+    Returns `(target or None, the delivery/result event that names it, how it was read)`.
+    """
+    harness_dir = os.path.join(record, "harness")
+    if not os.path.isdir(harness_dir):
+        return None, None, "no harness capture in this attempt's record"
+    try:
+        setup = setup_for(campaign, plan, command["setup"])
+    except (Usage, Missing, Failure) as exc:
+        return None, None, "the plan has no setup %r (%s)" % (command.get("setup"), exc)
+    try:
+        seen = observed_target(setup, harness_dir)
+    except (Missing, Failure, ValueError, KeyError) as exc:
+        return None, None, "the captures would not parse: %s" % exc
+    event = {"line": seen.get("line"), "id": seen.get("id"),
+             "candidates": (seen.get("candidates") or [])[:6]}
+    return seen.get("target"), event, seen.get("how")
+
+
+PROVIDER_FAILURE_MARKERS = ("HTTP 402", "\"status\": 402", "in_flight_budget_exhausted",
+                            "insufficient_quota", "credit")
+
+
+def _provider_failure(command, record):
+    """Did this attempt fail before the model ever answered (E11-7 item 1)?
+
+    The E10 outage produced 135 launches the provider refused in about 2.5 seconds each
+    (E10-73). Counting those as non-activations puts a provider's bill in a model's
+    activation rate; they are kept, named, and scored separately.
+    """
+    if command.get("status") == "launch_failed":
+        return {"why": "the launch failed", "status": command.get("status")}
+    for capture in capture_dirs(record):
+        for shape in ("claude-code", "codex", "opencode-session", "opencode-trace"):
+            for path in capture_files(capture, shape):
+                try:
+                    size = os.path.getsize(path)
+                except OSError:
+                    continue
+                if size > 200000:
+                    continue
+                text = read_text(path, "") or ""
+                for marker in PROVIDER_FAILURE_MARKERS[:3]:
+                    if marker in text:
+                        return {"why": "the provider refused the request",
+                                "marker": marker,
+                                "capture": os.path.relpath(path, record)}
+    return None
 
 
 def _matches_expected(expected, observed):
@@ -6372,16 +7497,28 @@ def state_of_checkpoint(document, log_text=None):
     items = ((document.get("scope") or {}).get("items")
              or document.get("items") or document.get("item_states") or [])
     rows = []
+    # E11-7 item 1: the checkpoint's item shape is `{"state", "retries", "result"}` (contract
+    # section 11); the disposition lives inside `result`, never at the top. The old reader
+    # took `value.get("disposition")`, so every comparison of a done item at the cut with the
+    # same item after the resume compared `null` with `null` and held whatever happened.
+    # The COMPLETE result object is kept and compared.
+    def row_of(index, value):
+        result = value.get("result") if isinstance(value.get("result"), dict) else None
+        return {"index": index, "state": value.get("state"),
+                "retries": value.get("retries"),
+                "disposition": (result or {}).get("disposition",
+                                                  value.get("disposition")),
+                "result": result,
+                "result_sha256": sha256_hex(canonical_json(result)) if result else None}
+
     if isinstance(items, dict):
         for key, value in sorted(items.items()):
             if isinstance(value, dict):
-                rows.append({"index": key, "state": value.get("state"),
-                             "disposition": value.get("disposition")})
+                rows.append(row_of(key, value))
     elif isinstance(items, list):
         for index, value in enumerate(items):
             if isinstance(value, dict):
-                rows.append({"index": value.get("index", index), "state": value.get("state"),
-                             "disposition": value.get("disposition")})
+                rows.append(row_of(value.get("index", index), value))
     states = [r["state"] for r in rows]
     return {
         "phase": document.get("phase"),
@@ -6390,7 +7527,13 @@ def state_of_checkpoint(document, log_text=None):
         "item_rows": rows,
         "done": states.count("done"),
         "pending": states.count("pending"),
-        "continuations": document.get("continuations") or document.get("continuation_count"),
+        # E11-7 item 4: a ZERO continuation count is kept as 0. `a or b` turned the real
+        # measurement 0 into the fallback and then into `null`, and a Claude Code compaction
+        # trial that resumed phase commands without `resume` — count 0 — read as "no count
+        # recorded" rather than as the failure it is.
+        "continuations": (document["continuations"]
+                          if isinstance(document.get("continuations"), int)
+                          else document.get("continuation_count")),
         # the core writes this as a top-level `start_identity`; `source_identity` is the
         # RESULT's name for the same thing (measured 2026-09-15 on a retained
         # `at-cut-checkpoint.json`).
@@ -6440,7 +7583,62 @@ def cut_verdict(observed, retained_state):
     return True, None
 
 
-def _freeze_group(child, timeout=5.0):
+def launched_child_groups(out_dir, child):
+    """Every process group the launch actually created (E11-7 item 4).
+
+    `setups/opencode/launch.sh` turns job control on and backgrounds the harness, so the
+    `opencode` process is the leader of ITS OWN process group, a different group from the
+    `sh` the runner started. A cut that signalled only the runner's own child froze the
+    shell and left the harness running: both OpenCode hand-offs of the E10 campaign went on
+    adjudicating and recording after a valid-looking cut (Astra's E11 read, section 2).
+
+    The launcher writes the harness's pid to `<out_dir>/child.pid`, which is exactly what
+    the cut needs. Every distinct group is returned, the launcher's own first.
+    """
+    groups, rows = [], []
+    try:
+        own = os.getpgid(child.pid)
+        groups.append(own)
+        rows.append({"pid": child.pid, "pgid": own, "what": "the launcher the runner started"})
+    except OSError as exc:
+        rows.append({"pid": child.pid, "pgid": None, "error": str(exc),
+                     "what": "the launcher the runner started"})
+    text = (read_text(os.path.join(out_dir, "child.pid"), "") or "").strip()
+    if text.isdigit():
+        pid = int(text)
+        try:
+            pgid = os.getpgid(pid)
+        except OSError as exc:
+            rows.append({"pid": pid, "pgid": None, "error": str(exc),
+                         "what": "the harness's own child, from child.pid"})
+        else:
+            rows.append({"pid": pid, "pgid": pgid,
+                         "what": "the harness's own child, from child.pid",
+                         "same_group_as_the_launcher": pgid in groups})
+            if pgid not in groups:
+                groups.append(pgid)
+    return groups, rows
+
+
+def run_dir_fingerprint(run_dir):
+    """Every file under a run directory with its size and hash (E11-7 item 4).
+
+    Taken at the cut and again immediately before the resume, this proves whether any writer
+    progressed in between.
+    """
+    out = {}
+    for base, _dirs, files in os.walk(run_dir):
+        for name in sorted(files):
+            path = os.path.join(base, name)
+            try:
+                out[os.path.relpath(path, run_dir)] = {
+                    "size": os.path.getsize(path), "sha256": file_sha256(path)}
+            except OSError:
+                continue
+    return out
+
+
+def _freeze_group(child, timeout=5.0, groups=None):
     """SIGSTOP the child's process group and wait until it reports stopped (E10-55).
 
     SIGSTOP is asynchronous: capturing before the freeze has landed would not be capturing
@@ -6453,12 +7651,23 @@ def _freeze_group(child, timeout=5.0):
     row = {"signal": "SIGSTOP", "sent": False, "confirmed": False, "wait_seconds": 0.0,
            "child_ended_before_the_freeze": False,
            "rule": "E10-55: the cut is captured frozen; SIGCONT, SIGTERM and SIGKILL follow "
-                   "the capture (E10-12)"}
-    try:
-        os.killpg(os.getpgid(child.pid), signal.SIGSTOP)
-        row["sent"] = True
-    except OSError as exc:
-        row["error"] = str(exc)
+                   "the capture (E10-12). E11-7 item 4: EVERY group the launch created is "
+                   "frozen, the harness's own included."}
+    # E11-7 item 4: `groups` carries every process group of this launch. The harness's own
+    # group is signalled FIRST, because it is the one that writes.
+    ordered = list(reversed(groups or []))
+    sent, errors = [], []
+    for pgid in ordered:
+        try:
+            os.killpg(pgid, signal.SIGSTOP)
+            sent.append(pgid)
+        except OSError as exc:
+            errors.append({"pgid": pgid, "error": str(exc)})
+    row["groups_signalled"] = sent
+    row["groups_that_refused"] = errors
+    row["sent"] = bool(sent)
+    if not sent:
+        row["error"] = errors[0]["error"] if errors else "no process group to signal"
         return row
     while time.time() - started < timeout:
         try:
@@ -6480,13 +7689,56 @@ def _freeze_group(child, timeout=5.0):
     return row
 
 
-def _thaw_group(pid):
+def _thaw_group(pid, groups=None):
     """SIGCONT, so the SIGTERM that follows the capture can be handled (E10-55)."""
-    try:
-        os.killpg(os.getpgid(pid), signal.SIGCONT)
-        return True
-    except OSError:
-        return False
+    ok = False
+    for pgid in (groups if groups is not None else [None]):
+        try:
+            os.killpg(pgid if pgid is not None else os.getpgid(pid), signal.SIGCONT)
+            ok = True
+        except OSError:
+            continue
+    return ok
+
+
+def _end_groups(groups, timeout=10.0):
+    """SIGTERM then SIGKILL every group of the launch, and PROVE each one is gone.
+
+    E11-7 item 4: "freeze and end the real child group by `child.pid`". Ending is not
+    claimed; it is waited for and reported per group.
+    """
+    rows = []
+    for pgid in reversed(list(groups or [])):
+        row = {"pgid": pgid, "term": False, "kill": False, "gone": False}
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+            row["term"] = True
+        except OSError as exc:
+            row["term_error"] = str(exc)
+        deadline = time.time() + timeout / 2.0
+        while time.time() < deadline:
+            try:
+                os.killpg(pgid, 0)
+            except OSError:
+                row["gone"] = True
+                break
+            time.sleep(0.05)
+        if not row["gone"]:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+                row["kill"] = True
+            except OSError as exc:
+                row["kill_error"] = str(exc)
+            deadline = time.time() + timeout / 2.0
+            while time.time() < deadline:
+                try:
+                    os.killpg(pgid, 0)
+                except OSError:
+                    row["gone"] = True
+                    break
+                time.sleep(0.05)
+        rows.append(row)
+    return rows
 
 
 def do_continuation(args, record=None, attempt=0):
@@ -6531,6 +7783,24 @@ def do_continuation(args, record=None, attempt=0):
     second = os.path.join(record, "harness-second")
     compaction = None
     second_registry = ProcessRegistry(campaign, args.trial, attempt, "continuation:resume")
+    # E11-7 item 4: prove no writer progressed between the retained cut and the resume. The
+    # fingerprint is taken again here, immediately before the resume launch, and compared
+    # with the one taken while the launch was frozen.
+    before_resume = run_dir_fingerprint(run_dir)
+    at_cut = cut.get("run_dir_fingerprint_at_the_cut") or {}
+    moved = sorted(set(
+        [name for name in at_cut if at_cut[name] != before_resume.get(name)]
+        + [name for name in before_resume if name not in at_cut]))
+    cut["no_writer_progressed"] = {
+        "held": not moved,
+        "files_that_moved": moved,
+        "files_at_the_cut": len(at_cut),
+        "files_before_the_resume": len(before_resume),
+        "why": "E11-7 item 4: the run directory is fingerprinted while the launch is frozen "
+               "and again immediately before the resume; any difference is a writer that "
+               "kept going after the cut",
+    }
+    cut["run_dir_fingerprint_before_the_resume"] = before_resume
     if not cut.get("valid"):
         # E10-47: a cut whose RETAINED pair does not show the claimed state is an invalid cut,
         # and the trial is recorded so. The resume still runs, so the record carries what the
@@ -6542,7 +7812,8 @@ def do_continuation(args, record=None, attempt=0):
         step = setup.launch("available", resume_path, workspace, second,
                             plan["timeouts"]["continuation"],
                             fake=getattr(args, "fake_launcher", None),
-                            registry=second_registry)
+                            registry=second_registry,
+                            scratch=trial_scratch(campaign, args.trial, attempt))
     else:
         step, compaction = _compaction_resume(campaign, setup, cut, resume_path, workspace,
                                               second, plan["timeouts"]["continuation"], args,
@@ -6603,7 +7874,12 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     so `--poll-interval` defaults to 0.1 and anything coarser is refused.
     """
     ensure_dir(os.path.dirname(out_dir))
-    env = campaign.env(extra=setup.launch_env("available"))
+    # E11-7 item 2: a continuation launch gets the trial's own scratch too.
+    trial = getattr(args, "trial", None)
+    env = campaign.env(
+        extra=setup.launch_env("available"),
+        scratch=(trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
+                 if trial else None))
     launcher = getattr(args, "fake_launcher", None) or setup.script("launch.sh")
     argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available")
     interval = float(getattr(args, "poll_interval", None) or DEFAULT_POLL_INTERVAL)
@@ -6639,9 +7915,13 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     # E10-55: FREEZE the trial's process group, so the capture below happens while nothing in
     # it can write. E10-47's order is kept — the session is stopped before anything is claimed
     # — and the race that made two of six live cuts invalid is gone.
-    freeze = _freeze_group(child) if child.poll() is None else {
+    # E11-7 item 4: every process group the launch created, the harness's own included.
+    groups, group_rows = launched_child_groups(out_dir, child)
+    freeze = _freeze_group(child, groups=groups) if child.poll() is None else {
         "signal": "SIGSTOP", "sent": False, "confirmed": False,
+        "groups_signalled": [],
         "why_not": "the session had already ended when the cut point was reached"}
+    freeze["groups"] = group_rows
     # ...then capture the exact checkpoint and log pair, and verify it.
     retained = {}
     for name in ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log"):
@@ -6652,10 +7932,15 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
             shutil.copy2(source, destination)
             retained[name] = {"path": destination, "sha256": file_sha256(destination)}
     captured_at = time.time()
+    # E11-7 item 4: the fingerprint of the run directory AT THE CUT, taken while the whole
+    # launch is frozen. The same fingerprint is taken again before the resume; any difference
+    # is a writer that progressed after the cut.
+    fingerprint_at_the_cut = run_dir_fingerprint(run_dir)
     # ...and only now let it go and end it, as E10-12 says.
+    ended_groups = []
     if child.poll() is None:
-        _thaw_group(child.pid)
-        _terminate_group(child.pid)
+        _thaw_group(child.pid, groups=groups)
+        ended_groups = _end_groups(groups)
     exit_status = child.wait()
     if registry is not None:
         registry.ended(child.pid, exit_status)
@@ -6689,6 +7974,12 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
         # E10-55: what the freeze did, and how long the capture was frozen for.
         "freeze": dict(freeze, captured_while_frozen=bool(freeze.get("confirmed")),
                        capture_seconds=round(captured_at - started, 3)),
+        # E11-7 item 4: every group of the launch, ended and proved gone.
+        "process_groups": group_rows,
+        "groups_ended": ended_groups,
+        "every_group_ended": (all(r.get("gone") for r in ended_groups)
+                              if ended_groups else None),
+        "run_dir_fingerprint_at_the_cut": fingerprint_at_the_cut,
         "observed_at_the_poll": observed,
         "retained": {
             "files": retained,
@@ -6800,7 +8091,13 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     setting where one exists; record every attempt with its exact command and output."""
     ensure_dir(out_dir)
     session = cut.get("session")
-    env = campaign.env(extra=setup.launch_env("available"))
+    # E11-7 item 2: the trial's own scratch when this call knows its trial (every campaign
+    # path does); the campaign scratch for a direct call that names none.
+    trial = getattr(args, "trial", None)
+    env = campaign.env(
+        extra=setup.launch_env("available"),
+        scratch=(trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
+                 if trial else None))
     prompt = read_text(resume_path, "") or ""
     attempts = []
     if not session:
@@ -6878,16 +8175,24 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     attempts.append({"argv": step["argv"], "exit": step["exit"],
                      "stdout_tail": (step["stdout"] or "")[-1200:],
                      "stderr_tail": (step["stderr"] or "")[-1200:]})
-    witness = compaction_witness(setup, out_dir)
+    witness = compaction_witness(setup, out_dir, resume_text=prompt)
+    # E11-7 item 4: the verdict tests `witness.ok`, not the dictionary's truthiness. A
+    # compaction event recorded AFTER the resumed work is not a compaction before the
+    # resumed work, and the E10 record said "compaction observed" over exactly that.
+    witnessed = bool(witness and witness.get("ok"))
     return step, {
         "available": COMPACTION[setup.harness]["flag"] is not None,
         "mechanism": COMPACTION[setup.harness],
         "attempts": attempts,
         "witness": witness,
-        "verdict": "compaction observed" if witness else
+        "witness_ok": witnessed,
+        "verdict": "compaction observed" if witnessed else
                    ("compaction unavailable headlessly"
                     if COMPACTION[setup.harness]["flag"] is None else
-                    "the resume ran; no compaction or summary event in the harness's own record"),
+                    ("a compaction event is recorded but not before the resumed work "
+                     "(E11-7 item 4)" if witness else
+                     "the resume ran; no compaction or summary event in the harness's own "
+                     "record")),
     }
 
 
@@ -6955,8 +8260,35 @@ def _first_work_line(harness, records):
     return None
 
 
-def compaction_witness(setup, out_dir):
-    """The native compaction event of the resumed session, before the resumed work (E10-47)."""
+def _resumed_turn_line(records, resume_text):
+    """The line at which the RESUMED turn begins (E11-7 item 4).
+
+    A Codex resume replays the whole rollout, so the file the resumed session leaves behind
+    carries the FIRST session's turns too. The ordering check used to start at line 1 and
+    found the first session's own tool call, so the E10 campaign's Codex compaction record
+    read `ok: false` while the compaction at rollout line 155 really did precede the resumed
+    work at 171 (E10-73 carried item (b); Astra's E11 read, continuation table).
+
+    The resumed turn starts at the record carrying the resume prompt. The run id in that
+    prompt is the marker: it appears in no earlier turn.
+    """
+    marker = None
+    for token in (resume_text or "").split():
+        if token.endswith("-run"):
+            marker = token
+            break
+    if marker:
+        for line, record in reversed(records):
+            if marker in json.dumps(record):
+                return line, "the record carrying the resume prompt's run id"
+    return None, "no resume prompt marker in the resumed session's record"
+
+
+def compaction_witness(setup, out_dir, resume_text=None):
+    """The native compaction event of the resumed session, before the resumed work (E10-47).
+
+    E11-7 item 4: the ordering check starts at the RESUMED TURN, not at line 1.
+    """
     harness = setup.harness
     for name in COMPACTION_RECORDS[harness]:
         path = os.path.join(out_dir, name)
@@ -6970,17 +8302,28 @@ def compaction_witness(setup, out_dir):
             records = list(enumerate(document.get("records") or [], 1))
         else:
             records = list(enumerate(jsonl_lines(path), 1))
-        work_line = _first_work_line(harness, records)
-        for line, record in records:
-            kind = _compaction_event(harness, record)
-            if not kind:
-                continue
-            before_work = work_line is None or line <= work_line
-            return {"file": name, "event": kind, "line": line,
-                    "first_resumed_work_line": work_line,
-                    "before_the_resumed_work": before_work,
-                    "source": "the resumed session's own native record",
-                    "ok": bool(before_work)}
+        resumed_from, how = _resumed_turn_line(records, resume_text)
+        after = [(line, record) for line, record in records
+                 if resumed_from is None or line >= resumed_from]
+        work_line = _first_work_line(harness, after)
+        events = [(line, _compaction_event(harness, record)) for line, record in records]
+        events = [(line, kind) for line, kind in events if kind]
+        if not events:
+            continue
+        # the last compaction event that still precedes the resumed work
+        before = [(line, kind) for line, kind in events
+                  if work_line is None or line <= work_line]
+        line, kind = (before[-1] if before else events[-1])
+        before_work = work_line is None or line <= work_line
+        return {"file": name, "event": kind, "line": line,
+                "resumed_turn_line": resumed_from,
+                "resumed_turn_found_by": how,
+                "first_resumed_work_line": work_line,
+                "before_the_resumed_work": before_work,
+                "every_compaction_event": events[:8],
+                "source": "the resumed session's own native record; the ordering check "
+                          "starts at the resumed turn (E11-7 item 4)",
+                "ok": bool(before_work)}
     return None
 
 
@@ -7296,11 +8639,15 @@ def _campaign_loop(campaign, plan, args):
                                       % (row.get("why") or "no terminal status"),
                                       "left it alone; `rerun` is the operator's call (E10-15)")
                 continue
+            # E11-7 item 7: the clock is read BEFORE the trial and reset AFTER it, so `gap`
+            # is the idle time between trials. The old order reset it before the launch, so
+            # the four "wall-clock gaps" of the E10 campaign were the preceding trials' own
+            # durations — 797.029, 827.948, 777.361 and 870.608 seconds — logged as gaps
+            # (Astra's E11 read, repair item 7).
             gap = time.time() - last
             if gap > 600:
                 campaign.interruption(row["id"], "a wall-clock gap of %.0fs between trials" % gap,
                                       "recorded the gap and continued")
-            last = time.time()
             with results_lock:
                 in_flight[lane] = row
             one = argparse.Namespace(campaign=campaign.root, trial=row["id"], attempt_dir=None,
@@ -7313,6 +8660,8 @@ def _campaign_loop(campaign, plan, args):
                     do_routing(one)
                 elif row["kind"] == "continuation":
                     do_continuation(one)
+                elif row["kind"] == "consumer":
+                    do_consumer(one)
                 else:
                     do_run(one)
                 with results_lock:
@@ -7322,6 +8671,8 @@ def _campaign_loop(campaign, plan, args):
                     failed.append({"id": row["id"], "why": str(exc)})
                 campaign.interruption(row["id"], "the trial raised: %s" % exc,
                                       "kept the record and went on")
+            # E11-7 item 7: the gap clock restarts when the trial ENDS.
+            last = time.time()
             # NOT a `finally`: an UNCAUGHT exception must leave the row in flight, because
             # that is what names the trial in the lane stop (E10-68 defect 3). A `finally`
             # runs while the exception is propagating and cleared it.
@@ -7498,7 +8849,10 @@ def do_report(args):
             kind = "routing"
         elif tid.startswith("cont-"):
             kind = "continuation"
-        activated = line.get("activated")
+        # E11-7 item 7: an ABSENT ledger field is unknown, not false. `bool(None)` put every
+        # trial whose row carried no `activated` into the `activated=False` bucket.
+        activated = line.get("activated", None)
+        activated = None if activated is None else bool(activated)
         cost = line.get("cost")
         wall = line.get("wall")
         for correction in by_attempt.get((tid, attempt), []):
@@ -7506,15 +8860,20 @@ def do_report(args):
                 cost = correction.get("corrected_value")
             elif correction.get("field") == "wall":
                 wall = correction.get("corrected_value")
-        bucket = cells.setdefault((kind, key, condition, bool(activated)), {
+        bucket = cells.setdefault((kind, key, condition, activated), {
             "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "partial": 0, "grades": []})
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
+            "launch_failed": 0, "partial": 0, "grades": []})
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
         bucket["complete"] += 1 if line.get("status") == "complete" else 0
-        bucket["no_result"] += 1 if line.get("status") in ("no_result", "timed_out",
-                                                          "launch_failed") else 0
+        # E11-7 item 7: the no-result column counts `no_result` and NOTHING ELSE. It used to
+        # fold `timed_out` and `launch_failed` into the same number, so a lane's provider
+        # outage read as a lane of sessions that answered nothing.
+        bucket["no_result"] += 1 if line.get("status") == "no_result" else 0
+        bucket["timed_out"] += 1 if line.get("status") == "timed_out" else 0
+        bucket["launch_failed"] += 1 if line.get("status") == "launch_failed" else 0
         if isinstance(cost, (int, float)):
             bucket["cost"] += cost
         if isinstance(wall, (int, float)):
@@ -7556,9 +8915,10 @@ def do_report(args):
         partial_attempts.append(entry)
         rows_seen.append({"id": tid, "attempt": attempt, "status": "partial",
                           "cost": None, "wall": None, "record": record})
-        bucket = cells.setdefault((kind, setup_name, condition, False), {
+        bucket = cells.setdefault((kind, setup_name, condition, None), {
             "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "partial": 0, "grades": []})
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
+            "launch_failed": 0, "partial": 0, "grades": []})
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
@@ -7575,9 +8935,12 @@ def do_report(args):
             "kind": kind, "setup": setup, "condition": condition, "activated": activated,
             "trials": len(set(bucket["trials"])), "attempts": len(bucket["attempts"]),
             "complete": bucket["complete"],
-            "no_result": bucket["no_result"], "partial": bucket["partial"],
+            "no_result": bucket["no_result"], "timed_out": bucket["timed_out"],
+            "launch_failed": bucket["launch_failed"], "partial": bucket["partial"],
             "graded_ok": bucket["graded_ok"],
-            "cost_usd": round(bucket["cost"], 6) if bucket["cost"] else None,
+            # E11-7 item 7: a measured zero cost stays 0.0. `x if x else None` turned every
+            # free attempt into `null`, which reads as "not measured".
+            "cost_usd": round(bucket["cost"], 6),
             "wall_seconds": round(bucket["wall"], 1),
             "records": bucket["records"],
             "attempt_ids": bucket["attempts"],
@@ -7599,12 +8962,34 @@ def do_report(args):
                 "partial_attempts": partial,
                 "partial_attempts_detail": partial_attempts,
                 "graded": len(grades), "table": table,
+                # E11-7 item 7: one trial id can occur in several activation buckets, so the
+                # table's `trials` column is not additive. The campaign's own distinct count
+                # is stated here. Astra's section 8 measured the consequence: the E10 table's
+                # trial counts summed to 356 over 348 distinct ids.
+                "distinct_trials": len({r["id"] for r in rows_seen}),
+                "table_trials_column_sums_to": sum(r["trials"] for r in table),
+                "trial_counts_are_not_additive_across_activation_buckets": (
+                    "one trial id can appear in more than one row; use distinct_trials"),
                 "grade_summary": summary,
                 "corrected_measurements_applied": applied,
                 "corrected_measurements_stale": stale,
                 "totals": {
                     "cost_usd": round(sum(r["cost"] for r in rows_seen
                                           if isinstance(r["cost"], (int, float))), 8),
+                    # E11-7 item 7: a CHARGE is an attempt whose recorded cost is positive.
+                    # E10-73's "222 charged OpenCode runs" does not reproduce from the
+                    # ledger; the charge-bearing attempts are what the bill is made of, and
+                    # the zero-cost and unavailable attempts are counted beside them.
+                    "positive_cost_attempts": sum(
+                        1 for r in rows_seen
+                        if isinstance(r["cost"], (int, float)) and r["cost"] > 0),
+                    "zero_cost_attempts": sum(
+                        1 for r in rows_seen
+                        if isinstance(r["cost"], (int, float)) and r["cost"] == 0),
+                    "cost_unavailable_attempts": sum(
+                        1 for r in rows_seen if not isinstance(r["cost"], (int, float))),
+                    "cost_line": ("the total is over attempts whose recorded cost is "
+                                  "positive; a launched session is not a charge"),
                     "wall_seconds": round(sum(r["wall"] for r in rows_seen
                                               if isinstance(r["wall"], (int, float))), 1),
                     "by_status": {status: sum(1 for r in rows_seen if r["status"] == status)
@@ -7622,14 +9007,21 @@ def do_report(args):
           "`activated` (E10-4). Corrected measurements (E10-48) are applied only where their",
           "hash binding still holds. A journalled attempt with no `command.json` is counted",
           "here with status `partial` (E10-59 (21)).", "",
-          "| kind | setup | condition | activated | trials | attempts | complete | no result | partial | graded ok | cost USD | wall s |",
-          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "E11-7 item 7: the `trials` column counts DISTINCT trial ids IN THAT ROW. One trial",
+          "id can appear in more than one activation bucket, so the column does not add up",
+          "across rows; `distinct_trials` in `table.json` is the campaign's own total. `no",
+          "result` counts `no_result` alone, with `timed out` and `launch failed` beside it;",
+          "`activated` reads `unknown` where the ledger row carried no field; a measured zero",
+          "cost is `0.000000`, never `null`.", "",
+          "| kind | setup | condition | activated | trials | attempts | complete | no result | timed out | launch failed | partial | graded ok | cost USD | wall s |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for row in table:
-        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %s | %s |" % (
-            row["kind"], row["setup"], row["condition"], row["activated"], row["trials"],
-            row["attempts"], row["complete"], row["no_result"], row["partial"],
-            row["graded_ok"],
-            "%.6f" % row["cost_usd"] if row["cost_usd"] else "null", row["wall_seconds"]))
+        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %s | %s |" % (
+            row["kind"], row["setup"], row["condition"],
+            "unknown" if row["activated"] is None else row["activated"], row["trials"],
+            row["attempts"], row["complete"], row["no_result"], row["timed_out"],
+            row["launch_failed"], row["partial"], row["graded_ok"],
+            "%.6f" % row["cost_usd"], row["wall_seconds"]))
     md += ["", "## Records per row", ""]
     for row in table:
         md.append("- %s / %s / %s / activated=%s: attempts %s; records %s; grades %s" % (
@@ -7665,6 +9057,13 @@ def do_report(args):
         "and is never written by `report` (E10-43). Every number below is copied from a named",
         "record (E10-15).", "",
         "## 1. What ran", "", "- planned: %s" % json.dumps(plan.get("counts")),
+        "- distinct trial ids seen: %d (the table's `trials` column is per row and does not "
+        "add up across activation buckets, E11-7 item 7)"
+        % len({r["id"] for r in rows_seen}),
+        "- attempts with a positive recorded cost: %d of %d (a launched session is not a "
+        "charge, E11-7 item 7)"
+        % (sum(1 for r in rows_seen
+               if isinstance(r["cost"], (int, float)) and r["cost"] > 0), len(rows_seen)),
         "- trial lines: %d (`trials.jsonl`)" % len(lines),
         "- attempts journalled: %d (`attempts.jsonl`)" % len(journal),
         "- attempts counted (ledger rows plus journalled partials): %d"
@@ -7992,6 +9391,170 @@ def negative_metric_cases(scratch):
             "all_failed_as_they_must": all(r["it_failed"] for r in rows)}
 
 
+READ_BOUNDARY_SENTINEL = ("E11 read-boundary sentinel: a trial that can read this line read "
+                          "another trial's records.\n")
+
+
+def read_boundary_probe(campaign, plan, setups=None):
+    """E11-7 item 2: can a trial read ANOTHER trial's records, or another condition's install?
+
+    Two trials of the campaign are given a sentinel each, and a child is run in the FIRST
+    trial's own launch environment (`env -i` plus that trial's scratch, exactly what a
+    launcher receives). Three questions are asked and answered by measurement, never by
+    assertion:
+
+    1. can the child read the other trial's sentinel by its absolute path?
+    2. can it DISCOVER that path by listing its own scratch and walking up?
+    3. can it read the other condition's installed home for its own setup?
+
+    A `yes` to any of them means the condition is not separated: the preflight fails, and a
+    campaign that starts anyway records the acceptance. Astra's E11 read measured what an
+    unseparated bench produces: absent sessions reading other trials' input, result, receipt,
+    chat and verifier reports, and one reading another trial's entire run.
+    """
+    names = [spec["name"] for spec in plan["setups"]]
+    if setups:
+        names = [n for n in names if n in setups]
+    rows = []
+    for name in names:
+        mine = trial_id(name, "read-boundary-probe-a", "available", 1)
+        theirs = trial_id(name, "read-boundary-probe-b", "available", 1)
+        my_scratch = trial_scratch(campaign, mine, 0)
+        their_tree = campaign.opaque_tree(theirs, 0)
+        ensure_dir(their_tree)
+        their_sentinel = os.path.join(their_tree, "sentinel.txt")
+        write_text(their_sentinel, READ_BOUNDARY_SENTINEL)
+        setup = setup_for(campaign, plan, name)
+        other_home = setup.home("absent")
+        env = campaign.env(extra=setup.launch_env("available"), scratch=my_scratch,
+                           require_binaries=False)
+        probe = run_cmd(
+            [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home],
+            env=env, cwd=my_scratch, label="read-boundary probe")
+        try:
+            answer = json.loads(probe["stdout"] or "{}")
+        except ValueError:
+            answer = {"error": (probe["stderr"] or "")[-400:]}
+        answer["setup"] = name
+        answer["this_trial_scratch"] = my_scratch
+        answer["the_other_trial_tree"] = their_tree
+        answer["the_other_condition_home"] = other_home
+        answer["separated"] = not (answer.get("read_the_other_trials_sentinel")
+                                   or answer.get("discovered_other_trial_trees")
+                                   or answer.get("read_the_other_conditions_install"))
+        rows.append(answer)
+    failed = [r for r in rows if not r.get("separated")]
+    return {
+        "rows": rows,
+        "separated": not failed,
+        "not_separated": [r["setup"] for r in failed],
+        "measured": "a child in the trial's own launch environment, E11-7 item 2",
+        "why_it_matters": "an absent trial that can read another trial's records is not a "
+                          "controlled absent comparison, and its result is not comparison "
+                          "evidence",
+    }
+
+
+READ_BOUNDARY_SOURCE = r"""
+import json, os, sys
+sentinel, other_home = sys.argv[1], sys.argv[2]
+out = {}
+try:
+    with open(sentinel) as handle:
+        out["read_the_other_trials_sentinel"] = bool(handle.read().strip())
+except Exception as exc:
+    out["read_the_other_trials_sentinel"] = False
+    out["sentinel_error"] = type(exc).__name__
+here = os.environ.get("TMPDIR") or os.getcwd()
+found = []
+walk = here
+for _ in range(3):
+    walk = os.path.dirname(walk.rstrip(os.sep))
+    try:
+        entries = sorted(os.listdir(walk))
+    except Exception:
+        continue
+    for name in entries:
+        path = os.path.join(walk, name)
+        if os.path.isdir(path) and not (here + os.sep).startswith(path + os.sep)                 and path != here:
+            if os.path.isfile(os.path.join(path, "sentinel.txt")):
+                found.append(path)
+out["discovered_other_trial_trees"] = found[:8]
+try:
+    out["read_the_other_conditions_install"] = bool(os.path.isdir(other_home)
+                                                    and os.listdir(other_home))
+except Exception:
+    out["read_the_other_conditions_install"] = False
+json.dump(out, sys.stdout)
+"""
+
+
+def allow_rule_check(campaign, plan, setups=None):
+    """Does each OpenCode home's own allow rule cover THIS campaign's scratch root?
+
+    Measured live on 2026-09-17 by this repair's own hand-off proof: `install.sh` bakes the
+    INSTALLING campaign's `TMPDIR` into `opencode.json` as the `external_directory` allow
+    rule, so a home installed for one campaign auto-rejects every write to another campaign's
+    run directory — "permission requested: external_directory (...); auto-rejecting", and the
+    session ends with no result before it ever reaches a mixed state. The failure is silent
+    in the launcher's own exit status (rc 0), which is why it is checked here.
+    """
+    rows = []
+    for spec in plan["setups"]:
+        if setups and spec["name"] not in setups:
+            continue
+        if spec.get("harness") != "opencode":
+            continue
+        setup = setup_for(campaign, plan, spec["name"])
+        for home in HOMES:
+            path = os.path.join(setup.home(home), "xdg-config", "opencode", "opencode.json")
+            text = read_text(path, None)
+            covered = None if text is None else (campaign.tmp in text)
+            rows.append({"setup": spec["name"], "home": home, "config": path,
+                         "present": text is not None,
+                         "covers_this_campaigns_scratch_root": covered,
+                         "scratch_root": campaign.tmp})
+    missing = [r for r in rows if r["present"] and not r["covers_this_campaigns_scratch_root"]]
+    return {"rows": rows, "ok": not missing,
+            "homes_written_for_another_campaign": missing,
+            "why": "an OpenCode home carries the allow rule of the campaign that installed "
+                   "it; install every home from THIS campaign before a launch (E11-7 item 2, "
+                   "measured 2026-09-17)"}
+
+
+def do_preflight(args):
+    """The read-boundary preflight of E11-7 item 2, run before a campaign starts."""
+    campaign = Campaign(args.campaign)
+    plan = campaign.plan()
+    document = read_boundary_probe(campaign, plan,
+                                   setups=getattr(args, "setup", None))
+    document["allow_rules"] = allow_rule_check(campaign, plan,
+                                               setups=getattr(args, "setup", None))
+    document["campaign"] = campaign.root
+    document["accepted_unseparated"] = bool(getattr(args, "accept_unseparated", False))
+    if not document["allow_rules"]["ok"]:
+        write_json(os.path.join(campaign.records("read-boundary"),
+                                "preflight-%s.json" % now_iso().replace(":", "")), document)
+        raise Failure(
+            "the allow-rule preflight failed: %s carries the allow rule of another campaign, "
+            "so every write to this campaign's run directory is auto-rejected. Run `install` "
+            "for each of them from this campaign first (E11-7 item 2)."
+            % ", ".join("%s/%s" % (r["setup"], r["home"])
+                        for r in document["allow_rules"]["homes_written_for_another_campaign"]))
+    if not document["separated"] and not document["accepted_unseparated"]:
+        write_json(os.path.join(campaign.records("read-boundary"),
+                                "preflight-%s.json" % now_iso().replace(":", "")), document)
+        raise Failure(
+            "the read-boundary preflight failed on %s: a trial can reach another trial's "
+            "records or another condition's install, so this bench does not supply a "
+            "controlled absent comparison (E11-7 item 2). Separate the stores, or start with "
+            "--accept-unseparated and the campaign records that its comparison evidence is "
+            "uncontrolled." % ", ".join(document["not_separated"]))
+    write_json(os.path.join(campaign.records("read-boundary"),
+                            "preflight-%s.json" % now_iso().replace(":", "")), document)
+    return document
+
+
 def sentinel_probe(scratch):
     """E10-40: a sentinel proves what a launched child can and cannot read.
 
@@ -8043,6 +9606,312 @@ def sentinel_probe(scratch):
                     "as such. The key directories are held at mode 000 for the whole launch "
                     "and the grader measures every read of a campaign record outside the "
                     "trial's own opaque tree."}
+
+
+# --------------------------------------------------------------- the consumer test (E11-7 item 6)
+#
+# E11's criterion "all three consume each other's records" was never tested: the comparison
+# demonstrated one shared validator and two schemas, and the cross-harness reads that did
+# happen were contamination, not a controlled consumer test (Astra's E11 read, section 2,
+# "Every harness consumes the others' records: Fail: untested").
+#
+# A consumer trial gives a FRESH session of one setup the records ONE producer wrote, through
+# the declared input route, with no other trial's records in reach, and grades what it
+# recovers: the original scope, each item's identity, the evidence each item references, the
+# card interpretation, and the continuation state where the producer had one.
+
+CONSUMER_ANSWER = "consumer.json"
+CONSUMER_PROMPT_TEMPLATE = (
+    "read the re-inspection records under {producer} and the build doc {build_doc} in "
+    "{workspace}, then write {answer} and print nothing else.\n"
+    "\n"
+    "{answer} is one JSON document:\n"
+    "{{\"items\": [{{\"location\": \"<file:line>\", \"claim\": \"<the claim>\", \"disposition\": "
+    "\"fixed | not_fixed\", \"reason\": \"<the reason or null>\", \"evidence\": [\"<one detail "
+    "the record gives for it>\"]}}],\n"
+    " \"cards\": [{{\"slice\": \"<name>\", \"before\": \"<value>\", \"after\": \"<value>\"}}],\n"
+    " \"continuation\": {{\"continuations\": <the count the records carry, or null>}}}}\n"
+    "\n"
+    "Take every value from those records. Add nothing they do not carry.\n"
+)
+
+
+def consumer_trial_id(producer, consumer, rep=1):
+    return "consumer-%s-to-%s-r%d" % (producer, consumer, rep)
+
+
+def parse_consumer_id(plan, tid):
+    match = re.match(r"^consumer-(?P<rest>.+)-r(?P<rep>\d+)$", tid)
+    if not match:
+        raise Usage("%r is not a consumer trial id (consumer-<producer>-to-<consumer>-r<n>)"
+                    % tid)
+    rest = match.group("rest")
+    names = sorted((s["name"] for s in plan["setups"]), key=len, reverse=True)
+    for producer in names:
+        head = producer + "-to-"
+        if rest.startswith(head):
+            consumer = rest[len(head):]
+            if consumer in names:
+                return {"trial": tid, "producer": producer, "consumer": consumer,
+                        "rep": int(match.group("rep"))}
+    raise Usage("%r names no producer/consumer pair in the plan (%s)" % (tid, ", ".join(names)))
+
+
+def consumer_order(plan):
+    """Every ordered pair of distinct setups, one trial each, by the consumer's lane."""
+    names = [spec["name"] for spec in plan["setups"]]
+    lanes = {}
+    for consumer in names:
+        for producer in names:
+            if producer == consumer:
+                continue
+            lanes.setdefault(consumer, []).append(
+                consumer_trial_id(producer, consumer, 1))
+    return {lane: rows for lane, rows in sorted(lanes.items())}
+
+
+def producer_record_for(campaign, plan, producer):
+    """The producer's own completed comparison or continuation record, and why it was chosen."""
+    best = None
+    for tid, attempt, record in graded_attempts(campaign):
+        command_path = os.path.join(record, "command.json")
+        if not os.path.isfile(command_path):
+            continue
+        command = read_json(command_path)
+        if command.get("setup") != producer or command.get("condition") != "available":
+            continue
+        if not os.path.isfile(os.path.join(record, "result.json")):
+            continue
+        rank = (0 if (command.get("kind") or "").startswith("continuation") else 1, tid, attempt)
+        if best is None or rank < best[0]:
+            best = (rank, tid, attempt, record, command)
+    if best is None:
+        raise Missing("no completed available-condition record of %s to consume; run the "
+                      "producer's own trial first" % producer)
+    _rank, tid, attempt, record, command = best
+    return {"trial": tid, "attempt": attempt, "record": record, "command": command,
+            "why": "the producer's own completed available-condition record, continuation "
+                   "trials first (they carry a continuation state to recover)"}
+
+
+CONSUMER_COPIED = ("result.json", "reply.md", "chat.md")
+CONSUMER_RUN_COPIED = ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log")
+
+
+def stage_consumer_pair(campaign, producer_row, pair_dir):
+    """The producer's bound evidence, copied into the pair directory, and nothing else.
+
+    E11-7 item 6: "with unrelated records unavailable". Only the named files of ONE producer
+    are copied, into a directory that holds nothing else, and the copy is listed so the record
+    says exactly what the consumer could reach.
+    """
+    if os.path.exists(pair_dir):
+        raise Usage("%s already exists: a consumer pair directory is never reused" % pair_dir)
+    producer_dir = os.path.join(pair_dir, "producer")
+    ensure_dir(producer_dir)
+    copied = []
+    record = producer_row["record"]
+    for name in CONSUMER_COPIED:
+        source = os.path.join(record, name)
+        if os.path.isfile(source):
+            shutil.copy2(source, os.path.join(producer_dir, name))
+            copied.append(name)
+    run_source = os.path.join(record, "run")
+    if os.path.isdir(run_source):
+        ensure_dir(os.path.join(producer_dir, "run"))
+        for name in CONSUMER_RUN_COPIED:
+            source = os.path.join(run_source, name)
+            if os.path.isfile(source):
+                shutil.copy2(source, os.path.join(producer_dir, "run", name))
+                copied.append("run/%s" % name)
+    # the workspace as the producer left it: its records are what the consumer reads
+    workspace = os.path.join(pair_dir, "workspace")
+    source_workspace = producer_row["command"].get("workspace")
+    fixture_copy = os.path.join(record, "fixture")
+    if os.path.isdir(fixture_copy):
+        for base, _dirs, files in os.walk(fixture_copy):
+            if os.path.basename(base) == "workspace" and files:
+                source_workspace = base
+                break
+    if source_workspace and os.path.isdir(source_workspace):
+        shutil.copytree(source_workspace, workspace)
+    else:
+        raise Missing("the producer %s left no readable workspace to copy"
+                      % producer_row["trial"])
+    return {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
+            "copied": copied,
+            "unrelated_records_present": [
+                name for name in sorted(os.listdir(producer_dir))
+                if name not in CONSUMER_COPIED and name != "run"],
+            "from": producer_row["record"], "producer_trial": producer_row["trial"]}
+
+
+def _consumer_expected(producer_row):
+    """What the producer's own records say, for the consumer's answer to be graded against."""
+    result = read_json(os.path.join(producer_row["record"], "result.json"))
+    items = []
+    for item in result.get("items") or []:
+        location = item.get("location") or {}
+        details = []
+        for entry in ((item.get("verification") or {}).get("evidence") or []):
+            if isinstance(entry, dict) and entry.get("detail"):
+                details.append(entry["detail"])
+        items.append({"location": "%s:%s" % (location.get("file"), location.get("line")),
+                      "claim": item.get("claim"),
+                      "disposition": item.get("disposition"),
+                      "reason": item.get("reason"),
+                      "evidence": details})
+    cards = [{"slice": c.get("slice"), "before": c.get("before"), "after": c.get("after")}
+             for c in (result.get("cards") or [])]
+    state = checkpoint_state(os.path.join(producer_row["record"], "run"))
+    return {"items": items, "cards": cards,
+            "continuations": (state or {}).get("continuations"),
+            "is_a_continuation": (producer_row["command"].get("kind")
+                                  or "").startswith("continuation")}
+
+
+def consumer_grade(pair, producer_row, answer_path):
+    """Grade one consumer trial against the producer's own records (E11-7 item 6)."""
+    expected = _consumer_expected(producer_row)
+    grade = {"producer_trial": producer_row["trial"], "answer": answer_path,
+             "expected_item_count": len(expected["items"])}
+    if not os.path.isfile(answer_path):
+        grade.update({"ok": False, "why": ["the consumer wrote no %s" % CONSUMER_ANSWER],
+                      "checks": {"answer_present": False}})
+        return grade
+    try:
+        answer = read_json(answer_path)
+    except (Missing, Failure) as exc:
+        grade.update({"ok": False, "why": ["the consumer's answer is not JSON: %s" % exc],
+                      "checks": {"answer_present": False}})
+        return grade
+    got_items = answer.get("items") if isinstance(answer.get("items"), list) else []
+    by_location = {}
+    for row in got_items:
+        if isinstance(row, dict) and row.get("location"):
+            by_location[str(row["location"])] = row
+    scope_ok = sorted(by_location) == sorted(i["location"] for i in expected["items"])
+    identity_rows, evidence_rows = [], []
+    for item in expected["items"]:
+        got = by_location.get(item["location"]) or {}
+        identity_rows.append({
+            "location": item["location"],
+            "claim_recovered": (str(got.get("claim") or "").strip()
+                                == str(item["claim"] or "").strip()),
+            "disposition_recovered": got.get("disposition") == item["disposition"],
+            "reason_recovered": (got.get("reason") or None) == (item["reason"] or None)})
+        theirs = got.get("evidence") if isinstance(got.get("evidence"), list) else []
+        hit = any(any(str(detail)[:40] and str(detail)[:40] in str(one)
+                      for one in theirs)
+                  for detail in item["evidence"]) if item["evidence"] else None
+        evidence_rows.append({"location": item["location"], "references_the_record": hit,
+                              "producer_evidence_entries": len(item["evidence"])})
+    got_cards = {str(c.get("slice")): c for c in (answer.get("cards") or [])
+                 if isinstance(c, dict)}
+    card_rows = []
+    for card in expected["cards"]:
+        got = got_cards.get(str(card["slice"])) or {}
+        card_rows.append({"slice": card["slice"],
+                          "before_recovered": got.get("before") == card["before"],
+                          "after_recovered": got.get("after") == card["after"]})
+    continuation = answer.get("continuation") or {}
+    continuation_ok = None
+    if expected["is_a_continuation"]:
+        continuation_ok = continuation.get("continuations") == expected["continuations"]
+    checks = {
+        "answer_present": True,
+        "unrelated_records_unavailable": not pair["unrelated_records_present"],
+        "original_scope": scope_ok,
+        "item_identity": all(r["claim_recovered"] and r["disposition_recovered"]
+                             and r["reason_recovered"] for r in identity_rows)
+        if identity_rows else False,
+        "evidence_references": all(r["references_the_record"] is not False
+                                   for r in evidence_rows) if evidence_rows else False,
+        "card_interpretation": all(r["before_recovered"] and r["after_recovered"]
+                                   for r in card_rows) if card_rows else True,
+    }
+    if continuation_ok is not None:
+        checks["continuation_state"] = continuation_ok
+    grade.update({"checks": checks, "items": identity_rows, "evidence": evidence_rows,
+                  "cards": card_rows, "continuation": {"expected": expected["continuations"],
+                                                       "observed": continuation.get(
+                                                           "continuations"),
+                                                       "graded": continuation_ok},
+                  "ok": all(checks.values()),
+                  "why": sorted(name for name, passed in checks.items() if not passed)})
+    return grade
+
+
+def do_consumer(args, record=None, attempt=0):
+    """One directed producer-to-consumer trial (E11-7 item 6)."""
+    campaign = Campaign(args.campaign)
+    plan = campaign.plan()
+    parts = parse_consumer_id(plan, args.trial)
+    refuse_if_lane_stopped(campaign, parts["consumer"])
+    setup = setup_for(campaign, plan, parts["consumer"])
+    if record is None:
+        record = campaign.trial_dir(args.trial)
+        if os.path.exists(record):
+            raise Usage("%s is a used trial directory (E9-34)" % record)
+        ensure_dir(record)
+        campaign.journal_attempt(args.trial, attempt, record, "consumer")
+    started = time.time()
+    producer_row = producer_record_for(campaign, plan, parts["producer"])
+    tree = campaign.opaque_tree(args.trial, attempt)
+    pair_dir = os.path.join(tree, "pair")
+    pair = stage_consumer_pair(campaign, producer_row, pair_dir)
+    build_doc = (read_json(os.path.join(producer_row["record"], "result.json"))
+                 .get("checklist") or {}).get("build_doc") or "docs/punch-list.md"
+    answer_path = os.path.join(pair_dir, CONSUMER_ANSWER)
+    prompt = CONSUMER_PROMPT_TEMPLATE.format(
+        producer=pair["producer_dir"], workspace=pair["workspace"], build_doc=build_doc,
+        answer=answer_path)
+    prompt_path = os.path.join(record, "prompt.txt")
+    write_text(prompt_path, prompt)
+    harness_dir = os.path.join(record, "harness")
+    registry = ProcessRegistry(campaign, args.trial, attempt, "consumer")
+    fake = getattr(args, "fake_launcher", None)
+    if fake:
+        campaign.mark_synthetic("a consumer launch ran the fake launcher %s" % fake)
+    close_key(campaign, "the %s launch" % args.trial)
+    step = setup.launch("available", prompt_path, pair["workspace"], harness_dir,
+                        plan["timeouts"]["comparison"], fake=fake, registry=registry,
+                        scratch=trial_scratch(campaign, args.trial, attempt))
+    grade = consumer_grade(pair, producer_row, answer_path)
+    reply, reply_source = harness_reply(setup, harness_dir)
+    write_text(os.path.join(record, "reply.md"), reply)
+    model = setup.model_record(harness_dir)
+    cost = setup.cost_record(harness_dir)
+    write_json(os.path.join(record, "model.json"), model)
+    write_json(os.path.join(record, "cost.json"), cost)
+    if os.path.isfile(answer_path):
+        shutil.copy2(answer_path, os.path.join(record, CONSUMER_ANSWER))
+    status = outcome_status(step, os.path.isfile(answer_path))
+    command = {
+        "trial": args.trial, "attempt": attempt, "kind": "consumer",
+        "setup": setup.name, "harness": setup.harness, "condition": "available",
+        "producer": parts["producer"], "consumer": parts["consumer"],
+        "producer_record": producer_row["record"], "producer_trial": producer_row["trial"],
+        "producer_chosen_because": producer_row["why"],
+        "pair": pair, "prompt": prompt_path, "workspace": pair["workspace"],
+        "opaque_tree": tree, "run_dir": None,
+        "argv": step["argv"], "exit": step["exit"], "status": status,
+        "wall_seconds": round(time.time() - started, 3),
+        "timeout_verdict": timeout_verdict(step),
+        "reply_source": reply_source,
+        "staged_commit": campaign.staged()["commit"],
+        "consumer_grade": grade,
+    }
+    write_json(os.path.join(record, "command.json"), command)
+    write_json(os.path.join(record, "consumer-grade.json"), grade)
+    campaign.append_jsonl(campaign.trials_jsonl, {
+        "id": args.trial, "attempt": attempt, "kind": "consumer", "status": status,
+        "exit": step["exit"], "wall": command["wall_seconds"],
+        "cost": cost.get("total_cost_usd"), "model": model.get("id"),
+        "graded_ok": grade.get("ok"), "record": record})
+    campaign.note("consumer %s -> ok=%s" % (args.trial, grade.get("ok")))
+    return {"trial": args.trial, "attempt": attempt, "record": record, "status": status,
+            "exit": step["exit"], "consumer_grade": grade, "pair": pair}
 
 
 # --------------------------------------------------------------------------- key-state, measure
@@ -8197,6 +10066,29 @@ def build_parser():
     one.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL)
     one.set_defaults(func=do_rerun, plugins=None)
 
+    con = subs.add_parser("consumer",
+                          help="one directed producer-to-consumer trial: a fresh consumer "
+                               "session reads ONE producer's records and is graded on what "
+                               "it recovers (E11-7 item 6)")
+    campaign_arg(con)
+    con.add_argument("trial", help="consumer-<producer>-to-<consumer>-r<n>")
+    con.add_argument("--attempt", type=int, default=0)
+    con.add_argument("--fake-launcher", default=None,
+                     help="test only: the fake harness's launcher")
+    con.set_defaults(func=do_consumer)
+
+    pre = subs.add_parser("preflight",
+                          help="the read-boundary preflight: can a trial read another "
+                               "trial's records or another condition's install "
+                               "(E11-7 item 2)")
+    campaign_arg(pre)
+    pre.add_argument("--setup", action="append",
+                     help="only these setups (repeatable); default every setup of the plan")
+    pre.add_argument("--accept-unseparated", action="store_true",
+                     help="record the failure and continue; the campaign's comparison "
+                          "evidence is then uncontrolled and says so")
+    pre.set_defaults(func=do_preflight)
+
     one = subs.add_parser("grade", help="validate, match, and the metrics of E10-11")
     campaign_arg(one)
     one.add_argument("trial", nargs="?")
@@ -8209,6 +10101,9 @@ def build_parser():
                      help="grade trials whose recorded staged_commit is not the campaign's "
                           "staged commit, and record the disagreement in grade.json "
                           "(E10-59 (9))")
+    one.add_argument("--revision", default=None,
+                     help="write the derived grade to grade.<revision>.json beside the "
+                          "original, which is never touched (E11-7 item 1)")
     one.set_defaults(func=do_grade)
 
     one = subs.add_parser("routing", help="one routing trial (E10-13)")
@@ -8231,6 +10126,7 @@ def build_parser():
                      help="seconds between checkpoint polls; E10-47 fixes the default and the "
                           "maximum at 0.1 (at least ten times a second)")
     one.add_argument("--fake-launcher")
+    one.add_argument("--attempt", type=int, default=0)
     one.set_defaults(func=do_continuation)
 
     one = subs.add_parser("campaign", help="start, status or stop the whole plan")
@@ -8252,6 +10148,10 @@ def build_parser():
     one = subs.add_parser("scan", help="the credential scan over every record")
     campaign_arg(one)
     one.add_argument("paths", nargs="*", help="extra roots to scan")
+    one.add_argument("--scrub-copy", metavar="DIR", default=None,
+                     help="write a sanitised copy of the scanned roots to DIR, every "
+                          "credential-shaped value replaced by a placeholder; the originals "
+                          "stay byte-identical (E11-7 item 7)")
     one.set_defaults(func=do_scan)
 
     one = subs.add_parser("report", help="table.md, table.json and a report.md skeleton")

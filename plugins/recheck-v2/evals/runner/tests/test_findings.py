@@ -2092,21 +2092,35 @@ class ContinuationInvariantsCutTest(RunnerCase):
     """E10-59 (15): `all_held` requires `cut_valid`, and prior verifier calls are compared by
     set equality."""
 
-    def continuation(self, cut_valid, prior_calls, after_calls, done=True):
-        record = os.path.join(self.scratch, "continuation-%s-%s"
-                             % (cut_valid, len(prior_calls) + len(after_calls)))
+    # E11-7 item 1: the checkpoint's real item shape is `{"state", "retries", "result"}`
+    # (contract section 11) and the identity carries all six fields of section 6. The old
+    # fixture wrote a top-level `disposition` that no core ever writes, which is the shape
+    # the defect this repair removes was measured against.
+    IDENTITY = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same",
+                "untracked": [], "untracked_sha256": "same", "submodules": []}
+
+    def item(self, index, disposition="fixed"):
+        return {"index": index, "state": "done", "retries": 0,
+                "result": {"index": index, "location": {"file": "src/x.py", "line": 1},
+                           "disposition": disposition}}
+
+    def continuation(self, cut_valid, prior_calls, after_calls, done=True, items=None):
+        record = os.path.join(self.scratch, "continuation-%s-%s-%s"
+                              % (cut_valid, len(prior_calls) + len(after_calls),
+                                 "d" if done else "n"))
         runner.ensure_dir(os.path.join(record, "run"))
-        identity = {"commit": "same", "dirty": False, "tracked_diff_sha256": "same"}
-        done_item = {"index": 0, "state": "done", "disposition": "fixed"}
+        identity = dict(self.IDENTITY)
+        stored = items if items is not None else [self.item(0), self.item(1, "not_fixed")]
         runner.write_json(os.path.join(record, "run", "checkpoint.json"), {
             "phase": "completed", "continuations": 1,
             "verifier_calls": [{"call_id": c} for c in after_calls],
-            "scope": {"items": [done_item,
-                                {"index": 1, "state": "done", "disposition": "not_fixed"}]}})
+            "scope": {"items": stored}})
         runner.write_json(os.path.join(record, "result.json"),
                           {"source_identity": {"actual": identity}})
+        at_cut = runner.state_of_checkpoint(
+            {"phase": "verifying", "scope": {"items": [self.item(0)]}})["item_rows"]
         command = {"cut": {"valid": cut_valid, "start_identity": identity,
-                           "retained": {"done_items": [done_item] if done else [],
+                           "retained": {"done_items": at_cut if done else [],
                                         "verifier_calls_for_done_items": list(prior_calls)}}}
         return runner.continuation_invariants(record, command)
 

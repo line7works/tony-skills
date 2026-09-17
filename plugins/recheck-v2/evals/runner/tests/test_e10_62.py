@@ -331,7 +331,9 @@ class EveryLaunchPathCarriesThePairTest(RunnerCase):
     def test_every_setup_launch_call_site_is_one_method(self):
         """So a new launch path cannot miss the pair by writing its own argv."""
         source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
-        self.assertEqual(source.count("setup.launch("), 4)
+        # E11-7 items 5 and 6 add two call sites: the guarded manual-only routing launch and
+        # the consumer trial. Both go through `Setup.launch`, which is what this pins.
+        self.assertEqual(source.count("setup.launch("), 6)
 
     def test_the_cut_s_own_argv_carries_the_pair(self):
         setups = self.setups_of()
