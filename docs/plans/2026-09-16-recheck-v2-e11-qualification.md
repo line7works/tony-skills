@@ -423,3 +423,24 @@ to exactly the held-out request text.
   each against `9368509`), then the control room's gates, commit, derived revision 7, Astra's re-check on
   the two, then the rerun. About an hour. The rerun stays behind its gate; Tony can rule to launch at
   `9368509` instead at any point, carrying the two with the affected subset named. Nothing else changes.
+- **E11-18, the send-back gated, committed and re-derived (2026-09-17 about 11:35 AM).** The builder delivered
+  A2 and B2 as four files on top of `9368509` (report section 14). A2's rule, written into the verifier's
+  module comment: the guard walks back from the phrase across determiners and copulas only
+  (`BLOCK_NEGATION_CARRIERS`, at most four); a negation reached that way negates the phrase; any other word
+  between them means the negation belongs to that word and the block stands. B2: `_artifact_rows` pairs each
+  producer reference with the consumer reference naming the same `artifact_path`, each spent once; an
+  unpaired producer reference leaves `consumer_named` null. The builder re-drove Astra's probes: the
+  "No output because execution was refused" case now downgrades; the reversed two-reference case now
+  recovers; every other probe unchanged; item C unchanged. Gate chain J green end to end
+  (`control-room/verify/gates-J.log`): runner 471 under both interpreters, `check` clean under both, core
+  364 twice, the three adapters, the examples, E7 nine for nine; the runner E11 suite fails on `9368509`
+  (2 failures) and passes after, the core E11 suite fails on the `9368509` core (2 failures) and passes
+  after. Commit `8b6beda` on `feat/recheck-v2-e11-repair`. Derived revision `e11-native-reparse-7` on the
+  real E10 root: 143 grades and four routing files beside the originals, the 150 originals byte-identical
+  (`rescore-real-root-7.log`, `after-originals-7.sha256`); revision 7 equals revision 6 on every grade
+  field except the derived file's own path, no flip against revisions 6 or 3, routing identical to
+  revision 6 (`grade-flips-e11-native-reparse-7.txt`, `routing-rates-e11-native-reparse-7.txt`). Next:
+  the verify copy refreshed at `8b6beda` behind the E11-1 wall, Astra's re-check limited to A2 and B2
+  (`mandate-recheck3.md`, `launch.sh recheck3`), her verdict filed as E11-19, then the rerun on Tony's
+  standing goal line. The 10:34 AM push to Tony offering a launch at `9368509` instead drew no answer; the
+  send-back stood.
