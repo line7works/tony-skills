@@ -5513,6 +5513,93 @@ INTERPRETERS = ("python", "python2", "python3", "uv", "uvx", "pytest", "node", "
                 "make", "npm", "npx", "pnpm", "yarn", "cargo", "poetry", "pipenv", "hatch")
 
 
+# The control room's gate on section 11: `command_word_lists` hands back ONE layer for a
+# whole compound line, so the head rule saw `S=...;`, `cd` or `mkdir` and never reached the
+# `python3 -m widget.export` simple command inside it. Three real E10 verifier runs read as
+# reads. A shell line is a sequence of SIMPLE commands, and the head rule belongs to each.
+SIMPLE_COMMAND_SEPARATORS = (";", ";;", "&&", "||", "|", "|&", "&", "(", ")", "{", "}", "!")
+CLAUSE_HEADS = ("then", "else", "elif", "do")
+CLAUSE_TAILS = ("fi", "done", "esac", "in")
+REDIRECTION = re.compile(r"^\d*(>>|>&|>\||<<<|<<-|<<|<>|<|>|&>>|&>)$")
+
+
+def _lex_shell(text):
+    """The line's tokens with its operators kept separate from its words."""
+    import shlex
+    lex = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    return list(lex)
+
+
+def shell_tokens(text):
+    """`_lex_shell` over a line whose continuations and newlines are settled first.
+
+    A `\\`-newline continuation joins its two halves (the shell's own rule); every other
+    newline separates two commands, which the lexer would otherwise swallow as whitespace.
+    An unbalanced quote (a truncated capture) falls back rather than raising.
+    """
+    text = re.sub(r"\\\r?\n", " ", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ; ")
+    for attempt in (text, text + "'", text + '"'):
+        try:
+            return _lex_shell(attempt)
+        except (ValueError, ImportError):
+            continue
+    return text.split()
+
+
+def _shell_c_operand(argv):
+    """The command text a shell was handed with `-c`, if it was."""
+    if not argv or os.path.basename(argv[0]) not in SHELLS:
+        return None
+    for position in range(1, len(argv)):
+        word = argv[position]
+        if word.startswith("-") and "c" in word:
+            return argv[position + 1] if position + 1 < len(argv) else None
+        if not word.startswith("-"):
+            return None
+    return None
+
+
+def simple_commands(text, depth=0):
+    """Every SIMPLE command in a compound shell line, as its own argv.
+
+    Splits on `;`, `&&`, `||`, `|`, `&`, newlines and `{ } ( )` grouping, drops each
+    command's redirections (and the file-descriptor digit in front of one), and follows a
+    `sh -c '...'` layer into the line it was handed.
+    """
+    commands, argv, tokens, index = [], [], shell_tokens(text), 0
+    while index < len(tokens):
+        word = tokens[index]
+        index += 1
+        if word in SIMPLE_COMMAND_SEPARATORS or word in CLAUSE_HEADS:
+            if argv:
+                commands.append(argv)
+            argv = []
+            continue
+        if word in CLAUSE_TAILS and not argv:
+            continue
+        if REDIRECTION.match(word):
+            index += 1                      # its operand belongs to the redirection
+            continue
+        if (word.isdigit() and index < len(tokens)
+                and REDIRECTION.match(tokens[index])):
+            index += 2                      # `2>&1`: the descriptor, the operator, the target
+            continue
+        argv.append(word)
+    if argv:
+        commands.append(argv)
+    if depth >= 3:
+        return commands
+    followed = []
+    for argv in commands:
+        followed.append(argv)
+        inner = _shell_c_operand(argv)
+        if inner:
+            followed.extend(simple_commands(inner, depth + 1))
+    return followed
+
+
 def _argv_without_assignments(words):
     """The argv with any leading `VAR=value` environment assignments dropped."""
     index = 0
@@ -5531,7 +5618,8 @@ def command_executes(text, target):
     if not text or not target:
         return False, "no command or no target"
     pattern = re.compile(target)
-    for words in command_word_lists(text):
+    reading_heads, other_heads = [], []
+    for words in simple_commands(text):
         argv = _argv_without_assignments(words)
         if not argv:
             continue
@@ -5541,13 +5629,21 @@ def command_executes(text, target):
             return True, "the file itself is the command (%s)" % argv[0][:80]
         if not names_it:
             continue
-        if head in READ_ONLY_TOOLS:
-            # a read of the source, not a run of it — keep looking at the other layers
-            continue
         if head in INTERPRETERS or head.startswith("python"):
             return True, "%s was given %s to run" % (head, names_it[0][:80])
-    return False, ("the command names the target only through a read-only utility"
-                   if pattern.search(text) else "the command does not name the target")
+        # not a run: remember WHICH command named it, so the reason can say so
+        (reading_heads if head in READ_ONLY_TOOLS else other_heads).append(head)
+    named_by = sorted(set(reading_heads + other_heads))
+    if named_by and not other_heads:
+        return False, ("the command names the target only through a read-only utility (%s)"
+                       % ", ".join(named_by))
+    if named_by:
+        return False, ("the target is named by %s; none of them runs it"
+                       % ", ".join(named_by))
+    if pattern.search(text):
+        return False, ("the command names the target only in text no command was given "
+                       "(no simple command of the line names it)")
+    return False, "the command does not name the target"
 
 
 def _scenario_execution(record, result, entry):

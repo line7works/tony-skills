@@ -1286,6 +1286,98 @@ class FixItem1Observation(RunnerCase):
             ran, _how = runner.command_executes(text, r"demo[./]check")
             self.assertFalse(ran, text)
 
+    # The control room's gate on section 11: three real E10 executions read as
+    # `reads_of_the_source_only`. `command_word_lists` hands back ONE layer for a whole
+    # compound line, so the head rule saw `S=...;`, `cd` or `mkdir` and never reached the
+    # `python3 -m widget.export` simple command inside it. Every command below is quoted
+    # from the launch capture of the trial named beside it.
+    E10_R1_LINE_18 = (
+        "S=/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "e219dfd7bb96a644/fixture/ca8c359f89da/run/verifier; "
+        "W=/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "e219dfd7bb96a644/fixture/ca8c359f89da/workspace; "
+        "{ echo \"\\$ PYTHONPATH=src python3 -m widget.export 'Widget, deluxe'\"; "
+        "PYTHONPATH=src python3 -m widget.export 'Widget, deluxe' 2>&1; "
+        "echo \"exit=$?\"; } > \"$S/export-comma.log\" 2>&1; cat \"$S/export-comma.log\"")
+    E10_R2_LINE_18 = (
+        "cd /Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "071f7ea0ee1b2237/fixture/ca8c359f89da/workspace && "
+        "V=/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "071f7ea0ee1b2237/fixture/ca8c359f89da/run/verifier && "
+        "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m widget.export 'Widget, deluxe' "
+        "> \"$V/export-comma.log\" 2>&1; echo \"exit=$?\"; cat \"$V/export-comma.log\"")
+    E10_R2_LINE_23 = (
+        "cd /Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "071f7ea0ee1b2237/fixture/ca8c359f89da/workspace && "
+        "V=/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "071f7ea0ee1b2237/fixture/ca8c359f89da/run/verifier && "
+        "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m widget.export 'PlainWidget' "
+        "> \"$V/export-nocomma.log\" 2>&1; echo \"exit=$?\"; "
+        "cat \"$V/export-nocomma.log\"; echo \"---\"; git status --porcelain; "
+        "echo \"git-clean-exit=$?\"; ls \"$V\"")
+    E10_DEEPSEEK_R2_LINE_17 = (
+        "mkdir -p /Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "25ef5f0cd72d8a02/fixture/ca8c359f89da/run/verifier && "
+        "cd /Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "25ef5f0cd72d8a02/fixture/ca8c359f89da/workspace && "
+        "PYTHONPATH=src python3 -m widget.export 'Widget, deluxe' 2>&1 | tee "
+        "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e10-rerun-2026-09-16/tmp/"
+        "25ef5f0cd72d8a02/fixture/ca8c359f89da/run/verifier/export-comma.log; "
+        "echo \"EXIT=$?\"")
+    CONTROL = ("cd /w && V=/v && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src "
+               "python3 -m widget.export 'x' > \"$V/a.log\" 2>&1; echo \"exit=$?\"; "
+               "cat \"$V/a.log\"")
+
+    def test_an_interpreter_inside_a_compound_command_is_an_execution(self):
+        """The three real E10 shapes plus the control room's one-line control."""
+        for label, text in (("e10-rerun r1 line 18", self.E10_R1_LINE_18),
+                            ("e10-rerun r2 line 18", self.E10_R2_LINE_18),
+                            ("e10-rerun r2 line 23", self.E10_R2_LINE_23),
+                            ("e10-rerun deepseek r2 line 17", self.E10_DEEPSEEK_R2_LINE_17),
+                            ("the control", self.CONTROL)):
+            ran, how = runner.command_executes(text, r"widget[./]export")
+            self.assertTrue(ran, "%s: %s" % (label, how))
+            self.assertIn("python3", how, label)
+            self.assertNotIn("read-only", how, label)
+
+    def test_a_read_in_the_same_line_does_not_cancel_the_execution(self):
+        """Every one of those lines also `cat`s the log; the run still happened."""
+        ran, _how = runner.command_executes(
+            "PYTHONPATH=src python3 -m widget.export 'x' > a.log; cat a.log",
+            r"widget[./]export")
+        self.assertTrue(ran)
+
+    def test_a_compound_line_that_only_reads_names_the_heads_it_saw(self):
+        """(3): the reason says what was observed, and no invented read-only utility."""
+        ran, how = runner.command_executes(
+            "cd /w && cat src/widget/export.py; echo src/widget/export.py",
+            r"widget[./]export")
+        self.assertFalse(ran)
+        self.assertIn("cat", how)
+        self.assertIn("echo", how)
+        ran, how = runner.command_executes("cd /w && cat src/widget/export.py",
+                                           r"widget[./]export")
+        self.assertFalse(ran)
+        self.assertIn("read-only", how)
+        self.assertIn("cat", how)
+
+    def test_a_one_liner_given_the_module_is_the_interpreter_running_it(self):
+        ran, how = runner.command_executes(
+            "PYTHONPATH=src python3 -c 'from widget.export import to_csv; print(to_csv([]))'",
+            r"widget[./]export")
+        self.assertTrue(ran)
+        self.assertIn("python3", how)
+
+    def test_the_simple_commands_of_a_compound_line_are_each_separated(self):
+        heads = [argv[0] for argv in runner.simple_commands(self.CONTROL) if argv]
+        self.assertIn("cd", heads)
+        self.assertIn("echo", heads)
+        self.assertIn("cat", heads)
+        self.assertTrue(any(argv[:2] == ["python3", "-m"]
+                            for argv in
+                            [runner._argv_without_assignments(a)
+                             for a in runner.simple_commands(self.CONTROL)]))
+
 
 class FixItem2Separation(RunnerCase):
     """Item 2(a)-(d): the preflight gate, the exclusion, the report, the listing."""

@@ -13,6 +13,7 @@ import testlib
 testlib.add_scripts_to_path()
 import recheck  # noqa: E402
 from recheck_core import ledger  # noqa: E402
+from recheck_core import verifier  # noqa: E402
 
 
 class CanonicalSlice(unittest.TestCase):
@@ -198,6 +199,179 @@ class ReasonCorrection(unittest.TestCase):
     def test_the_cli_documents_the_correction(self):
         code, _document, err = testlib.recheck(["adjudicate", "--help"])
         self.assertEqual(code, 0, err[-400:])
+
+
+class BlockedThenStaticClearance(unittest.TestCase):
+    """Item 3: a recorded block survives a later static clearance.
+
+    Contract section 5: "An execution the sandbox or environment stopped is
+    `verification_blocked`, never `static`." The E10 campaign's Codex F5 trial retained a
+    first report saying the required execution was refused, the permitted retry supplied a
+    static `fixed`, and the core completed with `fixed` through strict validation: the block
+    was in the run's own history and nothing read it. The fix round added the history control
+    with no test of its own; this is that test.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.scratch = testlib.make_scratch("e11-blocked-static")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.scratch, ignore_errors=True)
+
+    def drive(self, lane, case_id):
+        """A started run of one case: its run directory, checklist and first call id."""
+        case_dir = testlib.build_case(lane, case_id,
+                                      os.path.join(self.scratch, case_id + "-fixture"))
+        path = testlib.prepare_input(case_dir)
+        run_dir = os.path.join(case_dir, "run")
+        started = self.step(["start", path])
+        return run_dir, started
+
+    def step(self, args):
+        code, document, err = testlib.recheck(args, cwd=self.scratch)
+        self.assertIn(code, (0, 10), "%s: %s" % (args[0], err[-900:]))
+        return document
+
+    @staticmethod
+    def where(item):
+        location = item["location"]
+        return "%s:%s" % (location["file"], location["line"])
+
+    def record(self, run_dir, call_id, text, name):
+        path = testlib.write_report(run_dir, text, name)
+        return self.step(["record-call", "--run-dir", run_dir, "--call-id", call_id,
+                          "--status", "ok", "--raw", path, "--model", "test-verifier",
+                          "--kind", "canned"])
+
+    def assert_refused(self, result, blocked_text, how):
+        """The downgrade, its record, and the retained report behind it."""
+        item = result["items"][0]
+        self.assertEqual(item["disposition"], "not_fixed")
+        self.assertEqual(item["reason"], "verification_blocked")
+        adjudication = item["adjudication"]
+        self.assertEqual(adjudication["verifier_said"], "fixed")
+        self.assertEqual(adjudication["driver_action"], "downgraded")
+        refusal = adjudication["static_clearance_refused"]
+        self.assertIn("never static", refusal["why"])
+        reports = refusal["reports_that_recorded_the_block"]
+        self.assertEqual(len(reports), 1)
+        self.assertTrue(reports[0]["call_id"])
+        self.assertEqual(reports[0]["how"], how)
+        # the refusal names the earlier report, and that report is still on disk, unedited
+        self.assertIn(reports[0]["call_id"], adjudication["note"])
+        self.assertIn(reports[0]["how"], adjudication["note"])
+        self.assertIn("section 5", item["verification"]["blocked"])
+        self.assertIsNone(item["verification"].get("missing"))
+        with open(reports[0]["raw_path"], encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), blocked_text)
+
+    def validates(self, run_dir, result_path):
+        code, out, _err = testlib.run_script(
+            "validate-result.py",
+            [result_path, "--input", os.path.join(run_dir, "input.json"),
+             "--run-dir", run_dir], cwd=self.scratch)
+        self.assertEqual(code, 0)
+        document = json.loads(out)
+        self.assertTrue(document["ok"], document)
+        self.assertEqual(document["skipped"], [])
+
+    def test_a_structured_block_downgrades_a_later_static_clearance(self):
+        """The first report's own tail gives the item reason `verification_blocked`.
+
+        Two checklist items, a first report covering only item 0: the core retains it and
+        permits one re-send, which is how a run reaches a second report with the first still
+        in its history.
+        """
+        run_dir, started = self.drive("F3-partial-fix", "F3-02-mixed-two-items")
+        items = started["checklist"]
+        self.assertEqual(len(items), 2)
+        blocked = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "not_fixed",
+             "reason": "verification_blocked", "method": "executed",
+             "blocked": "the sandbox refused the outbound call",
+             "evidence": [{"kind": "command", "artifact": None,
+                           "detail": "attempted the scenario; the sandbox stopped it"}]}])
+        document = self.record(run_dir, started["call_id"], blocked, "supplied-blocked.md")
+        self.assertEqual(document["next"], "verify", document)
+        self.assertNotEqual(document["call_id"], started["call_id"])
+        static = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "fixed",
+             "method": "static", "static_reason": "non_executable_artifact",
+             "evidence": [{"kind": "read", "artifact": None,
+                           "detail": "static source inspection only; no service observation "
+                                     "obtained"}]},
+            {"index": 1, "location": self.where(items[1]), "disposition": "not_fixed",
+             "reason": "reproduces", "method": "executed",
+             "evidence": [{"kind": "command", "artifact": None,
+                           "detail": "ran the scenario command; observed the output"}]}])
+        document = self.record(run_dir, document["call_id"], static, "supplied-static.md")
+        self.assertEqual(document["next"], "adjudicate", document)
+        adjudicated = self.step(["adjudicate", "--run-dir", run_dir, "--item", "0",
+                                 "--action", "confirmed"])
+        self.assertEqual(adjudicated["disposition"], "not_fixed")
+        self.assertEqual(adjudicated["driver_action"], "downgraded")
+        self.step(["adjudicate", "--run-dir", run_dir, "--item", "1", "--action",
+                   "confirmed"])
+        done = self.step(["record", "--run-dir", run_dir])
+        result = testlib.load_json(done["result"])
+        self.assert_refused(result, blocked, "the retained report's own structured tail")
+        self.validates(run_dir, done["result"])
+
+    def test_a_declared_block_downgrades_a_later_static_clearance(self):
+        """A retained report with no tail whose text carries one BLOCK_DECLARATIONS phrase.
+
+        The E10 shape: the report says the execution was refused in prose, the tail is
+        missing, the core retains it and permits the re-send that supplies the static fixed.
+        """
+        run_dir, started = self.drive("F5-blocked-execution", "F5-01-outbound-required")
+        items = started["checklist"]
+        blocked = ("The required execution was refused. No service observation was "
+                   "obtained. The structured report is missing.\n")
+        document = self.record(run_dir, started["call_id"], blocked, "supplied-blocked.md")
+        self.assertEqual(document["next"], "verify", document)
+        static = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "fixed",
+             "method": "static", "static_reason": "non_executable_artifact",
+             "evidence": [{"kind": "read", "artifact": None,
+                           "detail": "static source inspection only; no service observation "
+                                     "obtained"}]}])
+        document = self.record(run_dir, document["call_id"], static, "supplied-static.md")
+        self.step(["adjudicate", "--run-dir", run_dir, "--item", "0", "--action",
+                   "confirmed"])
+        done = self.step(["record", "--run-dir", run_dir])
+        result = testlib.load_json(done["result"])
+        self.assert_refused(result, blocked, "the retained report declares a stopped "
+                                             "execution")
+        self.validates(run_dir, done["result"])
+        # the vocabulary is the closed list quoted from contract section 5 and verifier.md
+        self.assertTrue(any(phrase in blocked.lower()
+                            for phrase in verifier.BLOCK_DECLARATIONS))
+
+    def test_a_static_clearance_with_no_prior_block_stays_fixed(self):
+        """The control: the contract's own static route is untouched."""
+        run_dir, started = self.drive("VXUM-verifier-execution",
+                                      "X2-01-non-executable-artifact")
+        items = started["checklist"]
+        static = testlib.canned_report([
+            {"index": 0, "location": self.where(items[0]), "disposition": "fixed",
+             "method": "static", "static_reason": "non_executable_artifact",
+             "evidence": [{"kind": "read", "artifact": None,
+                           "detail": "Read the prose specification; its two statements now "
+                                     "agree"}]}])
+        self.record(run_dir, started["call_id"], static, "supplied-static.md")
+        self.step(["adjudicate", "--run-dir", run_dir, "--item", "0", "--action",
+                   "confirmed"])
+        done = self.step(["record", "--run-dir", run_dir])
+        result = testlib.load_json(done["result"])
+        item = result["items"][0]
+        self.assertEqual(item["disposition"], "fixed")
+        self.assertEqual(item["verification"]["method"], "static")
+        self.assertEqual(item["adjudication"]["driver_action"], "confirmed")
+        self.assertNotIn("static_clearance_refused", item["adjudication"])
+        self.assertIsNone(item["verification"].get("blocked"))
+        self.validates(run_dir, done["result"])
 
 
 class ResumeRequiredAfterCompaction(unittest.TestCase):
