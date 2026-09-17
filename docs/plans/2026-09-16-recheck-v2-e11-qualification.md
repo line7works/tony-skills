@@ -274,3 +274,31 @@ to exactly the held-out request text.
   defects came from writing a witness against one record shape and never running it against the shapes the
   absent condition and the E10-era cut produce. Astra's verification at high (E11-8) launches on the copy
   behind the E11-1 wall, scrubbed of the 43 cookie values by the repaired scanner.
+- **E11-12, Astra's verification of the repair (delivered 2026-09-17 about 4:05 AM, at high, E11-8; packet
+  `astra-outputs/e11/verify/`).** On the scrubbed copy at `31329cd`: every item PARTLY (1 BLOCKER, 2 BLOCKER,
+  3 MAJOR, 4 BLOCKER, 5 BLOCKER, 6 BLOCKER, 7 MAJOR) and five NEW findings (BLOCKER: a repeated `grade
+  --revision` overwrites the earlier derived file; a provider-failed manual-only launch reads as catalog
+  qualification; a directory listing counts as a completed foreign read. MAJOR: the Codex compaction reader
+  takes the last record mentioning the run as the resumed turn; the consumer grader compares evidence on a
+  40-character prefix). What she confirmed working: the three delivery witnesses, the verifier captures
+  scanned (33 / 11 / 12 / 9 actions on four retained trials where E10 read zero), both former `/`
+  destinations gone, the F6 scenario witness with the second source still required, the derived revisions
+  beside untouched originals (her own hash manifest), the six deterministic controls, canonical slice
+  resolution and `check-input`, the status-record rule, the reason definitions and correction, the resume
+  requirement, the readers scratch instruction, child-group discovery and the stored transaction identity,
+  the six retained full-object done-item comparisons, the guard on this setup's own copies, the consumer
+  command's rejection of a dropped item, the new timeout label, the gap clock, the table columns, the cookie
+  scanner and scrub; the E10-73 attempt accounting reproduced; the five witness questions resolved by entry
+  id (C H-01 is a measured selection under the repaired reader; C H-05 / H-06, Q H-05-r2 and D H-02-r1 are
+  completed non-deliveries). Her suite runs failed on her sandbox's limits as every round; she read the
+  control room's tails. Rerun set confirmed: 348 plus the 12 consumers the repaired planner now mints itself
+  plus 12 probes; requests and repetitions unchanged; "not ready to establish qualification" until the open
+  deterministic checks close, the preflight is required before any launch, every home is installed from the
+  new campaign, and valid continuation and catalog proofs exist. **The fix round (ruling 17's one):** the same
+  builder on the brief `astra-outputs/e11/briefs/e11-repair-fix.md` (eight numbered findings in her order,
+  item 5's other-setup readability carried to Tony as the bench-layout decision, one more live OpenCode
+  hand-off attempt after the control room installs the proof campaign's own home); then her re-check
+  (`launch.sh recheck`); then carry. The control room's reading of item 5 for the rerun, flagged to Tony: run
+  with the guard covering this setup's root and the campaign stage, and let the catalog requirement carry
+  unqualified on any setup where the station stays reachable, which is Astra's own recommendation; a home
+  layout where one setup cannot read another's is a scope change for Tony to rule on, not a fix-round item.
