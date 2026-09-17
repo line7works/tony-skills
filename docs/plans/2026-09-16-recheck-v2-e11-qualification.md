@@ -374,7 +374,7 @@ to exactly the held-out request text.
   what the rerun records, and the rerun costs hours and OpenRouter money to repeat. Until he rules:
   nothing launches, no campaign root is created, the rerun set stays as confirmed (348 plus twelve
   consumers plus twelve probes), the three local branches wait for "PR".
-- **E11-15, Tony's ruling on the E11-14 scope question (2026-09-17 about 8:10 AM): "Short fix first."** A narrow
+- **E11-15, Tony's ruling on the E11-14 scope question (2026-09-17 about 8:45 AM): "Short fix first."** A narrow
   second fix of the three live-record items only, outside ruling 17's count by his word: NEW 9 (the item-3
   phrase list), item 6's consumer pair staging and its `artifact_path` reading and per-item continuation
   comparison, and item 2's launch gate honoring a failed allow-rule check. The same builder (Opus 5 at high)
