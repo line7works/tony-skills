@@ -220,3 +220,31 @@ to exactly the held-out request text.
   sessions under a new proof root `e11-repair-proof-2026-09-16` (one OpenCode hand-off cut, one manual-only
   request each on Codex and OpenCode, one Claude Code slash request), proofs of the fix and never
   qualification trials. The rerun still waits for a separate "go".
+- **E11-10, the builder's report, the control room's gates and the first derived re-score (control room,
+  2026-09-17 about 1:05 AM).** The builder (Opus 5 at high) reported after 3 h 26 min: items 1, 3, 6 and 7
+  FIXED; 2, 4 and 5 PARTLY with the remainder carried in writing (cross-setup reads are reported by the new
+  `preflight` rather than prevented on this bench; the live OpenCode freeze-and-end is unit-proved and
+  live-unproven because the proof home carried the E10 campaign's `external_directory` allow rule; the
+  widened manual-only guard is live-unproven on Codex after the one Codex proof reached the station through
+  the setup's own marketplace source). Four live proofs under `e11-repair-proof-2026-09-16`, OpenRouter
+  $0.0092. The control room re-ran every gate from `/private/tmp` (tails in the packet
+  `astra-outputs/e11/control-room/verify/`): runner 410 OK under both runtimes, `check` ok under both, core
+  351 OK under both interpreters, adapters 90/34/96 OK, validate-examples ok, E7 nine PASS (its first run
+  collided with `check`'s closed key and was re-run), the two E11 suites 52 and 23 failing 46 and 21 on
+  `6d617b5` and passing after. Committed `c0e8b55`. Then `grade --all --revision e11-native-reparse` and
+  `routing-score --revision e11-native-reparse` on the E10 root: 143 derived grades and four derived score
+  files written beside the originals, the 150 original grade, score and table files byte-identical before
+  and after (hashes in the packet), keys reopened by `key-state --reopen`. Derived ok 8 of 143 against 20:
+  twelve flips, eleven on the new `model_binding` gate comparing `openrouter/<model>` (the native witness)
+  with `<model>` (the OpenCode result's id) as different models, one on the Codex hand-off's done-item
+  comparison reading the E10 cut's summary shape as a change. Both are control-room findings against the
+  repair and went back to the builder before Astra's verification (the control room's own gate on the
+  deliverable, not a second fix round under ruling 17; Astra's round has not started). The Codex
+  `gpt-5` / `GPT-5` against `gpt-5.6-sol` mismatches (11 attempts, none an ok grade) are real misreports and
+  stay failures. Derived routing over completed sessions: held-out activation 0.75 / 1.00 / 0.92 / 0.91,
+  false triggers 0 on all four, the recomputed target differs from the record on six Claude Code rows only,
+  provider failures 0 / 0 / 58 / 62, manual-only qualified on Claude Code alone. Carried to the E11
+  reconvene: the builder's finding 1 (the manual-only guard's reach is a bench-layout decision: the setups'
+  homes need a layout where one setup cannot read another's, or the catalog requirement is carried
+  unqualified with the guard's boundary stated) and finding 2 (install every home from the campaign that
+  launches it; `preflight` now fails by name).
