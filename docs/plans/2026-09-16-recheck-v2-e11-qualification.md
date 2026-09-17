@@ -203,3 +203,8 @@ to exactly the held-out request text.
   no instructions to manufacture an uplift, no indefinite prompt tuning, no lowered floors, no
   fewer reviewers, no edited sealed requests. Every root under `~/.local/share/skills-v2-pilot/e10/`
   stays a record.
+- **E11-8, Astra's effort for the repair round (Tony, 2026-09-16 night: "and astra high").** Supersedes
+  the Astra-at-max sentence of E11-7 and of R1g's first draft: for the repair round, Astra runs at
+  **high** for the verification, the re-checks and every review of the repair; R1f's "max" stays the
+  record for E11's independent read already delivered. The control room is Fable 5.1 at high, the
+  builder inherits high. Every other part of E11-7 stands.
