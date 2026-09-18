@@ -568,3 +568,33 @@ to exactly the held-out request text.
   records read and explained, not fixed. Then the control room's gates, commit, Astra's narrow re-check on
   the fix, a fresh campaign root and the full restart of 360 trials. The stopped root
   `e11-repair-qualification` stays as a record.
+- **E11-27, fix 4 delivered, gated and committed (2026-09-17 about 7:05 PM, control room).** The builder's
+  section 15 (about 6:25 PM): the cause verified from the stopped root's own records before any change
+  (`harness/stderr.log` "patch rejected: writing outside of the project"; the rollout's `sandbox_policy`
+  `writable_roots` holding only the child home, `exclude_tmpdir_env_var` false, cwd the workspace; the run
+  leaf a sibling of the workspace, outside cwd, `--add-dir` and `TMPDIR` at once). The change, commit
+  `ff54644` on the repair branch: `setups/codex/launch.sh` and `setups/claude-code/launch.sh` take
+  `--writable <dir>` and pass each as `--add-dir`; the runner names the opaque case directory (the parent
+  of the run leaf, holding exactly `run` and `workspace`) for comparison trials, the continuation resume and
+  the consumer path; a per-harness `writable_roots` and `require_writable_run_dir` refuse a launch whose run
+  directory lies inside no root (exit 2, a record per trial under `records/writable-roots/`); OpenCode
+  unchanged, its allow rule read by the guard; `ensure_dir` made race-safe after the guard exposed two lanes
+  colliding on one new record directory. `Fix4WritableRunLeaf`, 8 tests: FAILED (failures=2, errors=5) on
+  `8b6beda`, OK after. Live proof on the new root `e11-repair-proof-2026-09-17`: codex 2 of 2 complete with
+  the validator `ok`, claude-code 2 of 2, opencode-deepseek 2 `no_result`; OpenRouter charge $0.0244. The
+  deepseek `no_result` read, not fixed (the brief's scope): the model ends its turn with no assistant text
+  part after OpenCode refuses its read of a skill copy outside its home; beside it a bench fault, the
+  runner's `harness_reply` takes the last `text` part with no role filter, so `reply.md` is the request text
+  byte for byte; carried to the reconvene. Control room gates K on `ff54644` from outside the worktree
+  (`control-room/verify/gates-K.log`): runner 479 OK on both runtimes, `check` ok on both, core 364 OK on
+  both jsonschema pins, three adapters OK, validate-examples clean, E7 check runner 9 of 9, runner E11 suite
+  121 before FAILED (2+5) and after OK, core E11 suite 36 OK both. Derived revision `e11-native-reparse-8` on
+  the E10 root: 143 graded, every record equal to revision 7 on every field but `grade_path`, no flips,
+  150 originals byte-identical. Its routing re-score is held: the runner's live-harness check reads a
+  day-old `child.pid` from the finished E10 campaign and finds that pid number alive again, taken at 7:00 PM
+  by an unrelated process of another session, so `routing-score` refuses ("harness processes are still
+  alive"); the check tests pid existence only, not the process's start against the record's. A retry waits
+  on that pid; the routing files for revision 8 follow when it frees. That liveness reading is a bench
+  finding for the reconvene, not fixed in this round. Next: Astra's narrow re-check of fix 4 (mandate
+  `astra-kit/mandate-recheck4.md`, mode `recheck4`; the copy carries the fix-4 proof root and the stopped
+  root's records), then the fresh root `e11-repair-qualification-2` and the restart.
