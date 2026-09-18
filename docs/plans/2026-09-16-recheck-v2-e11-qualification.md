@@ -837,3 +837,28 @@ to exactly the held-out request text.
   ledger through the shared reader) and held until the twelve are recorded, because the builder's
   gates open and close the real answer-key wall and never overlap live trials. On the twelve's end:
   their consumer grades, a second derived revision, E11-37, the board, then Astra's read of the rerun.
+- **E11-37, the twelve consumer trials recorded; Astra's read of the rerun launched; fix 8 with the builder
+  (2026-09-18 about 9:05 AM, control room).** `campaign start` on the finished root through the fix-7
+  runner ran the queue's twelve unrun rows, one live per lane, from 8:26 AM to 8:44 AM; the loop exited
+  with `campaign status` reading recorded 360 of 360. Outcomes: 8 complete, 4 `no_result` (the three
+  DeepSeek consumers, 68 to 80 seconds each, replying in prose with no result record; and Qwen reading
+  DeepSeek's record). One rerun each of the four through `runner.py rerun` (the `consumer` subcommand
+  refuses a used trial directory, E9-34; the first attempt at reruns was refused and is on record):
+  the three DeepSeek consumers `no_result` again, the Qwen rerun complete. Final: 16 attempts, 9 complete,
+  3 `no_result`; consumer grades ok 0 of 12. Every one of the 9 complete attempts fails the same three
+  checks: `continuation_state` (expected continuations 1, done 2, phase committed; observed done indexes
+  empty), `evidence_artifacts_recovered` (the producer's named artifact lives under its own tmp fixture
+  run, `producer_sha256: null`, `in_the_pair: false`) and `unrelated_records_unavailable` (the isolation
+  sentinel read by a child in the consumer's launch environment, `separated: false`, the same unseparated
+  bench the preflight recorded); two carry one more (`source_identity_matches_the_producer` on
+  opencode-deepseek-to-codex, `evidence_references` on opencode-to-codex). Producers bound: every consumer
+  took its setup's `cont-…-compaction-r1` record, deterministic. Control room reading, for Astra's read
+  and the reconvene, not a fix: two of the three universal failures look like the bench's conditions and
+  the pair folder's contents rather than the consumer model, the third needs her read. OpenRouter cost of
+  the consumer attempts as recorded: 0.28; wall 3,776 s summed. The key was left closed by the loop and
+  reopened by hand; every launch closed it. Astra's independent read of the rerun launched at 9:02 AM at
+  effort max (`mandate-read2.md`, copy2 at 1d84b31: 116 trial directories, 126 revision grades, 16
+  consumer grades, scrubbed, rescan 0 hits, wall checks clean, the repair history beside it); fix 8
+  briefed to the builder at 9:02 AM once no trial was live. Decided on Tony's behalf and flagged: the read
+  runs on the fix-7 tree with fix 8 in flight (its brief in her copy; the fixes change the apparatus, not
+  a record). Next: fix 8 gated and committed, recheck8, then the reconvene with her read.
