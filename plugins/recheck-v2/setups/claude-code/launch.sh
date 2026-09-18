@@ -49,6 +49,7 @@ BYPASS=0
 PLUGINS=""
 PLUGIN_DIRS=""
 WRITABLE_DIRS=""   # E11-26: extra roots the runner names for THIS trial
+DENY_DIRS=""       # E11-45 S1: roots this launch may never write, denied by permission
 MODEL=""          # E10-62: the plan's pinned model, or empty for the sign-in's own
 EFFORT=""         # E10-62: the plan's pinned effort, or empty for the harness's own
 
@@ -74,6 +75,12 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "launch.sh: --writable takes a value" >&2; exit 2; }
       [ -d "$2" ] || { echo "launch.sh: no writable directory: $2" >&2; exit 3; }
       WRITABLE_DIRS="$WRITABLE_DIRS $2"; shift 2 ;;
+    --deny)
+      # E11-45 S1: a root this launch must not write. It becomes a path-scoped
+      # `permissions.deny` entry for Write and Edit, so the refusal comes from the
+      # harness rather than from the mandate's prose. The directory need not exist yet.
+      [ $# -ge 2 ] || { echo "launch.sh: --deny takes a value" >&2; exit 2; }
+      DENY_DIRS="$DENY_DIRS $2"; shift 2 ;;
     *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -116,8 +123,16 @@ mkdir -p "$RUN_ROOT"
 # it was given, so an E9-shaped call runs exactly the command E9 measured.
 if [ -n "$MODEL" ]; then set -- "$@" --model "$MODEL"; fi
 if [ -n "$EFFORT" ]; then set -- "$@" --effort "$EFFORT"; fi
+# E11-45 S1: this launch's own settings - the installed ones plus the path-scoped write
+# denials and the outbound-command denials (E11-41 R6: the F5 outbound call is declined by
+# permission, not left to a name that happens not to resolve). Written beside the capture so
+# the record shows exactly what the fence was.
+LAUNCH_SETTINGS="$OUT_DIR/launch-settings.json"
+python3 "$(dirname -- "$0")/write-fence.py" \
+  "$PILOT_HOME/launch-settings.json" "$LAUNCH_SETTINGS" $DENY_DIRS \
+  || { echo "launch.sh: could not write the launch settings" >&2; exit 3; }
 set -- "$@" --setting-sources local --strict-mcp-config \
-  --settings "$PILOT_HOME/launch-settings.json" \
+  --settings "$LAUNCH_SETTINGS" \
   --disallowed-tools WebFetch WebSearch \
   --add-dir "$RUN_ROOT" \
   --permission-prompts none \

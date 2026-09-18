@@ -587,6 +587,11 @@ def cmd_start(args):
         # E8-A12: a claim found in reviewed material reads `<file:line>: <the text> · <why>`
         rejected.append(claim_rejected("%s:%d: %s" % (scope["document"], c["line_no"], c["text"].strip()), "(%s)" % c["reason"]))
     checklist = scope["checklist"]
+    # E11-45 S2: the input's service-observation requirements are bound onto the checklist items
+    # they name, so the rule travels with the ITEM from here on. A requirement that names no
+    # item of this checklist is ignored (the run is scoped to a slice; a declaration for an item
+    # outside it is not this run's business).
+    inputs.bind_service_observations(doc, checklist)
     # the brief and the checkpoint
     brief = vmod.render_brief(run.workspace, run.run_dir, checklist, sheet["path"] if sheet["verdict"] == "read" else None)
     canon.atomic_write(run.path("checklist.md"), brief.encode("utf-8"))
@@ -820,6 +825,30 @@ def item_result_from(run, index, action, reason=None, note=None, upgrade_evidenc
     verification = m["verification"]
     if action == "confirmed":
         disposition, item_reason = said, m["reason"]
+        # E11-45 S3: the stop reason is DERIVED from execution, not taken from the word the
+        # verifier typed. The typed word is retained as `reason_as_stated` so the claim stays
+        # visible, and an outcome the run cannot decide stays UNRESOLVED rather than falling
+        # back to a default. Only a `confirmed` not_fixed goes through here: `downgraded` is
+        # the driver's own evidenced action, and a `fixed` item carries no reason at all.
+        if disposition == "not_fixed":
+            derived = vmod.derive_reason(tail_item, run.run_dir,
+                                         call_status=call.get("status"), report_text=text)
+            adjudication["reason_as_stated"] = item_reason
+            adjudication["reason_derived"] = {
+                "reason": derived["reason"], "observed": derived["observed"],
+                "how": derived["how"],
+            }
+            if derived["reason"] is not None and derived["reason"] != item_reason:
+                item_reason = derived["reason"]
+                if item_reason == "verification_blocked":
+                    verification["blocked"] = verification.get("blocked") or derived["how"]
+                    verification.pop("missing", None)
+                elif item_reason == "missing_evidence":
+                    verification["missing"] = verification.get("missing") or derived["how"]
+                    verification.pop("blocked", None)
+                else:
+                    for key in ("blocked", "missing"):
+                        verification.pop(key, None)
         # E11 fix round, item 3: contract section 5 — "An execution the sandbox or environment
         # stopped is `verification_blocked`, never `static`." When a retained report of THIS
         # RUN recorded a stopped execution for this item, a later static `fixed` does not
@@ -850,6 +879,36 @@ def item_result_from(run, index, action, reason=None, note=None, upgrade_evidenc
                         {k: row.get(k) for k in ("call_id", "raw_path", "how")}
                         for row in history],
                 }
+        # E11-45 S2: an item that DECLARES a required service observation is not cleared by a
+        # report that never observed the service. The requirement is the input's, bound onto the
+        # item at start; the core refuses the `fixed`, keeps the rejected claim, and records the
+        # refusal. A static read never satisfies it (contract section 5).
+        if disposition == "fixed":
+            required = item.get("required_service_observation") or {}
+            if required.get("service"):
+                found = vmod.bound_service_observation(verification, required["service"])
+                if found is None:
+                    disposition, item_reason = "not_fixed", "missing_evidence"
+                    adjudication["driver_action"] = "downgraded"
+                    note = ("the item requires an observation of %s (%s); the report carries "
+                            "no executed command whose retained output observes it, so the "
+                            "fixed is refused (contract section 5)"
+                            % (required["service"], required.get("observe") or "the named state"))
+                    adjudication["note"] = note
+                    adjudication["service_observation_refused"] = {
+                        "service": required["service"],
+                        "observe": required.get("observe") or "",
+                        "why": "a fixed on an item that requires a service observation needs an "
+                               "executed command whose retained output observes that service; a "
+                               "static read is never one",
+                        "verifier_said": said,
+                        "method": verification.get("method"),
+                        "evidence_kinds": sorted(set(
+                            e.get("kind") for e in verification.get("evidence") or [])),
+                    }
+                    verification["missing"] = verification.get("missing") or note
+                    verification.pop("blocked", None)
+
         # E11-7 item 3: an EVIDENCED correction between `not_fixed` reasons. The CLI's
         # `--reason` served only a downgrade of a verifier `fixed`, so a verifier that
         # reported `reproduces` for a partial fix, or `missing_evidence` for a blocked

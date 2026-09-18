@@ -493,6 +493,183 @@ def blocked_history(run_dir, checkpoint_doc, index):
     return found
 
 
+# ---- S3: the stop reason derived from execution (E11-45 S3) ----------------------------------
+#
+# Contract section 5 names the four reasons; until now the core took the one the verifier TYPED.
+# The E10 campaign's F5 lane is the record of why that is not enough: a session whose own report
+# showed the operation declined still typed `missing_evidence`, and the core wrote it down. S3
+# derives the reason from what the run can OBSERVE and keeps the typed one beside it.
+#
+# What counts as an observation, in order of authority:
+#   1. the record-call transport status - a call that did not complete is a blocked verification
+#      whatever the report says;
+#   2. a policy refusal or an unreachable service in the RETAINED output of the item's own
+#      command evidence, or in the report's own `blocked` text;
+#   3. whether the item's method was `executed` and a command-kind evidence entry exists;
+#   4. an absent required input.
+# Anything else is UNRESOLVED: recorded, never defaulted.
+#
+# The derivation reads execution facts and the report's FACTUAL fields (method, evidence kinds,
+# the narrower case it names). It never reads the item's `reason` word - that is the claim under
+# test, and mapping it onto itself would derive nothing.
+
+REFUSAL_OBSERVATIONS = (
+    "permission denied",
+    "operation not permitted",
+    "operation was declined",
+    "declined by policy",
+    "blocked by policy",
+    "denied by policy",
+    "not permitted by the sandbox",
+    "sandbox denied",
+    "refused by the sandbox",
+    "outbound network is blocked",
+    "network access is disabled",
+    "eacces",
+    "eperm",
+)
+
+UNREACHABLE_OBSERVATIONS = (
+    "could not resolve host",
+    "name or service not known",
+    "nodename nor servname provided",
+    "temporary failure in name resolution",
+    "getaddrinfo",
+    "connection refused",
+    "network is unreachable",
+    "no route to host",
+    "connection timed out",
+)
+
+ABSENT_INPUT_OBSERVATIONS = (
+    "no such file or directory",
+    "does not exist",
+    "is not present",
+    "was not provided",
+    "not found",
+)
+
+UNRESOLVED = "unresolved"
+
+
+def _observed_in(texts, phrases):
+    """The first phrase of `phrases` observed, unnegated, in any of `texts`."""
+    for text in texts:
+        if not text:
+            continue
+        lowered = text.lower()
+        for phrase in phrases:
+            at = lowered.find(phrase)
+            while at != -1:
+                if not _negated_before(lowered, at):
+                    return phrase, text[max(0, at - 60):at + len(phrase) + 60].strip()
+                at = lowered.find(phrase, at + 1)
+    return None, None
+
+
+def _evidence_outputs(item, run_dir):
+    """The retained output of the item's command evidence, plus the details it carries."""
+    texts, commands = [], 0
+    for e in item.get("evidence") or []:
+        if not isinstance(e, dict):
+            continue
+        if e.get("kind") == "command":
+            commands += 1
+        if e.get("detail"):
+            texts.append(e["detail"])
+        art = e.get("artifact")
+        if not art:
+            continue
+        path = artifact_abs(run_dir, art)
+        if path and os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    texts.append(fh.read(200000))
+            except (IOError, OSError):
+                pass
+    return texts, commands
+
+
+def derive_reason(item, run_dir, call_status=None, report_text=None):
+    """The reason this item's verification ACTUALLY reached, derived from execution (E11-45 S3).
+
+    Returns `{"reason": one of REASONS or None, "observed": str, "how": str}`. `reason` is None
+    exactly when the observation is UNRESOLVED; the caller records that and keeps the reason the
+    report stated rather than defaulting to one.
+    """
+    texts, commands = _evidence_outputs(item, run_dir)
+    blocked_text = item.get("blocked")
+    missing_text = item.get("missing")
+    if blocked_text:
+        texts = texts + [blocked_text]
+    # 1. the transport itself (the checkpoint spells a finished call `complete`, the transport
+    #    vocabulary spells it `ok`; either is "the call completed")
+    if call_status is not None and not is_complete(call_status):
+        return {"reason": "verification_blocked", "observed": "the call did not complete",
+                "how": "the record-call transport status is %r, not %r" % (call_status, OK)}
+    # 2. a policy refusal, then an unreachable service, in what the run retained
+    phrase, quote = _observed_in(texts, REFUSAL_OBSERVATIONS)
+    if phrase:
+        return {"reason": "verification_blocked", "observed": "the operation was declined",
+                "how": "the retained output carries %r: %s" % (phrase, quote)}
+    phrase, quote = _observed_in(texts, UNREACHABLE_OBSERVATIONS)
+    if phrase:
+        return {"reason": "verification_blocked", "observed": "the service was unreachable",
+                "how": "the retained output carries %r: %s" % (phrase, quote)}
+    if report_text:
+        declared, said = declared_block(report_text)
+        if declared:
+            return {"reason": "verification_blocked", "observed": "the report declares a stopped execution",
+                    "how": "the retained report declares %r: %s" % (declared, said)}
+    # 3. the command ran
+    if item.get("method") == "executed" and commands:
+        if item.get("missed_case"):
+            return {"reason": "missed_case", "observed": "the command ran and showed a narrower case",
+                    "how": "an executed command-kind evidence entry, and the report names the "
+                           "narrower case it found"}
+        return {"reason": "reproduces", "observed": "the command ran and showed the defect",
+                "how": "an executed command-kind evidence entry, and the report names no "
+                       "narrower case"}
+    # 4. a required input is absent
+    phrase, quote = _observed_in(texts + [missing_text], ABSENT_INPUT_OBSERVATIONS)
+    if phrase and not commands:
+        return {"reason": "missing_evidence", "observed": "a required input is absent",
+                "how": "no command ran, and the retained text carries %r: %s" % (phrase, quote)}
+    return {"reason": None, "observed": UNRESOLVED,
+            "how": "nothing the run retained decides this item: method %r, %d command-kind "
+                   "evidence entries, no refusal, unreachable service or absent input observed"
+                   % (item.get("method"), commands)}
+
+
+def bound_service_observation(verification, service):
+    """The evidence entry that OBSERVES `service`, or None (E11-45 S2).
+
+    A bound observation is an EXECUTED command-kind evidence entry that names the service and
+    retained its output. A read, a static method, or a command with nothing retained is not one:
+    the point of the rule is that the service's own answer is on disk, not that someone said so.
+    """
+    if (verification or {}).get("method") != "executed":
+        return None
+    needle = (service or "").strip().lower()
+    if not needle:
+        return None
+    for entry in verification.get("evidence") or []:
+        if not isinstance(entry, dict) or entry.get("kind") != "command":
+            continue
+        path = entry.get("artifact_path")
+        if not path or not os.path.isfile(path):
+            continue
+        haystacks = [entry.get("detail") or ""]
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                haystacks.append(fh.read(200000))
+        except (IOError, OSError):
+            pass
+        if any(needle in text.lower() for text in haystacks):
+            return entry
+    return None
+
+
 def retained_report(run_dir, checkpoint_doc, index=None):
     """The call whose retained report adjudication uses (E8-7): the last call recorded complete
     whose file still hashes to raw_sha256 and, when `index` is given, whose items cover it

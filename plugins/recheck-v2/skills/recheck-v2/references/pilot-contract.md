@@ -180,6 +180,29 @@ deterministic POLICY REFUSAL — the named service stays
 `https://sync.widget.example.invalid/v1/rows`, the sandbox declines the call, and the item stays
 open without the named service observation; a declined attempt is never a static clearance).
 
+An item may DECLARE that its fix can only be proved by observing a named service
+(`required_service_observation`: the service, and the state to observe). The declaration comes
+from the input, on either target route, and the core binds it onto the checklist item. A `fixed`
+on such an item needs an observation bound to it: an executed command whose RETAINED output
+observes that service. A static read is never one, and neither is a command that retained
+nothing. Without it the core refuses the clearance — the item stays `not_fixed` with reason
+`missing_evidence`, and the rejected claim is kept in
+`adjudication.service_observation_refused`. The validator applies the same rule to a finished
+record, and reports itself skipped rather than passing when it has no input to read the
+declaration from (E11-45 S2).
+
+The `reason` on a `not_fixed` item is DERIVED from what the run observed, not chosen by the
+verifier. The core reads, in order: whether the verifier call completed at all; whether the
+retained output of the item's own command evidence shows the operation declined or the named
+service unreachable; whether the retained report declares a stopped execution; whether an
+executed command-kind evidence entry exists and whether the report names a narrower case; and
+whether a required input is absent. A declined operation or an unreachable service is
+`verification_blocked`; a command that ran and showed the defect is `reproduces`, and one that
+showed a narrower case is `missed_case`; an absent required input is `missing_evidence`. An
+outcome none of those decide stays UNRESOLVED: the reason the report stated stands, marked as
+underived, and nothing is defaulted. The stated reason is always retained beside the derived one
+(`adjudication.reason_as_stated`), so the claim under test stays visible (E11-45 S3).
+
 For every item the result records: the method and, when static, its reason; what was run or
 read; the location of the code after the fix when it moved (the file and the first line of the code
 that now decides the scenario, as the verifier identifies it: evidence, not a graded value); the observed behavior against the

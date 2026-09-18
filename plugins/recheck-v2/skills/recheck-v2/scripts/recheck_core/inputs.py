@@ -339,6 +339,39 @@ def _ambiguity_lines(document, records):
     return ["%s:%d: %s: %s" % (document, r["line_no"], r["reason"], r["text"]) for r in records]
 
 
+def bind_service_observations(doc, checklist):
+    """Bind `required_service_observations` from the input onto the checklist items (E11-45 S2).
+
+    The declaration is the contract's, not a test's: an item whose fix can only be proved by
+    observing a named service says so, and a `fixed` on it without that observation bound to it
+    is refused by the core (contract section 5). Two routes reach the same field: an item of a
+    direct `target.items` input may carry `required_service_observation` inline, and a
+    `required_service_observations` list names items by location for either route.
+
+    Mutates `checklist` in place and returns the items it bound.
+    """
+    bound = []
+    for item in checklist:
+        inline = item.get("required_service_observation")
+        if isinstance(inline, dict) and inline.get("service"):
+            bound.append(item)
+    for row in doc.get("required_service_observations") or []:
+        if not isinstance(row, dict):
+            continue
+        where = row.get("location") or {}
+        for item in checklist:
+            loc = item.get("location") or {}
+            if loc.get("file") != where.get("file") or loc.get("line") != where.get("line"):
+                continue
+            if row.get("claim") is not None and item.get("claim") != row.get("claim"):
+                continue
+            item["required_service_observation"] = {"service": row.get("service"),
+                                                    "observe": row.get("observe")}
+            if item not in bound:
+                bound.append(item)
+    return bound
+
+
 def resolve_scope(doc, workspace, accepted_reopenings):
     """Section 3. Returns one of:
     {"status": "missing_input", "fields", "ambiguity", "question"}

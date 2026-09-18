@@ -99,9 +99,21 @@ OC="$SETUP/npm/node_modules/.bin/opencode"
 RUNROOT="${TMPDIR:-/tmp}"
 RUNROOT="${RUNROOT%/}/runs"  # E10-22: a neutral name; the E10 prompt names this path
 TMPROOT="${TMPDIR:-/tmp}"; TMPROOT="${TMPROOT%/}"  # E10-23: the whole TMPDIR is allowed, so a model-chosen scratch path there is not auto-rejected
+# E11-45 S1: the write fence's denied side. Last-match-wins, so these rules come after the
+# allows in the asset and a write to a pilot home, the checkout or either wall is declined by
+# the harness rather than only forbidden by the mandate. The trial's own roots are never here.
+DENY_1="${SKILLS_V2_PILOT_ROOT:-$HOME/.local/share/skills-v2-pilot}/claude-code"
+DENY_2="${SKILLS_V2_PILOT_ROOT:-$HOME/.local/share/skills-v2-pilot}/codex"
+DENY_3="${SKILLS_V2_PILOT_ROOT:-$HOME/.local/share/skills-v2-pilot}/opencode"
+DENY_4="$SETUP"   # E10-62 item 3: the homes are keyed by SETUP NAME, so this home's own
+                  # directory is named directly; the three harness names above miss
+                  # `opencode-deepseek` and every future second setup of one harness.
 sed -e "s|__MODEL__|$MODEL|g" -e "s|__RUNROOT__|$RUNROOT|g" -e "s|__TMPROOT__|$TMPROOT|g" \
+    -e "s|__DENY_1__|$DENY_1|g" -e "s|__DENY_2__|$DENY_2|g" \
+    -e "s|__DENY_3__|$DENY_3|g" -e "s|__DENY_4__|$DENY_4|g" \
   "$HERE/assets/opencode.json" > "$SETUP/xdg-config/opencode/opencode.json"
 echo "run root allowed: $RUNROOT (and $TMPROOT/** under E10-23)"
+echo "write fence denied: $DENY_1, $DENY_2, $DENY_3, $DENY_4 (E11-45 S1)"
 
 # The session pointer plugin (the user channel; see adapters/opencode/profile.md section 4).
 # It also records which CLI command started the harness process, which is where

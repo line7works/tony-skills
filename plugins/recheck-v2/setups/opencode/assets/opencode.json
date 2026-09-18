@@ -62,8 +62,23 @@
   "permission": {
     "external_directory": {
       "__RUNROOT__/**": "allow",
-          "__TMPROOT__/**": "allow",
-      "/tmp/recheck-v2/**": "allow"
+      "__TMPROOT__/**": "allow",
+      "/tmp/recheck-v2/**": "allow",
+      "__DENY_1__/**": "deny",
+      "__DENY_2__/**": "deny",
+      "__DENY_3__/**": "deny",
+      "__DENY_4__/**": "deny"
+    },
+    "bash": {
+      "*": "allow",
+      "curl *": "deny",
+      "wget *": "deny",
+      "nc *": "deny",
+      "ncat *": "deny",
+      "telnet *": "deny",
+      "ssh *": "deny",
+      "scp *": "deny",
+      "sftp *": "deny"
     }
   }
 }

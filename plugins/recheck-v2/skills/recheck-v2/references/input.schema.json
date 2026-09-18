@@ -276,6 +276,35 @@
           }
         }
       }
+    },
+    "required_service_observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "location",
+          "service",
+          "observe"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/$defs/location"
+          },
+          "claim": {
+            "$ref": "#/$defs/claim"
+          },
+          "service": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observe": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "description": "E11-45 S2: service-observation requirements named by item location; the core binds each onto the checklist item it names, on either target route."
     }
   },
   "$defs": {
@@ -386,6 +415,27 @@
           "type": "string",
           "minLength": 1,
           "description": "the slice the entry belongs to, or 'none' when the record has no card"
+        },
+        "required_service_observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "service",
+            "observe"
+          ],
+          "description": "E11-45 S2: the fix for this item can only be proved by OBSERVING a named service. A `fixed` disposition without an observation of that service, bound to this item and retained, is refused by the core.",
+          "properties": {
+            "service": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the named endpoint or service to observe"
+            },
+            "observe": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the state that must be observed"
+            }
+          }
         }
       }
     },

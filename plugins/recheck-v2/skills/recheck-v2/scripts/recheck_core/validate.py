@@ -379,7 +379,8 @@ def check_v10(result, ctx):
 
 
 def check_v11(result, ctx):
-    """A fixed item carries no block and no missing field."""
+    """A fixed item carries no block and no missing field, and observes what it must (S2)."""
+    from . import verifier
     findings = []
     for i, it in enumerate(result.get("items") or []):
         if it.get("disposition") != "fixed":
@@ -390,7 +391,46 @@ def check_v11(result, ctx):
                 findings.append(_f("V11", "/items/%d/verification/%s" % (i, field), "a fixed item carries %s" % field))
         if "reason" in it:
             findings.append(_f("V11", "/items/%d/reason" % i, "a fixed item carries a reason"))
+        # E11-45 S2: an item the INPUT declares needs a service observation is never `fixed`
+        # without one bound to it. The declaration is read from the input; without an input
+        # document the rule cannot be checked and the check says so rather than passing it.
+        required = _required_observation(it, ctx.get("input"))
+        if required is None:
+            continue
+        if verifier.bound_service_observation(it.get("verification"), required["service"]) is None:
+            findings.append(_f("V11", "/items/%d" % i,
+                               "fixed, but the item requires an observation of %s (%s) and the "
+                               "record carries no executed command whose retained output "
+                               "observes it" % (required["service"],
+                                                required.get("observe") or "the named state")))
+    if ctx.get("input") is None:
+        return findings, "skipped: needs the input document for the service-observation rule"
     return findings, None
+
+
+def _required_observation(item_result, input_doc):
+    """The service observation the input declares for this result item, or None (E11-45 S2)."""
+    if not isinstance(input_doc, dict):
+        return None
+    loc = item_result.get("location") or {}
+    for row in input_doc.get("required_service_observations") or []:
+        if not isinstance(row, dict):
+            continue
+        where = row.get("location") or {}
+        if where.get("file") == loc.get("file") and where.get("line") == loc.get("line"):
+            if row.get("claim") is not None and row.get("claim") != item_result.get("claim"):
+                continue
+            return row
+    target = (input_doc.get("target") or {})
+    for row in target.get("items") or []:
+        if not isinstance(row, dict):
+            continue
+        where = row.get("location") or {}
+        declared = row.get("required_service_observation")
+        if isinstance(declared, dict) and where.get("file") == loc.get("file") \
+                and where.get("line") == loc.get("line"):
+            return declared
+    return None
 
 
 def _moved_before(result):

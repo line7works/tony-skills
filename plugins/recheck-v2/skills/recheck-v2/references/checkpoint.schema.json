@@ -329,6 +329,27 @@
           "type": "string",
           "minLength": 1,
           "description": "the slice the entry belongs to, or 'none' when the record has no card"
+        },
+        "required_service_observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "service",
+            "observe"
+          ],
+          "description": "E11-45 S2: the fix for this item can only be proved by OBSERVING a named service. A `fixed` disposition without an observation of that service, bound to this item and retained, is refused by the core.",
+          "properties": {
+            "service": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the named endpoint or service to observe"
+            },
+            "observe": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the state that must be observed"
+            }
+          }
         }
       }
     },
@@ -620,6 +641,91 @@
               }
             }
           }
+        },
+        "reason_as_stated": {
+          "enum": [
+            "reproduces",
+            "missed_case",
+            "verification_blocked",
+            "missing_evidence"
+          ],
+          "description": "E11-45 S3: the reason the retained report STATED, kept beside the one the run derived from execution. Present on every confirmed not_fixed item."
+        },
+        "reason_derived": {
+          "type": "object",
+          "description": "E11-45 S3: the reason derived from what the run observed. `reason` is null exactly when the observation is unresolved; the item then keeps the reason the report stated and nothing is defaulted.",
+          "required": [
+            "reason",
+            "observed",
+            "how"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "enum": [
+                "reproduces",
+                "missed_case",
+                "verification_blocked",
+                "missing_evidence",
+                null
+              ]
+            },
+            "observed": {
+              "type": "string",
+              "minLength": 1
+            },
+            "how": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "service_observation_refused": {
+          "type": "object",
+          "description": "E11-45 S2: a `fixed` refused because the item declares a required service observation and the report carries none bound to it. The item stays not_fixed with reason missing_evidence; the rejected claim is retained.",
+          "required": [
+            "service",
+            "observe",
+            "why",
+            "verifier_said",
+            "method",
+            "evidence_kinds"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "service": {
+              "type": "string",
+              "minLength": 1
+            },
+            "observe": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verifier_said": {
+              "enum": [
+                "fixed",
+                "not_fixed"
+              ]
+            },
+            "method": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence_kinds": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
         }
       },
       "allOf": [
@@ -673,6 +779,26 @@
           "then": {
             "required": [
               "reason_correction_evidence"
+            ],
+            "properties": {
+              "verifier_said": {
+                "const": "not_fixed"
+              },
+              "driver_action": {
+                "const": "confirmed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "reason_as_stated"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason_derived"
             ],
             "properties": {
               "verifier_said": {

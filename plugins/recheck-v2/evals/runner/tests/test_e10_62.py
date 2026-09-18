@@ -332,8 +332,10 @@ class EveryLaunchPathCarriesThePairTest(RunnerCase):
         """So a new launch path cannot miss the pair by writing its own argv."""
         source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
         # E11-7 items 5 and 6 add two call sites: the guarded manual-only routing launch and
-        # the consumer trial. Both go through `Setup.launch`, which is what this pins.
-        self.assertEqual(source.count("setup.launch("), 6)
+        # the consumer trial. E11-45 S1 adds a seventh, the `write-fence` proof. All of them go
+        # through `Setup.launch`, which is what this pins; the count is the canary that says a
+        # new path was added, so that it can be checked rather than slipping in unseen.
+        self.assertEqual(source.count("setup.launch("), 7)
 
     def test_the_cut_s_own_argv_carries_the_pair(self):
         setups = self.setups_of()
