@@ -1007,3 +1007,9 @@ to exactly the held-out request text.
   preflight on a new proof root); the control room gates and commits each batch; Astra's single verification
   follows the third. Decided on Tony's behalf and flagged: starting batch A before he has seen the hour
   count (his E11-40 ruling authorised the round after Astra said "a couple of days" was unsupported).
+- **E11-44, Tony's ruling on the S1 write fence: "carry the gap" (2026-09-18 about 11:20 AM).** On Claude
+  Code and OpenCode, S1 denies writes at the tool level and detects shell writes outside the roots after the
+  fact; it does not prevent them. No OS-level sandbox and no deployment-layout change this round. The gap is
+  named in the round-2 report as a limit of the measurement on those two setups. Codex's kernel sandbox
+  stays the one real fence. The builder's default in `briefs/e11-round2-build.md` (question 3) is now the
+  ruling; nothing else in the package changes.
