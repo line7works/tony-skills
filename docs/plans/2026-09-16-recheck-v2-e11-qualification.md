@@ -1013,3 +1013,24 @@ to exactly the held-out request text.
   named in the round-2 report as a limit of the measurement on those two setups. Codex's kernel sandbox
   stays the one real fence. The builder's default in `briefs/e11-round2-build.md` (question 3) is now the
   ruling; nothing else in the package changes.
+- **E11-45, batch A delivered and sent back inside the round (2026-09-18 about 11:25 AM, control room).** The
+  builder's section 21: R5's hash check on the original round-1 rerun root, read-only, 126 checked and zero
+  mismatches, so Astra's 26 claude-code run-tree differences live in the review copy, not the original (the
+  copy manifest is batch C's); R6 settled as a policy refusal in the contract and the F5 fixture
+  (`outbound_refusal: "policy"`, a `required_service_observation` block that doubles as S2's per-item field;
+  the answer key's F5-01 entry already expects `not_fixed` / `verification_blocked` / method `executed` with
+  `blocked`, so no key value changes; claude-code F5 r1 re-derived as satisfying method); R2's Codex `file:`
+  paths, four call outcomes replacing the two-way error-equals-refusal map, here-documents as data, a role
+  filter on the reply collector, and reply-versus-result disposition agreement; R1's two scheduling phases
+  (Q-S-L), `_call_named_capture` replacing the no-dot rule (G-ID), a read-only `consumer --regrade
+  --revision`, and the replay into revision `e11-round2-1` (126 grades, 4 routing records, 16 consumer
+  records; originals byte-identical, the control room's own 86-file hash list confirms). Nineteen new tests,
+  17 failing on 4351654 and all passing after; three existing tests amended and named. **Sent back:** the
+  control room's per-attempt comparison of `grade.e11-rerun2-fix7-1.json` against `grade.e11-round2-1.json`
+  shows 27 decisions flipped ok to not ok, none the other way, every one on `interop` with
+  `dispositions_agree: false`: the new reply parser reads the word "fixed" inside "not fixed
+  (missed_case)". Section 21 reported "0 of 541 originals changed" and "ok 5, not_ok 121" without the flip
+  count the package's R2 acceptance requires ("no grade decision flips without a named reason"). Required
+  of the builder: whole-token disposition parsing, a test with both lines, the replay rerun into the same
+  revision name, and a per-attempt flip table in section 21. The control room's gates run on the sent-back
+  tree was stopped; it reruns on the corrected tree. Nothing committed on the repair branch.
