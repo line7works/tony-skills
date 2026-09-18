@@ -968,3 +968,21 @@ to exactly the held-out request text.
   those two setups and those two pairs; he can amend either by a recorded ruling. BF-34 executed: the stopped
   root's `operator/stop.md` renamed `stop.attempt-1.md` at 10:12 AM. Next: the builder's plan (step 2 of the
   package), checked here before any code changes; recheck8's verdict feeds R1.
+- **E11-42, Astra's recheck8: fix 8 still open on two new MAJORs, folded into round 2's R1 (2026-09-18 about
+  10:50 AM, control room).** Her verdict (`astra-outputs/e11/recheck8/`): FIX 8 still open (MAJOR); Q-S PARTLY,
+  G-1 FIXED, G-2 PARTLY. G-1: the four suffix controls reject the sidecars and the exact driving names hold. G-2:
+  every JSONL row reader keeps object rows only, `do_report` included; read2's dotted-id concern is still open,
+  not moot: the input schema accepts dots in `run_id`, the core preserves them in the call id, both adapters
+  put them in capture filenames, and `_dotless_stem` returns false on any dot, so `launch-run.v1-verify.json`,
+  `run.v1-verify.rollout.jsonl` and `run.v1-verify-2.events.jsonl` are all omitted; the prior Codex branch
+  selected the last two, so fix 8 extends OpenCode's omission to Codex (NEW MAJOR G-ID, `runner.py:5939`,
+  `5988`). Q-S: consumers wait for producer settlement and stopped lanes release their rows, but with fewer
+  worker slots than lanes a waiting consumer holds the only slot and the producer lane never starts; her
+  one-lane control times out with the producer never started (NEW MAJOR Q-S-L, `runner.py:9444`, `9566` to
+  `9568`; separate producer and consumer phases or release worker capacity while waiting, and test fewer
+  slots than lanes). No new BLOCKER. The five fix-8 tests and the 30 fix-4 to fix-7 tests pass on her fresh
+  copy; her four `Item6Consumer` failures are her sandbox refusing a uv cache path, confirmed by her
+  diagnostic, not the code. Control room reading: both findings are real and both belong to the package's R1
+  ("finish fix 8 against the real record shapes"), so under ruling 17 there is no fix 9 round: the builder
+  carries Q-S-L and G-ID into the one repair round, and Astra's single verification covers them. Relayed to the
+  builder for his plan (section 20). Nothing committed on the repair branch beyond 4351654.
