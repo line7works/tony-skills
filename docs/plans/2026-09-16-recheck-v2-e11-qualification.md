@@ -812,3 +812,28 @@ to exactly the held-out request text.
   Astra's recheck7 launched on a fresh scrubbed copy at 1d84b31 (`mandate-recheck7.md`, closed checklist
   Q, G, H); the twelve consumer launches follow her clearance per E11-34. The inspection board republished
   (V5) from the revision.
+- **E11-36, Astra's recheck7 on fix 7: PARTLY; the twelve consumer trials launched on the finished root;
+  fix 8 briefed for after them (2026-09-18 about 8:30 AM, control room).** Verdict
+  `astra-outputs/e11/recheck7/recheck7.md` (exit 0, 59 events): H FIXED (a reader exception is recorded,
+  later attempts graded, only written grades counted, exit 1 naming the error; she reversed the order so
+  the error came first); Q PARTLY (queue, counts and producer selection correct; NEW MAJOR Q-S: the loop
+  runs lanes concurrently, so a fast lane's consumer can select before another lane's producer is
+  recorded; her event-controlled probe picked a comparison record in-queue and the continuation record
+  after the end); G PARTLY (the copied trial reads, the shared JSONL reader keeps objects, but the other
+  suffix rules still admit dotted sidecars, `launch-x.trace.json` among them, and `do_report`'s ledger
+  reader indexes unfiltered rows). She read the sidecar's authorship from the trial's own trace (lines 78
+  and 84 redirect the adapter helper's stdout into the file): the session under trial wrote it. Her
+  fresh-copy re-drive of the fix-4 to fix-7 classes: 30 OK; the E11 file's four `Item6Consumer` failures
+  are her sandbox's uv cache, as every round. No new BLOCKER. Control room reading against the code:
+  Q-S is real for an in-queue campaign and does not bear on this root, where every producer attempt is
+  recorded and `producer_record_for` is deterministic (her own finding); G's remaining cases are grading
+  readers, not launch behaviour. Decided on Tony's behalf and flagged: (1) the twelve consumer trials
+  launched at 8:26 AM on the finished root through the fix-7 runner (`campaign start`, pid 27948, the
+  queue's twelve unrun rows, one live per lane; the campaign's staged tree stays 485e92a, the probe gate
+  passed against it) rather than waiting for fix 8, because the remaining items do not touch this
+  root's consumer run and E11-34 asked for the twelve after the re-check; (2) fix 8 briefed
+  (`briefs/e11-repair-fix8.md`: a campaign-wide producer-completion boundary before any consumer row
+  runs, with a regression over unequal lane progress; every capture suffix rule exact; `do_report`'s
+  ledger through the shared reader) and held until the twelve are recorded, because the builder's
+  gates open and close the real answer-key wall and never overlap live trials. On the twelve's end:
+  their consumer grades, a second derived revision, E11-37, the board, then Astra's read of the rerun.
