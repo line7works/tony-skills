@@ -623,3 +623,37 @@ to exactly the held-out request text.
   `ff54644`, a live Codex and Claude Code continuation proof on a new root
   `e11-repair-proof-2026-09-17-b`. The restart waits on that fix, the control room's gates and Astra's
   recheck5.
+- **E11-29, fix 5 delivered, gated and committed (2026-09-17 about 10:25 PM, control room).** The builder's
+  section 16 (about 9:45 PM): the three findings each confirmed at the lines before any change. The change,
+  commit `aa5a244` on the repair branch: one helper, `guarded_launch_roots`, names the run leaf's parent,
+  calls `require_writable_run_dir` and returns the roots, and every launch site goes through it (the
+  comparison trial, the consumer, the first continuation launch through `_launch_argv`, which now forwards
+  `--writable`, the handoff resume, and both hand-built compaction resumes, `--add-dir <case dir>` before
+  the Codex `resume` subcommand); one record per launch under `records/writable-roots/`, named per half; a
+  fake launcher records `enforced: false` and proceeds, every real launch is enforced (the builder's
+  decision, to be judged by Astra). D-G: `forwards_writable` per setup (True on Codex and Claude Code,
+  False on OpenCode and the base), the base reader counting a runner-named root only when the launcher
+  forwards it and recording `roots_named_but_not_forwarded`; an OpenCode home with no `opencode.json` reads
+  `bounded: false` and is refused nothing (uninstalled, the install and verify gates own it), a config that
+  exists and grants nothing is judged and refused (the builder's second decision, to be judged). D-T: the
+  synthetic isolation test deleted, two tests staging a real fixture and a real consumer pair through the
+  runner's own staging in its place. `Fix5EveryLaunchNamesTheRoot`, 10 tests: FAILED (failures=3, errors=5)
+  on `ff54644`, OK after; the two real-fixture tests pass on `ff54644` too, correctly, D-T being a defect in
+  a test. Live proof on the new root `e11-repair-proof-2026-09-17-b`, continuation only (the planner refuses
+  an empty `cases` list, so `F1-01-fixed-clean` is named and nothing ran from it; `campaign start` does not
+  run continuation trials, so each was run with `runner.py continuation`): the four trials on
+  `F3-02-mixed-two-items` (codex and claude-code, handoff and compaction) all `complete`, both Codex resumes
+  carrying the case directory in `sandbox_policy.writable_roots`, the resumed halves writing `result.json`,
+  `receipt.json`, `receipt.log` and `chat.md` into the run leaf with `validate_exit 0`, the at-cut and
+  before-resume fingerprints identical, eight writable-roots records all true, wall 2000 s, OpenRouter
+  charge $0.00 (no OpenCode lane). Control room gates L on `aa5a244` from outside the worktree
+  (`control-room/verify/gates-L.log`): runner 488 OK on both runtimes, `check` ok on both, core 364 OK on
+  both jsonschema pins, three adapters OK, validate-examples clean, E7 check runner 9 of 9, runner E11 suite
+  130 before FAILED (3+5) and after OK, core E11 suite 36 OK both. Derived revision `e11-native-reparse-9`
+  on the E10 root: 143 graded, every record equal to revision 8 on every field but `grade_path`, no flips,
+  150 originals byte-identical; its routing re-score ran without the liveness refusal this time (the reused
+  pid had freed at 8:16 PM, when revision 8's own routing files were also written and filed), all four
+  setups' records equal to revision 8. Next: Astra's recheck5 (mandate `astra-kit/mandate-recheck5.md`,
+  mode `recheck5`, narrowed to D, D-G, D-T and the continuation proof; the copy carries the fix-5 proof root
+  and her recheck4 probe scripts), then, if cleared, the fresh root `e11-repair-qualification-2` and the
+  restart.
