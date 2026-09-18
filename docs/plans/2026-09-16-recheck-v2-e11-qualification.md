@@ -899,3 +899,36 @@ to exactly the held-out request text.
   have been cured." OpenRouter as recorded: attempts 4.91 plus probes 0.01, 4.92; balance read again at
   9:44 AM, used 14.98, unchanged since before the rerun (harness estimates, not reconciled charges). Next:
   the reconvene in chat with both readings; fix 8's gates, then recheck8 with this read beside it.
+- **E11-39, Astra's weigh-in on the round-2 shape; fix 8 gated and committed; recheck8 launched (2026-09-18
+  about 10:15 AM, control room).** Tony asked, after the reconvene, why the pilot fails and how the skills become
+  model-agnostic, then had Astra at high weigh in on the control room's proposed shape (accept this round's
+  result; one bounded round 2 with a hard stop; narrow the target to Claude Code and Codex with the OpenCode
+  lanes as gaps; move four judgment calls into code: deny outside writes in the adapter, refuse "fixed" on an
+  outbound-required item without a service observation, derive the stop reason from execution, generate and
+  check the output block). Her weigh-in (`astra-outputs/e11/weigh-in/`, Clerk 7f8409cf): the control room
+  overstated "the model-agnostic part worked" (the whole package was tested, the core's contribution never
+  isolated; the baseline comparison was not clean; DeepSeek's refusals are a plausible contributor, not
+  established for all 35; the words discipline, honesty, stamina supply motives the records cannot show);
+  all four code changes are executable support the plan permits, each only if it covers every path including
+  shell and subprocess, plus what the proposal missed (reviewed-source accounting, corrected consumer inputs,
+  routing witnesses, immutable attempt records, compaction before resumed work); she would not call Claude
+  Code or Codex likely to pass on the four alone, and "a couple of days" is unsupported. Decisions: accept
+  HOLD; one bounded round CHANGE (freeze the repair list, acceptance checks and rerun set before building; one
+  repair round, one independent verification, then stop or carry, per ruling 17; D2's no ceiling is not a
+  licence to tune); narrowing CHANGE (an explicit E11 scope amendment naming the hand-off pairs that must
+  pass; reported as partial qualification; not itself a D4 matter, production eligibility is). On "are we
+  getting anywhere": the diagnosis converges, demonstrated reliability does not yet; stop if the repair round
+  cannot produce a clean bench or the clean rerun still fails a mandatory check. Tony's ruling PENDING.
+  Meanwhile fix 8's gates-O ran green 9:30 to 10:05 AM (runner 506/506 on both interpreters, check ok on
+  both, core 364/364 both jsonschema pins, adapters 90/34/96 both interpreters, validate-examples, E7 checks 9
+  of 9, E11 runner suite 148: 4 failures on 1d84b31, 0 after; core E11 36/36 both) and fix 8 is committed on
+  `feat/recheck-v2-e11-repair` as `4351654` (the commit message carries the E11-35 label nit and read2's
+  dotted-id point); gates filed at `control-room/verify/`. copy8 built by `verify-copy` at 4351654 with
+  `COPY_DIR` (repair tree 2,226 files), its six campaign roots scrub-swapped and rescanned 0 hits, no
+  routing directory, key-shaped grep clean apart from chance substrings inside Codex's encrypted reasoning
+  blobs; her read2 placed at `repair/read2.md` and the recheck8 mandate amended to ask whether read2's
+  dotted-id concern is cleared by the exact-stem selector. recheck8 launched at high on copy8 at about
+  10:14 AM (outputs `s/out/recheck8.*`). Decided on Tony's behalf and flagged: committing fix 8 locally and
+  launching recheck8 while his ruling on round 2 is pending (both inside the standing goal, both reversible,
+  no OpenRouter spend). Next: recheck8's verdict; Tony's ruling on the three decisions; then either the
+  frozen round-2 package or the E11 close.
