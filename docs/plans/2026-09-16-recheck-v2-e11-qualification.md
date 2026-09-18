@@ -862,3 +862,40 @@ to exactly the held-out request text.
   briefed to the builder at 9:02 AM once no trial was live. Decided on Tony's behalf and flagged: the read
   runs on the fix-7 tree with fix 8 in flight (its brief in her copy; the fixes change the apparatus, not
   a record). Next: fix 8 gated and committed, recheck8, then the reconvene with her read.
+- **E11-38, Astra's independent read of the rerun landed (2026-09-18 9:42 AM, control room).** `read2` at
+  effort max exited 0 after 42 minutes and 182 events; verdict, prompt, stderr, exit, events and her 25
+  scratch files filed at the packet's `astra-outputs/e11/read2/` (the 95 MB native-actions dump gzipped;
+  no key-shaped strings in the filing). Her verdict lines: claude-code, codex, opencode and
+  opencode-deepseek each DOES NOT QUALIFY; the pilot DOES NOT QUALIFY, "correcting the apparatus can
+  recover some measurements; it cannot make these records satisfy the whole predicate." Her diagnosis
+  classes 110 failed grades: 88 comparison/continuation model failures, 5 apparatus, 1 run condition; the
+  16 consumer attempts 9 model (the seven DeepSeek-side no-results plus two Codex consumers that read other
+  consumers' grades), 7 apparatus. What she confirms of the control room's reading: all nine complete
+  consumer attempts fail the same three checks, two of them apparatus (the artifact staging rejects the
+  producer's original live paths while the files were copied; the isolation probe measures the unseparated
+  bench from a runner child, not the harness), the third (`continuation_state`) an underspecified shape
+  the prompt never gave a schema for. What she corrects: E11-33's "75 of 104" is 79 of 126; E11-35's "4 of
+  8" continuation grades is 3 ok (the eight invariant sets pass, a separate number); the saved recount's
+  `timed_out: 0` reads a ledger field that does not exist (four routing timeouts on Qwen); DeepSeek's 35
+  no-result sessions did work in their traces (no matching outage, so model failure to finish, not a
+  proven provider failure); eight of the 28 scope violations are Codex `file:` cwd false detections and one
+  more is a here-document, leaving 19 real outside destinations across 12 attempts; the codex manual-only
+  UNQUALIFIED is a guard failure (a completed read of the manual-only probe's SKILL.md at rollout line 51
+  despite 24 station paths closed). What she flags on fix 7 and fix 8: the "no further dot" capture
+  selector discards valid dotted run ids and still selects an unrelated `launch-x.trace.json`; the fix-8
+  brief repeats the dotted-id restriction and "needs correcting before implementation is accepted" (fix 8
+  is uncommitted, its gates running since 9:30 AM; recheck8 will read this). Her bounded repair proposal,
+  six items, all class A: finish fix 8 against the real shapes and replay all 126 + 16 grades into a new
+  derived revision (0 live trials); repair the measurements (Codex URI/argv, here-docs, refusal vs error,
+  evidence checks from the raw report, reply/result agreement, OpenCode resume capture); repair the
+  consumer test (a real caller payload, a published answer schema, path binding through the producer's
+  run_dir, grade only after every consumer session ends); a clean independently measured bench with a
+  native read-boundary preflight before any rerun (layout changes need Tony's ruling; 360 trials + 12
+  probes, planning range 6 to 11 OpenRouter dollars, not a reconciled charge); recording completeness
+  (writable-root records by attempt and half, consumer failure interruptions, honest status counts, a
+  copy manifest: 26 claude-code run-tree hashes do not reproduce in her copy, to be resolved on the
+  original root with her read-only `live-record-check.py`); and the F5 method ambiguity settled before
+  another campaign. No model-prompt repair proposed; "additional instructions are not evidence that they
+  have been cured." OpenRouter as recorded: attempts 4.91 plus probes 0.01, 4.92; balance read again at
+  9:44 AM, used 14.98, unchanged since before the rerun (harness estimates, not reconciled charges). Next:
+  the reconvene in chat with both readings; fix 8's gates, then recheck8 with this read beside it.
