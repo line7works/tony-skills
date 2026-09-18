@@ -720,3 +720,28 @@ to exactly the held-out request text.
   Next: Astra's recheck6 (mandate `astra-kit/mandate-recheck6.md`, mode `recheck6`, narrowed to D-F, D-U, P
   and the one-trial proof; the copy carries the fix-6 proof root and her recheck5 probe scripts), then, if
   D clears, the fresh root `e11-repair-qualification-2` and the restart.
+- **E11-32, Astra's recheck6 on fix 6: D CLEARED (2026-09-18 about 12:30 AM, control room).** Verdict
+  `astra-outputs/e11/recheck6/recheck6.md` (7 minutes at high, exit 0): D-F FIXED (each site's enforcement
+  follows the launcher selected for that launch; her `decisions.py` re-run reads REFUSED with `enforced: true`
+  under either value of the first half's flag, and no argv reaches the process boundary; her new
+  `cli-proof.py` shows a fake handoff continuation through the CLI recording `enforced: false` on both halves
+  with the reason, the resume argv selecting the fake); D-U FIXED (a real launch with unestablished
+  writability refused with exit 2 even when `bounded: false`, the record written with `why_unbounded` naming
+  the missing `opencode.json`; a fake launch on the same home proceeds with `enforced: false`; the CLI exit
+  confirmed by staging the real OpenCode launch script, no model); P FIXED (section 17's dated correction
+  accurate; `campaign_queue` on the proof plan reads 2 comparison and 4 continuation rows). D as a whole
+  CLEARED on the closed checklist. The fix-6 proof read from its own records: one trial `complete`,
+  `validate_exit 0`, both halves' records `enforced: true` and `run_dir_is_writable: true`, the case
+  directory present in all 12 resumed turn contexts. Her fresh-copy re-drive of the fix-4, fix-5 and fix-6
+  classes: 23 tests OK; the two test-file tails as before (the four consumer tests her sandbox cannot run,
+  gates-M.log read for them; core 36 OK). No new BLOCKER. NEW MINOR P2, report only: section 17 overstates
+  the `test_e10_62.py` bench (on a clean test root its helper also creates the missing home directories
+  under the isolated test pilot root, and the older resume test selects the real binary at a captured
+  boundary); the runtime repair stands, the statement is to be corrected; carried to the reconvene with the
+  other carried items. Two notes of hers for the record: the literal `runner.py continuation` command of
+  the proof is not witnessed by the root's records (the runner log shows the continuation handler and the
+  cut), and the builder's config-less refusal output lives in section 17 rather than as a probe log under
+  the proof root; her own re-drives reproduce it. The restart follows on this commit, `485e92a`, on the
+  fresh root `e11-repair-qualification-2` under Tony's standing goal of 2026-09-17 ("finish the build and
+  Astra check, then run the rerun"); the two in-round send-backs, E11-28 and E11-30, were decided on his
+  behalf and are flagged for the reconvene.
