@@ -11,6 +11,7 @@ contribute actions; a refused operation is not a side effect.
 """
 import json
 import os
+import sys
 import shutil
 import unittest
 
@@ -2154,6 +2155,154 @@ class Fix6EnforcementFollowsTheLaunch(RunnerCase):
         self.assertFalse(record["bounded"])
         self.assertFalse(record["run_dir_is_writable"])
         self.assertIn("fake launcher", record["why_not_enforced"])
+
+
+class Fix7QueueAndReaders(RunnerCase):
+    """The rerun on 485e92a: 348 of 360 scheduled, and `grade --all` died on a sidecar.
+
+    NEW MAJOR Q: `campaign_queue` built rows from `order`, `continuation_order`,
+    `routing_order` and `manual_only_order` and never from `consumer_order`, while
+    `_campaign_loop` already had a `consumer` branch. NEW MAJOR G: `capture_files` took every
+    `launch-*.json` as an OpenCode verifier capture, so a pretty-printed
+    `launch-<call>.record-call-flags.json` beside the capture was read line by line and the
+    first string raised `AttributeError: 'str' object has no attribute 'get'`.
+    """
+
+    setups = ("claude-code", "codex")
+
+    # ---- Q: the queue schedules the consumer trials
+    def planned(self):
+        """The plan document as `runner.py plan` writes it: with `consumer_order`.
+
+        `testlib` builds its campaign document without that key (no test needed it before),
+        so the order and the count are minted here exactly as `do_plan` mints them.
+        """
+        plan = dict(self.plan_document)
+        plan["consumer_order"] = runner.consumer_order(plan)
+        counts = dict(plan["counts"])
+        counts["consumer"] = sum(len(v) for v in plan["consumer_order"].values())
+        counts["total"] = (counts["comparison"] + counts["routing"] + counts["manual_only"]
+                           + counts["continuation"] + counts["consumer"])
+        plan["counts"] = counts
+        return plan
+
+    def test_the_queue_schedules_the_consumer_trials_last(self):
+        campaign = runner.Campaign(self.campaign)
+        plan = self.planned()
+        self.assertTrue(plan.get("consumer_order"), "the test plan mints no consumer trials")
+        queue = runner.campaign_queue(campaign, plan)
+        kinds = [row["kind"] for row in queue]
+        consumers = [row for row in queue if row["kind"] == "consumer"]
+        planned = sorted(t for ids in plan["consumer_order"].values() for t in ids)
+        self.assertEqual(sorted(row["id"] for row in consumers), planned)
+        # after the routing rows: every producer must be recorded before a consumer runs
+        self.assertGreater(min(i for i, k in enumerate(kinds) if k == "consumer"),
+                           max(i for i, k in enumerate(kinds) if k == "routing"))
+        for row in consumers:
+            self.assertIn("state", row)
+            self.assertIn("status", row)
+            self.assertFalse(row["complete"])
+            self.assertFalse(row["recorded"])
+
+    def test_the_planned_count_equals_the_plans_total(self):
+        campaign = runner.Campaign(self.campaign)
+        plan = self.planned()
+        self.assertEqual(len(runner.campaign_queue(campaign, plan)),
+                         plan["counts"]["total"])
+
+    def test_a_consumer_record_is_not_graded_as_a_comparison_trial(self):
+        """A consequence of Q: `consumer-*` directories now exist on a finished root."""
+        campaign = runner.Campaign(self.campaign)
+        tid = "consumer-claude-code-to-codex-r1"
+        runner.ensure_dir(campaign.trial_dir(tid))
+        runner.write_json(os.path.join(campaign.trial_dir(tid), "command.json"),
+                          {"setup": "codex", "kind": "consumer"})
+        self.assertNotIn(tid, [row[0] for row in runner.graded_attempts(campaign)])
+
+    # ---- G: the capture reader and the row filter
+    def test_only_the_launch_capture_is_read_as_a_verifier_trace(self):
+        capture = os.path.join(self.scratch, "verifier")
+        runner.ensure_dir(capture)
+        real = os.path.join(capture, "launch-F5-01-outbound-required-run-verify.json")
+        runner.write_text(real, '{"part": {"type": "text"}}\n')
+        for stray in ("launch-F5-01-outbound-required-run-verify.record-call-flags.json",
+                      "launch-F5-01-outbound-required-run-verify.stderr",
+                      "launch-x.y.json"):
+            runner.write_text(os.path.join(capture, stray), "{\n  \"status\": \"ok\"\n}\n")
+        self.assertEqual(runner.capture_files(capture, "opencode-trace"), [real])
+
+    def test_a_pretty_printed_object_yields_no_rows(self):
+        path = os.path.join(self.scratch, "pretty.json")
+        runner.write_text(path, json.dumps(
+            {"injected": ["one"], "refused": [], "note": "a note", "status": "ok"},
+            indent=2) + "\n")
+        self.assertEqual(runner.jsonl_lines(path), [])
+
+    def test_native_actions_reads_the_capture_and_raises_nothing(self):
+        """Her trial's shape: the sidecar beside the capture in run/verifier/."""
+        record = os.path.join(self.scratch, "record-with-sidecar")
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        runner.write_json(os.path.join(record, "command.json"),
+                          {"workspace": os.path.join(record, "workspace"),
+                           "run_dir": os.path.join(record, "run"), "opaque_tree": record,
+                           "setup": "opencode", "case": testlib.CASE,
+                           "condition": "available"})
+        verifier = os.path.join(record, "run", "verifier")
+        runner.ensure_dir(verifier)
+        call = "launch-F5-01-outbound-required-run-verify"
+        jsonl(os.path.join(verifier, call + ".json"),
+              [{"part": {"type": "tool", "tool": "bash", "callID": "a",
+                         "state": {"status": "completed", "input": {"command": "ls -la"},
+                                   "output": "ok"}}}])
+        runner.write_text(os.path.join(verifier, call + ".record-call-flags.json"),
+                          json.dumps({"injected": ["opencode system prompt"], "refused": [],
+                                      "note": "a harness artifact", "status": "ok"},
+                                     indent=2) + "\n")
+        runner.write_text(os.path.join(verifier, call + ".stderr"), "")
+        actions = runner.native_actions(record)
+        self.assertTrue(actions)
+        self.assertIn("ls -la", [a.get("command") for a in actions])
+
+    # ---- the guard: one attempt's exception does not end the run
+    def test_grade_all_records_the_failing_attempt_and_grades_the_rest(self):
+        campaign = runner.Campaign(self.campaign)
+        good = runner.trial_id("claude-code", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, good,
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertEqual(got.returncode, 0, got.stderr[-2000:])
+        bad = runner.trial_id("codex", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, bad,
+                   "--fake-launcher", self.fake_launcher("codex")])
+        self.assertEqual(got.returncode, 0, got.stderr[-2000:])
+        # the first attempt in the order raises inside the reader, as the sidecar did
+        stub = os.path.join(self.scratch, "grade_stub.py")
+        runner.write_text(stub, "\n".join([
+            "import sys",
+            "sys.path.insert(0, %r)" % os.path.dirname(runner.__file__),
+            "import runner",
+            "real = runner.trace_witnesses",
+            "def boom(campaign, record, command):",
+            "    if %r in record:" % bad,
+            "        raise AttributeError(\"'str' object has no attribute 'get'\")",
+            "    return real(campaign, record, command)",
+            "runner.trace_witnesses = boom",
+            "sys.argv = ['runner.py', 'grade', '--campaign', %r, '--all']" % self.campaign,
+            "sys.exit(runner.main())",
+            ""]))
+        step = runner.run_cmd(
+            [sys.executable, stub],
+            env=runner.Campaign(self.campaign).env(require_binaries=False),
+            cwd=self.scratch, label="grade --all with one reader raising")
+        self.assertEqual(step["exit"], 1, step["stderr"][-1500:])
+        document = json.loads(step["stdout"])
+        self.assertEqual(document["graded"], 1)
+        self.assertEqual([e["trial"] for e in document["grade_errors"]], [bad])
+        self.assertEqual(document["grade_errors"][0]["exception"], "AttributeError")
+        self.assertIn(bad, document[runner.FAIL_EXIT_KEY])
+        self.assertIn("AttributeError", step["stderr"])
+        self.assertEqual([g["trial"] for g in document["grades"]], [good])
+        self.assertFalse(os.path.isfile(os.path.join(campaign.trial_dir(bad), "grade.json")))
+        self.assertTrue(os.path.isfile(os.path.join(campaign.trial_dir(good), "grade.json")))
 
 
 class Fix2PreflightAllowRules(RunnerCase):

@@ -363,7 +363,16 @@ def rmtree(path):
 
 
 def jsonl_lines(path):
-    """Every JSON document on its own line, bad lines skipped."""
+    """Every JSON OBJECT on its own line, bad lines and scalar lines skipped.
+
+    E11-33, NEW MAJOR G: a pretty-printed JSON object read line by line yields strings and
+    numbers, and every reader here indexes its rows (`entry.get("part")`,
+    `record.get("type")`, `row["id"]`). One such line ended `grade --all` with
+    `AttributeError: 'str' object has no attribute 'get'` and left 29 attempts ungraded.
+    Nothing in this runner wants a scalar row: every call site treats a row as a mapping (the
+    three harnesses' `native_actions`, `trace_witnesses`, the routing witnesses, the ledger,
+    the process registry and the attempt journal), so the filter belongs here, once.
+    """
     out = []
     text = read_text(path)
     if not text:
@@ -373,9 +382,11 @@ def jsonl_lines(path):
         if not line:
             continue
         try:
-            out.append(json.loads(line))
+            row = json.loads(line)
         except ValueError:
             continue
+        if isinstance(row, dict):
+            out.append(row)
     return out
 
 
@@ -5014,6 +5025,14 @@ def graded_attempts(campaign, kinds=("comparison", "continuation")):
         tid = os.path.basename(path)
         if tid.startswith("routing-"):
             continue
+        # E11-33, a consequence of NEW MAJOR Q: once the queue schedules them, `consumer-*`
+        # directories exist on a finished root, and this reader would hand each to `grade_one`
+        # as a COMPARISON record — which reads `command["case"]`, a field the consumer handler
+        # does not write. A consumer has its own grade, `consumer-grade.json`, written by
+        # `do_consumer` against the producer's records; it is not a comparison trial and is
+        # skipped here the way a routing trial is.
+        if tid.startswith("consumer-"):
+            continue
         kind = "continuation" if tid.startswith("cont-") else "comparison"
         if kind in kinds:
             rows.append((tid, 0, path))
@@ -5052,19 +5071,47 @@ def do_grade(args):
     revision = getattr(args, "revision", None) or None
     if revision:
         check_identifier("the revision", revision)
-    rows = []
+    rows, errors = [], []
     with key_open(campaign, "grade"):
         for tid, attempt, record in targets:
-            rows.append(grade_one(campaign, plan, tid, record, attempt, restaged=restaged,
-                                  revision=revision))
+            # E11-33: one attempt's exception used to end the whole run. `grade --all` on the
+            # rerun root died on the first trial carrying a stray sidecar, with 29 attempts
+            # after it in the order left with no grade at all. An attempt that raises is
+            # RECORDED as an error — no `grade.json` is written for it — and the rest are
+            # graded; the command still exits non-zero at the end and names them.
+            try:
+                rows.append(grade_one(campaign, plan, tid, record, attempt, restaged=restaged,
+                                      revision=revision))
+            except (Usage, Missing):
+                # A deliberate refusal is the runner's own contract, not a reader fault: the
+                # answer-key wall (a stand-in outside a synthetic campaign, a stand-in without
+                # the test flag) and a missing record still end the command with their own
+                # exit status. Only a fault inside the grading of one attempt is collected.
+                raise
+            except Exception as exc:                        # noqa: BLE001 - reported, not hidden
+                errors.append({"trial": tid, "attempt": attempt, "record": record,
+                               "exception": type(exc).__name__, "message": str(exc)[:400]})
+                sys.stderr.write(
+                    "runner.py: grading %s attempt %d raised; the attempt is recorded as an "
+                    "error and the rest are graded\n" % (tid, attempt))
+                traceback.print_exc()
     summary = grade_summary(rows)
     grades = [{"trial": r["trial"], "attempt": r["attempt"], "grade_path": r["grade_path"]}
               for r in rows]
+    document = {"campaign": campaign.root, "revision": revision,
+                # `graded` counts WRITTEN grades, never attempts attempted
+                "graded": len(rows), "summary": summary, "grades": grades,
+                "grade_errors": errors}
     if args.summary:
-        return {"campaign": campaign.root, "revision": revision, "graded": len(rows),
-                "summary": summary, "grades": grades, "per_trial": summary_rows(rows)}
-    return {"campaign": campaign.root, "revision": revision, "graded": len(rows),
-            "summary": summary, "grades": grades}
+        document["per_trial"] = summary_rows(rows)
+    if errors:
+        # E10-68 defect 3's own mechanism: the summary still reaches stdout as ONE json
+        # document (A7a) and the command exits 1 naming the attempts that raised.
+        document[FAIL_EXIT_KEY] = (
+            "%d attempt(s) raised while grading and have no grade.json: %s"
+            % (len(errors), ", ".join("%s#%d (%s)" % (e["trial"], e["attempt"], e["exception"])
+                                      for e in errors)))
+    return document
 
 
 def trial_defaults():
@@ -5877,6 +5924,13 @@ def capture_dirs(record):
     return out
 
 
+def _is_opencode_launch_capture(name):
+    """`launch-<call id>.json` and nothing dotted beside it (E11-33, NEW MAJOR G)."""
+    if not name.startswith("launch-") or not name.endswith(".json"):
+        return False
+    return "." not in name[len("launch-"):-len(".json")]
+
+
 def capture_files(capture, shape):
     """Every file of one capture directory carrying records of `shape` (E11-7 item 1).
 
@@ -5909,8 +5963,12 @@ def capture_files(capture, shape):
         elif shape == "opencode-trace":
             # `trace.json` for a driving session, `launch-<call>.json` for a verifier call:
             # both are JSONL of `{"part": ...}` rows despite the `.json` suffix.
-            if name.endswith("trace.json") or (name.startswith("launch-")
-                                               and name.endswith(".json")):
+            #
+            # NEW MAJOR G (E11-33): `startswith("launch-") and endswith(".json")` also selected
+            # `launch-<call>.record-call-flags.json`, a pretty-printed OBJECT that sits beside
+            # the capture, and `grade --all` died reading it. The call id carries no dot, so
+            # the remainder after `launch-` must carry none before `.json`.
+            if name.endswith("trace.json") or _is_opencode_launch_capture(name):
                 out.append(path)
     return out
 
@@ -9088,6 +9146,15 @@ def campaign_queue(campaign, plan):
     for lane, ids in sorted((plan.get("manual_only_order") or {}).items()):
         for tid in ids:
             queue.append({"lane": lane, "id": tid, "kind": "routing", "manual_only": True})
+    # NEW MAJOR Q (E11-33): the queue was built from four of the plan's five orders and never
+    # from `consumer_order`, while `_campaign_loop` already carries a `consumer` branch. Plan
+    # 2 declared twelve consumer trials; the closed queue held 348 of 360 and every consumer
+    # id is absent from the ledger. The E10 plan had no `consumer_order`, so the gap never
+    # showed there. They come LAST, after the routing and manual-only rows: a consumer reads
+    # one producer's records, so every producer must be recorded before one runs.
+    for lane, ids in sorted((plan.get("consumer_order") or {}).items()):
+        for tid in ids:
+            queue.append({"lane": lane, "id": tid, "kind": "consumer"})
     for row in queue:
         state = trial_state(campaign, row["id"])
         row["state"] = state["state"]
