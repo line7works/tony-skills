@@ -342,7 +342,12 @@ def write_claude_record(out_dir, prompt, state, steps, plugins, configured=None)
                       "message": {"content": [
                           {"type": "tool_result", "tool_use_id": planted["block"]["id"],
                            "is_error": planted.get("refused", False),
-                           "content": "planted"}]}})
+                           # E11-41 R2: a REFUSED call says so the way a harness says it.
+                           # `is_error` alone means the call failed, not that it was
+                           # refused, and the reader no longer conflates the two.
+                           "content": ("permission denied: writing outside of the project; "
+                                       "rejected by user approval settings"
+                                       if planted.get("refused") else "planted")}]}})
     if "routing_target" in prompt:
         skills = [{"name": "%s:%s" % (p, p)} for p in (plugins or ["recheck-v2"])]
         init["skills"] = skills

@@ -2105,6 +2105,26 @@ CODEX_EXEC_WORKDIR_RE = re.compile(
     r"""workdir\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
 
 
+def local_path(value):
+    """A `file:` URI as a local path; anything else unchanged (E11-41 R2).
+
+    Codex's rollout records a call's directory as `cwd: "file:///Users/..."`, and every
+    containment check here compares plain paths, so the URI form never matched and the call's
+    own directory was lost.
+    """
+    if not isinstance(value, str) or not value:
+        return value
+    if value.startswith("file://"):
+        try:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(value)
+            if parsed.netloc in ("", "localhost"):
+                return urllib.parse.unquote(parsed.path) or value
+        except (ValueError, ImportError):
+            return value
+    return value
+
+
 def codex_call_workdir(node):
     """The `workdir` this Codex call names, from any shape that carries one."""
     if not isinstance(node, dict):
@@ -2112,7 +2132,7 @@ def codex_call_workdir(node):
     for key in ("workdir", "cwd", "working_directory"):
         got = node.get(key)
         if isinstance(got, str) and got:
-            return got
+            return local_path(got)
     arguments = node.get("arguments")
     if isinstance(arguments, str):
         try:
@@ -2123,16 +2143,17 @@ def codex_call_workdir(node):
             for key in ("workdir", "cwd", "working_directory"):
                 got = parsed.get(key)
                 if isinstance(got, str) and got:
-                    return got
+                    return local_path(got)
     source = node.get("input")
     if isinstance(source, str):
         found = CODEX_EXEC_WORKDIR_RE.search(source)
         if found:
             literal = found.group(1)
             try:
-                return json.loads(literal) if literal.startswith('"') else literal[1:-1]
+                return local_path(json.loads(literal) if literal.startswith('"')
+                                  else literal[1:-1])
             except ValueError:
-                return literal[1:-1]
+                return local_path(literal[1:-1])
     return None
 
 
@@ -4717,6 +4738,25 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     return collected
 
 
+def _opencode_row_role(row):
+    """An OpenCode session record's role, from whichever field this store version carries.
+
+    E11-41 R2: the store's own rows name the role; the export beside them nests it under
+    `info`. A row whose parts are step/tool/reasoning and carry no `text` is an assistant
+    step either way, and the FIRST row of a session is the user's message.
+    """
+    info = row.get("info") if isinstance(row.get("info"), dict) else {}
+    for source in (row, info):
+        role = source.get("role")
+        if isinstance(role, str) and role:
+            return role
+    kinds = {((part.get("data") or {}) if isinstance(part, dict) else {}).get("type")
+             for part in (row.get("parts") or [])}
+    if kinds & {"step-start", "step-finish", "reasoning", "tool"}:
+        return "assistant"
+    return "user" if kinds == {"text"} else "unknown"
+
+
 def harness_reply(setup, harness_dir):
     """The session's OWN final reply, per harness (E10-45, finding 10).
 
@@ -4734,8 +4774,15 @@ def harness_reply(setup, harness_dir):
             document = read_json(session)
         except (Missing, Failure):
             document = {}
+        # E11-41 R2 (read2 section 4): this loop had NO role filter, so a session that
+        # produced no assistant text returned `records[0]` — the user's own request — and
+        # every reply check saw a false positive. The user's message is never the reply.
         texts = []
         for row in document.get("records") or []:
+            if not isinstance(row, dict):
+                continue
+            if _opencode_row_role(row) != "assistant":
+                continue
             for part in row.get("parts") or []:
                 data = part.get("data") or {} if isinstance(part, dict) else {}
                 if data.get("type") == "text" and isinstance(data.get("text"), str):
@@ -5733,6 +5780,16 @@ def simple_commands(text, depth=0):
             continue
         if word in CLAUSE_TAILS and not argv:
             continue
+        if word in ("<<", "<<-") and index < len(tokens):
+            # E11-41 R2: the body of a here-document is DATA. Lexed as shell it yielded
+            # phantom simple commands, and a scenario command quoted inside one read as a
+            # command the session ran.
+            delimiter = tokens[index]
+            index += 1
+            while index < len(tokens) and tokens[index] != delimiter:
+                index += 1
+            index += 1                      # step over the delimiter itself
+            continue
         if REDIRECTION.match(word):
             index += 1                      # its operand belongs to the redirection
             continue
@@ -5924,24 +5981,55 @@ def capture_dirs(record):
     return out
 
 
-def _dotless_stem(name, suffix):
-    """`<variable>.<suffix>` where the variable part carries no further dot.
+# E11-41 R1 / NEW MAJOR G-ID (Astra's recheck8): `_dotless_stem` rejected any variable part
+# containing a dot, but `input.schema.json` accepts `^[A-Za-z0-9._-]+$` for a run id and
+# `recheck_core.verifier.call_id_for` preserves it, so `run.v1-verify` is a real call id and
+# `launch-run.v1-verify.json`, `run.v1-verify.rollout.jsonl` and `run.v1-verify-2.events.jsonl`
+# are real captures. Fix 8 dropped all three — and the PRIOR Codex branch had selected the two
+# `.jsonl` ones, so it lost Codex verifier actions from grading. The discriminator is the call
+# id's own grammar, which the core builds and which always ends `-verify` or `-verify-<k>`; a
+# sidecar's stem (`x.record-call-flags`, `x.trace`, `x.session`) never does.
+CALL_ID_RE = re.compile(r"^[A-Za-z0-9._-]+-verify(?:-[0-9]+)?$")
+# The suffixes a SIDECAR carries between the call id and the extension. A capture's stem is
+# the call id itself; anything ending in one of these is something written beside a capture.
+SIDECAR_STEM_SUFFIXES = (".record-call-flags", ".stderr", ".stdout", ".err", ".out",
+                         ".trace", ".session", ".rollout", ".events", ".launch")
 
-    E11-35 (G): a verifier capture is named for its CALL — `<run id>-verify.rollout.jsonl`,
-    `<run id>-verify-2.events.jsonl`, `launch-<call>.json` — and a call id carries no dot. A
-    sidecar the session writes beside one does (`.record-call-flags.json`,
-    `x.record-call-flags.trace.jsonl`), which is how `grade --all` came to read a
-    pretty-printed object as JSONL. Only the documented forms are captures.
+
+def _is_call_id(stem):
+    """Does `stem` match a call id as `recheck_core.verifier.call_id_for` builds one?
+
+    Reported beside a selection, never the gate: a campaign may name a run id the schema
+    accepts and this pattern does not anticipate, and dropping its capture is the defect
+    G-ID names.
+    """
+    return bool(stem) and bool(CALL_ID_RE.match(stem))
+
+
+def _call_named_capture(name, suffix):
+    """`<stem>.<suffix>` where the stem is not a sidecar's.
+
+    E11-41 R1 / G-ID: the old rule was "no dot in the stem", which threw away the dotted run
+    ids `input.schema.json` accepts and `call_id_for` preserves. The stem may carry dots; what
+    it may not do is end in one of the sidecar suffixes above, which is what
+    `x.record-call-flags.rollout.jsonl` and `launch-x.trace.json` do.
     """
     tail = "." + suffix
     if not name.endswith(tail) or len(name) <= len(tail):
         return False
-    return "." not in name[:-len(tail)]
+    stem = name[:-len(tail)]
+    if any(stem.endswith(marker) for marker in SIDECAR_STEM_SUFFIXES):
+        return False
+    # A capture's stem is the CALL ID the core built, which always ends `-verify` or
+    # `-verify-<k>` and may carry dots (G-ID). A stem with no dot at all is accepted too, so a
+    # campaign whose run ids this pattern does not anticipate still has its captures read; a
+    # DOTTED stem that is not a call id is a sidecar this reader has not been told about.
+    return _is_call_id(stem) or "." not in stem
 
 
 def _is_opencode_launch_capture(name):
-    """`launch-<call id>.json` and nothing dotted beside it (E11-33, NEW MAJOR G)."""
-    return name.startswith("launch-") and _dotless_stem(name[len("launch-"):], "json")
+    """`launch-<call id>.json`, the documented form, and never a sidecar beside it."""
+    return name.startswith("launch-") and _call_named_capture(name[len("launch-"):], "json")
 
 
 # E11-35: the capture names, exactly as the reader's own docstring lists them. `driving` is
@@ -5985,7 +6073,7 @@ def capture_files(capture, shape):
             continue
         if name in names_for["driving"]:
             out.append(path)
-        elif any(_dotless_stem(name, suffix) for suffix in names_for["verifier"]):
+        elif any(_call_named_capture(name, suffix) for suffix in names_for["verifier"]):
             out.append(path)
         elif shape == "opencode-trace" and _is_opencode_launch_capture(name):
             out.append(path)
@@ -6063,6 +6151,45 @@ def git_subcommand(words):
     return None, options
 
 
+# E11-41 R2 (read2 section 4): the readers had two outcomes where the records carry four, and
+# "the runner incorrectly maps every OpenCode error to refused". A call that RAN and returned a
+# non-zero status is a completed error; a call the harness DECLINED is a refusal; a call the
+# session or the harness cut short is interrupted; and a write that landed before an error is
+# still a write. Only these words appear in the record.
+REFUSAL_MARKERS = ("auto-rejecting", "permission requested", "permission denied",
+                   "rejected by user approval", "not permitted", "operation not permitted",
+                   "refused by policy", "denied by policy", "writing outside of the project")
+INTERRUPTION_MARKERS = ("interrupted", "aborted", "cancelled", "canceled")
+
+
+def _marked(text, markers):
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in markers)
+
+
+def call_outcome(raw_status, text=None, metadata=None, errored=None):
+    """One of completed, refused, error, interrupted, unknown — never a conflation.
+
+    `raw_status` is the harness's own word where it has one; `text` is whatever output or
+    error string the call carries; `metadata` is the call's own metadata mapping. `errored`
+    is Claude Code's `is_error`, which says a call FAILED and not why.
+    """
+    metadata = metadata if isinstance(metadata, dict) else {}
+    if metadata.get("interrupted") or _marked(raw_status, INTERRUPTION_MARKERS):
+        return "interrupted"
+    if raw_status == "completed" and not errored:
+        return "completed"
+    if _marked(text, REFUSAL_MARKERS):
+        return "refused"
+    if _marked(text, INTERRUPTION_MARKERS):
+        return "interrupted"
+    if errored or raw_status == "error":
+        return "error"
+    if raw_status:
+        return raw_status
+    return "unknown"
+
+
 def opencode_kind(tool):
     """OpenCode's tool names, split into the kinds E11-7 item 1 distinguishes."""
     if tool in ("write", "edit", "patch"):
@@ -6108,9 +6235,13 @@ def native_actions(record):
                     payload = block.get("input") or {}
                     result = results.get(block.get("id"))
                     status = "unknown"
-                    if result is not None:
-                        status = "refused" if result.get("is_error") else "completed"
                     output_text = json.dumps((result or {}).get("content")) if result else None
+                    if result is not None:
+                        # R2: `is_error` says the call failed, not that it was refused.
+                        status = call_outcome(
+                            "error" if result.get("is_error") else "completed",
+                            text=output_text, metadata=result.get("metadata"),
+                            errored=result.get("is_error"))
                     paths = [payload[k] for k in ("file_path", "path", "notebook_path", "filePath")
                              if isinstance(payload.get(k), str)]
                     # E11-7 item 1: a listing is its own kind, and so is a request that never
@@ -6212,8 +6343,11 @@ def native_actions(record):
                         continue
                     state = data.get("state") or {}
                     payload = state.get("input") or {}
-                    status = {"completed": "completed", "error": "refused"}.get(
-                        state.get("status"), state.get("status") or "unknown")
+                    status = call_outcome(state.get("status"),
+                                          text=json.dumps(state.get("output"))
+                                          if state.get("output") is not None else
+                                          state.get("error"),
+                                          metadata=state.get("metadata"))
                     paths = [payload[k] for k in ("filePath", "path", "file_path")
                              if isinstance(payload.get(k), str)]
                     add(kind=opencode_kind(data.get("tool")),
@@ -6237,8 +6371,11 @@ def native_actions(record):
                     continue
                 state = part.get("state") or {}
                 payload = state.get("input") or {}
-                status = {"completed": "completed", "error": "refused"}.get(
-                    state.get("status"), state.get("status") or "unknown")
+                status = call_outcome(state.get("status"),
+                                      text=json.dumps(state.get("output"))
+                                      if state.get("output") is not None else
+                                      state.get("error"),
+                                      metadata=state.get("metadata"))
                 paths = [payload[k] for k in ("filePath", "path", "file_path")
                          if isinstance(payload.get(k), str)]
                 add(kind=opencode_kind(part.get("tool")),
@@ -6710,6 +6847,41 @@ def _unauthorized(witnesses, command):
 CHAT_LINES = ("RECHECK:", "Result:", "Source:", "Method:")
 
 
+# The reply grammar's own words (contract section 7's Output block). The two-word forms are
+# written with a space in a reply and with an underscore in a record.
+REPLY_DISPOSITIONS = ("not_fixed", "fixed", "waived", "reopened")
+REPLY_REASONS = ("reproduces", "missed_case", "verification_blocked", "missing_evidence")
+
+
+def _reply_disposition(line):
+    """The disposition a reply line states, as a WHOLE token of the reply grammar.
+
+    E11-41 R2, the control room's send-back on batch A: the first parser tested
+    `word in line`, so `fixed` matched inside `not fixed` and 27 attempts whose replies read
+    "… · not fixed (missed_case) · …" were read as saying `fixed`. Every one of them flipped
+    ok -> not ok on `interop`. A disposition is a whole token, never a substring: the line's
+    `·`-separated fields are normalised (case, spaces and hyphens) and matched with word
+    boundaries, longest form first, so `not_fixed` can never be read as `fixed`.
+    """
+    if not line:
+        return None
+    fields = [f for f in line.split("\u00b7")] or [line]
+    for field in fields + [line]:
+        token = field.split("(")[0].strip().lower().replace("-", "_").replace(" ", "_")
+        if not token:
+            continue
+        for word in REPLY_DISPOSITIONS:                     # not_fixed before fixed
+            if token == word:
+                return word
+        # a field that carries the word with something before or after it ("still not fixed")
+        # is still that disposition — but `not_fixed` is tested first, so the longer form can
+        # never lose to the shorter one it contains.
+        for word in REPLY_DISPOSITIONS:
+            if token.endswith("_" + word) or token.startswith(word + "_"):
+                return word
+    return None
+
+
 def _interop(result, record):
     """The session's ACTUAL final reply against the Output block and its specific items.
 
@@ -6736,10 +6908,20 @@ def _interop(result, record):
             if key and key in candidate and " · " in candidate:
                 line = candidate.strip()[:200]
                 break
+        # E11-41 R2: the reply's own disposition word must AGREE with the result's. A line
+        # that names the item and says the opposite of the record is a contradiction, not a
+        # delivery; read2 found a wrong-disposition reply passing.
+        said = _reply_disposition(line)
+        agrees = (said is not None and said == item.get("disposition")) if line else None
         item_rows.append({"index": index, "location": key, "line_in_the_reply": line,
-                          "present": line is not None})
+                          "present": line is not None,
+                          "disposition_in_the_reply": said,
+                          "result_disposition": item.get("disposition"),
+                          "disposition_agrees": agrees})
     reply_delivered = bool(reply.strip())
+    dispositions_agree = all(r["disposition_agrees"] for r in item_rows) if item_rows else None
     ok = reply_delivered and all(present.values()) and all(r["present"] for r in item_rows) \
+        and (dispositions_agree is not False) \
         and (bool(items) or status != "completed")
     return {"graded_from": "reply.md",
             "reply_delivered": reply_delivered,
@@ -6751,6 +6933,7 @@ def _interop(result, record):
             "chat_bytes": len(graded.encode("utf-8")),
             "items": len(items), "item_lines": item_rows,
             "one_line_per_item": all(r["present"] for r in item_rows) if items else None,
+            "dispositions_agree": dispositions_agree,
             "ok": ok}
 
 
@@ -9556,19 +9739,50 @@ def _campaign_loop(campaign, plan, args):
             in_flight.pop(lane, None)
         return last
 
-    workers = []
+    # NEW MAJOR Q-S-L (Astra's recheck8): the boundary was a WAIT, and a consumer waiting on
+    # it held a worker slot. With fewer slots than lanes (`--lanes 1`) the consuming lane
+    # started first, blocked forever, and the slot gate never started the producing lane that
+    # would have released it — a scheduler deadlock her one-lane control reproduces. The
+    # ordering is structural now: PHASE 1 runs every lane's producer rows and is joined; only
+    # then does PHASE 2 run the consumer rows. No row waits while holding a slot, and
+    # `--lanes N` keeps its plain meaning inside each phase.
     concurrency = int(getattr(args, "lanes", 0) or len(lanes))
-    for lane, rows in sorted(lanes.items()):
-        workers.append(threading.Thread(target=work, args=(lane, rows), name="lane-%s" % lane))
     started_at = now_iso()
-    running = []
-    for worker in workers:
-        while len([w for w in running if w.is_alive()]) >= max(1, concurrency):
-            time.sleep(0.2)
-        worker.start()
-        running.append(worker)
-    for worker in workers:
-        worker.join()
+
+    def run_phase(name, per_lane):
+        workers = []
+        for lane, rows in sorted(per_lane.items()):
+            if not rows:
+                continue
+            workers.append(threading.Thread(target=work, args=(lane, rows),
+                                            name="lane-%s-%s" % (lane, name)))
+        running = []
+        for worker in workers:
+            while len([w for w in running if w.is_alive()]) >= max(1, concurrency):
+                time.sleep(0.2)
+            worker.start()
+            running.append(worker)
+        for worker in workers:
+            worker.join()
+
+    producer_rows = {lane: [r for r in rows if r["kind"] != "consumer"]
+                     for lane, rows in lanes.items()}
+    consumer_rows = {lane: [r for r in rows if r["kind"] == "consumer"]
+                     for lane, rows in lanes.items()}
+    run_phase("producers", producer_rows)
+    if any(consumer_rows.values()):
+        # the boundary is now an ASSERTION: phase 1 has been joined, so every producer row is
+        # settled and the event must already be set. A future regression is loud here rather
+        # than a hang.
+        if not producers_done.is_set():
+            campaign.note("the producer phase ended with the boundary unset (%d row(s) "
+                          "outstanding); settling them before the consumer phase (E11-41 R1)"
+                          % sum(producers_left.values()))
+            for lane in sorted(producers_left):
+                _release_lane(lane)
+        campaign.note("the consumer phase begins: every producer row of every lane is "
+                      "settled (E11-41 R1, Q-S-L)")
+        run_phase("consumers", consumer_rows)
     if os.path.isfile(campaign.pid_file):
         os.unlink(campaign.pid_file)
     stops = {name: lane_stopped(campaign, name) for name in sorted(lanes)
@@ -11341,7 +11555,96 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     return grade
 
 
+def consumer_records(campaign):
+    """Every recorded consumer trial of this campaign, with its attempt and record."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "consumer-*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        if os.path.isfile(os.path.join(path, "command.json")):
+            rows.append((tid, 0, path))
+        for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_path)
+            if name.isdigit() and os.path.isfile(os.path.join(attempt_path, "command.json")):
+                rows.append((tid, int(name), attempt_path))
+    return rows
+
+
+def do_consumer_regrade(args):
+    """Grade retained consumer pairs again, read-only (E11-41 R1).
+
+    Astra's read2 asks for the 16 consumer records replayed under the repaired grader and says
+    explicitly not to call `consumer` on old records to obtain new grades: that would launch a
+    session. This launches nothing. It reloads each trial's retained staging record and its
+    answer, regrades, and writes `consumer-grade.<revision>.json` BESIDE the original, which is
+    never touched.
+    """
+    campaign = Campaign(args.campaign)
+    revision = getattr(args, "revision", None)
+    if not revision:
+        raise Usage("--regrade needs --revision <name>: a derived grade never overwrites the "
+                    "original (E10-48)")
+    check_identifier("the revision", revision)
+    targets = consumer_records(campaign)
+    if not getattr(args, "all", False):
+        targets = [row for row in targets if row[0] == args.trial]
+        if not targets:
+            raise Missing("no recorded consumer trial %s" % args.trial)
+    rows, errors = [], []
+    for tid, attempt, record in targets:
+        try:
+            command = read_json(os.path.join(record, "command.json"))
+            pair = command.get("pair")
+            if not isinstance(pair, dict) or not pair.get("pair_dir"):
+                raise Missing("%s#%d retained no staging record to regrade" % (tid, attempt))
+            producer = {"record": command.get("producer_record"),
+                        "trial": command.get("producer_trial"),
+                        "command": read_json(os.path.join(command["producer_record"],
+                                                          "command.json"))}
+            answer = os.path.join(pair["pair_dir"], "consumer.json")
+            after = {}
+            producer_dir = pair.get("producer_dir")
+            if producer_dir and os.path.isdir(producer_dir):
+                for base, _dirs, files in os.walk(producer_dir):
+                    for name in sorted(files):
+                        full = os.path.join(base, name)
+                        after[os.path.relpath(full, producer_dir)] = file_sha256(full)
+            grade = consumer_grade(pair, producer, answer,
+                                   result_path=os.path.join(pair.get("run_dir") or "",
+                                                            "result.json"),
+                                   reply_path=os.path.join(record, "reply.md"),
+                                   validator=command.get("validator"),
+                                   isolation=command.get("isolation"),
+                                   producer_hashes_after=after)
+            grade["revision"] = revision
+            grade["regraded_from"] = record
+            path = os.path.join(record, "consumer-grade.%s.json" % revision)
+            write_json(path, grade)
+            rows.append({"trial": tid, "attempt": attempt, "grade_path": path,
+                         "ok": grade.get("ok"),
+                         "why": grade.get("why")})
+        except Exception as exc:                        # noqa: BLE001 - reported, not hidden
+            errors.append({"trial": tid, "attempt": attempt, "record": record,
+                           "exception": type(exc).__name__, "message": str(exc)[:400]})
+    document = {"campaign": campaign.root, "revision": revision, "regraded": len(rows),
+                "grades": rows, "regrade_errors": errors,
+                "originals_untouched": "consumer-grade.json is never written by --regrade"}
+    if errors:
+        document[FAIL_EXIT_KEY] = ("%d consumer record(s) could not be regraded: %s"
+                                   % (len(errors), ", ".join("%s#%d (%s)"
+                                                             % (e["trial"], e["attempt"],
+                                                                e["exception"])
+                                                             for e in errors)))
+    return document
+
+
 def do_consumer(args, record=None, attempt=0):
+    if getattr(args, "regrade", False):
+        return do_consumer_regrade(args)
+    if not getattr(args, "trial", None):
+        raise Usage("name a consumer trial id (a trial is optional only with "
+                    "--regrade --all)")
     """One directed producer-to-consumer trial (E11-7 item 6)."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
@@ -11620,10 +11923,20 @@ def build_parser():
                                "session reads ONE producer's records and is graded on what "
                                "it recovers (E11-7 item 6)")
     campaign_arg(con)
-    con.add_argument("trial", help="consumer-<producer>-to-<consumer>-r<n>")
+    con.add_argument("trial", nargs="?", default=None,
+                     help="consumer-<producer>-to-<consumer>-r<n>; omitted only with "
+                          "--regrade --all")
     con.add_argument("--attempt", type=int, default=0)
     con.add_argument("--fake-launcher", default=None,
                      help="test only: the fake harness's launcher")
+    con.add_argument("--regrade", action="store_true",
+                     help="grade RETAINED consumer pairs again, read-only, writing "
+                          "consumer-grade.<revision>.json beside the originals; launches "
+                          "nothing (E11-41 R1)")
+    con.add_argument("--all", action="store_true",
+                     help="with --regrade: every recorded consumer trial of the campaign")
+    con.add_argument("--revision", default=None,
+                     help="with --regrade: the derived grade's name")
     con.set_defaults(func=do_consumer)
 
     pre = subs.add_parser("preflight",

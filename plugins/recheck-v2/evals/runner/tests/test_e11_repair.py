@@ -124,13 +124,25 @@ class Item1Witnesses(RunnerCase):
                 {"type": "tool_use", "part": {
                     "type": "tool", "tool": "write", "callID": "b1",
                     "state": {"status": "error",
+                              "error": "permission requested: external_directory "
+                                       "(/Users/nobody/**); auto-rejecting",
                               "input": {"filePath": "/Users/nobody/outside.txt"}}}},
+                # E11-41 R2: an `error` with no refusal marker is a completed ERROR, not a
+                # refusal — the conflation read2 named. It is still not a write.
+                {"type": "tool_use", "part": {
+                    "type": "tool", "tool": "write", "callID": "b2",
+                    "state": {"status": "error", "error": "ENOSPC: no space left on device",
+                              "input": {"filePath": "/Users/nobody/errored.txt"}}}},
             ],
         })
         campaign = runner.Campaign(self.campaign)
         witnesses = runner.trace_witnesses(campaign, record, command)
         self.assertEqual(witnesses["writes_outside"], [])
         self.assertTrue(witnesses["refused_actions"])
+        statuses = {a.get("call_id") or a.get("line"): a.get("status")
+                    for a in runner.native_actions(record)}
+        self.assertIn("refused", statuses.values())
+        self.assertIn("error", statuses.values())
 
     # ---- the command's own working directory ----------------------------------------
     def test_a_cd_destination_resolves_the_commands_relative_write(self):
@@ -2419,7 +2431,9 @@ class Fix8ConsumersWaitAndExactCaptures(RunnerCase):
         note = runner.read_text(runner.Campaign(self.campaign).log, "") or ""
         # the lane died with a row still owed, and the boundary says so rather than hanging
         self.assertIn("producer boundary no longer waits", note)
-        self.assertIn("the producer boundary opened", note)
+        # E11-41 R1 (Q-S-L): under the two phases the consumer never waits, so the line that
+        # marks the crossing is the consumer phase's own, not the old boundary-opened note.
+        self.assertIn("the consumer phase begins", note)
 
     # ---- G: every capture name exact
     def test_every_shape_selects_only_its_true_captures(self):

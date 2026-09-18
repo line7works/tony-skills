@@ -171,6 +171,15 @@ the sandbox or environment stopped is `verification_blocked`, never `static`. Wh
 scenario names more than one command or input, the verifier runs each and reports each; a path
 the record does not name is never substituted for one it does.
 
+`method` records what the verifier ATTEMPTED, not whether the attempt returned. `executed` means
+the verifier ran, or tried to run, the scenario's own command or call; when the sandbox or the
+environment declined that attempt the refusal is recorded in `blocked` and the reason is
+`verification_blocked`, and the method stays `executed`. `static` is only for a scenario that
+requires no execution at all (E11-41 R6, 2026-09-18: the outbound-required scenario is a
+deterministic POLICY REFUSAL — the named service stays
+`https://sync.widget.example.invalid/v1/rows`, the sandbox declines the call, and the item stays
+open without the named service observation; a declined attempt is never a static clearance).
+
 For every item the result records: the method and, when static, its reason; what was run or
 read; the location of the code after the fix when it moved (the file and the first line of the code
 that now decides the scenario, as the verifier identifies it: evidence, not a graded value); the observed behavior against the
