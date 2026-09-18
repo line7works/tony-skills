@@ -1588,6 +1588,154 @@ class Fix2ConsumerEvidence(RunnerCase):
         self.assertEqual(grade["continuation"]["observed_indexes"]["done"], [1])
 
 
+class Fix4WritableRunLeaf(RunnerCase):
+    """Tony's ruling E11-26: a session must be able to write its own run directory.
+
+    The rerun's every Codex comparison trial ended `no_result` in about 150 seconds, the
+    harness refusing the skill's first write ("patch rejected: writing outside of the
+    project"). The run directory is the fixture's own `run/` leaf, a SIBLING of the workspace
+    (E10-54(a)); Codex's sandbox writes cwd, its `--add-dir` roots and `$TMPDIR`. Until E11-7
+    item 2 `TMPDIR` was `<campaign>/tmp`, which CONTAINED the leaf by accident of layout; a
+    per-trial scratch (`<opaque tree>/scratch`, a sibling of `fixture/`) took that away, and
+    nothing checked.
+    """
+
+    setups = ("codex", "claude-code", "opencode")
+
+    def layout(self, leaf="tree"):
+        """The real shape: `<tree>/fixture/<12 hex>/{workspace,run}` beside `<tree>/scratch`."""
+        tree = os.path.join(self.scratch, leaf)
+        case_dir = os.path.join(tree, "fixture", "75d13f306773")
+        workspace = os.path.join(case_dir, "workspace")
+        run_dir = os.path.join(case_dir, "run")
+        scratch = os.path.join(tree, "scratch")
+        for path in (workspace, run_dir, scratch):
+            runner.ensure_dir(path)
+        return runner.Campaign(self.campaign), case_dir, workspace, run_dir, scratch
+
+    def test_a_run_leaf_outside_every_root_refuses_the_codex_launch(self):
+        """The stopped rerun's configuration, checked instead of launched."""
+        campaign, _case, workspace, run_dir, scratch = self.layout("refused")
+        setup = runner.setup_for(campaign, self.plan_document, "codex")
+        record = runner.writable_roots_record(setup, "available", workspace, run_dir,
+                                              scratch, [])
+        self.assertFalse(record["run_dir_is_writable"])
+        self.assertEqual(record["run_dir_inside"], [])
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_writable_run_dir(campaign, setup, "available", workspace, run_dir,
+                                            scratch, [], "the comparison trial t")
+        message = str(caught.exception)
+        self.assertIn(run_dir, message)
+        self.assertIn("codex", message)
+        self.assertIn("outside every root", message)
+        written = os.path.join(campaign.records("writable-roots"),
+                               "the-comparison-trial-t.json")
+        self.assertTrue(os.path.isfile(written))
+        self.assertFalse(runner.read_json(written)["run_dir_is_writable"])
+
+    def test_naming_the_case_directory_makes_the_run_leaf_writable(self):
+        campaign, case_dir, workspace, run_dir, scratch = self.layout("named")
+        setup = runner.setup_for(campaign, self.plan_document, "codex")
+        record = runner.require_writable_run_dir(campaign, setup, "available", workspace,
+                                                 run_dir, scratch, [case_dir],
+                                                 "the comparison trial u")
+        self.assertTrue(record["run_dir_is_writable"])
+        self.assertEqual(record["run_dir_inside"], [case_dir])
+
+    def test_the_codex_roots_are_the_ones_its_sandbox_gets(self):
+        campaign, case_dir, workspace, run_dir, scratch = self.layout("codex-roots")
+        setup = runner.setup_for(campaign, self.plan_document, "codex")
+        record = setup.writable_roots("available", workspace, scratch, extra=[case_dir])
+        roots = [row["root"] for row in record["roots"]]
+        self.assertIn(workspace, roots)
+        self.assertIn(scratch, roots)
+        self.assertIn(os.path.join(setup.home("available"), "child"), roots)
+        self.assertIn(case_dir, roots)
+        self.assertIn("exclude_tmpdir_env_var", record["sandbox"])
+
+    def test_the_opencode_roots_come_from_its_own_allow_rule(self):
+        campaign, _case, workspace, _run, scratch = self.layout("opencode-roots")
+        setup = runner.setup_for(campaign, self.plan_document, "opencode")
+        config = os.path.join(setup.home("available"), "xdg-config", "opencode",
+                              "opencode.json")
+        allowed = os.path.join(self.scratch, "allowed-root")
+        runner.ensure_dir(allowed)
+        runner.write_json(config, {"permission": {"external_directory": {
+            allowed + "/**": "allow"}}})
+        record = setup.writable_roots("available", workspace, scratch)
+        self.assertIn(allowed, [row["root"] for row in record["roots"]])
+
+    def test_the_codex_launch_is_handed_the_case_directory(self):
+        """End to end on the fake launcher: the flag reaches the launcher's own argv."""
+        tid = runner.trial_id("codex", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("codex")])
+        self.assertEqual(got.returncode, 0, got.stderr[-2500:])
+        record = runner.Campaign(self.campaign).trial_dir(tid)
+        command = runner.read_json(os.path.join(record, "command.json"))
+        case_dir = os.path.dirname(command["run_dir"])
+        argv = runner.read_json(os.path.join(record, "harness", "env-names.json"))["argv"]
+        self.assertIn("--writable", argv)
+        self.assertIn(case_dir, argv)
+        roots = runner.read_json(os.path.join(
+            runner.Campaign(self.campaign).records("writable-roots"),
+            "the-comparison-trial-%s.json" % tid))
+        self.assertTrue(roots["run_dir_is_writable"])
+        self.assertEqual(roots["run_dir_inside"], [case_dir])
+
+    def test_the_claude_code_launch_names_it_too(self):
+        """Its run leaf is outside `${TMPDIR}/runs` as well; only its permission mode hid it."""
+        tid = runner.trial_id("claude-code", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertEqual(got.returncode, 0, got.stderr[-2500:])
+        record = runner.Campaign(self.campaign).trial_dir(tid)
+        command = runner.read_json(os.path.join(record, "command.json"))
+        argv = runner.read_json(os.path.join(record, "harness", "env-names.json"))["argv"]
+        self.assertIn("--writable", argv)
+        self.assertIn(os.path.dirname(command["run_dir"]), argv)
+
+    def test_two_lanes_creating_the_record_directory_at_once_do_not_collide(self):
+        """`ensure_dir` was check-then-act, and the guard made two lanes race for it.
+
+        The per-trial writable-roots record is the first thing parallel lanes write into the
+        same NEW directory, and the loser raised FileExistsError and stopped its whole lane
+        (seen under 3.12 in test_e10_68's two-lane campaign).
+        """
+        target = os.path.join(self.scratch, "racing", "writable-roots")
+        real_isdir = os.path.isdir
+        os.makedirs(target)                      # the winner already made it
+
+        stale = [True]
+
+        def blind(path):
+            """Only the loser's OWN check is stale, the way a real race makes it.
+
+            `os.makedirs(exist_ok=True)` recovers by asking `isdir` again after `mkdir`
+            raises, so a stub that lies every time would break the recovery instead of
+            testing it.
+            """
+            if path == target and stale[0]:
+                stale[0] = False
+                return False
+            return real_isdir(path)
+
+        os.path.isdir = blind
+        try:
+            runner.ensure_dir(target)            # must not raise
+        finally:
+            os.path.isdir = real_isdir
+        self.assertTrue(os.path.isdir(target))
+
+    def test_the_named_root_holds_nothing_of_another_trial(self):
+        """Item 2 stands: the root is the trial's OWN opaque case directory."""
+        campaign, case_dir, _ws, _run, _scratch = self.layout("isolation")
+        self.assertEqual(sorted(os.listdir(case_dir)), ["run", "workspace"])
+        self.assertTrue(runner.path_contains(campaign.opaque_tree(
+            runner.trial_id("codex", testlib.CASE, "available", 1), 0),
+            campaign.opaque_tree(runner.trial_id("codex", testlib.CASE, "available", 1), 0)))
+
+
 class Fix2PreflightAllowRules(RunnerCase):
     """The narrow second fix, item C: an acceptance never covers a failed allow rule."""
 

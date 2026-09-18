@@ -48,6 +48,7 @@ CACHE="$CONFIG_DIR/plugins/cache"
 BYPASS=0
 PLUGINS=""
 PLUGIN_DIRS=""
+WRITABLE_DIRS=""   # E11-26: extra roots the runner names for THIS trial
 MODEL=""          # E10-62: the plan's pinned model, or empty for the sign-in's own
 EFFORT=""         # E10-62: the plan's pinned effort, or empty for the harness's own
 
@@ -66,6 +67,13 @@ while [ $# -gt 0 ]; do
     --effort)
       [ $# -ge 2 ] || { echo "launch.sh: --effort takes a value" >&2; exit 2; }
       EFFORT="$2"; shift 2 ;;
+    --writable)
+      # E11-26: a root the runner named for THIS trial (its own run leaf's directory). The
+      # run directory is a sibling of the workspace and is not under ${TMPDIR}/runs since the
+      # per-trial scratch of E11-7 item 2, so it is named rather than assumed.
+      [ $# -ge 2 ] || { echo "launch.sh: --writable takes a value" >&2; exit 2; }
+      [ -d "$2" ] || { echo "launch.sh: no writable directory: $2" >&2; exit 3; }
+      WRITABLE_DIRS="$WRITABLE_DIRS $2"; shift 2 ;;
     *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -114,6 +122,9 @@ set -- "$@" --setting-sources local --strict-mcp-config \
   --add-dir "$RUN_ROOT" \
   --permission-prompts none \
   --output-format stream-json --verbose --print
+for dir in $WRITABLE_DIRS; do
+  set -- "$@" --add-dir "$dir"
+done
 if [ "$BYPASS" -eq 1 ]; then
   SANDBOX="bypass"
   set -- "$@" --dangerously-skip-permissions

@@ -339,8 +339,12 @@ def write_text(path, text):
 
 
 def ensure_dir(path):
+    # E11-26: `if not isdir: makedirs` is check-then-act, and the lanes run in parallel. The
+    # per-trial writable-roots record is the first thing two lanes write into the same NEW
+    # directory at the same instant, and the loser raised FileExistsError and stopped its
+    # lane. `exist_ok` is the whole fix, and it protects every other caller the same way.
     if path and not os.path.isdir(path):
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
 
 
 def rmtree(path):
@@ -1460,6 +1464,26 @@ class Setup(object):
     def launch_env(self, condition):
         raise NotImplementedError
 
+    # ---- E11-26: the roots THIS session may write
+    def writable_roots(self, condition, workspace, scratch, extra=None):
+        """Every directory a launched session of this setup may write, and why.
+
+        Tony's ruling E11-26. The rerun's Codex trials all ended `no_result` because the run
+        directory — the fixture's own `run/` leaf, a SIBLING of the workspace (E10-54(a)) —
+        was outside every writable root the sandbox was given, and nothing checked. Until
+        E11-7 item 2 it was inside `$TMPDIR` (`<campaign>/tmp`) by accident of layout; a
+        per-trial scratch took that away silently.
+        """
+        roots = [{"root": workspace, "why": "the session's cwd"}]
+        if scratch:
+            roots.append({"root": scratch, "why": "TMPDIR, the trial's own scratch "
+                                                  "(E11-7 item 2)"})
+        for root in (extra or []):
+            roots.append({"root": root,
+                          "why": "a root the runner named for this trial (E11-26)"})
+        return {"harness": self.harness, "setup": self.name, "roots": roots,
+                "bounded": True}
+
     def install(self, condition, fake=None):
         raise NotImplementedError
 
@@ -1608,9 +1632,24 @@ class ClaudeCodeSetup(Setup):
             argv += ["--model", model]
         if effort:
             argv += ["--effort", effort]
+        # E11-26: the run leaf is a sibling of the workspace and is not under `${TMPDIR}/runs`
+        # since the per-trial scratch, so it is NAMED rather than left to the permission mode.
+        for root in (extra or {}).get("writable") or []:
+            argv += ["--writable", root]
         if registry is not None:
             registry.reserved(argv, "launch.sh")
         return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
+
+    def writable_roots(self, condition, workspace, scratch, extra=None):
+        record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
+        if scratch:
+            record["roots"].append(
+                {"root": os.path.join(scratch, "runs"),
+                 "why": "setups/claude-code/launch.sh's --add-dir ${TMPDIR}/runs (E10-22)"})
+        record["permission_mode"] = ("acceptEdits or bypass with --permission-prompts none: "
+                                     "this harness can write beyond the named roots, which is "
+                                     "why the E11-7 item 2 scratch change did not stop it")
+        return record
 
     # ---- records
     def _launch_json(self, out_dir):
@@ -2350,9 +2389,22 @@ class CodexSetup(Setup):
         home = self.home(condition)
         env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home}, scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
+        # E11-26: each root the runner named becomes its own `--add-dir` on the `codex exec`
+        # command line; nothing of any other trial is shared.
+        for root in (extra or {}).get("writable") or []:
+            argv += ["--writable", root]
         if registry is not None:
             registry.reserved(argv, "launch.sh")
         return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
+
+    def writable_roots(self, condition, workspace, scratch, extra=None):
+        record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
+        record["roots"].append(
+            {"root": os.path.join(self.home(condition), "child"),
+             "why": "setups/codex/launch.sh's --add-dir <CODEX_HOME>/child (E9-25)"})
+        record["sandbox"] = ("workspace-write with exclude_tmpdir_env_var: false, so TMPDIR "
+                             "is writable and nothing else is unless --add-dir names it")
+        return record
 
     def catalog(self, condition, out_dir):
         """`codex plugin list` under the condition's home: the harness's own catalog record."""
@@ -2588,6 +2640,21 @@ class OpenCodeSetup(Setup):
 
     def launch_env(self, condition):
         return {"RECHECK_OPENCODE_SETUP": self.home(condition)}
+
+    def writable_roots(self, condition, workspace, scratch, extra=None):
+        """E11-26: this harness's extra roots are its own `external_directory` allow rules."""
+        record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
+        config = os.path.join(self.home(condition), "xdg-config", "opencode", "opencode.json")
+        for pattern in _external_directory_rules(read_text(config, None)):
+            root = pattern
+            while root.endswith("*") or root.endswith("/"):
+                root = root[:-1]
+            if root:
+                record["roots"].append(
+                    {"root": root, "pattern": pattern,
+                     "why": "this home's external_directory allow rule, written by "
+                            "setups/opencode/install.sh from the installing campaign (E10-23)"})
+        return record
 
     def binary(self, condition):
         return os.path.join(self.home(condition), "npm", "node_modules", ".bin", "opencode")
@@ -4589,9 +4656,22 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     require_preflight(campaign, "the comparison trial %s" % trial_id)
     close_key(campaign, "the %s launch" % trial_id)
     scratch = trial_scratch(campaign, trial_id, attempt)
+    # E11-26: the run leaf's own directory — the opaque case directory, which holds this
+    # trial's workspace, run leaf and seeded input and nothing of any other trial.
+    writable = [os.path.dirname(run_dir)]
+    launch_extra = {"writable": writable}
+    if getattr(args, "plugins", None):
+        launch_extra["plugins"] = args.plugins
+    roots = require_writable_run_dir(campaign, setup, parts["condition"], workspace, run_dir,
+                                     scratch, writable,
+                                     "the comparison trial %s" % trial_id)
     step = setup.launch(parts["condition"], prompt_path, workspace, harness_dir, timeout,
-                        extra={"plugins": args.plugins} if getattr(args, "plugins", None) else None,
+                        extra=launch_extra,
                         fake=fake, registry=registry, scratch=scratch)
+    # the roots are recorded by the guard, in the campaign's own records; `step` is the
+    # launcher's process result and stays exactly what `run_cmd` returned (a extra key here
+    # reaches `collect_trial`'s per-step readers, which expect only run_cmd's own shape).
+    del roots
     catalog = setup.catalog(parts["condition"], harness_dir)
     collected = collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspace,
                               seeded, step, fixture, attempt, started, env_extra, catalog,
@@ -8335,6 +8415,7 @@ def do_continuation(args, record=None, attempt=0):
     if parts["kind"] == "handoff":
         step = setup.launch("available", resume_path, workspace, second,
                             plan["timeouts"]["continuation"],
+                            extra={"writable": [os.path.dirname(run_dir)]},
                             fake=getattr(args, "fake_launcher", None),
                             registry=second_registry,
                             scratch=trial_scratch(campaign, args.trial, attempt))
@@ -10259,6 +10340,41 @@ def _allow_rule_failures(state):
     return "; ".join(said) + "."
 
 
+def writable_roots_record(setup, condition, workspace, run_dir, scratch, extra_writable):
+    """The roots this launch may write, and whether `run_dir` is inside one (E11-26)."""
+    record = setup.writable_roots(condition, workspace, scratch, extra=extra_writable)
+    inside = [row["root"] for row in record["roots"]
+              if row.get("root") and path_contains(row["root"], run_dir)]
+    record.update({
+        "run_dir": run_dir,
+        "run_dir_inside": inside,
+        "run_dir_is_writable": bool(inside),
+        "why": "Tony's ruling E11-26: every Codex trial of the stopped rerun ended no_result "
+               "because the fixture's run leaf was outside every writable root the sandbox "
+               "was given and nothing checked. This is checked before every launch.",
+    })
+    return record
+
+
+def require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch,
+                             extra_writable, what):
+    """Refuse `what` when the session could not write its own run directory (E11-26)."""
+    record = writable_roots_record(setup, condition, workspace, run_dir, scratch,
+                                   extra_writable)
+    record["for"] = what
+    write_json(os.path.join(campaign.records("writable-roots"),
+                            "%s.json" % re.sub(r"[^A-Za-z0-9_.-]", "-", what)), record)
+    if not record["run_dir_is_writable"]:
+        raise Usage(
+            "refusing to launch %s: the run directory %s is outside every root a %s session "
+            "may write (%s). The session's first write into it would be refused by the "
+            "harness and the trial would end with no result. Name the run directory's own "
+            "root to the launch (E11-26)."
+            % (what, run_dir, setup.harness,
+               ", ".join("%s (%s)" % (row["root"], row["why"]) for row in record["roots"])))
+    return record
+
+
 def do_preflight(args):
     """The read-boundary preflight of E11-7 item 2, run before a campaign starts."""
     campaign = Campaign(args.campaign)
@@ -10970,9 +11086,16 @@ def do_consumer(args, record=None, attempt=0):
     # Item 6(f): a sentinel OUTSIDE the pair, inside the campaign. Isolation is read access.
     sentinel = os.path.join(campaign.trials, CONSUMER_SENTINEL)
     write_text(sentinel, READ_BOUNDARY_SENTINEL)
+    consumer_scratch = trial_scratch(campaign, args.trial, attempt)
+    consumer_writable = [os.path.dirname(pair["run_dir"])]
+    require_writable_run_dir(campaign, setup, "available", pair["workspace"],
+                             pair["run_dir"], consumer_scratch, consumer_writable,
+                             "the consumer trial %s" % args.trial)
     step = setup.launch("available", prompt_path, pair["workspace"], harness_dir,
-                        plan["timeouts"]["comparison"], fake=fake, registry=registry,
-                        scratch=trial_scratch(campaign, args.trial, attempt))
+                        plan["timeouts"]["comparison"],
+                        extra={"writable": consumer_writable},
+                        fake=fake, registry=registry,
+                        scratch=consumer_scratch)
     # the same measurement the read-boundary preflight makes, in the consumer's own launch
     # environment: can a child of this launch read a record outside its pair?
     probe = run_cmd([sys.executable, "-c",
