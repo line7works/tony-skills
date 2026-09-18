@@ -356,6 +356,25 @@ class EveryLaunchPathCarriesThePairTest(RunnerCase):
                                 "--plugin", "recheck-v2", "--plugin", "readers"])
 
     def resume_argv(self, setup, harness):
+        # E11-28 fix 6 (D-U): a REAL launch is refused when run-leaf writability cannot be
+        # established, and OpenCode's is established from its own `external_directory` rule.
+        # A real home always has one — `setups/opencode/install.sh` writes it — so this bench
+        # writes the rule it would have rather than driving a resume against a home no
+        # campaign could have launched. Restored afterwards: the pilot homes are shared.
+        if harness == "opencode":
+            config = os.path.join(setup.home("available"), "xdg-config", "opencode",
+                                  "opencode.json")
+            before = runner.read_text(config, None)
+
+            def restore():
+                if before is None:
+                    if os.path.isfile(config):
+                        os.remove(config)
+                else:
+                    runner.write_text(config, before)
+            self.addCleanup(restore)
+            runner.write_json(config, {"permission": {"external_directory": {
+                os.path.dirname(self.scratch.rstrip("/")) + "/**": "allow"}}})
         recorded = []
 
         def capture(command, **kwargs):

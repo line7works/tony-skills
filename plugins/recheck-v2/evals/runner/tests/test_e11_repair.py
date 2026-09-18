@@ -1976,6 +1976,186 @@ class Fix5EveryLaunchNamesTheRoot(RunnerCase):
         self.assertFalse(runner.path_contains(root, campaign.trials))
 
 
+class Fix6EnforcementFollowsTheLaunch(RunnerCase):
+    """Astra's recheck5: D still PARTLY on the two exceptions fix 5 introduced.
+
+    D-F: `_compaction_resume` disabled the guard on `args.fake_launcher` — the FIRST half's
+    flag — while its own argv is built from the real harness binary, so her probe reached the
+    process boundary with `enforced: false` and an argv naming `opencode run ... --session`.
+    D-U: a home with no `opencode.json` set `bounded: false`, and the refusal skipped it, so a
+    REAL launch proceeded with `run_dir_is_writable: false`; she drove that launcher with a
+    stand-in binary and an auth file and it never asks for `opencode.json`.
+    """
+
+    setups = ("opencode", "claude-code")
+    cases = (testlib.TWO_ITEM_CASE,)
+
+    def setUp(self):
+        RunnerCase.setUp(self)
+        self.campaign_object = runner.Campaign(self.campaign)
+        self.setup = runner.setup_for(self.campaign_object, self.plan_document, "opencode")
+        self.config = os.path.join(self.setup.home("available"), "xdg-config", "opencode",
+                                   "opencode.json")
+        before = runner.read_text(self.config, None)
+
+        def restore():
+            if before is None:
+                if os.path.isfile(self.config):
+                    os.remove(self.config)
+            else:
+                runner.write_text(self.config, before)
+        self.addCleanup(restore)
+        tree = os.path.join(self.scratch, "fix6")
+        self.case_dir = os.path.join(tree, "fixture", "75d13f306773")
+        self.workspace = os.path.join(self.case_dir, "workspace")
+        self.run_dir = os.path.join(self.case_dir, "run")
+        self.trial_scratch = os.path.join(tree, "scratch")
+        for path in (self.workspace, self.run_dir, self.trial_scratch):
+            runner.ensure_dir(path)
+        self.prompt = os.path.join(self.scratch, "fix6-resume.txt")
+        runner.write_text(self.prompt, "Continue the local test.\n")
+
+    def stage_launcher(self, harness="opencode"):
+        """The setup's OWN `launch.sh` in the stage, so a real launch resolves to it.
+
+        `RunnerCase` stages empty setup directories; without the script the run stops at
+        `Missing` (exit 3) before the guard is reached, and the refusal cannot be seen.
+        """
+        setup = (self.setup if harness == "opencode"
+                 else runner.setup_for(self.campaign_object, self.plan_document, harness))
+        path = os.path.join(setup.setup_dir, "launch.sh")
+        runner.write_text(path, "#!/bin/sh\nexit 0\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def record_for(self, what):
+        path = os.path.join(self.campaign_object.records("writable-roots"),
+                            "%s.json" % __import__("re").sub(r"[^A-Za-z0-9_.-]", "-", what))
+        self.assertTrue(os.path.isfile(path), path)
+        return runner.read_json(path)
+
+    def empty_config(self):
+        """A config that EXISTS and grants nothing: her decision (a) bench."""
+        runner.write_json(self.config, {"permission": {"external_directory": {}}})
+
+    def no_config(self):
+        if os.path.isfile(self.config):
+            os.remove(self.config)
+
+    # ---- the predicate itself
+    def test_the_predicate_reads_the_executable_not_a_flag(self):
+        own = self.stage_launcher()
+        self.assertEqual(own, self.setup.script("launch.sh"))
+        self.assertFalse(runner.launch_is_fake(self.setup, own))
+        self.assertFalse(runner.launch_is_fake(self.setup, None))
+        self.assertTrue(runner.launch_is_fake(self.setup,
+                                              os.path.join(self.scratch, "stand-in.sh")))
+
+    # ---- (a) D-F: the compaction resume names the real binary, so it is enforced
+    def test_a_compaction_resume_is_enforced_even_when_the_first_half_ran_fake(self):
+        """Her decision (a): only `fake_launcher` changed between the two runs."""
+        import argparse
+        self.empty_config()
+
+        class Captured(Exception):
+            pass
+
+        seen = {}
+
+        def capture(argv, **kwargs):
+            seen["argv"] = argv
+            raise Captured()
+
+        outcomes = {}
+        real = runner.run_cmd
+        runner.run_cmd = capture
+        try:
+            for fake in (None, os.path.join(self.scratch, "fake-first-launcher.sh")):
+                trial = "fix6-a-%s" % bool(fake)
+                args = argparse.Namespace(trial=trial, attempt=0, compact_tokens=2000,
+                                          fake_launcher=fake)
+                seen.clear()
+                outcome = "REACHED PROCESS BOUNDARY"
+                try:
+                    runner._compaction_resume(
+                        self.campaign_object, self.setup, {"session": "local-test-session"},
+                        self.prompt, self.workspace,
+                        os.path.join(self.scratch, "a-%s" % bool(fake)), 1, args,
+                        run_dir=self.run_dir)
+                except runner.Usage:
+                    outcome = "REFUSED"
+                except Captured:
+                    pass
+                outcomes[bool(fake)] = (outcome, self.record_for(
+                    "the continuation trial %s (compaction resume)" % trial))
+        finally:
+            runner.run_cmd = real
+        for fake_first_half, (outcome, record) in outcomes.items():
+            self.assertEqual(outcome, "REFUSED", fake_first_half)
+            self.assertTrue(record["enforced"], fake_first_half)
+            self.assertFalse(record["run_dir_is_writable"], fake_first_half)
+        self.assertNotIn("argv", seen)
+
+    # ---- (b) a launch that really runs the fake executable is not enforced
+    def test_a_resume_that_itself_runs_the_fake_executable_is_not_enforced(self):
+        tid = runner.continuation_trial_id("claude-code", testlib.TWO_ITEM_CASE, "handoff", 1)
+        got = cli(["continuation", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertIn(got.returncode, (0, 1), got.stderr[-2000:])
+        for half in ("first launch", "handoff resume"):
+            record = self.record_for("the continuation trial %s (%s)" % (tid, half))
+            self.assertFalse(record["enforced"], half)
+            self.assertIn("fake launcher", record["why_not_enforced"])
+
+    # ---- (c) D-U: a real launch with no establishable root is refused
+    def test_a_real_launch_on_a_config_less_home_is_refused(self):
+        import argparse
+        self.no_config()
+        self.stage_launcher()          # a real launch resolves to the setup's own script
+        args = argparse.Namespace(trial="fix6-c", attempt=0, poll_interval=0.1,
+                                  fake_launcher=None)
+        with self.assertRaises(runner.Usage) as caught:
+            runner._launch_and_cut(self.campaign_object, self.setup, self.prompt,
+                                   self.workspace,
+                                   os.path.join(self.scratch, "c", "harness"),
+                                   self.run_dir, 1, args)
+        message = str(caught.exception)
+        self.assertIn("cannot be established", message)
+        self.assertIn("not installed", message)
+        record = self.record_for("the continuation trial fix6-c (first launch)")
+        self.assertTrue(record["enforced"])
+        self.assertFalse(record["bounded"])
+        self.assertFalse(record["run_dir_is_writable"])
+        self.assertIn("opencode.json", record["why_unbounded"])
+
+    def test_that_refusal_is_exit_2_from_the_cli(self):
+        """`Usage` is the runner's exit 2, the same shape as item C's allow-rule gate."""
+        self.no_config()
+        self.stage_launcher()
+        tid = runner.continuation_trial_id("opencode", testlib.TWO_ITEM_CASE, "handoff", 1)
+        got = cli(["continuation", "--campaign", self.campaign, tid])
+        self.assertEqual(got.returncode, 2, got.stdout[-800:])
+        self.assertIn("writability cannot be established", got.stderr)
+
+    # ---- (d) the same home under the fake launcher proceeds
+    def test_the_same_home_under_a_fake_launcher_proceeds(self):
+        import argparse
+        self.no_config()
+        fake = os.path.join(self.scratch, "fake-launcher.sh")
+        runner.write_text(fake, "#!/bin/sh\nexit 0\n")
+        os.chmod(fake, 0o755)
+        args = argparse.Namespace(trial="fix6-d", attempt=0, poll_interval=0.1,
+                                  fake_launcher=fake)
+        runner._launch_and_cut(self.campaign_object, self.setup, self.prompt, self.workspace,
+                               os.path.join(self.scratch, "d", "harness"), self.run_dir, 1,
+                               args)
+        record = self.record_for("the continuation trial fix6-d (first launch)")
+        self.assertFalse(record["enforced"])
+        self.assertFalse(record["bounded"])
+        self.assertFalse(record["run_dir_is_writable"])
+        self.assertIn("fake launcher", record["why_not_enforced"])
+
+
 class Fix2PreflightAllowRules(RunnerCase):
     """The narrow second fix, item C: an acceptance never covers a failed allow rule."""
 

@@ -4692,7 +4692,7 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     # trial's workspace, run leaf and seeded input and nothing of any other trial.
     writable = guarded_launch_roots(campaign, setup, parts["condition"], workspace, run_dir,
                                     scratch, "the comparison trial %s" % trial_id,
-                                    enforced=not fake)
+                                    launcher=fake)
     launch_extra = {"writable": writable}
     if getattr(args, "plugins", None):
         launch_extra["plugins"] = args.plugins
@@ -8445,7 +8445,7 @@ def do_continuation(args, record=None, attempt=0):
         second_roots = guarded_launch_roots(
             campaign, setup, "available", workspace, run_dir, second_scratch,
             "the continuation trial %s (handoff resume)" % args.trial,
-            enforced=not getattr(args, "fake_launcher", None))
+            launcher=getattr(args, "fake_launcher", None))
         step = setup.launch("available", resume_path, workspace, second,
                             plan["timeouts"]["continuation"],
                             extra={"writable": second_roots},
@@ -8523,7 +8523,8 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     roots = guarded_launch_roots(campaign, setup, "available", workspace, run_dir, scratch,
                                  "the continuation trial %s (first launch)"
                                  % (trial or "unnamed"),
-                                 enforced=not getattr(args, "fake_launcher", None))
+                                 # the executable this half selects, fake or the setup's own
+                                 launcher=launcher)
     argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available",
                         writable=roots)
     interval = float(getattr(args, "poll_interval", None) or DEFAULT_POLL_INTERVAL)
@@ -8755,7 +8756,9 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     case_dir = guarded_launch_roots(
         campaign, setup, "available", workspace, run_dir, scratch,
         "the continuation trial %s (compaction resume)" % (trial or "unnamed"),
-        enforced=not getattr(args, "fake_launcher", None))[0]
+        # fix 6 (D-F): this half ALWAYS builds its argv from the harness's own binary, so it
+        # is always a real launch however the first half ran.
+        launcher=None)[0]
     prompt = read_text(resume_path, "") or ""
     attempts = []
     if not session:
@@ -10424,21 +10427,41 @@ def named_writable_roots(run_dir):
     return [os.path.dirname(run_dir)]
 
 
+def launch_is_fake(setup, launcher):
+    """Does THIS launch run a stand-in rather than the harness's own executable?
+
+    E11-28 fix 6, NEW MAJOR D-F. Enforcement was keyed to `args.fake_launcher`, the flag of
+    the FIRST half of a continuation trial, while the resumed half builds its argv from the
+    real harness binary whatever the first half ran: Astra reached the process boundary with
+    `enforced: false` and an argv naming the real `opencode run ... --session ...`. The
+    question is not what a flag said; it is which executable THIS launch selects.
+    """
+    if not launcher:
+        return False
+    try:
+        own = setup.script("launch.sh")
+    except Missing:
+        own = None
+    return os.path.abspath(launcher) != os.path.abspath(own or os.devnull)
+
+
 def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch, what,
-                         enforced=True):
+                         launcher=None):
     """Name the run leaf's root, CHECK it, and hand it back for the launch (E11-26, fix 5).
 
     Astra's recheck4 found only two of the runner's launch sites doing both. Every site goes
     through this one function now, so a new launch site cannot quietly skip the check: it has
     to ask for the roots to pass them on.
 
-    `enforced` is False when a FAKE launcher runs: there is no harness and no sandbox to
-    refuse anything, so the finding is recorded and the launch proceeds. Every real launch is
-    enforced.
+    `launcher` is the executable this launch will run. Enforcement follows it and nothing else
+    (fix 6): a launch that runs a FAKE launcher has no harness and no sandbox to refuse
+    anything, so its finding is recorded and it proceeds; every launch that runs the harness's
+    own executable is enforced. `_compaction_resume` passes None because it always builds its
+    argv from the harness's own binary.
     """
     roots = named_writable_roots(run_dir)
     require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
-                             what, enforced=enforced)
+                             what, enforced=not launch_is_fake(setup, launcher))
     return roots
 
 
@@ -10455,14 +10478,24 @@ def require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scr
                                       "and the launch proceeds")
     write_json(os.path.join(campaign.records("writable-roots"),
                             "%s.json" % re.sub(r"[^A-Za-z0-9_.-]", "-", what)), record)
-    if enforced and record.get("bounded", True) and not record["run_dir_is_writable"]:
+    # fix 6, NEW MAJOR D-U: "writability could not be established" is not "no refusal". The
+    # `bounded: false` exemption let a REAL OpenCode launch through on a home with no
+    # `opencode.json`, and Astra proved that launcher needs only its binary and an auth file,
+    # so install and verify do not stop a config-less home from running. The record keeps
+    # `bounded` and `why_unbounded` so the reason stays readable; the refusal does not.
+    if enforced and not record["run_dir_is_writable"]:
         raise Usage(
-            "refusing to launch %s: the run directory %s is outside every root a %s session "
-            "may write (%s). The session's first write into it would be refused by the "
-            "harness and the trial would end with no result. Name the run directory's own "
-            "root to the launch (E11-26)."
-            % (what, run_dir, setup.harness,
-               ", ".join("%s (%s)" % (row["root"], row["why"]) for row in record["roots"])))
+            "refusing to launch %s: %s for a %s session (%s). The session's first write into "
+            "it would be refused by the harness and the trial would end with no result. Name "
+            "the run directory's own root to the launch (E11-26)."
+            % (what,
+               ("the run directory %s is outside every root it may write" % run_dir)
+               if record.get("bounded", True) else
+               ("run-leaf writability cannot be established for %s: %s"
+                % (run_dir, record.get("why_unbounded"))),
+               setup.harness,
+               ", ".join("%s (%s)" % (row["root"], row["why"]) for row in record["roots"])
+               or "no root at all"))
     return record
 
 
@@ -11180,7 +11213,7 @@ def do_consumer(args, record=None, attempt=0):
     consumer_scratch = trial_scratch(campaign, args.trial, attempt)
     consumer_writable = guarded_launch_roots(
         campaign, setup, "available", pair["workspace"], pair["run_dir"], consumer_scratch,
-        "the consumer trial %s" % args.trial, enforced=not fake)
+        "the consumer trial %s" % args.trial, launcher=fake)
     step = setup.launch("available", prompt_path, pair["workspace"], harness_dir,
                         plan["timeouts"]["comparison"],
                         extra={"writable": consumer_writable},
