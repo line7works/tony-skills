@@ -788,3 +788,27 @@ to exactly the held-out request text.
   regrade of every comparison and continuation attempt to a derived revision, then the twelve consumer
   launches, their grades in the same revision, the inspection board republished, then Astra's independent
   read of the rerun and the reconvene.
+- **E11-35, fix 7 delivered, gated and committed; every card regraded (2026-09-18 about 8:20 AM, control
+  room).** The builder's section 18: `campaign_queue` appends the consumer rows last (a consumer reads a
+  producer's records); `graded_attempts` skips `consumer-` directories (their grade is the consumer grade,
+  not a comparison card, and `grade_one` reads a `case` field the consumer handler never writes);
+  `capture_files` selects `launch-<call>.json` with no further dot; `jsonl_lines` keeps object rows only;
+  `grade --all` records a raising attempt under `grade_errors` (no grade written), grades the rest and
+  exits non-zero naming them, re-raising the wall's own `Usage` and `Missing`. The sidecar was written by
+  the session under trial (its trace line 78 redirects the adapter helper's printed flags into the file);
+  nothing in the repo writes that name. `producer_record_for` ranks (continuation first, trial id,
+  attempt) over recorded attempts, reads no clock, so a consumer launched after the campaign's end binds
+  the record it would have bound in-queue. Seven tests in `Fix7QueueAndReaders`: E11 file 143 FAILED
+  (failures=5, errors=2) on 485e92a, OK after. Control room gates N (`control-room/verify/gates-N.log`):
+  runner 501 OK on both runtimes, check ok on both, core 364 OK on both pins, adapters 90/34/96 OK on
+  both, E7 checks 9 PASS, core E11 36 OK before and after. Committed `1d84b31` on
+  `feat/recheck-v2-e11-repair`. The real root regraded to derived revision `e11-rerun2-fix7-1`
+  (`rescore11.sh`): 126 of 126 attempts graded, exit 0, routing-score 4 files, originals byte-identical
+  (86 files), key reopened. Revision tallies: available claude-code 7 of 12, codex 8 of 13 attempts,
+  opencode 9 of 12, opencode-deepseek 5 of 19 attempts (6 complete); absent 0 ok in every setup;
+  continuation 4 of 8 (codex compaction, opencode handoff, opencode-deepseek handoff ok; claude-code both
+  on `no_scope_violations`, codex handoff on `match`, both OpenCode compactions on `interop` and
+  `model_binding`); no flip against the 79 original grades; routing held-out rates identical to rev1.
+  Astra's recheck7 launched on a fresh scrubbed copy at 1d84b31 (`mandate-recheck7.md`, closed checklist
+  Q, G, H); the twelve consumer launches follow her clearance per E11-34. The inspection board republished
+  (V5) from the revision.
