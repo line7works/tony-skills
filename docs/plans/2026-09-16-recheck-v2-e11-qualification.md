@@ -986,3 +986,24 @@ to exactly the held-out request text.
   ("finish fix 8 against the real record shapes"), so under ruling 17 there is no fix 9 round: the builder
   carries Q-S-L and G-ID into the one repair round, and Astra's single verification covers them. Relayed to the
   builder for his plan (section 20). Nothing committed on the repair branch beyond 4351654.
+- **E11-43, the builder's plan checked against the package; the one repair round opened in three batches
+  (2026-09-18 about 11:05 AM, control room).** Section 20 of the builder's report (filed at the packet's
+  `builder/report.md`) maps S1 to S4 and R1 to R6 to files, functions, tests, live proofs, coverage gaps and
+  hours, with recheck8's Q-S-L and G-ID folded into R1 (two scheduling phases; a call-id grammar match
+  replacing the no-dot rule). Sizes in builder hours: S1 16, S2 11, S3 9, S4 10, R1 12, R2 26, R3 16, R4 14,
+  R5 8, R6 5; total 127, about sixteen working days, before the control room's gates, Astra's verification
+  and the rerun. The control room read every item against the package text and found no narrowing; the
+  carries the builder names are the package's own (OpenCode headless compaction, the two OpenCode resume
+  model witnesses if the store rows are gone, no routing threshold to gate on, the core enforcing the shape
+  of an observation and not its sufficiency). Answers recorded in `briefs/e11-round2-build.md`: R6 = policy
+  refusal; C/F5/A/r1 re-derived with a note; a read-only `consumer --regrade --revision` command inside R1;
+  the native preflight launches counted outside the 360 with their OpenRouter cost reported; S1 to S4 on all
+  four setups; hash differences in the original root are explained and carried; S2's field on the checklist
+  item; Q-S-L by phases. **To Tony:** the builder's coverage item 1: a shell redirection cannot be prevented
+  on Claude Code or OpenCode by the harness's own mechanism, only on Codex; closing it needs an OS-level
+  sandbox around the launcher, a deployment-layout change. Default until he rules: tool-level denial plus
+  post-hoc violation detection, the gap written into the round-2 report. Batches: A (R5 hash check, R6, R2,
+  R1 with the replay to `e11-round2-1`), B (S3, S4, S2, S1), C (R5 rest, R3, R4 last with the native
+  preflight on a new proof root); the control room gates and commits each batch; Astra's single verification
+  follows the third. Decided on Tony's behalf and flagged: starting batch A before he has seen the hour
+  count (his E11-40 ruling authorised the round after Astra said "a couple of days" was unsupported).
