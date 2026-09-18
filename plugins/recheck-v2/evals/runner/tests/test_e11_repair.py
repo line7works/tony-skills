@@ -1186,26 +1186,40 @@ class Item7Table(RunnerCase):
 
 
 class FixItem8DerivedGrades(RunnerCase):
-    """NEW BLOCKER 1: a derived measurement is never replaced."""
+    """NEW BLOCKER 1, REVERSED by E11-46 R5: a revision REPLACES, and is never numbered.
 
-    def test_a_repeated_revision_takes_the_next_free_name(self):
+    The original rule made a rerun of one revision take the next free `-N` so that no derived
+    measurement was ever overwritten. E11-45's replay is the record of why that was wrong for a
+    NAMED revision: the rerun wrote `grade.e11-round2-1-1.json` and `-2.json` beside the stale
+    `grade.e11-round2-1.json`, and the control room read the stale one, because the canonical
+    name is where every reader looks. Both tests below are amended, not deleted: what they
+    assert is inverted and the reason is named here.
+    """
+
+    def test_a_repeated_revision_replaces_that_revision_s_file(self):
         record = os.path.join(self.scratch, "trial")
         runner.ensure_dir(record)
-        first = runner.reserve_derived_grade(record, "review-derived")
+        first = runner.derived_grade_path(record, "review-derived")
         self.assertTrue(first.endswith("grade.review-derived.json"))
         runner.write_json(first, {"first": True})
-        second = runner.reserve_derived_grade(record, "review-derived")
-        self.assertNotEqual(first, second)
-        self.assertTrue(second.endswith("grade.review-derived-1.json"))
-        self.assertEqual(runner.read_json(first), {"first": True},
-                         "the earlier derived measurement was replaced")
+        second = runner.derived_grade_path(record, "review-derived")
+        self.assertEqual(first, second, "one revision name owns exactly one file")
+        runner.write_json(second, {"second": True})
+        self.assertEqual(runner.read_json(first), {"second": True})
+        self.assertEqual(
+            sorted(n for n in os.listdir(record) if n.startswith("grade.")),
+            ["grade.review-derived.json"], "a revision never spills a numbered file")
 
-    def test_the_name_is_claimed_before_anything_is_written(self):
+    def test_a_second_measurement_takes_a_second_name(self):
+        """The way to keep two: name them apart. Nothing is lost, and nothing is ambiguous."""
         record = os.path.join(self.scratch, "claimed")
         runner.ensure_dir(record)
-        taken = runner.reserve_derived_grade(record, "rev")
-        self.assertTrue(os.path.isfile(taken))
-        self.assertNotEqual(runner.reserve_derived_grade(record, "rev"), taken)
+        one = runner.derived_grade_path(record, "rev")
+        two = runner.derived_grade_path(record, "rev-b")
+        runner.write_json(one, {"a": True})
+        runner.write_json(two, {"b": True})
+        self.assertNotEqual(one, two)
+        self.assertEqual(runner.read_json(one), {"a": True})
 
 
 class FixItem1Observation(RunnerCase):
