@@ -1034,3 +1034,21 @@ to exactly the held-out request text.
   of the builder: whole-token disposition parsing, a test with both lines, the replay rerun into the same
   revision name, and a per-attempt flip table in section 21. The control room's gates run on the sent-back
   tree was stopped; it reruns on the corrected tree. Nothing committed on the repair branch.
+- **E11-46, batch A corrected, gated and committed; batch B opened (2026-09-18 about 12:40 PM, control
+  room).** The builder's 21a: `_reply_disposition` parses the reply line by its own separator, cuts the
+  parenthesised reason and matches whole tokens longest first, so `not_fixed` can never lose to `fixed`;
+  three tests added (22 in the round-2 file); the replay rerun into the same revision name after deleting
+  this revision's own derived files (0 overlap with the 541-file originals manifest; the three "no key file"
+  errors were contention with a concurrent test suite closing the wall, traced, no runner change); per-attempt
+  comparison against `e11-rerun2-fix7-1`: 0 flips either way on 126 attempts and 0 on 16 consumer records;
+  record-level differences named, notably `no_scope_violations` false to true on four Codex attempts because
+  `file:` paths now resolve (all four still not ok for other reasons). The control room's own comparison:
+  0 decision flips, ok 32 / not ok 94 as before, originals 86 of 86 byte-identical. Gates-P on the corrected
+  tree (filed at `control-room/verify/`): runner 528 on both interpreters, `check` ok on both, core 364 on
+  both jsonschema pins, adapters 90/34/96 on both, examples, E7 checks 9 of 9, E11 suite 2 amended tests
+  failing on 4351654 and 148 passing after, round-2 suite 22 failing (11 failures, 9 errors) before and
+  passing after, core E11 36/36 both. Committed on `feat/recheck-v2-e11-repair` as `c285358`. Two items the
+  builder flagged, carried to batch C: a revision diff produced by `grade_summary` itself rather than by
+  hand; `grade --revision` spills numbered records instead of replacing, a contract question. Batch B
+  briefed (`briefs/e11-round2-batch-b.md`): S3, S4, S2, S1 with R6's enforcement, live proofs on a new
+  proof root only on the control room's word. Wall clock from Tony's ruling to this commit: about 2 h 15 m.
