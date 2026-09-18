@@ -598,3 +598,28 @@ to exactly the held-out request text.
   finding for the reconvene, not fixed in this round. Next: Astra's narrow re-check of fix 4 (mandate
   `astra-kit/mandate-recheck4.md`, mode `recheck4`; the copy carries the fix-4 proof root and the stopped
   root's records), then the fresh root `e11-repair-qualification-2` and the restart.
+- **E11-28, Astra's recheck4 on fix 4: PARTLY, sent back inside the round (2026-09-17 about 7:30 PM, control
+  room, decided on Tony's behalf as E11-17 was, flagged).** Verdict `astra-outputs/e11/recheck4/recheck4.md`
+  (12 minutes at high, exit 0): the cause confirmed from the stopped root's own rollout (the run leaf inside
+  none of cwd, the child home, the per-trial scratch or `/private/tmp`); the comparison repair proven on the
+  fix-4 proof root (both Codex trials `complete`, the available one's validator `ok`, six writable-roots
+  records true); her own re-drive of the eight new tests OK and of the guard by hand (unnamed refused with
+  exit 2, named accepted). Still open, D as MAJOR: of the runner's four launch sites only the comparison
+  and the consumer call the guard and pass the root; the first continuation launch and the Codex
+  compaction resume pass no root and call no guard, the handoff resume passes the root without the guard,
+  so the restart's eight continuation trials would fail on Codex exactly as the comparisons did. NEW MAJOR
+  D-G: `Setup.writable_roots` counts a runner-named root for every harness, and OpenCode's launcher never
+  forwards it, so with no allow rule the guard records writable instead of refusing. NEW MINOR D-T: the
+  isolation test asserts `["run", "workspace"]` against a layout it built; a real case directory also holds
+  `input.json` and `manifest.json`, a consumer's `producer/`. Her design answer, carried: naming the case
+  directory makes the case's `manifest.json` and a consumer's local `producer/` copies writable too, no
+  other trial's tree, no shorter opaque segment. The deepseek reply-capture read CONFIRMED by hash (the
+  first record's role is `user`; `harness_reply` has no role filter); no restart blocker, carried. The
+  control room read all three against the code and confirms them (guard calls at runner.py 4665 and 11091
+  only; 8418 root without guard; 8489 and 8738 neither; base reader 1468-1485 appends `extra` for every
+  harness; test 1730-1735). Brief `astra-outputs/e11/briefs/e11-repair-fix5.md` to the same builder: every
+  launch site names the root and calls the guard through one helper, per-setup `forwards_writable` so the
+  record counts only roots the session receives, a real-fixture isolation test, tests fail-then-pass on
+  `ff54644`, a live Codex and Claude Code continuation proof on a new root
+  `e11-repair-proof-2026-09-17-b`. The restart waits on that fix, the control room's gates and Astra's
+  recheck5.
