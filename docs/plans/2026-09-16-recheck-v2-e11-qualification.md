@@ -689,3 +689,34 @@ to exactly the held-out request text.
   a new root `e11-repair-proof-2026-09-17-c` showing `enforced: true` on both halves' records, and the
   config-less OpenCode refusal driven at the process boundary with no model. The restart waits on that
   fix, the control room's gates and Astra's recheck6.
+- **E11-31, fix 6 delivered, gated and committed (2026-09-18 about 12:15 AM, control room).** The builder's
+  section 17 (about 11:30 PM): both findings confirmed at the lines before any change. The change, commit
+  `485e92a` on the repair branch: one predicate, `launch_is_fake(setup, launcher)` (False for None and for
+  the setup's own `launch.sh`, True for any other executable), consulted by `guarded_launch_roots`, which now
+  takes `launcher=` and computes enforcement itself, so no site decides for itself; the compaction resume
+  passes None because it always builds its argv from the harness's own binary. The refusal is now
+  `if enforced and not run_dir_is_writable`, `bounded: false` and `why_unbounded` kept on the record and
+  the message naming the case; the fake-launcher pass-through is the only exception and only when the
+  launch itself is fake. P corrected as a dated note in section 17, section 16 left as written. A third
+  file, `tests/test_e10_62.py`: its OpenCode resume helper drove `_compaction_resume` against a home with
+  no `opencode.json`, a launch no campaign can make now, so it writes the `external_directory` rule a real
+  installed home has and removes it after; the control room read it and confirms the suites run under the
+  test pilot root (`RECHECK_PILOT_ROOT` set by `testlib`), never the real homes. No fabricated OpenCode home
+  anywhere. `Fix6EnforcementFollowsTheLaunch`, 6 tests: FAILED (failures=3, errors=1) on `aa5a244`, OK
+  after; (b) and (d), the pass-through cases, pass on both, correctly. Her `decisions.py` re-run: decision
+  (a) REFUSED with `enforced: true` under either value of the first half's flag, no argv reaching the
+  process boundary; decision (b) real launch REFUSED, CLI exit 2, `enforced: true`, `bounded: false`, the
+  record written; the same home under the fake launcher proceeds with `enforced: false`. Live proof on the
+  new root `e11-repair-proof-2026-09-17-c`, one trial through `runner.py continuation`
+  (`cont-codex-F3-02-mixed-two-items-compaction-r1`): `complete`, `validate_exit 0`, both halves' records
+  `enforced: true` and `run_dir_is_writable: true`, the resume's rollout carrying the case directory in all
+  12 turn contexts, the run leaf gaining `result.json`, `receipt.json`, `receipt.log` and `chat.md` across
+  the resume, wall 643 s, OpenRouter charge $0.00. Control room gates M on `485e92a` from outside the
+  worktree (`control-room/verify/gates-M.log`): runner 494 OK on both runtimes, `check` ok on both, core 364
+  OK on both jsonschema pins, three adapters OK, validate-examples clean, E7 check runner 9 of 9, runner E11
+  suite 136 before FAILED (3+1) and after OK, core E11 suite 36 OK both. Derived revision
+  `e11-native-reparse-10` on the E10 root: 143 graded, every record equal to revision 9 on every field but
+  `grade_path`, no flips, routing equal to revision 9 on all four setups, 150 originals byte-identical.
+  Next: Astra's recheck6 (mandate `astra-kit/mandate-recheck6.md`, mode `recheck6`, narrowed to D-F, D-U, P
+  and the one-trial proof; the copy carries the fix-6 proof root and her recheck5 probe scripts), then, if
+  D clears, the fresh root `e11-repair-qualification-2` and the restart.
