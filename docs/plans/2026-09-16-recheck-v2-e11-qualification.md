@@ -558,3 +558,13 @@ to exactly the held-out request text.
   scratch above the fixture, with a live Codex proof this time), gate, a fresh root and a full restart; or
   something he names. Charges so far this rerun: OpenRouter under a dollar (read at the reconvene from the
   records); the Claude lane is on his plan and is not reported (E11-5).
+- **E11-26, Tony's ruling on the stopped rerun (2026-09-17 about 4:58 PM): "Fix and restart."** The same builder
+  (Opus 5 at high) on the brief `astra-outputs/e11/briefs/e11-repair-fix4.md`: a Codex session must be able
+  to write the fixture's run leaf without re-sharing the campaign scratch (the control room's reading: the
+  opaque case directory as a second `--add-dir` through the runner's launch call), a runner-level guard that
+  records per trial whether the run directory lies inside a root the setup's session may write and refuses
+  the launch otherwise, one failing-then-passing test, and a live proof with real Codex comparison trials
+  under a new proof root, the step the fix round skipped; the four opencode-deepseek absent `no_result`
+  records read and explained, not fixed. Then the control room's gates, commit, Astra's narrow re-check on
+  the fix, a fresh campaign root and the full restart of 360 trials. The stopped root
+  `e11-repair-qualification` stays as a record.
