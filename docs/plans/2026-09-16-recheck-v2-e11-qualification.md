@@ -781,3 +781,10 @@ to exactly the held-out request text.
   unchanged: the E11-28 and E11-30 send-backs, deepseek reply capture, pid-reuse liveness, the OpenCode
   allow rule's breadth, the unseparated bench, the P2 wording, Astra's design note; new: the codex
   manual-only selection and the opencode-deepseek no-result rate.
+- **E11-34, Tony's ruling on the twelve unrun consumer trials: same bench (2026-09-18 about 6:45 AM, Tony).**
+  After fix 7 is gated and re-checked by Astra, the twelve consumer trials run on the finished rerun root
+  `e11-repair-qualification-2` as added attempts; the 348 recorded trials are never rewritten. The
+  producer records they read are the root's own comparison records. Sequence: gates, recheck7, the
+  regrade of every comparison and continuation attempt to a derived revision, then the twelve consumer
+  launches, their grades in the same revision, the inspection board republished, then Astra's independent
+  read of the rerun and the reconvene.
