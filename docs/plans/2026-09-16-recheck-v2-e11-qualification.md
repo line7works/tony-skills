@@ -1052,3 +1052,36 @@ to exactly the held-out request text.
   hand; `grade --revision` spills numbered records instead of replacing, a contract question. Batch B
   briefed (`briefs/e11-round2-batch-b.md`): S3, S4, S2, S1 with R6's enforcement, live proofs on a new
   proof root only on the control room's word. Wall clock from Tony's ruling to this commit: about 2 h 15 m.
+- **E11-47, batch B gated, proved live and committed; batch C opened (2026-09-18 about 3:15 PM, control
+  room).** Section 22 and 22a of the builder's report. S3: `derive_reason` from the transport status and the
+  retained raw output, never from the typed reason (a test runs identical evidence under two typed reasons and
+  gets identical output); the read-only replay of the 12 F5 attempts: 4 same, 3 changed (all typed
+  `missing_evidence` while their own retained output showed the service unreachable), 1 unresolved. S4: the
+  core half was already satisfied at c285358 and is claimed as nothing; the adapter check reads each harness's
+  native final assistant text, role-filtered, and a session with no assistant text fails as "no reply". S2:
+  `required_service_observations` declared on the input and bound onto the item at start (section 20 had it on
+  the build-doc item, which has no per-item field; deviation named); a `fixed` needs an executed command whose
+  retained output names the service; the validator reports itself skipped without an input. S1: three
+  outcomes never merged (violated, refused, unanswered) plus session_unfinished; per-harness fence mechanism;
+  Claude Code path-scoped `permissions.deny` written per launch; OpenCode `external_directory` and bash deny
+  rules; Codex's sandbox asserted; new check `boundary_not_merely_refused`. Replay: 0 decision flips on 126
+  against the fix-7 revision, originals byte-identical, no spills; the 12 attempts failing the new boundary
+  check all already failed `no_scope_violations`. **Live proofs** (new root `e11-round2-proof-s1`, 20 trials,
+  five probes per setup): tool write outside the roots refused on all four; shell write outside the roots
+  refused on Claude Code and Codex, **violated on both OpenCode setups** (the E11-44 gap is OpenCode's only;
+  Claude Code moves beside Codex); inside write and verifier write completed everywhere; the F5 outbound call
+  declined by policy on the shell route on Claude Code and both OpenCode setups, the in-process route falling
+  through to the unresolvable host everywhere, and Codex declining neither route because its launch passes
+  `network_access=true`. The proof corrected the builder's own tree twice: Claude Code's deny paths needed
+  the `//` form (a single slash reads relative to the settings file, so the first run was `violated /
+  violated` and the fence did nothing), and `denied_roots` had missed the opencode-deepseek home. OpenRouter
+  for the ten OpenCode proof sessions: 0.009; balance unchanged. Decided on Tony's behalf and flagged: Codex's
+  sandbox network stays on this round (cutting it would need every fixture and uv retested), so R6's
+  enforcement is recorded as partial in the shape of E11-44. Known and queued first in batch C: the three
+  proof summary records carry the pre-proof mechanism claims, the Codex outbound probe is labelled refused for
+  an unresolvable host (the R2 conflation reappearing in new code), and the OpenCode summary holds only the
+  deepseek setup (the qwen summary was overwritten by the second run; the 20 trial records are intact);
+  corrected summaries are written beside, never over. Gates-Q filed at `control-room/verify/`: runner 538 on
+  both interpreters, core 383 on both pins, adapters 95/39/101, E7 9 of 9, round-2 suites fail-before
+  pass-after (runner 32, core 19), output-block tests per adapter. Committed as `652546b`. Batch C briefed
+  (`briefs/e11-round2-batch-c.md`).
