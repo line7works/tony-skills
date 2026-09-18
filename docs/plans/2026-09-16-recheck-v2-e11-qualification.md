@@ -1085,3 +1085,28 @@ to exactly the held-out request text.
   both interpreters, core 383 on both pins, adapters 95/39/101, E7 9 of 9, round-2 suites fail-before
   pass-after (runner 32, core 19), output-block tests per adapter. Committed as `652546b`. Batch C briefed
   (`briefs/e11-round2-batch-c.md`).
+- **E11-48, round 2 PAUSED mid batch C for Tony's Anthropic account switch (2026-09-18 about 3:40 PM, control
+  room).** Tony: "i need to switch anthropic accounts. can we get to a spot to pause so i can do so." The
+  builder stopped at a clean point (tree parses; round-2 suite 54 and E11 suite 148 OK), launched nothing, and
+  wrote report section 23 (in progress, paused), lines 4101 to 4320: done, in progress, not started in the
+  brief's order, findings not yet recorded, git status. The control room made a WIP commit on
+  `feat/recheck-v2-e11-repair`, `1d4d985` (3 files, +744/-59), so nothing depends on the dying session; it is
+  not the batch-C commit. Done in batch C so far: the three proof-record items (a distinct
+  `unresolved-host-error` outcome kept out of `refused`; four corrected per-setup fence summaries generated
+  from the trial records beside the untouched originals; the OpenCode overwrite confirmed and fixed; R6's
+  wording verbatim); `resume-models` read-only on the round-1 root: `assistant_model_rows: []` for both
+  OpenCode setups, the gap carried, nothing reconstructed; R2's evidence check now reads the retained report
+  (0 changes across 82 retained attempts); cost unavailable separated from measured zero; `grade_summary`'s
+  own revision diff via `grade --against`; `grade --revision` settled as replace-never-number (Astra's earlier
+  NEW BLOCKER 1 explicitly reversed, its two tests inverted, not deleted, to be put to her in the
+  verification); one defect outside the brief found and fixed, a recycled pid counted as a live harness
+  forever and blocked `routing-score` (liveness now compares the process start time with the pid file's
+  mtime; unknown counts as alive), no test yet. The replay re-ran clean into `e11-round2-1` (126/16/4, no
+  spills, originals 541/541), and the tool's own diff reads 126 paired, 0 flips either way. Not started: R2's
+  continuation labels and reviewed-source accounting; six R5 items (`timed_out` could not be reproduced as a
+  defect, flagged); all of R3; all of R4 and its live preflight. Loose ends named for the next builder: the
+  pid-reuse test; the replace-never-number settlement into the contract; gates not rerun since these changes;
+  the answer-key wall is closed (mode 000) and a gate run needs `key-state --reopen`. Governing hand-off for
+  the resume: `~/Documents/handoffs/2026-09-18-skills-v2-e11-round2-pause-handoff.md` (paste-back line
+  inside; negative test at the bottom). The builder's subagent context ends with the session; a fresh builder
+  resumes from the worktree, the brief and section 23.
