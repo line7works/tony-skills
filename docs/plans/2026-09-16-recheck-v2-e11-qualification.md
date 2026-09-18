@@ -932,3 +932,19 @@ to exactly the held-out request text.
   launching recheck8 while his ruling on round 2 is pending (both inside the standing goal, both reversible,
   no OpenRouter spend). Next: recheck8's verdict; Tony's ruling on the three decisions; then either the
   frozen round-2 package or the E11 close.
+- **E11-40, Tony's ruling on the reconvene: "Do what Astra said" (2026-09-18 about 10:25 AM).** His words,
+  verbatim, set as the standing goal: "Her recommendation, three sentences: accept this round's failure and
+  keep its records. Authorize one frozen repair package covering the four safeguards and her six rig repairs,
+  one independent verification, and the rerun only after a native isolation check passes, with any narrower
+  target written down explicitly. Stop after that round, report each tool's demonstrated capabilities and
+  gaps, and leave production eligibility unchanged." Effect: (1) E11 round 1 closes with the result as read
+  by both readers, DOES NOT QUALIFY on claude-code, codex, opencode and opencode-deepseek and for the pilot;
+  the rerun root `e11-repair-qualification-2` (360 of 360), the stopped root, the proof roots, every grade
+  revision and every review in the packet are the record and are never rewritten. (2) One round 2, bounded
+  by ruling 17: a frozen repair package written and committed before any building, one repair round by the
+  builder, one independent verification by Astra, a native read-boundary preflight that must pass on all
+  four setups before the rerun, the rerun once, then stop or carry. (3) The narrower target is written
+  explicitly as an E11 scope amendment in the package (E11-41), reported as partial qualification, never as
+  the portability target achieved. (4) Production review eligibility does not change in this round (D4
+  untouched). (5) No prompt or skill-text change is in the package; executable support and necessary
+  contract wording only. The package is the next entry; nothing is built until it is committed.
