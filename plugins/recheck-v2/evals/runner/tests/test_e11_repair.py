@@ -2305,6 +2305,162 @@ class Fix7QueueAndReaders(RunnerCase):
         self.assertTrue(os.path.isfile(os.path.join(campaign.trial_dir(good), "grade.json")))
 
 
+class Fix8ConsumersWaitAndExactCaptures(RunnerCase):
+    """Astra's recheck7: Q and G PARTLY.
+
+    Q-S: the flat queue puts the consumer rows last, but `_campaign_loop` partitions it BY
+    LANE and runs the lanes at once, so a fast lane reaches its consumers while another lane
+    is still producing, and `producer_record_for` ranks over whatever exists at that moment.
+    Her probe got the comparison record in-queue and the continuation record after the end.
+    G: only the OpenCode `launch-` form was tightened, and `do_report` still read the ledger
+    with its own `json.loads` comprehension.
+    """
+
+    setups = ("claude-code", "codex")
+
+    # ---- Q-S: the campaign-wide producer boundary
+    def scheduler_plan(self, second_producer_row=False):
+        """Two lanes: `codex` produces, `claude-code` consumes. Her q.py's shape.
+
+        `second_producer_row` gives the producing lane a row AFTER the one that raises, so
+        the lane's thread dies with a row still owed to the boundary.
+        """
+        continuation = ["cont-codex-F3-02-mixed-two-items-compaction-r1"]
+        if second_producer_row:
+            continuation.append("cont-codex-F3-02-mixed-two-items-handoff-r1")
+        return {"order": {"codex": ["codex-F1-01-fixed-clean-available-r1"]},
+                "continuation_order": {"codex": continuation},
+                "consumer_order": {"claude-code": ["consumer-codex-to-claude-code-r1"]}}
+
+    def record_producer(self, campaign, tid, kind):
+        directory = campaign.trial_dir(tid)
+        runner.ensure_dir(directory)
+        runner.write_json(os.path.join(directory, "command.json"),
+                          {"setup": "codex", "condition": "available", "kind": kind,
+                           "status": "complete"})
+        runner.write_json(os.path.join(directory, "result.json"), {})
+
+    def drive_two_lanes(self, slow_seconds=0.6, stop_the_slow_lane=False,
+                        kill_the_slow_lane=False):
+        """The real queue, loop and selector; no harness and no model.
+
+        The slow lane records the PREFERRED record (a continuation) only after a delay, so a
+        consumer that does not wait selects the comparison record instead.
+        """
+        import argparse
+        import threading
+        import time as _time
+        campaign = runner.Campaign(self.campaign)
+        runner.ensure_dir(campaign.trials)
+        plan = self.scheduler_plan(second_producer_row=kill_the_slow_lane)
+        comparison = "codex-F1-01-fixed-clean-available-r1"
+        continuation = "cont-codex-F3-02-mixed-two-items-compaction-r1"
+        self.record_producer(campaign, comparison, "comparison")
+        selected, started = [], threading.Event()
+
+        def slow_continuation(one):
+            started.set()
+            if kill_the_slow_lane:
+                raise RuntimeError("the slow lane died before recording its producer")
+            _time.sleep(slow_seconds)
+            self.record_producer(campaign, continuation, "continuation:compaction")
+
+        def consume(one):
+            selected.append(
+                runner.producer_record_for(campaign, plan, "codex")["trial"])
+
+        args = argparse.Namespace(fake_launcher=None, compact_tokens=None, lanes=2,
+                                  poll_interval=0.01)
+        saved = (runner.require_preflight, runner.cache_routing_requests,
+                 runner.do_continuation, runner.do_consumer, runner.lane_stopped)
+        runner.require_preflight = lambda *a, **k: None
+        runner.cache_routing_requests = lambda *a, **k: {}
+        runner.do_continuation = slow_continuation
+        runner.do_consumer = consume
+        if stop_the_slow_lane:
+            runner.lane_stopped = lambda campaign_, lane: (
+                {"kind": "operator", "why": "stopped for the test"} if lane == "codex"
+                else None)
+        else:
+            runner.lane_stopped = lambda *a, **k: None
+        try:
+            document = runner._campaign_loop(campaign, plan, args)
+        finally:
+            (runner.require_preflight, runner.cache_routing_requests,
+             runner.do_continuation, runner.do_consumer, runner.lane_stopped) = saved
+        after = runner.producer_record_for(campaign, plan, "codex")["trial"]
+        return {"document": document, "in_queue": selected[0] if selected else None,
+                "after_end": after, "comparison": comparison,
+                "continuation": continuation}
+
+    def test_a_consumer_waits_for_a_slower_lanes_producer(self):
+        """Her q.py's finding, with no deadlock: both selections must agree."""
+        got = self.drive_two_lanes()
+        self.assertEqual(got["in_queue"], got["after_end"])
+        self.assertEqual(got["in_queue"], got["continuation"])
+        self.assertEqual(got["document"]["failed"], [])
+
+    def test_a_stopped_lane_does_not_deadlock_the_consumers(self):
+        """The boundary's stopped-lane resolution: a stop counts as finished."""
+        got = self.drive_two_lanes(stop_the_slow_lane=True)
+        self.assertIsNotNone(got["in_queue"], "the consumer never ran")
+        self.assertEqual(got["in_queue"], got["after_end"])
+        # the slow lane never recorded its continuation, so the comparison is the whole set
+        self.assertEqual(got["in_queue"], got["comparison"])
+
+    def test_a_lane_that_dies_releases_the_boundary(self):
+        """A producer that can never be recorded must not hold the consumers forever."""
+        got = self.drive_two_lanes(kill_the_slow_lane=True)
+        self.assertIsNotNone(got["in_queue"], "the consumer never ran")
+        self.assertEqual(got["in_queue"], got["comparison"])
+        self.assertTrue(any("lane stopped" in (row.get("why") or "")
+                            for row in got["document"]["failed"]),
+                        got["document"]["failed"])
+        note = runner.read_text(runner.Campaign(self.campaign).log, "") or ""
+        # the lane died with a row still owed, and the boundary says so rather than hanging
+        self.assertIn("producer boundary no longer waits", note)
+        self.assertIn("the producer boundary opened", note)
+
+    # ---- G: every capture name exact
+    def test_every_shape_selects_only_its_true_captures(self):
+        """Her four suffix controls (recheck7/scratch/g.py)."""
+        capture = os.path.join(self.scratch, "suffix-controls")
+        runner.ensure_dir(capture)
+        strays = ["launch-x.record-call-flags.json", "launch-x.trace.json",
+                  "launch-x.session.json", "x.record-call-flags.trace.jsonl",
+                  "x.record-call-flags.rollout.jsonl", "x.record-call-flags.events.jsonl",
+                  "launch-x.stderr"]
+        real = {"opencode-trace": ["launch-x.json", "trace.json"],
+                "opencode-session": ["session.json"],
+                "claude-code": ["trace.jsonl", "transcript.jsonl"],
+                "codex": ["rollout.jsonl", "events.jsonl",
+                          "F5-01-outbound-required-run-verify.rollout.jsonl",
+                          "F5-01-outbound-required-run-verify-2.events.jsonl"]}
+        for name in strays + [n for names in real.values() for n in names]:
+            runner.write_text(os.path.join(capture, name), "{}\n")
+        for shape, names in real.items():
+            selected = sorted(os.path.basename(p)
+                              for p in runner.capture_files(capture, shape))
+            self.assertEqual(selected, sorted(names), shape)
+            for stray in strays:
+                self.assertNotIn(stray, selected, shape)
+
+    # ---- G: the report's ledger reader
+    def test_the_report_survives_a_scalar_ledger_line(self):
+        campaign = runner.Campaign(self.campaign)
+        tid = runner.trial_id("claude-code", testlib.CASE, "available", 1)
+        got = cli(["run", "--campaign", self.campaign, tid,
+                   "--fake-launcher", self.fake_launcher("claude-code")])
+        self.assertEqual(got.returncode, 0, got.stderr[-2000:])
+        with open(campaign.trials_jsonl, "a", encoding="utf-8") as handle:
+            handle.write('"a line no reader should index"\n')
+        report = parse_stdout(cli(["report", "--campaign", self.campaign]))
+        self.assertTrue(report)
+        rows = runner.jsonl_lines(campaign.trials_jsonl)
+        self.assertTrue(all(isinstance(row, dict) for row in rows))
+        self.assertIn(tid, [row.get("id") for row in rows])
+
+
 class Fix2PreflightAllowRules(RunnerCase):
     """The narrow second fix, item C: an acceptance never covers a failed allow rule."""
 

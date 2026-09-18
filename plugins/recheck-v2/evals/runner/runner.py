@@ -5924,11 +5924,36 @@ def capture_dirs(record):
     return out
 
 
+def _dotless_stem(name, suffix):
+    """`<variable>.<suffix>` where the variable part carries no further dot.
+
+    E11-35 (G): a verifier capture is named for its CALL — `<run id>-verify.rollout.jsonl`,
+    `<run id>-verify-2.events.jsonl`, `launch-<call>.json` — and a call id carries no dot. A
+    sidecar the session writes beside one does (`.record-call-flags.json`,
+    `x.record-call-flags.trace.jsonl`), which is how `grade --all` came to read a
+    pretty-printed object as JSONL. Only the documented forms are captures.
+    """
+    tail = "." + suffix
+    if not name.endswith(tail) or len(name) <= len(tail):
+        return False
+    return "." not in name[:-len(tail)]
+
+
 def _is_opencode_launch_capture(name):
     """`launch-<call id>.json` and nothing dotted beside it (E11-33, NEW MAJOR G)."""
-    if not name.startswith("launch-") or not name.endswith(".json"):
-        return False
-    return "." not in name[len("launch-"):-len(".json")]
+    return name.startswith("launch-") and _dotless_stem(name[len("launch-"):], "json")
+
+
+# E11-35: the capture names, exactly as the reader's own docstring lists them. `driving` is
+# matched whole; `verifier` is the call-named form, whose variable part carries no dot. A
+# shape with no verifier form takes the driving names and nothing else.
+CAPTURE_NAMES = {
+    "claude-code": {"driving": ("trace.jsonl", "transcript.jsonl"), "verifier": ()},
+    "codex": {"driving": ("rollout.jsonl", "events.jsonl"),
+              "verifier": ("rollout.jsonl", "events.jsonl")},
+    "opencode-session": {"driving": ("session.json",), "verifier": ()},
+    "opencode-trace": {"driving": ("trace.json",), "verifier": ()},
+}
 
 
 def capture_files(capture, shape):
@@ -5939,9 +5964,16 @@ def capture_files(capture, shape):
     call: `<run id>-verify.rollout.jsonl` and `<run id>-verify-2.events.jsonl` on Codex,
     `launch-<run id>-verify.json` on OpenCode. The reader used to match the driving names
     exactly, so it scanned ZERO verifier actions in every real Codex and OpenCode run while
-    the captures sat beside it (Astra's E11 read, section 2). Shapes are matched by suffix
-    instead, and each file is read once.
+    the captures sat beside it (Astra's E11 read, section 2).
+
+    E11-35 (G): matching by SUFFIX then admitted every dotted sidecar the session wrote
+    beside a capture — `x.record-call-flags.trace.jsonl`, `launch-x.trace.json`,
+    `launch-x.session.json` — so each name is now matched exactly, and each documented
+    verifier form only where its variable part carries no further dot.
     """
+    names_for = CAPTURE_NAMES.get(shape)
+    if names_for is None:
+        return []
     try:
         names = sorted(os.listdir(capture))
     except OSError:
@@ -5951,25 +5983,12 @@ def capture_files(capture, shape):
         path = os.path.join(capture, name)
         if not os.path.isfile(path):
             continue
-        if shape == "claude-code":
-            if name.endswith("trace.jsonl") or name.endswith("transcript.jsonl"):
-                out.append(path)
-        elif shape == "codex":
-            if name.endswith("rollout.jsonl") or name.endswith("events.jsonl"):
-                out.append(path)
-        elif shape == "opencode-session":
-            if name.endswith("session.json"):
-                out.append(path)
-        elif shape == "opencode-trace":
-            # `trace.json` for a driving session, `launch-<call>.json` for a verifier call:
-            # both are JSONL of `{"part": ...}` rows despite the `.json` suffix.
-            #
-            # NEW MAJOR G (E11-33): `startswith("launch-") and endswith(".json")` also selected
-            # `launch-<call>.record-call-flags.json`, a pretty-printed OBJECT that sits beside
-            # the capture, and `grade --all` died reading it. The call id carries no dot, so
-            # the remainder after `launch-` must carry none before `.json`.
-            if name.endswith("trace.json") or _is_opencode_launch_capture(name):
-                out.append(path)
+        if name in names_for["driving"]:
+            out.append(path)
+        elif any(_dotless_stem(name, suffix) for suffix in names_for["verifier"]):
+            out.append(path)
+        elif shape == "opencode-trace" and _is_opencode_launch_capture(name):
+            out.append(path)
     return out
 
 
@@ -9373,6 +9392,65 @@ def _campaign_loop(campaign, plan, args):
     ran, skipped, failed = [], [], []
     results_lock = threading.Lock()
     in_flight = {}
+    # NEW MAJOR Q-S (E11-35): the flat queue puts the consumer rows last, but the loop
+    # partitions it BY LANE and runs the lanes at once, so a lane that finishes its own rows
+    # reaches its consumers while another lane is still producing — and
+    # `producer_record_for` ranks over whatever exists at that moment. Astra's
+    # event-controlled probe got the comparison record in-queue and the continuation record
+    # after the end. The boundary is campaign-wide and lives here, not in the queue's order:
+    # no consumer row starts until every NON-consumer row of every lane is done with.
+    producers_left = {lane: len([r for r in rows if r["kind"] != "consumer"])
+                      for lane, rows in lanes.items()}
+    producers_done = threading.Event()
+    boundary_logged = []
+
+    def _producer_settled(lane, count=1):
+        """One non-consumer row is done with, whatever its outcome."""
+        with results_lock:
+            producers_left[lane] = max(0, producers_left.get(lane, 0) - count)
+            remaining = sum(producers_left.values())
+        if not remaining:
+            producers_done.set()
+
+    def _release_lane(lane):
+        """A lane that stopped or died owes the boundary nothing more.
+
+        A producer that can never be recorded must not deadlock the consumers: a lane stop
+        (`lane_stops`) walks its remaining rows and settles each one, and a lane whose thread
+        dies has whatever is left released here. Either way the boundary opens and the
+        consumers select over the records that exist, which is the same set any later launch
+        would see.
+        """
+        with results_lock:
+            owed = producers_left.get(lane, 0)
+            producers_left[lane] = 0
+            remaining = sum(producers_left.values())
+        if not remaining:
+            producers_done.set()
+        return owed
+
+    def _wait_for_producers(lane, row):
+        """Hold this consumer row until every producer row of every lane is settled."""
+        if producers_done.is_set():
+            return
+        with results_lock:
+            outstanding = {name: n for name, n in producers_left.items() if n}
+        campaign.interruption(
+            row["id"],
+            "a consumer row reached the front of the %s lane with %d producer row(s) "
+            "outstanding (%s)" % (lane, sum(outstanding.values()),
+                                  ", ".join("%s=%d" % kv for kv in sorted(outstanding.items()))),
+            "held it at the campaign-wide producer boundary (E11-35)")
+        producers_done.wait()
+        if not boundary_logged:
+            boundary_logged.append(True)
+            campaign.note(
+                "the producer boundary opened: every non-consumer row of every lane is "
+                "settled (recorded, skipped, failed, or released by a lane stop); the "
+                "consumer rows select over the complete set (E11-35)")
+
+    if not sum(producers_left.values()):
+        producers_done.set()
 
     def work(lane, rows):
         """The lane's own queue, wrapped so a dead thread can never be invisible (E10-68 (3)).
@@ -9394,70 +9472,89 @@ def _campaign_loop(campaign, plan, args):
                                "lane_stop": "runner_error"})
             if isinstance(exc, (KeyboardInterrupt, SystemExit)):
                 raise
+        finally:
+            # E11-35: whatever ended this lane, it owes the producer boundary nothing more.
+            owed = _release_lane(lane)
+            if owed:
+                campaign.note("the %s lane ended with %d producer row(s) unsettled; the "
+                              "producer boundary no longer waits for them (E11-35)"
+                              % (lane, owed))
 
     def _lane_work(lane, rows):
         last = time.time()
         for row in rows:
-            if lane_stopped(campaign, lane):
-                with results_lock:
-                    skipped.append(row["id"])
-                campaign.interruption(row["id"], "the %s lane is stopped" % lane,
-                                      "left it alone (E10-46)")
-                continue
-            if row["recorded"]:
-                with results_lock:
-                    skipped.append(row["id"])
-                if row["status"] != "complete":
-                    campaign.interruption(
-                        row["id"], "a record already stands with status %s" % row["status"],
-                        "left it alone; `rerun` is the operator's call (E10-15)")
-                continue
-            if row["record_exists"]:
-                with results_lock:
-                    skipped.append(row["id"])
-                campaign.interruption(row["id"], "a partial record exists (%s)"
-                                      % (row.get("why") or "no terminal status"),
-                                      "left it alone; `rerun` is the operator's call (E10-15)")
-                continue
-            # E11-7 item 7: the clock is read BEFORE the trial and reset AFTER it, so `gap`
-            # is the idle time between trials. The old order reset it before the launch, so
-            # the four "wall-clock gaps" of the E10 campaign were the preceding trials' own
-            # durations — 797.029, 827.948, 777.361 and 870.608 seconds — logged as gaps
-            # (Astra's E11 read, repair item 7).
-            gap = time.time() - last
-            if gap > 600:
-                campaign.interruption(row["id"], "a wall-clock gap of %.0fs between trials" % gap,
-                                      "recorded the gap and continued")
-            with results_lock:
-                in_flight[lane] = row
-            one = argparse.Namespace(campaign=campaign.root, trial=row["id"], attempt_dir=None,
-                                     attempt=0, plugins=None, fake_launcher=args.fake_launcher,
-                                     compact_tokens=args.compact_tokens,
-                                     poll_interval=getattr(args, "poll_interval",
-                                                           DEFAULT_POLL_INTERVAL))
             try:
-                if row["kind"] == "routing":
-                    do_routing(one)
-                elif row["kind"] == "continuation":
-                    do_continuation(one)
-                elif row["kind"] == "consumer":
-                    do_consumer(one)
-                else:
-                    do_run(one)
-                with results_lock:
-                    ran.append(row["id"])
-            except (Usage, Missing, Failure) as exc:
-                with results_lock:
-                    failed.append({"id": row["id"], "why": str(exc)})
-                campaign.interruption(row["id"], "the trial raised: %s" % exc,
-                                      "kept the record and went on")
-            # E11-7 item 7: the gap clock restarts when the trial ENDS.
-            last = time.time()
-            # NOT a `finally`: an UNCAUGHT exception must leave the row in flight, because
-            # that is what names the trial in the lane stop (E10-68 defect 3). A `finally`
-            # runs while the exception is propagating and cleared it.
+                last = _lane_row(lane, row, last)
+            finally:
+                # E11-35: recorded, skipped, failed or raised — a producer row is settled
+                # once it has been through here, and the boundary counts it.
+                if row["kind"] != "consumer":
+                    _producer_settled(lane)
+
+    def _lane_row(lane, row, last):
+        if lane_stopped(campaign, lane):
             with results_lock:
-                in_flight.pop(lane, None)
+                skipped.append(row["id"])
+            campaign.interruption(row["id"], "the %s lane is stopped" % lane,
+                                  "left it alone (E10-46)")
+            return last
+        if row["recorded"]:
+            with results_lock:
+                skipped.append(row["id"])
+            if row["status"] != "complete":
+                campaign.interruption(
+                    row["id"], "a record already stands with status %s" % row["status"],
+                    "left it alone; `rerun` is the operator's call (E10-15)")
+            return last
+        if row["record_exists"]:
+            with results_lock:
+                skipped.append(row["id"])
+            campaign.interruption(row["id"], "a partial record exists (%s)"
+                                  % (row.get("why") or "no terminal status"),
+                                  "left it alone; `rerun` is the operator's call (E10-15)")
+            return last
+        # E11-7 item 7: the clock is read BEFORE the trial and reset AFTER it, so `gap`
+        # is the idle time between trials. The old order reset it before the launch, so
+        # the four "wall-clock gaps" of the E10 campaign were the preceding trials' own
+        # durations — 797.029, 827.948, 777.361 and 870.608 seconds — logged as gaps
+        # (Astra's E11 read, repair item 7).
+        gap = time.time() - last
+        if gap > 600:
+            campaign.interruption(row["id"], "a wall-clock gap of %.0fs between trials" % gap,
+                                  "recorded the gap and continued")
+        with results_lock:
+            in_flight[lane] = row
+        one = argparse.Namespace(campaign=campaign.root, trial=row["id"], attempt_dir=None,
+                                 attempt=0, plugins=None, fake_launcher=args.fake_launcher,
+                                 compact_tokens=args.compact_tokens,
+                                 poll_interval=getattr(args, "poll_interval",
+                                                       DEFAULT_POLL_INTERVAL))
+        try:
+            if row["kind"] == "routing":
+                do_routing(one)
+            elif row["kind"] == "continuation":
+                do_continuation(one)
+            elif row["kind"] == "consumer":
+                # E11-35: every producer row of every lane, first.
+                _wait_for_producers(lane, row)
+                do_consumer(one)
+            else:
+                do_run(one)
+            with results_lock:
+                ran.append(row["id"])
+        except (Usage, Missing, Failure) as exc:
+            with results_lock:
+                failed.append({"id": row["id"], "why": str(exc)})
+            campaign.interruption(row["id"], "the trial raised: %s" % exc,
+                                  "kept the record and went on")
+        # E11-7 item 7: the gap clock restarts when the trial ENDS.
+        last = time.time()
+        # NOT a `finally`: an UNCAUGHT exception must leave the row in flight, because
+        # that is what names the trial in the lane stop (E10-68 defect 3). A `finally`
+        # runs while the exception is propagating and cleared it.
+        with results_lock:
+            in_flight.pop(lane, None)
+        return last
 
     workers = []
     concurrency = int(getattr(args, "lanes", 0) or len(lanes))
@@ -9598,8 +9695,11 @@ def do_report(args):
     from `trials.jsonl` and the grade files, each cell naming its records."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
-    lines = [json.loads(l) for l in (read_text(campaign.trials_jsonl, "") or "").splitlines()
-             if l.strip()]
+    # E11-35 (G): this was the runner's last raw JSONL read — its own `json.loads`
+    # comprehension over the ledger, then row indexing, so one scalar line raised
+    # `TypeError: string indices must be integers`. Every JSONL read goes through the shared
+    # reader, which keeps object rows only.
+    lines = jsonl_lines(campaign.trials_jsonl)
     # E10-44 (finding 6): grades join on (trial id, attempt), and every attempt's own grade
     # file is found, `attempts/<n>/grade.json` included.
     grades = {}
