@@ -657,3 +657,35 @@ to exactly the held-out request text.
   mode `recheck5`, narrowed to D, D-G, D-T and the continuation proof; the copy carries the fix-5 proof root
   and her recheck4 probe scripts), then, if cleared, the fresh root `e11-repair-qualification-2` and the
   restart.
+- **E11-30, Astra's recheck5 on fix 5: D still PARTLY, sent back inside the round (2026-09-17 about
+  10:45 PM, control room, decided on Tony's behalf as E11-17 and E11-28 were, flagged).** Verdict
+  `astra-outputs/e11/recheck5/recheck5.md` (9 minutes at high, exit 0). D-G FIXED: OpenCode's unforwarded
+  root is recorded under `roots_named_but_not_forwarded`, contributes no writability, and an existing
+  config with no allow rule is refused (her `opencode-guard.py` now reads REFUSED, exit 2). D-T FIXED: the
+  two replacement tests use the runner's own staging and check the real listings. D PARTLY: all five
+  launch sites go through the helper and pass the case root where the harness takes it (her `paths.py`
+  reads `guard_calls=1` at every site, the persisted records `enforced: true`), and the continuation
+  proof stands (four trials `complete`, validators ok, both Codex resumes carrying the case directory,
+  eight records true, the at-cut and before-resume fingerprints equal), but the two decisions the builder
+  made without the brief naming them each let a real launch proceed with writability unestablished. NEW
+  MAJOR D-F (`runner.py:8758`): the compaction resume's `enforced` is keyed to the first half's
+  `fake_launcher` flag while the resume argv names the real binary; her probe reaches the process
+  boundary with `enforced: false` and a real `opencode run --session ...` argv. NEW MAJOR D-U
+  (`runner.py:2676`, `10458`): a home with no `opencode.json` reads `bounded: false` and the guard raises
+  only on a bounded record, so a real launch proceeds with `run_dir_is_writable: false`; she drove
+  `setups/opencode/launch.sh` with a stand-in binary and an empty auth file and it never requires
+  `opencode.json`, so the install and verify gates do not close that path. NEW MINOR P: section 16's
+  sentence that `campaign start` does not run continuation trials is wrong (`campaign_queue` includes
+  `continuation_order`, `_campaign_loop` dispatches to `do_continuation`); running the four individually
+  was a valid method, the explanation was not. She also notes the fix-5 proof records carry no `enforced`
+  field. The control room confirmed all three against the code (the `enforced=not
+  getattr(args, "fake_launcher", None)` at the compaction resume; `bounded: false` returned before any
+  root is read and the raise guarded by `record.get("bounded", True)`; `campaign_queue` at 9079; the
+  eight proof records written about 8:00 PM, before the field existed in the committed tree). Brief
+  `astra-outputs/e11/briefs/e11-repair-fix6.md` to the same builder: `enforced` follows the executable
+  the launch itself selects at every site through one predicate; a real launch is refused whenever
+  writability cannot be established, the fake exception the only pass-through; the P correction as a
+  dated note in section 17; tests fail-then-pass on `aa5a244`; one live Codex compaction continuation on
+  a new root `e11-repair-proof-2026-09-17-c` showing `enforced: true` on both halves' records, and the
+  config-less OpenCode refusal driven at the process boundary with no model. The restart waits on that
+  fix, the control room's gates and Astra's recheck6.
