@@ -1399,6 +1399,11 @@ PERMISSION_DENIED_SUBTYPE = "permission_denied"
 class Setup(object):
     harness = None
     name = None
+    # E11-26 fix 5 (NEW MAJOR D-G): does THIS setup's launcher forward a runner-named writable
+    # root to the session? Codex and Claude Code turn `--writable` into `--add-dir`; OpenCode's
+    # launcher has no such flag, so a root named for an OpenCode launch is never granted and
+    # must not be counted as one the session may write.
+    forwards_writable = False
     # The default model of a setup that named none, per harness. `None` means "whatever the
     # harness's own sign-in or config already says", which is what E10-2 measured for Claude
     # Code and Codex before Tony pinned them.
@@ -1478,10 +1483,19 @@ class Setup(object):
         if scratch:
             roots.append({"root": scratch, "why": "TMPDIR, the trial's own scratch "
                                                   "(E11-7 item 2)"})
+        not_forwarded = []
         for root in (extra or []):
-            roots.append({"root": root,
-                          "why": "a root the runner named for this trial (E11-26)"})
+            if self.forwards_writable:
+                roots.append({"root": root,
+                              "why": "a root the runner named for this trial, forwarded by "
+                                     "%s's launcher as --add-dir (E11-26)" % self.harness})
+            else:
+                # fix 5, NEW MAJOR D-G: naming a root the launcher never forwards granted
+                # nothing, and counting it read as writability the session did not have.
+                not_forwarded.append(root)
         return {"harness": self.harness, "setup": self.name, "roots": roots,
+                "forwards_writable": self.forwards_writable,
+                "roots_named_but_not_forwarded": not_forwarded,
                 "bounded": True}
 
     def install(self, condition, fake=None):
@@ -1532,6 +1546,8 @@ class Setup(object):
 
 class ClaudeCodeSetup(Setup):
     harness = "claude-code"
+    # fix 5: `launch.sh` turns each `--writable` into an `--add-dir` the session receives.
+    forwards_writable = True
 
     def launch_env(self, condition):
         return {"SKILLS_V2_PILOT_HOME": self.home(condition)}
@@ -2226,6 +2242,8 @@ def codex_delivery_status(payload, item, outputs):
 
 class CodexSetup(Setup):
     harness = "codex"
+    # fix 5: `launch.sh` turns each `--writable` into an `--add-dir` the session receives.
+    forwards_writable = True
 
     def launch_env(self, condition):
         return {"RECHECK_CODEX_HOME": self.home(condition)}
@@ -2626,6 +2644,9 @@ def _tree_bytes(path):
 
 class OpenCodeSetup(Setup):
     harness = "opencode"
+    # fix 5 (NEW MAJOR D-G): `setups/opencode/launch.sh` takes no such flag. This harness
+    # reaches a run leaf only through its own `external_directory` allow rule.
+    forwards_writable = False
     # `setups/opencode/install.sh`'s own `--model` default, and `launch.sh`'s `qwen` alias.
     default_model = "openrouter/qwen/qwen3.8-flash"
     # The two sub-setups the OpenCode scripts carry. `launch.sh` takes `qwen`, `deepseek` or a
@@ -2645,7 +2666,18 @@ class OpenCodeSetup(Setup):
         """E11-26: this harness's extra roots are its own `external_directory` allow rules."""
         record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
         config = os.path.join(self.home(condition), "xdg-config", "opencode", "opencode.json")
-        for pattern in _external_directory_rules(read_text(config, None)):
+        text = read_text(config, None)
+        record["allow_rule_config"] = config
+        if text is None:
+            # fix 5: this home has no `opencode.json` at all, so it was never installed and
+            # this reader has nothing to judge. The install/verify gates own that state; the
+            # writability guard records it and refuses nothing. A config that EXISTS and
+            # grants nothing IS judged, which is the case NEW MAJOR D-G names.
+            record["bounded"] = False
+            record["why_unbounded"] = ("no opencode.json under %s: this home is not "
+                                       "installed, so its allow rules cannot be read" % config)
+            return record
+        for pattern in _external_directory_rules(text):
             root = pattern
             while root.endswith("*") or root.endswith("/"):
                 root = root[:-1]
@@ -4658,20 +4690,15 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     scratch = trial_scratch(campaign, trial_id, attempt)
     # E11-26: the run leaf's own directory — the opaque case directory, which holds this
     # trial's workspace, run leaf and seeded input and nothing of any other trial.
-    writable = [os.path.dirname(run_dir)]
+    writable = guarded_launch_roots(campaign, setup, parts["condition"], workspace, run_dir,
+                                    scratch, "the comparison trial %s" % trial_id,
+                                    enforced=not fake)
     launch_extra = {"writable": writable}
     if getattr(args, "plugins", None):
         launch_extra["plugins"] = args.plugins
-    roots = require_writable_run_dir(campaign, setup, parts["condition"], workspace, run_dir,
-                                     scratch, writable,
-                                     "the comparison trial %s" % trial_id)
     step = setup.launch(parts["condition"], prompt_path, workspace, harness_dir, timeout,
                         extra=launch_extra,
                         fake=fake, registry=registry, scratch=scratch)
-    # the roots are recorded by the guard, in the campaign's own records; `step` is the
-    # launcher's process result and stays exactly what `run_cmd` returned (a extra key here
-    # reaches `collect_trial`'s per-step readers, which expect only run_cmd's own shape).
-    del roots
     catalog = setup.catalog(parts["condition"], harness_dir)
     collected = collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspace,
                               seeded, step, fixture, attempt, started, env_extra, catalog,
@@ -8413,16 +8440,22 @@ def do_continuation(args, record=None, attempt=0):
                               "recorded the cut as invalid and ran the resume anyway",
                               attempt=attempt)
     if parts["kind"] == "handoff":
+        second_scratch = trial_scratch(campaign, args.trial, attempt)
+        # fix 5 (D): this half passed the root but checked nothing.
+        second_roots = guarded_launch_roots(
+            campaign, setup, "available", workspace, run_dir, second_scratch,
+            "the continuation trial %s (handoff resume)" % args.trial,
+            enforced=not getattr(args, "fake_launcher", None))
         step = setup.launch("available", resume_path, workspace, second,
                             plan["timeouts"]["continuation"],
-                            extra={"writable": [os.path.dirname(run_dir)]},
+                            extra={"writable": second_roots},
                             fake=getattr(args, "fake_launcher", None),
                             registry=second_registry,
-                            scratch=trial_scratch(campaign, args.trial, attempt))
+                            scratch=second_scratch)
     else:
         step, compaction = _compaction_resume(campaign, setup, cut, resume_path, workspace,
                                               second, plan["timeouts"]["continuation"], args,
-                                              second_registry)
+                                              second_registry, run_dir=run_dir)
     catalog = setup.catalog("available", second)
     # The trial's wall time is the whole thing: the first session, the cut, and the resume.
     collected = collect_trial(campaign, setup, {"case": parts["case"], "condition": "available",
@@ -8481,12 +8514,18 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     ensure_dir(os.path.dirname(out_dir))
     # E11-7 item 2: a continuation launch gets the trial's own scratch too.
     trial = getattr(args, "trial", None)
-    env = campaign.env(
-        extra=setup.launch_env("available"),
-        scratch=(trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
-                 if trial else None))
+    scratch = (trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
+               if trial else None)
+    env = campaign.env(extra=setup.launch_env("available"), scratch=scratch)
     launcher = getattr(args, "fake_launcher", None) or setup.script("launch.sh")
-    argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available")
+    # fix 5 (D): the FIRST half of a continuation trial launched with the stopped rerun's
+    # configuration — the per-trial scratch as TMPDIR and no root naming the run leaf.
+    roots = guarded_launch_roots(campaign, setup, "available", workspace, run_dir, scratch,
+                                 "the continuation trial %s (first launch)"
+                                 % (trial or "unnamed"),
+                                 enforced=not getattr(args, "fake_launcher", None))
+    argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available",
+                        writable=roots)
     interval = float(getattr(args, "poll_interval", None) or DEFAULT_POLL_INTERVAL)
     if interval > MAX_POLL_INTERVAL:
         raise Usage("--poll-interval %.3f is coarser than E10-47's maximum of %.1f s "
@@ -8623,7 +8662,7 @@ DEFAULT_POLL_INTERVAL = 0.1   # E10-47: "at least ten times a second" is the rul
 MAX_POLL_INTERVAL = 0.1
 
 
-def _launch_argv(setup, launcher, prompt_path, workspace, out_dir, condition):
+def _launch_argv(setup, launcher, prompt_path, workspace, out_dir, condition, writable=()):
     """The continuation cut's own argv: `Setup.launch` cannot be used because the cut needs
     the `Popen` handle to freeze and kill the process group (E10-47, E10-55).
 
@@ -8632,8 +8671,14 @@ def _launch_argv(setup, launcher, prompt_path, workspace, out_dir, condition):
     harness's own default with `configured` still saying the plan's.
     """
     if setup.harness == "opencode":
+        # fix 5 (NEW MAJOR D-G): this launcher has no `--writable`; its reach is its own
+        # `external_directory` allow rule, and the guard reads that instead.
         return ["sh", launcher, setup.resolved_model(), prompt_path, workspace, out_dir]
     argv = ["sh", launcher, prompt_path, workspace, out_dir]
+    # fix 5 (D): the first half of a continuation trial is a launch like any other, and it
+    # launched with the stopped rerun's configuration until now.
+    for root in (writable or []):
+        argv += ["--writable", root]
     if setup.harness == "claude-code":
         for plugin in (["readers"] if condition == "absent" else ["recheck-v2", "readers"]):
             argv += ["--plugin", plugin]
@@ -8691,7 +8736,7 @@ COMPACTION = {
 
 
 def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, timeout, args,
-                       registry=None):
+                       registry=None, run_dir=None):
     """Continue the SAME session by the harness's own resume mechanism, with its compaction
     setting where one exists; record every attempt with its exact command and output."""
     ensure_dir(out_dir)
@@ -8699,10 +8744,18 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     # E11-7 item 2: the trial's own scratch when this call knows its trial (every campaign
     # path does); the campaign scratch for a direct call that names none.
     trial = getattr(args, "trial", None)
-    env = campaign.env(
-        extra=setup.launch_env("available"),
-        scratch=(trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
-                 if trial else None))
+    scratch = (trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
+               if trial else None)
+    env = campaign.env(extra=setup.launch_env("available"), scratch=scratch)
+    # fix 5 (D): the compaction resume builds its argv by hand and named no root at all. The
+    # run directory is the fixture's own `run/` leaf beside the workspace, so a caller that
+    # does not pass it (a direct probe) still gets the right root from the workspace's parent.
+    if not run_dir:
+        run_dir = os.path.join(os.path.dirname(workspace), "run")
+    case_dir = guarded_launch_roots(
+        campaign, setup, "available", workspace, run_dir, scratch,
+        "the continuation trial %s (compaction resume)" % (trial or "unnamed"),
+        enforced=not getattr(args, "fake_launcher", None))[0]
     prompt = read_text(resume_path, "") or ""
     attempts = []
     if not session:
@@ -8718,6 +8771,8 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
                 COMPACTION["claude-code"]["smallest_window"],
                 "--setting-sources", "local", "--strict-mcp-config",
                 "--settings", os.path.join(setup.home("available"), "launch-settings.json"),
+                # fix 5 (D): the run leaf, named here as `launch.sh` names it for a first launch
+                "--add-dir", case_dir,
                 "--output-format", "stream-json", "--verbose"]
         # E10-62 item 2: the resumed half of a continuation trial is a launch too, and the
         # two flags are session options (`claude --help`: "for the current session"), so the
@@ -8739,6 +8794,9 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         child_home = os.path.join(setup.home("available"), "child")
         argv = ["codex", "exec", "--json", "-o", os.path.join(out_dir, "final.md"),
                 "-C", workspace, "--add-dir", child_home,
+                # fix 5 (D): the run leaf's own root, an `exec` option, so BEFORE `resume`
+                # (E10-35: the subcommand accepts only its own options)
+                "--add-dir", case_dir,
                 "-c", "sandbox_workspace_write.network_access=true",
                 "resume", session, "-c",
                 "model_auto_compact_token_limit=%d" % args.compact_tokens, "-"]
@@ -10356,15 +10414,48 @@ def writable_roots_record(setup, condition, workspace, run_dir, scratch, extra_w
     return record
 
 
+def named_writable_roots(run_dir):
+    """The root a launch names for its own run directory: the run leaf's own parent.
+
+    On a trial that is the opaque case directory `<opaque tree>/fixture/<12 hex>`; on a
+    consumer it is the pair directory. Either way it holds this trial's records and nothing of
+    any other (E11-26).
+    """
+    return [os.path.dirname(run_dir)]
+
+
+def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch, what,
+                         enforced=True):
+    """Name the run leaf's root, CHECK it, and hand it back for the launch (E11-26, fix 5).
+
+    Astra's recheck4 found only two of the runner's launch sites doing both. Every site goes
+    through this one function now, so a new launch site cannot quietly skip the check: it has
+    to ask for the roots to pass them on.
+
+    `enforced` is False when a FAKE launcher runs: there is no harness and no sandbox to
+    refuse anything, so the finding is recorded and the launch proceeds. Every real launch is
+    enforced.
+    """
+    roots = named_writable_roots(run_dir)
+    require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
+                             what, enforced=enforced)
+    return roots
+
+
 def require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch,
-                             extra_writable, what):
+                             extra_writable, what, enforced=True):
     """Refuse `what` when the session could not write its own run directory (E11-26)."""
     record = writable_roots_record(setup, condition, workspace, run_dir, scratch,
                                    extra_writable)
     record["for"] = what
+    record["enforced"] = bool(enforced)
+    if not enforced:
+        record["why_not_enforced"] = ("a fake launcher runs this launch: there is no harness "
+                                      "sandbox to refuse anything, so the roots are recorded "
+                                      "and the launch proceeds")
     write_json(os.path.join(campaign.records("writable-roots"),
                             "%s.json" % re.sub(r"[^A-Za-z0-9_.-]", "-", what)), record)
-    if not record["run_dir_is_writable"]:
+    if enforced and record.get("bounded", True) and not record["run_dir_is_writable"]:
         raise Usage(
             "refusing to launch %s: the run directory %s is outside every root a %s session "
             "may write (%s). The session's first write into it would be refused by the "
@@ -11087,10 +11178,9 @@ def do_consumer(args, record=None, attempt=0):
     sentinel = os.path.join(campaign.trials, CONSUMER_SENTINEL)
     write_text(sentinel, READ_BOUNDARY_SENTINEL)
     consumer_scratch = trial_scratch(campaign, args.trial, attempt)
-    consumer_writable = [os.path.dirname(pair["run_dir"])]
-    require_writable_run_dir(campaign, setup, "available", pair["workspace"],
-                             pair["run_dir"], consumer_scratch, consumer_writable,
-                             "the consumer trial %s" % args.trial)
+    consumer_writable = guarded_launch_roots(
+        campaign, setup, "available", pair["workspace"], pair["run_dir"], consumer_scratch,
+        "the consumer trial %s" % args.trial, enforced=not fake)
     step = setup.launch("available", prompt_path, pair["workspace"], harness_dir,
                         plan["timeouts"]["comparison"],
                         extra={"writable": consumer_writable},

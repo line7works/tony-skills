@@ -1727,13 +1727,253 @@ class Fix4WritableRunLeaf(RunnerCase):
             os.path.isdir = real_isdir
         self.assertTrue(os.path.isdir(target))
 
-    def test_the_named_root_holds_nothing_of_another_trial(self):
-        """Item 2 stands: the root is the trial's OWN opaque case directory."""
-        campaign, case_dir, _ws, _run, _scratch = self.layout("isolation")
-        self.assertEqual(sorted(os.listdir(case_dir)), ["run", "workspace"])
-        self.assertTrue(runner.path_contains(campaign.opaque_tree(
-            runner.trial_id("codex", testlib.CASE, "available", 1), 0),
-            campaign.opaque_tree(runner.trial_id("codex", testlib.CASE, "available", 1), 0)))
+    # NEW MINOR D-T: the old test here asserted ["run", "workspace"] against a layout it had
+    # built itself, so it proved nothing about a staged fixture. It is replaced by
+    # Fix5EveryLaunchNamesTheRoot's two real-fixture tests.
+
+
+class Fix5EveryLaunchNamesTheRoot(RunnerCase):
+    """Astra's recheck4: D PARTLY. Only two of the runner's launch sites named the run leaf.
+
+    The comparison trial and the consumer did both; the FIRST continuation launch passed no
+    root and called no guard, the handoff resume passed the root without the guard, and both
+    compaction resumes built their argv by hand and named nothing. A Codex continuation would
+    have ended `no_result` exactly as the comparison trials did on 8b6beda.
+    """
+
+    setups = ("claude-code", "codex", "opencode")
+    cases = (testlib.TWO_ITEM_CASE,)
+
+    def restore_later(self, path):
+        """The pilot homes are SHARED between tests: put this one back as it was."""
+        before = runner.read_text(path, None)
+
+        def restore():
+            if before is None:
+                if os.path.isfile(path):
+                    os.remove(path)
+            else:
+                runner.write_text(path, before)
+        self.addCleanup(restore)
+
+    def records_dir(self):
+        return runner.Campaign(self.campaign).records("writable-roots")
+
+    def record_for(self, what):
+        path = os.path.join(self.records_dir(),
+                            "%s.json" % __import__("re").sub(r"[^A-Za-z0-9_.-]", "-", what))
+        self.assertTrue(os.path.isfile(path), sorted(os.listdir(self.records_dir())))
+        return runner.read_json(path)
+
+    def drive(self, harness, kind, launcher=None):
+        """One continuation trial. The compaction path needs a session id to resume, which
+        only the cut stub plants, so those tests hand one in."""
+        tid = runner.continuation_trial_id(harness, testlib.TWO_ITEM_CASE, kind, 1)
+        got = cli(["continuation", "--campaign", self.campaign, tid,
+                   "--fake-launcher", launcher or self.fake_launcher(harness)])
+        self.assertIn(got.returncode, (0, 1), got.stderr[-2500:])
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        return tid, command
+
+    def launcher_argv(self, tid, half):
+        path = os.path.join(self.campaign, "trials", tid, "harness-%s" % half,
+                            "env-names.json")
+        self.assertTrue(os.path.isfile(path), path)
+        return runner.read_json(path)["argv"]
+
+    def case_dir_of(self, command):
+        return os.path.dirname(command["run_dir"])
+
+    # ---- (a) the first continuation launch
+    def test_the_first_continuation_launch_names_the_root_and_is_guarded(self):
+        tid, command = self.drive("claude-code", "handoff")
+        case_dir = self.case_dir_of(command)
+        argv = self.launcher_argv(tid, "first")
+        self.assertIn("--writable", argv)
+        self.assertIn(case_dir, argv)
+        record = self.record_for("the continuation trial %s (first launch)" % tid)
+        self.assertTrue(record["run_dir_is_writable"])
+        self.assertEqual(record["run_dir_inside"], [case_dir])
+
+    # ---- (b) the handoff resume
+    def test_the_handoff_resume_is_guarded_too(self):
+        tid, command = self.drive("claude-code", "handoff")
+        case_dir = self.case_dir_of(command)
+        record = self.record_for("the continuation trial %s (handoff resume)" % tid)
+        self.assertTrue(record["run_dir_is_writable"])
+        self.assertEqual(record["run_dir_inside"], [case_dir])
+        self.assertIn(case_dir, self.launcher_argv(tid, "second"))
+
+    # ---- (c) the two compaction resumes
+    def test_the_codex_compaction_resume_names_the_root_before_resume(self):
+        """E10-35: `--add-dir` is an `exec` option and must precede the `resume` subcommand.
+
+        Driven the way Astra's `paths.py` drives it: the codex resume needs a thread id the
+        fake launcher never mints, so the argv is captured at the process boundary instead.
+        """
+        import argparse
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.setup_for(campaign, self.plan_document, "codex")
+        tree = os.path.join(self.scratch, "codex-resume")
+        case_dir = os.path.join(tree, "fixture", "75d13f306773")
+        workspace, run_dir = os.path.join(case_dir, "workspace"), os.path.join(case_dir, "run")
+        for path in (workspace, run_dir):
+            runner.ensure_dir(path)
+        prompt = os.path.join(self.scratch, "resume.txt")
+        runner.write_text(prompt, "Continue the local test.\n")
+
+        class Captured(Exception):
+            pass
+
+        seen = {}
+
+        def capture(argv, **kwargs):
+            seen["argv"] = argv
+            raise Captured()
+
+        args = argparse.Namespace(trial="cont-codex-probe-r1", attempt=0, compact_tokens=2000)
+        real = runner.run_cmd
+        runner.run_cmd = capture
+        try:
+            runner._compaction_resume(campaign, setup, {"session": "local-test-session"},
+                                      prompt, workspace, os.path.join(self.scratch, "out"),
+                                      1, args, run_dir=run_dir)
+        except Captured:
+            pass
+        finally:
+            runner.run_cmd = real
+        argv = seen["argv"]
+        self.assertIn(case_dir, argv)
+        self.assertEqual(argv[argv.index(case_dir) - 1], "--add-dir")
+        self.assertLess(argv.index(case_dir), argv.index("resume"))
+        record = self.record_for(
+            "the continuation trial cont-codex-probe-r1 (compaction resume)")
+        self.assertTrue(record["run_dir_is_writable"])
+        self.assertEqual(record["run_dir_inside"], [case_dir])
+
+    def test_the_claude_code_compaction_resume_names_the_root(self):
+        tid, command = self.drive("claude-code", "compaction",
+                                  launcher=self.cut_stub("fix5-claude-code"))
+        case_dir = self.case_dir_of(command)
+        self.record_for("the continuation trial %s (compaction resume)" % tid)
+        argv = ((command.get("compaction") or {}).get("attempts") or [{}])[0].get("argv") or []
+        self.assertIn(case_dir, argv)
+        self.assertEqual(argv[argv.index(case_dir) - 1], "--add-dir")
+
+    def test_every_launch_site_goes_through_the_one_helper(self):
+        """A fifth launch site cannot skip the check by forgetting to call it."""
+        import ast
+        with open(os.path.join(os.path.dirname(runner.__file__), "runner.py"),
+                  encoding="utf-8") as handle:
+            source = handle.read()
+        wanted = {"_one_trial", "do_continuation", "_launch_and_cut", "_compaction_resume",
+                  "do_consumer"}
+        seen = {}
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.FunctionDef) and node.name in wanted:
+                seen[node.name] = [c.lineno for c in ast.walk(node)
+                                   if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                                   and c.func.id in ("guarded_launch_roots",
+                                                     "require_writable_run_dir")]
+        self.assertEqual(sorted(seen), sorted(wanted))
+        for name, calls in seen.items():
+            self.assertTrue(calls, "%s calls no guard" % name)
+
+    # ---- NEW MAJOR D-G: a root the launcher never forwards is not a root
+    def test_a_root_opencode_never_receives_is_not_counted(self):
+        """Her opencode-guard.py: with `allow rules: []` the guard said writable anyway."""
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.setup_for(campaign, self.plan_document, "opencode")
+        config = os.path.join(setup.home("available"), "xdg-config", "opencode",
+                              "opencode.json")
+        self.restore_later(config)
+        runner.write_json(config, {"permission": {"external_directory": {}}})
+        tree = os.path.join(self.scratch, "op-guard")
+        case_dir = os.path.join(tree, "fixture", "75d13f306773")
+        workspace, run_dir = os.path.join(case_dir, "workspace"), os.path.join(case_dir, "run")
+        scratch = os.path.join(tree, "scratch")
+        for path in (workspace, run_dir, scratch):
+            runner.ensure_dir(path)
+        record = runner.writable_roots_record(setup, "available", workspace, run_dir, scratch,
+                                              [case_dir])
+        self.assertFalse(record["forwards_writable"])
+        self.assertEqual(record["roots_named_but_not_forwarded"], [case_dir])
+        self.assertNotIn(case_dir, [row["root"] for row in record["roots"]])
+        self.assertFalse(record["run_dir_is_writable"])
+        with self.assertRaises(runner.Usage):
+            runner.require_writable_run_dir(campaign, setup, "available", workspace, run_dir,
+                                            scratch, [case_dir], "no-allow-rule")
+        self.assertFalse(self.record_for("no-allow-rule")["run_dir_is_writable"])
+
+    def test_the_harnesses_that_do_forward_it_still_count_it(self):
+        campaign = runner.Campaign(self.campaign)
+        for name in ("codex", "claude-code"):
+            setup = runner.setup_for(campaign, self.plan_document, name)
+            self.assertTrue(setup.forwards_writable, name)
+            record = setup.writable_roots("available", "/w", "/s", extra=["/case"])
+            self.assertIn("/case", [row["root"] for row in record["roots"]], name)
+            self.assertEqual(record["roots_named_but_not_forwarded"], [])
+
+    def test_an_opencode_launch_with_its_allow_rule_still_passes(self):
+        """The rule is how this harness reaches a run leaf, and it is unchanged."""
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.setup_for(campaign, self.plan_document, "opencode")
+        tree = os.path.join(self.scratch, "op-allowed")
+        case_dir = os.path.join(tree, "fixture", "75d13f306773")
+        workspace, run_dir = os.path.join(case_dir, "workspace"), os.path.join(case_dir, "run")
+        scratch = os.path.join(tree, "scratch")
+        for path in (workspace, run_dir, scratch):
+            runner.ensure_dir(path)
+        config = os.path.join(setup.home("available"), "xdg-config", "opencode",
+                              "opencode.json")
+        self.restore_later(config)
+        runner.write_json(config, {"permission": {"external_directory": {tree + "/**": "allow"}}})
+        record = runner.writable_roots_record(setup, "available", workspace, run_dir, scratch,
+                                              [case_dir])
+        self.assertTrue(record["run_dir_is_writable"])
+        self.assertEqual(record["run_dir_inside"], [tree])
+
+    # ---- NEW MINOR D-T: the isolation claim, against a REAL staged layout
+    def test_a_real_case_directory_holds_only_its_own_trials_files(self):
+        campaign = runner.Campaign(self.campaign)
+        tid = runner.trial_id("codex", testlib.CASE, "available", 1)
+        tree = campaign.opaque_tree(tid, 0)
+        fixture = runner.build_fixture(campaign, testlib.CASE,
+                                       os.path.join(tree, "fixture"))
+        case_dir = fixture["case_dir"]
+        run_dir = runner.trial_run_dir(fixture)
+        self.assertEqual(os.path.dirname(run_dir), case_dir)
+        # what `build.py --opaque` really lays out, not a layout this test invented
+        self.assertEqual(sorted(os.listdir(case_dir)),
+                         ["input.json", "manifest.json", "run", "workspace"])
+        self.assertEqual(os.path.basename(case_dir), runner.re.sub(
+            r"[^0-9a-f]", "", os.path.basename(case_dir)))
+        self.assertEqual(len(os.path.basename(case_dir)), 12)
+        # and nothing of any other trial is under it
+        other = campaign.opaque_tree(runner.trial_id("codex", testlib.CASE, "absent", 1), 0)
+        self.assertFalse(runner.path_contains(case_dir, other))
+
+    def test_a_real_consumer_pair_root_holds_only_that_pair(self):
+        campaign = runner.Campaign(self.campaign)
+        record = os.path.join(self.scratch, "fix5-producer")
+        runner.ensure_dir(os.path.join(record, "workspace"))
+        runner.write_json(os.path.join(record, "result.json"), {"items": [], "cards": []})
+        runner.write_json(os.path.join(record, "run", "checkpoint.json"),
+                          {"phase": "completed", "continuations": 0, "scope": {"items": []}})
+        producer = {"record": record, "trial": "fix5-producer",
+                    "command": {"workspace": os.path.join(record, "workspace")}}
+        pair = runner.stage_consumer_pair(campaign, producer,
+                                          os.path.join(self.scratch, "fix5-pair"))
+        root = os.path.dirname(pair["run_dir"])
+        self.assertEqual(root, pair["pair_dir"])
+        # what `stage_consumer_pair` really lays out: the pair's own input, the ONE producer's
+        # copied records, the pair's run directory and the workspace it left
+        self.assertEqual(sorted(os.listdir(root)),
+                         ["input.json", "producer", "run", "workspace"])
+        # the producer copy inside it is this pair's own, and the campaign's other records
+        # are not under the named root
+        self.assertTrue(runner.path_contains(root, pair["producer_dir"]))
+        self.assertFalse(runner.path_contains(root, campaign.trials))
 
 
 class Fix2PreflightAllowRules(RunnerCase):
