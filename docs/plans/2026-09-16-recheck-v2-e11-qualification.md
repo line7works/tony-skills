@@ -745,3 +745,39 @@ to exactly the held-out request text.
   fresh root `e11-repair-qualification-2` under Tony's standing goal of 2026-09-17 ("finish the build and
   Astra check, then run the rerun"); the two in-round send-backs, E11-28 and E11-30, were decided on his
   behalf and are flagged for the reconvene.
+- **E11-33, the rerun (attempt 2) finished; two runner defects surfaced from its records; fix 7 briefed
+  (2026-09-18 about 6:30 AM, control room).** The operator exited at 6:14 AM (exit 0, 247 events, 5 hours
+  51 minutes from launch); her report is `astra-outputs/e11/rerun-2/operator/report.md`, the control room's
+  own recount, status and scan beside it under `rerun-2/control-room/`. Counts (her recount and
+  `recount.py` agree): planned 360, recorded 348, attempts 370, complete 326, no result 39, timed out 4,
+  launch failed 1, reruns 22, unrun 12. By setup: claude-code 87 of 87 complete; codex 87 of 87 complete
+  plus one `launch_failed` ("Selected model is at capacity") retried to complete; opencode 82 complete,
+  4 no result, 4 timed out; opencode-deepseek 70 complete, 35 no result (comparison absent 22 of 23
+  attempts, available 13 of 19). Zero writable-root refusals; every `records/writable-roots/` record
+  `run_dir_is_writable: true`. `campaign status` complete, no live process; scan ok, 0 hits over 15,380
+  files. Routing rev1, held-out activation / false-trigger: claude-code 0.667 / 0, codex 1.0 / 0,
+  opencode 1.0 / 0, opencode-deepseek 1.0 / 0. Manual-only: codex UNQUALIFIED for the catalog requirement
+  (the station was selected from a worded request in its one completed session, the runner's read barrier
+  applied over 24 station paths); the other three qualified. OpenRouter: the ledger's harness-computed sum
+  for the two OpenCode lanes is 4.63 (probes 0.008 more); the key's own counters read at 6:25 AM are
+  unchanged from the launch reading (used 14.98), so no charge is confirmed landed yet; to be re-read at
+  the reconvene. Defects: (Q) `campaign_queue` (runner.py 9076) never schedules `consumer_order`, so the
+  twelve consumer trials, the measurement of the plan's "all three consume each other's records", were
+  never launched (`campaign status` reads planned 348 for a 360 plan; the E10 plan carried none, so the
+  gap never showed); (G) `grade --all` aborted at 75 of 104 comparison and continuation attempts on
+  `native_actions` (runner.py 6158) reading a pretty-printed `launch-*.record-call-flags.json` sidecar in
+  trial `opencode-F5-01-outbound-required-available-r2` as JSONL, leaving the 24 opencode-deepseek and 5
+  opencode grades unwritten; routing-score completed on its own. Partial grades as written: available
+  claude-code 7 of 12 ok, codex 8 of 12, opencode 8 of 9; absent 0 ok in the three graded setups;
+  continuation codex 1 of 2, opencode 1 of 2, opencode-deepseek 1 of 2, claude-code 0 of 2 (both on
+  `no_scope_violations`). Fix 7 briefed to the same builder (`briefs/e11-repair-fix7.md`): the queue
+  schedules the consumer rows after routing, the reader selects the verifier capture exactly and every
+  JSONL reader skips non-object rows, the grader continues past a per-attempt exception and lists it;
+  tests failing on 485e92a and passing after, two read-only proofs, nothing written under any root; after
+  Astra's re-check the control room rescores the real root to a derived revision. Decided on Tony's behalf
+  and flagged: briefing fix 7 under his standing goal (the build is not finished while its grader aborts
+  on real records). Put to him in chat: whether the twelve consumer trials run on this root after fix 7
+  (added attempts, the 348 untouched), on a fresh root, or are carried unrun into the reading. Carried
+  unchanged: the E11-28 and E11-30 send-backs, deepseek reply capture, pid-reuse liveness, the OpenCode
+  allow rule's breadth, the unseparated bench, the P2 wording, Astra's design note; new: the codex
+  manual-only selection and the opencode-deepseek no-result rate.
