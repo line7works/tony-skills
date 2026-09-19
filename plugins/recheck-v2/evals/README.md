@@ -334,6 +334,29 @@ closes them.
     and `must_not` and is not enforced by the matcher; E10's semantic check enforces it.
     (F3; Astra verify G1 #6)
 
+## Records and derived measurements (E11-46 R5)
+
+A **record** is what a run observed, and it is never overwritten. A second probe, a second
+campaign table, a second attempt each take their own name; `--refresh` puts a new one beside the
+old one rather than replacing it.
+
+A **derived measurement under a named revision** is the one exception, and its rule is
+**replace, never number**. `runner.py grade --revision <name>` rewrites `grade.<name>.json` in
+place on a rerun; the revision's NAME is the identity of the measurement, so the same name means
+the same measurement recomputed. `consumer-grade.<revision>.json` follows the same rule, and the
+original `grade.json` is never touched by either.
+
+This reverses NEW BLOCKER 1 of Astra's verification of 31329cd, which made a repeated revision
+claim the next free `-N`. The reversal is recorded here because the earlier rule is recorded in
+her report: the E11-45 replay reran one revision and left `grade.e11-round2-1-1.json` and `-2`
+beside a stale `grade.e11-round2-1.json`, the control room read the stale file, and twenty-seven
+changed grade decisions were reported as none. The canonical name is where every reader looks.
+To keep two measurements, give them two names.
+
+`runner.py grade --revision <new> --against <old>` prints the comparison itself: flips in each
+direction, the named checks that moved on each, the checks that moved without a decision flip,
+and any attempt the prior revision does not cover.
+
 ## Build record
 
 - First fan-out, 2026-09-13 1:16 PM: 82 agents. It stopped at 1:41 PM when 35 agents hit the

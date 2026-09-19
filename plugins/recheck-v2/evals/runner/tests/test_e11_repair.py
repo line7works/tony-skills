@@ -1655,8 +1655,11 @@ class Fix4WritableRunLeaf(RunnerCase):
         self.assertIn(run_dir, message)
         self.assertIn("codex", message)
         self.assertIn("outside every root", message)
+        # AMENDED (E11-46 R5): this call passes no trial, so the record keeps the free-text
+        # name; the assertion follows the runner's own naming rule either way.
         written = os.path.join(campaign.records("writable-roots"),
-                               "the-comparison-trial-t.json")
+                               "%s.json" % runner.writable_roots_record_name(
+                                   "the comparison trial t"))
         self.assertTrue(os.path.isfile(written))
         self.assertFalse(runner.read_json(written)["run_dir_is_writable"])
 
@@ -1704,9 +1707,11 @@ class Fix4WritableRunLeaf(RunnerCase):
         argv = runner.read_json(os.path.join(record, "harness", "env-names.json"))["argv"]
         self.assertIn("--writable", argv)
         self.assertIn(case_dir, argv)
+        # AMENDED (E11-46 R5): the record is named by trial and attempt now, not by a slug of
+        # the free text, so a rerun no longer overwrites the first attempt's record.
         roots = runner.read_json(os.path.join(
             runner.Campaign(self.campaign).records("writable-roots"),
-            "the-comparison-trial-%s.json" % tid))
+            "%s.json" % runner.writable_roots_record_name("", tid, 0)))
         self.assertTrue(roots["run_dir_is_writable"])
         self.assertEqual(roots["run_dir_inside"], [case_dir])
 
@@ -1786,9 +1791,15 @@ class Fix5EveryLaunchNamesTheRoot(RunnerCase):
     def records_dir(self):
         return runner.Campaign(self.campaign).records("writable-roots")
 
-    def record_for(self, what):
-        path = os.path.join(self.records_dir(),
-                            "%s.json" % __import__("re").sub(r"[^A-Za-z0-9_.-]", "-", what))
+    def record_for(self, what, trial=None, attempt=0, half=None):
+        """AMENDED (E11-46 R5): the record is named by trial, attempt and half.
+
+        It used to be a slug of the free-text `what`, under which a RERUN overwrote the first
+        attempt's record and the write-fence proof's twenty probes left one file. The helper
+        asks the runner for the name rather than spelling it again here.
+        """
+        path = os.path.join(self.records_dir(), "%s.json" % runner.writable_roots_record_name(
+            what, trial, attempt, half))
         self.assertTrue(os.path.isfile(path), sorted(os.listdir(self.records_dir())))
         return runner.read_json(path)
 
@@ -1818,7 +1829,7 @@ class Fix5EveryLaunchNamesTheRoot(RunnerCase):
         argv = self.launcher_argv(tid, "first")
         self.assertIn("--writable", argv)
         self.assertIn(case_dir, argv)
-        record = self.record_for("the continuation trial %s (first launch)" % tid)
+        record = self.record_for("", tid, 0, "first")
         self.assertTrue(record["run_dir_is_writable"])
         self.assertEqual(record["run_dir_inside"], [case_dir])
 
@@ -1826,7 +1837,7 @@ class Fix5EveryLaunchNamesTheRoot(RunnerCase):
     def test_the_handoff_resume_is_guarded_too(self):
         tid, command = self.drive("claude-code", "handoff")
         case_dir = self.case_dir_of(command)
-        record = self.record_for("the continuation trial %s (handoff resume)" % tid)
+        record = self.record_for("", tid, 0, "second-handoff")
         self.assertTrue(record["run_dir_is_writable"])
         self.assertEqual(record["run_dir_inside"], [case_dir])
         self.assertIn(case_dir, self.launcher_argv(tid, "second"))
@@ -1873,8 +1884,7 @@ class Fix5EveryLaunchNamesTheRoot(RunnerCase):
         self.assertIn(case_dir, argv)
         self.assertEqual(argv[argv.index(case_dir) - 1], "--add-dir")
         self.assertLess(argv.index(case_dir), argv.index("resume"))
-        record = self.record_for(
-            "the continuation trial cont-codex-probe-r1 (compaction resume)")
+        record = self.record_for("", "cont-codex-probe-r1", 0, "second-compaction")
         self.assertTrue(record["run_dir_is_writable"])
         self.assertEqual(record["run_dir_inside"], [case_dir])
 
@@ -1882,7 +1892,7 @@ class Fix5EveryLaunchNamesTheRoot(RunnerCase):
         tid, command = self.drive("claude-code", "compaction",
                                   launcher=self.cut_stub("fix5-claude-code"))
         case_dir = self.case_dir_of(command)
-        self.record_for("the continuation trial %s (compaction resume)" % tid)
+        self.record_for("", tid, 0, "second-compaction")
         argv = ((command.get("compaction") or {}).get("attempts") or [{}])[0].get("argv") or []
         self.assertIn(case_dir, argv)
         self.assertEqual(argv[argv.index(case_dir) - 1], "--add-dir")
@@ -2055,7 +2065,10 @@ class Fix6EnforcementFollowsTheLaunch(RunnerCase):
         os.chmod(path, 0o755)
         return path
 
-    def record_for(self, what):
+    def record_for(self, what, trial=None, attempt=0, half=None):
+        """AMENDED with the same reason as the helper above (E11-46 R5)."""
+        if trial:
+            what = runner.writable_roots_record_name(what, trial, attempt, half)
         path = os.path.join(self.campaign_object.records("writable-roots"),
                             "%s.json" % __import__("re").sub(r"[^A-Za-z0-9_.-]", "-", what))
         self.assertTrue(os.path.isfile(path), path)
@@ -2114,7 +2127,7 @@ class Fix6EnforcementFollowsTheLaunch(RunnerCase):
                 except Captured:
                     pass
                 outcomes[bool(fake)] = (outcome, self.record_for(
-                    "the continuation trial %s (compaction resume)" % trial))
+                    "", trial, 0, "second-compaction"))
         finally:
             runner.run_cmd = real
         for fake_first_half, (outcome, record) in outcomes.items():
@@ -2129,8 +2142,8 @@ class Fix6EnforcementFollowsTheLaunch(RunnerCase):
         got = cli(["continuation", "--campaign", self.campaign, tid,
                    "--fake-launcher", self.fake_launcher("claude-code")])
         self.assertIn(got.returncode, (0, 1), got.stderr[-2000:])
-        for half in ("first launch", "handoff resume"):
-            record = self.record_for("the continuation trial %s (%s)" % (tid, half))
+        for half in ("first", "second-handoff"):
+            record = self.record_for("", tid, 0, half)
             self.assertFalse(record["enforced"], half)
             self.assertIn("fake launcher", record["why_not_enforced"])
 
@@ -2149,7 +2162,7 @@ class Fix6EnforcementFollowsTheLaunch(RunnerCase):
         message = str(caught.exception)
         self.assertIn("cannot be established", message)
         self.assertIn("not installed", message)
-        record = self.record_for("the continuation trial fix6-c (first launch)")
+        record = self.record_for("", "fix6-c", 0, "first")
         self.assertTrue(record["enforced"])
         self.assertFalse(record["bounded"])
         self.assertFalse(record["run_dir_is_writable"])
@@ -2176,7 +2189,7 @@ class Fix6EnforcementFollowsTheLaunch(RunnerCase):
         runner._launch_and_cut(self.campaign_object, self.setup, self.prompt, self.workspace,
                                os.path.join(self.scratch, "d", "harness"), self.run_dir, 1,
                                args)
-        record = self.record_for("the continuation trial fix6-d (first launch)")
+        record = self.record_for("", "fix6-d", 0, "first")
         self.assertFalse(record["enforced"])
         self.assertFalse(record["bounded"])
         self.assertFalse(record["run_dir_is_writable"])

@@ -16,6 +16,10 @@ import sys
 OUTBOUND = ("Bash(curl:*)", "Bash(wget:*)", "Bash(nc:*)", "Bash(ncat:*)", "Bash(telnet:*)",
             "Bash(ssh:*)", "Bash(scp:*)", "Bash(sftp:*)")
 WRITE_TOOLS = ("Write", "Edit", "NotebookEdit")
+# E11-46 R4: the READ side of the same fence. E11-40 makes the rerun conditional on a native
+# isolation check, and a boundary that stops writes says nothing about reads. These are the
+# read-kind tools Claude Code can scope to a path.
+READ_TOOLS = ("Read", "Glob", "Grep", "NotebookRead")
 
 
 def fence(document, deny_dirs):
@@ -30,7 +34,7 @@ def fence(document, deny_dirs):
         # 2026-09-18 proof root: `Write(/Users/.../claude-code/**)` did not stop a Write-tool
         # call to that exact path.
         absolute = "/" + directory if directory.startswith("/") else directory
-        for tool in WRITE_TOOLS:
+        for tool in WRITE_TOOLS + READ_TOOLS:
             deny.append("%s(%s/**)" % (tool, absolute))
             deny.append("%s(%s)" % (tool, absolute))
     deny.extend(OUTBOUND)

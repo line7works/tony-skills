@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tony-skills/recheck-v2/consumer-answer.schema.json",
+  "title": "recheck-v2 consumer answer",
+  "description": "What a CONSUMER session writes when it is asked to recover a producer's recheck from the producer's own retained records (E11-7 item 6). Published here, in the contract, because until now it lived only in the prompt and in the grader's expectations: a consumer had no document to write against, and a grader that is the only statement of a format is a grader that cannot be disagreed with (E11-46 R3).\n\nThe per-item `state` vocabulary is the CHECKPOINT'S OWN - `pending` and `done`, the two values `checkpoint.schema.json`'s `item_state` allows - so a continuation's recovered state is comparable with the producer's retained state field for field, with no translation in between.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items"
+  ],
+  "properties": {
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the producer's own terminal status as the consumer read it; a stopped producer is recovered by its stop, not by items it never had (E11-46 R3)"
+    },
+    "stop_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "location",
+          "disposition"
+        ],
+        "properties": {
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "description": "file:line, as the producer's record spells it"
+          },
+          "claim": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disposition": {
+            "enum": [
+              "fixed",
+              "not_fixed"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "reproduces",
+              "missed_case",
+              "verification_blocked",
+              "missing_evidence",
+              null
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "detail"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "command",
+                    "read",
+                    "diff",
+                    "artifact"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "artifact_path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "the path AS THE PRODUCER recorded it; the grader allows the relocation into the pair"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slice",
+          "before",
+          "after"
+        ],
+        "properties": {
+          "slice": {
+            "type": "string",
+            "minLength": 1
+          },
+          "before": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "continuation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "description": "the producer's retained continuation state, in the CHECKPOINT's own vocabulary",
+      "properties": {
+        "continuations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "done": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "pending": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "item_rows": {
+          "type": "array",
+          "description": "one row per checklist item, keyed by index, so WHICH item was done is comparable and not only how many",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "index",
+              "state"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "done"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "source_identity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "the identity the producer's result reports, as the consumer read it; compared field for field by the grader"
+    }
+  }
+}

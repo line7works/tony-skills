@@ -5,11 +5,15 @@ Batch A's tests fail against `4351654`, the fix-8 tip; batch B's fail against
 Each names the package item and the finding it closes. Standard library only, Python 3.9,
 run from any directory.
 """
+import glob
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import threading
+import time
 import unittest
 
 import testlib
@@ -453,6 +457,9 @@ class S1WriteFence(unittest.TestCase):
         self.assertIn("Write(//pilot/home/**)", deny)
         self.assertIn("Edit(//pilot/home/**)", deny)
         self.assertNotIn("Write(/pilot/home/**)", deny)
+        # E11-46 R4: the read side of the same fence, for E11-40's native isolation check.
+        self.assertIn("Read(//pilot/home/**)", deny)
+        self.assertIn("Grep(//pilot/home/**)", deny)
         self.assertIn("Bash(curl:*)", deny)
         self.assertIn("WebFetch", deny)
         self.assertEqual(len(deny), len(set(deny)))
@@ -721,3 +728,647 @@ class R2CostAvailability(RunnerCase):
         self.assertIsNone(runner.cell_measured({"wall": 0.0, "wall_measured": 0}, "wall", 1))
         self.assertEqual(runner.cell_measured(
             {"wall": 12.34, "wall_measured": 2}, "wall", 1), 12.3)
+
+
+class R5PidReuse(RunnerCase):
+    """R5: a recorded pid is not an identity - pid numbers are recycled.
+
+    Measured on the round-1 rerun root, 2026-09-18: `routing-score` refused to run because
+    "harness processes are still alive", naming pid 43611. That pid was written at 01:31 by a
+    routing trial that ended the same night; by 14:48 it belonged to a Google Chrome renderer.
+    `kill(pid, 0)` answers yes for ever once the number is handed out again, so a sanctioned
+    read-only command was blocked by a process that had nothing to do with the campaign.
+    """
+
+    def pid_file(self, name, pid, written_at):
+        record = os.path.join(self.scratch, name)
+        runner.ensure_dir(os.path.join(record, "harness"))
+        path = os.path.join(record, "harness", "child.pid")
+        runner.write_text(path, "%d\n" % pid)
+        os.utime(path, (written_at, written_at))
+        return record, path
+
+    def test_a_pid_recorded_before_the_process_started_is_not_ours(self):
+        """The Chrome case: this test's own process started long after 1990."""
+        _record, path = self.pid_file("recycled", os.getpid(), 631152000.0)  # 1990-01-01
+        self.assertIs(runner._pid_is_still_ours(path, os.getpid()), False)
+
+    def test_a_pid_recorded_after_the_process_started_is_ours(self):
+        """A harness writes its child's pid just after the fork, so the record is younger."""
+        _record, path = self.pid_file("ours", os.getpid(), time.time() + 5)
+        self.assertIs(runner._pid_is_still_ours(path, os.getpid()), True)
+
+    def test_an_unreadable_record_is_unknown_and_unknown_counts_as_alive(self):
+        """A barrier that guesses "gone" is the dangerous way to be wrong."""
+        self.assertIsNone(runner._pid_is_still_ours(
+            os.path.join(self.scratch, "no-such-file.pid"), os.getpid()))
+        self.assertIsNone(runner._pid_is_still_ours(None, os.getpid()))
+
+    def test_the_barrier_stops_naming_a_recycled_pid_as_a_live_harness(self):
+        record, _path = self.pid_file("barrier", os.getpid(), 631152000.0)
+        campaign = runner.Campaign(self.campaign)
+        self.assertEqual(runner.harness_alive_for(campaign, "t", 0, record), [])
+
+    def test_a_pid_within_the_slack_is_still_ours(self):
+        """The fork-then-write window is covered; a recycled number is nowhere near it."""
+        just_before = time.time() - (runner.PID_RECORD_SLACK_SECONDS / 2.0)
+        _record, path = self.pid_file("slack", os.getpid(), just_before)
+        self.assertIs(runner._pid_is_still_ours(path, os.getpid()), True)
+
+
+class R5RevisionContract(RunnerCase):
+    """R5: the replace-never-number settlement is written where a reader will find it."""
+
+    def test_the_runner_s_own_interface_note_records_the_rule_and_the_reversal(self):
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        head = source[:source.index('"""', source.index('"""') + 3)]
+        self.assertIn("REPLACE, NEVER NUMBER", head)
+        self.assertIn("NEW BLOCKER 1", head)
+        self.assertIn("consumer-grade.<revision>.json", head)
+
+    def test_the_evals_readme_records_it_too(self):
+        readme = runner.read_text(os.path.join(runner.EVALS_DIR, "README.md"))
+        self.assertIn("replace, never number", readme)
+        self.assertIn("reverses NEW BLOCKER 1", readme)
+        self.assertIn("--against", readme)
+
+
+class R5WritableRootRecordNames(RunnerCase):
+    """R5: a writable-roots record is named by trial, attempt and half, and claimed O_EXCL.
+
+    Two collisions lived under the old slug-of-the-free-text name. A RERUN: the attempt was
+    nowhere in the name, so attempt 1 overwrote attempt 0's record of the same trial. And the
+    write-fence proof: its twenty probes all said "the write-fence proof", so nineteen records
+    were lost and the twentieth stood for all of them.
+    """
+
+    def test_the_attempt_is_in_the_name(self):
+        first = runner.writable_roots_record_name("x", "claude-code-F1-01-r1", 0)
+        second = runner.writable_roots_record_name("x", "claude-code-F1-01-r1", 1)
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.endswith(".attempt-0"))
+        self.assertTrue(second.endswith(".attempt-1"))
+
+    def test_each_continuation_half_has_its_own_name(self):
+        names = {runner.writable_roots_record_name("x", "cont-t-r1", 0, half)
+                 for half in ("first", "second-handoff", "second-compaction")}
+        self.assertEqual(len(names), 3)
+
+    def test_each_write_fence_probe_has_its_own_name(self):
+        names = {runner.writable_roots_record_name("the write-fence proof", "fence-cc-%s" % p,
+                                                   0, p)
+                 for p in runner.FENCE_PROBE_ORDER}
+        self.assertEqual(len(names), len(runner.FENCE_PROBE_ORDER))
+
+    def test_a_call_with_no_trial_keeps_the_free_text_name(self):
+        self.assertEqual(runner.writable_roots_record_name("the comparison trial t"),
+                         "the-comparison-trial-t")
+
+    def test_the_name_is_claimed_and_a_collision_is_kept_not_lost(self):
+        campaign = runner.Campaign(self.campaign)
+        first, collided = runner.reserve_writable_roots_record(campaign, "t.attempt-0")
+        self.assertTrue(first.endswith("t.attempt-0.json"))
+        self.assertIsNone(collided)
+        second, collided = runner.reserve_writable_roots_record(campaign, "t.attempt-0")
+        self.assertNotEqual(second, first)
+        self.assertTrue(os.path.isfile(first))
+        self.assertEqual(collided, first)
+
+
+class R5TimedOutFieldExists(RunnerCase):
+    """R5: `timed_out` reads a field that exists - the second look the control room asked for.
+
+    FINDING: no defect reproduces. Every reader of `timed_out` reads a `step` dictionary, and
+    every path that produces a `step` sets the key - `run_cmd`'s early return and its normal
+    return, the continuation's own collector, and the compaction resume's synthetic step. The
+    derived report's timeout relabelling reads `line["exit"]` against `TIMEOUT_EXIT`, which
+    also exists. Nothing reads a `timed_out` key off a ledger line or a `command.json`.
+
+    The item is closed with a guard rather than a shrug: this test pins the invariant, so a
+    future step-producing path that forgets the key is caught here instead of silently reading
+    `None` and calling a timeout a launch failure.
+    """
+
+    @staticmethod
+    def clean_env():
+        """The allowlisted shape `run_cmd` insists on; nothing of this session leaks in."""
+        return {"PATH": "/usr/bin:/bin", "HOME": os.path.expanduser("~"),
+                "TMPDIR": os.environ.get("TMPDIR", "/tmp"), "LANG": "C"}
+
+    def test_run_cmd_sets_timed_out_on_a_missing_binary(self):
+        step = runner.run_cmd(["definitely-not-a-binary-xyzzy"], label="probe",
+                              env=self.clean_env())
+        self.assertIn("timed_out", step)
+        self.assertIs(step["timed_out"], False)
+        self.assertEqual(step["exit"], 127)
+
+    def test_run_cmd_sets_timed_out_on_a_normal_exit(self):
+        step = runner.run_cmd(["/usr/bin/true"], label="probe", env=self.clean_env())
+        self.assertIn("timed_out", step)
+        self.assertIs(step["timed_out"], False)
+
+    def test_run_cmd_sets_timed_out_when_it_times_out(self):
+        step = runner.run_cmd(["/bin/sh", "-c", "sleep 5"], label="probe", timeout=1,
+                              env=self.clean_env())
+        self.assertIs(step["timed_out"], True)
+
+    def test_every_reader_of_timed_out_reads_a_step(self):
+        """The invariant, read off the source: no reader takes it from a record or a line."""
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        readers = re.findall(r'(\w+)\.get\("timed_out"\)', source)
+        readers += re.findall(r'(\w+)\["timed_out"\]', source)
+        self.assertTrue(readers)
+        # `bucket["timed_out"]` and `row["timed_out"]` are the report's own COUNTERS, built
+        # from a status string, not reads of a step's field. Every read of the launch fact
+        # itself is off a `step`.
+        self.assertEqual(sorted(set(readers)), ["bucket", "row", "step"])
+        self.assertIn("step", readers)
+
+
+class R5ConsumerInterruption(RunnerCase):
+    """R5: a consumer that did not complete emits the same interruption as every other kind."""
+
+    def test_the_consumer_emits_one_and_names_what_it_saw(self):
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        body = source[source.index("def do_consumer(args"):source.index("def do_lane_stop(")]
+        self.assertIn("campaign.interruption(args.trial", body)
+        self.assertIn('"kept the attempt and counted it"', body)
+        self.assertIn("answer present", body)
+
+    def test_it_is_the_same_action_wording_collect_trial_uses(self):
+        """The point of the item: one vocabulary, so a reader can count across kinds."""
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        # three kinds emit it now: the comparison/continuation collector, the routing trial,
+        # and the consumer this item added.
+        self.assertEqual(source.count('"kept the attempt and counted it"'), 3)
+
+
+class R5AttemptCensus(RunnerCase):
+    """R5: `status` reports the original attempt, the latest, and how many there are."""
+
+    def plant(self, tid, attempts, ledger=True):
+        base = os.path.join(runner.Campaign(self.campaign).trials, tid)
+        for attempt in attempts:
+            record = base if attempt == 0 else os.path.join(base, "attempts", str(attempt))
+            runner.ensure_dir(record)
+            runner.write_json(os.path.join(record, "command.json"), {"trial": tid})
+            if ledger:
+                runner.Campaign(self.campaign).append_jsonl(
+                    runner.Campaign(self.campaign).trials_jsonl,
+                    {"id": tid, "attempt": attempt, "status": "complete"})
+
+    def test_a_trial_with_one_attempt_reads_original_equals_latest(self):
+        self.plant("t-one", [0])
+        row = runner.attempt_census(runner.Campaign(self.campaign))["per_trial"]["t-one"]
+        self.assertEqual((row["original"], row["latest"], row["attempts"]), (0, 0, 1))
+
+    def test_a_rerun_is_visible(self):
+        self.plant("t-two", [0, 1])
+        census = runner.attempt_census(runner.Campaign(self.campaign))
+        row = census["per_trial"]["t-two"]
+        self.assertEqual((row["original"], row["latest"], row["attempts"]), (0, 1, 2))
+        self.assertIn("t-two", census["trials_with_more_than_one_attempt"])
+
+    def test_an_attempt_with_no_ledger_row_is_still_counted(self):
+        """A journalled attempt interrupted before it wrote a ledger row is on disk only."""
+        self.plant("t-disk", [0, 1], ledger=False)
+        row = runner.attempt_census(runner.Campaign(self.campaign))["per_trial"]["t-disk"]
+        self.assertEqual(row["attempts"], 2)
+        self.assertEqual(row["read_from"], ["record"])
+
+    def test_the_totals_add_up(self):
+        self.plant("t-a", [0])
+        self.plant("t-b", [0, 1, 2])
+        census = runner.attempt_census(runner.Campaign(self.campaign))
+        self.assertEqual(census["trials"], 2)
+        self.assertEqual(census["total_attempts"], 4)
+
+
+class R3ConsumerRoute(RunnerCase):
+    """R3: a correct `verifier_unavailable` is neither a pass nor a crash.
+
+    `verifier_unavailable` is a correct terminal outcome of the core (contract section 10: the
+    transport refused the call deterministically, nothing graded, no card moved). Such a result
+    carries NO items, and the consumer grader asked "did you recover every item": `bool([])`
+    was False, so the consumer failed for recovering nothing when there was nothing to recover.
+    The producer's stop read as the consumer's fault.
+    """
+
+    def producer(self, status, stop_reason=None, items=None):
+        record = os.path.join(self.scratch, "producer-%s" % status)
+        runner.ensure_dir(os.path.join(record, "run"))
+        result = {"status": status, "items": items or [], "cards": []}
+        if stop_reason:
+            result["stop_reason"] = stop_reason
+        runner.write_json(os.path.join(record, "result.json"), result)
+        return {"trial": "p-%s" % status, "record": record, "command": {"kind": "comparison"},
+                "why": "planted"}
+
+    def answer(self, document):
+        path = os.path.join(self.scratch, "answer-%d.json" % len(os.listdir(self.scratch)))
+        runner.write_json(path, document)
+        return path
+
+    def grade(self, producer, answer):
+        return runner.consumer_grade({"pair": None}, producer, answer)
+
+    def test_a_stopped_producer_is_not_graded_on_items_it_never_had(self):
+        producer = self.producer("verifier_unavailable",
+                                 "unknown-model: the verifier transport refused the call")
+        answer = self.answer({
+            "status": "verifier_unavailable",
+            "stop_reason": "unknown-model: the verifier transport refused the call",
+            "items": [], "cards": []})
+        grade = self.grade(producer, answer)
+        self.assertTrue(grade["checks"]["item_identity"])
+        self.assertTrue(grade["checks"]["producer_stop_recovered"])
+        self.assertEqual(grade["producer_stop"]["status"], "verifier_unavailable")
+
+    def test_a_consumer_that_missed_the_stop_still_fails(self):
+        """Not a free pass: the check exists and can fail."""
+        producer = self.producer("verifier_unavailable", "unknown-model: refused")
+        grade = self.grade(producer, self.answer({"status": "completed", "items": []}))
+        self.assertFalse(grade["checks"]["producer_stop_recovered"])
+
+    def test_a_consumer_that_got_the_status_but_not_the_reason_fails(self):
+        producer = self.producer("verifier_unavailable", "unknown-model: refused")
+        grade = self.grade(producer, self.answer(
+            {"status": "verifier_unavailable", "stop_reason": "something else", "items": []}))
+        self.assertFalse(grade["checks"]["producer_stop_recovered"])
+
+    def test_a_completed_producer_is_unchanged(self):
+        """The control: a normal producer is still graded on its items."""
+        producer = self.producer("completed", items=[])
+        grade = self.grade(producer, self.answer({"items": [], "cards": []}))
+        self.assertFalse(grade["checks"]["item_identity"])
+        self.assertNotIn("producer_stop_recovered", grade["checks"])
+
+    def test_the_grade_names_why_the_items_were_not_asked_for(self):
+        producer = self.producer("verifier_unavailable", "unknown-model: refused")
+        grade = self.grade(producer, self.answer({"status": "verifier_unavailable",
+                                                  "stop_reason": "unknown-model: refused"}))
+        self.assertIn("no items to recover", grade["producer_stop"]["why"])
+
+
+    def test_an_unrun_validator_is_skipped_not_failed(self):
+        """A read-only regrade runs no validator; False there says the record is bad."""
+        producer = self.producer("completed", items=[])
+        grade = self.grade(producer, self.answer({"items": [], "cards": []}))
+        self.assertNotIn("result_validates", grade["checks"])
+        self.assertIn("result_validates", grade["checks_skipped"])
+        self.assertFalse(grade["result_validation"]["ran"])
+        self.assertIn("read-only regrade", grade["result_validation"]["why"])
+
+    def test_a_skipped_check_is_not_a_pass_either(self):
+        """It is absent from `checks`, so it can never be counted as one that held."""
+        producer = self.producer("completed", items=[])
+        grade = self.grade(producer, self.answer({"items": [], "cards": []}))
+        self.assertNotIn(True, [grade["checks"].get("result_validates")])
+        self.assertTrue(set(grade["checks_skipped"]) <= runner.CONSUMER_CHECKS)
+
+    def test_a_validator_that_did_run_is_still_graded(self):
+        producer = self.producer("completed", items=[])
+        grade = runner.consumer_grade(
+            {"pair": None}, producer, self.answer({"items": [], "cards": []}),
+            validator={"ok": True, "exit": 0, "skipped": []})
+        self.assertIs(grade["checks"]["result_validates"], True)
+        self.assertTrue(grade["result_validation"]["ran"])
+        self.assertNotIn("result_validates", grade["checks_skipped"])
+
+
+class R4NativePreflight(RunnerCase):
+    """R4: the isolation check the HARNESS enforces, and the gate that depends on it.
+
+    `read_boundary_probe` runs a bare Python child in the trial's launch environment, which
+    answers "can a process reach these paths" - a fact about the filesystem, not about the
+    harness. Tony's ruling E11-40 makes the rerun conditional on a NATIVE check passing.
+    """
+
+    # ---- reading one session's answer
+    def test_a_refused_read_is_refused(self):
+        outcome, said = runner._native_read_outcome(
+            "other_trial_record",
+            "other_trial_record: Permission denied - that path is outside my allowed "
+            "directories.")
+        self.assertEqual(outcome, "refused")
+        self.assertIn("Permission denied", said)
+
+    def test_a_read_that_returned_the_sentinel_is_a_read(self):
+        outcome, _said = runner._native_read_outcome(
+            "grading_record", "grading_record: %s" % runner.READ_BOUNDARY_SENTINEL)
+        self.assertEqual(outcome, "read")
+
+    def test_a_missing_line_is_unclear_not_a_pass(self):
+        outcome, said = runner._native_read_outcome("other_condition_home", "nothing here")
+        self.assertEqual(outcome, "unclear")
+        self.assertIn("no line", said)
+
+    def test_an_unexplained_failure_is_unclear_not_a_refusal(self):
+        """"I could not" is not "the harness refused"; only a refusal counts as separated."""
+        outcome, _said = runner._native_read_outcome(
+            "other_trial_record", "other_trial_record: no such file or directory")
+        self.assertEqual(outcome, "unclear")
+
+    def test_the_prompt_names_all_three_targets_and_the_verifier_route(self):
+        targets = {label: "/p/%s" % label for label in runner.NATIVE_READ_TARGETS}
+        prompt = runner.native_read_prompt(targets)
+        for label in runner.NATIVE_READ_TARGETS:
+            self.assertIn(label, prompt)
+            self.assertIn(targets[label], prompt)
+        self.assertIn("sub-agent", prompt)
+        self.assertIn("verifier ", prompt)
+
+    # ---- the gate
+    def plant_preflight(self, **over):
+        document = {"separated": True, "accepted_unseparated": False,
+                    "allow_rules": {"ok": True}}
+        document.update(over)
+        # `preflight_state` takes the LAST record by name, and the test bench plants one of
+        # its own; clear the directory so this test controls the state it is asserting about.
+        directory = runner.Campaign(self.campaign).records("read-boundary")
+        for stale in glob.glob(os.path.join(directory, "preflight-*.json")):
+            os.unlink(stale)
+        runner.write_json(os.path.join(directory, "preflight-planted.json"), document)
+        return runner.Campaign(self.campaign)
+
+    def test_an_acceptance_no_longer_qualifies_a_campaign(self):
+        campaign = self.plant_preflight(separated=False, accepted_unseparated=True)
+        runner.require_preflight(campaign, "one trial")          # unchanged for a single trial
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertIn("E11-40", str(caught.exception))
+        self.assertIn("does not qualify", str(caught.exception))
+
+    def test_a_record_with_no_native_check_refuses_a_qualification_start(self):
+        campaign = self.plant_preflight()
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertIn("no NATIVE read-boundary check", str(caught.exception))
+
+    def test_a_failed_native_check_refuses_and_names_the_setups(self):
+        campaign = self.plant_preflight(
+            native={"separated": False, "not_separated": ["codex", "opencode"]})
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertIn("codex, opencode", str(caught.exception))
+        self.assertIn("no acceptance covers it", str(caught.exception))
+
+    def test_a_passing_native_check_lets_the_campaign_start(self):
+        campaign = self.plant_preflight(native={"separated": True, "not_separated": []})
+        state = runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertTrue(state["native_separated"])
+        self.assertTrue(state["native_checked"])
+
+    def test_the_campaign_start_gate_asks_as_a_qualification(self):
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        self.assertIn('require_preflight(campaign, "this campaign", '
+                      'qualification=not campaign.synthetic())', source)
+
+
+class R4ManualOnlySelections(RunnerCase):
+    """R4: the manual-only guard's uncovered read path, and every selection inspected.
+
+    `setups/claude-code/install.sh` builds its marketplace out of SYMLINKS into a stage, so a
+    station copy beside the homes is a link. `os.walk` does not descend through one, and
+    `os.chmod` DOES follow one: the station body below the link was never inspected, and
+    closing the link wrote a mode change into whatever stage it pointed at. Measured
+    2026-09-18: `claude-code/absent/marketplace/manual-only-probe` points into another
+    campaign's stage entirely.
+    """
+
+    def test_a_link_out_of_the_controlled_roots_is_classified_as_moved_aside(self):
+        """A real link, planted under a real setup root, classified by the real function."""
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.setup_for(campaign, runner._optional_plan(campaign), "claude-code")
+        root = os.path.join(runner.PILOT_ROOT, setup.name or setup.harness)
+        outside = os.path.join(self.scratch, "foreign-stage", runner.MANUAL_ONLY_SKILL)
+        runner.ensure_dir(outside)
+        link_dir = os.path.join(root, "marketplace-test-%d" % os.getpid())
+        runner.ensure_dir(link_dir)
+        link = os.path.join(link_dir, runner.MANUAL_ONLY_SKILL)
+        self.addCleanup(shutil.rmtree, link_dir, True)
+        os.symlink(outside, link)
+        selections, _roots = runner.manual_only_selections(setup)
+        mine = [r for r in selections if r["path"] == link]
+        self.assertEqual(len(mine), 1, [r["path"] for r in selections][:6])
+        self.assertEqual(mine[0]["kind"], "symlink")
+        self.assertIs(mine[0]["target_inside_the_controlled_roots"], False)
+        self.assertIn("move the link aside", mine[0]["how"])
+        self.assertIn("another campaign", mine[0]["how"])
+
+    def test_every_selection_is_inspected_and_classified(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.setup_for(campaign, runner._optional_plan(campaign), "claude-code")
+        selections, roots = runner.manual_only_selections(setup)
+        self.assertIsInstance(selections, list)
+        self.assertIsInstance(roots, list)
+        for row in selections:
+            self.assertIn(row["kind"], ("symlink", "directory"))
+            self.assertIn("how", row)
+            if row["kind"] == "symlink":
+                self.assertIsNotNone(row["target"])
+                self.assertIn(row["target_inside_the_controlled_roots"], (True, False))
+
+    def test_the_record_names_the_selections_and_the_links_that_left_the_roots(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.setup_for(campaign, runner._optional_plan(campaign), "claude-code")
+        with runner.manual_only_barrier(setup, "a test") as barrier:
+            record = barrier.record()
+        self.assertIn("selections_inspected", record)
+        self.assertIn("selections_by_kind", record)
+        self.assertIn("links_out_of_the_controlled_roots", record)
+
+    def test_the_aside_suffix_is_named_once_and_reversible(self):
+        self.assertTrue(runner.MANUAL_ONLY_ASIDE.startswith("."))
+        self.assertIn("manual-only-guard", runner.MANUAL_ONLY_ASIDE)
+
+
+class R5CopyManifest(RunnerCase):
+    """R5: a review copy that differs from the run tree must say why, file by file.
+
+    Astra's review copy of the E10 records differs from the original claude-code run tree in
+    26 files and nothing said why. Section 21's hash check settled that the ORIGINALS are
+    intact, which leaves the copy owing an account of itself.
+    """
+
+    def tree(self):
+        root = os.path.join(self.scratch, "src", "records")
+        runner.ensure_dir(root)
+        for name, body in (("a.txt", "plain\n"), ("b.txt", "secret\n"), ("c.txt", "also\n")):
+            runner.write_text(os.path.join(root, name), body)
+        return root
+
+    def copy_of(self, root, **changes):
+        destination = os.path.join(self.scratch, "copy-%d" % len(os.listdir(self.scratch)))
+        base = os.path.dirname(root.rstrip(os.sep))
+        for path in runner.walk_files(root):
+            relative = os.path.relpath(path, base)
+            if relative in changes and changes[relative] is None:
+                continue
+            target = os.path.join(destination, relative)
+            runner.ensure_dir(os.path.dirname(target))
+            runner.write_text(target, changes.get(relative, runner.read_text(path)))
+        return destination
+
+    def test_an_identical_copy_explains_itself(self):
+        root = self.tree()
+        got = runner.scrub_copy_manifest([root], self.copy_of(root), [])
+        self.assertTrue(got["every_difference_is_explained"])
+        self.assertEqual(got["counts"], {"identical": 3})
+
+    def test_a_scrubbed_file_is_explained_by_the_scrub(self):
+        root = self.tree()
+        copy = self.copy_of(root, **{"records/b.txt": "[[redacted]]\n"})
+        rows = [{"file": os.path.join(root, "b.txt"), "values_replaced": 1,
+                 "shapes": ["openrouter-key"]}]
+        got = runner.scrub_copy_manifest([root], copy, rows)
+        by = {r["path"]: r for r in got["files"]}
+        self.assertEqual(by["records/b.txt"]["verdict"], "scrubbed")
+        self.assertEqual(by["records/b.txt"]["detail"]["shapes"], ["openrouter-key"])
+        self.assertTrue(got["every_difference_is_explained"])
+
+    def test_a_difference_with_no_reason_is_the_one_thing_to_act_on(self):
+        root = self.tree()
+        copy = self.copy_of(root, **{"records/c.txt": "edited by hand\n"})
+        got = runner.scrub_copy_manifest([root], copy, [])
+        self.assertEqual(got["unexplained"], ["records/c.txt"])
+        self.assertFalse(got["every_difference_is_explained"])
+        self.assertEqual(got["counts"]["changed_without_a_reason"], 1)
+
+    def test_an_omission_is_named(self):
+        root = self.tree()
+        copy = self.copy_of(root, **{"records/a.txt": None})
+        got = runner.scrub_copy_manifest([root], copy, [])
+        by = {r["path"]: r for r in got["files"]}
+        self.assertEqual(by["records/a.txt"]["verdict"], "missing_from_the_copy")
+        self.assertIsNone(by["records/a.txt"]["copy_sha256"])
+
+    def test_a_file_only_in_the_copy_is_named_too(self):
+        root = self.tree()
+        copy = self.copy_of(root)
+        runner.write_text(os.path.join(copy, "records", "extra.txt"), "added later\n")
+        got = runner.scrub_copy_manifest([root], copy, [])
+        self.assertEqual(got["added_to_the_copy"], [os.path.join("records", "extra.txt")])
+        self.assertFalse(got["every_difference_is_explained"])
+
+    def test_the_manifest_is_written_into_the_copy_and_does_not_count_itself(self):
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        body = source[source.index("def do_scrub_copy("):source.index("def do_scan(")]
+        self.assertIn("scrub_copy_manifest(roots, destination, rows)", body)
+        self.assertIn("COPY_MANIFEST_NAME", body)
+        manifest_body = source[source.index("def scrub_copy_manifest("):
+                               source.index("def do_scrub_copy(")]
+        self.assertIn("COPY_MANIFEST_NAME", manifest_body)
+
+
+class R3ConsumerAnswerSchema(RunnerCase):
+    """R3: the consumer answer's format is PUBLISHED, and its states are the checkpoint's own.
+
+    Until now the format lived in the prompt and in the grader's expectations. A consumer had
+    no document to write against, and a grader that is the only statement of a format is a
+    grader nobody can disagree with.
+    """
+
+    @staticmethod
+    def schema():
+        path = os.path.join(testlib.PLUGIN, "skills", "recheck-v2", "references",
+                            "consumer-answer.schema.json")
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+
+    @staticmethod
+    def checkpoint_states():
+        path = os.path.join(testlib.PLUGIN, "skills", "recheck-v2", "references",
+                            "checkpoint.schema.json")
+        with open(path, encoding="utf-8") as handle:
+            document = json.load(handle)
+        return sorted(branch["properties"]["state"]["const"]
+                      for branch in document["$defs"]["item_state"]["oneOf"])
+
+    def test_the_schema_is_published_in_the_contract(self):
+        schema = self.schema()
+        self.assertEqual(schema["type"], "object")
+        self.assertIn("items", schema["required"])
+        self.assertFalse(schema["additionalProperties"])
+
+    def test_the_per_item_states_are_the_checkpoint_s_own(self):
+        """The point of the item: no translation between the two vocabularies."""
+        rows = (self.schema()["properties"]["continuation"]["properties"]["item_rows"])
+        self.assertEqual(sorted(rows["items"]["properties"]["state"]["enum"]),
+                         self.checkpoint_states())
+
+    def test_a_stopped_producer_has_somewhere_to_be_recovered(self):
+        properties = self.schema()["properties"]
+        self.assertIn("status", properties)
+        self.assertIn("stop_reason", properties)
+
+    def test_the_dispositions_and_reasons_are_the_contract_s(self):
+        item = self.schema()["properties"]["items"]["items"]["properties"]
+        self.assertEqual(sorted(item["disposition"]["enum"]), ["fixed", "not_fixed"])
+        self.assertEqual(sorted(r for r in item["reason"]["enum"] if r),
+                         ["missed_case", "missing_evidence", "reproduces",
+                          "verification_blocked"])
+
+    def test_an_artifact_reference_is_the_producer_s_path(self):
+        evidence = (self.schema()["properties"]["items"]["items"]["properties"]["evidence"]
+                    ["items"]["properties"])
+        self.assertIn("artifact_path", evidence)
+        self.assertIn("relocation", evidence["artifact_path"]["description"])
+
+    def test_the_schema_validates_a_real_shaped_answer(self):
+        try:
+            from jsonschema import Draft202012Validator
+        except ImportError:
+            self.skipTest("jsonschema is not installed for this interpreter")
+        answer = {"status": "completed", "items": [
+            {"location": "src/widget/export.py:9", "claim": "unquoted",
+             "disposition": "not_fixed", "reason": "missed_case",
+             "evidence": [{"kind": "command", "detail": "ran it",
+                           "artifact_path": "/run/verifier/out.txt"}]}],
+            "cards": [{"slice": "A", "before": "rejected", "after": "rejected"}],
+            "continuation": {"continuations": 1, "phase": "adjudicating", "done": 1,
+                             "pending": 1,
+                             "item_rows": [{"index": 0, "state": "done"},
+                                           {"index": 1, "state": "pending"}]},
+            "source_identity": {"commit": "abc"}}
+        Draft202012Validator(self.schema()).validate(answer)
+
+    def test_an_invented_state_is_rejected(self):
+        try:
+            from jsonschema import Draft202012Validator
+        except ImportError:
+            self.skipTest("jsonschema is not installed for this interpreter")
+        from jsonschema import ValidationError
+        answer = {"items": [], "continuation": {
+            "item_rows": [{"index": 0, "state": "half-done"}]}}
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(self.schema()).validate(answer)
+
+
+class R3GradingWaitsForTheSessions(RunnerCase):
+    """R3: grading happens only after every consumer session has ended."""
+
+    def test_the_regrade_goes_through_the_same_campaign_wide_barrier(self):
+        source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
+        body = source[source.index("def do_consumer_regrade("):
+                      source.index("def do_lane_stop(")]
+        self.assertIn("refuse_while_alive(campaign, targets)", body)
+
+    def test_a_live_consumer_session_stops_the_regrade(self):
+        campaign = runner.Campaign(self.campaign)
+        record = os.path.join(campaign.trials, "consumer-a-to-b-r1")
+        runner.ensure_dir(os.path.join(record, "harness"))
+        # a pid that is alive and whose record is younger than the process: this session's own
+        runner.write_text(os.path.join(record, "harness", "child.pid"), "%d\n" % os.getpid())
+        with self.assertRaises(runner.Failure) as caught:
+            runner.refuse_while_alive(campaign, [("consumer-a-to-b-r1", 0, record)])
+        self.assertIn("still alive", str(caught.exception))
+
+    def test_a_finished_session_does_not(self):
+        campaign = runner.Campaign(self.campaign)
+        record = os.path.join(campaign.trials, "consumer-c-to-d-r1")
+        runner.ensure_dir(os.path.join(record, "harness"))
+        path = os.path.join(record, "harness", "child.pid")
+        runner.write_text(path, "%d\n" % os.getpid())
+        os.utime(path, (631152000.0, 631152000.0))   # recorded in 1990: a recycled number
+        runner.refuse_while_alive(campaign, [("consumer-c-to-d-r1", 0, record)])

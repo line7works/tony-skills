@@ -210,8 +210,13 @@ def verifier_report(checklist, path):
             "index": index, "location": location, "disposition": "fixed", "reason": None,
             "method": "executed", "static_reason": None, "blocked": None, "missing": None,
             "missed_case": None,
-            "evidence": [{"kind": "command", "detail": "the scenario command ran and the "
-                                                       "failure no longer appears",
+            # E11-46 R2: the detail NAMES THE ITEM'S OWN SCENARIO. The evidence check reads
+            # the record now rather than counting entries, and generic prose - "the scenario
+            # command ran" - is exactly the evidence it is meant to reject: it could belong to
+            # any item of any trial. A fake that models a good session says which scenario.
+            "evidence": [{"kind": "command",
+                          "detail": "ran the scenario (%s); the failure no longer appears"
+                                    % (entry.get("failure_scenario") or "unstated"),
                           "artifact": None}],
             "location_after_fix": None,
         })

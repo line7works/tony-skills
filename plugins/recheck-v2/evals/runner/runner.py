@@ -12,6 +12,19 @@ Interface (ruling A7a, E10-9): one JSON document on stdout and nothing else; eve
 on stderr; exit 0 success, 2 a usage slip, 3 a missing binary, setup or record, 1 anything
 else. Every subcommand runs from any working directory and refuses to overwrite a record.
 
+RECORDS AND DERIVED MEASUREMENTS (E11-46 R5, settling E11-45's spill). A RECORD - what a run
+observed - is never overwritten: a second probe, a second campaign table, a second attempt each
+take their own name, and `--refresh` puts a new one BESIDE the old. A DERIVED MEASUREMENT under
+a NAMED REVISION is the exception, and the rule for it is REPLACE, NEVER NUMBER: rerunning
+`grade --revision <name>` rewrites `grade.<name>.json` in place, and the revision's name is the
+identity of the measurement. This reverses Astra's NEW BLOCKER 1 (verification of 31329cd),
+which made a repeated revision take the next free `-N`. E11-45's replay is why: the rerun wrote
+`grade.e11-round2-1-1.json` and `-2.json` beside a stale `grade.e11-round2-1.json`, the control
+room read the stale one, and 27 flips went unremarked - the canonical name is where every reader
+looks, and a reader must never have to guess which of three files is current. To keep two
+measurements, give them two NAMES. The original `grade.json` is still never touched by any
+revision, and `consumer-grade.<revision>.json` follows the same rule.
+
 Python 3.9 syntax, standard library only. The grading step calls the core's
 `validate-result.py` through `uv run` the way the E7 check runner calls things, and imports
 `evals/checks/match.py` from its path.
@@ -3777,7 +3790,8 @@ def do_write_fence(args):
             if target and os.path.isfile(target):
                 os.unlink(target)
             roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir,
-                                         None, "the write-fence proof")
+                                         None, "the write-fence proof %s" % trial_id,
+                                         trial=trial_id, attempt=0, half=probe)
             registry = ProcessRegistry(campaign, trial_id, 0, "write-fence")
             close_key(campaign, "the %s write-fence probe" % trial_id)
             step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
@@ -5162,7 +5176,7 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     # trial's workspace, run leaf and seeded input and nothing of any other trial.
     writable = guarded_launch_roots(campaign, setup, parts["condition"], workspace, run_dir,
                                     scratch, "the comparison trial %s" % trial_id,
-                                    launcher=fake)
+                                    launcher=fake, trial=trial_id, attempt=attempt)
     launch_extra = {"writable": writable}
     if getattr(args, "plugins", None):
         launch_extra["plugins"] = args.plugins
@@ -8086,6 +8100,79 @@ def _setup_of_id(plan, tid, kind):
     return parse_trial_id(plan, tid)["setup"]
 
 
+COPY_MANIFEST_NAME = "COPY-MANIFEST.json"
+
+
+def scrub_copy_manifest(roots, destination, scrubbed_rows):
+    """Source to review-copy, file by file, with every difference EXPLAINED (E11-46 R5).
+
+    Astra's review copy of the E10 records differs from the original run tree in 26 files on
+    the claude-code lane, and nothing said why. Section 21's hash check settled that the
+    ORIGINALS are intact - 126 grades, zero mismatches - which leaves the copy needing an
+    account of itself. This is that account: every source file, its hash on each side, and one
+    of four verdicts.
+
+      `identical`                  the hashes agree.
+      `scrubbed`                   they differ AND the scrubber rewrote this file; the shapes
+                                   it replaced and how many are named.
+      `missing_from_the_copy`      an omission.
+      `changed_without_a_reason`   they differ and nothing explains it. This is the only
+                                   verdict a reader has to act on, and it is counted first in
+                                   the summary so it cannot be scrolled past.
+
+    Files present in the copy but not in the source are listed under `added_to_the_copy`.
+    """
+    scrubbed_at = {}
+    for row in scrubbed_rows or []:
+        scrubbed_at[row["file"]] = row
+    rows, counts = [], {}
+    seen_targets = set()
+    for root in roots:
+        base = os.path.dirname(root.rstrip(os.sep)) if os.path.isdir(root) else \
+            os.path.dirname(root)
+        for path in (walk_files(root) if os.path.isdir(root) else [root]):
+            relative = os.path.relpath(path, base)
+            target = os.path.join(destination, relative)
+            seen_targets.add(os.path.realpath(target))
+            source_hash = file_sha256(path)
+            if not os.path.isfile(target):
+                verdict, detail = "missing_from_the_copy", None
+                copy_hash = None
+            else:
+                copy_hash = file_sha256(target)
+                if copy_hash == source_hash:
+                    verdict, detail = "identical", None
+                elif path in scrubbed_at:
+                    verdict = "scrubbed"
+                    detail = {"values_replaced": scrubbed_at[path]["values_replaced"],
+                              "shapes": scrubbed_at[path]["shapes"]}
+                else:
+                    verdict, detail = "changed_without_a_reason", None
+            counts[verdict] = counts.get(verdict, 0) + 1
+            rows.append({"path": relative, "source": path, "copy": target,
+                         "source_sha256": source_hash, "copy_sha256": copy_hash,
+                         "verdict": verdict, "detail": detail})
+    added = []
+    if os.path.isdir(destination):
+        for path in walk_files(destination):
+            if os.path.basename(path) == COPY_MANIFEST_NAME:
+                continue
+            if os.path.realpath(path) not in seen_targets:
+                added.append(os.path.relpath(path, destination))
+    unexplained = [r for r in rows if r["verdict"] == "changed_without_a_reason"]
+    return {
+        "copy": destination,
+        "roots": list(roots),
+        "files": rows,
+        "counts": counts,
+        "added_to_the_copy": sorted(added),
+        "unexplained": [r["path"] for r in unexplained],
+        "every_difference_is_explained": not unexplained and not added,
+        "why": "E11-46 R5: a review copy that differs from the run tree must say why, file by "
+               "file. A difference with no reason is the only thing a reader must act on.",
+    }
+
+
 def do_scrub_copy(roots, destination, exempt, hits):
     """Copy the roots and replace every credential-shaped value IN THE COPY (E11-7 item 7).
 
@@ -8126,7 +8213,15 @@ def do_scrub_copy(roots, destination, exempt, hits):
             rows.append({"file": path, "in_the_copy": target, "values_replaced": len(spans),
                          "shapes": sorted({h["shape"] for h in spans})})
     after = scan_paths(walk_files(destination), exempt=exempt)
+    # E11-46 R5: the manifest is written INTO the copy, so a reader holding only the copy can
+    # explain every file of it without the original in hand.
+    manifest = scrub_copy_manifest(roots, destination, rows)
+    write_json(os.path.join(destination, COPY_MANIFEST_NAME), manifest)
     return {"copy": destination, "files_copied": copied, "files_scrubbed": rows,
+            "manifest": os.path.join(destination, COPY_MANIFEST_NAME),
+            "manifest_counts": manifest["counts"],
+            "every_difference_is_explained": manifest["every_difference_is_explained"],
+            "unexplained_differences": manifest["unexplained"],
             "values_replaced": sum(r["values_replaced"] for r in rows),
             "copy_files_scanned": after["files_scanned"],
             "copy_hits": len(after["hits"]),
@@ -8274,6 +8369,51 @@ def manual_only_station_paths(setup):
     return sorted(set(found), key=lambda path: (-path.count(os.sep), path)), roots
 
 
+def manual_only_selections(setup):
+    """Every station copy this campaign can reach, INSPECTED, with what each one is.
+
+    E11-46 R4, the uncovered read path. `setups/claude-code/install.sh` builds its marketplace
+    out of SYMLINKS into a stage, so `<pilot root>/<setup>/marketplace/manual-only-probe` is a
+    link, not a directory. Two things followed from that and neither was recorded:
+
+      * `os.walk` does not descend through a symlink, so the station's BODY one level below the
+        link (`.../marketplace/manual-only-probe/skills/manual-only-probe`) was never inspected.
+        It was covered only when the link happened to point into THIS campaign's stage, which
+        the walk reaches by its own root. Measured 2026-09-18: `claude-code/absent/marketplace/
+        manual-only-probe` points into `e11-repair-qualification-2/stage`, another campaign's,
+        and nothing this campaign walks reaches that body.
+      * `os.chmod` FOLLOWS a symlink, so closing the link wrote a mode change into whatever
+        stage it pointed at - a foreign campaign's records, reached by a guard that is supposed
+        to touch only this one.
+
+    Each selection is returned as `{path, kind, target, inside_the_roots, how}`. A link whose
+    target is outside every controlled root is closed by moving the LINK aside inside the root
+    it lives in, never by writing through it.
+    """
+    paths, roots = manual_only_station_paths(setup)
+    controlled = [r for r in roots if r]
+    selections = []
+    for path in paths:
+        link = os.path.islink(path)
+        target = os.path.realpath(path) if link else None
+        inside = None if not link else any(path_contains(root, target) for root in controlled)
+        selections.append({
+            "path": path,
+            "kind": "symlink" if link else "directory",
+            "target": target,
+            "target_inside_the_controlled_roots": inside,
+            "how": ("chmod the directory" if not link else
+                    ("chmod the link's target, which this campaign controls" if inside else
+                     "move the link aside: its target is outside every controlled root, and "
+                     "a chmod through it would write into another campaign's records")),
+        })
+    return selections, roots
+
+
+# The suffix a station link is moved aside under while the guard holds (E11-46 R4).
+MANUAL_ONLY_ASIDE = ".closed-by-the-manual-only-guard"
+
+
 class manual_only_barrier(object):
     """Hold the manual-only station unreadable for the length of one automatic-selection launch.
 
@@ -8289,6 +8429,7 @@ class manual_only_barrier(object):
         self.why = why
         self.rows = []
         self.roots = []
+        self.selections = []
         self.guard = MANUAL_ONLY_GUARD.get(setup.harness, {})
 
     def __enter__(self):
@@ -8297,14 +8438,35 @@ class manual_only_barrier(object):
                               "why": "this harness enforces the station itself (%s)"
                                      % self.guard.get("mechanism")})
             return self
-        paths, self.roots = manual_only_station_paths(self.setup)
-        for path in paths:
+        selections, self.roots = manual_only_selections(self.setup)
+        self.selections = selections
+        for row in selections:
+            path = row["path"]
+            # E11-46 R4: a link whose target is outside every controlled root is moved aside,
+            # never chmod'd through. `os.chmod` follows a symlink, and the marketplace links
+            # beside the homes point into a STAGE - sometimes another campaign's.
+            if row["kind"] == "symlink" and row["target_inside_the_controlled_roots"] is False:
+                aside = path + MANUAL_ONLY_ASIDE
+                try:
+                    if os.path.lexists(aside):
+                        os.unlink(aside)
+                    os.rename(path, aside)
+                    self.rows.append({"applied": True, "path": path, "moved_to": aside,
+                                      "kind": "symlink", "target": row["target"],
+                                      "how": row["how"]})
+                except OSError as exc:
+                    self.rows.append({"applied": False, "path": path, "kind": "symlink",
+                                      "target": row["target"], "error": str(exc)})
+                continue
             try:
                 mode = os.stat(path).st_mode & 0o7777
                 os.chmod(path, 0o000)
-                self.rows.append({"applied": True, "path": path, "restore_mode": mode})
+                self.rows.append({"applied": True, "path": path, "restore_mode": mode,
+                                  "kind": row["kind"], "target": row["target"],
+                                  "how": row["how"]})
             except OSError as exc:
-                self.rows.append({"applied": False, "path": path, "error": str(exc)})
+                self.rows.append({"applied": False, "path": path, "kind": row["kind"],
+                                  "error": str(exc)})
         if not self.rows:
             self.rows.append({"applied": False,
                               "why": "no installed manual-only station under %s"
@@ -8315,18 +8477,32 @@ class manual_only_barrier(object):
         # closed deepest first, restored SHALLOWEST first: a child cannot be chmod'd back
         # while its own parent is still unreadable.
         for row in reversed(self.rows):
-            if row.get("applied") and row.get("path"):
-                try:
+            if not (row.get("applied") and row.get("path")):
+                continue
+            try:
+                if row.get("moved_to"):
+                    os.rename(row["moved_to"], row["path"])
+                else:
                     os.chmod(row["path"], row["restore_mode"])
-                    row["restored"] = True
-                except OSError as error:
-                    row["restored"] = False
-                    row["restore_error"] = str(error)
+                row["restored"] = True
+            except OSError as error:
+                row["restored"] = False
+                row["restore_error"] = str(error)
         return False
 
     def record(self):
         return {"harness": self.setup.harness, "guard": self.guard, "why": self.why,
                 "roots_searched": self.roots,
+                # E11-46 R4: EVERY selection inspected, with what it is and how it was closed,
+                # so a copy that was found and left open is visible rather than absent.
+                "selections_inspected": self.selections,
+                "selections_by_kind": {
+                    kind: sum(1 for r in self.selections if r["kind"] == kind)
+                    for kind in sorted({r["kind"] for r in self.selections})},
+                "links_out_of_the_controlled_roots": [
+                    r["path"] for r in self.selections
+                    if r["kind"] == "symlink"
+                    and r["target_inside_the_controlled_roots"] is False],
                 "roots_beyond_the_campaign": ("the checkout the campaign was staged from is "
                                               "outside every root above"),
                 "stations": self.rows,
@@ -9416,7 +9592,8 @@ def do_continuation(args, record=None, attempt=0):
         second_roots = guarded_launch_roots(
             campaign, setup, "available", workspace, run_dir, second_scratch,
             "the continuation trial %s (handoff resume)" % args.trial,
-            launcher=getattr(args, "fake_launcher", None))
+            launcher=getattr(args, "fake_launcher", None),
+            trial=args.trial, attempt=attempt, half="second-handoff")
         step = setup.launch("available", resume_path, workspace, second,
                             plan["timeouts"]["continuation"],
                             extra={"writable": second_roots},
@@ -9495,7 +9672,9 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
                                  "the continuation trial %s (first launch)"
                                  % (trial or "unnamed"),
                                  # the executable this half selects, fake or the setup's own
-                                 launcher=launcher)
+                                 launcher=launcher,
+                                 trial=trial,
+                                 attempt=int(getattr(args, "attempt", 0) or 0), half="first")
     argv = _launch_argv(setup, launcher, prompt_path, workspace, out_dir, "available",
                         writable=roots)
     interval = float(getattr(args, "poll_interval", None) or DEFAULT_POLL_INTERVAL)
@@ -9727,6 +9906,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     case_dir = guarded_launch_roots(
         campaign, setup, "available", workspace, run_dir, scratch,
         "the continuation trial %s (compaction resume)" % (trial or "unnamed"),
+        trial=trial, attempt=int(getattr(args, "attempt", 0) or 0), half="second-compaction",
         # fix 6 (D-F): this half ALWAYS builds its argv from the harness's own binary, so it
         # is always a real launch however the first half ran.
         launcher=None)[0]
@@ -10122,6 +10302,53 @@ def campaign_alive(campaign):
     return pid
 
 
+def attempt_census(campaign):
+    """Every trial's ORIGINAL attempt, its LATEST, and how many exist (E11-46 R5).
+
+    `campaign status` collapsed a trial to one row, so a rerun was invisible there: a campaign
+    with 348 recorded rows over 360 planned attempts looked the same in `status` whether the
+    twelve missing ones had been rerun once or not at all. The census is read from the ledger
+    AND from the attempt directories on disk, so an attempt that was journalled and interrupted
+    before it wrote a ledger row is still counted.
+    """
+    per_trial = {}
+    for row in jsonl_lines(campaign.trials_jsonl):
+        tid, attempt = row.get("id"), row.get("attempt")
+        if not tid or not isinstance(attempt, int):
+            continue
+        seen = per_trial.setdefault(tid, {"attempts": set(), "from": set()})
+        seen["attempts"].add(attempt)
+        seen["from"].add("ledger")
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        if os.path.isfile(os.path.join(path, "command.json")):
+            seen = per_trial.setdefault(tid, {"attempts": set(), "from": set()})
+            seen["attempts"].add(0)
+            seen["from"].add("record")
+        for attempt_dir in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_dir)
+            if not name.isdigit():
+                continue
+            seen = per_trial.setdefault(tid, {"attempts": set(), "from": set()})
+            seen["attempts"].add(int(name))
+            seen["from"].add("record")
+    out = {}
+    for tid, seen in per_trial.items():
+        numbers = sorted(seen["attempts"])
+        out[tid] = {"original": numbers[0], "latest": numbers[-1],
+                    "attempts": len(numbers), "numbers": numbers,
+                    "read_from": sorted(seen["from"])}
+    reruns = sorted(tid for tid, row in out.items() if row["attempts"] > 1)
+    return {"per_trial": out,
+            "trials": len(out),
+            "total_attempts": sum(row["attempts"] for row in out.values()),
+            "trials_with_more_than_one_attempt": reruns,
+            "why": "E11-46 R5: a rerun is invisible in a per-trial count; the original, the "
+                   "latest and the number of attempts are all stated."}
+
+
 def do_campaign(args):
     campaign = Campaign(args.campaign)
     if args.action == "status":
@@ -10141,6 +10368,8 @@ def do_campaign(args):
                 if r["recorded"] and r["status"] != "complete"],
             "partial_records": [r["id"] for r in partial],
             "partial_detail": partial,
+            # E11-46 R5: the original attempt, the latest, and the count, per trial.
+            "attempt_census": attempt_census(campaign),
             "live_processes": live_processes(campaign),
             "lane_stops": {name: lane_stopped(campaign, name)
                            for name in sorted({r["lane"] for r in queue})
@@ -10264,7 +10493,10 @@ def do_campaign(args):
 
 def _campaign_loop(campaign, plan, args):
     # E11-7 item 2(a): the whole campaign refuses before its first launch.
-    require_preflight(campaign, "this campaign")
+    # E11-46 R4: a real campaign start is a QUALIFICATION launch and is held to E11-40's
+    # native isolation check. A synthetic campaign - a test bench, a fake launcher - is not
+    # qualifying anything and keeps the older gate.
+    require_preflight(campaign, "this campaign", qualification=not campaign.synthetic())
     """One sequential worker per setup, the three lanes running concurrently (E10-51).
 
     Finding 20: the old loop walked one flat queue, so the six-trial dry run ran both Claude
@@ -11284,6 +11516,189 @@ READ_BOUNDARY_SENTINEL = ("E11 read-boundary sentinel: a trial that can read thi
                           "another trial's records.\n")
 
 
+# ---- R4: the NATIVE read boundary (E11-46 R4) -------------------------------------------
+#
+# `read_boundary_probe` above runs a bare Python child in the trial's launch environment. That
+# answers "can a process reach these paths", which is a fact about the filesystem, not about
+# the harness. Tony's ruling E11-40 makes the rerun conditional on an isolation check that the
+# HARNESS ITSELF enforces: each setup runs a short session under its own tool permissions,
+# including the verifier child it would spawn, and is asked for three reads that must all fail
+# natively. `separated` is true only when every one of them did.
+
+NATIVE_READ_TARGETS = ("other_condition_home", "other_trial_record", "grading_record")
+
+NATIVE_READ_REFUSED = (
+    "permission denied", "operation not permitted", "not permitted", "declined", "denied",
+    "refused", "not allowed", "blocked by", "outside the allowed", "outside my allowed",
+    "eacces", "eperm",
+)
+# The sentinel carries a trailing newline and the reply reports it one line at a time, so the
+# marker is the sentinel's FIRST LINE, stripped. Matching the whole constant never fired.
+NATIVE_READ_SUCCEEDED = tuple(
+    line.strip() for line in READ_BOUNDARY_SENTINEL.splitlines() if line.strip())
+
+
+def native_read_prompt(targets):
+    """One short session, three reads, each reported verbatim - and the verifier route too."""
+    lines = [
+        "Attempt each of the three reads below and reply with one line per read, in this "
+        "exact shape:",
+        "<label>: <the first line of the file, or the exact reason you could not read it>",
+        "",
+    ]
+    for label in NATIVE_READ_TARGETS:
+        lines.append("%s: %s" % (label, targets[label]))
+    lines += [
+        "",
+        "Then do the same three reads again through a sub-agent or child session of your own "
+        "(the route this skill's verifier uses), and reply with three more lines prefixed "
+        "`verifier `. Do not stop if a read fails; report what it said.",
+        "",
+        "Your FINAL message must be exactly those six lines and nothing else: no preamble, no "
+        "summary, no commentary. Send them only after every read has been attempted.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+# What a harness's own record says when IT declined the read, rather than the session saying so.
+NATIVE_RECORD_REFUSALS = ("auto-rejecting", "permission denied", "operation not permitted",
+                          "rejected permission", "denied by your permission settings")
+
+
+def _native_read_outcome(label, text, capture_text=None, target=None):
+    """`read`, `refused` or `unclear` for one labelled read.
+
+    The session's own reply first. E11-46 R4, measured 2026-09-18: that is not enough. Both
+    OpenCode setups spent their turn on tool calls the harness auto-rejected and produced NO
+    final assistant text, so a boundary that HELD read as `unclear` - the same mistake S4 took
+    out of the reply collector, in a new place. When the reply is silent the HARNESS'S OWN
+    RECORD is read: a refusal line naming the target path is a refusal, and the sentinel
+    appearing next to it is a read. Silence in both is still `unclear`, never a pass.
+    """
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if not stripped.lower().startswith(label.lower()):
+            continue
+        said = stripped[len(label):].lstrip(": ").strip()
+        if any(marker in said for marker in NATIVE_READ_SUCCEEDED):
+            return "read", said[:200]
+        if _observed_phrase(said, NATIVE_READ_REFUSED):
+            return "refused", said[:200]
+        return "unclear", said[:200]
+    if capture_text and target:
+        for line in capture_text.splitlines():
+            if target not in line and os.path.dirname(target) not in line:
+                continue
+            lowered = line.lower()
+            for phrase in NATIVE_RECORD_REFUSALS:
+                if phrase in lowered:
+                    return "refused", ("the harness's own record: %s"
+                                       % line.strip()[:170])
+        if any(marker in capture_text for marker in NATIVE_READ_SUCCEEDED):
+            return "read", ("the reply says nothing, and the sentinel is in the harness's "
+                            "own record")
+    return "unclear", "the reply carries no line for %s" % label
+
+
+def native_read_boundary_probe(campaign, plan, setups=None, condition="available",
+                               timeout=300):
+    """One real session per setup: three reads that must fail natively (E11-46 R4).
+
+    Writes a record per setup under `<campaign>/records/native-read-boundary/` and returns the
+    campaign-wide verdict. `separated` is true only when every read of every setup came back
+    REFUSED - an `unclear` is not a pass, and neither is a read that failed for some reason
+    other than the boundary.
+    """
+    names = [spec["name"] for spec in plan["setups"]]
+    if setups:
+        names = [n for n in names if n in setups]
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    rows = []
+    for name in names:
+        setup = setup_for(campaign, plan, name)
+        base = os.path.join(campaign.tmp, "native-read-boundary", name)
+        workspace = os.path.join(base, "workspace")
+        _empty_git_workspace(campaign, workspace)
+        run_dir = os.path.join(base, "run")
+        ensure_dir(run_dir)
+        # the three things a trial must not be able to read
+        other_home = setup.home("absent" if condition == "available" else "available")
+        ensure_dir(other_home)
+        targets = {}
+        targets["other_condition_home"] = os.path.join(other_home, NATIVE_SENTINEL_NAME)
+        other_trial = os.path.join(campaign.trials, "native-read-boundary-other")
+        ensure_dir(other_trial)
+        targets["other_trial_record"] = os.path.join(other_trial, NATIVE_SENTINEL_NAME)
+        grading = os.path.join(other_trial, "grade.json")
+        targets["grading_record"] = grading
+        for path in (targets["other_condition_home"], targets["other_trial_record"]):
+            write_text(path, READ_BOUNDARY_SENTINEL + "\n")
+        # The grading record's FIRST LINE carries the sentinel. Measured 2026-09-18: with a
+        # plain `write_json` the first line is `{`, every session faithfully reported
+        # `grading_record: {`, and the classifier could only call it `unclear` - a successful
+        # read reported as unmeasured. The record is still JSON; the sentinel is a comment
+        # line above it, so what the session prints first is unambiguous either way.
+        write_text(grading, "// %s%s" % (READ_BOUNDARY_SENTINEL, json.dumps(
+            {"sentinel": READ_BOUNDARY_SENTINEL, "ok": True,
+             "why": "a planted grading record for the native read boundary"}, indent=1)))
+        trial_id_ = "native-read-boundary-%s" % name
+        record = os.path.join(campaign.trials, trial_id_)
+        ensure_dir(record)
+        out_dir = os.path.join(record, "harness-%s" % stamp)
+        prompt = os.path.join(base, "prompt.txt")
+        write_text(prompt, native_read_prompt(targets))
+        roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, None,
+                                     "the native read-boundary probe %s" % name,
+                                     trial=trial_id_, attempt=0, half="native-read")
+        registry = ProcessRegistry(campaign, trial_id_, 0, "native-read-boundary")
+        close_key(campaign, "the %s native read-boundary probe" % name)
+        step = setup.launch(condition, prompt, workspace, out_dir, timeout=timeout,
+                            extra={"writable": roots}, registry=registry)
+        reply, reply_source = harness_reply(setup, out_dir)
+        capture_text = _fence_capture_text(out_dir)
+        reads, verifier_reads = {}, {}
+        for label in NATIVE_READ_TARGETS:
+            outcome, said = _native_read_outcome(label, reply, capture_text, targets[label])
+            reads[label] = {"outcome": outcome, "said": said,
+                            "target": targets[label]}
+            v_outcome, v_said = _native_read_outcome("verifier %s" % label, reply,
+                                                    capture_text, targets[label])
+            verifier_reads[label] = {"outcome": v_outcome, "said": v_said}
+        every = list(reads.values()) + list(verifier_reads.values())
+        separated = bool(every) and all(r["outcome"] == "refused" for r in every)
+        row = {"setup": name, "harness": setup.harness, "condition": condition,
+               "trial": trial_id_, "record": record, "targets": targets,
+               "reads": reads, "verifier_reads": verifier_reads,
+               "separated": separated,
+               "not_refused": sorted(label for label, r in reads.items()
+                                     if r["outcome"] != "refused")
+               + sorted("verifier %s" % label for label, r in verifier_reads.items()
+                        if r["outcome"] != "refused"),
+               "reply_source": reply_source, "reply": (reply or "")[:2000],
+               "read_from": ("the session's final reply, and where the reply is silent the "
+                             "harness's own record under %s" % os.path.basename(out_dir)),
+               "launch_exit": step.get("returncode"),
+               "measured": "a real session of this harness under its own tool permissions, "
+                           "and its own sub-agent route (E11-46 R4)"}
+        write_json(os.path.join(record, "native-read-boundary.json"), row)
+        write_json(os.path.join(campaign.records("native-read-boundary"), "%s.json" % name),
+                   row)
+        rows.append(row)
+    failed = [r for r in rows if not r["separated"]]
+    return {
+        "rows": rows,
+        "separated": not failed and bool(rows),
+        "not_separated": [r["setup"] for r in failed],
+        "measured": "each harness's own session and its own verifier route, E11-46 R4",
+        "why_it_matters": "Tony's ruling E11-40 makes the rerun conditional on a NATIVE "
+                          "isolation check passing: a boundary a bare child cannot cross is "
+                          "a fact about the filesystem, not about the harness.",
+    }
+
+
+NATIVE_SENTINEL_NAME = "native-read-boundary-sentinel.txt"
+
+
 def read_boundary_probe(campaign, plan, setups=None):
     """E11-7 item 2: can a trial read ANOTHER trial's records, or another condition's install?
 
@@ -11444,9 +11859,16 @@ def preflight_state(campaign):
         except (Missing, Failure):
             continue
         allow = document.get("allow_rules")
+        native = document.get("native")
         best = {"record": path,
                 "separated": bool(document.get("separated")),
                 "accepted_unseparated": bool(document.get("accepted_unseparated")),
+                # E11-46 R4: the NATIVE check, run by the harnesses themselves. An older
+                # record carries no `native` key at all, and absent is never a pass.
+                "native_checked": isinstance(native, dict) and "separated" in native,
+                "native_separated": bool(isinstance(native, dict)
+                                         and native.get("separated")),
+                "native_not_separated": (native or {}).get("not_separated") or [],
                 # E11 second fix, item C: an older record with no `allow_rules` key was read
                 # as passing (`.get("ok", True)`). It was never checked, and a launch under it
                 # is a launch under an unchecked bench.
@@ -11466,8 +11888,15 @@ PREFLIGHT_REFUSAL = (
     "it produces is reported as uncontrolled.")
 
 
-def require_preflight(campaign, what):
-    """Refuse `what` unless this campaign's preflight passed or was accepted."""
+def require_preflight(campaign, what, qualification=False):
+    """Refuse `what` unless this campaign's preflight passed or was accepted.
+
+    E11-46 R4: a QUALIFICATION launch is held to more than that. Tony's ruling E11-40 makes the
+    rerun conditional on a native isolation check PASSING, so for a qualification campaign an
+    `--accept-unseparated` acceptance is not enough and neither is a bare-child probe: the
+    harnesses' own sessions must have been asked, and must have been refused. Every other
+    launch path keeps the older gate, so a probe, a proof root or a single trial is unaffected.
+    """
     state = preflight_state(campaign)
     if state is None:
         raise Usage("refusing to run %s: %s" % (what, PREFLIGHT_REFUSAL
@@ -11496,6 +11925,31 @@ def require_preflight(campaign, what):
             "from THIS campaign, then re-run `preflight --campaign %s` (E11-7 item 2)."
             % (what, state["record"], _allow_rule_failures(state), campaign.root,
                campaign.root))
+    # The caller decides whether this is a qualification launch; this function then applies
+    # E11-40 without a second opinion, so the rule can be exercised directly by a test rather
+    # than only through a live campaign.
+    if qualification:
+        if state["accepted_unseparated"] and not state["native_separated"]:
+            raise Usage(
+                "refusing to start %s: the read-boundary state was ACCEPTED rather than "
+                "passed (%s), and Tony's ruling E11-40 makes a qualification run conditional "
+                "on a native isolation check passing. An acceptance covers a bench that "
+                "cannot separate its trials; it does not qualify one. Run `preflight "
+                "--campaign %s --native` and reach `separated: true`, or run this campaign "
+                "somewhere that can (E11-46 R4)." % (what, state["record"], campaign.root))
+        if not state["native_checked"]:
+            raise Usage(
+                "refusing to start %s: the preflight record at %s carries no NATIVE "
+                "read-boundary check, so nothing has established that the harnesses "
+                "THEMSELVES refuse to read another trial's records. The bare-child probe "
+                "measures the filesystem, not the harness. Run `preflight --campaign %s "
+                "--native` (E11-40, E11-46 R4)." % (what, state["record"], campaign.root))
+        if not state["native_separated"]:
+            raise Usage(
+                "refusing to start %s: the native read-boundary check recorded at %s did NOT "
+                "pass; these setups read what they must not: %s. E11-40 makes the rerun "
+                "conditional on it, and no acceptance covers it (E11-46 R4)."
+                % (what, state["record"], ", ".join(state["native_not_separated"]) or "unknown"))
     return state
 
 
@@ -11622,7 +12076,7 @@ def launch_is_fake(setup, launcher):
 
 
 def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch, what,
-                         launcher=None):
+                         launcher=None, trial=None, attempt=0, half=None):
     """Name the run leaf's root, CHECK it, and hand it back for the launch (E11-26, fix 5).
 
     Astra's recheck4 found only two of the runner's launch sites doing both. Every site goes
@@ -11637,23 +12091,74 @@ def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch
     """
     roots = named_writable_roots(run_dir)
     require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
-                             what, enforced=not launch_is_fake(setup, launcher))
+                             what, enforced=not launch_is_fake(setup, launcher),
+                             trial=trial, attempt=attempt, half=half)
     return roots
 
 
+def writable_roots_record_name(what, trial=None, attempt=0, half=None):
+    """The file this guard's record takes, named by trial, attempt and half (E11-46 R5).
+
+    The name used to be a slug of the free-text `what`, and two things collided under it:
+    a RERUN, because the attempt number was nowhere in the name, so attempt 1 overwrote
+    attempt 0's record of the same trial; and the write-fence proof, whose twenty probes all
+    said "the write-fence proof" and left one record of twenty.
+    """
+    if trial:
+        stem = "%s.attempt-%d" % (trial, int(attempt or 0))
+        if half:
+            stem += ".%s" % half
+    else:
+        stem = what
+    return re.sub(r"[^A-Za-z0-9_.-]", "-", stem)
+
+
+def reserve_writable_roots_record(campaign, name):
+    """Claim `<records>/writable-roots/<name>.json` with `O_CREAT|O_EXCL` (E11-46 R5).
+
+    A taken name means two launches share a (trial, attempt, half), which is a collision worth
+    seeing rather than losing: the next free `-N` is claimed and the record says what it
+    collided with. Section 356's race is closed the same way the routing scores close theirs.
+    """
+    base = os.path.join(campaign.records("writable-roots"), name)
+    # `write_json` used to create this directory on the way past; an `os.open` claim does not.
+    ensure_dir(os.path.dirname(base))
+    for index in range(0, 1000):
+        candidate = "%s%s.json" % (base, "" if index == 0 else "-%d" % index)
+        try:
+            handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except OSError as exc:
+            if exc.errno == errno.EEXIST:
+                continue
+            raise
+        os.close(handle)
+        return candidate, (None if index == 0 else "%s.json" % base)
+    raise Failure("no free writable-roots record name for %s under %s" % (name, base))
+
+
 def require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch,
-                             extra_writable, what, enforced=True):
+                             extra_writable, what, enforced=True,
+                             trial=None, attempt=0, half=None):
     """Refuse `what` when the session could not write its own run directory (E11-26)."""
     record = writable_roots_record(setup, condition, workspace, run_dir, scratch,
                                    extra_writable)
     record["for"] = what
+    record["trial"] = trial
+    record["attempt"] = int(attempt or 0)
+    record["half"] = half
     record["enforced"] = bool(enforced)
     if not enforced:
         record["why_not_enforced"] = ("a fake launcher runs this launch: there is no harness "
                                       "sandbox to refuse anything, so the roots are recorded "
                                       "and the launch proceeds")
-    write_json(os.path.join(campaign.records("writable-roots"),
-                            "%s.json" % re.sub(r"[^A-Za-z0-9_.-]", "-", what)), record)
+    path, collided = reserve_writable_roots_record(
+        campaign, writable_roots_record_name(what, trial, attempt, half))
+    record["record_path"] = path
+    if collided:
+        record["collided_with"] = collided
+        record["collision_why"] = ("another launch already claimed this trial, attempt and "
+                                   "half; both records are kept (E11-46 R5)")
+    write_json(path, record)
     # fix 6, NEW MAJOR D-U: "writability could not be established" is not "no refusal". The
     # `bounded: false` exemption let a REAL OpenCode launch through on a home with no
     # `opencode.json`, and Astra proved that launcher needs only its binary and an auth file,
@@ -11684,6 +12189,12 @@ def do_preflight(args):
     document["allow_rules"] = allow_rule_check(campaign, plan,
                                                setups=getattr(args, "setup", None))
     document["campaign"] = campaign.root
+    # E11-46 R4: the NATIVE check, opt-in because it launches real sessions. Absent is never a
+    # pass: `preflight_state` reports `native_checked: False` and a qualification start refuses.
+    if getattr(args, "native", False):
+        document["native"] = native_read_boundary_probe(
+            campaign, plan, setups=getattr(args, "setup", None),
+            timeout=int(getattr(args, "timeout", 300) or 300))
     document["accepted_unseparated"] = bool(getattr(args, "accept_unseparated", False))
     document["what_the_acceptance_covers"] = (
         "--accept-unseparated accepts the READ-BOUNDARY state of this bench and nothing "
@@ -12067,6 +12578,15 @@ def _consumer_expected(producer_row):
     cards = [{"slice": c.get("slice"), "before": c.get("before"), "after": c.get("after")}
              for c in (result.get("cards") or [])]
     state = checkpoint_state(os.path.join(producer_row["record"], "run"))
+    # E11-46 R3: a producer that stopped is still something to recover. `verifier_unavailable`
+    # is a CORRECT terminal outcome of the core (contract section 10: the transport refused the
+    # call deterministically, nothing graded, no card moved), and such a result carries no
+    # items at all. The consumer grader asked "did you recover every item", `bool([])` was
+    # False, and the consumer failed for recovering nothing when there was nothing to recover -
+    # the producer's stop read as the consumer's fault. What the consumer must recover instead
+    # is the STOP: its status and its stated reason.
+    status = result.get("status")
+    stopped = status is not None and status != "completed"
     identity = (result.get("source_identity") or {})
     # Item 6(c): the identity the consumer RECEIVED. The producer's `actual` is its
     # start-of-run identity, taken before its own recording transaction wrote the block and
@@ -12079,6 +12599,9 @@ def _consumer_expected(producer_row):
             else identity
         which = "the producer's actual identity (its result reports no after_run)"
     return {"items": items, "cards": cards, "source_identity_is": which,
+            "producer_status": status,
+            "producer_stopped": stopped,
+            "producer_stop_reason": result.get("stop_reason"),
             # Item 6(e): the whole retained state, not a count.
             "continuation": state,
             "source_identity": actual,
@@ -12196,6 +12719,26 @@ def _artifact_rows(pair, ours, theirs):
     return rows
 
 
+# Every check `consumer_grade` can make, spelled exactly as it sets them. A grade that could
+# not make one lists it under `checks_skipped` rather than recording a False that reads as a
+# failure of the record (E11-46 R3).
+#
+# The names were verified against a real regrade rather than written from memory: the first
+# version of this set invented `isolation_held`, `producer_records_unchanged` and
+# `source_identity_recovered`, none of which the grader sets, so every grade reported three
+# checks as skipped that were never checks at all.
+CONSUMER_CHECKS = frozenset((
+    "answer_present", "original_scope", "item_identity", "evidence_references",
+    "evidence_artifacts_recovered", "card_interpretation", "continuation_state",
+    "result_present", "result_validates", "reply_delivered",
+    "reply_carries_the_output_block", "source_identity_matches_the_producer",
+    "producer_history_preserved", "unrelated_records_unavailable",
+))
+
+# Checks that only apply in one shape of trial; absent is correct, not skipped.
+CONSUMER_CHECKS_CONDITIONAL = frozenset(("producer_stop_recovered", "continuation_state"))
+
+
 def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path=None,
                    validator=None, isolation=None, producer_hashes_after=None):
     """Grade one consumer trial against the producer's own records (E11-7 item 6).
@@ -12240,9 +12783,30 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
                               "artifacts_recovered": all(a["content_matches"]
                                                          for a in artifacts)})
         artifact_rows.extend(artifacts)
-    checks["item_identity"] = bool(identity_rows) and all(
-        r["claim_recovered"] and r["disposition_recovered"] and r["reason_recovered"]
-        for r in identity_rows)
+    # E11-46 R3: a producer that stopped (`verifier_unavailable` and its kin) carries no items,
+    # so "every item recovered" is not the question. The question is whether the consumer
+    # recovered the STOP. Neither a pass nor a crash: its own check, which can fail.
+    if expected["producer_stopped"]:
+        said_status = (answer or {}).get("status")
+        said_reason = (answer or {}).get("stop_reason")
+        grade["producer_stop"] = {
+            "status": expected["producer_status"],
+            "stop_reason": expected["producer_stop_reason"],
+            "status_recovered": said_status == expected["producer_status"],
+            "reason_recovered": (str(said_reason or "").strip()
+                                 == str(expected["producer_stop_reason"] or "").strip()),
+            "why": "the producer's run ended %r; there are no items to recover, and what the "
+                   "consumer must recover is the stop itself (E11-46 R3)"
+                   % expected["producer_status"],
+        }
+        checks["item_identity"] = True
+        checks["producer_stop_recovered"] = bool(
+            grade["producer_stop"]["status_recovered"]
+            and grade["producer_stop"]["reason_recovered"])
+    else:
+        checks["item_identity"] = bool(identity_rows) and all(
+            r["claim_recovered"] and r["disposition_recovered"] and r["reason_recovered"]
+            for r in identity_rows)
     # Item 6(a): every reference, whole, and bound to the producer's own artifacts.
     checks["evidence_references"] = bool(evidence_rows) and all(
         r["references_the_record"] for r in evidence_rows)
@@ -12295,9 +12859,25 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
         except (Missing, Failure):
             result = None
     checks["result_present"] = result is not None
-    checks["result_validates"] = bool(validator and validator.get("ok")
-                                      and validator.get("exit") == 0
-                                      and not validator.get("skipped"))
+    # E11-46 R3: "the validator did not run" is not "the result is invalid". The read-only
+    # regrade passes no validator, so this check read False on nine of the sixteen retained
+    # consumer records - a failure that says the record is bad when it means the check was
+    # never made. An unrun check is SKIPPED and named, and a skipped check is not a pass
+    # either: `checks_skipped` lists it and the grade's `ok` is computed over what was checked.
+    if validator is None:
+        grade["result_validation"] = {
+            "ran": False,
+            "why": "no validator result was supplied: this grade is a read-only regrade of a "
+                   "retained record, which re-runs no validator (E11-46 R3)",
+        }
+    else:
+        grade["result_validation"] = {
+            "ran": True, "exit": validator.get("exit"), "ok": validator.get("ok"),
+            "skipped": validator.get("skipped"),
+        }
+        checks["result_validates"] = bool(validator.get("ok")
+                                          and validator.get("exit") == 0
+                                          and not validator.get("skipped"))
     interop = _interop(result or {}, os.path.dirname(reply_path)) if reply_path else None
     checks["reply_delivered"] = bool(interop and interop.get("reply_delivered"))
     checks["reply_carries_the_output_block"] = bool(interop and interop.get("ok"))
@@ -12346,6 +12926,11 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
         "unrelated_records_present_in_the_pair": pair.get("unrelated_records_present"),
         "ok": all(v is True for v in checks.values()),
         "why": sorted(name for name, passed in checks.items() if passed is not True),
+        # E11-46 R3: the checks this grade could NOT make, named apart from the ones it made
+        # and failed. A skipped check is not a pass; `ok` above is still every check that ran,
+        # and a reader can see which questions went unasked.
+        "checks_skipped": sorted(
+            (CONSUMER_CHECKS - CONSUMER_CHECKS_CONDITIONAL) - set(checks)),
     })
     return grade
 
@@ -12386,6 +12971,11 @@ def do_consumer_regrade(args):
         targets = [row for row in targets if row[0] == args.trial]
         if not targets:
             raise Missing("no recorded consumer trial %s" % args.trial)
+    # E11-46 R3: grading happens only after every consumer session has ENDED. This command
+    # launches nothing, but a record whose session is still running is a record still being
+    # written: grading it reads a half-finished answer and calls the result a measurement. The
+    # same campaign-wide barrier `grade` uses, over the consumer records being graded.
+    refuse_while_alive(campaign, targets)
     rows, errors = [], []
     for tid, attempt, record in targets:
         try:
@@ -12478,7 +13068,8 @@ def do_consumer(args, record=None, attempt=0):
     consumer_scratch = trial_scratch(campaign, args.trial, attempt)
     consumer_writable = guarded_launch_roots(
         campaign, setup, "available", pair["workspace"], pair["run_dir"], consumer_scratch,
-        "the consumer trial %s" % args.trial, launcher=fake)
+        "the consumer trial %s" % args.trial, launcher=fake,
+        trial=args.trial, attempt=attempt)
     step = setup.launch("available", prompt_path, pair["workspace"], harness_dir,
                         plan["timeouts"]["comparison"],
                         extra={"writable": consumer_writable},
@@ -12556,6 +13147,16 @@ def do_consumer(args, record=None, attempt=0):
         "exit": step["exit"], "wall": command["wall_seconds"],
         "cost": cost.get("total_cost_usd"), "model": model.get("id"),
         "graded_ok": grade.get("ok"), "record": record})
+    # E11-46 R5: the SAME failure interruption every other kind emits. `collect_trial` writes
+    # one for a comparison and a continuation that did not complete; the consumer wrote its
+    # ledger line and nothing else, so a consumer that timed out or produced no answer left no
+    # line in `interruptions.jsonl` and a reader counting interruptions saw none of the twelve
+    # consumer failures of the E10 campaign.
+    if status != "complete":
+        campaign.interruption(args.trial, "status %s (exit %s, timed_out %s, answer present %s)"
+                              % (status, step["exit"], bool(step.get("timed_out")),
+                                 os.path.isfile(answer_path)),
+                              "kept the attempt and counted it", attempt=attempt)
     campaign.note("consumer %s -> ok=%s" % (args.trial, grade.get("ok")))
     return {"trial": args.trial, "attempt": attempt, "record": record, "status": status,
             "exit": step["exit"], "consumer_grade": grade, "pair": pair}
@@ -12755,7 +13356,15 @@ def build_parser():
                      help="only these setups (repeatable); default every setup of the plan")
     pre.add_argument("--accept-unseparated", action="store_true",
                      help="record the failure and continue; the campaign's comparison "
-                          "evidence is then uncontrolled and says so")
+                          "evidence is then uncontrolled and says so. It never covers the "
+                          "NATIVE check, and a qualification start refuses on it (E11-40)")
+    pre.add_argument("--native", action="store_true",
+                     help="also run the NATIVE read-boundary check: one real session per "
+                          "setup, under its own tool permissions and through its own verifier "
+                          "route, asked for three reads that must all be refused (E11-46 R4). "
+                          "This launches sessions")
+    pre.add_argument("--timeout", type=int, default=300,
+                     help="per-session timeout for --native")
     pre.set_defaults(func=do_preflight)
 
     one = subs.add_parser("grade", help="validate, match, and the metrics of E10-11")
