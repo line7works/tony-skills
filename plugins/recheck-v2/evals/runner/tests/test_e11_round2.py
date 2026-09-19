@@ -427,12 +427,9 @@ class S1WriteFence(unittest.TestCase):
         self.assertEqual(sorted(table), ["claude-code", "codex", "opencode"])
         for harness, row in table.items():
             self.assertTrue(row["writes"] and row["outbound"])
-            self.assertTrue(row["prevented"])
         # AMENDED after the live proof (e11-round2-proof-s1, 2026-09-18). The table first
         # claimed Codex prevented everything and that Claude Code could not fence a shell
         # redirection. Both were wrong, and the measurement wins:
-        #   * Codex refuses both write routes but does NOT refuse an outbound call - its
-        #     launcher passes sandbox_workspace_write.network_access=true;
         #   * Claude Code refuses the shell redirection too, once the deny path is written
         #     with the double leading slash;
         #   * OpenCode is the harness where the shell redirection actually lands.
@@ -440,9 +437,30 @@ class S1WriteFence(unittest.TestCase):
         self.assertIn("shell redirection", " ".join(table["opencode"]["detected_only"]))
         self.assertNotIn("shell redirection",
                          " ".join(table["claude-code"]["detected_only"]))
-        for harness in ("claude-code", "codex", "opencode"):
+        for harness in ("claude-code", "opencode"):
             joined = " ".join(table[harness]["prevented"])
             self.assertIn("write-kind tool call", joined)
+        # AMENDED AGAIN by SB-2 (2026-09-19). Codex's own sandbox is OFF inside the wall, so
+        # its NATIVE row prevents nothing and says so; what used to be its sandbox's job is
+        # the wall's. A row that kept the old claim would be a false claim in every
+        # `writable-roots` record.
+        self.assertEqual(table["codex"]["prevented"], [])
+        self.assertIn("danger-full-access", table["codex"]["writes"])
+        self.assertIn("write-kind tool call", " ".join(table["codex"]["detected_only"]))
+
+    def test_the_wall_carries_one_service_policy_on_every_route(self):
+        """A2 / Astra's gap 4: the harness rows are per harness; the wall's row is not."""
+        wall = runner.WALL_MECHANISM
+        self.assertEqual(wall["detected_only"], [])
+        joined = " ".join(wall["prevented"])
+        for expected in ("write-kind tool call", "shell redirection",
+                         "another trial's record", "tool, shell, interpreter or verifier"):
+            self.assertIn(expected, joined)
+        import tempfile
+        campaign = runner.Campaign(os.path.join(tempfile.mkdtemp(prefix="fence-"), "c"))
+        for cls in (runner.ClaudeCodeSetup, runner.CodexSetup, runner.OpenCodeSetup):
+            row = runner.fence_mechanism(cls(campaign, stage=campaign.stage))
+            self.assertEqual(row["wall"], wall)
 
     def test_the_claude_code_fence_denies_the_named_roots_and_the_outbound_names(self):
         import importlib.util
@@ -458,9 +476,14 @@ class S1WriteFence(unittest.TestCase):
         self.assertIn("Write(//pilot/home/**)", deny)
         self.assertIn("Edit(//pilot/home/**)", deny)
         self.assertNotIn("Write(/pilot/home/**)", deny)
-        # E11-46 R4: the read side of the same fence, for E11-40's native isolation check.
-        self.assertIn("Read(//pilot/home/**)", deny)
-        self.assertIn("Grep(//pilot/home/**)", deny)
+        # E11-46 R4's READ side is GONE (Astra's gap 1, the sealed bench's A5). `denied_roots`
+        # names the pilot HOMES, and a session's own installed skill lives inside its home, so
+        # the read denials denied the skill its own references, scripts, adapters and schemas
+        # in all twelve with-skill sessions of the round-2 rerun. The read boundary is the
+        # WALL now; the write denials and the outbound denials stay as a second layer.
+        for tool in ("Read", "Glob", "Grep", "NotebookRead"):
+            self.assertNotIn("%s(//pilot/home/**)" % tool, deny)
+        self.assertEqual(module.READ_TOOLS, ())
         self.assertIn("Bash(curl:*)", deny)
         self.assertIn("WebFetch", deny)
         self.assertEqual(len(deny), len(set(deny)))

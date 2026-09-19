@@ -165,6 +165,7 @@ python3 - "$OUT_DIR" "$WORKSPACE" "$PROMPT_FILE" "$SANDBOX" "$START" "$END" "$CO
 import glob
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -189,11 +190,23 @@ with open(trace, "r", encoding="utf-8") as handle:
 
 session_id = result.get("session_id") or init.get("session_id")
 transcript = None
+# The session's own project folder is named after its cwd, every character that is
+# not a letter or a digit replaced by "-". Behind the wall the sibling folders
+# under projects/ are unreadable and the directory itself cannot be LISTED, so the
+# named path is tried first and the glob is the fallback for an unwalled launch.
+slug = re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(workspace))
 if session_id:
     # The live session writes its transcript under the machine's own config
     # directory, not the isolated one, because the isolated one has no sign-in.
     for root in (os.path.expanduser("~/.claude"), config_dir):
-        hits = glob.glob(os.path.join(root, "projects", "*", "%s.jsonl" % session_id))
+        named = os.path.join(root, "projects", slug, "%s.jsonl" % session_id)
+        if os.path.isfile(named):
+            transcript = named
+            break
+        try:
+            hits = glob.glob(os.path.join(root, "projects", "*", "%s.jsonl" % session_id))
+        except OSError:
+            hits = []
         if hits:
             transcript = hits[0]
             break
@@ -238,6 +251,7 @@ document = {
     "trace": trace,
     "transcript": os.path.join(out_dir, "transcript.jsonl") if transcript else None,
     "transcript_source": transcript,
+    "transcript_slug": slug,
 }
 with open(os.path.join(out_dir, "launch.json"), "w", encoding="utf-8") as handle:
     json.dump(document, handle, indent=2)

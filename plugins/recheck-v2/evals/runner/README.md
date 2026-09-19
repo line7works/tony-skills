@@ -982,6 +982,53 @@ The runner is launched from inside a `codex exec` (E10-8), so:
   sandbox line come **before** the `resume` subcommand.
 - **The compaction witness is in the thread's rollout, not the exec event stream** (E10-36).
 
+## 8a. The wall (the sealed bench, A1 to A3)
+
+Every harness launch of a SEALED campaign runs as
+`/usr/bin/sandbox-exec -f <record>/harness/launch.sb <launcher argv>`. One helper,
+`Setup.walled`, builds the prefix for all five launch sites (`ClaudeCodeSetup.launch`,
+`CodexSetup.launch`, `OpenCodeSetup.launch`, the continuation cut's own argv, and the
+compaction resume), writes the profile and its spec into the record, and starts and stops the
+filtering proxy around the launch. `command.json` carries a `wall` block with the profile's
+sha256, the proxy port and the spec path.
+
+- The profile is written by `setups/_wall/write-sandbox-profile.py` from a JSON spec the
+  runner builds out of `guarded_launch_roots`, `denied_roots`, the trial's opaque tree, the
+  stage, the setup home for this condition, and the per-harness needs in each setup's own
+  `wall-needs.json` (data, with a reason per entry).
+- Hazards, measured on macOS 26.6.2 on 2026-09-19:
+  - **The last matching rule wins.** Broad denials first, narrow allows after. A refused root
+    that sits UNDER an allowed root is re-denied at the end; a refused root that CONTAINS an
+    allowed root is denied in the leading block instead, because re-denying it at the end
+    would close the allowed root with it.
+  - **`(deny file-read* (subpath X))` does not stop a binary under X from being EXECUTED.**
+    Exec is `process-exec*`. `uv --version` runs from `~/.local/bin` under a profile that
+    denies every read of `/Users`; `cat` on the same file is refused. A harness that reads its
+    own bundle still needs its install location as a read root.
+  - **`file-read-metadata` must be allowed on every ancestor of every allowed root**, or path
+    resolution fails first: a shell whose cwd is inside an allowed root printed
+    `getcwd: cannot access parent directories: Operation not permitted`.
+  - **`git` aborts on EPERM for `~/.gitconfig`** rather than treating it as absent, so the
+    file is a declared read in both setups' `wall-needs.json`.
+  - **An unreadable cwd breaks Python's path-based imports** before any of the child's own
+    code runs (`_path_importer_cache` raises PermissionError on the `''` entry of `sys.path`).
+    A launch names its workspace, so this bites tests, not trials.
+  - **A second `sandbox-exec` inside the first fails** (`sandbox_apply: Operation not
+    permitted`, exit 71, E9-21). That is why the Codex lane runs `codex exec --sandbox
+    danger-full-access -c approval_policy=never` inside the wall (SB-2) and why the Codex
+    adapter accepts `RECHECK_HARNESS_SANDBOX=sandbox-exec` as a second witness — but only when
+    a read of the path in `RECHECK_WALL_PROBE` is actually refused.
+- The network hole is one loopback port. `evals/runner/wall_proxy.py` is a standard-library
+  CONNECT proxy started OUTSIDE the wall; it allows `CONNECT host:port` only for the setup's
+  own allowlist, refuses plain HTTP, and writes one JSON line per request to
+  `<record>/harness/proxy.jsonl` — time, host, port, allowed or refused, bytes each way, never
+  a header and never a body. A walled launch's environment gains `HTTPS_PROXY`, `HTTP_PROXY`,
+  `ALL_PROXY`, `NO_PROXY` and their lowercase forms; an unwalled one gains none of them.
+- A launch that runs a **fake launcher**, and every launch of a **synthetic campaign**, bypasses
+  the wall and records `wall: {sealed: false, why: ...}`. A campaign whose plan says
+  `sealed: true` refuses `--accept-unseparated`, refuses a recorded ruling, and refuses to
+  launch a real session it cannot wall.
+
 ## 9. Tests
 
 `tests/`, unittest, standard library, run from any directory:
@@ -1004,6 +1051,7 @@ both are set. Every test restores the two key directories on the way out, whatev
 | `test_fake_end_to_end.py` | one trial per setup validating end to end, the model/cost/activation/condition-witness readers per harness, the grade paths, the routing and routing-score paths, the frozen valid cut, the race of finding 15 that can no longer reach the retained pair (E10-55), the poll-interval refusal, and the compaction witness's ordering |
 | `test_e10_62.py` | E10-62: the plan's `model` and `effort` validated (`PlanModelAndEffortTest`), the setup name keying the homes with the three existing sets of paths asserted literally (`SetupNameKeysTheHomesTest`), the **real** `setups/claude-code/launch.sh` driven over a stub `claude` that records its own argv (`ClaudeCodeLauncherFlagsTest`), every launch path carrying the pair, the cut's own argv and both compaction resumes included (`EveryLaunchPathCarriesThePairTest`), the Codex `config.toml` lines (`CodexConfigLinesTest`), the OpenCode model mapping (`OpenCodeModelMappingTest`), and `configured` at both `model.json` write sites with the old defect's reproduction (`ConfiguredPairTest`, `ConfiguredPairInTheRecordTest`) |
 | `test_e10_68.py` | E10-68's three defects and item (e): `HeldOutRequestSurvivesTheBarrierTest` (two lanes launching concurrently with a held-out routing trial each, the barrier closed at every launch — the stub records the mode it met — and the prompt byte-equal to the cached file), `AStringMessageDoesNotKillAReaderTest` (the verbatim `permission_denied` record of the 2026-09-15 campaign's trace line 74, in `tests/fake/permission-denied-system-event.jsonl`, fed to every reader, plus the denial witness), `ADeadLaneIsRecordedTest` (a setup raising inside collection: the lane stop, the status output, the in-flight `command.json` and the non-zero exit), `OpenCodeInstallClearsPriorStateTest` (what `install` clears and what it keeps) |
+| `test_wall_profile.py` | the wall (A5): the profile writer's rule ordering, both path forms, escaping, the ancestor metadata and the refusal of a self-contradicting spec; then PLAIN children under `/usr/bin/sandbox-exec` over a tree with an own trial tree, another trial tree, two homes, a stage and a fake `trials/`+`records/` — `cat`, `python3`, a shell redirection, `cp`, `chmod`, `git -C`, a grandchild through `sh -c`, a symlink out of the own tree and the same path spelled through `/tmp` and `/private/tmp`; the CONNECT proxy (200, 403 with its log line, plain HTTP refused, no headers logged, and a walled child that reaches the allowed host only through the proxy — all on loopback, so it runs offline); and the runner's own `wall_spec`, `Setup.walled` and the two A4 refusals. NOT `test_wall.py`, which is the ANSWER KEY's wall |
 | `test_findings.py` | one test per finding of the review verdict, exercising the real path the finding names, plus the second fix round: `TrialShapeTest` (E10-54(a) and (b)), `TrialConditionedExpectedTest` (E10-54(c) and the summary's reasons by path segment), `FrozenCutTest` (E10-55) and `WithoutTheSkillTest` (E10-56(1)) |
 
 ## 10. What the harnesses cannot do

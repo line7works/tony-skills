@@ -52,6 +52,26 @@ def metadata(events):
     return model,sorted(set(injected))
 
 
+# SB-2 / A3 of the sealed bench: the second accepted witness for "this session is confined".
+# E9-26(a) accepts `CODEX_SANDBOX=seatbelt`, Codex's own marker. On the sealed bench Codex's
+# own sandbox is OFF (macOS refuses a second seatbelt inside the first, E9-21) and the
+# confinement is the launcher's `sandbox-exec` wall. A launcher's word is not a witness, so the
+# marker is accepted only when a read the wall must refuse actually IS refused: the launcher
+# plants `RECHECK_WALL_PROBE` outside every root the profile allows, and this attempts it. A
+# read that SUCCEEDS means there is no wall, and nothing launches, exactly as before.
+WALL_MARKER='sandbox-exec'
+
+
+def wall_refuses(path):
+    """True only when reading `path` raises PermissionError: the wall is there and refusing."""
+    if not path:return False,'RECHECK_WALL_PROBE names no path'
+    try:
+        with open(path,'rb') as handle:handle.read(1)
+    except PermissionError as exc:return True,'the probe read was refused: '+str(exc)
+    except OSError as exc:return False,'the probe read failed for another reason: '+str(exc)
+    return False,'the probe read SUCCEEDED, so no wall refused it'
+
+
 def child_records(events, home):
     """CLI JSON identifies the child; actual model and injected state live in its rollout."""
     threads={e['thread_id'] for e in events if e.get('type')=='thread.started' and e.get('thread_id')}
@@ -85,7 +105,15 @@ def main():
     if not canned:
         home=os.environ.get('CODEX_HOME')
         if not home or not Path(home).is_dir():raise Missing('CODEX_HOME is not set or not a directory; inherited isolated child home required (E9-25); nothing launched')
-        if os.environ.get('CODEX_SANDBOX')!='seatbelt':raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a); nothing launched')
+        if os.environ.get('CODEX_SANDBOX')!='seatbelt':
+            if os.environ.get('RECHECK_HARNESS_SANDBOX')!=WALL_MARKER:
+                raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a), or '
+                              'RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' with a refused '
+                              'RECHECK_WALL_PROBE read (SB-2); nothing launched')
+            refused,why=wall_refuses(os.environ.get('RECHECK_WALL_PROBE'))
+            if not refused:raise Missing('RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' is declared '
+                                         'but the wall does not refuse: '+why+
+                                         '; nothing launched')
     scratch.mkdir(parents=True,exist_ok=True);raw.parent.mkdir(parents=True,exist_ok=True)
     events=scratch/(a.call_id+'.events.jsonl');err=scratch/(a.call_id+'.stderr.log')
     if events.exists():raise ValueError('call capture already exists')

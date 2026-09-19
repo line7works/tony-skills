@@ -34,6 +34,7 @@ opened by `grade`, `routing-score`, and the one-entry text lookup `routing` need
 nothing else. Every launch path runs with both directories unreadable (a test proves it).
 """
 import argparse
+import contextlib
 import errno
 import glob
 import hashlib
@@ -49,6 +50,11 @@ import threading
 import time
 import traceback
 import uuid
+
+# The wall's loopback proxy (A2) lives beside this file; the runner starts it OUTSIDE the
+# profile before a launch and stops it after.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wall_proxy  # noqa: E402
 
 # --------------------------------------------------------------------------- exits
 
@@ -157,7 +163,11 @@ DECLARED_ENV = {
     # E10-20: the one install-time credential, passed to one script, for three homes.
     INSTALL_CREDENTIAL: "the OpenCode install's one credential (E10-20)",
 }
-PATH_BINARIES = ("claude", "codex", "node", "uv", "git", "python3")
+# A3: `sandbox-exec` joins the binaries the runner resolves. It is the executable every real
+# launch now runs, so it is resolved and recorded exactly like the harness binaries rather
+# than assumed at a hard-coded path (`require_wall` refuses a sealed campaign on a machine
+# that has none).
+PATH_BINARIES = ("claude", "codex", "node", "uv", "git", "python3", "sandbox-exec")
 PATH_TAIL = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
 # E10-42: the names each harness sets in its OWN tool shells, below the boundary the runner
@@ -1459,6 +1469,395 @@ def denied_roots(campaign):
     return out
 
 
+
+# --------------------------------------------------------------------------- the wall (A1-A3)
+#
+# Every harness launch of a sealed campaign runs as
+# `/usr/bin/sandbox-exec -f <record>/harness/launch.sb <launcher argv>`. One helper builds the
+# prefix for all four launch sites (`ClaudeCodeSetup.launch`, `CodexSetup.launch`, the
+# continuation cut's own argv and the compaction resume), so a new launch site cannot quietly
+# run outside it: it has to ask for the prefix to get one.
+#
+# The profile itself is written by `setups/_wall/write-sandbox-profile.py` — one writer for
+# every setup — from a spec this file builds out of `guarded_launch_roots`, `denied_roots`,
+# the trial's opaque tree, the stage, the setup home for this condition, and the per-harness
+# needs each setup declares in its own `wall-needs.json`.
+#
+# The runner itself never runs under the profile. A launch that runs a FAKE launcher, and every
+# launch of a synthetic campaign, bypasses the wall and says so in its record; there is no
+# harness there for a wall to confine, and `check`'s synthetic campaigns must keep running on a
+# machine where `sandbox-exec` is not usable.
+
+SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+WALL_SETUP_DIR = "_wall"
+WALL_WRITER_NAME = "write-sandbox-profile.py"
+# A2: the four proxy names, in both cases, added to a WALLED launch's environment only. They
+# match no banned shape, and a launch that is not walled carries none of them, so the fake
+# launcher's own environment is unchanged.
+PROXY_ENV = ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+             "https_proxy", "http_proxy", "all_proxy", "no_proxy")
+# What never goes through the proxy: the loopback the proxy itself is on.
+PROXY_BYPASS = "localhost,127.0.0.1,::1"
+
+
+def wall_writer(stage):
+    """The staged profile writer, falling back to the checkout's copy.
+
+    A trial runs the STAGED copy of everything, so the writer comes from the stage; a probe or
+    a test that has no stage gets the checkout's.
+    """
+    staged = os.path.join(stage or "", "plugins", "recheck-v2", "setups", WALL_SETUP_DIR,
+                          WALL_WRITER_NAME)
+    if stage and os.path.isfile(staged):
+        return staged
+    return os.path.join(PLUGIN_DIR, "setups", WALL_SETUP_DIR, WALL_WRITER_NAME)
+
+
+def wall_needs(setup):
+    """The setup's own `wall-needs.json`, or `{}` when it declares none.
+
+    Data, not code (A1): what a harness needs from outside its own trial tree is a list with a
+    reason per entry, so the control room's live proof can add or remove one without a code
+    change.
+    """
+    for directory in (getattr(setup, "setup_dir", None),
+                      os.path.join(PLUGIN_DIR, "setups", setup.harness)):
+        if not directory:
+            continue
+        path = os.path.join(directory, "wall-needs.json")
+        if os.path.isfile(path):
+            try:
+                return read_json(path, "%s/wall-needs.json" % setup.harness)
+            except (Missing, Failure):
+                return {}
+    return {}
+
+
+def _expand(path):
+    return os.path.abspath(os.path.expanduser(path))
+
+
+def _needs_rows(needs, key):
+    rows = []
+    for entry in needs.get(key) or []:
+        if isinstance(entry, str):
+            entry = {"path": entry}
+        path = entry.get("path")
+        if not path:
+            continue
+        full = _expand(path)
+        if entry.get("optional") and not os.path.exists(full):
+            continue
+        rows.append({"path": full, "why": entry.get("why") or ("%s: %s" % (key, path))})
+    return rows
+
+
+def _binary_read_roots(needs):
+    """The real install location of each binary the setup names.
+
+    Measured 2026-09-19: `(deny file-read* (subpath "/Users"))` does not stop a binary under
+    `/Users` from being EXECUTED — exec is `process-exec*` — but it does stop the bundle from
+    reading its own files, which a harness written in JavaScript does on every start. So the
+    resolved location is a read root and the symlink's directory is not.
+    """
+    rows = []
+    for entry in needs.get("binaries") or []:
+        name = entry.get("name") if isinstance(entry, dict) else entry
+        found = which(name)
+        if not found:
+            continue
+        real = os.path.realpath(found)
+        root = real if os.path.isdir(real) else os.path.dirname(real)
+        rows.append({"path": root,
+                     "why": (entry.get("why") if isinstance(entry, dict) else None)
+                     or "the resolved install location of %s" % name})
+        if real != root:
+            rows.append({"path": real, "why": "the %s executable itself" % name})
+    return rows
+
+
+def claude_project_slug(path):
+    """Claude Code's own folder name for a session's cwd under `~/.claude/projects/`.
+
+    Every character that is not a letter or a digit becomes `-`. Read off this Mac's own
+    `~/.claude/projects/` on 2026-09-19: `/private/tmp/claude-501/-Users-tonycoon/<uuid>/
+    scratchpad/confine-probe` is
+    `-private-tmp-claude-501--Users-tonycoon-<uuid>-scratchpad-confine-probe`. The rule is
+    INFERRED from those names, not from the harness's source, which is why `launch.sh` still
+    falls back to a glob and why the report names this as something a live proof settles.
+    """
+    return re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(path))
+
+
+def _session_transcript_root(needs, workspace):
+    """The ONE folder under `~/.claude/projects/` this session may reach, never the siblings."""
+    block = needs.get("session_transcript")
+    if not isinstance(block, dict) or not block.get("root") or not workspace:
+        return None
+    return {"path": os.path.join(_expand(block["root"]), claude_project_slug(workspace)),
+            "why": block.get("why") or "the session's own transcript folder, and no sibling"}
+
+
+def _home_refusals(campaign, setup, condition):
+    """Every pilot home this launch must NOT reach, with the one it may left out.
+
+    `denied_roots` names the pilot homes by their top-level directory, and for two of the three
+    harnesses the condition's own home either IS that directory (`claude-code` `available`) or
+    sits inside it (`claude-code` `absent`, every Codex condition). Refusing the directory
+    would refuse the launch its own home, so the directory is dropped and the OTHER conditions'
+    homes are named instead. The result refuses exactly what the contract asks for: the other
+    condition's home, every other pilot home, and nothing the launch needs.
+    """
+    mine = os.path.realpath(setup.home(condition))
+    others = []
+    for other in HOMES:
+        if other == condition:
+            continue
+        path = os.path.realpath(setup.home(other))
+        if path == mine or path_contains(path, mine):
+            continue
+        others.append(path)
+    return mine, others
+
+
+def wall_refused_roots(campaign, setup, condition, allowed):
+    """The refused roots for one launch: `denied_roots` with the launch's own home resolved.
+
+    `allowed` is every root the launch may reach; a denied root that IS one of them, or that
+    contains one, is replaced by the sibling homes rather than dropped silently.
+    """
+    mine, others = _home_refusals(campaign, setup, condition)
+    allowed_real = [os.path.realpath(p) for p in allowed]
+    rows = []
+    for root in denied_roots(campaign):
+        real = os.path.realpath(root)
+        if real == mine or path_contains(real, mine):
+            rows.extend({"path": p, "why": "another condition's home for this setup"}
+                        for p in others)
+            continue
+        if any(a == real for a in allowed_real):
+            # something else the launch needs is named as denied; the launch wins and the
+            # record says so, rather than a profile that refuses to build.
+            continue
+        rows.append({"path": real, "why": "denied_roots (E11-45 S1)"})
+    # The campaign's own stores. Each is an ANCESTOR of something this launch may reach
+    # (`tmp/` holds the trial's opaque tree, `trials/` holds its own record), so the writer
+    # emits them in the leading deny block and the narrow allow reopens only this trial's own.
+    for path, why in ((campaign.tmp, "every other trial's opaque tree"),
+                      (campaign.trials, "every other trial's record"),
+                      (os.path.join(campaign.root, "records"), "the campaign's own records"),
+                      (campaign.measurements, "the campaign's measurements"),
+                      (campaign.routing_dir, "the campaign's routing records"),
+                      (os.path.join(campaign.root, "tables"), "the campaign's tables"),
+                      (os.path.join(campaign.root, "probes"), "the campaign's probes")):
+        rows.append({"path": os.path.realpath(path), "why": why})
+    for entry in (wall_needs(setup).get("refused_even_though_the_harness_would_use_them")
+                  or []):
+        rows.append({"path": _expand(entry["path"]),
+                     "why": entry.get("why") or "the setup's own refusal list"})
+    # The machine's own harness state, whatever the harness is: never the pilot's.
+    for path, why in ((os.path.join(os.path.expanduser("~"), ".claude"),
+                       "the machine's own Claude Code state; only the named files and the "
+                       "session's own transcript folder are reopened"),
+                      (os.path.join(os.path.expanduser("~"), ".codex"),
+                       "the machine's own Codex state (E9-25)"),
+                      (os.path.join(os.path.expanduser("~"), "Developer"),
+                       "every checkout"),
+                      (os.path.join(os.path.expanduser("~"), ".local", "share",
+                                    "skills-v2-locked"), "the locked folder (SB-4)")):
+        rows.append({"path": os.path.realpath(path), "why": why})
+    out, seen = [], set()
+    for row in rows:
+        if row["path"] in seen:
+            continue
+        seen.add(row["path"])
+        out.append(row)
+    return out
+
+
+def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None, scratch=None,
+              roots=(), proxy_port=None, opaque_tree=None, label=None):
+    """The JSON spec `write-sandbox-profile.py` turns into one launch's profile."""
+    needs = wall_needs(setup)
+    home = setup.home(condition)
+    record_root = os.path.dirname(os.path.abspath(out_dir))
+    read_roots = [{"path": campaign.stage,
+                   "why": "the staged checkout: the launcher, the skill and the fixtures"}]
+    read_roots.extend(_binary_read_roots(needs))
+    read_roots.extend(_needs_rows(needs, "read"))
+    write_roots = [
+        {"path": record_root,
+         "why": "this trial's own record, which holds the harness capture folder. The "
+                "capture folder itself cannot be the root: setups/codex/launch.sh refuses an "
+                "output directory that already exists, so the runner may not create it."},
+        {"path": home, "why": "the setup home for THIS condition (its session state, its "
+                              "plugin cache, its uv cache)"},
+    ]
+    if opaque_tree:
+        write_roots.append({"path": opaque_tree,
+                            "why": "the trial's own opaque tree: workspace, run leaf, scratch "
+                                   "and the adapters' run root (E10-41)"})
+    for path, why in ((workspace, "the session's workspace"),
+                      (run_dir, "the trial's run directory (the fixture's own run leaf)"),
+                      (scratch, "the trial's own scratch, handed to the launch as TMPDIR")):
+        if path:
+            write_roots.append({"path": path, "why": why})
+    for root in roots or []:
+        write_roots.append({"path": root, "why": "a root guarded_launch_roots named for this "
+                                                 "launch (E11-26)"})
+    write_roots.extend(_needs_rows(needs, "read_write"))
+    transcript = _session_transcript_root(needs, workspace)
+    if transcript:
+        write_roots.append(transcript)
+    allowed = [r["path"] for r in read_roots + write_roots]
+    spec = {
+        "label": label or "%s %s" % (setup.name, condition),
+        "read_roots": read_roots,
+        "read_files": [],
+        "write_roots": write_roots,
+        "refused_roots": wall_refused_roots(campaign, setup, condition, allowed),
+        "proxy_port": proxy_port,
+        "proxy_host": "localhost",
+    }
+    return spec
+
+
+def wall_hosts(setup):
+    """The hosts this setup's proxy allows, from its own `wall-needs.json`."""
+    rows = []
+    for entry in wall_needs(setup).get("network") or []:
+        host = entry.get("host") if isinstance(entry, dict) else entry
+        if host:
+            rows.append(host)
+    return rows
+
+
+def write_wall_profile(campaign, spec, out_dir, stage=None):
+    """Run the staged writer over the spec; keep the spec and the profile in the record."""
+    ensure_dir(out_dir)
+    spec_path = os.path.join(out_dir, "launch-wall.json")
+    profile_path = os.path.join(out_dir, "launch.sb")
+    write_json(spec_path, spec)
+    step = run_cmd([sys.executable, wall_writer(stage or campaign.stage),
+                    "--spec", spec_path, "--out", profile_path],
+                   env=tool_env(), label="write-sandbox-profile.py")
+    if step["exit"] != 0:
+        raise Failure("the wall profile could not be written for %s: %s"
+                      % (spec.get("label"), (step["stderr"] or "")[-800:]))
+    try:
+        summary = json.loads(step["stdout"])
+    except ValueError:
+        raise Failure("write-sandbox-profile.py printed no JSON summary")
+    return profile_path, spec_path, summary
+
+
+class _NoWall(object):
+    """The stand-in a launch gets when there is no harness to confine."""
+
+    def __init__(self, why):
+        self.record = {"sealed": False, "why": why}
+        self.env = {}
+
+    def prefix(self, argv):
+        return list(argv)
+
+
+# A3: what the launcher declares to the session's own adapters, and the file the adapter reads
+# to check the declaration. `RECHECK_HARNESS_SANDBOX=sandbox-exec` is a claim; the probe is the
+# proof, and the Codex verifier refuses to launch when the probe read SUCCEEDS.
+WALL_MARKER = "sandbox-exec"
+WALL_PROBE_NAME = "wall-probe.txt"
+WALL_PROBE_TEXT = ("the wall's probe file. It sits under the campaign's own records, outside "
+                   "every root a launch profile allows, so a session that can read it is not "
+                   "behind a wall (SB-2).\n")
+
+
+def wall_probe_path(campaign):
+    """The file a walled session must NOT be able to read, planted outside every allowed root."""
+    path = os.path.join(campaign.root, "records", WALL_PROBE_NAME)
+    if not os.path.isfile(path):
+        write_text(path, WALL_PROBE_TEXT)
+    return path
+
+
+class _Wall(object):
+    """One profile and one proxy, for the length of one launch."""
+
+    def __init__(self, profile, spec_path, summary, proxy, record, probe=None):
+        self.profile = profile
+        self.spec_path = spec_path
+        self.summary = summary
+        self.proxy = proxy
+        self.record = record
+        self.env = {"RECHECK_HARNESS_SANDBOX": WALL_MARKER}
+        if probe:
+            self.env["RECHECK_WALL_PROBE"] = probe
+        if proxy is not None:
+            url = "http://127.0.0.1:%d" % proxy.port
+            for name in PROXY_ENV:
+                self.env[name] = PROXY_BYPASS if name.lower() == "no_proxy" else url
+
+    def prefix(self, argv):
+        return [SANDBOX_EXEC, "-f", self.profile] + list(argv)
+
+
+@contextlib.contextmanager
+def walled(campaign, setup, condition, out_dir, launcher=None, workspace=None, run_dir=None,
+           scratch=None, roots=(), opaque_tree=None, label=None):
+    """The wall around ONE launch: the profile, the proxy, and the argv prefix.
+
+    Used at all four launch sites. A fake launcher and a synthetic campaign bypass it and
+    record `sealed: false` with the reason; every launch that runs the harness's own
+    executable is sealed, and `sandbox-exec` joins the binaries the runner resolves.
+    """
+    if launch_is_fake(setup, launcher):
+        yield _NoWall("fake launcher")
+        return
+    if campaign.synthetic():
+        yield _NoWall("a synthetic campaign: no harness runs, so there is nothing to confine")
+        return
+    if not os.path.isfile(SANDBOX_EXEC):
+        raise Failure("the wall needs %s and this machine has none" % SANDBOX_EXEC)
+    hosts = wall_hosts(setup)
+    probe = wall_probe_path(campaign)
+    log_path = os.path.join(out_dir, "proxy.jsonl")
+    ensure_dir(out_dir)
+    proxy = wall_proxy.WallProxy(hosts, log_path)
+    proxy.start()
+    try:
+        spec = wall_spec(campaign, setup, condition, out_dir, workspace=workspace,
+                         run_dir=run_dir, scratch=scratch, roots=roots,
+                         proxy_port=proxy.port,
+                         opaque_tree=opaque_tree or (os.path.dirname(scratch)
+                                                     if scratch else None),
+                         label=label)
+        profile, spec_path, summary = write_wall_profile(campaign, spec, out_dir)
+        record = {
+            "sealed": True,
+            "profile": profile,
+            "profile_sha256": file_sha256(profile),
+            "spec_path": spec_path,
+            "proxy_port": proxy.port,
+            "proxy_log": log_path,
+            "proxy_allows": hosts,
+            "summary": summary,
+            "sandbox_exec": SANDBOX_EXEC,
+            "probe": probe,
+            "declared_env_names": sorted(("RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE")
+                                         + PROXY_ENV),
+            "why": "the sealed bench's wall: one OS-level profile per launch, one loopback "
+                   "proxy outside it (A1, A2)",
+        }
+        yield _Wall(profile, spec_path, summary, proxy, record, probe=probe)
+    finally:
+        proxy.stop()
+
+
+def wall_record_of(step):
+    """The `wall` block a launch record carries, for `command.json`."""
+    return (step or {}).get("wall") or {"sealed": False, "why": "no wall record was attached"}
+
+
 class Setup(object):
     harness = None
     name = None
@@ -1495,6 +1894,21 @@ class Setup(object):
         # E10-62 item 3: the SETUP NAME keys the homes, so a second setup of one harness never
         # overwrites the first's install.
         return pilot_home(self.harness, condition, setup_name=self.name)
+
+    # ---- the wall (A3)
+    def walled(self, condition, out_dir, launcher=None, workspace=None, run_dir=None,
+               scratch=None, roots=(), opaque_tree=None, label=None):
+        """`with setup.walled(...) as wall:` — the profile, the proxy and the argv prefix.
+
+        Every launch site goes through this one helper: `wall.prefix(argv)` returns
+        `["/usr/bin/sandbox-exec", "-f", <profile>] + argv`, `wall.env` carries the proxy
+        names for a walled launch and nothing for an unwalled one, and `wall.record` is the
+        `wall` block `collect_trial` writes into `command.json`.
+        """
+        return walled(self.campaign, self, condition, out_dir, launcher=launcher,
+                      workspace=workspace, run_dir=run_dir, scratch=scratch, roots=roots,
+                      opaque_tree=opaque_tree,
+                      label=label or "%s %s" % (self.name, condition))
 
     # ---- what the launcher was told (E10-50, E10-62 item 4)
     def resolved_model(self):
@@ -1718,9 +2132,16 @@ class ClaudeCodeSetup(Setup):
         # E11-45 S1: the write fence, path-scoped, on the harness's own permission layer.
         for root in denied_roots(self.campaign):
             argv += ["--deny", root]
-        if registry is not None:
-            registry.reserved(argv, "launch.sh")
-        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
+        with self.walled(condition, out_dir, launcher=fake, workspace=workspace,
+                         run_dir=(extra or {}).get("run_dir"), scratch=scratch,
+                         roots=(extra or {}).get("writable") or []) as wall:
+            argv = wall.prefix(argv)
+            if registry is not None:
+                registry.reserved(argv, "launch.sh")
+            step = run_cmd(argv, env=dict(env, **wall.env), timeout=timeout,
+                           label="launch.sh", registry=registry)
+        step["wall"] = wall.record
+        return step
 
     def writable_roots(self, condition, workspace, scratch, extra=None):
         record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
@@ -2498,9 +2919,16 @@ class CodexSetup(Setup):
         # command line; nothing of any other trial is shared.
         for root in (extra or {}).get("writable") or []:
             argv += ["--writable", root]
-        if registry is not None:
-            registry.reserved(argv, "launch.sh")
-        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
+        with self.walled(condition, out_dir, launcher=fake, workspace=workspace,
+                         run_dir=(extra or {}).get("run_dir"), scratch=scratch,
+                         roots=(extra or {}).get("writable") or []) as wall:
+            argv = wall.prefix(argv)
+            if registry is not None:
+                registry.reserved(argv, "launch.sh")
+            step = run_cmd(argv, env=dict(env, **wall.env), timeout=timeout,
+                           label="launch.sh", registry=registry)
+        step["wall"] = wall.record
+        return step
 
     def writable_roots(self, condition, workspace, scratch, extra=None):
         record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
@@ -2889,10 +3317,19 @@ class OpenCodeSetup(Setup):
         agent = (extra or {}).get("agent")
         if agent:
             argv += ["--agent", agent]
-        if registry is not None:
-            registry.reserved(argv, "launch.sh")
-        return run_cmd(argv, env=env, timeout=(timeout + 120) if timeout else None,
-                       label="launch.sh", registry=registry)
+        # The OpenCode lanes are a recorded gap of the clean run and do not run, but this is a
+        # launch site and an unsealed launch site is the hole the wall exists to close.
+        with self.walled(condition, out_dir, launcher=fake, workspace=workspace,
+                         run_dir=(extra or {}).get("run_dir"), scratch=scratch,
+                         roots=(extra or {}).get("writable") or []) as wall:
+            argv = wall.prefix(argv)
+            if registry is not None:
+                registry.reserved(argv, "launch.sh")
+            step = run_cmd(argv, env=dict(env, **wall.env),
+                           timeout=(timeout + 120) if timeout else None,
+                           label="launch.sh", registry=registry)
+        step["wall"] = wall.record
+        return step
 
     def catalog(self, condition, out_dir):
         """`opencode debug skill`: the loader's own catalog listing, no model call."""
@@ -3782,8 +4219,10 @@ def do_write_fence(args):
                             "it (a record is never replaced)" % record)
             if os.path.isdir(out_dir):
                 out_dir = os.path.join(record, "harness-%s" % stamp)
-            # NOT created here: Codex's launch.sh refuses an out-dir that already exists
-            # ("refusing to overwrite a live session"). Every launcher creates its own.
+            # Not created here: every launcher creates its own. Codex's launch.sh used to
+            # refuse an out-dir that merely EXISTED; since the wall writes this launch's own
+            # profile, spec and proxy log into it before the launcher runs, that refusal now
+            # names the session records a spent directory holds, the way claude-code's does.
             prompt = os.path.join(base, "%s.txt" % probe)
             write_text(prompt, prompts[probe])
             target = targets[probe]
@@ -4257,6 +4696,12 @@ def validate_plan(plan):
         if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
             problems.append("`routing.repetitions` must be a positive integer, got %r" % (reps,))
 
+    # ---- A4: `sealed` says every launch of this campaign runs behind the wall. It is a
+    # boolean, and a sealed campaign gives up the two escapes (`--accept-unseparated` and a
+    # recorded ruling) that an unsealed one has: a wall either refuses a read or it does not,
+    # and there is nothing left to accept.
+    if "sealed" in plan and not isinstance(plan["sealed"], bool):
+        problems.append("plan.json `sealed` must be true or false, got %r" % (plan["sealed"],))
     if "run_root_name" in plan:
         try:
             check_identifier("run_root_name", plan["run_root_name"])
@@ -4310,6 +4755,9 @@ def do_plan(args):
         # E11-7 item 6: every ordered pair of distinct setups, one directed trial each.
         "consumer_order": consumer_order(plan) if plan.get("consumer", True) else {},
         "synthetic": bool(getattr(args, "synthetic", False)) or bool(plan.get("synthetic")),
+        # A4: carried through so every reader of `campaign.json` sees it, and `sealed --plan`
+        # cannot be lost by a plan file that did not name it.
+        "sealed": bool(plan.get("sealed")) or bool(getattr(args, "sealed", False)),
     })
     # Every id the plan will ever use is checked here, so no launch can mint a path outside
     # `trials/` later (E10-43).
@@ -5371,6 +5819,9 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         "validation_binding": validation_binding,
         "key_boundary": KEY_BOUNDARY_LABEL,
         "key_state_during_the_launch": "closed (mode 000) by the runner before the launch",
+        # A3: the wall this launch ran behind — the profile's hash, the proxy port, the spec —
+        # or `sealed: false` with the reason a fake launcher or a synthetic campaign gives.
+        "wall": wall_record_of(step),
         "scan_hits": len(scan["hits"]),
     }
     if setup.harness == "opencode":
@@ -9734,6 +10185,16 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     if interval > MAX_POLL_INTERVAL:
         raise Usage("--poll-interval %.3f is coarser than E10-47's maximum of %.1f s "
                     "(at least ten times a second)" % (interval, MAX_POLL_INTERVAL))
+    # A3: the third launch site. The cut owns its own `Popen`, so the wall is held open for
+    # the whole poll-freeze-retain sequence and closed in the same `finally` the launch ends
+    # in; `wall_block` is what the record carries.
+    wall_cm = setup.walled("available", out_dir, launcher=launcher, workspace=workspace,
+                           run_dir=run_dir, scratch=scratch, roots=roots,
+                           label="the continuation cut")
+    wall = wall_cm.__enter__()
+    wall_block = wall.record
+    argv = wall.prefix(argv)
+    env = dict(env, **wall.env)
     sys.stderr.write("$ %s   (polled for the cut every %.2fs)\n" % (" ".join(argv), interval))
     if registry is not None:
         registry.reserved(argv, "launch.sh (cut)")
@@ -9793,6 +10254,9 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     if registry is not None:
         registry.ended(child.pid, exit_status)
     ended = time.time()
+    # A3: the launch is over, so the wall comes down — the proxy is stopped here rather than
+    # left to the process's exit, or a long campaign would leak a listener per continuation.
+    wall_cm.__exit__(None, None, None)
     at_cut_checkpoint = os.path.join(out_dir, "at-cut-checkpoint.json")
     at_cut_log = os.path.join(out_dir, "at-cut-checkpoint.log")
     document = None
@@ -9828,6 +10292,7 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
         "every_group_ended": (all(r.get("gone") for r in ended_groups)
                               if ended_groups else None),
         "run_dir_fingerprint_at_the_cut": fingerprint_at_the_cut,
+        "wall": wall_block,
         "observed_at_the_poll": observed,
         "retained": {
             "files": retained,
@@ -9965,13 +10430,23 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         launcher=None)[0]
     prompt = read_text(resume_path, "") or ""
     attempts = []
+    # A3: the fourth launch site. It always builds its argv from the harness's own binary, so
+    # it is always a real launch and always walled (a synthetic campaign still bypasses).
+    wall_cm = setup.walled("available", out_dir, launcher=None, workspace=workspace,
+                           run_dir=run_dir, scratch=scratch, roots=[case_dir],
+                           label="the compaction resume")
+    wall = wall_cm.__enter__()
+    wall_block = wall.record
+    env = dict(env, **wall.env)
     if not session:
+        wall_cm.__exit__(None, None, None)
         return ({"argv": [], "exit": None, "timed_out": False, "wall_seconds": 0.0,
                  "started_at": now_iso(), "ended_at": now_iso(), "stdout": "", "stderr": ""},
                 {"available": COMPACTION[setup.harness]["flag"] is not None,
                  "mechanism": COMPACTION[setup.harness],
                  "witness": None, "attempts": attempts,
                  "verdict": "no resume: the cut session left no session id",
+                 "wall": wall_block,
                  "reason": "the first session left no session id to resume"})
     if setup.harness == "claude-code":
         argv = ["claude", "-p", "--resume", session, "--autocompact",
@@ -9989,6 +10464,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         if setup.effort:
             argv += ["--effort", setup.effort]
         argv += [prompt]
+        argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "resume+autocompact")
         step = run_cmd(argv, env=env, cwd=workspace, timeout=timeout, label="resume+autocompact",
@@ -10004,9 +10480,13 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
                 # fix 5 (D): the run leaf's own root, an `exec` option, so BEFORE `resume`
                 # (E10-35: the subcommand accepts only its own options)
                 "--add-dir", case_dir,
-                "-c", "sandbox_workspace_write.network_access=true",
+                # SB-2: the wall is this lane's sandbox (setups/codex/launch.sh carries the
+                # same two flags and the same reason). `sandbox_workspace_write.network_access`
+                # configured a sandbox this launch no longer uses.
+                "--sandbox", "danger-full-access", "-c", "approval_policy=never",
                 "resume", session, "-c",
                 "model_auto_compact_token_limit=%d" % args.compact_tokens, "-"]
+        argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "exec resume + compact limit")
         step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")), cwd=workspace,
@@ -10030,6 +10510,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         # first session did. This duplicated the alias map inline and took `self.model` raw.
         argv = [binary, "run", "--session", session, "--format", "json", "--model",
                 setup.resolved_model(), prompt]
+        argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "run --session")
         step = run_cmd(argv, env=dict(
@@ -10042,6 +10523,8 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
             label="run --session (no compaction setting exists)", registry=registry)
         write_text(os.path.join(out_dir, "trace.json"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
+    wall_cm.__exit__(None, None, None)
+    step["wall"] = wall_block
     attempts.append({"argv": step["argv"], "exit": step["exit"],
                      "stdout_tail": (step["stdout"] or "")[-1200:],
                      "stderr_tail": (step["stderr"] or "")[-1200:]})
@@ -10054,6 +10537,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         "available": COMPACTION[setup.harness]["flag"] is not None,
         "mechanism": COMPACTION[setup.harness],
         "attempts": attempts,
+        "wall": wall_block,
         "witness": witness,
         "witness_ok": witnessed,
         "verdict": "compaction observed" if witnessed else
@@ -11708,7 +12192,13 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
         ensure_dir(other_home)
         targets = {}
         targets["other_condition_home"] = os.path.join(other_home, NATIVE_SENTINEL_NAME)
-        other_trial = os.path.join(campaign.trials, "native-read-boundary-other")
+        # A4: the probe's own record no longer lives in `trials/`, so neither do its
+        # sentinels. They sit BESIDE the probe records, under
+        # `<campaign>/records/native-read-boundary/sentinels/<setup>/`, which is outside the
+        # one directory the launch's profile makes writable (its own record) and inside the
+        # `records/` root the wall refuses. The planted decoy grade moved with them: a path
+        # the session is told to try, and the wall must refuse.
+        other_trial = os.path.join(campaign.records("native-read-boundary"), "sentinels", name)
         ensure_dir(other_trial)
         targets["other_trial_record"] = os.path.join(other_trial, NATIVE_SENTINEL_NAME)
         grading = os.path.join(other_trial, "grade.json")
@@ -11724,7 +12214,10 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
             {"sentinel": READ_BOUNDARY_SENTINEL, "ok": True,
              "why": "a planted grading record for the native read boundary"}, indent=1)))
         trial_id_ = "native-read-boundary-%s" % name
-        record = os.path.join(campaign.trials, trial_id_)
+        # A4: out of `trials/`. The probe is not a trial, and while it lived under `trials/`
+        # every rig reader had to know to skip it (B3 in the contract) and the wall would have
+        # had to open a hole in the one root it most needs shut.
+        record = os.path.join(campaign.records("native-read-boundary"), name)
         ensure_dir(record)
         out_dir = os.path.join(record, "harness-%s" % stamp)
         prompt = os.path.join(base, "prompt.txt")
@@ -11765,6 +12258,9 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
         write_json(os.path.join(record, "native-read-boundary.json"), row)
         write_json(os.path.join(campaign.records("native-read-boundary"), "%s.json" % name),
                    row)
+        row["record_moved_out_of_trials"] = (
+            "A4: `<campaign>/records/native-read-boundary/<setup>/`, with the sentinels and "
+            "the planted decoy grade under `.../sentinels/<setup>/`")
         rows.append(row)
     failed = [r for r in rows if not r["separated"]]
     return {
@@ -12025,6 +12521,23 @@ def _why_the_ruling_is_not_usable(state):
     return "it is not in the recorded shape"
 
 
+def campaign_is_sealed(campaign):
+    """Does this campaign's plan say every launch runs behind the wall (A4)?"""
+    try:
+        return bool(campaign.plan().get("sealed"))
+    except (Missing, Failure):
+        return False
+
+
+SEALED_ACCEPTANCE_REFUSAL = (
+    "refusing %s: this campaign's plan says `sealed: true`, so every launch runs behind an "
+    "OS-level wall and there is nothing left for an acceptance to cover. "
+    "`--accept-unseparated` accepts a bench that CANNOT separate its trials, and a ruling "
+    "overrides a native measurement that did not pass; a sealed bench either refuses a read "
+    "or it does not, and if it does not, that is a defect in the profile rather than "
+    "something to waive. Fix the wall, or plan the campaign without `sealed` (A4).")
+
+
 def require_preflight(campaign, what, qualification=False):
     """Refuse `what` unless this campaign's preflight passed or was accepted.
 
@@ -12035,9 +12548,15 @@ def require_preflight(campaign, what, qualification=False):
     launch path keeps the older gate, so a probe, a proof root or a single trial is unaffected.
     """
     state = preflight_state(campaign)
+    sealed = campaign_is_sealed(campaign)
     if state is None:
         raise Usage("refusing to run %s: %s" % (what, PREFLIGHT_REFUSAL
                                                 % ("runner.py", campaign.root)))
+    # A4: a sealed campaign gives up both escapes, wherever they were recorded.
+    if sealed and state["accepted_unseparated"]:
+        raise Usage(SEALED_ACCEPTANCE_REFUSAL % what)
+    if sealed and state["ruling"]:
+        raise Usage(SEALED_ACCEPTANCE_REFUSAL % what)
     if not state["separated"] and not state["accepted_unseparated"]:
         raise Usage(
             "refusing to run %s: the read-boundary preflight at %s failed and no acceptance "
@@ -12148,17 +12667,26 @@ FENCE_MECHANISM = {
                       "an outbound call through a denied tool or command name"],
         "detected_only": ["an outbound call an interpreter makes in process"],
     },
+    # AMENDED by SB-2 (2026-09-19). Codex's own sandbox is OFF on this bench:
+    # `setups/codex/launch.sh` runs `codex exec --sandbox danger-full-access -c
+    # approval_policy=never` because macOS refuses a second seatbelt inside the wall
+    # (sandbox_apply: Operation not permitted, exit 71, E9-21) and Codex's own seatbelt allows
+    # every read, so it could never give the separation the bench needs. Everything this row
+    # used to claim natively is now the WALL's, and the row says so rather than keeping a
+    # claim that stopped being true. What the older records measured stays in those records.
     "codex": {
-        "writes": "the sandbox itself: sandbox_workspace_write with writable_roots = the "
-                  "child home plus the roots the runner names, exclude_tmpdir_env_var false",
-        "outbound": "NONE. setups/codex/launch.sh passes "
-                    "`-c sandbox_workspace_write.network_access=true`, so the sandbox does "
-                    "not refuse an outbound call at all",
-        "prevented": ["a write-kind tool call outside the roots",
-                      "a shell redirection to a path outside the roots (measured: "
-                      "'operation not permitted' from the sandbox, nothing landed)"],
-        "detected_only": ["every outbound call: the sandbox is configured to allow the "
-                          "network, so nothing declines one"],
+        "writes": "NONE of its own (SB-2): `--sandbox danger-full-access`. The roots the "
+                  "runner names are still passed as `--add-dir` and still recorded, but "
+                  "nothing in the harness refuses a write outside them; the wall does",
+        "outbound": "NONE of its own: with the sandbox off there is no network setting left "
+                    "to refuse anything. The wall's loopback proxy is the whole policy",
+        "prevented": [],
+        "detected_only": ["a write-kind tool call outside the roots",
+                          "a shell redirection to a path outside the roots",
+                          "every outbound call"],
+        "why_nothing_native": "E9-21: a second seatbelt cannot nest inside the wall, and "
+                              "Codex's own seatbelt allows every read. One sandbox, and it is "
+                              "the wall (SB-2).",
     },
     "opencode": {
         "writes": "permission.external_directory deny rules for every pilot home (including "
@@ -12175,12 +12703,42 @@ FENCE_MECHANISM = {
 }
 
 
+# A2 / Astra's gap 4: ONE service policy on every route. The harness rows above say what each
+# harness can refuse by itself; this says what the wall refuses on every launch that runs a
+# harness's own executable, whatever the harness is and whatever route the attempt takes —
+# tool, shell, interpreter or verifier. F5's outbound attempt is refused the same way by all
+# four, because none of them is a special case to the kernel.
+WALL_MECHANISM = {
+    "writes": "an OS-level sandbox-exec profile per launch: `file-write*` denied everywhere "
+              "except the trial's own opaque tree, its own record, the setup home for this "
+              "condition and the harness state each setup declares in its wall-needs.json",
+    "reads": "`file-read*` denied on the whole user area, every other trial's tree, every "
+             "other condition's home, the campaign's own records and every checkout; the "
+             "staged skill, the trial's own tree and the named harness files are reopened",
+    "outbound": "`network*` denied but one loopback port, where a filtering CONNECT proxy "
+                "started OUTSIDE the wall allows only the setup's own model and sign-in "
+                "hosts and logs every request and refusal",
+    "prevented": ["a write-kind tool call outside the roots",
+                  "a shell redirection to a path outside the roots",
+                  "a read of another trial's record, by any route",
+                  "an outbound call by ANY route: tool, shell, interpreter or verifier",
+                  "an outbound call an interpreter makes in process"],
+    "detected_only": [],
+    "not_applied_to": "a launch that runs a fake launcher, and every launch of a synthetic "
+                      "campaign: there is no harness there to confine, and the record says "
+                      "`wall: {sealed: false}` with the reason",
+}
+
+
 def fence_mechanism(setup):
-    """What THIS setup's harness can refuse natively, and what it can only detect (E11-45 S1)."""
-    return FENCE_MECHANISM.get(getattr(setup, "harness", None) or "", {
+    """What THIS setup's harness can refuse natively, what it only detects, and what the wall
+    refuses whatever the harness does (E11-45 S1, A2)."""
+    row = dict(FENCE_MECHANISM.get(getattr(setup, "harness", None) or "", {
         "writes": "unknown harness: no native fence is claimed",
         "outbound": "unknown harness: no native fence is claimed",
-        "prevented": [], "detected_only": ["everything"]})
+        "prevented": [], "detected_only": ["everything"]}))
+    row["wall"] = WALL_MECHANISM
+    return row
 
 
 def writable_roots_record(setup, condition, workspace, run_dir, scratch, extra_writable):
@@ -12219,6 +12777,32 @@ def named_writable_roots(run_dir):
     return [os.path.dirname(run_dir)]
 
 
+def require_wall(campaign, setup, launcher, what):
+    """A sealed campaign refuses to launch a real session unless the wall is available (A4).
+
+    The check is made BEFORE the launch, at the one place every launch site already passes
+    through, so a sealed campaign cannot produce a trial that silently ran outside the wall.
+    A fake launcher is exempt: there is no harness to confine.
+    """
+    if not campaign_is_sealed(campaign) or launch_is_fake(setup, launcher):
+        return {"required": False,
+                "why": "not a sealed campaign, or this launch runs a fake launcher"}
+    if campaign.synthetic():
+        raise Usage(
+            "refusing to launch %s: the plan says `sealed: true` and the campaign is marked "
+            "synthetic. A synthetic campaign bypasses the wall, so the two cannot both be "
+            "true of one launch (A4)." % what)
+    if not os.path.isfile(SANDBOX_EXEC):
+        raise Usage("refusing to launch %s: the plan says `sealed: true` and this machine has "
+                    "no %s, so no launch of this campaign can run behind the wall (A4)."
+                    % (what, SANDBOX_EXEC))
+    writer = wall_writer(campaign.stage)
+    if not os.path.isfile(writer):
+        raise Usage("refusing to launch %s: the plan says `sealed: true` and the profile "
+                    "writer is not staged (%s). Re-run `stage` (A4)." % (what, writer))
+    return {"required": True, "sandbox_exec": SANDBOX_EXEC, "writer": writer}
+
+
 def launch_is_fake(setup, launcher):
     """Does THIS launch run a stand-in rather than the harness's own executable?
 
@@ -12252,6 +12836,8 @@ def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch
     argv from the harness's own binary.
     """
     roots = named_writable_roots(run_dir)
+    # A4: a sealed campaign refuses a real launch it cannot wall, at the same one place.
+    require_wall(campaign, setup, launcher, what)
     require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
                              what, enforced=not launch_is_fake(setup, launcher),
                              trial=trial, attempt=attempt, half=half)
@@ -12419,6 +13005,9 @@ def do_preflight(args):
     """The read-boundary preflight of E11-7 item 2, run before a campaign starts."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
+    if plan.get("sealed") and (getattr(args, "accept_unseparated", False)
+                               or getattr(args, "ruling", None)):
+        raise Usage(SEALED_ACCEPTANCE_REFUSAL % "this preflight")
     document = read_boundary_probe(campaign, plan,
                                    setups=getattr(args, "setup", None))
     document["allow_rules"] = allow_rule_check(campaign, plan,
@@ -13315,9 +13904,21 @@ def do_consumer(args, record=None, attempt=0):
                         scratch=consumer_scratch)
     # the same measurement the read-boundary preflight makes, in the consumer's own launch
     # environment: can a child of this launch read a record outside its pair?
-    probe = run_cmd([sys.executable, "-c",
-                     "import sys;print('READ' if open(sys.argv[1]).read().strip() else 'EMPTY')",
-                     sentinel],
+    #
+    # A4: and under the consumer's OWN PROFILE. Until now this probe ran with the launch's
+    # environment but none of its confinement, so `separated` said what the filesystem allows
+    # rather than what the session's wall allowed — the same gap E11-46 R4 found between a
+    # bare child and a harness. The profile the launch actually ran under is retained in the
+    # record, so the probe runs behind exactly that one and nothing is inferred.
+    wall_block = wall_record_of(step)
+    probe_argv = [sys.executable, "-c",
+                  "import sys;print('READ' if open(sys.argv[1]).read().strip() else 'EMPTY')",
+                  sentinel]
+    under_the_wall = bool(wall_block.get("sealed")) and \
+        os.path.isfile(wall_block.get("profile") or "")
+    if under_the_wall:
+        probe_argv = [SANDBOX_EXEC, "-f", wall_block["profile"]] + probe_argv
+    probe = run_cmd(probe_argv,
                     env=campaign.env(extra=setup.launch_env("available"),
                                      scratch=trial_scratch(campaign, args.trial, attempt),
                                      require_binaries=False),
@@ -13327,8 +13928,15 @@ def do_consumer(args, record=None, attempt=0):
         "child_read_it": probe["exit"] == 0 and "READ" in (probe["stdout"] or ""),
         "exit": probe["exit"],
         "separated": not (probe["exit"] == 0 and "READ" in (probe["stdout"] or "")),
-        "measured": "a child in this consumer's own launch environment, item 6(f); the flag "
-                    "is read ACCESS, never the pair folder's contents",
+        "under_the_wall": under_the_wall,
+        "profile": wall_block.get("profile") if under_the_wall else None,
+        "profile_sha256": wall_block.get("profile_sha256") if under_the_wall else None,
+        "measured": ("a child under this consumer's OWN sandbox profile, item 6(f) and A4; "
+                     "the flag is read ACCESS, never the pair folder's contents"
+                     if under_the_wall else
+                     "a child in this consumer's own launch environment with no wall (a fake "
+                     "launcher or a synthetic campaign): the flag says what the FILESYSTEM "
+                     "allows, not what a walled session could reach"),
     }
     # Item 6(b): the consumer's own result, validated the way every other result is.
     result_path = os.path.join(pair["run_dir"], "result.json")
@@ -13546,6 +14154,9 @@ def build_parser():
     one.add_argument("--synthetic", action="store_true",
                      help="mark the campaign synthetic, so an E10-21 key stand-in is honoured "
                           "(tests and `check` only)")
+    one.add_argument("--sealed", action="store_true",
+                     help="every launch of this campaign runs behind the wall; "
+                          "--accept-unseparated and a ruling override are refused (A4)")
     one.set_defaults(func=do_plan)
 
     one = subs.add_parser("run", help="one comparison trial end to end")

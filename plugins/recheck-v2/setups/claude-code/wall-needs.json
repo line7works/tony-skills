@@ -1,0 +1,36 @@
+{
+  "setup": "claude-code",
+  "note": "What a Claude Code launch needs from outside its own trial tree, as data, with a reason per entry. The runner reads this file, resolves the binaries and the `~` forms, and hands the result to setups/_wall/write-sandbox-profile.py. Nothing here is prose for a model; it is the profile's input. An entry marked `proven: false` has NOT been measured against a live session yet - the control room's walled proof either keeps it or takes it out.",
+  "binaries": [
+    {"name": "claude", "why": "the harness itself; the resolved install directory is a read root because the executable reads its own files. Execution alone needs no read rule (measured 2026-09-19: process-exec is not file-read*), the bundle's own reads do.", "proven": true},
+    {"name": "node", "why": "the runtime the harness may re-exec; resolved only when it is on PATH.", "proven": true}
+  ],
+  "read": [
+    {"path": "~/.local/bin", "why": "`command -v claude` in launch.sh stats the PATH entry, and the runner's PATH names this directory. A directory of symlinks, no content.", "proven": true},
+    {"path": "~/Library/Keychains", "why": "the sign-in item `Claude Code-credentials` (class genp) lives in the login keychain; E10-7's USER measurement shows the harness answers only when it can reach it.", "proven": false},
+    {"path": "~/.gitconfig", "why": "git aborts with `fatal: unable to access '~/.gitconfig': Operation not permitted` on EPERM rather than treating the file as absent, so `git --version` and every `git -C` inside a trial fail without it. Measured 2026-09-19.", "optional": true, "proven": true}
+  ],
+  "read_write": [
+    {"path": "~/.claude.json", "why": "the harness rewrites its own top-level state file on every session; a read-only copy makes the session fail to start.", "proven": false},
+    {"path": "~/.claude/.credentials.json", "why": "the sign-in store when the Keychain item is not used. Absent on this Mac at the time of writing; named optional so the profile skips it when it is not there.", "optional": true, "proven": false}
+  ],
+  "session_transcript": {
+    "root": "~/.claude/projects",
+    "slug_rule": "every character of the session's cwd that is not a letter or a digit becomes `-` (so `/private/tmp/x` is `-private-tmp-x`). ONLY the session's own slug folder is allowed; the siblings are refused with the rest of `~/.claude`.",
+    "why": "launch.sh copies the session's transcript back from this folder after the session ends.",
+    "proven": false
+  },
+  "maybe_needed_ask_the_proof": [
+    {"path": "~/.claude/settings.json", "why": "the launch passes --setting-sources local, so the machine's user settings should not be read. Left OUT; the control room's walled proof says whether the session starts without it."},
+    {"path": "~/.claude/shell-snapshots", "why": "left out until a proof shows a headless session writes one."},
+    {"path": "~/.claude/todos", "why": "left out until a proof shows a headless session writes one."},
+    {"path": "~/.claude/statsig", "why": "left out until a proof shows a headless session writes one."}
+  ],
+  "network": [
+    {"host": "api.anthropic.com", "why": "the model endpoint", "proven": false},
+    {"host": "console.anthropic.com", "why": "sign-in and account state", "proven": false},
+    {"host": "claude.ai", "why": "sign-in", "proven": false},
+    {"host": "statsig.anthropic.com", "why": "the harness's own feature-flag service; refusing it is recorded, not hidden", "proven": false},
+    {"host": "platform.claude.com", "why": "account and entitlement reads", "proven": false}
+  ]
+}

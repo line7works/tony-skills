@@ -232,3 +232,65 @@ class InstallCredentialTest(RunnerCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WalledLaunchEnvironmentTest(RunnerCase):
+    """A2: the proxy names, and the wall's two declarations, on a WALLED launch only.
+
+    The allowlist itself does not grow. `allowlist_env` starts from nothing and adds the names
+    it is given; the wall gives a walled launch four proxy names in both cases plus
+    `RECHECK_HARNESS_SANDBOX` and `RECHECK_WALL_PROBE`, and gives an unwalled one none of
+    them, which is why the fake-launcher test above still sees the allowlist plus one pointer.
+    """
+
+    def test_the_proxy_names_are_declared_in_both_cases(self):
+        self.assertEqual(sorted(runner.PROXY_ENV),
+                         sorted(["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+                                 "https_proxy", "http_proxy", "all_proxy", "no_proxy"]))
+
+    def test_no_declared_wall_name_matches_a_banned_shape(self):
+        for name in runner.PROXY_ENV + ("RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE"):
+            self.assertIsNone(runner.BANNED_ENV_RE.match(name), name)
+
+    def test_an_unwalled_launch_carries_none_of_them(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        with setup.walled("available", os.path.join(self.scratch, "harness"),
+                          launcher=self.fake_launcher("claude-code")) as wall:
+            self.assertEqual(wall.env, {})
+
+    def test_a_walled_launch_carries_the_proxy_url_and_the_wall_declarations(self):
+        """No harness and no model: the wall is built directly, around nothing."""
+        campaign = runner.Campaign(self.campaign)
+        # `walled` bypasses for a synthetic campaign, which every test campaign is, so the
+        # pieces are exercised directly rather than through a campaign that would skip them.
+        log = os.path.join(self.scratch, "proxy.jsonl")
+        proxy = runner.wall_proxy.WallProxy(["api.anthropic.com"], log)
+        proxy.start()
+        self.addCleanup(proxy.stop)
+        probe = runner.wall_probe_path(campaign)
+        wall = runner._Wall("/dev/null", "/dev/null", {}, proxy, {"sealed": True},
+                            probe=probe)
+        self.assertEqual(wall.env["HTTPS_PROXY"], "http://127.0.0.1:%d" % proxy.port)
+        self.assertEqual(wall.env["https_proxy"], wall.env["HTTPS_PROXY"])
+        self.assertEqual(wall.env["NO_PROXY"], runner.PROXY_BYPASS)
+        self.assertEqual(wall.env["no_proxy"], runner.PROXY_BYPASS)
+        self.assertEqual(wall.env["RECHECK_HARNESS_SANDBOX"], runner.WALL_MARKER)
+        self.assertEqual(wall.env["RECHECK_WALL_PROBE"], probe)
+        self.assertTrue(os.path.isfile(probe))
+        built = campaign.env(extra=wall.env, require_binaries=False)
+        self.assertEqual(sorted(n for n in runner.banned_names(built)), [])
+        self.assertEqual(wall.prefix(["sh", "launch.sh"]),
+                         ["/usr/bin/sandbox-exec", "-f", "/dev/null", "sh", "launch.sh"])
+
+    def test_the_wall_probe_sits_outside_every_root_a_launch_profile_allows(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        probe = runner.wall_probe_path(campaign)
+        spec = runner.wall_spec(campaign, setup, "available",
+                                os.path.join(campaign.trials, "a-trial", "harness"),
+                                workspace=os.path.join(self.scratch, "ws"),
+                                scratch=os.path.join(self.scratch, "tree", "scratch"))
+        for row in spec["read_roots"] + spec["write_roots"]:
+            self.assertFalse(runner.path_contains(row["path"], probe),
+                             "%s allows the probe file" % row["path"])

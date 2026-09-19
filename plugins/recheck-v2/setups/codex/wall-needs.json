@@ -1,0 +1,20 @@
+{
+  "setup": "codex",
+  "note": "What a Codex launch needs from outside its own trial tree. The wall is the sandbox for this lane (SB-2): `codex exec` runs with `--sandbox danger-full-access` inside it, because macOS refuses a second seatbelt inside the first. Nothing under `~/.codex` is reachable; the condition's own CODEX_HOME is the only harness home in the profile.",
+  "binaries": [
+    {"name": "codex", "why": "the harness itself; the resolved install location is a read root.", "proven": true}
+  ],
+  "read": [
+    {"path": "~/.local/bin", "why": "PATH resolution and `command -v` for the launcher's own checks.", "proven": true},
+    {"path": "~/.gitconfig", "why": "git aborts on EPERM for the global config rather than treating it as absent (measured 2026-09-19).", "optional": true, "proven": true}
+  ],
+  "read_write": [],
+  "refused_even_though_the_harness_would_use_them": [
+    {"path": "~/.codex", "why": "the machine's own Codex home. E9-25 keeps the pilot home separate and the wall enforces it."}
+  ],
+  "network": [
+    {"host": "chatgpt.com", "why": "the model endpoint for a ChatGPT sign-in", "proven": false},
+    {"host": "api.openai.com", "why": "the model endpoint for an API sign-in", "proven": false},
+    {"host": "auth.openai.com", "why": "sign-in", "proven": false}
+  ]
+}
