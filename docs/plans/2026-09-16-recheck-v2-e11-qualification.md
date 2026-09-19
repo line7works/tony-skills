@@ -1216,3 +1216,49 @@ to exactly the held-out request text.
   an hour ahead of the machine (the board's stamps for the same events read 6:09 PM, 6:34 PM and 6:47 PM); a
   session has no clock, and this entry's times come from `date`. Next: Astra's one verification at high on
   copy9 at `7de6e3b`.
+- **E11-53, Astra's ONE verification of round 2: one item cleared, nine carried, one new BLOCKER; nothing is
+  fixed (ruling 17); the rerun proceeds on E11-50 (2026-09-18 about 8:00 PM by the machine's clock, control
+  room).** Astra (GPT-6) at high on copy9 (repair at `7de6e3b`, scrubbed, 0 scan hits on nine record folders,
+  the wall checked), mandate `astra-kit/mandate-round2-verify.md`, 7:35 PM to 7:52 PM, exit 0, 98 events. Filed
+  at `astra-outputs/e11/round2-verify/` (verdict, prompt, stderr, exit, events, her probe scripts and logs; her
+  fresh plugin copy left out). Her lines, verbatim:
+  S1 CARRIED MAJOR: The recorded probes distinguish refusals from landed writes, but OpenCode shell writes
+  remain possible and the Claude Code proof covers named home paths rather than every outside destination.
+  S2 CARRIED BLOCKER: An executed claim naming the service clears the item with an empty file or a retained
+  DNS failure, and the validator accepts both.
+  S3 CARRIED MAJOR: Recognised refusal and missing-input cases map correctly, but an executed command entry
+  with no observed result defaults to reproduces.
+  S4 CARRIED MAJOR: The core renders the block and the grader checks delivery, but the new adapter checkers
+  have no production caller.
+  R1 CLEARED: Dotted captures, sidecar exclusion and the one-slot producer boundary hold, and the supplied
+  replay retains 126 comparison/continuation grades, 16 consumer grades and four routing scores without
+  decision flips.
+  R2 CARRIED MAJOR: Eight false destinations disappear and all 19 real destinations remain, but the ninth
+  false detection, incomplete action accounting and the declared source/model gaps remain.
+  R3 CARRIED BLOCKER: The consumer test still lacks complete caller facts, rejects valid artifact relocation,
+  grades during the consumer phase and lacks an explicit completed-consumer requirement.
+  R4 CARRIED BLOCKER: Native separation fails as recorded and is waived by E11-50, while verifier-route
+  attribution, ruling provenance and complete cross-trial reporting remain insufficient.
+  R5 CARRIED BLOCKER: Root reservations and census improvements hold, but original grades remain replaceable,
+  the new liveness check can admit grading during a live child, and cost/copy accounting remains incomplete.
+  R6 CARRIED MAJOR: The documented attempted-execution method agrees with the F5 key, but the chosen
+  deterministic policy refusal is not enforced on every route.
+  The replace-never-number reversal: UNSOUND as implemented (a named revision leaves the original and other
+  revisions intact, but `grade` with no `--revision` replaces `grade.json`). NEW BLOCKER N1 (R5 liveness: a live
+  recorded child is ignored when the process start time is unavailable, contradicting "unknown counts as
+  alive"). NEW MAJORs N2 (S3: an executed entry with no observed result, or even a success output, derives
+  `reproduces`), N3 (S4: the adapters' `output_block.py` checkers are called only by tests), N4 (R4: parent and
+  verifier route labels read the same capture text, so one parent refusal reports two), N5 (R4: a copied
+  ruling measurement and an empty native JSON are accepted without their source being re-established). Her
+  test tails: core round-2 19 OK; runner round-2 128 with 4 failures in her sandbox, three from `ps -o lstart=`
+  being refused there and one exposing N1. Her limits per item are in the verdict's section 4 and go into the
+  round-2 report as written. **What this means for the rerun, stated before it starts:** by her R3 limit the
+  consumer pass and fail counts cannot qualify cross-setup consumption, and E11-41 requires both directed
+  pairs to pass, so the rerun can report demonstrated capabilities and gaps per setup but cannot by itself
+  support "qualified" on the pairs; by R4 it is an unseparated-bench run under E11-50, not an isolated
+  comparison. **Operating cautions the control room takes from it:** never run `grade` on the new root without
+  `--revision`; never grade, regrade or score while any session is live (N1), whatever the barrier says; the
+  consumers' first grades are written as each consumer ends, so the consumer phase is read only after the
+  campaign loop has ended. No builder is started; no code changes. The control room has not yet read her
+  findings against the code; that reading belongs to the report after the rerun. Next: the fresh root, the
+  native preflight, the recorded ruling, the balance read, both reported in chat, then the launch.
