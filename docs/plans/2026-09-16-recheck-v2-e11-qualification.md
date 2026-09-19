@@ -1383,3 +1383,35 @@ to exactly the held-out request text.
   ruling 17 and E11-40 close the round with no round 3. What remains is Tony's: A12a (the guide compile), the
   E11 close hand-off, the Phase 4 estimate with the OS-level wall as its first item, and the old negative-test
   homes.
+- **E11-58, Tony's close of the round: the next phase named, the thread cleared, the code merged (2026-09-19
+  about 6:45 AM by the machine's clock, control room).** After both readings Tony asked for the overall
+  assessment, then for the goal of the whole project, then: "Am I correct in assuming that if we don't fix 2
+  and 3 in the portable method, then there's no point to doing steps 12 to 219?" (12 to 19, dictated). The
+  control room's answer, which he accepted by his next message: mostly yes. The pilot has to answer three
+  questions: (1) does the skill do its job on each tool; (2) does having it beat not having it; (3) can one
+  tool pick up another tool's work. Three runs answered (1) in part (reliable record-keeping on every tool;
+  no demonstrated gain in judgment; the two cheap models often return nothing) and could not measure (2) or
+  (3), because the baseline cannot pass a card by design, the hand-off test cannot pass on an unsealed bench,
+  and copies of the answer key sit outside every wall. **His ruling, verbatim:** "Okay, we're going to clear
+  and do steps 1 and 2 on goal setting, and then we can evaluate with step 3. Prep the thread for me to clear.
+  Give me a handoff with all of our thoughts and findings so we don't lose anything here. PR and merge if we
+  need to before we start." The steps he names are the control room's list: step 1, build the sealed bench and
+  fix the two design faults (the baseline that cannot pass; the hand-off test); step 2, one clean run that
+  answers questions 2 and 3; step 3, decide on E12 to E19 with a real answer (yes, no, or two tools only). This
+  is the next phase, not a third round of E11: E11's decision stands as DOES NOT QUALIFY and E11 is closed by
+  this entry. He sets the goal himself in the fresh window. **Merged under his word:** PR #68
+  (`docs/guide-findings-e11`, the one local `main` commit `017e51b`, merge `fd9b7ee`) and PR #69
+  (`feat/recheck-v2-e11-repair`, 18 commits to `7de6e3b`, merge `f8288c9`), both merge commits, no CI
+  configured; local `main` fast-forwarded to `f8288c9`, Tony's dirty `docs/feedback.md` and untracked
+  `docs/ideas.md` untouched. PR #69's description names every carried defect and the one production-facing
+  line (`plugins/readers/skills/readers/SKILL.md`, the scratch directory is the caller's `run_dir`; no version
+  bump). **Held, flagged to Tony:** this docs branch is NOT pushed. `line7works/tony-skills` is a PUBLIC
+  repository under the Line 7 organisation, and this file's E11-50 carries one line of Tony's ruling verbatim
+  with a profanity; the record may not be reworded, the next phase does not need the branch on the remote, and
+  putting that line on a public brand repository is his call, not the control room's. **A finding from the
+  same look, not acted on:** the answer key (21 files) and the held-out request set have been on that public
+  repository since PR #66, so any session with web access could have read them; Codex ran with network on in
+  every campaign. It belongs on the sealed bench's list beside the 27 old negative-test homes. Clerk's packet
+  branch `audit/tony-skills-2026-09-12` (private repository, 82 commits ahead of its `main`) is not pushed and
+  not needed to start. The close hand-off: `~/Documents/handoffs/2026-09-19-skills-v2-e11-close-handoff.md`.
+  Still on Tony's word: the 27 negative-test homes (lock away, delete, or leave), A12a, this branch's PR.
