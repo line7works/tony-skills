@@ -5,6 +5,7 @@ Batch A's tests fail against `4351654`, the fix-8 tip; batch B's fail against
 Each names the package item and the finding it closes. Standard library only, Python 3.9,
 run from any directory.
 """
+import argparse
 import glob
 import json
 import os
@@ -1121,8 +1122,174 @@ class R4NativePreflight(RunnerCase):
 
     def test_the_campaign_start_gate_asks_as_a_qualification(self):
         source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
-        self.assertIn('require_preflight(campaign, "this campaign", '
-                      'qualification=not campaign.synthetic())', source)
+        # AMENDED (E11-50): the gate's return value is now kept, because the ruling it
+        # validated is written into campaign.json and the log by `record_campaign_ruling`.
+        self.assertIn('state = require_preflight(campaign, "this campaign",', source)
+        self.assertIn("qualification=not campaign.synthetic())", source)
+        self.assertIn("record_campaign_ruling(campaign, state)", source)
+
+
+    # ---- E11-50: the recorded ruling
+    RULING_TEXT = ("run the rerun on the bench as measured, every cross-trial read recorded "
+                   "and reported by name")
+
+    def ruling_block(self, **over):
+        block = {"id": "E11-50", "text": self.RULING_TEXT, "recorded_at": "2026-09-19T00:00:00Z",
+                 "overrides": {"native_separated": False,
+                               "per_setup": {"codex": {"refused": 0, "read": 6, "unclear": 0,
+                                                       "separated": False}}}}
+        block.update(over)
+        return block
+
+    def test_an_acceptance_with_a_recorded_ruling_qualifies(self):
+        campaign = self.plant_preflight(
+            separated=False, accepted_unseparated=True,
+            native={"separated": False, "not_separated": ["codex"]},
+            ruling=self.ruling_block())
+        state = runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertEqual(state["ruling"]["id"], "E11-50")
+
+    def test_an_acceptance_without_a_ruling_is_still_refused(self):
+        campaign = self.plant_preflight(
+            separated=False, accepted_unseparated=True,
+            native={"separated": False, "not_separated": ["codex"]})
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "this campaign", qualification=True)
+        said = str(caught.exception)
+        self.assertIn("--ruling", said)
+        self.assertIn("--ruling-text", said)
+
+    def test_a_ruling_carries_the_measurement_so_an_earlier_native_run_counts(self):
+        """AMENDED (E11-50): the control room's own command records the acceptance WITHOUT
+        re-running `--native`, and the ruling copies the per-setup measurement into itself.
+        A record that carries the ruling therefore carries the measurement, and the state says
+        which of the two it read. The "may only override something measured" rule is enforced
+        where it belongs - at record time, in `preflight_ruling` - and is kept by the test
+        below."""
+        campaign = self.plant_preflight(separated=False, accepted_unseparated=True,
+                                        ruling=self.ruling_block())
+        state = runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertTrue(state["native_checked"])
+        self.assertEqual(state["native_checked_from"],
+                         "the measurement copied into the ruling block")
+        self.assertEqual(state["native_not_separated"], ["codex"])
+
+    def test_a_ruling_may_only_be_recorded_over_something_measured(self):
+        """The rule, at the place it is enforced: no native record, no ruling."""
+        campaign = runner.Campaign(self.campaign)
+        args = argparse.Namespace(ruling="E11-50", ruling_text=self.RULING_TEXT,
+                                  accept_unseparated=True)
+        with self.assertRaises(runner.Usage) as caught:
+            runner.preflight_ruling(campaign, args, None)
+        self.assertIn("carries no NATIVE read-boundary measurement", str(caught.exception))
+
+    def test_a_half_written_ruling_is_refused_and_says_which_part(self):
+        campaign = self.plant_preflight(
+            separated=False, accepted_unseparated=True,
+            native={"separated": False, "not_separated": ["codex"]},
+            ruling=self.ruling_block(text=""))
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertIn("it carries no text", str(caught.exception))
+
+    def test_a_ruling_that_overrides_nothing_measured_is_refused(self):
+        campaign = self.plant_preflight(
+            separated=False, accepted_unseparated=True,
+            native={"separated": False, "not_separated": ["codex"]},
+            ruling=self.ruling_block(overrides={"native_separated": False}))
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_preflight(campaign, "this campaign", qualification=True)
+        self.assertIn("overrides nothing that was measured", str(caught.exception))
+
+    def test_the_ruling_round_trips_through_the_record(self):
+        campaign = self.plant_preflight(
+            separated=False, accepted_unseparated=True,
+            native={"separated": False, "not_separated": ["codex"]},
+            ruling=self.ruling_block())
+        state = runner.preflight_state(campaign)
+        self.assertEqual(state["ruling"]["text"], self.RULING_TEXT)
+        self.assertEqual(state["ruling"]["overrides"]["per_setup"]["codex"]["read"], 6)
+        self.assertIs(runner.valid_preflight_ruling(state) is None, False)
+
+    def test_the_counts_are_copied_from_the_native_record(self):
+        campaign = runner.Campaign(self.campaign)
+        native = {"separated": False, "rows": [{
+            "setup": "codex", "separated": False, "not_refused": ["other_trial_record"],
+            "reads": {"a": {"outcome": "read"}, "b": {"outcome": "refused"},
+                      "c": {"outcome": "unclear"}},
+            "verifier_reads": {"a": {"outcome": "read"}, "b": {"outcome": "refused"},
+                               "c": {"outcome": "unclear"}}}]}
+        got = runner.native_measurement_for_a_ruling(campaign, native)
+        self.assertEqual(got["per_setup"]["codex"],
+                         {"refused": 2, "read": 2, "unclear": 2, "separated": False,
+                          "not_refused": ["other_trial_record"]})
+        self.assertFalse(got["native_separated"])
+
+    def test_a_ruling_id_with_no_text_is_refused_at_the_cli_layer(self):
+        campaign = runner.Campaign(self.campaign)
+        args = argparse.Namespace(ruling="E11-50", ruling_text="  ",
+                                  accept_unseparated=True)
+        with self.assertRaises(runner.Usage) as caught:
+            runner.preflight_ruling(campaign, args, {"separated": False, "rows": [
+                {"setup": "codex", "reads": {}, "verifier_reads": {}}]})
+        self.assertIn("a label, not a record", str(caught.exception))
+
+    def test_a_ruling_without_the_acceptance_is_refused(self):
+        campaign = runner.Campaign(self.campaign)
+        args = argparse.Namespace(ruling="E11-50", ruling_text="x", accept_unseparated=False)
+        with self.assertRaises(runner.Usage):
+            runner.preflight_ruling(campaign, args, None)
+
+    def test_campaign_json_and_the_log_carry_the_ruling_id(self):
+        campaign = self.plant_preflight(
+            separated=False, accepted_unseparated=True,
+            native={"separated": False, "not_separated": ["codex"]},
+            ruling=self.ruling_block())
+        state = runner.preflight_state(campaign)
+        written = runner.record_campaign_ruling(campaign, state)
+        self.assertEqual(written["id"], "E11-50")
+        self.assertEqual(campaign.plan()["ruling"]["id"], "E11-50")
+        self.assertEqual(campaign.plan()["ruling"]["text"], self.RULING_TEXT)
+        self.assertIn("E11-50", runner.read_text(campaign.log) or "")
+
+    def test_no_ruling_writes_nothing_into_campaign_json(self):
+        campaign = self.plant_preflight(separated=True)
+        self.assertIsNone(runner.record_campaign_ruling(campaign,
+                                                        runner.preflight_state(campaign)))
+        self.assertNotIn("ruling", campaign.plan())
+
+    # ---- E11-50: the reads the report must name
+    def test_the_summary_names_cross_trial_reads_per_setup_with_targets(self):
+        rows = [{"trial": "codex-F1-r1", "attempt": 0, "setup": "codex",
+                 "records_reached": {"reached": True, "reads": [
+                     {"path": "/c/trials/other/result.json", "operation": "read of contents",
+                      "capture": "harness/rollout.jsonl"},
+                     {"path": "/c/trials/other/grade.json", "operation": "listing",
+                      "capture": "harness/rollout.jsonl"}]}},
+                {"trial": "codex-F2-r1", "attempt": 0, "setup": "codex",
+                 "records_reached": {"reached": True, "reads": [
+                     {"path": "/c/trials/other/result.json", "operation": "read of contents",
+                      "capture": "harness/rollout.jsonl"}]}},
+                {"trial": "cc-F1-r1", "attempt": 0, "setup": "claude-code",
+                 "records_reached": {"reached": False, "reads": []}}]
+        got = runner.cross_trial_reads(rows)
+        self.assertEqual(got["setups_with_a_cross_trial_read"], ["codex"])
+        codex = got["per_setup"]["codex"]
+        self.assertEqual(codex["attempts_that_reached_another_trial"], 2)
+        self.assertEqual(sorted(codex["targets"]), ["/c/trials/other/grade.json",
+                                                    "/c/trials/other/result.json"])
+        self.assertEqual(codex["targets"]["/c/trials/other/result.json"]["attempts"],
+                         ["codex-F1-r1#0", "codex-F2-r1#0"])
+        self.assertEqual(codex["targets"]["/c/trials/other/grade.json"]["operations"],
+                         ["listing"])
+
+    def test_grade_summary_carries_it(self):
+        summary = runner.grade_summary([{"trial": "t", "attempt": 0, "setup": "codex",
+                                         "records_reached": {"reached": True, "reads": [
+                                             {"path": "/c/trials/other/result.json",
+                                              "operation": "read of contents"}]}}])
+        self.assertIn("cross_trial_reads", summary)
+        self.assertEqual(summary["cross_trial_reads"]["distinct_targets"], 1)
 
 
 class R4ManualOnlySelections(RunnerCase):

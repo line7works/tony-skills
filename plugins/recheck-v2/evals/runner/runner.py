@@ -7978,6 +7978,54 @@ def revision_diff(rows, against):
     }
 
 
+def cross_trial_reads(rows):
+    """Every cross-trial read these grades witnessed, per setup and by target (E11-50).
+
+    The witness is R2's repaired `records_reached`: a path outside this trial's own opaque
+    tree that the session's own record shows it reaching, with `operation` saying whether the
+    contents were read or the path merely listed. Tony's ruling runs the rerun on a bench that
+    does not separate its trials, on the condition that every such read is recorded and
+    reported BY NAME - so the summary lists the targets, not a count of attempts.
+    """
+    per_setup = {}
+    for row in rows:
+        witness = row.get("records_reached")
+        if not isinstance(witness, dict) or not witness.get("reached"):
+            continue
+        setup = row.get("setup") or "unknown"
+        entry = per_setup.setdefault(setup, {"attempts": [], "targets": {}})
+        attempt = "%s#%s" % (row.get("trial"), row.get("attempt"))
+        if attempt not in entry["attempts"]:
+            entry["attempts"].append(attempt)
+        for read in witness.get("reads") or []:
+            path = read.get("path")
+            if not path:
+                continue
+            target = entry["targets"].setdefault(
+                path, {"operations": [], "attempts": [], "capture": read.get("capture")})
+            operation = read.get("operation")
+            if operation and operation not in target["operations"]:
+                target["operations"].append(operation)
+            if attempt not in target["attempts"]:
+                target["attempts"].append(attempt)
+    out = {}
+    for setup, entry in sorted(per_setup.items()):
+        out[setup] = {
+            "attempts_that_reached_another_trial": len(entry["attempts"]),
+            "attempt_ids": sorted(entry["attempts"]),
+            "targets": {path: {"operations": sorted(row["operations"]),
+                               "attempts": sorted(row["attempts"]),
+                               "capture": row["capture"]}
+                        for path, row in sorted(entry["targets"].items())},
+            "distinct_targets": len(entry["targets"]),
+        }
+    return {"per_setup": out,
+            "setups_with_a_cross_trial_read": sorted(out),
+            "distinct_targets": sum(v["distinct_targets"] for v in out.values()),
+            "why": "E11-50: the bench does not separate its trials, so every cross-trial read "
+                   "is named here rather than counted"}
+
+
 def grade_summary(rows):
     """Counts only. A `grade.json` is never printed (section 3)."""
     summary = {
@@ -8003,6 +8051,11 @@ def grade_summary(rows):
         "records_reached": sum(1 for r in rows
                                if isinstance(r.get("records_reached"), dict)
                                and r["records_reached"].get("reached")),
+        # E11-50: the run proceeds on a bench whose trials can read one another, so the report
+        # must NAME the reads, not count the attempts that had any. Per setup: how many
+        # attempts reached another trial's records, and every target path they reached, with
+        # what was done to it. The summary carried only the attempt count before this.
+        "cross_trial_reads": cross_trial_reads(rows),
         "continuation_invariants_held": sum(
             1 for r in rows if isinstance(r.get("continuation_invariants"), dict)
             and r["continuation_invariants"].get("all_held")),
@@ -10491,12 +10544,41 @@ def do_campaign(args):
     raise Usage("campaign takes start, status or stop")
 
 
+def record_campaign_ruling(campaign, state):
+    """Write the ruling this run proceeds under into campaign.json and runner.log (E11-50)."""
+    ruling = valid_preflight_ruling(state or {})
+    if not ruling:
+        return None
+    document = campaign.plan()
+    block = {"id": ruling["id"], "text": ruling["text"],
+             "recorded_at": ruling["recorded_at"],
+             "preflight_record": (state or {}).get("record"),
+             "overrides": ruling.get("overrides"),
+             "why": "E11-50: this campaign runs on a bench whose native read boundary did not "
+                    "separate its trials, on a recorded ruling. Every comparison it produces "
+                    "is uncontrolled, and every cross-trial read is recorded and named."}
+    if document.get("ruling") != block:
+        document["ruling"] = block
+        write_json(campaign.campaign_json, document)
+    campaign.note("campaign runs under ruling %s (%s); the native read boundary did not "
+                  "separate: %s" % (ruling["id"], (state or {}).get("record"),
+                                    json.dumps((ruling.get("overrides") or {})
+                                               .get("per_setup") or {})))
+    return block
+
+
 def _campaign_loop(campaign, plan, args):
     # E11-7 item 2(a): the whole campaign refuses before its first launch.
     # E11-46 R4: a real campaign start is a QUALIFICATION launch and is held to E11-40's
     # native isolation check. A synthetic campaign - a test bench, a fake launcher - is not
     # qualifying anything and keeps the older gate.
-    require_preflight(campaign, "this campaign", qualification=not campaign.synthetic())
+    state = require_preflight(campaign, "this campaign",
+                              qualification=not campaign.synthetic())
+    # E11-50: the ruling the run is proceeding under is written into the campaign's own plan
+    # document and into its log, so EVERY record of the run carries it. A reader who finds one
+    # trial record can follow `campaign.json` to the ruling id and the preflight record to the
+    # measurement it overrode, without being told which flag was passed on the day.
+    record_campaign_ruling(campaign, state)
     """One sequential worker per setup, the three lanes running concurrently (E10-51).
 
     Finding 20: the old loop walked one flat queue, so the six-trial dry run ran both Claude
@@ -11865,10 +11947,36 @@ def preflight_state(campaign):
                 "accepted_unseparated": bool(document.get("accepted_unseparated")),
                 # E11-46 R4: the NATIVE check, run by the harnesses themselves. An older
                 # record carries no `native` key at all, and absent is never a pass.
-                "native_checked": isinstance(native, dict) and "separated" in native,
-                "native_separated": bool(isinstance(native, dict)
-                                         and native.get("separated")),
-                "native_not_separated": (native or {}).get("not_separated") or [],
+                "native_checked": (
+                    (isinstance(native, dict) and "separated" in native)
+                    # E11-50: a ruling COPIES the native measurement it overrides into itself,
+                    # so a record that carries the ruling carries the measurement even when
+                    # the native check was run by an earlier `preflight --native` rather than
+                    # by the run that recorded the acceptance. That is the shape the control
+                    # room's own command produces, and the copy names where it came from.
+                    or bool(isinstance(document.get("ruling"), dict)
+                            and isinstance((document["ruling"].get("overrides") or {})
+                                           .get("per_setup"), dict))),
+                "native_checked_from": (
+                    "this record's own native block"
+                    if isinstance(native, dict) and "separated" in native
+                    else ("the measurement copied into the ruling block"
+                          if isinstance(document.get("ruling"), dict) else None)),
+                "native_separated": bool(
+                    (isinstance(native, dict) and native.get("separated"))
+                    or (not isinstance(native, dict)
+                        and isinstance(document.get("ruling"), dict)
+                        and (document["ruling"].get("overrides") or {})
+                        .get("native_separated"))),
+                "native_not_separated": (native or {}).get("not_separated") or [
+                    name for name, row in sorted(
+                        ((document.get("ruling") or {}).get("overrides") or {})
+                        .get("per_setup", {}).items())
+                    if not row.get("separated")],
+                # E11-50: the recorded ruling, if one was written. A ruling is valid only with
+                # an id, its text, and the measurement it overrides - a flag is not a ruling.
+                "ruling": (document.get("ruling")
+                           if isinstance(document.get("ruling"), dict) else None),
                 # E11 second fix, item C: an older record with no `allow_rules` key was read
                 # as passing (`.get("ok", True)`). It was never checked, and a launch under it
                 # is a launch under an unchecked bench.
@@ -11886,6 +11994,35 @@ PREFLIGHT_REFUSAL = (
     "and, if this bench cannot separate them and that is accepted, run it with "
     "--accept-unseparated; the acceptance is recorded in the campaign and every comparison "
     "it produces is reported as uncontrolled.")
+
+
+RULING_REQUIRED_FIELDS = ("id", "text", "recorded_at", "overrides")
+
+
+def valid_preflight_ruling(state):
+    """The recorded ruling in this state, if it is one (E11-50), else None."""
+    ruling = state.get("ruling")
+    if not isinstance(ruling, dict):
+        return None
+    if any(not ruling.get(field) for field in RULING_REQUIRED_FIELDS):
+        return None
+    overrides = ruling.get("overrides")
+    if not isinstance(overrides, dict) or not overrides.get("per_setup"):
+        return None
+    return ruling
+
+
+def _why_the_ruling_is_not_usable(state):
+    """Which part of a half-written ruling block is missing (E11-50)."""
+    ruling = state.get("ruling") or {}
+    missing = [field for field in RULING_REQUIRED_FIELDS if not ruling.get(field)]
+    if missing:
+        return "it carries no %s" % ", ".join(missing)
+    overrides = ruling.get("overrides")
+    if not isinstance(overrides, dict) or not overrides.get("per_setup"):
+        return ("its `overrides` names no per-setup measurement, so it overrides nothing that "
+                "was measured")
+    return "it is not in the recorded shape"
 
 
 def require_preflight(campaign, what, qualification=False):
@@ -11929,14 +12066,39 @@ def require_preflight(campaign, what, qualification=False):
     # E11-40 without a second opinion, so the rule can be exercised directly by a test rather
     # than only through a live campaign.
     if qualification:
+        # E11-50: a RECORDED RULING is the one thing that gets an accepted-unseparated bench
+        # past this gate. Tony ruled on 2026-09-19 that the rerun runs on the bench as
+        # measured, with every cross-trial read recorded and reported by name. The ruling must
+        # carry an id, its text, and the native measurement it overrides - so it can only
+        # override something that was actually measured, and a reader of any record of the run
+        # can see what was waived and on whose word.
+        ruling = valid_preflight_ruling(state)
+        if ruling and state["native_checked"]:
+            return state
+        if ruling and not state["native_checked"]:
+            # the ruling is well formed; what it has nothing to override is the problem, and
+            # saying "the ruling is not usable" here would send a reader to the wrong file.
+            raise Usage(
+                "refusing to start %s: ruling %s is recorded, but the preflight record at %s "
+                "carries no NATIVE read-boundary check, and a ruling may only override "
+                "something that was measured. Run `preflight --campaign %s --native "
+                "--accept-unseparated --ruling %s --ruling-text \"...\"` so the ruling "
+                "records the measurement it overrides (E11-50)."
+                % (what, ruling["id"], state["record"], campaign.root, ruling["id"]))
         if state["accepted_unseparated"] and not state["native_separated"]:
             raise Usage(
                 "refusing to start %s: the read-boundary state was ACCEPTED rather than "
                 "passed (%s), and Tony's ruling E11-40 makes a qualification run conditional "
                 "on a native isolation check passing. An acceptance covers a bench that "
-                "cannot separate its trials; it does not qualify one. Run `preflight "
-                "--campaign %s --native` and reach `separated: true`, or run this campaign "
-                "somewhere that can (E11-46 R4)." % (what, state["record"], campaign.root))
+                "cannot separate its trials; it does not qualify one.%s Run `preflight "
+                "--campaign %s --native` and reach `separated: true`, run this campaign "
+                "somewhere that can, or record the ruling that accepts this bench: "
+                "`preflight --campaign %s --native --accept-unseparated --ruling <ID> "
+                "--ruling-text \"<the words that were ruled>\"` (E11-46 R4, E11-50)."
+                % (what, state["record"],
+                   (" The record carries a `ruling` block, but it is not usable: %s."
+                    % _why_the_ruling_is_not_usable(state)) if state["ruling"] else "",
+                   campaign.root, campaign.root))
         if not state["native_checked"]:
             raise Usage(
                 "refusing to start %s: the preflight record at %s carries no NATIVE "
@@ -12180,6 +12342,79 @@ def require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scr
     return record
 
 
+def native_measurement_for_a_ruling(campaign, native):
+    """The native measurement a ruling overrides, per setup (E11-50).
+
+    A ruling may only override something that was MEASURED. This reads the native check just
+    run, or the last one this campaign recorded, and copies the counts into the ruling block so
+    the acceptance carries the numbers it overrode rather than a promise that they existed.
+    Returns None when nothing has been measured, and the caller refuses.
+    """
+    rows = (native or {}).get("rows")
+    separated = (native or {}).get("separated")
+    if not rows:
+        rows, separated = [], None
+        directory = campaign.records("native-read-boundary")
+        for path in sorted(glob.glob(os.path.join(directory, "*.json"))):
+            try:
+                rows.append(read_json(path))
+            except (Missing, Failure):
+                continue
+        if not rows:
+            return None
+        separated = all(row.get("separated") for row in rows)
+    per_setup = {}
+    for row in rows:
+        counts = {"refused": 0, "read": 0, "unclear": 0}
+        for group in ("reads", "verifier_reads"):
+            for entry in (row.get(group) or {}).values():
+                outcome = entry.get("outcome")
+                if outcome in counts:
+                    counts[outcome] += 1
+        counts["separated"] = bool(row.get("separated"))
+        counts["not_refused"] = list(row.get("not_refused") or [])
+        per_setup[row.get("setup")] = counts
+    return {"native_separated": bool(separated),
+            "per_setup": per_setup,
+            "read_from": campaign.records("native-read-boundary"),
+            "why": "E11-50: the acceptance carries the measurement it overrides, per setup, so "
+                   "no reader has to go and find out what was being waived"}
+
+
+def preflight_ruling(campaign, args, native):
+    """The recorded ruling that lets an accepted-unseparated bench qualify (E11-50).
+
+    Tony ruled on 2026-09-19 that the rerun runs on the bench AS MEASURED, with every
+    cross-trial read recorded and reported by name. A ruling is the only thing that gets an
+    accepted-unseparated bench past `require_preflight(qualification=True)`, and it is a
+    RECORD, not a flag: an id, the words that were ruled, when it was written down, and the
+    native measurement it overrides. A bare `--accept-unseparated` still refuses.
+    """
+    ruling_id = getattr(args, "ruling", None)
+    ruling_text = getattr(args, "ruling_text", None)
+    if not ruling_id:
+        return None
+    if not getattr(args, "accept_unseparated", False):
+        raise Usage("--ruling records the ruling that ACCEPTS an unseparated bench; pass "
+                    "--accept-unseparated with it (E11-50)")
+    if not (ruling_text or "").strip():
+        raise Usage("--ruling needs --ruling-text \"<the words that were ruled>\": a ruling "
+                    "id with no text is a label, not a record (E11-50)")
+    check_identifier("the ruling id", ruling_id)
+    overrides = native_measurement_for_a_ruling(campaign, native)
+    if overrides is None:
+        raise Usage("refusing to record ruling %s: this campaign carries no NATIVE "
+                    "read-boundary measurement, and a ruling may only override something that "
+                    "was measured. Run `preflight --campaign %s --native` first (E11-50)."
+                    % (ruling_id, campaign.root))
+    return {"id": ruling_id, "text": ruling_text.strip(), "recorded_at": now_iso(),
+            "overrides": overrides,
+            "what_it_covers": "the READ-BOUNDARY state of this bench, as measured above, and "
+                              "nothing else: every comparison the campaign produces is still "
+                              "reported as uncontrolled, and every cross-trial read is "
+                              "recorded and named (E11-50)"}
+
+
 def do_preflight(args):
     """The read-boundary preflight of E11-7 item 2, run before a campaign starts."""
     campaign = Campaign(args.campaign)
@@ -12196,6 +12431,9 @@ def do_preflight(args):
             campaign, plan, setups=getattr(args, "setup", None),
             timeout=int(getattr(args, "timeout", 300) or 300))
     document["accepted_unseparated"] = bool(getattr(args, "accept_unseparated", False))
+    ruling = preflight_ruling(campaign, args, document.get("native"))
+    if ruling:
+        document["ruling"] = ruling
     document["what_the_acceptance_covers"] = (
         "--accept-unseparated accepts the READ-BOUNDARY state of this bench and nothing "
         "else: it never covers a failed or unchecked allow rule, and every launch is refused "
@@ -13365,6 +13603,14 @@ def build_parser():
                           "This launches sessions")
     pre.add_argument("--timeout", type=int, default=300,
                      help="per-session timeout for --native")
+    pre.add_argument("--ruling", default=None, metavar="ID",
+                     help="record the ruling that accepts this unseparated bench for a "
+                          "QUALIFICATION run (e.g. E11-50). Only a recorded ruling gets an "
+                          "accepted bench past the qualification gate; it needs "
+                          "--accept-unseparated, --ruling-text, and a native measurement to "
+                          "override")
+    pre.add_argument("--ruling-text", default=None, metavar="TEXT",
+                     help="the words that were ruled, recorded verbatim beside the id")
     pre.set_defaults(func=do_preflight)
 
     one = subs.add_parser("grade", help="validate, match, and the metrics of E10-11")
