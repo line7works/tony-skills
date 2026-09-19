@@ -1287,3 +1287,31 @@ to exactly the held-out request text.
   launch failures, or the loop ending or dying). Rerun rule: once per failed or empty trial, never twice,
   logged. Nothing is graded, regraded or scored while any session is live (E11-53's cautions). Tony's goal is
   met at this launch; the grading, both readings and the report wait for his word.
+- **E11-55, the round-2 rerun ended: 360 of 360 recorded, then the once-only rerun pass, 33 of 33; nothing
+  graded (2026-09-19, the loop ended 2:22 AM and the rerun pass 4:40 AM by the machine's clock, control
+  room).** The campaign loop ran 8:01 PM to 2:22 AM, about six hours twenty minutes against the fourteen-hour
+  estimate, and ended with status complete: recorded 360, complete 327, `no_result` 26, `timed_out` 7,
+  `launch_failed` 0, no lane stop, no traceback, 36 interruptions (33 failed or empty attempts and three
+  invalid continuation cuts on the OpenCode lanes). claude-code 90 of 90 and codex 90 of 90 complete. All 33
+  failed or empty trials are on the two OpenCode lanes: opencode-deepseek 17 comparison, 1 continuation
+  (handoff) and 2 consumers, all `no_result`; opencode 6 comparison `no_result` and 7 routing `timed_out`
+  (exit 124 at the 300 s limit, no rate-limit text in their stderr; round 1 had 6 on the same lane). The
+  empty results read like round 1's: the model writes toward `/tmp` and OpenCode auto-rejects the
+  `external_directory` ask. The consumers ran in-queue after every producer of every lane was recorded; all
+  twelve took their producer's compaction continuation trial, and none of those four producers is on the
+  failed list, so a rerun could not move any consumer's source. **The once-only rerun pass** (package step 6;
+  run by the control room on its own reading that the retry rule belongs to the run and not to the grading,
+  flagged to Tony): `runner.py rerun <trial> --campaign` for each of the 33, one at a time, producers first and
+  the two consumers last, refusing to start while another runner process was live; 2:24 AM to 4:40 AM; 33 of 33
+  exit 0; outcomes complete 17, `no_result` 14, `timed_out` 2 (opencode comparison 6 of 6 complete, opencode
+  routing 5 complete and 2 timed out, opencode-deepseek comparison 5 complete and 12 `no_result`, its
+  continuation `no_result`, its consumers 1 complete and 1 `no_result`). Every rerun is attempt 1 beside the
+  original attempt 0; `attempt_census`: 393 attempts, 33 trials with more than one, none with more than two.
+  The answer key stayed closed from the first launch to now. OpenRouter read after the run and before any
+  grading: total 110.00, used 15.05, available 94.95, against 14.98 before; the sessions' own cost records sum
+  to about 5.55 on the qwen lane and 1.99 on the deepseek lane, so the account read has either not caught up
+  or the qwen lane's provider charges fall on Tony's own Alibaba key (E11-22); the read is repeated at step 7
+  and only the account's figure is reported. Filed at `astra-outputs/e11/rerun-3/control-room/`
+  (`status-end-of-loop.json`, `status-after-reruns.json`, `reruns/`). Nothing is graded, regraded or scored;
+  step 7 (grade, routing-score, consumer regrade, report, scan, to revision `round2-final`, always with
+  `--revision`; both readings side by side in chat) waits for Tony's word.
