@@ -163,7 +163,7 @@ A builder never edits this file. Rulings are recorded in section 8 as `SB-n`.
 2. Pause for Tony's go.
 3. After his go: Codex `probe-env`, the live seal proof and native check on Codex; Astra's verification
    at high; one fix round; the clean run; grading after every session has ended; the control room's
-   reading and Astra's independent read at max, side by side in chat.
+   reading and Astra's independent read at high, side by side in chat (Tony, 2026-09-19: high, not max).
 
 Gates, each batch: the whole runner suite, the new tests, the core's tests, round-2 originals
 byte-identical, the regrade gate of B1, no file written outside the scratch. A gate red twice is a stop.
