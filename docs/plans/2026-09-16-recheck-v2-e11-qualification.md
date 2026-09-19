@@ -1169,3 +1169,24 @@ to exactly the held-out request text.
   round's findings (17 entries, per tool and per model) appended to `docs/guide-findings.md` on the main
   checkout on Tony's word ("Can we just put it in there for now?"), committed 017e51b; the compile into the
   vault guide stays for A12a.
+- **E11-51, batch C complete with the E11-50 ruling record; the rerun hand-off written; the thread cleared
+  (2026-09-18 about 7:50 PM, control room).** The builder's 23e: `preflight --accept-unseparated --ruling
+  E11-50 --ruling-text "<Tony's words>"` writes a ruling block (id, the words verbatim, recorded-at, and the
+  native measurement it overrides copied from the native record: claude-code 2/4/0, codex 0/6/0, opencode
+  4/0/2, opencode-deepseek 4/0/2, native_separated false); three refusals at record time (no acceptance, an
+  id without text, a ruling over a campaign with no native measurement); `require_preflight` passes a
+  qualification launch on an accepted-unseparated state only with that block, and a bare acceptance is
+  refused with the flags named; `record_campaign_ruling` writes the block into campaign.json and a line
+  into runner.log; `preflight_state` counts the ruling's copied measurement as the native check and records
+  `native_checked_from`, so the ruling need not re-run four live sessions (a judgement the builder flagged;
+  the control room accepts it: the measurement is enforced at record time); `grade_summary` gains
+  `cross_trial_reads` per setup with every target path and the attempts that touched it (over the 126
+  retained round-1 grades: 3 setups, 10 distinct targets: claude-code 1 attempt / 2 targets, opencode 3 / 7,
+  opencode-deepseek 1 / 1), the list the round-2 report prints. Fourteen new tests fail on c2cdab5 and pass
+  after; round-2 suite 128, runner 634 on the builder's side. Secured as the third WIP `e539078`; the
+  control room's gates on batch C run in the fresh window (gates-R.sh filed at
+  `control-room/scratch-cr/`). The rerun hand-off:
+  `~/Documents/handoffs/2026-09-18-skills-v2-e11-round2-rerun-handoff.md`, steps 1 to 7 with every command
+  verbatim, the goal text Tony sets, and the negative test; it supersedes the pause hand-off. Wall clock:
+  Tony's E11-40 ruling 10:25 AM to batch C complete 7:45 PM, with the account switch and two discussions
+  inside it.
