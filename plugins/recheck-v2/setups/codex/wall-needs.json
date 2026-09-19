@@ -2,19 +2,63 @@
   "setup": "codex",
   "note": "What a Codex launch needs from outside its own trial tree. The wall is the sandbox for this lane (SB-2): `codex exec` runs with `--sandbox danger-full-access` inside it, because macOS refuses a second seatbelt inside the first. Nothing under `~/.codex` is reachable; the condition's own CODEX_HOME is the only harness home in the profile.",
   "binaries": [
-    {"name": "codex", "why": "the harness itself; the resolved install location is a read root.", "proven": true}
+    {
+      "name": "codex",
+      "why": "the harness itself; the resolved install location is a read root.",
+      "proven": true
+    }
   ],
   "read": [
-    {"path": "~/.local/bin", "why": "PATH resolution and `command -v` for the launcher's own checks.", "proven": true},
-    {"path": "~/.gitconfig", "why": "git aborts on EPERM for the global config rather than treating it as absent (measured 2026-09-19).", "optional": true, "proven": true}
+    {
+      "path": "~/.local/bin",
+      "why": "PATH resolution and `command -v` for the launcher's own checks.",
+      "proven": true
+    },
+    {
+      "path": "~/.gitconfig",
+      "why": "git aborts on EPERM for the global config rather than treating it as absent (measured 2026-09-19).",
+      "optional": true,
+      "proven": true
+    },
+    {
+      "path": "~/.config/git",
+      "why": "git reads `$XDG_CONFIG_HOME/git/ignore` as the default `core.excludesFile` and `$XDG_CONFIG_HOME/git/config` as a second global config. On EPERM it prints `warning: unable to access '~/.config/git/ignore': Operation not permitted` and continues, so it does not break a trial - but the warning lands in the SESSION's own view, and it appeared in one condition's traces and not the other's, which is exactly the kind of difference a with/without comparison must not carry. Measured 2026-09-19: `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` does NOT silence it, because the excludesFile default is applied independently of any config file, so the environment route does not fix the symptom; allowing the directory does. Read only, two small files, no credential - the same reasoning and the same optional flag as `~/.gitconfig`, and it applies identically to both conditions and both setups.",
+      "optional": true,
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T162738Z"
+    },
+    {
+      "path": "~/.local/share/uv/python",
+      "why": "uv's managed interpreters. `uv run` picks the managed cpython (3.12.13 on this Mac) for the core and both validators, not /usr/bin/python3 3.9; with this directory refused it fails at `failed to read directory .../uv/python: Operation not permitted` whatever the warmed cache holds. Measured 2026-09-19. The alternative, `UV_PYTHON_PREFERENCE=only-system`, also works and was rejected: it pins every walled trial's core to 3.9, so the apparatus would run on a different Python inside the wall than outside it and the 3.12 half of the core's own two-interpreter matrix would never be exercised by a trial. An interpreter install: no user data, no credential, read only. Identical for both setups and both conditions.",
+      "optional": true,
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T171050Z"
+    }
   ],
   "read_write": [],
   "refused_even_though_the_harness_would_use_them": [
-    {"path": "~/.codex", "why": "the machine's own Codex home. E9-25 keeps the pilot home separate and the wall enforces it."}
+    {
+      "path": "~/.codex",
+      "why": "the machine's own Codex home. E9-25 keeps the pilot home separate and the wall enforces it."
+    }
   ],
   "network": [
-    {"host": "chatgpt.com", "why": "the model endpoint for a ChatGPT sign-in", "proven": false},
-    {"host": "api.openai.com", "why": "the model endpoint for an API sign-in", "proven": false},
-    {"host": "auth.openai.com", "why": "sign-in", "proven": false}
+    {
+      "host": "chatgpt.com",
+      "why": "the model endpoint for a ChatGPT sign-in",
+      "proven": false
+    },
+    {
+      "host": "api.openai.com",
+      "why": "the model endpoint for an API sign-in",
+      "proven": false
+    },
+    {
+      "host": "auth.openai.com",
+      "why": "sign-in",
+      "proven": false
+    }
   ]
 }

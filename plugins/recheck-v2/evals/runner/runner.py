@@ -162,6 +162,14 @@ DECLARED_ENV = {
     "CODEX_HOME": "the Codex home pointer (E9-25, E10-7)",
     # E10-20: the one install-time credential, passed to one script, for three homes.
     INSTALL_CREDENTIAL: "the OpenCode install's one credential (E10-20)",
+    # Send-back 2 (2026-09-19, proof root wall-proof-20260919T155236Z): Claude Code makes its
+    # own scratch at `/tmp/claude-<uid>` — one folder shared by EVERY Claude session on this
+    # Mac, which is why it can never be a root of a trial's profile. Behind the wall the
+    # session died with `EPERM: operation not permitted, mkdir '/tmp/claude-501'` after it had
+    # already signed in and reached the model. `CLAUDE_CODE_TMPDIR` moves that scratch inside
+    # the trial's own TMPDIR. It carries no credential; it is a path the runner chose.
+    "CLAUDE_CODE_TMPDIR": "Claude Code's own scratch, moved inside the trial's own TMPDIR so "
+                          "the shared /tmp/claude-<uid> is never a root (send-back 2)",
 }
 # A3: `sandbox-exec` joins the binaries the runner resolves. It is the executable every real
 # launch now runs, so it is resolved and recorded exactly like the harness binaries rather
@@ -1681,7 +1689,16 @@ def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None,
     needs = wall_needs(setup)
     home = setup.home(condition)
     record_root = os.path.dirname(os.path.abspath(out_dir))
-    read_roots = [{"path": campaign.stage,
+    # The trial's own tree is the scratch's parent. Derived HERE rather than in `walled`, so a
+    # direct call and a launch build the same spec: the test of every launch kind caught the
+    # two disagreeing, and the adapters' run root (`<opaque tree>/runs`) fell outside every
+    # write root on the direct path.
+    if not opaque_tree and scratch:
+        opaque_tree = os.path.dirname(os.path.abspath(scratch))
+    # the SETUP's stage, which is the campaign's in every real run. Named through the setup
+    # so one object answers "what does this launch run" everywhere (warm_uv_cache and
+    # uv_offline_check read the same attribute).
+    read_roots = [{"path": setup.stage,
                    "why": "the staged checkout: the launcher, the skill and the fixtures"}]
     read_roots.extend(_binary_read_roots(needs))
     read_roots.extend(_needs_rows(needs, "read"))
@@ -1705,6 +1722,22 @@ def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None,
     for root in roots or []:
         write_roots.append({"path": root, "why": "a root guarded_launch_roots named for this "
                                                  "launch (E11-26)"})
+    # send-back 2: the harness's own scratch pointer, derived HERE from the same hook the
+    # launch uses, so a direct call and a real launch build the same spec (the lesson of
+    # send-back 1). It sits inside TMPDIR, which is inside the trial's own tree, so it is
+    # already covered; naming it makes the record say so.
+    harness_tmpdirs = setup.scratch_env(scratch or campaign.tmp)
+    for name, path in sorted(harness_tmpdirs.items()):
+        write_roots.append({"path": path,
+                            "why": "%s: this harness's own scratch, inside the launch's own "
+                                   "TMPDIR (send-back 2)" % name})
+    # send-back 5: the offline uv cache. It sits inside the home, which is already a write
+    # root, and `uv run` BUILDS its ephemeral environment in there, so naming it makes the
+    # record say what the launch depends on rather than leaving it to be inferred.
+    uv_environment = setup.uv_env(condition)
+    write_roots.append({"path": uv_environment["UV_CACHE_DIR"],
+                        "why": "UV_CACHE_DIR: the cache `install` warmed for this condition; "
+                               "`uv run` builds its environment inside it (send-back 5)"})
     write_roots.extend(_needs_rows(needs, "read_write"))
     transcript = _session_transcript_root(needs, workspace)
     if transcript:
@@ -1718,6 +1751,26 @@ def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None,
         "refused_roots": wall_refused_roots(campaign, setup, condition, allowed),
         "proxy_port": proxy_port,
         "proxy_host": "localhost",
+        # Send-back 1, fault 1: THE CWD IS NAMED, never inherited. A launcher used to start in
+        # whatever directory the operator ran the runner from; the control room ran it from a
+        # scratch under `/private/tmp`, which every profile refuses, and every shell in
+        # `launch.sh` printed `getcwd: cannot access parent directories: Operation not
+        # permitted` before a model was ever called. The runner must not depend on where the
+        # operator stands.
+        #
+        # ONE rule for all five launch sites: the launch's OWN WORKSPACE. It exists before
+        # every launch, it is always a write root (so it is readable), it is where
+        # `setups/claude-code/launch.sh` `cd`s anyway, and it is the directory the session's
+        # own tools should see. The record root is the fallback for a launch with no
+        # workspace, and it is a write root too.
+        "cwd": os.path.realpath(workspace or record_root),
+        "cwd_rule": "the launch's own workspace, else its record root; both are write roots, "
+                    "so both are readable, and neither depends on the operator's cwd",
+        # send-back 2: the harness scratch names this launch declares, and where they point.
+        "harness_tmpdirs": harness_tmpdirs,
+        # send-back 5: the cache this launch's `uv run` uses, and the flag that keeps it from
+        # walking to the proxy.
+        "uv": uv_environment,
     }
     return spec
 
@@ -1757,6 +1810,9 @@ class _NoWall(object):
     def __init__(self, why):
         self.record = {"sealed": False, "why": why}
         self.env = {}
+        # `None` means "whatever the caller already did": an unwalled launch keeps the cwd it
+        # had before the wall existed, so no fake-launcher path changes behaviour.
+        self.cwd = None
 
     def prefix(self, argv):
         return list(argv)
@@ -1783,13 +1839,18 @@ def wall_probe_path(campaign):
 class _Wall(object):
     """One profile and one proxy, for the length of one launch."""
 
-    def __init__(self, profile, spec_path, summary, proxy, record, probe=None):
+    def __init__(self, profile, spec_path, summary, proxy, record, probe=None, cwd=None,
+                 uv=None):
         self.profile = profile
         self.spec_path = spec_path
         self.summary = summary
         self.proxy = proxy
         self.record = record
+        # Send-back 1, fault 1: the directory every walled child starts in, named by the spec.
+        self.cwd = cwd
         self.env = {"RECHECK_HARNESS_SANDBOX": WALL_MARKER}
+        # send-back 5: the offline uv cache this launch's `uv run` uses.
+        self.env.update(uv or {})
         if probe:
             self.env["RECHECK_WALL_PROBE"] = probe
         if proxy is not None:
@@ -1827,13 +1888,15 @@ def walled(campaign, setup, condition, out_dir, launcher=None, workspace=None, r
     try:
         spec = wall_spec(campaign, setup, condition, out_dir, workspace=workspace,
                          run_dir=run_dir, scratch=scratch, roots=roots,
-                         proxy_port=proxy.port,
-                         opaque_tree=opaque_tree or (os.path.dirname(scratch)
-                                                     if scratch else None),
-                         label=label)
-        profile, spec_path, summary = write_wall_profile(campaign, spec, out_dir)
+                         proxy_port=proxy.port, opaque_tree=opaque_tree, label=label)
+        profile, spec_path, summary = write_wall_profile(campaign, spec, out_dir,
+                                                         stage=setup.stage)
         record = {
             "sealed": True,
+            "cwd": spec["cwd"],
+            "cwd_rule": spec["cwd_rule"],
+            "harness_tmpdirs": spec["harness_tmpdirs"],
+            "uv": spec["uv"],
             "profile": profile,
             "profile_sha256": file_sha256(profile),
             "spec_path": spec_path,
@@ -1843,12 +1906,13 @@ def walled(campaign, setup, condition, out_dir, launcher=None, workspace=None, r
             "summary": summary,
             "sandbox_exec": SANDBOX_EXEC,
             "probe": probe,
-            "declared_env_names": sorted(("RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE")
-                                         + PROXY_ENV),
+            "declared_env_names": sorted(("RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE",
+                                          "UV_CACHE_DIR", "UV_OFFLINE") + PROXY_ENV),
             "why": "the sealed bench's wall: one OS-level profile per launch, one loopback "
                    "proxy outside it (A1, A2)",
         }
-        yield _Wall(profile, spec_path, summary, proxy, record, probe=probe)
+        yield _Wall(profile, spec_path, summary, proxy, record, probe=probe,
+                    cwd=spec["cwd"], uv=spec["uv"])
     finally:
         proxy.stop()
 
@@ -1856,6 +1920,207 @@ def walled(campaign, setup, condition, out_dir, launcher=None, workspace=None, r
 def wall_record_of(step):
     """The `wall` block a launch record carries, for `command.json`."""
     return (step or {}).get("wall") or {"sealed": False, "why": "no wall record was attached"}
+
+
+# --------------------------------------------------------------- the offline uv cache (SB5)
+#
+# Blocker 1 of live proof 5. The core and both validators are PEP 723 scripts run through
+# `uv run`; they declare `jsonschema==4.25.1`; behind the wall the network is closed and the
+# machine's own caches are refused, so every phase command exited 3. The cache is warmed
+# OUTSIDE the wall by `install`, at a path inside the condition's own home, and the launch
+# then runs uv against it with `UV_OFFLINE=1`.
+#
+# Measured on this Mac, 2026-09-19:
+#   * `uv run <script>` builds its ephemeral environment INSIDE `UV_CACHE_DIR`
+#     (`<cache>/environments-v2/<script>-<hash>/`), so the cache must be writable at launch
+#     time. It is inside the home, which is already a write root.
+#   * it picks uv's MANAGED interpreter (cpython 3.12.13 under `~/.local/share/uv/python`),
+#     not `/usr/bin/python3` 3.9, for these scripts.
+#   * with the cache warmed and that interpreter readable, `UV_OFFLINE=1 uv run ... --help`
+#     exits 0 under a wall profile that refuses `~/.cache/uv` and the network.
+#   * with the managed interpreter directory refused it fails at
+#     `failed to read directory .../uv/python: Operation not permitted`, whatever the cache
+#     holds - which is why that directory is a declared read in both setups' wall-needs.json
+#     rather than being worked around with `UV_PYTHON_PREFERENCE=only-system`. Forcing
+#     only-system works, and pins every walled trial's core to 3.9: the apparatus would then
+#     run on a different Python inside the wall than outside it, and the 3.12 half of the
+#     core's own two-interpreter test matrix would never be exercised by a trial. The wall is
+#     meant to change what is REACHABLE, not what runs.
+
+PEP_723_OPEN = "# /// script"
+PEP_723_CLOSE = "# ///"
+UV_WARM_SUBDIRS = (os.path.join("skills", "recheck-v2", "scripts"),
+                   os.path.join("skills", "recheck-v2", "adapters"))
+
+
+def pep723_block(path):
+    """The inline metadata block of a PEP 723 script, as a list of lines, or None."""
+    text = read_text(path, None)
+    if not text or PEP_723_OPEN not in text:
+        return None
+    lines, inside, block = text.splitlines(), False, []
+    for line in lines:
+        if line.strip() == PEP_723_OPEN:
+            inside = True
+            continue
+        if inside and line.strip() == PEP_723_CLOSE:
+            return block
+        if inside:
+            block.append(line.lstrip("#").strip())
+    return None
+
+
+def pep723_scripts(stage):
+    """Every script under the STAGED plugin that declares its own dependencies.
+
+    The staged copy, not the checkout: a trial runs what was staged, and the cache has to
+    match what the session will execute.
+    """
+    rows = []
+    plugin = os.path.join(stage, "plugins", "recheck-v2")
+    for relative in UV_WARM_SUBDIRS:
+        base = os.path.join(plugin, relative)
+        if not os.path.isdir(base):
+            continue
+        for directory, dirs, files in os.walk(base):
+            dirs[:] = [d for d in sorted(dirs) if d not in ("__pycache__", "tests")]
+            for name in sorted(files):
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(directory, name)
+                block = pep723_block(path)
+                if block is None:
+                    continue
+                rows.append({"script": path,
+                             "relative": os.path.relpath(path, plugin),
+                             "declares": block})
+    return rows
+
+
+def uv_cache_listing(cache):
+    """A hash listing of a warmed cache: what it holds, and one digest over all of it."""
+    if not os.path.isdir(cache):
+        return {"present": False, "files": 0, "bytes": 0, "tree_sha256": None, "entries": []}
+    files = total = 0
+    for directory, _dirs, names in os.walk(cache):
+        for name in names:
+            try:
+                total += os.path.getsize(os.path.join(directory, name))
+            except OSError:
+                continue
+            files += 1
+    return {"present": True, "files": files, "bytes": total,
+            "tree_sha256": tree_sha256_of(cache),
+            "entries": sorted(os.listdir(cache)),
+            "how": "every file under the cache, `<path>\0<sha256>` sorted (tree_sha256_of)"}
+
+
+# The interpreter preferences a warm pass runs under. The default is what a session gets; the
+# system pass is there so a script whose `requires-python` excludes the managed interpreter
+# still has its dependencies in the cache, and so the 3.9 half of the core's own matrix is
+# covered by the same cache.
+UV_WARM_PASSES = (
+    ("default", {}, "the preference a session's own `uv run` uses (uv's managed interpreter "
+                    "on this Mac)"),
+    ("only-system", {"UV_PYTHON_PREFERENCE": "only-system"},
+     "the system interpreter, so the other half of the core's two-Python matrix resolves from "
+     "the same cache"),
+)
+
+
+def warm_uv_cache(campaign, setup, condition, timeout=900):
+    """Fill this condition's own uv cache, OUTSIDE the wall, with the network (send-back 5).
+
+    Runs during `install` only. Identical for every setup AND both conditions: the cache is
+    apparatus, not skill, so the absent home gets exactly the same one and no comparison can
+    turn on which condition could run the core.
+    """
+    cache = setup.uv_cache(condition)
+    ensure_dir(cache)
+    # the SETUP's stage, which is the campaign's in every real run and the one a test builds
+    scripts = pep723_scripts(setup.stage)
+    steps = []
+    for row in scripts:
+        for label, extra, why in UV_WARM_PASSES:
+            env = tool_env(extra=dict(extra, UV_CACHE_DIR=cache), require_binaries=False)
+            step = run_cmd(["uv", "run", "--quiet", row["script"], "--help"], env=env,
+                           timeout=timeout,
+                           label="warm %s (%s)" % (row["relative"], label))
+            steps.append({"script": row["relative"], "pass": label, "why": why,
+                          "declares": row["declares"], "exit": step["exit"],
+                          "stderr_tail": (step["stderr"] or "")[-400:]})
+    failed = [r for r in steps if r["exit"] != 0]
+    return {"cache": cache, "condition": condition, "setup": setup.name,
+            "scripts": [r["relative"] for r in scripts],
+            "dependency_sets": {r["relative"]: r["declares"] for r in scripts},
+            "passes": steps, "failed": failed, "ok": not failed and bool(scripts),
+            "listing": uv_cache_listing(cache),
+            "warmed": "outside the wall, with the network, by `install` (send-back 5)",
+            "why_both_conditions": "the cache is apparatus, not skill: the absent home gets "
+                                   "exactly the same one, so no comparison turns on which "
+                                   "condition could run the core"}
+
+
+def uv_offline_check(campaign, setup, condition, timeout=300):
+    """Prove the warmed cache works OFFLINE, behind this home's own wall (send-back 5).
+
+    A plain child, no model: `sandbox-exec -f <profile> uv run <staged recheck.py> --help`
+    with `UV_OFFLINE=1` and the cache this condition's launches will use.
+    """
+    cache = setup.uv_cache(condition)
+    script = os.path.join(setup.stage, "plugins", "recheck-v2", "skills", "recheck-v2",
+                          "scripts", "recheck.py")
+    if not os.path.isfile(script):
+        return {"ok": False, "exit": None, "env_names": [],
+                "why": "no staged recheck.py at %s" % script, "cache": cache}
+    base = os.path.join(campaign.tmp, "uv-offline-check", setup.name, condition)
+    workspace = os.path.join(base, "workspace")
+    scratch = probe_scratch(base)
+    for path in (workspace, os.path.join(base, "run")):
+        ensure_dir(path)
+    out_dir = os.path.join(campaign.records("uv-offline-check"),
+                           "%s-%s" % (setup.name, condition), "harness")
+    ensure_dir(out_dir)
+    spec = wall_spec(campaign, setup, condition, out_dir, workspace=workspace,
+                     run_dir=os.path.join(base, "run"), scratch=scratch,
+                     roots=named_writable_roots(os.path.join(base, "run")),
+                     label="the offline uv check for %s/%s" % (setup.name, condition))
+    profile, spec_path, _summary = write_wall_profile(campaign, spec, out_dir,
+                                                     stage=setup.stage)
+    extra = dict(setup.launch_env(condition), **setup.scratch_env(scratch))
+    extra.update(setup.uv_env(condition))
+    env = campaign.env(extra=extra, scratch=scratch, require_binaries=False)
+    step = run_cmd([SANDBOX_EXEC, "-f", profile, "uv", "run", "--quiet", script, "--help"],
+                   env=env, cwd=spec["cwd"], timeout=timeout, label="uv run --help, offline")
+    return {"ok": step["exit"] == 0, "exit": step["exit"], "cache": cache,
+            "script": script, "profile": profile, "spec_path": spec_path,
+            "cwd": spec["cwd"],
+            "env_names": sorted(env),
+            "stderr_tail": (step["stderr"] or "")[-800:],
+            "measured": "a plain child under this home's own wall profile, UV_OFFLINE=1, no "
+                        "model and no network (send-back 5)"}
+
+
+def with_uv_offline_check(campaign, setup, condition, step):
+    """`verify`'s own step, plus the proof the warmed cache works offline behind the wall.
+
+    The offline check never turns a passing `verify-install.sh` into a failing one on its own
+    exit code; it is recorded beside it and the caller's gate reads `uv_offline.ok`. A launch
+    that needs the cache fails loudly at the first phase command, which is exactly what live
+    proof 5 measured, so the record has to carry this before a campaign starts.
+    """
+    record = dict(step)
+    try:
+        record["uv_offline"] = uv_offline_check(campaign, setup, condition)
+    except (Usage, Missing, Failure, OSError) as exc:
+        record["uv_offline"] = {"ok": False, "why": "the offline check could not run: %s" % exc}
+    if not record["uv_offline"].get("ok"):
+        record["uv_offline_problem"] = (
+            "the warmed uv cache at %s does not satisfy `uv run` offline behind this home's "
+            "wall, so every phase command of a walled trial will exit 3 with `missing "
+            "dependency` (send-back 5, blocker 1). Re-run `install` for this setup and home "
+            "with the network up." % setup.uv_cache(condition))
+    return record
 
 
 class Setup(object):
@@ -1909,6 +2174,38 @@ class Setup(object):
                       workspace=workspace, run_dir=run_dir, scratch=scratch, roots=roots,
                       opaque_tree=opaque_tree,
                       label=label or "%s %s" % (self.name, condition))
+
+    # ---- the offline uv cache (send-back 5, blocker 1)
+    #
+    # The core and both validators are PEP 723 scripts run through `uv run`, and they declare
+    # `jsonschema==4.25.1`. Behind the wall the network is closed and the machine's own uv
+    # cache is refused, so every phase command exited 3 with `missing dependency:
+    # jsonschema==4.25.1` and the with-skill trial of live proof 5 correctly stopped itself.
+    # `install` warms a cache INSIDE this condition's home, outside the wall, with the network;
+    # the launch then runs `uv` against that cache with `UV_OFFLINE=1`, so uv never walks to
+    # the proxy. The cache is apparatus, not skill: the absent home gets exactly the same one.
+    def uv_cache(self, condition):
+        return os.path.join(self.home(condition), "uv-cache")
+
+    def uv_env(self, condition):
+        """The two names every WALLED launch carries so `uv run` works offline.
+
+        They ride with the wall, not with `launch_env`, for the same reason the proxy names
+        do: they exist BECAUSE the wall closes the network and refuses the machine's own uv
+        cache. A launch that is not walled — a fake launcher, a synthetic campaign — has no
+        warmed cache and needs none, and pointing it at an empty one would break the fake
+        harness's real-core runs. `_NoWall` carries neither.
+        """
+        return {"UV_CACHE_DIR": self.uv_cache(condition), "UV_OFFLINE": "1"}
+
+    def scratch_env(self, tmpdir):
+        """The names THIS harness needs pointed inside the launch's own TMPDIR (send-back 2).
+
+        Empty for every harness but Claude Code, which otherwise makes its scratch in
+        `/tmp/claude-<uid>` — a folder shared by every Claude session on this Mac, and so one
+        that can never be a root of one trial's profile.
+        """
+        return {}
 
     # ---- what the launcher was told (E10-50, E10-62 item 4)
     def resolved_model(self):
@@ -2029,6 +2326,10 @@ class ClaudeCodeSetup(Setup):
     def launch_env(self, condition):
         return {"SKILLS_V2_PILOT_HOME": self.home(condition)}
 
+    def scratch_env(self, tmpdir):
+        """Send-back 2: `CLAUDE_CODE_TMPDIR=<TMPDIR>/cc-tmp`, on every Claude Code launch."""
+        return {"CLAUDE_CODE_TMPDIR": claude_code_tmpdir(tmpdir)}
+
     def marketplace_plugins(self):
         """Every plugin in the checkout's marketplace, for the routing profile (E10-13)."""
         manifest = read_json(
@@ -2069,6 +2370,9 @@ class ClaudeCodeSetup(Setup):
         return {
             "home": home,
             "condition": condition,
+            # send-back 5: the offline uv cache, warmed here, with the network, outside the
+            # wall. Identical for every condition.
+            "uv_cache": warm_uv_cache(self.campaign, self, condition),
             "steps": [_step_summary(s) for s in steps],
             "uninstalled_after_install": removed,
             "recheck_v2_installation": installation,
@@ -2102,12 +2406,15 @@ class ClaudeCodeSetup(Setup):
         env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home})
         step = run_cmd(["sh", self.script("verify-install.sh"), "--pilot-home", home], env=env,
                        label="verify-install.sh")
-        return step
+        return with_uv_offline_check(self.campaign, self, condition, step)
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
                registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home}, scratch=scratch)
+        # send-back 2: the harness's own scratch, inside this launch's TMPDIR, created here.
+        launcher_env = dict(self.launch_env(condition))
+        launcher_env.update(self.scratch_env(scratch or self.campaign.tmp))
+        env = self.campaign.env(extra=launcher_env, scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
         plugins = (extra or {}).get("plugins")
         if plugins is None:
@@ -2138,7 +2445,8 @@ class ClaudeCodeSetup(Setup):
             argv = wall.prefix(argv)
             if registry is not None:
                 registry.reserved(argv, "launch.sh")
-            step = run_cmd(argv, env=dict(env, **wall.env), timeout=timeout,
+            # send-back 1, fault 1: the named cwd, never the operator's
+            step = run_cmd(argv, env=dict(env, **wall.env), cwd=wall.cwd, timeout=timeout,
                            label="launch.sh", registry=registry)
         step["wall"] = wall.record
         return step
@@ -2756,6 +3064,12 @@ class CodexSetup(Setup):
     def launch_env(self, condition):
         return {"RECHECK_CODEX_HOME": self.home(condition)}
 
+    def uv_cache(self, condition):
+        """E9-25: this lane's cache is the one `setups/codex/launch.sh` already exports,
+        inside the child home. The runner names the same path so `install` warms it and the
+        launch environment records it."""
+        return os.path.join(self.home(condition), "child", "uv-cache")
+
     def _link_auth(self, home, base):
         """Every derived or second home points at the base home's one credential store.
 
@@ -2839,6 +3153,7 @@ class CodexSetup(Setup):
                                  label="install.sh"))
             return {"home": base, "condition": condition, "derived_from_available": False,
                     "recheck_v2_installation": {"how": "installed", "by": "install.sh"},
+                    "uv_cache": warm_uv_cache(self.campaign, self, condition),
                     "model_lines": self._write_model_lines(base),
                     "steps": [_step_summary(s) for s in steps]}
         if not os.path.isdir(base):
@@ -2869,6 +3184,7 @@ class CodexSetup(Setup):
                                                   "the host-skill folder", "the session catalog"],
                 },
                 "auth_linked_to_the_available_store": linked,
+                "uv_cache": warm_uv_cache(self.campaign, self, condition),
                 "model_lines": self._write_model_lines(home),
                 "added": [], "steps": [_step_summary(s) for s in steps],
             }
@@ -2900,6 +3216,7 @@ class CodexSetup(Setup):
                 "removed": removed,
                 "recheck_v2_installation": {"how": "installed",
                                             "by": "the copy of the available home"},
+                "uv_cache": warm_uv_cache(self.campaign, self, condition),
                 # The copy already carries the available home's two lines; rewriting them here
                 # keeps the record explicit and survives a plan change between the two installs.
                 "model_lines": self._write_model_lines(home),
@@ -2908,12 +3225,16 @@ class CodexSetup(Setup):
     def verify(self, condition):
         home = self.home(condition)
         env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home})
-        return run_cmd(["sh", self.script("verify-install.sh")], env=env, label="verify-install.sh")
+        step = run_cmd(["sh", self.script("verify-install.sh")], env=env,
+                       label="verify-install.sh")
+        return with_uv_offline_check(self.campaign, self, condition, step)
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
                registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home}, scratch=scratch)
+        env = self.campaign.env(extra=dict(self.launch_env(condition),
+                                           **self.scratch_env(scratch or self.campaign.tmp)),
+                                scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
         # E11-26: each root the runner named becomes its own `--add-dir` on the `codex exec`
         # command line; nothing of any other trial is shared.
@@ -2925,7 +3246,8 @@ class CodexSetup(Setup):
             argv = wall.prefix(argv)
             if registry is not None:
                 registry.reserved(argv, "launch.sh")
-            step = run_cmd(argv, env=dict(env, **wall.env), timeout=timeout,
+            # send-back 1, fault 1: the named cwd, never the operator's
+            step = run_cmd(argv, env=dict(env, **wall.env), cwd=wall.cwd, timeout=timeout,
                            label="launch.sh", registry=registry)
         step["wall"] = wall.record
         return step
@@ -3259,6 +3581,7 @@ class OpenCodeSetup(Setup):
                                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
                     added.append(name)
         return {"home": home, "condition": condition, "model": model,
+                "uv_cache": warm_uv_cache(self.campaign, self, condition),
                 "credential_passed": bool(credential),
                 "removed": removed, "recheck_v2_installation": installation,
                 "prior_state_cleared": cleared,
@@ -3299,16 +3622,17 @@ class OpenCodeSetup(Setup):
     def verify(self, condition):
         home = self.home(condition)
         env = self.campaign.env(extra={"RECHECK_OPENCODE_SETUP": home})
-        return run_cmd(["sh", self.script("verify-install.sh"), "--setup", home], env=env,
+        step = run_cmd(["sh", self.script("verify-install.sh"), "--setup", home], env=env,
                        label="verify-install.sh")
+        return with_uv_offline_check(self.campaign, self, condition, step)
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
                registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={
-            "RECHECK_OPENCODE_SETUP": home,
-            "RECHECK_OPENCODE_TIMEOUT": str(int(timeout)) if timeout else "900",
-        }, scratch=scratch)
+        env = self.campaign.env(extra=dict(
+            self.launch_env(condition),
+            RECHECK_OPENCODE_TIMEOUT=str(int(timeout)) if timeout else "900",
+            **self.scratch_env(scratch or self.campaign.tmp)), scratch=scratch)
         # The full id, not the alias: `launch.sh` takes either (`qwen | deepseek | provider/
         # model`), and the record then names the model the session actually ran on.
         model = self.MODEL_ALIASES.get((extra or {}).get("model"), (extra or {}).get("model")) \
@@ -3325,7 +3649,7 @@ class OpenCodeSetup(Setup):
             argv = wall.prefix(argv)
             if registry is not None:
                 registry.reserved(argv, "launch.sh")
-            step = run_cmd(argv, env=dict(env, **wall.env),
+            step = run_cmd(argv, env=dict(env, **wall.env), cwd=wall.cwd,
                            timeout=(timeout + 120) if timeout else None,
                            label="launch.sh", registry=registry)
         step["wall"] = wall.record
@@ -4234,7 +4558,8 @@ def do_write_fence(args):
             registry = ProcessRegistry(campaign, trial_id, 0, "write-fence")
             close_key(campaign, "the %s write-fence probe" % trial_id)
             step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
-                                extra={"writable": roots}, registry=registry)
+                                extra={"writable": roots}, registry=registry,
+                                scratch=probe_scratch(base))
             reply, reply_source = harness_reply(setup, out_dir)
             command = {"workspace": workspace, "run_dir": run_dir,
                        "opaque_tree": base, "trial": trial_id}
@@ -4315,12 +4640,21 @@ def do_probe_env(args):
             _empty_git_workspace(campaign, workspace)
             prompt = os.path.join(campaign.root, "probes", "env-probe.txt")
             write_text(prompt, PROBE_PROMPT)
-            passed = sorted(campaign.env(extra=setup.launch_env(condition)))
+            # send-back 2: `passed` is what the LAUNCH will carry, built the same way, or
+            # the gate below compares the session's environment against a shorter list than
+            # the one it was given and calls a name the runner passed "unexplained".
+            probe_tmp = probe_scratch(base)
+            launcher_env = dict(setup.launch_env(condition))
+            launcher_env.update(setup.scratch_env(probe_tmp))
+            # send-back 5: a probe launch is walled, so the wall's own names are part of what
+            # the runner passed; neither matches a banned shape, so neither reaches the gate.
+            launcher_env.update(setup.uv_env(condition))
+            passed = sorted(campaign.env(extra=launcher_env, scratch=probe_tmp))
             registry = ProcessRegistry(campaign, "probe-%s-%s" % (setup.name, condition), 0,
                                        "probe")
             close_key(campaign, "the environment probe")
             step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
-                                registry=registry)
+                                registry=registry, scratch=probe_tmp)
             printed, printed_source = harness_reply(setup, out_dir)
             names = _probe_names(printed)
             names_in_the_record = _names_in_the_record(out_dir)
@@ -4329,7 +4663,15 @@ def do_probe_env(args):
             # not on this harness's measured own-tool-shell list. A harness-created name that
             # was never measured fails the probe rather than being waved through.
             measured = list(HARNESS_CREATED_ENV.get(setup.harness, ()))
-            from_runner = sorted(n for n in banned if n in passed)
+            # send-back 2: a DECLARED name is not a leak. `DECLARED_ENV` is the written list
+            # of the only banned-shaped names any child of the runner may carry, each with the
+            # measurement that put it there, and `run_cmd` already refuses every other one at
+            # the one environment boundary (E10-42). The gate asks whether the runner passed
+            # a banned name it never declared; a declared one is recorded by name beside the
+            # probe instead of failing it.
+            declared = sorted(n for n in banned if n in passed and n in DECLARED_ENV)
+            from_runner = sorted(n for n in banned
+                                 if n in passed and n not in DECLARED_ENV)
             from_harness = sorted(n for n in banned if n not in passed and n in measured)
             unexplained = sorted(n for n in banned if n not in passed and n not in measured)
             empty = not printed.strip()
@@ -4383,6 +4725,10 @@ def do_probe_env(args):
                 "names_the_runner_passed": passed,
                 "banned_names_seen": banned,
                 "banned_the_runner_passed": from_runner,
+                # send-back 2: the banned-shaped names the runner passed ON PURPOSE, each on
+                # DECLARED_ENV with the measurement that put it there.
+                "banned_the_runner_declared": declared,
+                "declared_env": {n: DECLARED_ENV[n] for n in declared},
                 "banned_the_harness_set_for_its_own_tool_shells": from_harness,
                 "harness_created_measured_list": measured,
                 "banned_names_nobody_measured": unexplained,
@@ -5188,6 +5534,41 @@ def run_root_of(campaign, plan, trial=None, attempt=0):
 
 
 TRIAL_SCRATCH_LEAF = "scratch"
+# The leaf `CLAUDE_CODE_TMPDIR` points at, inside the launch's own TMPDIR.
+CLAUDE_CODE_TMPDIR_LEAF = "cc-tmp"
+
+
+def claude_code_tmpdir(tmpdir):
+    """`<TMPDIR>/cc-tmp`, created before the launch (send-back 2).
+
+    Measured by the control room on 2026-09-19 (proof root `wall-proof-20260919T155236Z`):
+    with this name set to a folder inside the launch's own TMPDIR, a walled Claude Code
+    session exits 0, answers, costs a non-zero amount, runs `pwd` in its workspace, and the
+    harness creates `cc-tmp/claude-<uid>` inside the trial's own scratch. Without it the
+    session reaches the model and then dies on `mkdir '/tmp/claude-501'`.
+    """
+    path = os.path.join(tmpdir, CLAUDE_CODE_TMPDIR_LEAF)
+    ensure_dir(path)
+    return path
+
+
+def probe_scratch(base):
+    """The TMPDIR a PROBE-SHAPED launch gets: `<its own tree>/scratch` (send-back 1, fault 2).
+
+    E11-7 item 2 gave every TRIAL its own scratch and left the probes on the campaign's shared
+    `tmp/`. Behind the wall that shared directory is a refused root and not a write root, so
+    `setups/claude-code/launch.sh`'s `mkdir -p "${TMPDIR}/runs"` was refused and the first
+    walled native check died in under a second with
+    `mkdir: <campaign>/tmp/runs: Operation not permitted`, before any model call.
+
+    A probe is now trial-shaped: its TMPDIR sits inside its own tree, which is the same tree
+    its workspace and run directory sit in and which `guarded_launch_roots` already names as
+    this launch's writable root. Created here, before the launch, so `${TMPDIR}/runs` lands
+    inside a write root on every harness.
+    """
+    path = os.path.join(base, TRIAL_SCRATCH_LEAF)
+    ensure_dir(path)
+    return path
 
 
 def trial_scratch(campaign, trial, attempt=0):
@@ -5620,6 +6001,11 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     require_preflight(campaign, "the comparison trial %s" % trial_id)
     close_key(campaign, "the %s launch" % trial_id)
     scratch = trial_scratch(campaign, trial_id, attempt)
+    # send-back 2: the record's `allowlisted_env_names` and `launcher_env_names` name what the
+    # launch ACTUALLY carried. `Setup.launch` adds this harness's own scratch pointer, so the
+    # record has to know about it or `command.json` lists a shorter environment than the child
+    # was given.
+    env_extra = dict(env_extra, **setup.scratch_env(scratch))
     # E11-26: the run leaf's own directory — the opaque case directory, which holds this
     # trial's workspace, run leaf and seeded input and nothing of any other trial.
     writable = guarded_launch_roots(campaign, setup, parts["condition"], workspace, run_dir,
@@ -10168,7 +10554,11 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     trial = getattr(args, "trial", None)
     scratch = (trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
                if trial else None)
-    env = campaign.env(extra=setup.launch_env("available"), scratch=scratch)
+    # send-back 2: the same launcher environment `Setup.launch` builds, so the first half of a
+    # continuation trial is not the one Claude Code launch without its own scratch pointer.
+    launcher_env = dict(setup.launch_env("available"))
+    launcher_env.update(setup.scratch_env(scratch or campaign.tmp))
+    env = campaign.env(extra=launcher_env, scratch=scratch)
     launcher = getattr(args, "fake_launcher", None) or setup.script("launch.sh")
     # fix 5 (D): the FIRST half of a continuation trial launched with the stopped rerun's
     # configuration — the per-trial scratch as TMPDIR and no root naming the run leaf.
@@ -10199,7 +10589,9 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     if registry is not None:
         registry.reserved(argv, "launch.sh (cut)")
     started = time.time()
-    child = subprocess.Popen(argv, env=env, cwd=None, stdin=subprocess.DEVNULL,
+    # send-back 1, fault 1: the named cwd. This Popen passed `cwd=None`, so the first half of
+    # every continuation trial started wherever the operator ran the runner from.
+    child = subprocess.Popen(argv, env=env, cwd=wall.cwd, stdin=subprocess.DEVNULL,
                              stdout=open(out_dir + ".launcher.out", "wb"),
                              stderr=open(out_dir + ".launcher.err", "wb"),
                              start_new_session=True)
@@ -10415,7 +10807,11 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     trial = getattr(args, "trial", None)
     scratch = (trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
                if trial else None)
-    env = campaign.env(extra=setup.launch_env("available"), scratch=scratch)
+    launcher_env = dict(setup.launch_env("available"))
+    # send-back 2: the resumed half is a launch too, and `claude -p --resume` makes the same
+    # scratch the first half did.
+    launcher_env.update(setup.scratch_env(scratch or campaign.tmp))
+    env = campaign.env(extra=launcher_env, scratch=scratch)
     # fix 5 (D): the compaction resume builds its argv by hand and named no root at all. The
     # run directory is the fixture's own `run/` leaf beside the workspace, so a caller that
     # does not pass it (a direct probe) still gets the right root from the workspace's parent.
@@ -10467,8 +10863,8 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "resume+autocompact")
-        step = run_cmd(argv, env=env, cwd=workspace, timeout=timeout, label="resume+autocompact",
-                       registry=registry)
+        step = run_cmd(argv, env=env, cwd=wall.cwd or workspace, timeout=timeout,
+                       label="resume+autocompact", registry=registry)
         write_text(os.path.join(out_dir, "trace.jsonl"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
     elif setup.harness == "codex":
@@ -10489,7 +10885,8 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "exec resume + compact limit")
-        step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")), cwd=workspace,
+        step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")),
+                       cwd=wall.cwd or workspace,
                        stdin=prompt, timeout=timeout, label="exec resume + compact limit",
                        registry=registry)
         write_text(os.path.join(out_dir, "events.jsonl"), step["stdout"])
@@ -10519,7 +10916,8 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
             XDG_DATA_HOME=os.path.join(home, "xdg-data"),
             XDG_CACHE_HOME=os.path.join(home, "xdg-cache"),
             XDG_STATE_HOME=os.path.join(home, "xdg-state"),
-            OPENCODE_DISABLE_EXTERNAL_SKILLS="1"), cwd=workspace, timeout=timeout,
+            OPENCODE_DISABLE_EXTERNAL_SKILLS="1"), cwd=wall.cwd or workspace,
+            timeout=timeout,
             label="run --session (no compaction setting exists)", registry=registry)
         write_text(os.path.join(out_dir, "trace.json"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
@@ -12222,13 +12620,18 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
         out_dir = os.path.join(record, "harness-%s" % stamp)
         prompt = os.path.join(base, "prompt.txt")
         write_text(prompt, native_read_prompt(targets))
-        roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, None,
+        # send-back 1, fault 2: the probe is trial-shaped. Its TMPDIR is `<its own
+        # tree>/scratch`, inside the root `guarded_launch_roots` names, so
+        # `setups/claude-code/launch.sh`'s `mkdir -p "${TMPDIR}/runs"` lands in a write root.
+        probe_tmp = probe_scratch(base)
+        roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, probe_tmp,
                                      "the native read-boundary probe %s" % name,
                                      trial=trial_id_, attempt=0, half="native-read")
         registry = ProcessRegistry(campaign, trial_id_, 0, "native-read-boundary")
         close_key(campaign, "the %s native read-boundary probe" % name)
         step = setup.launch(condition, prompt, workspace, out_dir, timeout=timeout,
-                            extra={"writable": roots}, registry=registry)
+                            extra={"writable": roots}, registry=registry,
+                            scratch=probe_tmp)
         reply, reply_source = harness_reply(setup, out_dir)
         capture_text = _fence_capture_text(out_dir)
         reads, verifier_reads = {}, {}
@@ -12297,6 +12700,16 @@ def read_boundary_probe(campaign, plan, setups=None):
     names = [spec["name"] for spec in plan["setups"]]
     if setups:
         names = [n for n in names if n in setups]
+    # Send-back 3. On a SEALED plan this probe runs its child THROUGH THE WALL, under the
+    # trial-shaped profile a comparison trial of that setup and condition would get. Until now
+    # it ran outside every profile, so it measured the FILESYSTEM — which of course lets one
+    # plain process read another's files — and failed the preflight of a bench whose sessions
+    # are confined, which then refused every trial through `require_preflight`. The filesystem
+    # reading is kept, as `unwalled_filesystem_fact`, because it is still the honest answer to
+    # "could a process that escaped the wall read this"; it is never the verdict on a sealed
+    # plan. On a plan without `sealed: true` nothing changes: the old reading is the verdict
+    # and the old refusal stands.
+    sealed = bool(plan.get("sealed"))
     rows = []
     for name in names:
         mine = trial_id(name, "read-boundary-probe-a", "available", 1)
@@ -12310,31 +12723,109 @@ def read_boundary_probe(campaign, plan, setups=None):
         other_home = setup.home("absent")
         env = campaign.env(extra=setup.launch_env("available"), scratch=my_scratch,
                            require_binaries=False)
-        probe = run_cmd(
-            [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home],
-            env=env, cwd=my_scratch, label="read-boundary probe")
-        try:
-            answer = json.loads(probe["stdout"] or "{}")
-        except ValueError:
-            answer = {"error": (probe["stderr"] or "")[-400:]}
+        argv = [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home]
+        walled_record, cwd = None, my_scratch
+        if sealed:
+            walled_record = read_boundary_wall(campaign, setup, mine, my_scratch)
+            argv = [SANDBOX_EXEC, "-f", walled_record["profile"]] + argv
+            cwd = walled_record["cwd"]
+        probe = run_cmd(argv, env=env, cwd=cwd, label="read-boundary probe")
+        answer = _read_boundary_answer(probe)
         answer["setup"] = name
         answer["this_trial_scratch"] = my_scratch
         answer["the_other_trial_tree"] = their_tree
         answer["the_other_condition_home"] = other_home
-        answer["separated"] = not (answer.get("read_the_other_trials_sentinel")
-                                   or answer.get("discovered_other_trial_trees")
-                                   or answer.get("read_the_other_conditions_install"))
+        answer["separated"] = _read_boundary_separated(answer)
+        answer["walled"] = bool(sealed)
+        answer["wall"] = walled_record
+        if sealed:
+            # the same child, with no profile at all: what the FILESYSTEM allows.
+            bare = run_cmd([sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel,
+                            other_home],
+                           env=env, cwd=my_scratch, label="read-boundary probe, unwalled")
+            fact = _read_boundary_answer(bare)
+            fact["separated"] = _read_boundary_separated(fact)
+            fact["measured"] = ("the same child with NO profile: what the filesystem allows a "
+                                "process that escaped the wall. Recorded for information; it "
+                                "is never the verdict on a sealed plan")
+            answer["unwalled_filesystem_fact"] = fact
         rows.append(answer)
     failed = [r for r in rows if not r.get("separated")]
     return {
         "rows": rows,
         "separated": not failed,
         "not_separated": [r["setup"] for r in failed],
-        "measured": "a child in the trial's own launch environment, E11-7 item 2",
+        "walled": sealed,
+        "measured": ("a child under the trial-shaped sandbox profile this setup and condition "
+                     "would launch behind, E11-7 item 2 as the sealed bench measures it "
+                     "(send-back 3)" if sealed else
+                     "a child in the trial's own launch environment, E11-7 item 2"),
         "why_it_matters": "an absent trial that can read another trial's records is not a "
                           "controlled absent comparison, and its result is not comparison "
                           "evidence",
     }
+
+
+def _read_boundary_answer(probe):
+    """The child's own JSON, or a recorded failure — never a silent pass.
+
+    A child that did not run answers nothing, and "nothing" used to read as three `False`s,
+    which `_read_boundary_separated` would call SEPARATED. A probe that could not be taken is
+    not a probe that passed.
+    """
+    try:
+        answer = json.loads(probe["stdout"] or "")
+    except ValueError:
+        return {"probe_ran": False,
+                "why_not": "the probe child printed no JSON (exit %s): %s"
+                           % (probe.get("exit"), (probe["stderr"] or "")[-400:]),
+                "read_the_other_trials_sentinel": None,
+                "discovered_other_trial_trees": None,
+                "read_the_other_conditions_install": None}
+    answer["probe_ran"] = True
+    answer["exit"] = probe.get("exit")
+    return answer
+
+
+def _read_boundary_separated(answer):
+    if not answer.get("probe_ran"):
+        return False
+    return not (answer.get("read_the_other_trials_sentinel")
+                or answer.get("discovered_other_trial_trees")
+                or answer.get("read_the_other_conditions_install"))
+
+
+def read_boundary_wall(campaign, setup, trial, scratch):
+    """The trial-shaped profile the read-boundary child runs behind (send-back 3).
+
+    The SAME spec a comparison trial of this setup and condition gets: its own opaque tree,
+    its own scratch, a named cwd, and everything else refused — the other trial's tree, the
+    other condition's home, `trials/`, `records/` and the rest of the user area. The probe's
+    own record sits under `records/read-boundary/`, never under `trials/`, for the reason A4
+    moved the native check out of there.
+
+    No proxy: this child opens no socket, and a proxy per probe would be a listener nothing
+    ever speaks to.
+    """
+    tree = campaign.opaque_tree(trial, 0)
+    workspace = os.path.join(tree, "workspace")
+    run_dir = os.path.join(tree, "run")
+    for path in (workspace, run_dir):
+        ensure_dir(path)
+    out_dir = os.path.join(campaign.records("read-boundary"), "probe-%s" % setup.name,
+                           "harness")
+    ensure_dir(out_dir)
+    spec = wall_spec(campaign, setup, "available", out_dir, workspace=workspace,
+                     run_dir=run_dir, scratch=scratch,
+                     roots=named_writable_roots(run_dir),
+                     label="the read-boundary probe for %s" % setup.name)
+    profile, spec_path, summary = write_wall_profile(campaign, spec, out_dir,
+                                                    stage=setup.stage)
+    return {"profile": profile, "profile_sha256": file_sha256(profile),
+            "spec_path": spec_path, "cwd": spec["cwd"], "summary": summary,
+            "sandbox_exec": SANDBOX_EXEC,
+            "why": "send-back 3: the plain child measures the WALL a sealed bench gives a "
+                   "trial, not the filesystem underneath it"}
 
 
 READ_BOUNDARY_SOURCE = r"""
@@ -13027,27 +13518,38 @@ def do_preflight(args):
         "--accept-unseparated accepts the READ-BOUNDARY state of this bench and nothing "
         "else: it never covers a failed or unchecked allow rule, and every launch is refused "
         "while one stands (E11 second fix, item C)")
+    # Send-back 3: the record goes to STDOUT on the failure path too. A7a's rule is one JSON
+    # document on stdout per subcommand, and a preflight that refuses is the run whose record
+    # a reader most needs: on the failing live proof `preflight-native.json` was 0 bytes and
+    # everything that had been measured existed only in stderr. `FAIL_EXIT_KEY` is the
+    # mechanism E10-68 defect 3 already built for exactly this — the document prints, the
+    # reason goes to stderr, and the exit status is non-zero.
+    problems = []
     if not document["allow_rules"]["ok"]:
-        write_json(os.path.join(campaign.records("read-boundary"),
-                                "preflight-%s.json" % now_iso().replace(":", "")), document)
-        raise Failure(
+        problems.append(
             "the allow-rule preflight failed: %s carries the allow rule of another campaign, "
             "so every write to this campaign's run directory is auto-rejected. Run `install` "
             "for each of them from this campaign first (E11-7 item 2). %s"
             % (", ".join("%s/%s" % (r["setup"], r["home"])
                          for r in document["allow_rules"]["homes_written_for_another_campaign"]),
                document["what_the_acceptance_covers"]))
-    if not document["separated"] and not document["accepted_unseparated"]:
-        write_json(os.path.join(campaign.records("read-boundary"),
-                                "preflight-%s.json" % now_iso().replace(":", "")), document)
-        raise Failure(
+    elif not document["separated"] and not document["accepted_unseparated"]:
+        problems.append(
             "the read-boundary preflight failed on %s: a trial can reach another trial's "
             "records or another condition's install, so this bench does not supply a "
             "controlled absent comparison (E11-7 item 2). Separate the stores, or start with "
             "--accept-unseparated and the campaign records that its comparison evidence is "
-            "uncontrolled." % ", ".join(document["not_separated"]))
-    write_json(os.path.join(campaign.records("read-boundary"),
-                            "preflight-%s.json" % now_iso().replace(":", "")), document)
+            "uncontrolled.%s" % (
+                ", ".join(document["not_separated"]),
+                (" This plan is sealed, so the reading above is what the WALL allowed a plain "
+                 "child, not what the filesystem allows: a failure here is a defect in the "
+                 "profile (send-back 3)." if plan.get("sealed") else "")))
+    record = os.path.join(campaign.records("read-boundary"),
+                          "preflight-%s.json" % now_iso().replace(":", ""))
+    write_json(record, document)
+    document["record"] = record
+    if problems:
+        document[FAIL_EXIT_KEY] = "; ".join(problems)
     return document
 
 

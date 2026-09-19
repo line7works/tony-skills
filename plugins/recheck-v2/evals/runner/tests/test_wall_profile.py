@@ -7,6 +7,7 @@ through `sh -c` — and asserts what the kernel did, not what the profile says.
 The name is `test_wall_profile.py` rather than `test_wall.py`: `test_wall.py` is the ANSWER
 KEY's wall (the key directories at mode 000), and the two must not be confused.
 """
+import hashlib
 import importlib.util
 import json
 import os
@@ -14,11 +15,13 @@ import shutil
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
+import time
 import unittest
 
-from testlib import RunnerCase, runner
+from testlib import RunnerCase, cli, parse_stdout, runner
 
 SANDBOX_EXEC = "/usr/bin/sandbox-exec"
 WRITER_PATH = os.path.join(runner.PLUGIN_DIR, "setups", "_wall",
@@ -503,6 +506,340 @@ class WallInTheRunnerTest(RunnerCase):
         self.assertTrue(command["wall"]["why"])
 
 
+class WallProxyThroughputTest(unittest.TestCase):
+    """Send-back 4: back-pressure must never look like a closed connection.
+
+    The first relay set both sockets non-blocking and called `sendall` on them. When the far
+    side's buffer filled, `sendall` raised `BlockingIOError` (EAGAIN), the handler read that as
+    a close, and the proxy tore a live session down mid-stream: two walled comparison trials
+    ran three minutes and ended `API Error: Connection dropped (ECONNRESET)` with
+    `bytes_to_host` at 131404 (proof root `wall-proof-20260919T162738Z`).
+
+    Loopback only and no model. The "allowed host" is this test's own listener, allowlisted as
+    `127.0.0.1:<port>` in the TEST spec only.
+    """
+
+    # One megabyte of incompressible bytes, repeated. 50 MiB each way is enough to fill every
+    # buffer in the path several times over; the old relay died at about one megabyte.
+    BLOCK = os.urandom(1 << 20)
+    COPIES = 50
+    TOTAL = (1 << 20) * 50
+
+    @classmethod
+    def expected_digest(cls):
+        h = hashlib.sha256()
+        for _ in range(cls.COPIES):
+            h.update(cls.BLOCK)
+        return h.hexdigest()
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="wall-relay-", dir="/private/tmp")
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.listener = socket.socket()
+        self.listener.bind(("127.0.0.1", 0))
+        self.listener.listen(4)
+        self.far_port = self.listener.getsockname()[1]
+        self.addCleanup(self.listener.close)
+        self.far = {}
+        self.log = os.path.join(self.root, "proxy.jsonl")
+        self.proxy = runner.wall_proxy.WallProxy(["127.0.0.1:%d" % self.far_port], self.log)
+        self.proxy.start()
+        self.addCleanup(self.proxy.stop)
+
+    def serve(self, target):
+        thread = threading.Thread(target=target)
+        thread.daemon = True
+        thread.start()
+        return thread
+
+    def connect(self):
+        target = "127.0.0.1:%d" % self.far_port
+        client = socket.create_connection(("127.0.0.1", self.proxy.port), timeout=30)
+        client.sendall(("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n"
+                        % (target, target)).encode("ascii"))
+        head = client.recv(200).decode("latin-1")
+        self.assertIn("200 Connection established", head)
+        client.settimeout(180)
+        return client
+
+    def read_exactly(self, sock, total, chunk=4096, sleep_every=0, sleep_for=0.0):
+        """Read `total` bytes, slowly on purpose, hashing as it goes."""
+        digest, seen, reads = hashlib.sha256(), 0, 0
+        while seen < total:
+            blob = sock.recv(chunk)
+            if not blob:
+                break
+            digest.update(blob)
+            seen += len(blob)
+            reads += 1
+            if sleep_every and reads % sleep_every == 0:
+                time.sleep(sleep_for)
+        return digest.hexdigest(), seen
+
+    def log_rows(self):
+        return [json.loads(line) for line in runner.read_text(self.log, "").splitlines()
+                if line.strip()]
+
+    def test_fifty_megabytes_each_way_past_a_slow_reader_arrive_byte_for_byte(self):
+        want = self.expected_digest()
+
+        def far_side():
+            conn, _ = self.listener.accept()
+            conn.settimeout(180)
+            try:
+                self.far["up_sha"], self.far["up_bytes"] = self.read_exactly(
+                    conn, self.TOTAL, chunk=4096, sleep_every=32, sleep_for=0.001)
+                for _ in range(self.COPIES):
+                    conn.sendall(self.BLOCK)
+                conn.shutdown(socket.SHUT_WR)
+            except OSError as exc:
+                self.far["error"] = str(exc)
+            finally:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+
+        thread = self.serve(far_side)
+        client = self.connect()
+
+        def push():
+            try:
+                for _ in range(self.COPIES):
+                    client.sendall(self.BLOCK)
+            except OSError as exc:
+                self.far["push_error"] = str(exc)
+
+        pusher = threading.Thread(target=push)
+        pusher.start()
+        down_sha, down_bytes = self.read_exactly(client, self.TOTAL, chunk=4096,
+                                                 sleep_every=64, sleep_for=0.0005)
+        pusher.join(timeout=180)
+        thread.join(timeout=30)
+
+        self.assertIsNone(self.far.get("error"), self.far)
+        self.assertIsNone(self.far.get("push_error"), self.far)
+        self.assertEqual(self.far.get("up_bytes"), self.TOTAL, "the upload was cut short")
+        self.assertEqual(self.far.get("up_sha"), want, "the upload arrived corrupted")
+        self.assertEqual(down_bytes, self.TOTAL, "the download was cut short")
+        self.assertEqual(down_sha, want, "the download arrived corrupted")
+
+        # and the proxy's own log agrees, and says the relay ended cleanly
+        client.close()
+        for _ in range(100):
+            rows = [r for r in self.log_rows() if r.get("outcome") == "allowed"]
+            if rows:
+                break
+            time.sleep(0.05)
+        self.assertEqual(len(rows), 1, self.log_rows())
+        self.assertEqual(rows[0]["bytes_to_host"], self.TOTAL)
+        self.assertEqual(rows[0]["bytes_to_client"], self.TOTAL)
+        self.assertTrue(rows[0]["clean"], rows[0])
+
+    def test_a_stream_held_idle_mid_way_resumes_rather_than_dropping(self):
+        """A model that pauses between tokens is not a model that hung up."""
+        payload = self.BLOCK[:1 << 18]
+
+        def far_side():
+            conn, _ = self.listener.accept()
+            conn.settimeout(60)
+            try:
+                first, _n = self.read_exactly(conn, len(payload))
+                conn.sendall(payload)
+                time.sleep(3)                       # the pause
+                conn.sendall(payload)
+                second, _n = self.read_exactly(conn, len(payload))
+                self.far["halves"] = (first, second)
+                conn.shutdown(socket.SHUT_WR)
+            except OSError as exc:
+                self.far["error"] = str(exc)
+
+        thread = self.serve(far_side)
+        client = self.connect()
+        want = hashlib.sha256(payload).hexdigest()
+        client.sendall(payload)
+        first, first_bytes = self.read_exactly(client, len(payload))
+        time.sleep(3)                               # idle in the other direction too
+        client.sendall(payload)
+        second, second_bytes = self.read_exactly(client, len(payload))
+        thread.join(timeout=30)
+        self.assertIsNone(self.far.get("error"), self.far)
+        self.assertEqual((first_bytes, second_bytes), (len(payload), len(payload)))
+        self.assertEqual([first, second], [want, want])
+        self.assertEqual(list(self.far.get("halves")), [want, want])
+
+    def test_a_half_close_keeps_the_other_direction_open(self):
+        """The client says it is done sending; everything the far side still owes arrives."""
+        up = self.BLOCK[:1 << 16]
+        down = self.BLOCK[:1 << 20]
+
+        def far_side():
+            conn, _ = self.listener.accept()
+            conn.settimeout(60)
+            try:
+                seen = b""
+                while len(seen) < len(up):
+                    blob = conn.recv(4096)
+                    if not blob:
+                        break
+                    seen += blob
+                # the half-close must arrive as a plain EOF, not as an error
+                self.far["eof_after_up"] = conn.recv(4096) == b""
+                self.far["up"] = hashlib.sha256(seen).hexdigest()
+                conn.sendall(down)
+                conn.shutdown(socket.SHUT_WR)
+                conn.close()
+            except OSError as exc:
+                self.far["error"] = str(exc)
+
+        thread = self.serve(far_side)
+        client = self.connect()
+        client.sendall(up)
+        client.shutdown(socket.SHUT_WR)
+        got, got_bytes = self.read_exactly(client, len(down))
+        thread.join(timeout=30)
+        self.assertIsNone(self.far.get("error"), self.far)
+        self.assertTrue(self.far.get("eof_after_up"), self.far)
+        self.assertEqual(self.far.get("up"), hashlib.sha256(up).hexdigest())
+        self.assertEqual(got_bytes, len(down), "the far side's reply was cut short")
+        self.assertEqual(got, hashlib.sha256(down).hexdigest())
+
+    def test_the_headers_are_read_unbuffered_so_nothing_is_swallowed(self):
+        """A client that sends its first payload bytes in the SAME packet as the CONNECT
+        headers must not lose them to a read-ahead buffer."""
+        self.assertEqual(runner.wall_proxy._Handler.rbufsize, 0)
+        payload = b"the-first-bytes-after-the-headers"
+
+        def far_side():
+            conn, _ = self.listener.accept()
+            conn.settimeout(30)
+            try:
+                self.far["first"] = conn.recv(len(payload))
+                conn.close()
+            except OSError as exc:
+                self.far["error"] = str(exc)
+
+        thread = self.serve(far_side)
+        target = "127.0.0.1:%d" % self.far_port
+        client = socket.create_connection(("127.0.0.1", self.proxy.port), timeout=30)
+        self.addCleanup(client.close)
+        client.sendall(("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n"
+                        % (target, target)).encode("ascii") + payload)
+        client.settimeout(30)
+        self.assertIn("200 Connection established", client.recv(200).decode("latin-1"))
+        thread.join(timeout=30)
+        self.assertEqual(self.far.get("first"), payload, self.far)
+
+
+@unittest.skipUnless(os.path.isfile(SANDBOX_EXEC), "this machine has no sandbox-exec")
+class GitConfigReadsTest(RunnerCase):
+    """Send-back 4 item 3: git's two global config locations are declared reads, identically
+    for both setups and therefore for both conditions.
+
+    Measured 2026-09-19 on this Mac: with `~/.config` refused, `git status` prints
+    `warning: unable to access '~/.config/git/ignore': Operation not permitted` and continues;
+    `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` does NOT silence it, because the
+    `core.excludesFile` default is applied independently of any config file; allowing the
+    directory does silence it.
+    """
+
+    def test_both_setups_declare_the_same_two_git_paths_with_a_reason(self):
+        campaign = runner.Campaign(self.campaign)
+        for cls, name in ((runner.ClaudeCodeSetup, "claude-code"),
+                          (runner.CodexSetup, "codex")):
+            needs = runner.wall_needs(cls(campaign, stage=self.stage, name=name))
+            paths = {e["path"]: e for e in needs["read"]}
+            for wanted in ("~/.gitconfig", "~/.config/git"):
+                self.assertIn(wanted, paths, name)
+                self.assertTrue(paths[wanted].get("optional"), (name, wanted))
+                self.assertGreater(len(paths[wanted]["why"]), 60, (name, wanted))
+
+    def test_the_declared_paths_reach_the_profile_and_silence_the_warning(self):
+        """A real `git status` under a real profile built from the real needs file."""
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        runner.ensure_dir(setup.home("available"))
+        work = os.path.join(self.scratch, "gitwork")
+        repo = os.path.join(work, "repo")
+        runner.ensure_dir(repo)
+        runner.run_cmd(["/usr/bin/git", "init", "-q", repo], env=runner.tool_env(),
+                       label="init")
+        runner.write_text(os.path.join(repo, "a.txt"), "x\n")
+        spec = runner.wall_spec(campaign, setup, "available",
+                                os.path.join(campaign.trials, "t", "harness"),
+                                workspace=repo, run_dir=os.path.join(work, "run"),
+                                scratch=os.path.join(work, "scratch"),
+                                roots=[work])
+        declared = [os.path.realpath(os.path.expanduser("~/.config/git"))]
+        self.assertTrue([r for r in spec["read_roots"]
+                         if os.path.realpath(r["path"]) in declared],
+                        "~/.config/git is not in the profile's read roots")
+        profile = os.path.join(self.scratch, "git.sb")
+        text, _summary = writer.build(spec)
+        runner.write_text(profile, text)
+        got = sandbox(profile, ["/usr/bin/git", "-C", repo, "status", "--porcelain"],
+                      cwd=repo)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertNotIn("Operation not permitted", got.stderr)
+        self.assertNotIn("unable to access", got.stderr)
+        self.assertIn("a.txt", got.stdout)
+
+
+@unittest.skipUnless(os.path.isfile(SANDBOX_EXEC), "this machine has no sandbox-exec")
+class NamedCwdTest(unittest.TestCase):
+    """Send-back 1, fault 1: a walled child never inherits the operator's cwd.
+
+    The control room ran the runner from a scratch under `/private/tmp`, which every profile
+    refuses, so every shell in `launch.sh` printed `getcwd: cannot access parent directories:
+    Operation not permitted` before a model was called. This proves both halves: inheriting a
+    refused cwd breaks the child, and the named cwd fixes it.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="wall-cwd-", dir="/private/tmp")
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.refused = os.path.join(self.root, "where-the-operator-stood")
+        self.allowed = os.path.join(self.root, "the-launchs-own-workspace")
+        os.makedirs(self.refused)
+        os.makedirs(self.allowed)
+        self.profile = os.path.join(self.root, "launch.sb")
+        text, _summary = writer.build({
+            "label": "the named cwd",
+            "read_roots": ["/usr", "/bin", "/System", "/Library"],
+            "write_roots": [self.allowed],
+            "refused_roots": [self.refused],
+        })
+        runner.write_text(self.profile, text)
+
+    def test_a_child_that_INHERITS_a_refused_cwd_cannot_even_getcwd(self):
+        """The fault, reproduced: this is what the first live proof did."""
+        got = sandbox(self.profile, ["/bin/sh", "-c", "pwd"], cwd=self.refused)
+        self.assertIn("getcwd", (got.stderr or "") + (got.stdout or ""))
+        got = sandbox(self.profile, ["/usr/bin/python3", "-c", "import os;print(os.getcwd())"],
+                      cwd=self.refused)
+        self.assertNotEqual(got.returncode, 0)
+        self.assertIn("PermissionError", got.stderr)
+
+    def test_a_child_given_the_NAMED_cwd_resolves_it(self):
+        got = sandbox(self.profile, ["/bin/sh", "-c", "pwd"], cwd=self.allowed)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(got.stdout.strip(), os.path.realpath(self.allowed))
+        self.assertNotIn("getcwd", got.stderr or "")
+        got = sandbox(self.profile, ["/usr/bin/python3", "-c", "import os;print(os.getcwd())"],
+                      cwd=self.allowed)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(got.stdout.strip(), os.path.realpath(self.allowed))
+
+    def test_a_grandchild_of_the_named_cwd_resolves_it_too(self):
+        """`launch.sh` runs a python post-step through a shell; the cwd has to survive both."""
+        got = sandbox(self.profile,
+                      ["/bin/sh", "-c",
+                       "/bin/sh -c '/usr/bin/python3 -c \"import os;print(os.getcwd())\"'"],
+                      cwd=self.allowed)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(got.stdout.strip(), os.path.realpath(self.allowed))
+
+
 class CodexLauncherToleratesTheWallsOwnFilesTest(unittest.TestCase):
     """The regression the wall introduced, and the fix, with a STUB `codex` and no model.
 
@@ -569,6 +906,553 @@ class CodexLauncherToleratesTheWallsOwnFilesTest(unittest.TestCase):
         self.assertEqual(command[command.index("--sandbox") + 1], "danger-full-access")
         self.assertIn("approval_policy=never", command)
         self.assertNotIn("sandbox_workspace_write.network_access=true", command)
+
+
+class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
+    """Send-back 1, fault 2: the audit, as a test.
+
+    Every walled launch kind's TMPDIR, its `${TMPDIR}/runs` (which
+    `setups/claude-code/launch.sh` creates on every launch), its run directory and its
+    adapters' run root must each sit inside a write root of its own profile, and its named
+    cwd inside a read root. The native check died in under a second because one kind's TMPDIR
+    was the campaign's shared `tmp/`, which is a REFUSED root.
+
+    The kinds are built here the way each call site builds them, from the runner's own
+    helpers, so a call site that stops using `trial_scratch` or `probe_scratch` fails here.
+    """
+
+    def campaign_and_setup(self, name="claude-code"):
+        campaign = runner.Campaign(self.campaign)
+        cls = {"claude-code": runner.ClaudeCodeSetup, "codex": runner.CodexSetup,
+               "opencode": runner.OpenCodeSetup}[name]
+        setup = cls(campaign, stage=self.stage, name=name)
+        runner.ensure_dir(setup.home("available"))
+        return campaign, setup
+
+    def kinds(self, campaign, setup):
+        """`(name, workspace, run_dir, scratch, roots, out_dir)` per launch kind."""
+        rows = []
+
+        def trial_shaped(name, tid, kind_attempt=0):
+            tree = campaign.opaque_tree(tid, kind_attempt)
+            case = os.path.join(tree, "fixture", "abc123def456")
+            workspace = os.path.join(case, "workspace")
+            run_dir = os.path.join(case, "run")
+            scratch = runner.trial_scratch(campaign, tid, kind_attempt)
+            return (name, workspace, run_dir, scratch,
+                    runner.named_writable_roots(run_dir),
+                    os.path.join(campaign.trials, tid, "harness"))
+
+        # 1. comparison, and 2. its rerun (the same path, another attempt)
+        rows.append(trial_shaped("comparison", "claude-code-F1-01-fixed-clean-available-r1"))
+        rows.append(trial_shaped("rerun", "claude-code-F1-01-fixed-clean-available-r1", 1))
+        # 3. routing: the workspace is the opaque tree's own, not a fixture leaf
+        tid = "routing-claude-code-T-01-slash-v2-slice-r1"
+        tree = campaign.opaque_tree(tid, 0)
+        rows.append(("routing", os.path.join(tree, "workspace"),
+                     os.path.join(tree, "run"), runner.trial_scratch(campaign, tid, 0),
+                     runner.named_writable_roots(os.path.join(tree, "run")),
+                     os.path.join(campaign.trials, tid, "harness")))
+        # 4. and 5. both continuation halves
+        rows.append(trial_shaped("continuation-first", "cont-claude-code-F3-02-handoff-r1"))
+        rows.append(trial_shaped("continuation-second", "cont-claude-code-F3-02-handoff-r1"))
+        # 6. the compaction resume
+        rows.append(trial_shaped("compaction-resume", "cont-claude-code-F3-02-compaction-r1"))
+        # 7. the consumer: its workspace is inside the pair directory of its own tree
+        tid = "consumer-claude-code-from-codex-r1"
+        tree = campaign.opaque_tree(tid, 0)
+        pair = os.path.join(tree, "pair")
+        rows.append(("consumer", os.path.join(pair, "workspace"),
+                     os.path.join(pair, "run"), runner.trial_scratch(campaign, tid, 0),
+                     runner.named_writable_roots(os.path.join(pair, "run")),
+                     os.path.join(campaign.trials, tid, "harness")))
+        # 8. probe-env
+        base = runner.probe_dir(campaign, setup.name, "available")
+        rows.append(("probe-env", os.path.join(campaign.root, "probes", "workspace"),
+                     os.path.join(campaign.root, "probes", "workspace"),
+                     runner.probe_scratch(base), [],
+                     os.path.join(base, "20260919T000000Z")))
+        # 9. the write-fence proof's live mode
+        base = os.path.join(campaign.tmp, "write-fence", setup.name)
+        rows.append(("write-fence", os.path.join(base, "workspace"),
+                     os.path.join(base, "run"), runner.probe_scratch(base),
+                     runner.named_writable_roots(os.path.join(base, "run")),
+                     os.path.join(campaign.trials, "fence-%s-x" % setup.name, "harness")))
+        # 10. the native read-boundary probe
+        base = os.path.join(campaign.tmp, "native-read-boundary", setup.name)
+        rows.append(("native-read-boundary", os.path.join(base, "workspace"),
+                     os.path.join(base, "run"), runner.probe_scratch(base),
+                     runner.named_writable_roots(os.path.join(base, "run")),
+                     os.path.join(campaign.records("native-read-boundary"), setup.name,
+                                  "harness-20260919T000000Z")))
+        return rows
+
+    def inside(self, rows, path):
+        """Is `path` inside one of these roots, in EITHER spelling?
+
+        The writer emits every root in its given AND its resolved form, because `/var` is
+        `/private/var` and `/tmp` is `/private/tmp` on this Mac. The relocated test pilot root
+        lives under `/var/folders/...`, so a comparison on one spelling alone reports a root
+        that is in the profile as missing from it.
+        """
+        hits = []
+        for row in rows:
+            for root in (row["path"], os.path.realpath(row["path"])):
+                for candidate in (os.path.abspath(path), os.path.realpath(path)):
+                    if runner.path_contains(root, candidate):
+                        hits.append(row["path"])
+                        break
+                else:
+                    continue
+                break
+        return hits
+
+    def test_every_launch_kind(self):
+        for name in ("claude-code", "codex", "opencode"):
+            campaign, setup = self.campaign_and_setup(name)
+            for kind, workspace, run_dir, scratch, roots, out_dir in self.kinds(campaign,
+                                                                                setup):
+                spec = runner.wall_spec(campaign, setup, "available", out_dir,
+                                        workspace=workspace, run_dir=run_dir,
+                                        scratch=scratch, roots=roots, proxy_port=1)
+                writes = spec["write_roots"]
+                reads = spec["read_roots"] + writes
+                label = "%s / %s" % (name, kind)
+                # TMPDIR itself
+                self.assertTrue(self.inside(writes, scratch),
+                                "%s: TMPDIR %s is in no write root" % (label, scratch))
+                # `${TMPDIR}/runs`, which setups/claude-code/launch.sh makes on every launch
+                self.assertTrue(self.inside(writes, os.path.join(scratch, "runs")),
+                                "%s: ${TMPDIR}/runs is in no write root" % label)
+                # the run directory
+                self.assertTrue(self.inside(writes, run_dir),
+                                "%s: the run directory is in no write root" % label)
+                # the adapters' run root, `<opaque tree>/runs`
+                tree = os.path.dirname(os.path.realpath(scratch))
+                self.assertTrue(self.inside(writes, os.path.join(tree, "runs")),
+                                "%s: the adapters' run root is in no write root" % label)
+                # the named cwd, readable
+                self.assertTrue(self.inside(reads, spec["cwd"]),
+                                "%s: the named cwd %s is in no read root"
+                                % (label, spec["cwd"]))
+                self.assertEqual(spec["cwd"], os.path.realpath(workspace))
+                # send-back 5: the offline uv cache, on every kind of every setup.
+                uv = spec["uv"]
+                self.assertEqual(uv["UV_OFFLINE"], "1", label)
+                self.assertEqual(os.path.realpath(uv["UV_CACHE_DIR"]),
+                                 os.path.realpath(setup.uv_cache("available")), label)
+                self.assertTrue(self.inside(writes, uv["UV_CACHE_DIR"]),
+                                "%s: UV_CACHE_DIR is in no write root" % label)
+                self.assertTrue(runner.path_contains(setup.home("available"),
+                                                     uv["UV_CACHE_DIR"]),
+                                "%s: UV_CACHE_DIR is outside this condition's home" % label)
+                # the two names ride with the WALL, not with launch_env: they exist because
+                # the wall closes the network, and an unwalled launch has no warmed cache.
+                self.assertNotIn("UV_CACHE_DIR", setup.launch_env("available"), label)
+                self.assertNotIn("UV_OFFLINE", setup.launch_env("available"), label)
+                self.assertEqual(setup.uv_env("available"), uv, label)
+                # send-back 2: Claude Code's own scratch pointer, on every claude-code kind
+                # and on no other harness's.
+                pointers = spec["harness_tmpdirs"]
+                if name == "claude-code":
+                    self.assertEqual(sorted(pointers), ["CLAUDE_CODE_TMPDIR"], label)
+                    cc_tmp = pointers["CLAUDE_CODE_TMPDIR"]
+                    self.assertEqual(os.path.realpath(cc_tmp),
+                                     os.path.realpath(os.path.join(scratch, "cc-tmp")), label)
+                    self.assertTrue(os.path.isdir(cc_tmp),
+                                    "%s: CLAUDE_CODE_TMPDIR was not created before the launch"
+                                    % label)
+                    self.assertTrue(self.inside(writes, cc_tmp),
+                                    "%s: CLAUDE_CODE_TMPDIR is in no write root" % label)
+                    self.assertFalse(
+                        runner.path_contains("/private/tmp", os.path.realpath(cc_tmp))
+                        and not self.inside(writes, cc_tmp),
+                        "%s: CLAUDE_CODE_TMPDIR is under the shared /tmp" % label)
+                else:
+                    self.assertEqual(pointers, {}, label)
+                # and Codex's own two, which its launcher always adds
+                if name == "codex":
+                    child = os.path.join(setup.home("available"), "child")
+                    self.assertTrue(self.inside(writes, child),
+                                    "%s: $CODEX_HOME/child is in no write root" % label)
+                    self.assertTrue(self.inside(writes, os.path.join(child, "uv-cache")),
+                                    "%s: the uv cache is in no write root" % label)
+
+    def test_the_campaigns_shared_tmp_is_never_a_launchs_TMPDIR(self):
+        """The fault itself: `<campaign>/tmp` is a REFUSED root, so a launch handed it as
+        TMPDIR cannot make `${TMPDIR}/runs`."""
+        campaign, setup = self.campaign_and_setup()
+        for _kind, workspace, run_dir, scratch, roots, out_dir in self.kinds(campaign, setup):
+            self.assertNotEqual(os.path.realpath(scratch), os.path.realpath(campaign.tmp))
+        spec = runner.wall_spec(campaign, setup, "available",
+                                os.path.join(campaign.trials, "t", "harness"),
+                                workspace=os.path.join(self.scratch, "ws"),
+                                scratch=os.path.join(self.scratch, "tree", "scratch"))
+        self.assertIn(os.path.realpath(campaign.tmp),
+                      [r["path"] for r in spec["refused_roots"]])
+
+
+class ClaudeCodeTmpdirTest(RunnerCase):
+    """Send-back 2: `/tmp/claude-<uid>` is shared by every Claude session on this Mac, so it
+    can never be a root of one trial's profile; `CLAUDE_CODE_TMPDIR` moves that scratch inside
+    the trial's own TMPDIR."""
+
+    def the_setups(self):
+        campaign = runner.Campaign(self.campaign)
+        return campaign, {
+            "claude-code": runner.ClaudeCodeSetup(campaign, stage=self.stage),
+            "codex": runner.CodexSetup(campaign, stage=self.stage),
+            "opencode": runner.OpenCodeSetup(campaign, stage=self.stage, name="opencode"),
+        }
+
+    def test_the_name_is_declared_and_carries_its_reason(self):
+        self.assertIn("CLAUDE_CODE_TMPDIR", runner.DECLARED_ENV)
+        self.assertIn("shared", runner.DECLARED_ENV["CLAUDE_CODE_TMPDIR"])
+        # it IS a banned shape, which is exactly why it has to be declared
+        self.assertTrue(runner.BANNED_ENV_RE.match("CLAUDE_CODE_TMPDIR"))
+        # and `run_cmd` therefore lets it through rather than refusing the child
+        built = runner.Campaign(self.campaign).env(
+            extra={"CLAUDE_CODE_TMPDIR": "/x"}, require_binaries=False)
+        self.assertEqual([n for n in runner.banned_names(built)
+                          if n not in runner.DECLARED_ENV], [])
+
+    def test_only_claude_code_gets_it_and_it_is_created(self):
+        campaign, setups = self.the_setups()
+        tmpdir = os.path.join(self.scratch, "a-launchs-own-tmpdir")
+        runner.ensure_dir(tmpdir)
+        self.assertEqual(setups["codex"].scratch_env(tmpdir), {})
+        self.assertEqual(setups["opencode"].scratch_env(tmpdir), {})
+        got = setups["claude-code"].scratch_env(tmpdir)
+        self.assertEqual(sorted(got), ["CLAUDE_CODE_TMPDIR"])
+        self.assertEqual(got["CLAUDE_CODE_TMPDIR"], os.path.join(tmpdir, "cc-tmp"))
+        self.assertTrue(os.path.isdir(got["CLAUDE_CODE_TMPDIR"]))
+        # never the shared folder the live proof died on
+        self.assertNotEqual(os.path.realpath(got["CLAUDE_CODE_TMPDIR"]),
+                            os.path.realpath("/tmp/claude-%d" % os.getuid()))
+
+    def test_a_real_claude_code_launch_carries_it_and_the_record_says_so(self):
+        """Through the fake launcher, which records the names its environment held."""
+        tid, got = self.run_trial()
+        self.assertEqual(got.returncode, 0, got.stderr)
+        names = runner.read_json(os.path.join(self.campaign, "trials", tid, "harness",
+                                              "env-names.json"))["names"]
+        self.assertIn("CLAUDE_CODE_TMPDIR", names)
+        command = runner.read_json(os.path.join(self.campaign, "trials", tid, "command.json"))
+        self.assertIn("CLAUDE_CODE_TMPDIR", command["allowlisted_env_names"])
+        self.assertIn("CLAUDE_CODE_TMPDIR", command["launcher_env_names"])
+        # and it points inside this trial's own scratch, which the runner made before the
+        # launch. (The record cannot be searched for the literal `/tmp/claude-<uid>`: this
+        # suite's own scratch root legitimately contains that string.)
+        scratch = runner.trial_scratch(runner.Campaign(self.campaign), tid, 0)
+        self.assertTrue(os.path.isdir(os.path.join(scratch, "cc-tmp")))
+        self.assertTrue(runner.path_contains(command["opaque_tree"],
+                                             os.path.join(scratch, "cc-tmp")))
+
+
+@unittest.skipUnless(os.path.isfile(SANDBOX_EXEC), "this machine has no sandbox-exec")
+@unittest.skipUnless(runner.which("uv"), "this machine has no uv")
+class OfflineUvCacheTest(RunnerCase):
+    """Send-back 5, blocker 1: the core runs behind the wall because `install` warmed a cache.
+
+    No network and no model. The fixture script declares an EMPTY dependency set, so warming
+    it needs no index: what is tested is the mechanism (a per-home cache, `UV_OFFLINE=1` at
+    launch, the wall profile in between), not pypi.
+    """
+
+    # Built line by line rather than as one triple-quoted block, so this file's own quoting
+    # stays boring.
+    TINY = "\n".join([
+        "#!/usr/bin/env python3",
+        "# /// script",
+        '# requires-python = ">=3.9"',
+        "# dependencies = []",
+        "# ///",
+        "import argparse",
+        'parser = argparse.ArgumentParser(description="a fixture script this test wrote")',
+        "parser.parse_args()",
+        'print("the staged core ran")',
+        "",
+    ])
+
+    def tiny_stage(self, recheck=None):
+        """A stage holding PEP 723 scripts, named the way the real ones are."""
+        scripts = os.path.join(self.stage, "plugins", "recheck-v2", "skills", "recheck-v2",
+                               "scripts")
+        runner.ensure_dir(scripts)
+        for name, body in (("recheck.py", recheck or self.TINY),
+                           ("validate-result.py", self.TINY)):
+            path = os.path.join(scripts, name)
+            runner.write_text(path, body)
+            # the real stage is copied with `copy2`, which keeps the executable bit; uv spawns
+            # the script by its shebang, so a 0644 copy fails with `Permission denied`
+            os.chmod(path, 0o755)
+        return scripts
+
+    def setup_object(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        runner.ensure_dir(setup.home("available"))
+        return campaign, setup
+
+    def test_pep723_scripts_finds_the_real_plugins_three_declared_scripts(self):
+        """Against the CHECKOUT, so the enumeration is checked against what really ships."""
+        rows = runner.pep723_scripts(os.path.dirname(os.path.dirname(runner.PLUGIN_DIR)))
+        names = sorted(os.path.basename(r["script"]) for r in rows)
+        self.assertEqual(names, ["recheck.py", "validate-examples.py", "validate-result.py"])
+        for row in rows:
+            self.assertIn('dependencies = ["jsonschema==4.25.1"]', row["declares"])
+            self.assertIn('requires-python = ">=3.9"', row["declares"])
+
+    def test_the_cache_is_inside_the_home_and_the_codex_lane_keeps_its_own_path(self):
+        campaign = runner.Campaign(self.campaign)
+        claude = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        codex = runner.CodexSetup(campaign, stage=self.stage)
+        for setup in (claude, codex):
+            for condition in ("available", "absent"):
+                cache = setup.uv_cache(condition)
+                self.assertTrue(runner.path_contains(setup.home(condition), cache),
+                                (setup.name, condition))
+                self.assertEqual(setup.uv_env(condition)["UV_OFFLINE"], "1")
+                self.assertEqual(setup.uv_env(condition)["UV_CACHE_DIR"], cache)
+        # E9-25: the Codex lane's cache is the one its own launcher already exports
+        self.assertTrue(codex.uv_cache("available").endswith(
+            os.path.join("child", "uv-cache")))
+        # apparatus, not skill: both conditions get a cache of their own, built the same way
+        self.assertNotEqual(claude.uv_cache("available"), claude.uv_cache("absent"))
+
+    def test_warming_then_running_offline_behind_the_wall(self):
+        campaign, setup = self.setup_object()
+        self.tiny_stage()
+        warm = runner.warm_uv_cache(campaign, setup, "available")
+        self.assertTrue(warm["ok"], warm)
+        self.assertEqual(warm["failed"], [])
+        self.assertEqual(sorted(os.path.basename(p) for p in warm["scripts"]),
+                         ["recheck.py", "validate-result.py"])
+        # both interpreter passes ran, and the record says which
+        self.assertEqual(sorted({r["pass"] for r in warm["passes"]}),
+                         ["default", "only-system"])
+        # the hash listing
+        self.assertTrue(warm["listing"]["present"])
+        self.assertGreater(warm["listing"]["files"], 0)
+        self.assertEqual(len(warm["listing"]["tree_sha256"]), 64)
+        self.assertTrue(runner.path_contains(setup.home("available"), warm["cache"]))
+
+        # ...and now offline, behind this home's own profile, in a plain child
+        check = runner.uv_offline_check(campaign, setup, "available")
+        self.assertTrue(check["ok"], check)
+        self.assertEqual(check["exit"], 0)
+        self.assertIn("UV_OFFLINE", check["env_names"])
+        self.assertIn("UV_CACHE_DIR", check["env_names"])
+        self.assertTrue(os.path.isfile(check["profile"]))
+
+    def test_an_unwarmed_cache_fails_the_offline_check_rather_than_passing_quietly(self):
+        """The control: the check is not passing because it cannot fail."""
+        campaign, setup = self.setup_object()
+        self.tiny_stage(recheck=self.TINY.replace(
+            "# dependencies = []",
+            '# dependencies = ["a-package-this-bench-will-never-have==9.9.9"]'))
+        runner.ensure_dir(setup.uv_cache("available"))
+        check = runner.uv_offline_check(campaign, setup, "available")
+        self.assertFalse(check["ok"], check)
+        self.assertNotEqual(check["exit"], 0)
+
+    def test_verify_carries_the_offline_check_and_never_changes_its_own_exit(self):
+        campaign, setup = self.setup_object()
+        self.tiny_stage()
+        runner.ensure_dir(setup.uv_cache("available"))
+        step = runner.with_uv_offline_check(campaign, setup, "available",
+                                            {"exit": 0, "label": "verify-install.sh"})
+        self.assertIn("uv_offline", step)
+        self.assertEqual(step["exit"], 0)
+        if not step["uv_offline"]["ok"]:
+            self.assertIn("missing dependency", step["uv_offline_problem"])
+
+
+class TheAvailableHomeContainsTheOtherTwoTest(RunnerCase):
+    """The claude-code `available` home IS `<pilot>/claude-code`, a WRITE root that CONTAINS
+    `absent` and `routing`. The profile must re-deny both, for READ and for WRITE, after that
+    allow: the last matching rule wins, so the order is the whole proof."""
+
+    def profile_text(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        runner.ensure_dir(setup.home("available"))
+        tid = "claude-code-F1-01-fixed-clean-available-r1"
+        tree = campaign.opaque_tree(tid, 0)
+        case = os.path.join(tree, "fixture", "abc123def456")
+        spec = runner.wall_spec(
+            campaign, setup, "available",
+            os.path.join(campaign.trials, tid, "harness"),
+            workspace=os.path.join(case, "workspace"),
+            run_dir=os.path.join(case, "run"),
+            scratch=runner.trial_scratch(campaign, tid, 0),
+            roots=[case], proxy_port=1)
+        text, _summary = writer.build(spec)
+        return setup, text, writer.build_rules(spec)["rules"]
+
+    def test_available_is_the_home_directory_itself(self):
+        setup = runner.ClaudeCodeSetup(runner.Campaign(self.campaign), stage=self.stage)
+        self.assertEqual(setup.home("available"),
+                         os.path.join(runner.PILOT_ROOT, "claude-code"))
+        for other in ("absent", "routing"):
+            self.assertTrue(runner.path_contains(setup.home("available"),
+                                                 setup.home(other)), other)
+
+    def test_the_two_siblings_are_re_denied_after_the_allow_for_both_operations(self):
+        setup, text, rules = self.profile_text()
+        home = os.path.realpath(setup.home("available"))
+        allow_line = [i for i, line in enumerate(text.splitlines())
+                      if line.startswith("(allow file-read* file-write*")
+                      and '(subpath "%s")' % home in line]
+        self.assertEqual(len(allow_line), 1, "the home is allowed exactly once:\n%s" % text)
+        for other in ("absent", "routing"):
+            path = os.path.realpath(setup.home(other))
+            deny_line = [i for i, line in enumerate(text.splitlines())
+                         if line.startswith("(deny file-read* file-write*")
+                         and '(subpath "%s")' % path in line]
+            self.assertEqual(len(deny_line), 1,
+                             "%s is re-denied exactly once:\n%s" % (other, text))
+            self.assertGreater(deny_line[0], allow_line[0],
+                               "%s is denied BEFORE the home is allowed, so the allow wins"
+                               % other)
+            # and the kernel's own rule, evaluated: deny for read AND for write
+            for operation in ("file-read-data", "file-read-metadata", "file-write-data",
+                              "file-write-create", "file-write-mode"):
+                self.assertEqual(writer.evaluate(rules, path, operation), "deny",
+                                 "%s is not denied for %s" % (other, operation))
+                self.assertEqual(writer.evaluate(rules, os.path.join(path, "install.json"),
+                                                 operation), "deny", other)
+            # while the home itself stays readable and writable
+            for operation in ("file-read-data", "file-write-data"):
+                self.assertEqual(writer.evaluate(rules, os.path.join(home, "config"),
+                                                 operation), "allow")
+
+
+@unittest.skipUnless(os.path.isfile(SANDBOX_EXEC), "this machine has no sandbox-exec")
+class WalledReadBoundaryProbeTest(RunnerCase):
+    """Send-back 3: on a SEALED plan the read-boundary probe measures the WALL, not the disk.
+
+    The bare child used to run outside every profile, so it read everything a plain process
+    can read, failed the preflight of a bench whose sessions are confined, and
+    `require_preflight` then refused every trial of a sealed campaign. No model anywhere: the
+    probe is a plain `python3 -c`.
+    """
+
+    def seal(self):
+        campaign = runner.Campaign(self.campaign)
+        document = runner.read_json(campaign.campaign_json)
+        document["sealed"] = True
+        runner.write_json(campaign.campaign_json, document)
+        # the other condition's home has to exist, or "could not list it" is not a refusal
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        runner.ensure_dir(setup.home("available"))
+        runner.write_text(os.path.join(setup.home("absent"), "install.json"), "{}\n")
+        return campaign
+
+    def test_the_walled_child_is_separated_and_the_bare_one_is_not(self):
+        campaign = self.seal()
+        document = runner.read_boundary_probe(campaign, campaign.plan())
+        self.assertTrue(document["walled"])
+        row = document["rows"][0]
+        self.assertTrue(row["walled"])
+        self.assertTrue(row["probe_ran"], row)
+        # the wall refused all three
+        self.assertFalse(row["read_the_other_trials_sentinel"], row)
+        self.assertEqual(row["discovered_other_trial_trees"], [], row)
+        self.assertFalse(row["read_the_other_conditions_install"], row)
+        self.assertTrue(row["separated"])
+        self.assertTrue(document["separated"])
+        # and the filesystem underneath still allows every one of them, recorded as a fact
+        fact = row["unwalled_filesystem_fact"]
+        self.assertTrue(fact["probe_ran"], fact)
+        self.assertTrue(fact["read_the_other_trials_sentinel"], fact)
+        self.assertFalse(fact["separated"])
+        # the profile the child ran behind is retained and hashed
+        self.assertTrue(os.path.isfile(row["wall"]["profile"]))
+        self.assertEqual(len(row["wall"]["profile_sha256"]), 64)
+        self.assertTrue(runner.path_contains(campaign.opaque_tree(
+            runner.trial_id("claude-code", "read-boundary-probe-a", "available", 1), 0),
+            row["wall"]["cwd"]))
+        # and it is NOT under trials/ (A4's reason, kept)
+        self.assertFalse(runner.path_contains(campaign.trials, row["wall"]["profile"]))
+
+    def test_a_profile_that_ALLOWS_the_sentinel_fails_the_probe(self):
+        """The control: the probe is not passing because the child is broken."""
+        campaign = self.seal()
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        mine = runner.trial_id("claude-code", "read-boundary-probe-a", "available", 1)
+        theirs = runner.trial_id("claude-code", "read-boundary-probe-b", "available", 1)
+        my_scratch = runner.trial_scratch(campaign, mine, 0)
+        their_tree = campaign.opaque_tree(theirs, 0)
+        runner.ensure_dir(their_tree)
+        sentinel = os.path.join(their_tree, "sentinel.txt")
+        runner.write_text(sentinel, runner.READ_BOUNDARY_SENTINEL)
+        # the same spec, with the other trial's tree deliberately ALLOWED
+        wall = runner.read_boundary_wall(campaign, setup, mine, my_scratch)
+        spec = runner.read_json(wall["spec_path"])
+        spec["read_roots"].append({"path": their_tree, "why": "deliberately reopened"})
+        spec["refused_roots"] = [r for r in spec["refused_roots"]
+                                 if not runner.path_contains(r["path"], their_tree)]
+        leaky = os.path.join(self.scratch, "leaky.sb")
+        text, _summary = writer.build(spec)
+        runner.write_text(leaky, text)
+        probe = runner.run_cmd(
+            [SANDBOX_EXEC, "-f", leaky, sys.executable, "-c", runner.READ_BOUNDARY_SOURCE,
+             sentinel, setup.home("absent")],
+            env=campaign.env(extra=setup.launch_env("available"), scratch=my_scratch,
+                             require_binaries=False),
+            cwd=wall["cwd"], label="a deliberately leaky profile")
+        answer = runner._read_boundary_answer(probe)
+        self.assertTrue(answer["probe_ran"], answer)
+        self.assertTrue(answer["read_the_other_trials_sentinel"], answer)
+        self.assertFalse(runner._read_boundary_separated(answer))
+
+    def test_a_probe_that_could_not_run_is_never_separated(self):
+        """A child that answers nothing is not a child that passed."""
+        self.assertFalse(runner._read_boundary_separated(
+            runner._read_boundary_answer({"stdout": "", "stderr": "boom", "exit": 71})))
+
+    def test_an_UNSEALED_plan_keeps_the_old_reading_and_the_old_refusal(self):
+        campaign = runner.Campaign(self.campaign)
+        document = runner.read_boundary_probe(campaign, campaign.plan())
+        self.assertFalse(document["walled"])
+        row = document["rows"][0]
+        self.assertFalse(row["walled"])
+        self.assertIsNone(row.get("wall"))
+        self.assertNotIn("unwalled_filesystem_fact", row)
+        # the filesystem lets one plain child read another's sentinel, so it is not separated
+        self.assertTrue(row["read_the_other_trials_sentinel"], row)
+        self.assertFalse(document["separated"])
+
+
+class PreflightPrintsItsRecordOnTheFailurePathTest(RunnerCase):
+    """Send-back 3: A7a's one-JSON-document-on-stdout rule holds when the preflight REFUSES.
+
+    On the failing live proof the record was 0 bytes and everything measured existed only in
+    stderr.
+    """
+
+    def test_a_failing_preflight_prints_the_record_and_exits_non_zero(self):
+        got = cli(["preflight", "--campaign", self.campaign])
+        self.assertNotEqual(got.returncode, 0, got.stdout)
+        document = parse_stdout(got)
+        self.assertFalse(document["separated"])
+        self.assertIn("claude-code", document["not_separated"])
+        self.assertTrue(document["rows"][0]["read_the_other_trials_sentinel"])
+        self.assertIn("read-boundary preflight failed", got.stderr)
+        self.assertIn("read-boundary preflight failed",
+                      document[runner.FAIL_EXIT_KEY])
+        # and the same document is on disk
+        self.assertTrue(os.path.isfile(document["record"]))
+        on_disk = runner.read_json(document["record"])
+        self.assertEqual(on_disk["separated"], document["separated"])
+
+    def test_a_passing_preflight_still_prints_it_and_exits_zero(self):
+        got = cli(["preflight", "--campaign", self.campaign, "--accept-unseparated"])
+        self.assertEqual(got.returncode, 0, got.stderr[-600:])
+        document = parse_stdout(got)
+        self.assertTrue(document["accepted_unseparated"])
+        self.assertNotIn(runner.FAIL_EXIT_KEY, document)
 
 
 class SealedCampaignTest(RunnerCase):

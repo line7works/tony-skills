@@ -24,6 +24,7 @@ Python 3.9, standard library only. Run it standalone for a test:
 which prints one JSON line naming the port it bound and then serves until it is killed.
 """
 import argparse
+import errno
 import json
 import os
 import select
@@ -35,6 +36,12 @@ import time
 
 BUFFER = 65536
 IDLE_SECONDS = 900
+# How much of one direction the proxy will hold in memory before it stops READING that
+# direction. This is how back-pressure is passed along: a slow far side fills its own kernel
+# buffer, the relay's buffer then fills, and the relay stops reading from the fast side, which
+# fills ITS kernel buffer and slows the sender down. Nothing is dropped and nothing grows
+# without bound.
+HIGH_WATER = 1 << 20
 
 
 def parse_allow(entries):
@@ -68,8 +75,51 @@ def allowed(rows, host, port):
     return False
 
 
+# EAGAIN and EWOULDBLOCK are the same errno on macOS, and `BlockingIOError` covers both;
+# `InterruptedError` is EINTR. None of the three means the peer went away, and treating any of
+# them as a close is what dropped a live session mid-stream.
+def _recv(sock):
+    """`(blob, closed, fatal)`. `closed` is a real EOF; `fatal` is a real error."""
+    try:
+        blob = sock.recv(BUFFER)
+    except (BlockingIOError, InterruptedError):
+        return b"", False, None
+    except (socket.error, OSError) as exc:
+        if exc.errno in _RETRY:
+            return b"", False, None
+        if exc.errno in (errno.ECONNRESET, errno.EPIPE):
+            return b"", True, None
+        return b"", True, "recv failed: %s" % exc
+    if not blob:
+        return b"", True, None
+    return blob, False, None
+
+
+def _send(sock, blob):
+    """`(bytes actually sent, fatal)`. A partial send is normal and is carried over."""
+    try:
+        return sock.send(blob), None
+    except (BlockingIOError, InterruptedError):
+        return 0, None
+    except (socket.error, OSError) as exc:
+        if exc.errno in _RETRY:
+            return 0, None
+        return 0, "send failed: %s" % exc
+
+
+_RETRY = frozenset(e for e in (getattr(errno, "EAGAIN", None),
+                               getattr(errno, "EWOULDBLOCK", None),
+                               getattr(errno, "EINTR", None)) if e is not None)
+
+
 class _Handler(socketserver.StreamRequestHandler):
     timeout = 60
+    # UNBUFFERED. `readline` on a buffered `rfile` reads ahead, so bytes the client sent
+    # immediately after the CONNECT headers — a TLS ClientHello in the same packet — would sit
+    # in a Python buffer that the byte relay below never looks at, and the session would hang
+    # or fail its handshake. Reading the request line and the headers one byte at a time costs
+    # nothing next to a TLS session and leaves the socket exactly where the relay expects it.
+    rbufsize = 0
 
     def log_line(self, document):
         self.server.log(document)
@@ -129,52 +179,104 @@ class _Handler(socketserver.StreamRequestHandler):
         except (IOError, OSError):
             upstream.close()
             return
-        to_host, to_client = self.pump(upstream)
+        to_host, to_client, broken = self.pump(upstream)
         self.log_line({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                        "host": host, "port": port, "method": "CONNECT",
                        "outcome": "allowed", "why": "on this setup's allowlist",
+                       # A relay that ended on anything but a clean close says so, by name. A
+                       # dropped stream used to be indistinguishable from a finished one.
+                       "ended": broken or "both directions closed",
+                       "clean": broken is None,
                        "bytes_to_host": to_host, "bytes_to_client": to_client})
 
     def pump(self, upstream):
-        """Bytes both ways until either side closes. Counted, never recorded."""
+        """Relay bytes both ways until BOTH directions have closed. Counted, never recorded.
+
+        Back-pressure must never look like a closed connection. The first version set both
+        sockets non-blocking and then called `sendall` on them: when the far side's send
+        buffer filled — a large request body going up, or a long response streaming down —
+        `sendall` raised `BlockingIOError` (EAGAIN), the handler treated it as a close, and
+        the proxy tore the connection down mid-stream. Measured by the control room on
+        2026-09-19 (proof root `wall-proof-20260919T162738Z`): two walled comparison trials
+        ran for about three minutes and then ended `API Error: Connection dropped
+        (ECONNRESET)`, with `bytes_to_host` at 131404 on one of them. The native probe never
+        hit it because its exchange is small enough to fit in the buffers.
+
+        So: `select` for readability AND for writability, one pending buffer per direction,
+        partial sends carried over, and EAGAIN / EWOULDBLOCK / EINTR handled as "not yet",
+        never as "closed". When one side sends EOF the relay flushes what it still holds,
+        shuts down the WRITE half of the other side, and keeps relaying the opposite direction
+        until it closes too, because a half-closed connection is a normal thing for a client
+        to do and the other direction's data is still owed.
+        """
         client = self.connection
         client.setblocking(False)
         upstream.setblocking(False)
-        to_host = to_client = 0
+        directions = [
+            {"name": "to_host", "src": client, "dst": upstream},
+            {"name": "to_client", "src": upstream, "dst": client},
+        ]
+        for side in directions:
+            side.update({"buffer": b"", "src_eof": False, "dst_shut": False, "bytes": 0})
+        broken = None
         try:
             while True:
-                ready, _w, bad = select.select([client, upstream], [], [client, upstream],
-                                               IDLE_SECONDS)
-                if bad or not ready:
+                readers = [s["src"] for s in directions
+                           if not s["src_eof"] and len(s["buffer"]) < HIGH_WATER]
+                writers = [s["dst"] for s in directions if s["buffer"]]
+                if not readers and not writers:
                     break
-                closed = False
-                for source in ready:
-                    try:
-                        blob = source.recv(BUFFER)
-                    except (socket.error, OSError):
-                        closed = True
-                        break
-                    if not blob:
-                        closed = True
-                        break
-                    target = upstream if source is client else client
-                    try:
-                        target.sendall(blob)
-                    except (socket.error, OSError):
-                        closed = True
-                        break
-                    if source is client:
-                        to_host += len(blob)
-                    else:
-                        to_client += len(blob)
-                if closed:
+                try:
+                    ready, writable, bad = select.select(readers, writers,
+                                                         readers + writers, IDLE_SECONDS)
+                except InterruptedError:
+                    continue
+                except (socket.error, OSError) as exc:
+                    broken = "select failed: %s" % exc
+                    break
+                if bad:
+                    broken = "a socket reported an error condition"
+                    break
+                if not ready and not writable:
+                    broken = "idle for %d seconds" % IDLE_SECONDS
+                    break
+                for side in directions:
+                    if side["src"] in ready:
+                        blob, closed, fatal = _recv(side["src"])
+                        if fatal:
+                            broken = "%s: %s" % (side["name"], fatal)
+                        if closed:
+                            side["src_eof"] = True
+                        elif blob:
+                            side["buffer"] += blob
+                    if side["buffer"] and side["dst"] in writable:
+                        sent, fatal = _send(side["dst"], side["buffer"])
+                        side["buffer"] = side["buffer"][sent:]
+                        side["bytes"] += sent
+                        if fatal:
+                            broken = "%s: %s" % (side["name"], fatal)
+                    # EOF travels only after everything already read has gone out.
+                    if side["src_eof"] and not side["buffer"] and not side["dst_shut"]:
+                        side["dst_shut"] = True
+                        try:
+                            side["dst"].shutdown(socket.SHUT_WR)
+                        except (socket.error, OSError):
+                            pass
+                if broken:
+                    break
+                if all(s["dst_shut"] for s in directions):
                     break
         finally:
+            try:
+                client.setblocking(True)
+            except (socket.error, OSError):
+                pass
             try:
                 upstream.close()
             except (socket.error, OSError):
                 pass
-        return to_host, to_client
+        counts = {s["name"]: s["bytes"] for s in directions}
+        return counts["to_host"], counts["to_client"], broken
 
     def log_message(self, *args):        # never the default stderr line
         pass
