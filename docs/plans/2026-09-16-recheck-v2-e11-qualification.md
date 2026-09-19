@@ -1217,7 +1217,7 @@ to exactly the held-out request text.
   session has no clock, and this entry's times come from `date`. Next: Astra's one verification at high on
   copy9 at `7de6e3b`.
 - **E11-53, Astra's ONE verification of round 2: one item cleared, nine carried, one new BLOCKER; nothing is
-  fixed (ruling 17); the rerun proceeds on E11-50 (2026-09-18 about 8:00 PM by the machine's clock, control
+  fixed (ruling 17); the rerun proceeds on E11-50 (2026-09-18 about 7:55 PM by the machine's clock, control
   room).** Astra (GPT-6) at high on copy9 (repair at `7de6e3b`, scrubbed, 0 scan hits on nine record folders,
   the wall checked), mandate `astra-kit/mandate-round2-verify.md`, 7:35 PM to 7:52 PM, exit 0, 98 events. Filed
   at `astra-outputs/e11/round2-verify/` (verdict, prompt, stderr, exit, events, her probe scripts and logs; her
