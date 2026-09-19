@@ -1110,3 +1110,45 @@ to exactly the held-out request text.
   the resume: `~/Documents/handoffs/2026-09-18-skills-v2-e11-round2-pause-handoff.md` (paste-back line
   inside; negative test at the bottom). The builder's subagent context ends with the session; a fresh builder
   resumes from the worktree, the brief and section 23.
+- **E11-49, round 2 resumed after the account switch; batch C built through R4; the native isolation
+  check measured NOT SEPARATED on all four setups; paused for Tony's discussion (2026-09-18 about 6:20 PM,
+  control room).** Tony signed in as his other account inside the same session (/login), pasted the pause
+  hand-off line (the go), re-set the goal, then cleared it at about 5:20 PM: "lets wait and see what the
+  isolation check run turns up and we'll take a pause to discuss." Batch C since the pause (section 23b):
+  the pid-reuse liveness test; replace-never-number written into the runner's interface note and
+  `evals/README.md`, reversing Astra's earlier NEW BLOCKER 1 by name (to be put to her); writable-root
+  records named by trial, attempt and half and claimed `O_CREAT|O_EXCL` (which closed two real collisions);
+  the consumer failure interruption; `attempt_census` in `campaign status` (360 trials, 386 attempts, 26 with
+  reruns); `timed_out` looked at again and no defect found (guard tests pin the invariant); continuation
+  labels found not to read grade ok anywhere (reported, not invented); R3: a correct `verifier_unavailable`
+  no longer fails the consumer for items that never existed, `result_validates` reports skipped when the
+  regrade ran no validator, the consumer-answer schema published in the checkpoint's own vocabulary, the
+  regrade waits for every session, artifact relocation verified already correct; R5's `scrub_copy_manifest`
+  writing `COPY-MANIFEST.json` with four verdicts per file (the fourth, changed without a reason, counted
+  first); R4: `native_read_boundary_probe` (one real session per setup under its own permissions, six reads:
+  the other condition's home, another trial's record, a grading record, by the tool route and by the
+  verifier's sub-agent route; `separated` only if all six refuse; "no such file" is unclear, never
+  refused), `require_preflight` refusing a qualification launch on `accepted_unseparated`, on a record with
+  no native block, or on a failed native check; the manual-only guard found reaching through a symlink into
+  another campaign's stage (`os.walk` does not descend a link, `os.chmod` follows one, so closing the guard
+  had been changing that stage's modes), now classified per copy and moved aside inside its own root.
+  **The R4 measurement on the new root `e11-round2-proof-r4`:** claude-code 2 refused / 4 read (the other
+  condition's home refused by its path-scoped deny; the other trial's record and the grading record read,
+  because they live under the campaign root, which cannot be denied without denying the trial its own
+  work); codex 0 refused / 6 read (the sandbox governs writes and has no read permission); opencode and
+  opencode-deepseek 4 refused / 2 unclear each (the `external_directory` auto-reject on the trial and
+  grading records, the other-condition home unclear because the sessions produced no final text and their
+  records do not settle it); an earlier opencode run read `separated: true` and the builder reported both
+  runs rather than the favourable one. All four `separated: false`. The 12 environment probes ok; four
+  manual-only guard proofs complete with no setup selecting the manual-only station (A6b held). Gates on
+  the builder's side: runner 620 on both interpreters, core 383 on both pins, `check` ok; replay 0 decision
+  flips on 126, consumer 16 records 0 flips, originals 541 of 541. The control room's own checks: 0 flips,
+  consumer 16 unchanged, originals 86 of 86, no spills. Carried with reasons: OpenCode's lost resume rows,
+  R2's reviewed-source accounting, R5's verifier and resume cost binding, one R3 item. Secured as a second
+  WIP commit `c2cdab5` (not the batch-C commit: the control room's gates are not run and Tony has paused
+  the round). Both proof roots' records and the report filed in the packet. OpenRouter for the round-2
+  proofs: under 0.02; balance reads unchanged (used 14.98). **The decision to Tony, in chat:** the package's
+  step 5 says no rerun on a failed native preflight; the options are a layout change (per-campaign trial
+  roots, which does not reach Codex; an OS-level sandbox around the launcher, the only one that reaches
+  Codex, ruled out for the write fence in E11-44), or knowingly reversing E11-40's condition and rerunning
+  on the measured bench with the gap named, or closing the round without a rerun on the replayed grades.
