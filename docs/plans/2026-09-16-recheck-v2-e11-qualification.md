@@ -1152,3 +1152,20 @@ to exactly the held-out request text.
   roots, which does not reach Codex; an OS-level sandbox around the launcher, the only one that reaches
   Codex, ruled out for the write fence in E11-44), or knowingly reversing E11-40's condition and rerunning
   on the measured bench with the gap named, or closing the round without a rerun on the replayed grades.
+- **E11-50, Tony's ruling on the unsealed bench: run the rerun without the wall (2026-09-18 about 7:05 PM).**
+  His words: "Okay, fuck it. Let's run without it, but I'm going to clear the thread, and then we're going to
+  run it." Effect: E11-40's condition "the rerun only after a native isolation check passes" is knowingly
+  waived for this round by this ruling; the measured result (E11-49: `separated: false` on all four setups)
+  stands in the record and is named in the round-2 report as a limit of the bench; every cross-trial read in
+  the rerun is recorded per attempt with its target by the repaired readers and reported by name, never
+  prevented. The runner's `require_preflight` refusal of a qualification launch on an unseparated bench
+  (built in batch C per E11-40) is kept; the launch carries an explicit ruling flag naming E11-50, recorded
+  in the campaign, never a silent default. The OS-level wall (a `sandbox-exec` profile per launch first, a
+  per-condition Unix user as the fallback) is deferred to the next phase as its first item, built once for
+  all eight skills. Order before the run, decided on Tony's behalf and flagged: the ruling flag built and
+  tested, gates and the batch-C commit, Astra's one verification, the fresh root, preflight recorded as
+  accepted under E11-50, balance read, launch. The thread is cleared before the run; the resume goes through
+  `~/Documents/handoffs/2026-09-18-skills-v2-e11-round2-rerun-handoff.md`. Also this evening: the repair
+  round's findings (17 entries, per tool and per model) appended to `docs/guide-findings.md` on the main
+  checkout on Tony's word ("Can we just put it in there for now?"), committed 017e51b; the compile into the
+  vault guide stays for A12a.
