@@ -1342,7 +1342,7 @@ to exactly the held-out request text.
   independent read at max on a fresh copy (`copy3`, `mandate-read3.md`), the control room's own reading, both
   side by side in chat; the rerun board regenerated from the new root.
 - **E11-57, Astra's independent read of the round-2 rerun, the control room's reading beside it, two live
-  checks, and three corrections to the control room's own figures (2026-09-19 about 6:30 AM by the machine's
+  checks, and three corrections to the control room's own figures (2026-09-19 about 6:20 AM by the machine's
   clock, control room).** Astra (GPT-6) at max (R1f) on copy10, `mandate-read3.md`, 5:09 AM to 6:19 AM, exit 0;
   filed at `astra-outputs/e11/read3/`. **Her verdict lines under E11-41, verbatim in their first sentences:**
   claude-code DOES NOT QUALIFY; codex DOES NOT QUALIFY; opencode DOES NOT QUALIFY; opencode-deepseek DOES NOT
