@@ -540,5 +540,255 @@ class TheSummariesCarryTheSplit(RunnerCase):
             self.assertEqual(diff["flag_flips"][flag]["to_true"], 0, flag)
 
 
+class TheJudgmentAgreesWithTheFlatChecks(RunnerCase):
+    """Send-back 1: on a with-result attempt the two readings must give the same answer.
+
+    The defect this pins: the extraction used to build every item as
+    `{location, disposition, reason}` with `None` where the source said nothing. The key writes
+    "this item states no reason" as `"reason": "$absent"`, and `$absent` means the KEY IS
+    ABSENT - a key present with the value `null` fails it. So every item whose correct call was
+    `fixed` failed `dispositions_all_matched` inside the judgment block while the flat check
+    over the record's own items passed, in BOTH conditions. On the round-2 root that was the
+    whole F1 lane and every continuation pair, and nothing measured it.
+    """
+
+    WHERE = {"file": "src/widget/export.py", "line": 17}
+    KEY = "src/widget/export.py:17"
+    OTHER = {"file": "src/widget/render.py", "line": 4}
+    OTHER_KEY = "src/widget/render.py:4"
+
+    def record_dir(self, name, result=None, reply=None):
+        record = os.path.join(self.scratch, "judgment-" + name)
+        runner.ensure_dir(record)
+        if result is not None:
+            runner.write_json(os.path.join(record, "result.json"), result)
+        runner.write_text(os.path.join(record, "reply.md"), reply or "")
+        return record
+
+    @staticmethod
+    def fixed_item(where):
+        """A record's own `fixed` item: it carries NO `reason` key, as the schema has it."""
+        return {"location": dict(where), "disposition": "fixed",
+                "failure_scenario": "export a title holding a comma",
+                "verification": {"method": "executed", "evidence": [
+                    {"kind": "command", "detail": "ran widget.export; the cell is quoted"}]}}
+
+    @staticmethod
+    def not_fixed_item(where, reason):
+        return {"location": dict(where), "disposition": "not_fixed", "reason": reason,
+                "failure_scenario": "export a title holding a comma",
+                "verification": {"method": "executed", "evidence": [
+                    {"kind": "command", "detail": "ran widget.export; the cell is unquoted"}]}}
+
+    @staticmethod
+    def expects_fixed(where):
+        """The key's own shape for a fixed item: the reason key must be ABSENT."""
+        return {"location": dict(where), "disposition": "fixed", "reason": "$absent"}
+
+    @staticmethod
+    def expects_not_fixed(where, reason):
+        return {"location": dict(where), "disposition": "not_fixed", "reason": reason}
+
+    def both_readings(self, name, expected_items, result, reply=None):
+        """`(judgment checks, flat checks)` over one attempt, read the two ways."""
+        record = self.record_dir(name, result=result, reply=reply)
+        expected = {"status": "completed", "items": expected_items}
+        judgment = runner._judgment(record, result, expected, {})
+        flat_dispositions = runner._dispositions(
+            (result or {}).get("items") or [], expected_items)
+        flat = {
+            "dispositions_all_matched": flat_dispositions["all_matched"] is True,
+            "no_false_fixed": not runner._false_fixed(flat_dispositions)["items"],
+        }
+        return judgment, flat
+
+    # ---- the matrix -------------------------------------------------------------------
+
+    def matrix(self):
+        """One row per disposition the contract names, plus the `$unordered` pair of F3-02.
+
+        Named `matrix`, not `cases`: `RunnerCase.cases` is the plan's own case list.
+        """
+        rows = [("fixed",
+                 [self.expects_fixed(self.WHERE)],
+                 {"items": [self.fixed_item(self.WHERE)]})]
+        for reason in ("reproduces", "missed_case", "verification_blocked",
+                       "missing_evidence"):
+            rows.append(("not_fixed-" + reason,
+                         [self.expects_not_fixed(self.WHERE, reason)],
+                         {"items": [self.not_fixed_item(self.WHERE, reason)]}))
+        # F3-02's shape: two items, order not pinned, one of each disposition
+        rows.append((
+            "unordered-pair",
+            {"$unordered": [self.expects_not_fixed(self.OTHER, "missed_case"),
+                            self.expects_fixed(self.WHERE)]},
+            {"items": [self.fixed_item(self.WHERE),
+                       self.not_fixed_item(self.OTHER, "missed_case")]}))
+        # and the same pair answered the WRONG way round, so the agreement is tested on a
+        # failing attempt too and not only on passing ones
+        rows.append((
+            "unordered-pair-wrong",
+            {"$unordered": [self.expects_not_fixed(self.OTHER, "missed_case"),
+                            self.expects_fixed(self.WHERE)]},
+            {"items": [self.not_fixed_item(self.WHERE, "reproduces"),
+                       self.fixed_item(self.OTHER)]}))
+        # a record whose call is simply wrong
+        rows.append(("wrong-disposition",
+                     [self.expects_not_fixed(self.WHERE, "reproduces")],
+                     {"items": [self.fixed_item(self.WHERE)]}))
+        # a record whose reason is wrong
+        rows.append(("wrong-reason",
+                     [self.expects_not_fixed(self.WHERE, "reproduces")],
+                     {"items": [self.not_fixed_item(self.WHERE, "missed_case")]}))
+        return rows
+
+    def test_a_fixed_item_matches_the_keys_absent_reason(self):
+        """The defect itself, at its smallest."""
+        judgment, flat = self.both_readings(
+            "fixed-alone", [self.expects_fixed(self.WHERE)],
+            {"items": [self.fixed_item(self.WHERE)]})
+        self.assertTrue(flat["dispositions_all_matched"])
+        self.assertTrue(judgment["checks"]["dispositions_all_matched"],
+                        judgment["dispositions"]["items"])
+        self.assertEqual(judgment["items"][0]["stated_fields"],
+                         ["disposition", "location"])
+
+    def test_the_two_readings_agree_on_every_disposition(self):
+        for name, expected_items, result in self.matrix():
+            with self.subTest(case=name):
+                judgment, flat = self.both_readings(name, expected_items, result)
+                self.assertEqual(judgment["checks"]["dispositions_all_matched"],
+                                 flat["dispositions_all_matched"],
+                                 "%s: judgment %r, flat %r"
+                                 % (name, judgment["checks"]["dispositions_all_matched"],
+                                    flat["dispositions_all_matched"]))
+                self.assertEqual(judgment["checks"]["no_false_fixed"],
+                                 flat["no_false_fixed"], name)
+
+    def test_the_matrix_actually_exercises_both_answers(self):
+        """A test that only ever compared two `True`s would have passed the defect too."""
+        answers = set()
+        for name, expected_items, result in self.matrix():
+            judgment, _flat = self.both_readings(name, expected_items, result)
+            answers.add(judgment["checks"]["dispositions_all_matched"])
+        self.assertEqual(answers, {True, False})
+
+    def test_a_record_that_states_reason_null_still_fails_absent(self):
+        """"Stated null" and "not stated" are different, and stay different."""
+        item = self.fixed_item(self.WHERE)
+        item["reason"] = None
+        judgment, flat = self.both_readings(
+            "stated-null", [self.expects_fixed(self.WHERE)], {"items": [item]})
+        self.assertFalse(flat["dispositions_all_matched"])
+        self.assertFalse(judgment["checks"]["dispositions_all_matched"])
+        self.assertIn("reason", judgment["items"][0]["stated_fields"])
+
+    # ---- the reply-sourced side --------------------------------------------------------
+
+    def test_a_reply_sourced_fixed_call_matches(self):
+        reply = ("MAJOR \u00b7 %s \u00b7 (the title with a comma is not quoted) \u00b7 fixed "
+                 "\u00b7 executed the scenario and saw it quoted\n" % self.KEY)
+        judgment, _flat = self.both_readings(
+            "reply-fixed", [self.expects_fixed(self.WHERE)], None, reply=reply)
+        self.assertEqual(judgment["sources"], {"reply.md": 1})
+        self.assertEqual(judgment["items"][0]["stated_fields"],
+                         ["disposition", "location"])
+        self.assertTrue(judgment["checks"]["dispositions_all_matched"],
+                        judgment["dispositions"]["items"])
+
+    def test_a_reply_sourced_fixed_call_on_a_not_fixed_item_fails_and_is_a_false_fixed(self):
+        reply = ("BLOCKER \u00b7 %s \u00b7 (the title with a comma is not quoted) \u00b7 "
+                 "fixed \u00b7 static, read the diff\n" % self.KEY)
+        judgment, _flat = self.both_readings(
+            "reply-false-fixed", [self.expects_not_fixed(self.WHERE, "reproduces")], None,
+            reply=reply)
+        self.assertFalse(judgment["checks"]["dispositions_all_matched"])
+        self.assertFalse(judgment["checks"]["no_false_fixed"])
+        self.assertEqual(judgment["false_fixed"]["count"], 1)
+        self.assertIn("no_false_fixed", judgment["because"])
+
+    def test_a_reply_line_with_a_reason_states_it(self):
+        reply = ("BLOCKER \u00b7 %s \u00b7 (a claim) \u00b7 not fixed (missed_case) \u00b7 "
+                 "executed\n" % self.KEY)
+        judgment, _flat = self.both_readings(
+            "reply-reason", [self.expects_not_fixed(self.WHERE, "missed_case")], None,
+            reply=reply)
+        self.assertEqual(judgment["items"][0]["stated_fields"],
+                         ["disposition", "location", "reason"])
+        self.assertTrue(judgment["checks"]["dispositions_all_matched"])
+
+    # ---- point 4: nothing else stands in for "not stated" ------------------------------
+
+    def test_a_reply_sourced_item_invents_no_verification_and_no_evidence_list(self):
+        """An empty object or list standing in for "not stated" would match `$len: 0` and
+        would fail `$absent`; neither is invented."""
+        reply = ("MAJOR \u00b7 %s \u00b7 (a claim) \u00b7 fixed \u00b7 static\n" % self.KEY)
+        record = self.record_dir("reply-no-verification", result=None, reply=reply)
+        items, _rows = runner._judgment_extraction(
+            record, None, [self.expects_fixed(self.WHERE)])
+        self.assertEqual(sorted(items[0]), ["disposition", "location"])
+        match = runner._import_match()
+        self.assertTrue(match.match({"verification": "$absent"}, items[0])[0])
+        self.assertFalse(match.match({"verification": {"$len": 0}}, items[0])[0])
+
+    def test_an_unextracted_item_is_no_item_at_all(self):
+        """An invented keyless item would match an expected item made only of `$absent`."""
+        record = self.record_dir("nothing", result=None, reply="nothing to report\n")
+        items, rows = runner._judgment_extraction(
+            record, None, [self.expects_fixed(self.WHERE)])
+        self.assertEqual(items, [])
+        self.assertEqual(rows[0]["source"], "unextracted")
+        self.assertEqual(rows[0]["stated_fields"], [])
+
+    def test_no_call_at_all_is_counted_while_a_reply_sourced_call_is_structural(self):
+        """The two reasons an extraction carries no evidence are not the same reason."""
+        record = self.record_dir("nothing-2", result=None, reply="nothing to report\n")
+        judgment = runner._judgment(
+            record, None, {"items": [self.expects_fixed(self.WHERE)]}, {})
+        rows = {r["check"]: r for r in judgment["not_measurable"]}
+        self.assertEqual(rows["evidence_sufficient"]["why"],
+                         "the extraction found no call to judge")
+        self.assertFalse(rows["evidence_sufficient"]["structural"])
+        self.assertTrue(rows["evidence_sufficient"]["counted_against_judgment_ok"])
+        self.assertFalse(judgment["ok"])
+
+        reply = ("MAJOR \u00b7 %s \u00b7 (a claim) \u00b7 fixed \u00b7 static\n" % self.KEY)
+        record = self.record_dir("reply-only", result=None, reply=reply)
+        judgment = runner._judgment(
+            record, None, {"items": [self.expects_fixed(self.WHERE)]}, {})
+        rows = {r["check"]: r for r in judgment["not_measurable"]}
+        self.assertEqual(rows["evidence_sufficient"]["why"],
+                         "the extraction's source cannot carry evidence entries")
+        self.assertTrue(rows["evidence_sufficient"]["structural"])
+        self.assertTrue(judgment["ok"], judgment["because"])
+
+    def test_the_record_item_is_passed_through_whole(self):
+        """Not a rebuilt copy of three fields: the key may match on any of them."""
+        record = self.record_dir("passthrough", result={"items": [self.fixed_item(self.WHERE)]})
+        items, _rows = runner._judgment_extraction(
+            record, {"items": [self.fixed_item(self.WHERE)]}, [self.expects_fixed(self.WHERE)])
+        self.assertEqual(items[0], self.fixed_item(self.WHERE))
+
+    # ---- end to end, through the real grade -------------------------------------------
+
+    def test_a_graded_fixed_attempt_agrees_end_to_end(self):
+        directory = self.stand_in_key(expected={
+            "status": "completed",
+            "items": [{"disposition": "fixed", "reason": "$absent"}]})
+        tid, _got = self.run_trial()
+        environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
+                                      "RECHECK_RUNNER_KEY_DIR": directory})
+        done = cli(["grade", "--campaign", self.campaign, tid], env=environment)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        grade = runner.read_json(os.path.join(self.campaign, "trials", tid, "grade.json"))
+        self.assertEqual(grade["judgment"]["checks"]["dispositions_all_matched"],
+                         grade["checks"]["dispositions_all_matched"],
+                         grade["judgment"]["dispositions"]["items"])
+        self.assertTrue(grade["checks"]["dispositions_all_matched"])
+        self.assertEqual(grade["judgment"]["checks"]["no_false_fixed"],
+                         grade["checks"]["no_false_fixed"])
+        self.assertTrue(grade["judgment_ok"], grade["judgment_because"])
+
+
 if __name__ == "__main__":
     unittest.main()
