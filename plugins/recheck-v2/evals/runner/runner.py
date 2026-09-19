@@ -8783,6 +8783,26 @@ def _expected_item_list(expected_items):
     return "opaque", []
 
 
+# The fields `_dispositions` matches an item on. Send-back 1: the extraction states a field or
+# omits it; it never stands `None` in for "the source said nothing", because the key writes
+# "not stated" as `"$absent"` and `$absent` means the KEY is absent, not that its value is null.
+MATCHED_ITEM_FIELDS = ("location", "disposition", "reason")
+
+
+def _stated_from_a_reply(row):
+    """What a reply line STATED, as a partial item (send-back 1).
+
+    A reply line always names a location and a disposition - `_reply_item_lines` will not call
+    it an item line otherwise. The reason is optional: the grammar writes it in parentheses
+    beside the disposition, and a `fixed` item carries none. A line with no reason word yields
+    NO `reason` key, which is what the key's `"reason": "$absent"` asks for.
+    """
+    stated = {"location": row["location"], "disposition": row["disposition"]}
+    if row.get("reason") is not None:
+        stated["reason"] = row["reason"]
+    return stated
+
+
 def _judgment_extraction(record, result, expected_items):
     """The session's call per item, normalized: `{location, disposition, reason, evidence,
     source}` (B1).
@@ -8804,13 +8824,23 @@ def _judgment_extraction(record, result, expected_items):
         if isinstance(result_items, list) else []
     items, rows, taken = [], [], set()
 
-    def add(location, disposition, reason, source, verification=None, scenario=None,
-            evidence_from=None, line=None):
-        item = {"location": location, "disposition": disposition, "reason": reason}
-        if verification is not None:
-            item["verification"] = verification
-        if scenario is not None:
-            item["failure_scenario"] = scenario
+    def add(stated, source, evidence_from=None, line=None):
+        """One extracted call. `stated` holds ONLY the fields the source actually stated.
+
+        Send-back 1, the `$absent` defect. The first version of this built every item as
+        `{"location": ..., "disposition": ..., "reason": ...}` with `None` where the source
+        said nothing. A key's expected item for a `fixed` disposition carries
+        `"reason": "$absent"`, and `$absent` means THE KEY IS ABSENT - a key present with the
+        value `null` fails it. So every item whose correct call was `fixed` failed
+        `dispositions_all_matched` in the judgment block, in BOTH conditions, while the flat
+        check over the record's own items (which simply has no `reason` key) passed. On the
+        round-2 root that was the whole F1 lane and every continuation pair.
+
+        The rule now: A FIELD THE SOURCE DID NOT STATE IS NOT A KEY. "Stated null" and "not
+        stated" are different things and stay different, so a record that really does carry
+        `"reason": null` still fails `$absent` exactly as the flat check does.
+        """
+        item = dict(stated)
         # The identity of an item is `_item_key`'s, the same one `_dispositions` and
         # `_interop` pair on: a `{file, line}` object and the reply's `file:line` string are
         # ONE item, and reading the raw location with `str()` would make them two.
@@ -8818,19 +8848,28 @@ def _judgment_extraction(record, result, expected_items):
         if key is not None:
             taken.add(key)
         items.append(item)
-        entries = (verification or {}).get("evidence") or []
-        rows.append({"location": key, "disposition": disposition, "reason": reason,
+        entries = (item.get("verification") or {}).get("evidence") or []
+        rows.append({"location": key,
+                     "disposition": item.get("disposition"),
+                     "reason": item.get("reason"),
+                     # which of the matched fields the source STATED, so a reader can tell a
+                     # stated null from a field that was never there (send-back 1)
+                     "stated_fields": sorted(k for k in item if k in MATCHED_ITEM_FIELDS),
                      "evidence": len(entries) if isinstance(entries, list) else 0,
                      "carries_evidence": bool(entries),
                      "evidence_read_from": evidence_from,
                      "line_in_the_reply": line,
                      "source": source})
 
-    # 1. the record, whatever the validator made of it
+    # 1. the record, whatever the validator made of it.
+    #
+    # Send-back 1: the record's OWN item is passed through, not a rebuilt copy of three of its
+    # fields. It is the same object the flat `dispositions` check reads, so for an attempt
+    # whose record answers every expected item the two checks are computed from identical
+    # inputs and cannot disagree. A rebuilt copy is where the `$absent` defect came from, and
+    # it would also have dropped any other field the key matches on.
     for item in result_items:
-        add(item.get("location"), item.get("disposition"), item.get("reason"), "result.json",
-            verification=item.get("verification") or {},
-            scenario=item.get("failure_scenario"),
+        add(dict(item), "result.json",
             evidence_from="the item's own verification.evidence")
     # 2. and 3. every expected item the record did not answer, from the reply then the chat
     for source, text in (("reply.md", reply), ("chat.md", chat)):
@@ -8845,19 +8884,22 @@ def _judgment_extraction(record, result, expected_items):
             row = stated.get(key)
             if row is None:
                 continue
-            add(row["location"], row["disposition"], row["reason"], source, line=row["line"])
+            add(_stated_from_a_reply(row), source, line=row["line"])
         # a session that wrote no record at all: its whole call is the reply's own lines
         if not result_items:
             for key, row in sorted(stated.items(), key=lambda kv: kv[1]["line_number"]):
                 if key in taken:
                     continue
-                add(row["location"], row["disposition"], row["reason"], source,
-                    line=row["line"])
-    # 4. what no source named
+                add(_stated_from_a_reply(row), source, line=row["line"])
+    # 4. what no source named. No item is appended for it at all - an `unextracted` item is
+    #    not a call, and inventing a keyless item would let it match an expected item made
+    #    entirely of `$absent` forms. `_dispositions` reports it as an expected item nothing
+    #    matched, which is what it is.
     for want in wanted:
         key = _item_key(want)
         if key is not None and key not in taken:
             rows.append({"location": key, "disposition": None, "reason": None,
+                         "stated_fields": [],
                          "evidence": 0, "carries_evidence": False,
                          "evidence_read_from": None, "line_in_the_reply": None,
                          "source": UNEXTRACTED})
@@ -8930,8 +8972,16 @@ def _judgment(record, result, expected, entry, dispositions=None):
         put("dispositions_all_matched", matched["all_matched"] is True)
         put("no_false_fixed", not false_fixed["items"])
     if evidence is None:
+        # Send-back 1, point 3: the two reasons a call carries no evidence are not the same
+        # reason, and they do not land on the same side of `judgment_ok`. A reply line states
+        # a method SENTENCE and can never carry structured evidence entries in either
+        # condition, so a reply-sourced call is structural. NOTHING EXTRACTED AT ALL is the
+        # session's own doing - it stated no call anywhere - so it counts. (It also fails
+        # `dispositions_all_matched`, so this changes no attempt's `judgment_ok`; it stops the
+        # record giving a misleading reason.)
         put("evidence_sufficient", "not_measurable",
-            "the extraction's source cannot carry evidence entries")
+            "the extraction found no call to judge" if not items
+            else "the extraction's source cannot carry evidence entries")
     else:
         put("evidence_sufficient", evidence["all_sufficient"] is True)
     if scenario.get("stated_by_the_key") is False:
