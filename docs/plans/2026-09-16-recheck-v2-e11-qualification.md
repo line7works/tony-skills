@@ -1415,3 +1415,13 @@ to exactly the held-out request text.
   branch `audit/tony-skills-2026-09-12` (private repository, 82 commits ahead of its `main`) is not pushed and
   not needed to start. The close hand-off: `~/Documents/handoffs/2026-09-19-skills-v2-e11-close-handoff.md`.
   Still on Tony's word: the 27 negative-test homes (lock away, delete, or leave), A12a, this branch's PR.
+- **E11-59, Tony's ruling on this branch: publish it as it stands (2026-09-19 about 6:55 AM by the machine's
+  clock, control room).** Asked in plain form whether his E11-50 ruling, quoted verbatim with its swear, may go
+  onto the public `line7works/tony-skills` repository, Tony answered, as typed: "yes, pbulish last nigths ruling
+  with swear included". This branch is pushed, opened as a PR and merged under that word together with his
+  earlier "PR and merge if we need to before we start." Nothing in the record is reworded. In the same message
+  he asked for the close hand-off and for a goal prompt that runs steps 1 and 2 as he quoted them: "1. Build
+  the sealed bench and fix the two design faults: the baseline that cannot pass, and the hand-off test. 2. Run
+  one clean test that answers questions 2 and 3." The goal text and the defaults it assumes are in the close
+  hand-off; he sets the goal himself in the fresh window and may edit any default there. Still on his word:
+  the 27 negative-test homes, A12a, Astra's live checks 2 to 4, Clerk's packet branch.
