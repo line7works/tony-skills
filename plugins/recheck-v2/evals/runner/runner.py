@@ -5933,10 +5933,24 @@ def harness_alive_for(campaign, trial, attempt, record):
         # renderer, and `routing-score` refused to run because "harness processes are still
         # alive". The record's own timestamp settles it: a process that STARTED AFTER its pid
         # was written down is a different process wearing the same number.
+        #
+        # B3(4), N1: UNKNOWN IS ALIVE. `_pid_is_still_ours` returns True, False or None, and
+        # None is "the record or the process start time could not be read". The barrier used
+        # to test `whose is not True`, which dropped None as well - so a live child whose
+        # `ps` read failed, or whose pid file had been moved, was silently graded through.
+        # Only a MEASURED False (the process started after its pid was written down, so it is
+        # a recycled number) is skipped. A barrier that guesses "gone" is the dangerous way to
+        # be wrong, and the row says which of the two reasons put it here.
         whose = _pid_is_still_ours(os.path.join(record, source.split(":")[0]), pid)
-        if whose is not True:
+        if whose is False:
             continue
-        alive.append({"pid": pid, "source": source})
+        alive.append({
+            "pid": pid, "source": source,
+            "still_ours": whose,
+            "live_because": ("the recorded pid is still this record's own process"
+                             if whose is True else
+                             "the owner of this pid could not be established, and an unknown "
+                             "owner counts as ALIVE (B3(4), N1)")})
     return alive
 
 
@@ -6016,19 +6030,68 @@ def refuse_while_alive(campaign, rows):
                       % json.dumps(blocked))
 
 
-def graded_attempts(campaign, kinds=("comparison", "continuation")):
+# Batch B, B3(1): a directory under `trials/` is not a trial. Batch A moved the new probe
+# folders out of `trials/`, but every root written before it still carries them there, and the
+# round-2 root has five `native-read-boundary-*` folders beside its 348 real trials. Each holds
+# a probe document and a harness capture and no `command.json`, so `grade --all` handed each to
+# `grade_one`, which raised on `command["case"]`, and the command ended non-zero with five
+# recorded errors. A trial is a trial because the campaign JOURNALLED it: `trials.jsonl` (the
+# ledger) or `attempts.jsonl` (the attempt journal, which carries an attempt the ledger never
+# reached). The name prefix is checked too, so a root whose journals were truncated still skips
+# the probe folders.
+PROBE_FOLDER_PREFIXES = ("native-read-boundary",)
+
+
+def journalled_trial_ids(campaign):
+    """Every trial id this campaign journalled, from the ledger and the attempt journal.
+
+    Returns `(ids, journals_readable)`. `journals_readable` is False when NEITHER journal has a
+    single object row - a campaign mid-creation, or one whose journals are not written yet - and
+    the caller then falls back to the name rule alone rather than skipping every directory.
+    """
+    ids, rows = set(), 0
+    for path in (campaign.trials_jsonl, campaign.attempts_journal):
+        for row in jsonl_lines(path):
+            rows += 1
+            tid = row.get("id") or row.get("trial")
+            if tid:
+                ids.add(tid)
+    return ids, bool(rows)
+
+
+def is_probe_folder(tid):
+    """A probe directory that was written under `trials/` before batch A moved them out."""
+    return any(tid.startswith(prefix) for prefix in PROBE_FOLDER_PREFIXES)
+
+
+def graded_attempts(campaign, kinds=("comparison", "continuation"), require_journal=True):
     """Every (trial id, attempt, record) a grade must cover (E10-44, finding 6).
 
     `grade --all` used to list only `trials/*` that did not start with `routing-` or `cont-`,
     so every continuation trial and every rerun attempt went ungraded and the base trial's
     grade stood in for its rerun in the report.
+
+    B3(1): a `trials/` directory with no journalled trial is not graded, and neither is a
+    `native-read-boundary-*` probe folder.
+
+    `require_journal=False` keeps the probe-folder rule and drops the journal rule, for the
+    one caller that asks a different question: `producer_record_for` enumerates RECORDS that
+    can be consumed, not attempts a grade must cover. Every trial of a real campaign is
+    journalled, so the two agree there; a record placed by hand (the scheduler tests) is not.
     """
     rows = []
+    journalled, journals_readable = journalled_trial_ids(campaign)
+    journals_readable = journals_readable and require_journal
     for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
         if not os.path.isdir(path):
             continue
         tid = os.path.basename(path)
         if tid.startswith("routing-"):
+            continue
+        # B3(1)
+        if is_probe_folder(tid):
+            continue
+        if journals_readable and tid not in journalled:
             continue
         # E11-33, a consequence of NEW MAJOR Q: once the queue schedules them, `consumer-*`
         # directories exist on a finished root, and this reader would hand each to `grade_one`
@@ -6064,6 +6127,23 @@ def do_grade(args):
     for tid, attempt, record in targets:
         if not os.path.isdir(record):
             raise Missing("no trial record at %s" % record)
+    revision = getattr(args, "revision", None) or None
+    if revision:
+        check_identifier("the revision", revision)
+    # B3(3): a BARE `grade` never replaces an existing `grade.json`. The original grade is the
+    # campaign's own retained measurement; a regrade is a DERIVED one and takes a `--revision`
+    # name (E11-7 item 1). The refusal comes before `refuse_while_alive`, so it never opens a
+    # key directory. A first grade of an ungraded attempt still writes `grade.json`.
+    if not revision:
+        already = [os.path.join(record, "grade.json") for _tid, _attempt, record in targets
+                   if os.path.isfile(os.path.join(record, "grade.json"))]
+        if already:
+            raise Usage(
+                "%d of %d attempt(s) already carry a grade.json and a bare `grade` never "
+                "replaces one: pass --revision <name> to write grade.<name>.json beside the "
+                "original (E11-7 item 1, B3(3)). Already graded: %s"
+                % (len(already), len(targets), ", ".join(sorted(already)[:6])
+                   + (" ..." if len(already) > 6 else "")))
     # E10-45: the barrier comes FIRST, over every attempt being graded, and the key is opened
     # only inside this block.
     refuse_while_alive(campaign, targets)
@@ -6073,9 +6153,6 @@ def do_grade(args):
     for tid, attempt, record in targets:
         staged_commit_binding(
             campaign, read_json(os.path.join(record, "command.json"), "command.json"), restaged)
-    revision = getattr(args, "revision", None) or None
-    if revision:
-        check_identifier("the revision", revision)
     rows, errors = [], []
     with key_open(campaign, "grade"):
         for tid, attempt, record in targets:
@@ -6215,6 +6292,113 @@ def staged_commit_binding(campaign, command, restaged):
     return binding
 
 
+def model_binding_block(observed_model, run_block):
+    """The observed model against the one the result reports (E11-7 item 1).
+
+    E11-7 item 1: the grade GATES on the observed model binding. The harness's own witness
+    (`model.json`, session-bound by E10-50) and the id the result reports must be the same
+    model, and the witness must be bound to this session at all. Eleven absent Codex results
+    reported a different model id than the session ran, and no check saw it (Astra's E11 read,
+    capability matrix, "Model and effort witnessed").
+
+    B1: lifted out of `grade_one` unchanged, so the NO-RESULT branch can state the same rig
+    fact rather than leaving it blank. A no-result attempt reports no `run.model`, so the two
+    ids cannot agree and the binding does not hold - which is what `rig_ok` then says.
+    """
+    observed_model = observed_model or {}
+    run_block = run_block or {}
+    observed_id = observed_model.get("id")
+    reported_id = run_block.get("id")
+    binding_ok = bool(observed_model.get("session_binding_ok"))
+    # The PROVIDER ROUTE is not part of the model's identity, so it is not part of the
+    # comparison (the control room's run of this grade on the E10 root, 2026-09-17). The
+    # route is read once, from whichever record names it, and applied to BOTH sides.
+    route = model_provider_route(observed_model, run_block)
+    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id,
+                                                           route=route)
+    reported_canonical, reported_form = canonical_model_id(run_block, reported_id, route=route)
+    agrees = None
+    identical = bool(observed_id) and bool(reported_id) \
+        and str(observed_id) == str(reported_id)
+    if identical:
+        # Two identical strings never disagree, whatever any canonical form makes of them.
+        agrees = True
+    elif observed_canonical and reported_canonical:
+        agrees = observed_canonical == reported_canonical
+    return {
+        "observed_id": observed_id,
+        "reported_in_the_result": reported_id,
+        "compared_on": {"observed": observed_canonical, "reported": reported_canonical},
+        "compared_form": {"observed": observed_form, "reported": reported_form},
+        "provider_route": route,
+        "ids_are_identical_as_recorded": identical,
+        "session_binding_ok": binding_ok,
+        "ids_agree": agrees,
+        "held": binding_ok and agrees is True,
+        "why": "E11-7 item 1: the session-bound native witness and the result's run.model.id "
+               "must name the same model, compared on the profile's canonical model id (the "
+               "provider route is the launcher's, not the model's identity)",
+    }
+
+
+# B1: the checks dict, split into four named groups. Every existing key is in exactly one
+# group, and `ok` is still computed over the FLAT dict, so its meaning is unchanged.
+#
+#   format    - did the session deliver the record the contract asks for, in that format
+#   judgment  - did the session make the right call on each item
+#   boundary  - did the session stay inside the fence it was given
+#   rig       - is this measurement bound to the thing it claims to measure
+CHECK_GROUPS = (
+    ("format_checks", ("match", "validator_ok", "validator_exit_zero", "zero_skips",
+                       "validation_binding", "interop")),
+    ("judgment_checks", ("dispositions_all_matched", "no_false_fixed", "evidence_sufficient",
+                         "scenario_executed")),
+    ("boundary_checks", ("no_scope_violations", "boundary_not_merely_refused",
+                         "no_unauthorized", "usable_as_comparison_evidence")),
+    ("rig_checks", ("staged_commit_bound", "model_binding", "continuation_invariants")),
+)
+GROUP_FLAGS = (("format_checks", "format"), ("judgment_checks", "judgment"),
+               ("boundary_checks", "boundary"), ("rig_checks", "rig"))
+
+
+def grouped_checks(checks):
+    """`checks` split into the four groups of B1, with every key kept."""
+    groups, seen = {}, set()
+    for name, members in CHECK_GROUPS:
+        groups[name] = {key: checks[key] for key in members if key in checks}
+        seen.update(groups[name])
+    ungrouped = sorted(set(checks) - seen)
+    if ungrouped:
+        # A check no group names is NAMED here rather than dropped: it still counts in `ok`,
+        # which is computed over the flat dict, and a reader can see the table is behind.
+        groups["ungrouped_checks"] = {key: checks[key] for key in ungrouped}
+    return groups
+
+
+def check_group_flags(checks, judgment=None):
+    """`format_ok`, `judgment_ok`, `boundary_ok`, `rig_ok` and their `*_because` lists (B1).
+
+    `judgment_ok` comes from the JUDGMENT BLOCK when one was built, never from the flat
+    checks: the judgment block is the one that read the session's call from its reply when the
+    record was missing, and it is what makes a no-result attempt able to pass or fail on
+    judgment at all.
+    """
+    groups = grouped_checks(checks)
+    out = {"check_groups": groups}
+    for name, label in GROUP_FLAGS:
+        members = groups.get(name) or {}
+        if label == "judgment" and judgment is not None:
+            out["judgment_ok"] = judgment["ok"]
+            out["judgment_because"] = list(judgment["because"])
+            out["judgment_not_measurable"] = list(judgment["not_measurable"])
+            continue
+        out["%s_ok" % label] = (all(value is True for value in members.values())
+                                if members else None)
+        out["%s_because" % label] = sorted(key for key, value in members.items()
+                                           if value is not True)
+    return out
+
+
 def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=None):
     """`validate-result.py --strict`, then `match()`, then the metrics of E10-11.
 
@@ -6291,10 +6475,18 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     result_path = os.path.join(record, "result.json")
     if not os.path.isfile(result_path):
         # E10-11: no result grades every metric as `no_result` and counts as a failure of the
-        # condition, never as excluded.
-        for metric in ("validator", "match", "false_fixed", "dispositions", "evidence_sufficient",
-                       "scope_violations", "unauthorized", "interop", "floor_met",
-                       "trace_witnesses", "trial_conditioned"):
+        # condition, never as excluded. `ok` and `ok_because` are UNCHANGED by B1: a session
+        # that delivered no record still fails.
+        #
+        # B1: what changes is that the attempt is no longer BLANK. Its JUDGMENT is graded from
+        # the harness's own reply, its BOUNDARIES from the same witnesses every other attempt
+        # uses, and its rig facts from the same records - so `judgment_ok`, `boundary_ok` and
+        # `rig_ok` sit beside `format_ok: False`, and the comparison the campaign exists to
+        # make can be read. `records_reached` comes from the `trace_witnesses` call, which is
+        # also B3(5)'s cross-trial fix: a no-result attempt's reads were invisible to
+        # `cross_trial_reads` because nothing on the grade carried the witness.
+        for metric in ("validator", "match", "false_fixed", "dispositions",
+                       "evidence_sufficient", "interop", "floor_met", "trial_conditioned"):
             grade[metric] = "no_result"
         grade["ok"] = False
         grade["ok_because"] = ["no result.json"]
@@ -6305,8 +6497,39 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
             if os.path.isfile(os.path.join(record, "model.json")) else None
         if (command.get("kind") or "").startswith("continuation"):
             grade["continuation_invariants"] = continuation_invariants(record, command)
+        witnesses = trace_witnesses(campaign, record, command)
+        grade["trace_witnesses"] = witnesses
+        grade["skill_file_reached"] = witnesses["skill_file_reached"]
+        grade["records_reached"] = witnesses["records_reached"]
+        grade["scope_violations"] = _scope_violations({}, witnesses, command)
+        grade["unauthorized"] = _unauthorized(witnesses, command)
         grade["comparison_evidence"] = comparison_evidence(
-            campaign, record, trace_witnesses(campaign, record, command), command)
+            campaign, record, witnesses, command)
+        grade["model_binding"] = model_binding_block(grade["model"], {})
+        expected, conditioned = trial_conditioned_expected(entry.get("expected") or {},
+                                                           grade["kind"])
+        grade["judgment"] = _judgment(record, None, expected, entry)
+        # The four groups over what a no-result attempt can state. `ok` above is untouched,
+        # and no flat `checks` dict is written for a no-result attempt, so a revision diff
+        # against an earlier grading compares exactly what it compared before.
+        no_result_checks = {
+            "match": False, "validator_ok": False, "validator_exit_zero": False,
+            "zero_skips": False, "validation_binding": False, "interop": False,
+            "staged_commit_bound": commit_binding["agrees"] or commit_binding["restaged"]
+            or not commit_binding["comparable"],
+            "model_binding": grade["model_binding"]["held"],
+            "no_scope_violations": not grade["scope_violations"]["all"],
+            "boundary_not_merely_refused":
+                grade["scope_violations"].get("boundary_outcome")
+                in (None, "clean", "unanswered"),
+            "no_unauthorized": not grade["unauthorized"]["all"],
+            "usable_as_comparison_evidence": grade["comparison_evidence"]["usable"],
+        }
+        if "continuation_invariants" in grade:
+            no_result_checks["continuation_invariants"] = \
+                grade["continuation_invariants"]["all_held"] is True
+        grade.update(check_group_flags(no_result_checks, grade["judgment"]))
+        grade["format_because"] = ["no result.json"]
         write_json(grade_path, grade)
         return grade
     result = read_json(result_path, "result.json")
@@ -6372,47 +6595,10 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     grade["cost"] = read_json(os.path.join(record, "cost.json"))
     grade["model"] = read_json(os.path.join(record, "model.json"))
     run_block = (result.get("run") or {}).get("model") or {}
-    # E11-7 item 1: the grade GATES on the observed model binding. The harness's own witness
-    # (`model.json`, session-bound by E10-50) and the id the result reports must be the same
-    # model, and the witness must be bound to this session at all. Eleven absent Codex
-    # results reported a different model id than the session ran, and no check saw it
-    # (Astra's E11 read, capability matrix, "Model and effort witnessed").
-    observed_model = (grade["model"] or {})
-    observed_id = observed_model.get("id")
-    reported_id = run_block.get("id")
-    binding_ok = bool(observed_model.get("session_binding_ok"))
-    # The PROVIDER ROUTE is not part of the model's identity, so it is not part of the
-    # comparison (the control room's run of this grade on the E10 root, 2026-09-17). The
-    # route is read once, from whichever record names it, and applied to BOTH sides.
-    route = model_provider_route(observed_model, run_block)
-    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id,
-                                                           route=route)
-    reported_canonical, reported_form = canonical_model_id(run_block, reported_id, route=route)
-    agrees = None
-    identical = bool(observed_id) and bool(reported_id) \
-        and str(observed_id) == str(reported_id)
-    if identical:
-        # Two identical strings never disagree, whatever any canonical form makes of them.
-        agrees = True
-    elif observed_canonical and reported_canonical:
-        agrees = observed_canonical == reported_canonical
     grade["floor_met"] = {"result_run_model": run_block,
-                          "model_json_id": observed_id,
+                          "model_json_id": (grade["model"] or {}).get("id"),
                           "floor_met": run_block.get("floor_met")}
-    grade["model_binding"] = {
-        "observed_id": observed_id,
-        "reported_in_the_result": reported_id,
-        "compared_on": {"observed": observed_canonical, "reported": reported_canonical},
-        "compared_form": {"observed": observed_form, "reported": reported_form},
-        "provider_route": route,
-        "ids_are_identical_as_recorded": identical,
-        "session_binding_ok": binding_ok,
-        "ids_agree": agrees,
-        "held": binding_ok and agrees is True,
-        "why": "E11-7 item 1: the session-bound native witness and the result's run.model.id "
-               "must name the same model, compared on the profile's canonical model id (the "
-               "provider route is the launcher's, not the model's identity)",
-    }
+    grade["model_binding"] = model_binding_block(grade["model"], run_block)
     grade["must_not"] = entry.get("must_not")
     if (command.get("kind") or "").startswith("continuation"):
         grade["continuation_invariants"] = continuation_invariants(record, command)
@@ -6453,6 +6639,11 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     grade["checks"] = checks
     grade["ok"] = all(checks.values())
     grade["ok_because"] = sorted(name for name, passed in checks.items() if not passed)
+    # B1: the JUDGMENT, graded apart from the format it was delivered in. The extraction
+    # prefers this record's own items, so for an attempt that delivered one the judgment block
+    # reads the same calls the checks above read; `ok` is untouched either way.
+    grade["judgment"] = _judgment(record, result, expected, entry)
+    grade.update(check_group_flags(checks, grade["judgment"]))
     write_json(grade_path, grade)
     return grade
 
@@ -7989,6 +8180,283 @@ def _reply_disposition(line):
     return None
 
 
+# --------------------------------------------------------------------------- B1: judgment
+#
+# The fault B1 closes: a session WITHOUT the skill could never pass, because every check hung
+# off a valid `result.json` in the skill's own record format. Both conditions get the same
+# prompt, which does ask for `result.json` and does point at the schemas; the without-skill
+# condition frequently answers in prose instead, and `grade_one` then stamped every metric
+# `no_result` and the attempt failed everything at once. The comparison the campaign exists to
+# make - "does having the skill beat not having it, ON JUDGMENT" (contract section 2,
+# question 2) - was never measured, because format and judgment were one verdict.
+#
+# The judgment block grades the session's CALL, wherever the session stated it: the record
+# when there is one, the harness's own final reply when there is not, `chat.md` last. The
+# format verdict is unchanged and still fails a missing record.
+
+# A reply's item line carries its location as a whole `·`-separated field in the record's own
+# spelling, `file:line`.
+_REPLY_LOCATION = re.compile(r"^[A-Za-z0-9_./\\+-]+:\d+$")
+# What "the extraction could not find this item's call" is called. Never a guess, never a
+# default disposition or reason.
+UNEXTRACTED = "unextracted"
+
+
+def _reply_location(line):
+    """The location a reply line names, as a whole field of the reply grammar."""
+    for field in (line or "").split("\u00b7"):
+        token = field.strip()
+        if _REPLY_LOCATION.match(token):
+            return token
+    return None
+
+
+def _reply_reason(line):
+    """The reason a reply line states, as a WHOLE token inside the disposition's parentheses.
+
+    The grammar writes it `not fixed (missed_case)`. The claim field is parenthesised too, so
+    the scan takes only a parenthesised token that IS one of the four reason words; anything
+    else is prose and is passed over. A line that states no reason word carries no reason -
+    `None`, never a default.
+    """
+    if not line:
+        return None
+    for field in line.split("\u00b7"):
+        for inner in re.findall(r"\(([^()]*)\)", field):
+            token = inner.strip().lower().replace("-", "_").replace(" ", "_")
+            if token in REPLY_REASONS:
+                return token
+    return None
+
+
+def _reply_item_lines(text):
+    """Every item call a reply states, in the reply's own order.
+
+    An item line is a `·`-separated line that names a location AND a disposition word. The
+    "Still open:" line names a location and no disposition and is not one; the `Method:` line
+    carries no `·` and is not one. The first line for a location wins, as in `_interop`.
+    """
+    rows, seen = [], set()
+    for number, raw in enumerate((text or "").splitlines()):
+        line = raw.strip()
+        if "\u00b7" not in line:
+            continue
+        location = _reply_location(line)
+        disposition = _reply_disposition(line)
+        if location is None or disposition is None or location in seen:
+            continue
+        seen.add(location)
+        rows.append({"location": location, "disposition": disposition,
+                     "reason": _reply_reason(line), "line_number": number + 1,
+                     "line": line[:300]})
+    return rows
+
+
+def _expected_item_list(expected_items):
+    """The key's expected items as a plain list, with the matcher's forms unwrapped.
+
+    The same unwrapping `_dispositions` does, so the two agree on what an expected item is.
+    """
+    if isinstance(expected_items, dict):
+        for operator in ("$unordered", "$contains"):
+            if operator in expected_items:
+                return "list" if operator == "$unordered" else operator, \
+                    [row for row in expected_items[operator] if isinstance(row, dict)]
+        return "opaque", []
+    if isinstance(expected_items, list):
+        return "list", [row for row in expected_items if isinstance(row, dict)]
+    return "opaque", []
+
+
+def _judgment_extraction(record, result, expected_items):
+    """The session's call per item, normalized: `{location, disposition, reason, evidence,
+    source}` (B1).
+
+    Source priority, per item: `result.json`'s items when the file PARSES - even when it does
+    not validate - then the harness's own `reply.md` through `_reply_disposition` and
+    `_item_key`, then `chat.md`. Nothing is guessed: an item no source names is `unextracted`,
+    with no disposition and no reason, and `_dispositions` then reports it as an expected item
+    nothing matched.
+
+    Returns `(items, rows)`. `items` are in the RESULT ITEM shape so the existing helpers can
+    read them unchanged; `rows` is the per-item record of what was extracted and from where.
+    """
+    reply = read_text(os.path.join(record, "reply.md"), "") or ""
+    chat = read_text(os.path.join(record, "chat.md"), "") or ""
+    _form, wanted = _expected_item_list(expected_items)
+    result_items = (result or {}).get("items")
+    result_items = [row for row in result_items if isinstance(row, dict)] \
+        if isinstance(result_items, list) else []
+    items, rows, taken = [], [], set()
+
+    def add(location, disposition, reason, source, verification=None, scenario=None,
+            evidence_from=None, line=None):
+        item = {"location": location, "disposition": disposition, "reason": reason}
+        if verification is not None:
+            item["verification"] = verification
+        if scenario is not None:
+            item["failure_scenario"] = scenario
+        # The identity of an item is `_item_key`'s, the same one `_dispositions` and
+        # `_interop` pair on: a `{file, line}` object and the reply's `file:line` string are
+        # ONE item, and reading the raw location with `str()` would make them two.
+        key = _item_key(item)
+        if key is not None:
+            taken.add(key)
+        items.append(item)
+        entries = (verification or {}).get("evidence") or []
+        rows.append({"location": key, "disposition": disposition, "reason": reason,
+                     "evidence": len(entries) if isinstance(entries, list) else 0,
+                     "carries_evidence": bool(entries),
+                     "evidence_read_from": evidence_from,
+                     "line_in_the_reply": line,
+                     "source": source})
+
+    # 1. the record, whatever the validator made of it
+    for item in result_items:
+        add(item.get("location"), item.get("disposition"), item.get("reason"), "result.json",
+            verification=item.get("verification") or {},
+            scenario=item.get("failure_scenario"),
+            evidence_from="the item's own verification.evidence")
+    # 2. and 3. every expected item the record did not answer, from the reply then the chat
+    for source, text in (("reply.md", reply), ("chat.md", chat)):
+        stated = {row["location"]: row for row in _reply_item_lines(text)}
+        if not stated:
+            continue
+        # an item the record never carried, named by the reply
+        for want in wanted:
+            key = _item_key(want)
+            if key is None or key in taken:
+                continue
+            row = stated.get(key)
+            if row is None:
+                continue
+            add(row["location"], row["disposition"], row["reason"], source, line=row["line"])
+        # a session that wrote no record at all: its whole call is the reply's own lines
+        if not result_items:
+            for key, row in sorted(stated.items(), key=lambda kv: kv[1]["line_number"]):
+                if key in taken:
+                    continue
+                add(row["location"], row["disposition"], row["reason"], source,
+                    line=row["line"])
+    # 4. what no source named
+    for want in wanted:
+        key = _item_key(want)
+        if key is not None and key not in taken:
+            rows.append({"location": key, "disposition": None, "reason": None,
+                         "evidence": 0, "carries_evidence": False,
+                         "evidence_read_from": None, "line_in_the_reply": None,
+                         "source": UNEXTRACTED})
+    return items, rows
+
+
+# THE `not_measurable` RULE (B1).
+#
+# A judgment check reads `not_measurable` when a helper it needs is fed a field only the
+# RECORD FORMAT carries, and the extraction for this attempt does not carry it. A
+# `not_measurable` value is NEITHER A PASS NOR A FAIL: it is listed apart in
+# `judgment["not_measurable"]`, and it is kept out of `judgment_ok` ONLY when its reason is
+# STRUCTURAL - true of both conditions of that case by construction, decided by the key or by
+# the grammar of the source, never by what this one session happened to do. Anything else that
+# cannot be measured is the session's own doing and still fails `judgment_ok`.
+#
+# The three structural reasons, and the checks they touch:
+#
+#   * `the key states no scenario command and output`      -> scenario_executed
+#   * `the key's expected items are an opaque form`        -> dispositions_all_matched,
+#                                                             no_false_fixed
+#   * `the extraction's source cannot carry evidence       -> evidence_sufficient
+#      entries` (a reply line states a method SENTENCE;
+#      the reply grammar has no structured evidence in
+#      either condition)
+#
+# Nothing else is structural. In particular, an item the extraction could not find at all is
+# NOT `not_measurable`: it is a failure of `dispositions_all_matched`, because the session was
+# asked for a call and none can be found.
+STRUCTURAL_NOT_MEASURABLE = (
+    "the key states no scenario command and output",
+    "the key's expected items are an opaque form",
+    "the extraction's source cannot carry evidence entries",
+)
+
+
+def _judgment(record, result, expected, entry, dispositions=None):
+    """The session's JUDGMENT, graded apart from the format it delivered it in (B1).
+
+    The same `expected` items the key already holds, matched against the extraction with the
+    same helpers the format grade uses: `_dispositions` for the disposition and the reason per
+    item, `_false_fixed`, `_evidence` where the extraction carries evidence, and
+    `_scenario_execution` from the trace witnesses, which needs no result document.
+    """
+    expected_items = (expected.get("items") or []) if isinstance(expected, dict) else []
+    items, rows = _judgment_extraction(record, result, expected_items)
+    matched = _dispositions(items, expected_items)
+    false_fixed = _false_fixed(matched)
+    with_evidence = [item for item, row in zip(items, rows)
+                     if row["source"] == "result.json"]
+    evidence = _evidence(with_evidence, entry, record) if with_evidence else None
+    scenario = _scenario_execution(record, result or {}, entry)
+    sources = {}
+    for row in rows:
+        sources[row["source"]] = sources.get(row["source"], 0) + 1
+    opaque = matched["form"] == "opaque"
+    checks, why = {}, {}
+
+    def put(name, value, reason=None):
+        checks[name] = value
+        if reason:
+            why[name] = reason
+
+    if opaque:
+        put("dispositions_all_matched", "not_measurable",
+            "the key's expected items are an opaque form")
+        put("no_false_fixed", "not_measurable",
+            "the key's expected items are an opaque form")
+    else:
+        put("dispositions_all_matched", matched["all_matched"] is True)
+        put("no_false_fixed", not false_fixed["items"])
+    if evidence is None:
+        put("evidence_sufficient", "not_measurable",
+            "the extraction's source cannot carry evidence entries")
+    else:
+        put("evidence_sufficient", evidence["all_sufficient"] is True)
+    if scenario.get("stated_by_the_key") is False:
+        put("scenario_executed", "not_measurable",
+            "the key states no scenario command and output")
+    else:
+        put("scenario_executed", bool(scenario.get("held")))
+    not_measurable = []
+    for name, value in sorted(checks.items()):
+        if value != "not_measurable":
+            continue
+        reason = why.get(name)
+        not_measurable.append({
+            "check": name, "why": reason,
+            "structural": reason in STRUCTURAL_NOT_MEASURABLE,
+            "counted_against_judgment_ok": reason not in STRUCTURAL_NOT_MEASURABLE})
+    counted = {name: value for name, value in checks.items()
+               if value != "not_measurable" or why.get(name) not in STRUCTURAL_NOT_MEASURABLE}
+    ok = all(value is True for value in counted.values())
+    return {
+        "items": rows,
+        "sources": dict(sorted(sources.items())),
+        "extracted": len([r for r in rows if r["source"] != UNEXTRACTED]),
+        "unextracted": len([r for r in rows if r["source"] == UNEXTRACTED]),
+        "dispositions": matched,
+        "false_fixed": false_fixed,
+        "evidence_sufficient": evidence,
+        "scenario_execution": scenario,
+        "checks": checks,
+        "not_measurable": not_measurable,
+        "checks_counted": sorted(counted),
+        "ok": ok,
+        "because": sorted(name for name, value in counted.items() if value is not True),
+        "why": ("B1: the session's call is graded wherever it stated it - the record first, "
+                "then the harness's own reply, then chat.md - so a session that delivered no "
+                "result.json can still pass or fail on JUDGMENT. `not_measurable` is neither "
+                "a pass nor a fail and is kept out of `ok` only for a structural reason."),
+    }
+
+
 def _interop(result, record):
     """The session's ACTUAL final reply against the Output block and its specific items.
 
@@ -8356,6 +8824,21 @@ def summary_rows(rows):
             if isinstance(row.get("staged_commit_binding"), dict) else None,
             "ok": row.get("ok"),
             "ok_because": row.get("ok_because"),
+            # B1: the four flags, beside `ok` and never instead of it.
+            "format_ok": row.get("format_ok"),
+            "judgment_ok": row.get("judgment_ok"),
+            "boundary_ok": row.get("boundary_ok"),
+            "rig_ok": row.get("rig_ok"),
+            "format_because": row.get("format_because"),
+            "judgment_because": row.get("judgment_because"),
+            "boundary_because": row.get("boundary_because"),
+            "rig_because": row.get("rig_because"),
+            "judgment_sources": (row.get("judgment") or {}).get("sources")
+            if isinstance(row.get("judgment"), dict) else None,
+            "judgment_unextracted": (row.get("judgment") or {}).get("unextracted")
+            if isinstance(row.get("judgment"), dict) else None,
+            "judgment_not_measurable": [r["check"] for r in row.get("judgment_not_measurable")
+                                        or []],
         })
     return out
 
@@ -8387,6 +8870,11 @@ def revision_diff(rows, against):
     as unpaired rather than silently skipped.
     """
     ups, downs, unpaired, check_moves = [], [], [], {}
+    # B1: the flags move too, and a flip of one of them is the thing this revision was built
+    # to produce. A flag the PRIOR revision never carried is not a flip: it is reported as
+    # unpaired for that flag, because a grading that did not measure it cannot have moved.
+    flag_moves = {flag: {"to_true": [], "to_false": [], "unpaired": []}
+                  for _group, flag in [(g, "%s_ok" % label) for g, label in GROUP_FLAGS]}
     for row in rows:
         record = os.path.dirname(row.get("grade_path") or "")
         prior_path = os.path.join(record, "grade.%s.json" % against)
@@ -8400,6 +8888,14 @@ def revision_diff(rows, against):
             unpaired.append({"attempt": attempt, "looked_for": prior_path,
                              "why": str(exc)[:200]})
             continue
+        for flag in flag_moves:
+            was, now = prior.get(flag), row.get(flag)
+            if was is None and now is None:
+                continue
+            if was is None:
+                flag_moves[flag]["unpaired"].append(attempt)
+            elif bool(was) != bool(now):
+                flag_moves[flag]["to_true" if now else "to_false"].append(attempt)
         now_checks = row.get("checks") or {}
         was_checks = prior.get("checks") or {}
         moved = sorted(name for name in set(now_checks) | set(was_checks)
@@ -8424,6 +8920,14 @@ def revision_diff(rows, against):
         "checks_that_moved_without_a_decision_flip": {
             name: {"to_true": len(entry["to_true"]), "to_false": len(entry["to_false"])}
             for name, entry in sorted(check_moves.items())},
+        # B1: flips of each flag, not only of `ok`.
+        "flag_flips": {
+            flag: {"to_true": len(entry["to_true"]), "to_false": len(entry["to_false"]),
+                   "unpaired": len(entry["unpaired"]),
+                   "attempts_to_true": sorted(entry["to_true"])[:40],
+                   "attempts_to_false": sorted(entry["to_false"])[:40],
+                   "why_unpaired": "the %s grading carried no %s" % (against, flag)}
+            for flag, entry in sorted(flag_moves.items())},
         "acceptance": ("no grade decision flips without a named reason in the revision's "
                        "summary; every flip above names the checks that moved"),
     }
@@ -8437,9 +8941,18 @@ def cross_trial_reads(rows):
     contents were read or the path merely listed. Tony's ruling runs the rerun on a bench that
     does not separate its trials, on the condition that every such read is recorded and
     reported BY NAME - so the summary lists the targets, not a count of attempts.
+
+    B3(5): the rows now include CONSUMER attempts (stamped by `stamp_consumer_witness`) and
+    NO-RESULT attempts (which take `records_reached` from the same `trace_witnesses` call as
+    every other grade). Both were absent before: a consumer grade carried no witness at all,
+    and a no-result grade stamped every metric `no_result` and never read its own witnesses -
+    so the two kinds of attempt most likely to have wandered were the two this report could
+    not see. Each target names the kinds of attempt that reached it.
     """
-    per_setup = {}
+    per_setup, kinds = {}, {}
     for row in rows:
+        kind = row.get("kind") or "comparison"
+        kinds[kind] = kinds.get(kind, 0) + 1
         witness = row.get("records_reached")
         if not isinstance(witness, dict) or not witness.get("reached"):
             continue
@@ -8453,12 +8966,15 @@ def cross_trial_reads(rows):
             if not path:
                 continue
             target = entry["targets"].setdefault(
-                path, {"operations": [], "attempts": [], "capture": read.get("capture")})
+                path, {"operations": [], "attempts": [], "kinds": [],
+                       "capture": read.get("capture")})
             operation = read.get("operation")
             if operation and operation not in target["operations"]:
                 target["operations"].append(operation)
             if attempt not in target["attempts"]:
                 target["attempts"].append(attempt)
+            if kind not in target["kinds"]:
+                target["kinds"].append(kind)
     out = {}
     for setup, entry in sorted(per_setup.items()):
         out[setup] = {
@@ -8466,6 +8982,7 @@ def cross_trial_reads(rows):
             "attempt_ids": sorted(entry["attempts"]),
             "targets": {path: {"operations": sorted(row["operations"]),
                                "attempts": sorted(row["attempts"]),
+                               "kinds": sorted(row["kinds"]),
                                "capture": row["capture"]}
                         for path, row in sorted(entry["targets"].items())},
             "distinct_targets": len(entry["targets"]),
@@ -8473,12 +8990,20 @@ def cross_trial_reads(rows):
     return {"per_setup": out,
             "setups_with_a_cross_trial_read": sorted(out),
             "distinct_targets": sum(v["distinct_targets"] for v in out.values()),
+            # B3(5): which kinds of attempt this scan actually covered, so a reader can see
+            # that the consumer and no-result attempts were in it.
+            "attempts_scanned_by_kind": dict(sorted(kinds.items())),
             "why": "E11-50: the bench does not separate its trials, so every cross-trial read "
                    "is named here rather than counted"}
 
 
-def grade_summary(rows):
-    """Counts only. A `grade.json` is never printed (section 3)."""
+def grade_summary(rows, cross_trial_extra=()):
+    """Counts only. A `grade.json` is never printed (section 3).
+
+    B3(5): `cross_trial_extra` carries rows whose CROSS-TRIAL READS belong in the scan but
+    whose counts do not belong in these totals - the consumer grades, which are a different
+    document with different checks. Nothing else in this summary sees them.
+    """
     summary = {
         "graded": len(rows),
         "attempts": sorted({"%s#%s" % (r.get("trial"), r.get("attempt")) for r in rows}),
@@ -8506,7 +9031,7 @@ def grade_summary(rows):
         # must NAME the reads, not count the attempts that had any. Per setup: how many
         # attempts reached another trial's records, and every target path they reached, with
         # what was done to it. The summary carried only the attempt count before this.
-        "cross_trial_reads": cross_trial_reads(rows),
+        "cross_trial_reads": cross_trial_reads(list(rows) + list(cross_trial_extra)),
         "continuation_invariants_held": sum(
             1 for r in rows if isinstance(r.get("continuation_invariants"), dict)
             and r["continuation_invariants"].get("all_held")),
@@ -8527,9 +9052,25 @@ def grade_summary(rows):
         "match_reasons_by_path_segment": {},
         "trials_with_a_failing_match": sum(
             1 for r in rows if isinstance(r.get("match"), dict) and not r["match"]["ok"]),
+        # B1: the four flags, counted over every attempt that carries them.
+        "format_ok": sum(1 for r in rows if r.get("format_ok") is True),
+        "judgment_ok": sum(1 for r in rows if r.get("judgment_ok") is True),
+        "boundary_ok": sum(1 for r in rows if r.get("boundary_ok") is True),
+        "rig_ok": sum(1 for r in rows if r.get("rig_ok") is True),
+        "judgment_graded_from": {},
+        "judgment_not_measurable_checks": {},
         "by_condition": {},
         "by_kind": {},
     }
+    for row in rows:
+        for source, count in ((row.get("judgment") or {}).get("sources") or {}).items() \
+                if isinstance(row.get("judgment"), dict) else ():
+            summary["judgment_graded_from"][source] = \
+                summary["judgment_graded_from"].get(source, 0) + count
+        for entry in row.get("judgment_not_measurable") or []:
+            name = entry.get("check")
+            summary["judgment_not_measurable_checks"][name] = \
+                summary["judgment_not_measurable_checks"].get(name, 0) + 1
     for row in rows:
         if not isinstance(row.get("match"), dict) or row["match"]["ok"]:
             continue
@@ -8537,14 +9078,19 @@ def grade_summary(rows):
             summary["match_reasons_by_path_segment"][name] = \
                 summary["match_reasons_by_path_segment"].get(name, 0) + count
     for row in rows:
+        # B1: every bucket carries the four flags, so question 2 - "does having the skill beat
+        # not having it, ON JUDGMENT, per setup" - is readable straight off the summary.
+        blank = {"graded": 0, "ok": 0, "format_ok": 0, "judgment_ok": 0, "boundary_ok": 0,
+                 "rig_ok": 0, "no_result": 0}
         bucket = summary["by_condition"].setdefault(
-            "%s/%s" % (row.get("setup"), row.get("condition")), {"graded": 0, "ok": 0})
-        bucket["graded"] += 1
-        bucket["ok"] += 1 if row.get("ok") else 0
-        kind = summary["by_kind"].setdefault(row.get("kind") or "comparison",
-                                             {"graded": 0, "ok": 0})
-        kind["graded"] += 1
-        kind["ok"] += 1 if row.get("ok") else 0
+            "%s/%s" % (row.get("setup"), row.get("condition")), dict(blank))
+        kind = summary["by_kind"].setdefault(row.get("kind") or "comparison", dict(blank))
+        for cell in (bucket, kind):
+            cell["graded"] += 1
+            cell["ok"] += 1 if row.get("ok") else 0
+            cell["no_result"] += 1 if row.get("validator") == "no_result" else 0
+            for flag in ("format_ok", "judgment_ok", "boundary_ok", "rig_ok"):
+                cell[flag] += 1 if row.get(flag) is True else 0
     return summary
 
 
@@ -11413,6 +11959,17 @@ def _separation_line(campaign):
             % os.path.basename(state["record"]))
 
 
+def _table_cell():
+    """One empty cell of the comparison table. B1 adds the four flags to every cell."""
+    cell = {"trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
+            "launch_failed": 0, "partial": 0, "grades": []}
+    for _group, label in GROUP_FLAGS:
+        cell["%s_ok" % label] = 0
+        cell["%s_ok_not" % label] = 0
+    return cell
+
+
 def do_report(args):
     """`tables/<n>/table.md`, `tables/<n>/table.json` and a generated skeleton; every number
     from `trials.jsonl` and the grade files, each cell naming its records."""
@@ -11423,14 +11980,59 @@ def do_report(args):
     # `TypeError: string indices must be integers`. Every JSONL read goes through the shared
     # reader, which keeps object rows only.
     lines = jsonl_lines(campaign.trials_jsonl)
+    # B3(2): `report --revision <name>` reads `grade.<name>.json`, and falls back PER RECORD to
+    # `grade.json` when that record has no grade under the revision. Without this the report
+    # read the originals while the summary read the revision, and the two documents disagreed
+    # with nothing saying why. `table.json` names the file that fed every row and whether it
+    # was the revision or the fallback.
+    #
+    # B3(1): a `trials/` directory with no journalled trial is not a record, and neither is a
+    # `native-read-boundary-*` probe folder. The old glob read `trials/*/grade.json`, which is
+    # how five probe folders would have reached the table on any root written before batch A
+    # moved them out.
+    revision = getattr(args, "revision", None) or None
+    if revision:
+        check_identifier("the revision", revision)
+    journalled, journals_readable = journalled_trial_ids(campaign)
     # E10-44 (finding 6): grades join on (trial id, attempt), and every attempt's own grade
     # file is found, `attempts/<n>/grade.json` included.
-    grades = {}
-    for path in sorted(glob.glob(os.path.join(campaign.trials, "*", "grade.json"))
-                       + glob.glob(os.path.join(campaign.trials, "*", "attempts", "*",
-                                                "grade.json"))):
-        grade = read_json(path)
-        grades[(grade["trial"], grade.get("attempt", 0))] = {"path": path, "grade": grade}
+    # B3(2): `consumer-grade[.<revision>].json` is read the same way. A consumer's grade is
+    # written under its own name by `consumer`, so the table's `graded ok` column counted zero
+    # for every consumer row.
+    grades, grade_sources, skipped_folders = {}, [], []
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        if is_probe_folder(tid) or (journals_readable and tid not in journalled):
+            skipped_folders.append({"folder": path, "why": (
+                "a probe folder, not a trial" if is_probe_folder(tid)
+                else "no journalled trial of this id in trials.jsonl or attempts.jsonl")})
+            continue
+        records = [(tid, 0, path)]
+        for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_path)
+            if name.isdigit() and os.path.isdir(attempt_path):
+                records.append((tid, int(name), attempt_path))
+        for trial_id, attempt, record in records:
+            for base in ("grade", "consumer-grade"):
+                wanted = (os.path.join(record, "%s.%s.json" % (base, revision))
+                          if revision else None)
+                fallback = os.path.join(record, "%s.json" % base)
+                if wanted and os.path.isfile(wanted):
+                    chosen, came_from = wanted, "the revision %s" % revision
+                elif os.path.isfile(fallback):
+                    chosen, came_from = fallback, (
+                        "grade.json: this record has no %s.%s.json" % (base, revision)
+                        if revision else "grade.json (no revision asked for)")
+                else:
+                    continue
+                grade = read_json(chosen)
+                key = (grade.get("trial") or trial_id, grade.get("attempt", attempt))
+                grades[key] = {"path": chosen, "grade": grade, "name": base}
+                grade_sources.append({"trial": key[0], "attempt": key[1], "file": chosen,
+                                      "read_from": came_from, "name": base})
+                break
     corrections = measurement_records(campaign)
     applied, stale = [], []
     by_attempt = {}
@@ -11482,10 +12084,7 @@ def do_report(args):
                 cost = correction.get("corrected_value")
             elif correction.get("field") == "wall":
                 wall = correction.get("corrected_value")
-        bucket = cells.setdefault((kind, key, condition, activated), {
-            "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
-            "launch_failed": 0, "partial": 0, "grades": []})
+        bucket = cells.setdefault((kind, key, condition, activated), _table_cell())
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
@@ -11520,6 +12119,12 @@ def do_report(args):
             bucket["grades"].append(entry["path"])
             if entry["grade"].get("ok"):
                 bucket["graded_ok"] += 1
+            # B1: the four flags, by setup and condition, straight off the grade files.
+            for flag in ("format_ok", "judgment_ok", "boundary_ok", "rig_ok"):
+                if entry["grade"].get(flag) is True:
+                    bucket[flag] += 1
+                elif entry["grade"].get(flag) is False:
+                    bucket["%s_not" % flag] += 1
         rows_seen.append({"id": tid, "attempt": attempt, "status": status,
                           "retained_status": line.get("status"),
                           "cost": cost, "wall": wall, "record": record})
@@ -11553,10 +12158,7 @@ def do_report(args):
         partial_attempts.append(entry)
         rows_seen.append({"id": tid, "attempt": attempt, "status": "partial",
                           "cost": None, "wall": None, "record": record})
-        bucket = cells.setdefault((kind, setup_name, condition, None), {
-            "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
-            "launch_failed": 0, "partial": 0, "grades": []})
+        bucket = cells.setdefault((kind, setup_name, condition, None), _table_cell())
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
@@ -11576,6 +12178,13 @@ def do_report(args):
             "no_result": bucket["no_result"], "timed_out": bucket["timed_out"],
             "launch_failed": bucket["launch_failed"], "partial": bucket["partial"],
             "graded_ok": bucket["graded_ok"],
+            # B1: the split, per row. `graded_ok` is unchanged and still means "every check".
+            "format_ok": bucket["format_ok"], "format_not_ok": bucket["format_ok_not"],
+            "judgment_ok": bucket["judgment_ok"],
+            "judgment_not_ok": bucket["judgment_ok_not"],
+            "boundary_ok": bucket["boundary_ok"],
+            "boundary_not_ok": bucket["boundary_ok_not"],
+            "rig_ok": bucket["rig_ok"], "rig_not_ok": bucket["rig_ok_not"],
             # E11-7 item 7: a measured zero cost stays 0.0. `x if x else None` turned every
             # free attempt into `null`, which reads as "not measured".
             #
@@ -11594,7 +12203,12 @@ def do_report(args):
             "attempt_ids": bucket["attempts"],
             "grade_files": bucket["grades"],
         })
-    summary = grade_summary([g["grade"] for g in grades.values()])
+    # B3(2): the grade summary stays what it was - the comparison and continuation grades. A
+    # consumer grade is a different document with different checks; it is counted on its own
+    # line rather than folded into counts a reader compares against `grade --summary`.
+    consumer_grades = [g for g in grades.values() if g["name"] == "consumer-grade"]
+    summary = grade_summary([g["grade"] for g in grades.values() if g["name"] == "grade"],
+                            cross_trial_extra=[g["grade"] for g in consumer_grades])
     # E10-59 (7): `report` NEVER REPLACES. The generated table of every run takes its own
     # reserved directory `tables/<n>/`, the first free number, created with `mkdir` so two
     # reports cannot take the same one; the fixed `tables/table.json` and `tables/table.md` of
@@ -11603,6 +12217,20 @@ def do_report(args):
     tables_dir = reserve_tables_dir(campaign)
     document = {"campaign": campaign.root, "plan_counts": plan.get("counts"),
                 "tables_dir": tables_dir,
+                # B3(2): which grade file fed every row, and whether it was the revision or
+                # the per-record fallback.
+                "revision": revision,
+                "grade_sources": sorted(grade_sources,
+                                        key=lambda r: (r["trial"], r["attempt"])),
+                "grades_read_from_the_revision": sum(
+                    1 for r in grade_sources if r["read_from"].startswith("the revision")),
+                "grades_read_from_the_fallback": sum(
+                    1 for r in grade_sources if not r["read_from"].startswith("the revision")),
+                "consumer_grades_read": len(consumer_grades),
+                "consumer_grades_ok": sum(1 for g in consumer_grades
+                                          if g["grade"].get("ok")),
+                # B3(1): directories under `trials/` that are not trials.
+                "folders_skipped_as_not_a_trial": skipped_folders,
                 "trials_seen": len(lines),
                 "attempts_seen": len({(r["id"], r["attempt"]) for r in rows_seen}),
                 "attempts_journalled": len(journal),
@@ -11658,6 +12286,16 @@ def do_report(args):
           "`activated` (E10-4). Corrected measurements (E10-48) are applied only where their",
           "hash binding still holds. A journalled attempt with no `command.json` is counted",
           "here with status `partial` (E10-59 (21)).", "",
+          ("Grades read at revision `%s`, falling back per record to `grade.json`: %d from the "
+           "revision, %d from the fallback. `table.json` names the file behind every row "
+           "(B3(2))." % (revision,
+                         sum(1 for r in grade_sources
+                             if r["read_from"].startswith("the revision")),
+                         sum(1 for r in grade_sources
+                             if not r["read_from"].startswith("the revision"))))
+          if revision else
+          "Grades read from `grade.json` and `consumer-grade.json`; `table.json` names the "
+          "file behind every row (B3(2)).", "",
           _separation_line(campaign), "",
           "E11-7 item 2: any benefit these columns show is a benefit of the WHOLE PACKAGE —",
           "the instructions, the executable support and the record contract together. Nothing",
@@ -11669,14 +12307,21 @@ def do_report(args):
           "result` counts `no_result` alone, with `timed out` and `launch failed` beside it;",
           "`activated` reads `unknown` where the ledger row carried no field; a measured zero",
           "cost is `0.000000`, never `null`.", "",
-          "| kind | setup | condition | activated | trials | attempts | complete | no result | timed out | launch failed | partial | graded ok | cost USD | wall s |",
-          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "B1: `graded ok` is unchanged and still means EVERY check held. The four columns",
+          "beside it are the split: `format` is the record the contract asks for, `judgment`",
+          "is the call the session made on each item (read from the record when there is one",
+          "and from the harness's own reply when there is not), `boundary` is the fence and",
+          "`rig` is whether the measurement is bound to what it claims to measure. Each",
+          "column counts the attempts in that row whose flag is true.", "",
+          "| kind | setup | condition | activated | trials | attempts | complete | no result | timed out | launch failed | partial | graded ok | format ok | judgment ok | boundary ok | rig ok | cost USD | wall s |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for row in table:
-        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %s | %s |" % (
+        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %s | %s |" % (
             row["kind"], row["setup"], row["condition"],
             "unknown" if row["activated"] is None else row["activated"], row["trials"],
             row["attempts"], row["complete"], row["no_result"], row["timed_out"],
             row["launch_failed"], row["partial"], row["graded_ok"],
+            row["format_ok"], row["judgment_ok"], row["boundary_ok"], row["rig_ok"],
             # E11-46 R2: a cell that measured no cost prints `unavailable`, never a number.
             # The old renderer formatted whatever was there, and what was there was a 0.0 no
             # one had measured.
@@ -11780,6 +12425,16 @@ def do_report(args):
               "partial_attempts": partial,
               "partial_attempts_detail": partial_attempts,
               "graded": len(grades), "totals": document["totals"],
+              # B3(1) and B3(2): which grading fed this report, and which directories under
+              # `trials/` were not trials. The per-attempt `grade_sources` list stays in
+              # `table.json`, where a reader looks up one row; stdout carries the counts.
+              "revision": revision,
+              "grades_read_from_the_revision": document["grades_read_from_the_revision"],
+              "grades_read_from_the_fallback": document["grades_read_from_the_fallback"],
+              "consumer_grades_read": document["consumer_grades_read"],
+              "consumer_grades_ok": document["consumer_grades_ok"],
+              "folders_skipped_as_not_a_trial": skipped_folders,
+              "grade_sources_in": os.path.join(tables_dir, "table.json"),
               "corrected_measurements_applied": applied,
               "corrected_measurements_stale": stale,
               "grade_summary": summary}
@@ -13187,7 +13842,9 @@ def consumer_order(plan):
 def producer_record_for(campaign, plan, producer):
     """The producer's own completed comparison or continuation record, and why it was chosen."""
     best = None
-    for tid, attempt, record in graded_attempts(campaign):
+    # B3(1): the probe folders are skipped here too, but the JOURNAL rule is not applied: this
+    # asks which record can be consumed, not which attempt a grade must cover.
+    for tid, attempt, record in graded_attempts(campaign, require_journal=False):
         command_path = os.path.join(record, "command.json")
         if not os.path.isfile(command_path):
             continue
@@ -13566,6 +14223,28 @@ CONSUMER_CHECKS = frozenset((
 CONSUMER_CHECKS_CONDITIONAL = frozenset(("producer_stop_recovered", "continuation_state"))
 
 
+def stamp_consumer_witness(grade, campaign, record, command, tid, attempt):
+    """B3(5): a consumer grade carries the same cross-trial witness a comparison grade does.
+
+    `cross_trial_reads` reports every read of another trial's records BY NAME (E11-50), and it
+    read `records_reached` off the grade rows it was handed. A consumer grade carried neither
+    that witness nor the `(trial, attempt, setup)` identity the report joins on, so a consumer
+    session that opened another trial's record was invisible to the one place that names them.
+    The witness is the same `trace_witnesses` call, over the consumer's own capture.
+    """
+    witnesses = trace_witnesses(campaign, record, command)
+    grade["trial"] = tid
+    grade["attempt"] = attempt
+    grade["setup"] = command.get("setup")
+    grade["condition"] = command.get("condition")
+    grade["kind"] = "consumer"
+    grade["record"] = record
+    grade["trace_witnesses"] = witnesses
+    grade["records_reached"] = witnesses["records_reached"]
+    grade["skill_file_reached"] = witnesses["skill_file_reached"]
+    return grade
+
+
 def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path=None,
                    validator=None, isolation=None, producer_hashes_after=None):
     """Grade one consumer trial against the producer's own records (E11-7 item 6).
@@ -13831,6 +14510,8 @@ def do_consumer_regrade(args):
                                    producer_hashes_after=after)
             grade["revision"] = revision
             grade["regraded_from"] = record
+            # B3(5): the regrade carries the same witness the live grade does.
+            stamp_consumer_witness(grade, campaign, record, command, tid, attempt)
             path = os.path.join(record, "consumer-grade.%s.json" % revision)
             write_json(path, grade)
             rows.append({"trial": tid, "attempt": attempt, "grade_path": path,
@@ -13987,6 +14668,8 @@ def do_consumer(args, record=None, attempt=0):
         "consumer_grade": grade,
     }
     write_json(os.path.join(record, "command.json"), command)
+    # B3(5): the cross-trial witness and the identity the report joins on.
+    stamp_consumer_witness(grade, campaign, record, command, args.trial, attempt)
     write_json(os.path.join(record, "consumer-grade.json"), grade)
     campaign.append_jsonl(campaign.trials_jsonl, {
         "id": args.trial, "attempt": attempt, "kind": "consumer", "status": status,
@@ -14296,6 +14979,10 @@ def build_parser():
 
     one = subs.add_parser("report", help="table.md, table.json and a report.md skeleton")
     campaign_arg(one)
+    one.add_argument("--revision", default=None,
+                     help="read grade.<revision>.json and consumer-grade.<revision>.json, "
+                          "falling back PER RECORD to the original grade.json; table.json "
+                          "names the file that fed every row (B3(2))")
     one.set_defaults(func=do_report)
 
     one = subs.add_parser("check", help="the runner's own tests, a dry trial, the negative "

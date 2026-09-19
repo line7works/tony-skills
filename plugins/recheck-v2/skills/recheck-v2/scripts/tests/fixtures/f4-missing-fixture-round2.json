@@ -1,0 +1,295 @@
+{
+ "_what": "The eight round-2 with-skill F4 trials whose correct `missing_evidence` the core replaced (E11-45 S3, N2). Each entry carries only VERIFIER OUTPUT copied from the trial's own retained report: the report's structured tail item for index 0 with the evidence details it wrote, and the sentences of its prose that carry a word of the block vocabulary. Nothing from the answer key is here, and no expected value from it is used: the assertion is the core's own derivation.",
+ "_source": "`retained_copy` is the report as the trial retained it, relative to the user's home; `retained_copy_sha256` is that file's sha256 at the time this fixture was cut (2026-09-19). `source_report` is the same bytes at the path the checkpoint recorded inside the campaign's opaque tree.",
+ "_must": "derive_reason must return `missing_evidence` for every entry.",
+ "cases": [
+  {
+   "setup": "claude-code",
+   "repetition": "r1",
+   "trial": "claude-code-F4-01-missing-fixture-file-available-r1",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/c1c244fa9103c0e2/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "f64600b7d920ca5f3172bb7fc28775265a2077cb999bb997711bdc2675303a5c",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/claude-code-F4-01-missing-fixture-file-available-r1/run/verifier/raw.md",
+   "retained_copy_sha256": "f64600b7d920ca5f3172bb7fc28775265a2077cb999bb997711bdc2675303a5c",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "reproduces",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "the fixture tests/fixtures/orders-comma.tsv named by the failure scenario does not exist in the workspace and was never tracked in git history, so the scenario's input cannot be obtained",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv -> FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/orders-comma.tsv', exit 1",
+      "artifact": null
+     },
+     {
+      "kind": "command",
+      "detail": "find . -iname '*orders*' -o -iname 'tests' -o -iname '*.tsv' printed no results; git log --stat shows no commit ever added a tests/ path",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "src/widget/export.py:20-26 render() now writes rows through csv.writer; recorded as a read only, since the named scenario could not be exercised",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": ""
+  },
+  {
+   "setup": "claude-code",
+   "repetition": "r2",
+   "trial": "claude-code-F4-01-missing-fixture-file-available-r2",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/48aecb249ca42c3d/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "0a37f1bd81866af17777ac65fbd099e9fc796887a91325e880233f29c60c55f5",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/claude-code-F4-01-missing-fixture-file-available-r2/run/verifier/raw.md",
+   "retained_copy_sha256": "0a37f1bd81866af17777ac65fbd099e9fc796887a91325e880233f29c60c55f5",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "verification_blocked",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "the named fixture tests/fixtures/orders-comma.tsv does not exist in the workspace or in any commit, so the row titled 'Widget, large' cannot be exported to compare column counts",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv exited 1 with FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/orders-comma.tsv'",
+      "artifact": null
+     },
+     {
+      "kind": "command",
+      "detail": "ls tests printed 'No such file or directory'; find for *.tsv returned nothing; git log --all --name-only matched no tsv or fixture path",
+      "artifact": null
+     },
+     {
+      "kind": "diff",
+      "detail": "e0c7715 replaces ','.join(row) with csv.writer(buffer, lineterminator='\\n') in render(), but no input exercises it",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": "Nothing in the sandbox stopped me: the command ran to completion and the interpreter itself reported the file absent, so this is not `verification_blocked`."
+  },
+  {
+   "setup": "codex",
+   "repetition": "r1",
+   "trial": "codex-F4-01-missing-fixture-file-available-r1",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/1855898f22231b67/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "3fe57f8a6244bb0f74b58a9cb18490d51a94880345ed35344c6585881551bb01",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/codex-F4-01-missing-fixture-file-available-r1/run/verifier/raw.md",
+   "retained_copy_sha256": "3fe57f8a6244bb0f74b58a9cb18490d51a94880345ed35344c6585881551bb01",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "reproduces",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "The named fixture tests/fixtures/orders-comma.tsv is absent, so the required comma-title row could not be exercised.",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv exited 1 with FileNotFoundError and printed no CSV output.",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "Repository file listing contains no tests directory or orders-comma.tsv fixture.",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "Current source constructs csv.writer at line 22 and writes data rows at line 25.",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": ""
+  },
+  {
+   "setup": "codex",
+   "repetition": "r2",
+   "trial": "codex-F4-01-missing-fixture-file-available-r2",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/89ea92154bde1253/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "3c3ac6dab1ff0bae47c9e950b3507225b569fb85e4743d36b81de6779e7e8d0f",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/codex-F4-01-missing-fixture-file-available-r2/run/verifier/raw.md",
+   "retained_copy_sha256": "3c3ac6dab1ff0bae47c9e950b3507225b569fb85e4743d36b81de6779e7e8d0f",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "reproduces",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "The named fixture tests/fixtures/orders-comma.tsv is absent, and the repository has no tests directory.",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv exited 1 with FileNotFoundError for the named fixture.",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "src/widget/export.py line 22 uses csv.writer, but the required fixture was unavailable for execution.",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": ""
+  },
+  {
+   "setup": "opencode",
+   "repetition": "r1",
+   "trial": "opencode-F4-01-missing-fixture-file-available-r1",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/9572b2a0f16c7d21/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "5ffd5320ceb9fcc66c0f282162ca15d12ad85cad85646e02da3b11c0188b8e08",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/opencode-F4-01-missing-fixture-file-available-r1/run/verifier/raw.md",
+   "retained_copy_sha256": "5ffd5320ceb9fcc66c0f282162ca15d12ad85cad85646e02da3b11c0188b8e08",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "verification_blocked",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "tests/fixtures/orders-comma.tsv (with the title 'Widget, large') is absent from the workspace and from all git history, so the named scenario path cannot be exercised",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv exits 1 with FileNotFoundError on the fixture path, stdout empty",
+      "artifact": null
+     },
+     {
+      "kind": "command",
+      "detail": "find and git log --all show no tests/ dir and no orders-comma.tsv in any commit",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "current export.py render() at lines 20-26 uses csv.writer default quoting, but this is source reading, not an executed scenario",
+      "artifact": null
+     },
+     {
+      "kind": "diff",
+      "detail": "fix commit e0c7715 replaced manual join with csv.writer; fixer account is not evidence per rule 9",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": "This is not `verification_blocked` — nothing in the sandbox stopped an execution; the artifact simply is not there."
+  },
+  {
+   "setup": "opencode",
+   "repetition": "r2",
+   "trial": "opencode-F4-01-missing-fixture-file-available-r2",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/bd25bfdda4fa3216/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "68d17b74b62a1739cc45bf5b842f0f42bea66211e3c0a7e7691c659afc9e24f9",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/opencode-F4-01-missing-fixture-file-available-r2/run/verifier/raw.md",
+   "retained_copy_sha256": "68d17b74b62a1739cc45bf5b842f0f42bea66211e3c0a7e7691c659afc9e24f9",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "reproduces",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "tests/fixtures/orders-comma.tsv: the fixture named by the failure scenario does not exist on disk, is not tracked, matches no blob in any reachable or dangling git object, and could not be obtained at all by this run",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv -> FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/orders-comma.tsv', exit 1",
+      "artifact": null
+     },
+     {
+      "kind": "command",
+      "detail": "ls tests -> No such file or directory; git ls-files lists no test path; git rev-list --all --objects | grep -iE 'tsv|fixture|orders' matched nothing; git fsck found no dangling objects; find of worktree returned no *.tsv",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "src/widget/export.py:20-26: render() now uses csv.writer (line 22, QUOTE_MINIMAL default) instead of the joined-string body, but the scenario names tests/fixtures/orders-comma.tsv and cannot be exercised on any other input per rule 6",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": ""
+  },
+  {
+   "setup": "opencode-deepseek",
+   "repetition": "r1",
+   "trial": "opencode-deepseek-F4-01-missing-fixture-file-available-r1",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/bfdcde03c14d2d19/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "86ddee31e3a53db2a21c7c632fb38a5765889161379feb867600fb97540338c8",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/opencode-deepseek-F4-01-missing-fixture-file-available-r1/run/verifier/raw.md",
+   "retained_copy_sha256": "86ddee31e3a53db2a21c7c632fb38a5765889161379feb867600fb97540338c8",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "reproduces",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "tests/fixtures/orders-comma.tsv: the scenario's named input file is absent from the workspace and no commit or file ever held it, so the run could not obtain the state the scenario needs",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv -> FileNotFoundError [Errno 2] 'tests/fixtures/orders-comma.tsv', exit 1",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "src/widget/export.py:20-26 render now uses csv.writer with QUOTE_MINIMAL so a comma title would be quoted, but the named fixture is absent so the scenario cannot be exercised",
+      "artifact": null
+     },
+     {
+      "kind": "command",
+      "detail": "ls tests/fixtures/orders-comma.tsv and git ls-tree across all commits: no tests directory, no tsv fixture in any commit",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": ""
+  },
+  {
+   "setup": "opencode-deepseek",
+   "repetition": "r2",
+   "trial": "opencode-deepseek-F4-01-missing-fixture-file-available-r2",
+   "source_report": "/Users/tonycoon/.local/share/skills-v2-pilot/e10/e11-round2-qualification/tmp/dafd3e9858725fe9/fixture/796999eadb50/run/verifier/raw.md",
+   "source_report_sha256": "9ae58dca32e0e4e5c6a88e8170be177cdd2e391fc8627940e3a7836902c87e41",
+   "retained_copy": "~/.local/share/skills-v2-pilot/e10/e11-round2-qualification/trials/opencode-deepseek-F4-01-missing-fixture-file-available-r2/run/verifier/raw.md",
+   "retained_copy_sha256": "9ae58dca32e0e4e5c6a88e8170be177cdd2e391fc8627940e3a7836902c87e41",
+   "verifier_typed_reason": "missing_evidence",
+   "what_the_core_wrote_instead": "reproduces",
+   "item": {
+    "method": "executed",
+    "disposition": "not_fixed",
+    "missed_case": null,
+    "missing": "tests/fixtures/orders-comma.tsv",
+    "blocked": null,
+    "evidence": [
+     {
+      "kind": "command",
+      "detail": "PYTHONPATH=src python3 -m widget.export tests/fixtures/orders-comma.tsv exited 1 with FileNotFoundError: 'tests/fixtures/orders-comma.tsv'",
+      "artifact": null
+     },
+     {
+      "kind": "read",
+      "detail": "git ls-files shows only .gitignore, README.md, docs/plans/2026-09-18-widget-export.md, src/widget/__init__.py, src/widget/export.py; no tests/ directory",
+      "artifact": null
+     },
+     {
+      "kind": "diff",
+      "detail": "commit e0c7715 replaced ','.join(row) with csv.writer in render(), but the named fixture run is still the only evidence that decides the scenario",
+      "artifact": null
+     }
+    ]
+   },
+   "report_excerpt": ""
+  }
+ ]
+}
