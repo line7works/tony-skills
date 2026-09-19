@@ -257,7 +257,10 @@ class R1CaptureAndSchedule(RunnerCase):
             runner.write_json(os.path.join(directory, "command.json"),
                               {"setup": "codex", "condition": "available", "kind": kind,
                                "status": "complete"})
-            runner.write_json(os.path.join(directory, "result.json"), {})
+            # batch C: a producer with NOTHING to recover is refused, so the record this
+            # scheduler test places by hand carries a terminal status the way a real one does.
+            runner.write_json(os.path.join(directory, "result.json"),
+                              {"status": "completed", "items": []})
         plan = {"order": {"codex": [comparison]},
                 "continuation_order": {"codex": [continuation]},
                 "consumer_order": {"claude-code": ["consumer-codex-to-claude-code-r1"]}}
@@ -269,7 +272,8 @@ class R1CaptureAndSchedule(RunnerCase):
             runner.write_json(os.path.join(directory, "command.json"),
                               {"setup": "codex", "condition": "available",
                                "kind": "continuation:compaction", "status": "complete"})
-            runner.write_json(os.path.join(directory, "result.json"), {})
+            runner.write_json(os.path.join(directory, "result.json"),
+                              {"status": "completed", "items": []})
 
         def consume(one):
             selected.append(runner.producer_record_for(campaign, plan, "codex")["trial"])
@@ -312,10 +316,23 @@ class R1CaptureAndSchedule(RunnerCase):
         self.assertEqual(one, continuation)
 
     # ---- the read-only consumer regrade command
-    def test_the_regrade_command_needs_a_revision(self):
+    def test_the_regrade_command_needs_a_revision_once_a_first_grade_exists(self):
+        """Batch C: `--regrade` with no revision writes the FIRST grade, and only that.
+
+        Deferred grading (Astra's gap 7) means every consumer attempt starts ungraded, so a
+        bare `--regrade` has a job to do: write `consumer-grade.json`. A record that already
+        holds one is refused by name, which is the E10-48 rule the old message carried.
+        """
+        campaign = runner.Campaign(self.campaign)
+        tid = "consumer-claude-code-to-codex-r1"
+        record = campaign.trial_dir(tid)
+        runner.ensure_dir(record)
+        runner.write_json(os.path.join(record, "command.json"), {"kind": "consumer"})
+        runner.write_json(os.path.join(record, "consumer-grade.json"), {"ok": True})
         got = cli(["consumer", "--campaign", self.campaign, "--regrade", "--all"])
         self.assertEqual(got.returncode, 2, got.stdout[-400:])
         self.assertIn("--revision", got.stderr)
+        self.assertIn("consumer-grade.json", got.stderr)
 
     def test_the_regrade_command_writes_beside_the_original(self):
         campaign = runner.Campaign(self.campaign)
@@ -1539,10 +1556,14 @@ class R3GradingWaitsForTheSessions(RunnerCase):
     """R3: grading happens only after every consumer session has ended."""
 
     def test_the_regrade_goes_through_the_same_campaign_wide_barrier(self):
+        """Batch C moved the barrier into the one grading path both callers share."""
         source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
-        body = source[source.index("def do_consumer_regrade("):
-                      source.index("def do_lane_stop(")]
+        body = source[source.index("def grade_consumer_records("):
+                      source.index("def _backfill_graded_ok(")]
         self.assertIn("refuse_while_alive(campaign, targets)", body)
+        regrade = source[source.index("def do_consumer_regrade("):
+                         source.index("def do_consumer(")]
+        self.assertIn("grade_consumer_records(campaign, targets", regrade)
 
     def test_a_live_consumer_session_stops_the_regrade(self):
         campaign = runner.Campaign(self.campaign)

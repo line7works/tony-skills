@@ -92,11 +92,16 @@ def drive_consumer_core(harness, consumer, prompt, out_dir):
     never for the core.
     """
     document = json.loads(read_or(consumer["input"], "{}"))
+    # The adapter's own report of the harness and the model in force wins over the caller's
+    # pin, which is what contract section 13 asks of a real adapter. The caller's OTHER facts
+    # stand: `run_date` and `session_wrote_fix` are the station's to state, so this only fills
+    # a date the caller did not give.
     document.setdefault("invocation", {})["harness"] = {
         "name": harness, "version": "fake", "entry": "fakelib.py", "sandbox": "none"}
     document["invocation"]["model"] = dict(FAKE_MODEL[harness])
     document["invocation"]["model"]["floor_met"] = True
-    document["invocation"]["run_date"] = prompt.get("run_date") or "2026-09-20"
+    document["invocation"].setdefault("run_date",
+                                      prompt.get("run_date") or "2026-09-20")
     path = os.path.join(out_dir, "consumer-input.json")
     write_json(path, document)
     inner = dict(prompt)
@@ -126,12 +131,17 @@ def answer_consumer(consumer):
     items = []
     for item in result.get("items") or []:
         location = item.get("location") or {}
-        # item 6(a): every field of every reference, whole
+        # item 6(a): every field of every reference, whole.
+        # Astra's gap 6: the published shape (`references/consumer-answer.schema.json`, now
+        # copied into the pair's run directory) names the reference `artifact_path` and
+        # forbids `artifact`. The fake writes the published shape, like any consumer that
+        # reads the schema the prompt cites.
         evidence = []
         for entry in ((item.get("verification") or {}).get("evidence") or []):
             if isinstance(entry, dict):
+                named = entry.get("artifact_path") or entry.get("artifact")
                 evidence.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
-                                 "artifact": entry.get("artifact")})
+                                 "artifact_path": named})
         items.append({"location": "%s:%s" % (location.get("file"), location.get("line")),
                       "claim": item.get("claim"),
                       "disposition": item.get("disposition"),
@@ -155,9 +165,21 @@ def answer_consumer(consumer):
             states = [r.get("state") for r in rows if isinstance(r, dict)]
             state = {"continuations": document.get("continuations"),
                      "phase": document.get("phase"),
-                     "done": states.count("done"), "pending": states.count("pending")}
-    write_json(consumer["answer"], {"items": items, "cards": cards,
-                                    "source_identity": actual, "continuation": state})
+                     "done": states.count("done"), "pending": states.count("pending"),
+                     # the published shape carries WHICH item is in which state, not only
+                     # how many (`item_rows`, the checkpoint's own vocabulary)
+                     "item_rows": [{"index": index, "state": value}
+                                   for index, value in enumerate(states)
+                                   if value in ("pending", "done")]}
+    answer = {"items": items, "cards": cards,
+              "source_identity": actual, "continuation": state}
+    # E11-46 R3: a producer that stopped is recovered by its stop. The published shape carries
+    # both fields; a completed producer carries neither.
+    status = result.get("status")
+    if status is not None and status != "completed":
+        answer["status"] = status
+        answer["stop_reason"] = result.get("stop_reason")
+    write_json(consumer["answer"], answer)
 
 
 def seeded_input(workspace):

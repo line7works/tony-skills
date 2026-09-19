@@ -376,7 +376,10 @@ class AttemptsAndGradingTest(RunnerCase):
                            "workspace": "/nowhere", "status": "no_result", "wall_seconds": 1.0})
         environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
                                       "RECHECK_RUNNER_KEY_DIR": directory})
-        for extra in ([], ["--summary"]):
+        # B3(3): the FIRST grade of an ungraded attempt still writes `grade.json`; a second
+        # bare `grade` over the same record is refused and names `--revision`, so the
+        # `--summary` pass takes a revision name.
+        for extra in ([], ["--summary", "--revision", "second"]):
             graded = cli(["grade", "--campaign", self.campaign, tid] + extra, env=environment)
             self.assertEqual(graded.returncode, 0, graded.stderr)
             self.assertTrue(parse_stdout(graded)["grades"][0]["grade_path"])
