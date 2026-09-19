@@ -1415,7 +1415,7 @@ to exactly the held-out request text.
   branch `audit/tony-skills-2026-09-12` (private repository, 82 commits ahead of its `main`) is not pushed and
   not needed to start. The close hand-off: `~/Documents/handoffs/2026-09-19-skills-v2-e11-close-handoff.md`.
   Still on Tony's word: the 27 negative-test homes (lock away, delete, or leave), A12a, this branch's PR.
-- **E11-59, Tony's ruling on this branch: publish it as it stands (2026-09-19 about 6:55 AM by the machine's
+- **E11-59, Tony's ruling on this branch: publish it as it stands (2026-09-19 about 6:50 AM by the machine's
   clock, control room).** Asked in plain form whether his E11-50 ruling, quoted verbatim with its swear, may go
   onto the public `line7works/tony-skills` repository, Tony answered, as typed: "yes, pbulish last nigths ruling
   with swear included". This branch is pushed, opened as a PR and merged under that word together with his
