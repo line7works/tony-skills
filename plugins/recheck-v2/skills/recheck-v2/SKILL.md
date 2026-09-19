@@ -119,6 +119,11 @@ file outside the workspace and outside the run directory (beside it, as
 `<run_dir>.input.json`); `start` creates the run directory and copies the document in only
 after it validates. `references/examples/README.md` names one complete example per route.
 
+Once before `start`: `uv run scripts/recheck.py check-input <input.json>` resolves scope
+read-only, writes nothing, and prints `corrected_target` (the document's own slice
+spelling); take that into the document. A spent run id never starts again, so this is
+the one correction path.
+
 ### 3. Start
 
 ```
@@ -270,6 +275,10 @@ Print `<run_dir>/chat.md` to the user verbatim, as the whole verdict. Hand
 hand the document to a caller unchanged. Write no verdict prose into any project document.
 
 ### Resume
+
+**Required after a compaction.** The first command after a context boundary is `resume`,
+never a phase command: a phase command revalidates no checkpoint and moves no
+continuation count.
 
 After a compaction, in a fresh session handed the run directory, after a `recording_failed`
 result, or after a stop the run can recover from (two verifier failures, or an unavailable

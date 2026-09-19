@@ -76,6 +76,10 @@ class RunnerCase(unittest.TestCase):
     cases = (CASE,)
     conditions = ("available",)
     repetitions = 1
+    # E11 fix round, item 2(a): every launch path refuses without a read-boundary preflight
+    # record. A test campaign records the operator's acceptance the way a real one does; the
+    # tests of the GATE itself set this False and assert the refusal.
+    preflight_accepted = True
 
     def setUp(self):
         self.scratch = scratch_root()
@@ -137,8 +141,25 @@ class RunnerCase(unittest.TestCase):
         document["counts"]["total"] = sum(document["counts"].values())
         runner.write_json(campaign.campaign_json, document)
         campaign.mark_synthetic("a test built this campaign")
+        if self.preflight_accepted:
+            self.accept_preflight(campaign)
         self.plan_document = document
         return campaign
+
+    @staticmethod
+    def accept_preflight(campaign):
+        """The acceptance a real campaign records with `preflight --accept-unseparated`.
+
+        These benches cannot separate one trial's reads from another's (E10-40), so the
+        acceptance is the honest state; the campaign's own record says so and `report` prints
+        it. Written directly here so a test costs no child process.
+        """
+        runner.write_json(
+            os.path.join(campaign.records("read-boundary"), "preflight-test.json"),
+            {"separated": False, "accepted_unseparated": True,
+             "allow_rules": {"ok": True},
+             "rows": [], "measured": "recorded by the test bench (E11-7 item 2(a))",
+             "why": "the test bench accepts the unseparated state the way an operator does"})
 
     @staticmethod
     def setup_spec(name):

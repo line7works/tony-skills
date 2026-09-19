@@ -379,6 +379,43 @@ def slice_names(parsed):
     return [s["name"] for s in parsed["slices"]]
 
 
+def canonical_slice(given, names):
+    """The document's own spelling of a slice a caller named (E11-7 item 3).
+
+    A slice's name is what follows `## Slice ` in its heading: the heading `## Slice A —
+    export` names the slice `A`. A session reading that heading naturally passes the words
+    it saw, `Slice A`, and seven runs of the E10 campaign did exactly that: the core keyed
+    them as `missing_input`, wrote that envelope into the pinned run directory, and then
+    refused the corrected start as a reused run id (Astra's E11 read: "The seven
+    `missing_input` results all name `target.slice`").
+
+    Returns `(name or None, why)`. The document's own spelling always wins; a caller's
+    spelling is accepted only when it resolves to exactly one slice.
+    """
+    if given is None:
+        return None, "no slice was named"
+    given = str(given)
+    if given in names:
+        return given, "the document's own spelling"
+
+    def key(text):
+        text = " ".join(str(text).split()).strip().lower()
+        if text.startswith("slice "):
+            text = text[len("slice "):].strip()
+        return text.rstrip(":").strip()
+
+    wanted = key(given)
+    if not wanted:
+        return None, "the slice named is empty once its heading words are removed"
+    matches = [n for n in names if key(n) == wanted]
+    if len(matches) == 1:
+        return matches[0], "the heading's words %r resolve to the slice %r" % (given,
+                                                                               matches[0])
+    if len(matches) > 1:
+        return None, "%r matches more than one slice (%s)" % (given, ", ".join(matches))
+    return None, "%r matches no slice heading" % given
+
+
 def sort_slices(names):
     """Ascending slice order: single letters first (A, B, ...), then the rest lexically."""
     return sorted(set(names), key=lambda n: (0 if len(n) == 1 else 1, n))

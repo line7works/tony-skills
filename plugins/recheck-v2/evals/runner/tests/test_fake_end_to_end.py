@@ -316,17 +316,34 @@ class RoutingTest(RunnerCase):
             self.assertIn("manual_only_row", scored)
 
     def test_a_blocked_station_in_the_observed_target_is_a_leak_row(self):
+        """E11-7 item 1: the leak is read from the NATIVE capture, not from the cached value.
+
+        The score used to reuse `command.json.observed_target`, the value the witness this
+        repair replaces had written. The trace is what a blocked station's selection
+        actually leaves behind, so this test plants it there.
+        """
         tid = runner.routing_trial_id("claude-code", "T-01-slash-v2-slice", 1)
         cli(["routing", "--campaign", self.campaign, tid,
              "--fake-launcher", self.fake_launcher("claude-code")])
-        path = os.path.join(self.campaign, "trials", tid, "command.json")
-        command = runner.read_json(path)
-        command["observed_target"]["target"] = "signoff"
-        runner.write_json(path, command)
+        record = os.path.join(self.campaign, "trials", tid)
+        trace = os.path.join(record, "harness", "trace.jsonl")
+        rows = [json.loads(line) for line in open(trace) if line.strip()]
+        for row in rows:
+            for block in ((row.get("message") or {}).get("content") or []):
+                if isinstance(block, dict) and block.get("name") == "Skill":
+                    block["input"]["skill"] = "signoff:signoff"
+        with open(trace, "w") as handle:
+            for row in rows:
+                handle.write(json.dumps(row) + "\n")
         document = parse_stdout(cli(["routing-score", "--campaign", self.campaign]))
         scored = runner.read_json(document["written"][0]["path"])
+        self.assertEqual(scored["rows"][0]["observed_target"], "signoff")
+        self.assertEqual(scored["rows"][0]["observed_target_recomputed"], "signoff")
+        self.assertEqual(scored["rows"][0]["observed_target_as_recorded"], "recheck-v2")
+        self.assertFalse(scored["rows"][0]["recomputed_agrees_with_the_record"])
         self.assertTrue(scored["rows"][0]["blocked_station_leak"])
         self.assertEqual(len(scored["blocked_station_leaks"]), 1)
+        self.assertEqual(len(scored["recomputed_differs_from_the_record"]), 1)
 
 
 class ContinuationTest(RunnerCase):
@@ -433,8 +450,25 @@ class ContinuationTest(RunnerCase):
         witness = runner.compaction_witness(setup, out)
         self.assertEqual(witness["file"], "trace.jsonl")
         self.assertEqual(witness["line"], 1)
-        self.assertEqual(witness["first_resumed_work_line"], 2)
-        self.assertTrue(witness["before_the_resumed_work"])
+        # NEW MAJOR 4 (Astra's verification of 31329cd): the ordering verdict needs all three
+        # lines — compaction < resumed turn < first resumed tool. This record names no
+        # resumed turn, so the event is found and the ORDERING is not claimed.
+        self.assertFalse(witness["ok"])
+        self.assertIsNone(witness["resumed_turn_line"])
+        self.assertIn("no resumed turn", witness["ordering_witness"]["why"])
+        # with the resume request in the record, the three lines are there and in order
+        runner.write_text(os.path.join(out, "trace.jsonl"), "\n".join([
+            '{"type": "system", "subtype": "compact_boundary", "session_id": "s"}',
+            '{"type": "user", "message": {"content": [{"type": "text",'
+            ' "text": "resume the recheck run standin-run in /r"}]}}',
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash",'
+            ' "id": "t1", "input": {"command": "ls"}}]}}']) + "\n")
+        witness = runner.compaction_witness(
+            setup, out, resume_text="resume the recheck run standin-run in /r")
+        self.assertTrue(witness["ok"], witness)
+        self.assertEqual(witness["ordering_witness"]["compaction_line"], 1)
+        self.assertEqual(witness["ordering_witness"]["resumed_turn_line"], 2)
+        self.assertEqual(witness["ordering_witness"]["first_resumed_tool_line"], 3)
 
     def test_a_compaction_event_after_the_resumed_work_is_not_ok(self):
         setup = runner.make_setup(runner.Campaign(self.campaign),

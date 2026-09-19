@@ -331,7 +331,12 @@ class EveryLaunchPathCarriesThePairTest(RunnerCase):
     def test_every_setup_launch_call_site_is_one_method(self):
         """So a new launch path cannot miss the pair by writing its own argv."""
         source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
-        self.assertEqual(source.count("setup.launch("), 4)
+        # E11-7 items 5 and 6 add two call sites: the guarded manual-only routing launch and
+        # the consumer trial. E11-45 S1 adds a seventh, the `write-fence` proof, and E11-46 R4
+        # an eighth, the native read-boundary probe. All of them go through `Setup.launch`,
+        # which is what this pins; the count is the canary that says a new path was added, so
+        # that it can be checked rather than slipping in unseen.
+        self.assertEqual(source.count("setup.launch("), 8)
 
     def test_the_cut_s_own_argv_carries_the_pair(self):
         setups = self.setups_of()
@@ -354,6 +359,25 @@ class EveryLaunchPathCarriesThePairTest(RunnerCase):
                                 "--plugin", "recheck-v2", "--plugin", "readers"])
 
     def resume_argv(self, setup, harness):
+        # E11-28 fix 6 (D-U): a REAL launch is refused when run-leaf writability cannot be
+        # established, and OpenCode's is established from its own `external_directory` rule.
+        # A real home always has one — `setups/opencode/install.sh` writes it — so this bench
+        # writes the rule it would have rather than driving a resume against a home no
+        # campaign could have launched. Restored afterwards: the pilot homes are shared.
+        if harness == "opencode":
+            config = os.path.join(setup.home("available"), "xdg-config", "opencode",
+                                  "opencode.json")
+            before = runner.read_text(config, None)
+
+            def restore():
+                if before is None:
+                    if os.path.isfile(config):
+                        os.remove(config)
+                else:
+                    runner.write_text(config, before)
+            self.addCleanup(restore)
+            runner.write_json(config, {"permission": {"external_directory": {
+                os.path.dirname(self.scratch.rstrip("/")) + "/**": "allow"}}})
         recorded = []
 
         def capture(command, **kwargs):

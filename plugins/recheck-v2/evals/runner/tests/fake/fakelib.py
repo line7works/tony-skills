@@ -66,6 +66,100 @@ def parse_prompt(text):
     return got
 
 
+def parse_consumer_prompt(text):
+    """The consumer prompt's own paths, or None when this is not a consumer trial.
+
+    E11-7 item 6(b): the consumer prompt now names an input document and a run directory,
+    because the consumer RUNS the job on the pair through the declared input route.
+    """
+    match = re.search(r"re-inspect the findings in (\S+) against (\S+): the records the "
+                      r"caller holds are under (\S+), and its input document is (\S+)\.", text)
+    if not match:
+        return None
+    input_path, workspace, producer, _again = match.groups()
+    answer = re.search(r"Then write (\S+), one JSON document", text)
+    if not answer:
+        return None
+    return {"producer": producer.rstrip(","), "workspace": workspace.rstrip(":,"),
+            "input": input_path, "answer": answer.group(1).rstrip(",")}
+
+
+def drive_consumer_core(harness, consumer, prompt, out_dir):
+    """Run the real core on the pair's own input, the way a consumer session would.
+
+    E11-7 item 6(b): the grade reads a validating `result.json` and a delivered reply, so the
+    fake consumer drives the same CLI every other trial drives — it stands in for a model,
+    never for the core.
+    """
+    document = json.loads(read_or(consumer["input"], "{}"))
+    document.setdefault("invocation", {})["harness"] = {
+        "name": harness, "version": "fake", "entry": "fakelib.py", "sandbox": "none"}
+    document["invocation"]["model"] = dict(FAKE_MODEL[harness])
+    document["invocation"]["model"]["floor_met"] = True
+    document["invocation"]["run_date"] = prompt.get("run_date") or "2026-09-20"
+    path = os.path.join(out_dir, "consumer-input.json")
+    write_json(path, document)
+    inner = dict(prompt)
+    inner["run_dir"] = document["invocation"]["run_dir"]
+    inner["run_id"] = document["invocation"]["run_id"]
+    inner["workspace"] = document["workspace"]
+    inner["consumer_input_path"] = path
+    steps, state = drive_core(harness, inner, out_dir, input_path=path)
+    # the caller's `prompt` is what the record writers read; point it at the pair's run dir
+    prompt["run_dir"] = inner["run_dir"]
+    prompt["run_id"] = inner["run_id"]
+    return steps, state
+
+
+def answer_consumer(consumer):
+    """Read the producer's own records and write the consumer's answer (E11-7 item 6).
+
+    The fake stands in for a model: it reads exactly the files the prompt named and copies
+    what they say. What it proves is the runner's end of the trial — the pair staged with one
+    producer's records and nothing else, the launch, the grade — not a model's comprehension.
+    """
+    result_path = os.path.join(consumer["producer"], "result.json")
+    if not os.path.isfile(result_path):
+        return
+    with open(result_path, encoding="utf-8") as handle:
+        result = json.load(handle)
+    items = []
+    for item in result.get("items") or []:
+        location = item.get("location") or {}
+        # item 6(a): every field of every reference, whole
+        evidence = []
+        for entry in ((item.get("verification") or {}).get("evidence") or []):
+            if isinstance(entry, dict):
+                evidence.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
+                                 "artifact": entry.get("artifact")})
+        items.append({"location": "%s:%s" % (location.get("file"), location.get("line")),
+                      "claim": item.get("claim"),
+                      "disposition": item.get("disposition"),
+                      "reason": item.get("reason"),
+                      "evidence": evidence})
+    cards = [{"slice": c.get("slice"), "before": c.get("before"), "after": c.get("after")}
+             for c in (result.get("cards") or [])]
+    identity = result.get("source_identity") or {}
+    actual = identity.get("actual") if isinstance(identity.get("actual"), dict) else identity
+    # item 6(e): the whole retained state the caller's records carry
+    state = None
+    checkpoint = os.path.join(consumer["producer"], "run", "checkpoint.json")
+    if os.path.isfile(checkpoint):
+        try:
+            with open(checkpoint, encoding="utf-8") as handle:
+                document = json.load(handle)
+        except ValueError:
+            document = None
+        if document is not None:
+            rows = (document.get("scope") or {}).get("items") or document.get("items") or []
+            states = [r.get("state") for r in rows if isinstance(r, dict)]
+            state = {"continuations": document.get("continuations"),
+                     "phase": document.get("phase"),
+                     "done": states.count("done"), "pending": states.count("pending")}
+    write_json(consumer["answer"], {"items": items, "cards": cards,
+                                    "source_identity": actual, "continuation": state})
+
+
 def seeded_input(workspace):
     """The fixture's own seeded input document, beside its workspace."""
     path = os.path.join(os.path.dirname(workspace), "input.json")
@@ -116,8 +210,13 @@ def verifier_report(checklist, path):
             "index": index, "location": location, "disposition": "fixed", "reason": None,
             "method": "executed", "static_reason": None, "blocked": None, "missing": None,
             "missed_case": None,
-            "evidence": [{"kind": "command", "detail": "the scenario command ran and the "
-                                                       "failure no longer appears",
+            # E11-46 R2: the detail NAMES THE ITEM'S OWN SCENARIO. The evidence check reads
+            # the record now rather than counting entries, and generic prose - "the scenario
+            # command ran" - is exactly the evidence it is meant to reject: it could belong to
+            # any item of any trial. A fake that models a good session says which scenario.
+            "evidence": [{"kind": "command",
+                          "detail": "ran the scenario (%s); the failure no longer appears"
+                                    % (entry.get("failure_scenario") or "unstated"),
                           "artifact": None}],
             "location_after_fix": None,
         })
@@ -132,10 +231,13 @@ def verifier_report(checklist, path):
     return path
 
 
-def drive_core(harness, prompt, out_dir):
+def drive_core(harness, prompt, out_dir, input_path=None):
     """start -> record-call -> adjudicate -> record, the way the SKILL.md procedure does."""
     steps = []
-    input_path, document = build_input(harness, prompt, out_dir)
+    if input_path is None:
+        input_path, document = build_input(harness, prompt, out_dir)
+    else:
+        document = json.loads(read_or(input_path, "{}"))
     if prompt.get("resume"):
         first = uv_run(["resume", input_path])
     else:
@@ -245,7 +347,12 @@ def write_claude_record(out_dir, prompt, state, steps, plugins, configured=None)
                       "message": {"content": [
                           {"type": "tool_result", "tool_use_id": planted["block"]["id"],
                            "is_error": planted.get("refused", False),
-                           "content": "planted"}]}})
+                           # E11-41 R2: a REFUSED call says so the way a harness says it.
+                           # `is_error` alone means the call failed, not that it was
+                           # refused, and the reader no longer conflates the two.
+                           "content": ("permission denied: writing outside of the project; "
+                                       "rejected by user approval settings"
+                                       if planted.get("refused") else "planted")}]}})
     if "routing_target" in prompt:
         skills = [{"name": "%s:%s" % (p, p)} for p in (plugins or ["recheck-v2"])]
         init["skills"] = skills
@@ -515,7 +622,17 @@ def main(argv):
     prompt = parse_prompt(text)
     prompt["prompt_file"] = os.path.abspath(prompt_file)
     prompt.setdefault("workspace", os.path.abspath(workspace))
-    if "run_dir" not in prompt:
+    consumer = parse_consumer_prompt(text)
+    if consumer:
+        # E11-7 item 6: the fake consumer reads the ONE producer's records it was given, runs
+        # the real core on the pair's own input, and writes the recovery answer beside it.
+        prompt.setdefault("workspace", consumer["workspace"])
+        prompt["consumer"] = consumer
+        steps, state = drive_consumer_core(harness, consumer, prompt, out_dir)
+        answer_consumer(consumer)
+        # the record writers read the run directory's own chat block for the final reply,
+        # so the consumer's record names the PAIR's run directory (E11-7 item 6(b))
+    elif "run_dir" not in prompt:
         # A routing trial: the whole prompt is the request text, there is no run directory and
         # no core to drive. The fake selects recheck-v2 when the request reads like a recheck,
         # so the runner's observed-target readers have a marker to find; RECHECK_FAKE_TARGET

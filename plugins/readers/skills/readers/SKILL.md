@@ -24,7 +24,7 @@ Print `READERS-PROTOCOL: 1` as the first line of the run, before any dispatch, i
 
 ## Step 2 — Prepare every call
 
-1. Make a scratch directory for request files (`mktemp -d`). The run dir is the request's `run_dir` when the caller passed one, else the runner's default.
+1. Make a scratch directory for request files: **the request's own `run_dir` when the caller passed one** (a caller that hands over a run directory is handing over the only place its own contract lets these files live, and a request file written outside it is a write the caller's run never authorised), else `mktemp -d`. The run dir is the request's `run_dir` when the caller passed one, else the runner's default.
 2. `RUNNER suggest <row>[,<row>...] --run <run id> [--run-dir <run dir>] [--floor <floor>]` once per run, every requested row in one call. Its `model` per row is the model the run sends.
 3. Write each call's request JSON to `<scratch>/<call id>.json` with the contract's fields and `protocol_version: 1`. On row `claude-session`, set `session_model` to the exact model id your system prompt says you are powered by; leave it unset on other rows.
 4. `RUNNER validate <request file>` prints `valid` or the refusing status. A refusal is the call's status; never repair the request. Its sidecar comes from Step 3's lane step, which refuses again and writes `sidecar.json` alone.

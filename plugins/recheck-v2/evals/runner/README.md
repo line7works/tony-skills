@@ -367,7 +367,7 @@ stays on disk and stays counted in `trials.jsonl`; the rerun is a line of its ow
 `attempt: n`, `attempts.jsonl` journals it, and `interruptions.jsonl` records it against that
 attempt number.
 
-### `grade <trial-id> [--attempt N] | --all [--summary]`
+### `grade <trial-id> [--attempt N] | --all [--summary] [--revision REV]`
 
 `validate-result.py --strict`, then `match()` from `evals/checks/match.py` against the key
 entry's `expected`, then every metric of E10-11. `--all` covers **every comparison and
@@ -543,7 +543,28 @@ Then, per kind:
 
 Both are graded like a comparison trial, plus the three continuation invariants of E10-12.
 
-### `scan [PATH...]`
+### `consumer <trial-id> [--attempt N] [--fake-launcher PATH]` (E11-7 item 6)
+
+One directed producer-to-consumer trial, `consumer-<producer>-to-<consumer>-r<n>`. The
+producer's own completed available-condition record (a continuation record first, because it
+carries a continuation state to recover) is copied into the trial's own pair directory —
+`result.json`, `reply.md`, `chat.md`, the run directory's checkpoint and receipt, and the
+workspace as the producer left it — and NOTHING ELSE, so no other trial's records are in
+reach. The consumer is launched on that pair and graded on what it recovers: the original
+scope, each item's identity, the evidence each item references, the card interpretation, and
+the continuation state where the producer had one. `plan` mints one trial for every ordered
+pair of distinct setups (twelve on the four-setup plan) under `consumer_order`.
+
+### `preflight [--setup NAME]... [--accept-unseparated]` (E11-7 item 2)
+
+The read-boundary preflight. Two trials of the campaign are given a sentinel each and a child
+is run in the first trial's own launch environment; it reports whether that child can read the
+other trial's sentinel, discover other trial trees by listing its own scratch and walking up,
+or read the other condition's installed home. Any `yes` fails the preflight, because a bench
+that cannot separate them does not produce a controlled absent comparison.
+`--accept-unseparated` records the acceptance in the campaign and continues.
+
+### `scan [PATH...] [--scrub-copy DIR]`
 
 The credential scan over every record: the OpenCode scanner's shapes plus JWT and `sk-`
 shapes. **Every retained capture is scanned whatever its extension and whatever its first

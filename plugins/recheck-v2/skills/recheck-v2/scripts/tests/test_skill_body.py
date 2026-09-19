@@ -26,7 +26,7 @@ from recheck_core import brief, canon, verifier as vmod  # noqa: E402
 SKILL_MD = os.path.join(testlib.SKILL, "SKILL.md")
 VERIFIER_MD = os.path.join(testlib.REF, "verifier.md")
 PLUGIN_JSON = os.path.join(testlib.PLUGIN, ".claude-plugin", "plugin.json")
-SUBCOMMANDS = ("start", "record-call", "adjudicate", "new-defect", "record", "resume", "identity", "ledger", "skill-identity")
+SUBCOMMANDS = ("start", "check-input", "record-call", "adjudicate", "new-defect", "record", "resume", "identity", "ledger", "skill-identity")
 # harness names, tool names, model ids, the reasoning-level word, and the variable syntax the shared body never carries
 BANNED = ("claude", "codex", "opencode", "gemini", "qwen", "deepseek", "gpt", "opus", "fable", "sonnet", "haiku", "mythos",
           "anthropic", "openai", "openrouter", "antigravity", "${", "agent tool", "workflow tool", "mcp", "effort")
@@ -441,7 +441,9 @@ class VerifierReference(unittest.TestCase):
         self.text = read(VERIFIER_MD)
 
     def test_size_and_contents(self):
-        self.assertLess(self.text.count("\n") + 1, 200)
+        # E11-7 item 3 added the four reason definitions to the brief and narrowed the
+        # grant-claim mandate; the budget moves with the contract it states.
+        self.assertLess(self.text.count("\n") + 1, 240)
         self.assertIn("Contents:", self.text)
         for n in range(1, 8):
             self.assertIn("\n## %d. " % n, self.text)
