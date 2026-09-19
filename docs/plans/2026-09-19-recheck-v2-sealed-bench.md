@@ -181,3 +181,16 @@ byte-identical, the regrade gate of B1, no file written outside the scratch. A g
   re-verified against the manifest after the move, zero mismatches. All 27 held a held-out copy, not ten.
 - SB-5 (2026-09-19, control room, flagged): the run's repetitions. Four per comparison cell, two per
   continuation kind, eight consumers per directed pair. Section 6.
+- SB-6 (2026-09-19, control room, flagged): behind the wall `uv` can reach neither its cache nor the
+  package index, so the skill's core (`jsonschema==4.25.1` through `uv run`) cannot start. `install`
+  warms a per-home uv cache outside the wall; every launch gets `UV_CACHE_DIR` inside its home and
+  `UV_OFFLINE=1`. The same cache goes to BOTH conditions of every setup: it is apparatus, not skill.
+  Found by live proof 5 on Claude Code.
+- SB-7 (2026-09-19, control room): the Claude Code adapter looks for the session's transcript in its
+  own slug folder first and tolerates a refused directory in the scan. The profile is not widened to
+  all of `~/.claude/projects`. Executable support only. Found by live proof 5.
+- SB-8 (2026-09-19, control room): fit faults the live proofs on Claude Code found and the build
+  fixed: inherited cwd (named cwd per launch), the probes' TMPDIR (a probe scratch), Claude Code's own
+  `/tmp/claude-<uid>` scratch (`CLAUDE_CODE_TMPDIR`), the plain-process probe outside the wall, the
+  proxy dropping a connection under back-pressure, git's `~/.config/git` warning in one condition.
+  One telemetry host (`http-intake.logs.us5.datadoghq.com`) and `pypi.org` stay refused on purpose.
