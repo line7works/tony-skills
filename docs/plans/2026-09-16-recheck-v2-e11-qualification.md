@@ -1262,3 +1262,28 @@ to exactly the held-out request text.
   campaign loop has ended. No builder is started; no code changes. The control room has not yet read her
   findings against the code; that reading belongs to the report after the rerun. Next: the fresh root, the
   native preflight, the recorded ruling, the balance read, both reported in chat, then the launch.
+- **E11-54, the fresh root, the preflight under E11-50, the balance, and the launch of the round-2 rerun
+  (2026-09-18, launched 8:01 PM by the machine's clock, control room).** Root
+  `~/.local/share/skills-v2-pilot/e10/e11-round2-qualification`. `stage` ok at `7de6e3b` (399 files, no key or
+  held-out file in the stage). `plan`: the first attempt was refused because the control room's replay grade
+  had left the answer key closed (its output is kept as `plan-attempt1-key-closed.*`); after `key-state
+  --reopen` the default plan gave 360 ids: comparison 96, continuation 8, routing 240, manual_only 4, consumer
+  12; setups, models, cases, conditions, repetitions, continuation, routing and timeouts identical to the
+  round-1 rerun's `campaign.json` (its explicit `run_root_name` "runs" is the default here). `install` 12 of 12
+  ok; `verify` ok on all twelve homes; `probe-env` 12 of 12. `preflight --native --timeout 600`: exit 1 as
+  expected, `separated: false` on all four setups with the proof root's counts reproduced exactly (claude-code
+  2 refused / 4 read; codex 0 / 6; opencode and opencode-deepseek 4 refused / 2 unclear each); allow rules
+  ok; record `records/read-boundary/preflight-2026-09-19T030002Z.json`. `preflight --accept-unseparated
+  --ruling E11-50 --ruling-text` with Tony's words verbatim: exit 0, record `preflight-2026-09-19T030046Z.json`
+  carrying the ruling block over that measurement. OpenRouter before the launch: total 110.00, used 14.98,
+  available 95.02. Both reported in chat before the start, as the package's step 6 asks. `campaign start
+  --reopen-key`: started, loop pid 79674; `campaign.json` and `runner.log` carry E11-50 with the measurement;
+  the answer key closed at the first launches; all four lanes running within the first minute; no traceback.
+  The first recorded trial, `opencode-deepseek-F1-01-fixed-clean-available-r1`, is `no_result` with exit 0:
+  the model wrote toward `/tmp` and OpenCode auto-rejected the `external_directory` ask, the same behaviour
+  that ended 35 of this lane's 42 comparison trials in round 1; a result about the model, not a launch fault.
+  Step-5 and launch records filed at `astra-outputs/e11/rerun-3/control-room/`. The control room watches
+  `campaign status` every ten minutes (hourly progress lines; immediate lines on a traceback, a rise in
+  launch failures, or the loop ending or dying). Rerun rule: once per failed or empty trial, never twice,
+  logged. Nothing is graded, regraded or scored while any session is live (E11-53's cautions). Tony's goal is
+  met at this launch; the grading, both readings and the report wait for his word.
