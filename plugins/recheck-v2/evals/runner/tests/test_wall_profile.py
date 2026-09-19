@@ -7,6 +7,8 @@ through `sh -c` — and asserts what the kernel did, not what the profile says.
 The name is `test_wall_profile.py` rather than `test_wall.py`: `test_wall.py` is the ANSWER
 KEY's wall (the key directories at mode 000), and the two must not be confused.
 """
+import argparse
+import glob
 import hashlib
 import importlib.util
 import json
@@ -1266,6 +1268,215 @@ class OfflineUvCacheTest(RunnerCase):
         self.assertEqual(step["exit"], 0)
         if not step["uv_offline"]["ok"]:
             self.assertIn("missing dependency", step["uv_offline_problem"])
+
+
+@unittest.skipUnless(os.path.isfile(SANDBOX_EXEC), "this machine has no sandbox-exec")
+@unittest.skipUnless(runner.which("uv"), "this machine has no uv")
+class VerifyRecordsTheOfflineUvCheckTest(RunnerCase):
+    """Send-back 6: a passing check that is not recorded is a failing check that will be
+    invisible.
+
+    `with_uv_offline_check` attached `uv_offline` to the verify STEP and `do_verify` built its
+    rows from named fields, so on the real root the block ran, wrote its profiles under
+    `records/uv-offline-check/`, and appeared in neither verify's stdout nor its record file:
+    grep count zero for `uv_offline` in all eight records while the check was passing.
+
+    No model anywhere. The homes here are ones the test builds; `verify-install.sh` is a stub.
+    """
+
+    TINY = "\n".join([
+        "#!/usr/bin/env python3",
+        "# /// script",
+        '# requires-python = ">=3.9"',
+        "# dependencies = []",
+        "# ///",
+        "import argparse",
+        "argparse.ArgumentParser().parse_args()",
+        'print("the staged core ran")',
+        "",
+    ])
+
+    def stage_the_core(self, stage=None, unobtainable=False):
+        """The staged core. `unobtainable=True` gives it a dependency no warm pass can
+        resolve, which is the honest stand-in for the live blocker: an EMPTY dependency set
+        runs offline from a cold cache, so an empty cache alone proves nothing."""
+        scripts = os.path.join(stage or self.stage, "plugins", "recheck-v2", "skills",
+                               "recheck-v2", "scripts")
+        runner.ensure_dir(scripts)
+        path = os.path.join(scripts, "recheck.py")
+        body = self.TINY
+        if unobtainable:
+            body = body.replace(
+                "# dependencies = []",
+                '# dependencies = ["a-package-this-bench-will-never-have==9.9.9"]')
+        runner.write_text(path, body)
+        os.chmod(path, 0o755)
+        return path
+
+    def canonical_digest(self, campaign):
+        """`do_verify` compares the installed digest with the CHECKOUT's own, so the stub has
+        to print that one; anything else fails the row for a reason this test is not about."""
+        identity = runner.fresh_skill_identity(campaign)
+        self.assertTrue(identity["ok"], identity)
+        return identity["content_sha256"]
+
+    def stub_launcher(self, setup):
+        """`require_wall` asks the setup which executable a launch selects, so the file has to
+        be in the stage; it is never run."""
+        path = os.path.join(setup.setup_dir, "launch.sh")
+        if not os.path.isfile(path):
+            runner.ensure_dir(setup.setup_dir)
+            runner.write_text(path, "#!/bin/sh\nexit 0\n")
+            os.chmod(path, 0o755)
+        return path
+
+    def stub_verify_install(self, setup, canonical="a-canonical-digest"):
+        """A `verify-install.sh` this test wrote: it prints the shape do_verify reads."""
+        runner.ensure_dir(setup.setup_dir)
+        path = os.path.join(setup.setup_dir, "verify-install.sh")
+        runner.write_text(path, "#!/bin/sh\ncat <<'JSON'\n" + json.dumps(
+            {"ok": True, "skill_identity": {"installed": {"content_sha256": canonical}}},
+            indent=1) + "\nJSON\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def seal(self, sealed=True):
+        campaign = runner.Campaign(self.campaign)
+        document = runner.read_json(campaign.campaign_json)
+        document["sealed"] = sealed
+        # `require_wall` refuses sealed+synthetic before it reaches anything else, and every
+        # test campaign is synthetic by default. The launch gate under test here is the one a
+        # REAL sealed campaign meets, so this one stops saying it is synthetic. No launch
+        # happens in this class; only the gate is called.
+        document["synthetic"] = False
+        runner.write_json(campaign.campaign_json, document)
+        if os.path.exists(campaign.synthetic_marker):
+            os.unlink(campaign.synthetic_marker)
+        return campaign
+
+    def setUpHome(self, campaign, warm=True):
+        # `do_verify` builds its own setups from `campaign.stage`, so the stub launcher and the
+        # staged core go THERE; the object this test keeps is built the same way.
+        setup = runner.ClaudeCodeSetup(campaign, stage=campaign.stage)
+        runner.ensure_dir(setup.home("available"))
+        self.stub_verify_install(setup, canonical=self.canonical_digest(campaign))
+        self.stub_launcher(setup)
+        self.stage_the_core(campaign.stage, unobtainable=not warm)
+        if warm:
+            record = runner.warm_uv_cache(campaign, setup, "available")
+            self.assertTrue(record["ok"], record)
+        else:
+            runner.ensure_dir(setup.uv_cache("available"))
+        return setup
+
+    def verify_args(self, **extra):
+        base = dict(campaign=self.campaign, setup=["claude-code"], home="available")
+        base.update(extra)
+        return argparse.Namespace(**base)
+
+    def test_the_row_carries_the_whole_block_in_stdout_and_in_the_record(self):
+        campaign = self.seal(sealed=False)
+        self.setUpHome(campaign)
+        document = runner.do_verify(self.verify_args())
+        row = document["rows"][0]
+        self.assertIn("uv_offline", row)
+        self.assertTrue(row["uv_offline_ok"], row["uv_offline"])
+        self.assertEqual(row["uv_offline"]["exit"], 0)
+        self.assertIn("UV_OFFLINE", row["uv_offline"]["env_names"])
+        self.assertTrue(os.path.isfile(row["uv_offline"]["profile"]))
+        # ...and the same thing on disk, which is where it was missing
+        records = sorted(glob.glob(os.path.join(campaign.root, "records", "verify*.json")))
+        self.assertTrue(records)
+        blob = runner.read_text(records[-1], "")
+        self.assertIn("uv_offline", blob)
+        on_disk = runner.read_json(records[-1])["rows"][0]
+        self.assertEqual(on_disk["uv_offline_ok"], row["uv_offline_ok"])
+        self.assertEqual(on_disk["uv_offline"]["profile"], row["uv_offline"]["profile"])
+
+    def test_an_unsealed_plan_records_it_and_never_gates(self):
+        campaign = self.seal(sealed=False)
+        self.setUpHome(campaign, warm=False)          # an EMPTY cache
+        document = runner.do_verify(self.verify_args())
+        self.assertFalse(document["rows"][0]["uv_offline_ok"])
+        self.assertTrue(document["uv_offline_failed"])
+        self.assertFalse(document["sealed"])
+        self.assertNotIn(runner.FAIL_EXIT_KEY, document)
+        self.assertIn("never gates", document["uv_offline_gate"])
+
+    def test_a_sealed_plan_with_an_empty_cache_FAILS_verify_on_stdout(self):
+        campaign = self.seal()
+        self.setUpHome(campaign, warm=False)
+        document = runner.do_verify(self.verify_args())
+        self.assertTrue(document["sealed"])
+        self.assertFalse(document["rows"][0]["uv_offline_ok"])
+        self.assertIn(runner.FAIL_EXIT_KEY, document)
+        message = document[runner.FAIL_EXIT_KEY]
+        self.assertIn("claude-code/available", message)
+        self.assertIn("install", message)
+        self.assertIn("missing dependency", message)
+        # the document is still returned, so `main` prints it on stdout (A7a)
+        self.assertTrue(document["rows"])
+
+    def test_a_sealed_plan_with_a_warm_cache_passes(self):
+        campaign = self.seal()
+        self.setUpHome(campaign, warm=True)
+        document = runner.do_verify(self.verify_args())
+        self.assertTrue(document["rows"][0]["uv_offline_ok"])
+        self.assertEqual(document["uv_offline_failed"], [])
+        self.assertNotIn(runner.FAIL_EXIT_KEY, document)
+
+    def test_the_launch_gate_refuses_a_home_with_no_passing_check(self):
+        campaign = self.seal()
+        setup = self.setUpHome(campaign, warm=False)
+        runner.do_verify(self.verify_args())
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_wall(campaign, setup, setup.script("launch.sh"), "a trial",
+                                condition="available")
+        message = str(caught.exception)
+        self.assertIn("claude-code/available", message)
+        self.assertIn("install", message)
+        self.assertIn("--home available", message)
+
+    def test_the_launch_gate_refuses_a_home_no_verify_record_names(self):
+        campaign = self.seal()
+        setup = self.setUpHome(campaign, warm=True)
+        with self.assertRaises(runner.Usage) as caught:
+            runner.require_wall(campaign, setup, setup.script("launch.sh"), "a trial",
+                                condition="routing")
+        self.assertIn("no verify record", str(caught.exception))
+
+    def test_the_launch_gate_lets_a_verified_home_through(self):
+        campaign = self.seal()
+        setup = self.setUpHome(campaign, warm=True)
+        runner.do_verify(self.verify_args())
+        record = runner.require_wall(campaign, setup, setup.script("launch.sh"), "a trial",
+                                     condition="available")
+        self.assertTrue(record["required"])
+        self.assertTrue(record["uv_offline"]["ok"])
+
+    def test_an_unsealed_campaign_is_never_gated_by_it(self):
+        campaign = self.seal(sealed=False)
+        setup = self.setUpHome(campaign, warm=False)
+        runner.do_verify(self.verify_args())
+        record = runner.require_wall(campaign, setup, setup.script("launch.sh"), "a trial",
+                                     condition="available")
+        self.assertFalse(record["required"])
+
+    def test_installs_record_file_carries_the_warm_passes_and_the_tree_hash(self):
+        """Item 4: confirmed on the RECORD, not only on stdout."""
+        campaign = self.seal(sealed=False)
+        setup = self.setUpHome(campaign, warm=False)
+        warm = runner.warm_uv_cache(campaign, setup, "available")
+        path = campaign.reserve_record("install")
+        runner.write_json(path, {"campaign": campaign.root,
+                                 "installs": [{"setup": setup.name, "condition": "available",
+                                               "uv_cache": warm}]})
+        on_disk = runner.read_json(path)["installs"][0]["uv_cache"]
+        self.assertEqual(sorted({r["pass"] for r in on_disk["passes"]}),
+                         ["default", "only-system"])
+        self.assertEqual(len(on_disk["listing"]["tree_sha256"]), 64)
+        self.assertIn("recheck.py", " ".join(on_disk["scripts"]))
+        self.assertTrue(on_disk["dependency_sets"])
 
 
 class TheAvailableHomeContainsTheOtherTwoTest(RunnerCase):

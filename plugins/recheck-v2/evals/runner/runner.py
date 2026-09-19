@@ -4097,6 +4097,16 @@ def do_verify(args):
                 "links_refused":
                     link_survey(home, allowed_targets=[PILOT_ROOT],
                                 forbidden_targets=protected_roots(campaign))["symlinks_refused"],
+                # Send-back 6: the offline uv check, in the ROW. `with_uv_offline_check`
+                # attached it to the step and this loop built the row from named fields, so
+                # the block existed, ran, wrote its profiles under
+                # `records/uv-offline-check/` — and appeared in neither `verify`'s stdout nor
+                # its record file. The string `uv_offline` had a grep count of zero in all
+                # eight records of the real root while the check was passing. A passing check
+                # that is not recorded is a failing check that will be invisible.
+                "uv_offline": step.get("uv_offline"),
+                "uv_offline_ok": bool((step.get("uv_offline") or {}).get("ok")),
+                "uv_offline_problem": step.get("uv_offline_problem"),
                 "stdout_tail": step["stdout"][-1500:] if document is None else None,
                 "stderr_tail": step["stderr"][-1500:],
             })
@@ -4106,6 +4116,23 @@ def do_verify(args):
                                    "record (E10-40)")
     document = {"campaign": campaign.root, "canonical_content_sha256": canonical,
                 "skill_identity": identity, "rows": rows}
+    # Send-back 6: on a SEALED plan a home whose warmed uv cache does not satisfy `uv run`
+    # offline cannot produce a trial - every phase command exits 3 with `missing dependency`,
+    # which is exactly what live proof 5 measured. It is recorded on every plan and gates only
+    # on a sealed one, which is what `with_uv_offline_check`'s docstring always said.
+    sealed = bool((plan or {}).get("sealed"))
+    uv_failed = [r for r in rows if r.get("present") and not r.get("uv_offline_ok")]
+    document["sealed"] = sealed
+    document["uv_offline_failed"] = [
+        {"setup": r["setup"], "condition": r["condition"], "home": r["home"],
+         "why": r.get("uv_offline_problem")
+         or (r.get("uv_offline") or {}).get("why")
+         or "no uv_offline block was recorded for this home"}
+        for r in uv_failed]
+    document["uv_offline_gate"] = (
+        "a home whose uv_offline.ok is not true fails this command and is refused at every "
+        "launch (send-back 6)" if sealed else
+        "recorded only: this plan is not sealed, so the offline uv check never gates")
     failed = [r for r in rows if r.get("ok") is not True]
     # E10-52 (finding 26): EVERY failed row fails the command; a present failing row no longer
     # leaves the exit at 0.
@@ -4122,7 +4149,39 @@ def do_verify(args):
     if failed:
         raise Failure("verification failed for %s"
                       % ", ".join("%s/%s" % (r["setup"], r["condition"]) for r in failed))
+    if sealed and uv_failed:
+        # FAIL_EXIT_KEY, not a raise: the record a reader needs is the one that says WHICH
+        # home could not run the core offline, and a raise prints nothing on stdout.
+        document[FAIL_EXIT_KEY] = (
+            "the plan is sealed and the warmed uv cache does not satisfy `uv run` offline for "
+            "%s. Every phase command of a walled trial in %s will exit 3 with `missing "
+            "dependency`. Run `install --campaign %s --setup <setup> --home <home>` for each "
+            "of them with the network up, then verify again (send-back 6)."
+            % (", ".join("%s/%s" % (r["setup"], r["condition"]) for r in uv_failed),
+               "those homes" if len(uv_failed) > 1 else "that home", campaign.root))
     return document
+
+
+def latest_uv_offline(campaign, setup_name, condition):
+    """The newest `verify` record's uv_offline verdict for one setup and condition.
+
+    `None` when no verify record names that pair at all, which is not the same as a failure and
+    is reported differently.
+    """
+    records = sorted(glob.glob(os.path.join(campaign.root, "records", "verify*.json")),
+                     key=lambda p: (os.path.getmtime(p), p), reverse=True)
+    for path in records:
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        for row in document.get("rows") or []:
+            if row.get("setup") == setup_name and row.get("condition") == condition:
+                return {"record": path, "ok": bool(row.get("uv_offline_ok")),
+                        "checked": "uv_offline" in row,
+                        "problem": row.get("uv_offline_problem"),
+                        "uv_offline": row.get("uv_offline")}
+    return None
 
 
 # --------------------------------------------------------------------------- probe-env (E10-7)
@@ -14033,7 +14092,7 @@ def named_writable_roots(run_dir):
     return [os.path.dirname(run_dir)]
 
 
-def require_wall(campaign, setup, launcher, what):
+def require_wall(campaign, setup, launcher, what, condition=None):
     """A sealed campaign refuses to launch a real session unless the wall is available (A4).
 
     The check is made BEFORE the launch, at the one place every launch site already passes
@@ -14056,7 +14115,26 @@ def require_wall(campaign, setup, launcher, what):
     if not os.path.isfile(writer):
         raise Usage("refusing to launch %s: the plan says `sealed: true` and the profile "
                     "writer is not staged (%s). Re-run `stage` (A4)." % (what, writer))
-    return {"required": True, "sandbox_exec": SANDBOX_EXEC, "writer": writer}
+    # Send-back 6: and the home this launch will use must have PROVED it can run the core
+    # offline. A sealed bench closes the network, so a home whose warmed uv cache does not
+    # satisfy `uv run` produces a trial in which every phase command exits 3 with `missing
+    # dependency` — three minutes of model time for a record that measures the apparatus.
+    uv = latest_uv_offline(campaign, setup.name, condition) if condition else None
+    if condition and (uv is None or not uv["ok"]):
+        raise Usage(
+            "refusing to launch %s: the plan says `sealed: true` and %s. The wall closes the "
+            "network, so this home's `uv run` must work from the cache `install` warmed. Run "
+            "`runner.py install --campaign %s --setup %s --home %s` with the network up, then "
+            "`runner.py verify --campaign %s --setup %s --home %s` (send-back 6)."
+            % (what,
+               ("no verify record of this campaign carries an offline uv check for %s/%s"
+                % (setup.name, condition)) if uv is None else
+               ("the offline uv check for %s/%s recorded at %s did not pass: %s"
+                % (setup.name, condition, uv["record"],
+                   uv.get("problem") or "uv_offline.ok is not true")),
+               campaign.root, setup.name, condition, campaign.root, setup.name, condition))
+    return {"required": True, "sandbox_exec": SANDBOX_EXEC, "writer": writer,
+            "uv_offline": uv}
 
 
 def launch_is_fake(setup, launcher):
@@ -14093,7 +14171,7 @@ def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch
     """
     roots = named_writable_roots(run_dir)
     # A4: a sealed campaign refuses a real launch it cannot wall, at the same one place.
-    require_wall(campaign, setup, launcher, what)
+    require_wall(campaign, setup, launcher, what, condition=condition)
     require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
                              what, enforced=not launch_is_fake(setup, launcher),
                              trial=trial, attempt=attempt, half=half)
