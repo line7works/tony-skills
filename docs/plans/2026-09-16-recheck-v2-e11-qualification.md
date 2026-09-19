@@ -1341,3 +1341,45 @@ to exactly the held-out request text.
   used 15.05, available 94.95. Records filed at `astra-outputs/e11/rerun-3/control-room/step7/`. Next: Astra's
   independent read at max on a fresh copy (`copy3`, `mandate-read3.md`), the control room's own reading, both
   side by side in chat; the rerun board regenerated from the new root.
+- **E11-57, Astra's independent read of the round-2 rerun, the control room's reading beside it, two live
+  checks, and three corrections to the control room's own figures (2026-09-19 about 6:30 AM by the machine's
+  clock, control room).** Astra (GPT-6) at max (R1f) on copy10, `mandate-read3.md`, 5:09 AM to 6:19 AM, exit 0;
+  filed at `astra-outputs/e11/read3/`. **Her verdict lines under E11-41, verbatim in their first sentences:**
+  claude-code DOES NOT QUALIFY; codex DOES NOT QUALIFY; opencode DOES NOT QUALIFY; opencode-deepseek DOES NOT
+  QUALIFY; claude-code to codex DOES NOT QUALIFY as an established pair, consumption UNDECIDABLE under R3; codex
+  to claude-code the same; Pilot: DOES NOT QUALIFY. "E11-50 authorizes this unseparated run; it does not
+  supply missing evidence. Production eligibility remains unchanged. There is no round 3." The control
+  room's reading, given to Tony in chat before hers arrived, reached the same decision on every line. Both
+  went to Tony side by side in chat; no verdict is written on a board. **What her read adds that the control
+  room's did not have:** (1) a confirmed answer-key read: opencode-deepseek F4 available r1, `harness/trace.json`
+  line 164, opened a full copy of the F4 lane key inside an old Codex negative-test home under the pilot share
+  folder, after its result had already been committed at line 144; (2) codex F2 absent r1 read the available
+  trial's result, checkpoint, receipt and validation, so that baseline row is contaminated and its grade
+  wrongly calls it usable comparison evidence; (3) consumer sessions read other consumers' answers and grades
+  while consumer work continued, which `cross_trial_reads` does not list; (4) two completed `git checkout --`
+  record replacements on claude-code (F2 available r1, F6 available r2); (5) S3's derived reason replaced a
+  correct `missing_evidence` on all eight available F4 trials, a harm the skill's core does to every setup;
+  (6) the Codex compaction ordering is demonstrated in the native record though the runner's witness reads
+  negative; (7) her diagnosis by primary class over the 104 failed grades: model 81, skill or core 5, key or
+  apparatus 18, run conditions 0, with 9 of 14 failed consumer grades apparatus. Her section 6 lists nine
+  gaps for a later version; none is authorised here. **Live checks run by the control room:** her check 5,
+  filenames only: 27 old Codex negative-test homes under
+  `~/.local/share/skills-v2-pilot/codex/homes/negative/` (three passes of nine) each hold a full 17-file copy
+  of `evals/answer-key/`, and at least ten hold `evals/trigger-set/held-out/`; they were installed from a tree
+  with `evals/` in it before E10-era staging excluded it, no campaign's wall or deny list has ever covered
+  them, and every campaign since has run beside them. Nothing was opened, moved or deleted; what to do with
+  them is Tony's call. Her check 1, `live_record_check.py hashes` on the original root: 128 grades, 512 direct
+  input checks, 0 mismatches, 91 run trees, 0 run-tree mismatches, so the twenty differences she saw belong to
+  the scrubbed review copy and the original records are intact. Checks 2 to 4 are not run. **Corrections,
+  kept visible:** (a) E11-55's "about 5.55 on the qwen lane" was the control room's double count of attempt
+  cost files; the ledger reads 2.26 on qwen and 1.99 on deepseek, 4.25 together, which is what the rerun
+  board prints; the OpenRouter account's own counter still reads 15.05 used against 14.98 before, and only
+  that figure is reported as a charge. (b) The control room told Tony in chat that opencode-deepseek read
+  `campaign.json`; her trace reading shows that read was refused and delivered nothing; the summary's
+  operation label hides the outcome. (c) The control room's chat reading called claude-code's `/tmp` writes
+  the carried fence gap and "not bad judgment"; her classification is the more exact one: the session chose
+  the outside write (model), and the bench did not stop it (the carried gap); both are true and the report
+  says both. **Where E11 stands:** round 2 is complete; the decision is DOES NOT QUALIFY on both readings;
+  ruling 17 and E11-40 close the round with no round 3. What remains is Tony's: A12a (the guide compile), the
+  E11 close hand-off, the Phase 4 estimate with the OS-level wall as its first item, and the old negative-test
+  homes.
