@@ -194,3 +194,17 @@ byte-identical, the regrade gate of B1, no file written outside the scratch. A g
   `/tmp/claude-<uid>` scratch (`CLAUDE_CODE_TMPDIR`), the plain-process probe outside the wall, the
   proxy dropping a connection under back-pressure, git's `~/.config/git` warning in one condition.
   One telemetry host (`http-intake.logs.us5.datadoghq.com`) and `pypi.org` stay refused on purpose.
+- SB-9 (2026-09-19, control room): `e10/sealed-bench-clean-run` is a REHEARSAL root, staged at 0ca9f80 to
+  prove stage, plan (120 trials), install, verify and the Claude Code preflight on the real homes. It
+  never launches a trial. The run's own root is `e10/sealed-bench-clean-run-final`, staged only after
+  Astra's verification and the one fix round, so the staged commit is the tip the run was verified at.
+- SB-10 (2026-09-19, control room): two defects the control room's own checks found after the merge,
+  both fixed before the verification: `verify` dropped the offline package check's verdict (now carried,
+  and a sealed plan refuses a home with no passing record), and the judgment block failed every correct
+  `fixed` call (`reason: null` against the key's `$absent`; the record's own item is now passed through
+  whole and an agreement test pins the block to the flat checks).
+- SB-11 (2026-09-19, control room): the reading reports judgment two ways. THE CALL: disposition and
+  reason matched and no false fixed, which every session can be measured on. THE CALL PLUS EVIDENCE:
+  `judgment_ok`, where a session that answered only in its reply is `not_measurable` on evidence. Both
+  are printed per setup and condition, with the count of reply-sourced and unextracted items beside them.
+
