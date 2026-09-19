@@ -869,6 +869,10 @@ class Item6Consumer(RunnerCase):
         Every check of the adopted contract passes except isolation, which is the bench's own
         measured state: a child in the consumer's launch environment CAN read a record
         outside its pair, so the flag is false and the grade says so (item 6(f)).
+
+        Astra's gap 7: the grade no longer comes back from `consumer`, which leaves the
+        attempt ungraded on purpose. The first grade is written by the deferred path, and it
+        is the same document this test always read.
         """
         self.producer_trial()
         tid = "consumer-claude-code-to-codex-r1"
@@ -876,7 +880,11 @@ class Item6Consumer(RunnerCase):
                    "--fake-launcher", self.fake_launcher("codex")])
         self.assertEqual(got.returncode, 0, got.stderr[-3000:])
         document = parse_stdout(got)
-        grade = document["consumer_grade"]
+        self.assertIsNone(document["consumer_grade"])
+        self.assertFalse(document["graded"])
+        graded = cli(["consumer", "--campaign", self.campaign, "--regrade", "--all"])
+        self.assertEqual(graded.returncode, 0, graded.stderr[-3000:])
+        grade = runner.read_json(os.path.join(document["record"], "consumer-grade.json"))
         checks = grade["checks"]
         for name in ("answer_present", "original_scope", "item_identity",
                      "evidence_references", "card_interpretation",
@@ -2377,7 +2385,10 @@ class Fix8ConsumersWaitAndExactCaptures(RunnerCase):
         runner.write_json(os.path.join(directory, "command.json"),
                           {"setup": "codex", "condition": "available", "kind": kind,
                            "status": "complete"})
-        runner.write_json(os.path.join(directory, "result.json"), {})
+        # batch C: a producer with NOTHING to recover is refused, so the record this
+        # scheduler test places by hand carries a terminal status the way a real one does.
+        runner.write_json(os.path.join(directory, "result.json"),
+                          {"status": "completed", "items": []})
 
     def drive_two_lanes(self, slow_seconds=0.6, stop_the_slow_lane=False,
                         kill_the_slow_lane=False):

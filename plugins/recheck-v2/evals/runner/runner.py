@@ -4696,6 +4696,47 @@ def validate_plan(plan):
         if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
             problems.append("`routing.repetitions` must be a positive integer, got %r" % (reps,))
 
+    # ---- the consumer set (E11-7 item 6, Astra's gap 6)
+    #
+    # `consumer` has always been a flag: absent or true mints one trial per ordered pair of
+    # setups, false mints none. It may now be an OBJECT, and then each directed pair is read
+    # on several producers: `repetitions_per_pair` trials per selected producer kind.
+    consumer = plan.get("consumer")
+    if isinstance(consumer, dict):
+        unknown = sorted(k for k in consumer
+                         if k not in ("repetitions_per_pair", "producers"))
+        if unknown:
+            problems.append("the consumer set carries the unknown key%s %s (it takes "
+                            "repetitions_per_pair, producers)"
+                            % ("" if len(unknown) == 1 else "s",
+                               ", ".join(repr(k) for k in unknown)))
+        reps = consumer.get("repetitions_per_pair", 1)
+        if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+            problems.append("`consumer.repetitions_per_pair` must be a positive integer, "
+                            "got %r" % (reps,))
+        producers = consumer.get("producers")
+        if producers is not None:
+            if not isinstance(producers, list) or not producers:
+                problems.append("`consumer.producers` must be a non-empty list of producer "
+                                "kinds, got %r" % (producers,))
+            else:
+                allowed = (["continuation:%s" % k for k in CONTINUATION_KINDS]
+                           + ["comparison:%s" % case for case in cases])
+                for kind in producers:
+                    if kind not in allowed:
+                        problems.append(
+                            "`consumer.producers` names %r, which is not a producer kind "
+                            "this plan can supply (%s)" % (kind, ", ".join(allowed)))
+                if len(set(producers)) != len(producers):
+                    problems.append("`consumer.producers` names the same kind twice")
+                if any(k.startswith("continuation:") for k in producers) \
+                        and not plan.get("continuation"):
+                    problems.append("`consumer.producers` names a continuation kind and the "
+                                    "plan runs no continuation set")
+    elif consumer is not None and not isinstance(consumer, bool):
+        problems.append("plan.json `consumer` must be true, false or an object, got %r"
+                        % (consumer,))
+
     # ---- A4: `sealed` says every launch of this campaign runs behind the wall. It is a
     # boolean, and a sealed campaign gives up the two escapes (`--accept-unseparated` and a
     # recorded ruling) that an unsealed one has: a wall either refuses a read or it does not,
@@ -4753,7 +4794,11 @@ def do_plan(args):
         "manual_only_order": manual_only_order(plan) if plan.get("routing") else {},
         "continuation_order": continuation_order(plan) if plan.get("continuation") else {},
         # E11-7 item 6: every ordered pair of distinct setups, one directed trial each.
-        "consumer_order": consumer_order(plan) if plan.get("consumer", True) else {},
+        # `consumer` is `false` to mint none, and ANYTHING ELSE — absent, `true`, or the
+        # object batch C added — to mint them. An empty object is the "all producer kinds"
+        # form and is not the same as `false`, so the test is explicit rather than truthy.
+        "consumer_order": ({} if plan.get("consumer", True) is False
+                           else consumer_order(plan)),
         "synthetic": bool(getattr(args, "synthetic", False)) or bool(plan.get("synthetic")),
         # A4: carried through so every reader of `campaign.json` sees it, and `sealed --plan`
         # cannot be lost by a plan file that did not name it.
@@ -6040,6 +6085,31 @@ def refuse_while_alive(campaign, rows):
 # reached). The name prefix is checked too, so a root whose journals were truncated still skips
 # the probe folders.
 PROBE_FOLDER_PREFIXES = ("native-read-boundary",)
+
+
+def ledger_rows(campaign):
+    """The ledger, one row per `(trial id, attempt)`, the last row winning.
+
+    Astra's gap 7: `graded_ok` is BACK-FILLED for a consumer attempt once the campaign's
+    third phase has graded it, and the ledger is append-only (E10-48: raw history stays), so
+    the back-fill is a second row. Collapsing on the attempt key is what keeps one attempt
+    one row for every reader; the later row's own fields win and the fields it does not carry
+    are kept from the earlier one. Every campaign written before this has exactly one row per
+    attempt, so the collapse changes nothing there.
+    """
+    merged, order = {}, []
+    for row in jsonl_lines(campaign.trials_jsonl):
+        tid, attempt = row.get("id"), row.get("attempt", 0)
+        if not tid:
+            continue
+        key = (tid, attempt)
+        if key not in merged:
+            merged[key] = dict(row)
+            order.append(key)
+            continue
+        merged[key]["_rows"] = merged[key].get("_rows", 1) + 1
+        merged[key].update({k: v for k, v in row.items() if v is not None})
+    return [merged[key] for key in order]
 
 
 def journalled_trial_ids(campaign):
@@ -11824,6 +11894,7 @@ def _campaign_loop(campaign, plan, args):
                      for lane, rows in lanes.items()}
     consumer_rows = {lane: [r for r in rows if r["kind"] == "consumer"]
                      for lane, rows in lanes.items()}
+    consumer_grading = None
     run_phase("producers", producer_rows)
     if any(consumer_rows.values()):
         # the boundary is now an ASSERTION: phase 1 has been joined, so every producer row is
@@ -11838,6 +11909,34 @@ def _campaign_loop(campaign, plan, args):
         campaign.note("the consumer phase begins: every producer row of every lane is "
                       "settled (E11-41 R1, Q-S-L)")
         run_phase("consumers", consumer_rows)
+        # Astra's gap 7: PHASE 3. Every consumer thread above has joined, so no consumer
+        # session of this campaign can still be writing an answer or reading a grade
+        # document. Only now is any consumer graded. `grade_consumer_records` runs the
+        # campaign-wide liveness barrier first anyway (with batch B's N1 rule: an unknown
+        # owner counts as alive), writes `consumer-grade.json` as each record's FIRST grade,
+        # and back-fills `graded_ok` into the ledger.
+        targets = consumer_records(campaign)
+        ungraded = [row for row in targets
+                    if not os.path.isfile(os.path.join(row[2], CONSUMER_GRADE_NAME))]
+        campaign.note("the grading phase begins: %d consumer record(s), %d of them ungraded; "
+                      "every consumer thread has joined (Astra's gap 7)"
+                      % (len(targets), len(ungraded)))
+        try:
+            graded_rows, grade_errors = grade_consumer_records(campaign, ungraded)
+        except (Usage, Missing, Failure) as exc:
+            graded_rows, grade_errors = [], [{"trial": None, "attempt": None,
+                                              "exception": type(exc).__name__,
+                                              "message": str(exc)[:400]}]
+            campaign.interruption("consumer-grading", "the grading phase raised: %s" % exc,
+                                  "left every consumer ungraded")
+        consumer_grading = {
+            "records": len(targets), "graded": len(graded_rows),
+            "already_graded": len(targets) - len(ungraded),
+            "grades": graded_rows, "errors": grade_errors,
+            "when": "after every consumer session of this campaign ended (Astra's gap 7)",
+        }
+        campaign.note("the grading phase ended: %d graded, %d error(s)"
+                      % (len(graded_rows), len(grade_errors)))
     if os.path.isfile(campaign.pid_file):
         os.unlink(campaign.pid_file)
     stops = {name: lane_stopped(campaign, name) for name in sorted(lanes)
@@ -11850,13 +11949,21 @@ def _campaign_loop(campaign, plan, args):
                     "entries": len(request_cache.get("entries") or []),
                     "failed": request_cache.get("failed") or []},
                 "lane_stops": stops,
+                # Astra's gap 7: the third phase's own record.
+                "consumer_grading": consumer_grading,
                 "started_at": started_at, "ended_at": now_iso()}
     # E10-68 defect 3: a lane the RUNNER killed is not a quiet ending. `campaign start` exits
     # non-zero and says which lane, so an operator watching the exit status sees it.
     broken = sorted(n for n, stop in stops.items() if (stop or {}).get("kind") == RUNNER_ERROR)
+    reasons = []
     if broken:
-        document[FAIL_EXIT_KEY] = ("the %s lane(s) stopped on a runner error; see "
-                                   "lane-stops/ and %s" % (", ".join(broken), campaign.log))
+        reasons.append("the %s lane(s) stopped on a runner error; see lane-stops/ and %s"
+                       % (", ".join(broken), campaign.log))
+    if (consumer_grading or {}).get("errors"):
+        reasons.append("%d consumer record(s) could not be graded in the third phase"
+                       % len(consumer_grading["errors"]))
+    if reasons:
+        document[FAIL_EXIT_KEY] = "; ".join(reasons)
     return document
 
 
@@ -11979,7 +12086,10 @@ def do_report(args):
     # comprehension over the ledger, then row indexing, so one scalar line raised
     # `TypeError: string indices must be integers`. Every JSONL read goes through the shared
     # reader, which keeps object rows only.
-    lines = jsonl_lines(campaign.trials_jsonl)
+    #
+    # Astra's gap 7: and through `ledger_rows`, which collapses the `graded_ok` back-fill row
+    # onto the attempt it belongs to. A raw read would count that attempt twice in the table.
+    lines = ledger_rows(campaign)
     # B3(2): `report --revision <name>` reads `grade.<name>.json`, and falls back PER RECORD to
     # `grade.json` when that record has no grade under the revision. Without this the report
     # read the originals while the summary read the revision, and the two documents disagreed
@@ -13790,58 +13900,387 @@ CONSUMER_PROMPT_TEMPLATE = (
     "{run_dir}/checkpoint.schema.json and {run_dir}/receipt.schema.json: the records and the "
     "chat block the output must carry.\n"
     "\n"
-    "Then write {answer}, one JSON document saying what the caller's own records carry:\n"
-    "{{\"items\": [{{\"location\": \"<file:line>\", \"claim\": \"<the claim>\", \"disposition\": "
-    "\"fixed | not_fixed\", \"reason\": \"<the reason or null>\", \"evidence\": [{{\"kind\": "
-    "\"<kind>\", \"detail\": \"<the detail, whole>\", \"artifact\": \"<the artifact or null>\"}}]}}],\n"
-    " \"cards\": [{{\"slice\": \"<name>\", \"before\": \"<value>\", \"after\": \"<value>\"}}],\n"
-    " \"source_identity\": {{\"commit\": \"<the commit those records name>\"}},\n"
-    " \"continuation\": <the whole continuation state those records carry, or null>}}\n"
+    "Then write {answer}, one JSON document saying what the caller's own records carry. Its "
+    "shape is {answer_schema}, in the run directory; that file is the whole statement of the "
+    "shape, and the grade reads the same one.\n"
     "\n"
     "Take every value from those records, whole. Add nothing they do not carry, and shorten "
     "nothing.\n"
 )
+# Astra's gap 6: the prompt used to INLINE a shape, and it was not the published one — it
+# named the evidence reference `artifact` (a field `consumer-answer.schema.json` forbids and a
+# valid result never carries), carried no `status` or `stop_reason` for a producer that
+# stopped, and described the continuation state in words with no `item_rows`. The grader read
+# the published names. A consumer that followed the prompt exactly could therefore be failed
+# for its shape, and there was no document it could be held against. The schema is copied into
+# the pair's run directory and the prompt cites it by path; nothing about the shape is stated
+# twice.
+CONSUMER_ANSWER_SCHEMA = "consumer-answer.schema.json"
 
 CONSUMER_SENTINEL = "consumer-isolation-sentinel.txt"
 
 
-def consumer_trial_id(producer, consumer, rep=1):
-    return "consumer-%s-to-%s-r%d" % (producer, consumer, rep)
+# ------------------------------------------------------------------- the caller's own facts
+#
+# Astra's gap 6: "Supply model/harness/date facts". Six of the retained consumer sessions
+# ended in a VALID TERMINAL ENVELOPE rather than doing the work, because the input the pair
+# handed over carried no `invocation.model`: the core's `floor_check` (contract section 14,
+# E8-18) stops such a run as `verifier_unavailable (unknown_capability)` before scope. The
+# runner IS the station caller here (`invocation.caller: consumer-test`), so it states the
+# facts it holds — the pin the plan named for the consuming setup — and the session's own
+# adapter still reports what was actually in force in the result's `run` block.
+#
+# The classes are ruling E9-3's, per harness, copied from the three installed adapters'
+# own maps (`adapters/claude-code/_common.py` FLOOR_CLASSES, `adapters/codex/invocation.py`
+# FLOOR_MAP, `adapters/opencode/invocation.py` FLOOR_MAP) plus the launcher aliases a plan
+# may name. A model no map lists gets class `unknown` and `floor_met: null`, which is the
+# adapters' own answer and which the core reads as `unknown_capability` — a stop the record
+# then explains, rather than a silent one.
+CALLER_CLASS_RANK = {"haiku": 1, "sonnet": 2, "opus": 3}
+CALLER_FLOOR_EXACT = {
+    # `setups/claude-code/launch.sh` is handed the plan's `model` verbatim, and E10-62 pins
+    # it to Claude Code's own alias rather than a full id.
+    "claude-code": {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"},
+    "codex": {"gpt-6-astra": "opus", "gpt-5.6-sol": "opus"},
+    "opencode": {"qwen/qwen3.8-flash": "opus", "deepseek/deepseek-v4.1-flash": "opus"},
+}
+CALLER_FLOOR_PREFIXES = {
+    "claude-code": (("claude-opus-", "opus"), ("claude-fable-", "opus"),
+                    ("claude-mythos-", "opus"), ("claude-sonnet-", "sonnet"),
+                    ("claude-haiku-", "haiku")),
+}
+# How each setup's `install.sh` puts the skill in front of its harness, in the vocabulary
+# `input.schema.json` names for `invocation.harness.entry`.
+CALLER_ENTRY = {"claude-code": "plugin", "codex": "plugin", "opencode": "host skill"}
+
+
+def caller_model_class(harness, model_id, floor="opus"):
+    """Ruling E9-3's map for one harness: `(floor_class, floor_met)`."""
+    if not model_id:
+        return "unknown", None
+    lowered = str(model_id).lower()
+    bare = lowered.split("/", 1)[1] if lowered.startswith("openrouter/") else lowered
+    klass = (CALLER_FLOOR_EXACT.get(harness) or {}).get(bare)
+    if klass is None:
+        for prefix, mapped in CALLER_FLOOR_PREFIXES.get(harness, ()):
+            if lowered.startswith(prefix):
+                klass = mapped
+                break
+    if klass is None:
+        return "unknown", None
+    wanted = CALLER_CLASS_RANK.get(floor)
+    if wanted is None:
+        return klass, None
+    return klass, CALLER_CLASS_RANK[klass] >= wanted
+
+
+def caller_invocation_facts(setup, plan):
+    """`invocation.harness` and `invocation.model` for the session this input is handed to.
+
+    The shape is `references/input.schema.json`'s, field for field, and every value is a fact
+    the runner holds before the launch: the harness the setup names, how its `install.sh` put
+    the skill in front of it, whether the campaign is sealed behind the wall, and the model and
+    effort the plan pinned. A field the runner cannot measure is `unknown` — the core's own
+    spelling for an adapter report it did not get (`recheck_core/result.py` UNKNOWN_HARNESS) —
+    never a guess. `version` is one of those: no record of this campaign holds a harness
+    version, and reading one would mean running the harness binary.
+    """
+    model_id = setup.resolved_model()
+    floor = (plan.get("policy") or {}).get("model_floor", "opus")
+    klass, met = caller_model_class(setup.harness, model_id, floor)
+    model = {"id": model_id or "unknown", "floor_class": klass, "floor_met": met}
+    if setup.effort:
+        model["effort"] = setup.effort
+    harness = {
+        "name": setup.harness,
+        "version": "unknown",
+        "entry": CALLER_ENTRY.get(setup.harness, "explicit path"),
+        "sandbox": ("sandbox-exec, the bench's own profile (A1)" if plan.get("sealed")
+                    else "the harness's own default"),
+    }
+    return {"harness": harness, "model": model,
+            "why": {
+                "harness.version": "no record of this campaign holds one, and reading it "
+                                   "would mean running the harness binary",
+                "model": "the pin the plan's setup entry names (E10-62), classed by ruling "
+                         "E9-3's map for %s against policy.model_floor %r; the session's own "
+                         "adapter reports what was in force in the result's run block"
+                         % (setup.harness, floor)}}
+
+
+# ------------------------------------------------------- the pair's artifact path normalizer
+#
+# Astra's gap 6: "map original artifact paths through the recorded producer run directory".
+# The producer's evidence names its artifacts by the ABSOLUTE path it wrote them to — under
+# its own run directory, which `references/result.schema.json` requires and V3 enforces. The
+# consumer never sees that directory: it sees the pair's copies. So the producer's recorded
+# form and the relocated form the consumer opened are two spellings of one file, and every
+# comparison goes through one normalizer that knows both.
+#
+# The roots come from the producer's own `command.json` — its `run_dir` and its `workspace` —
+# and from the record itself, for a reference a producer wrote relative to its record. The
+# SOURCE root is the durable copy inside the record (`<record>/run`, the fixture's workspace
+# copy), not the live tree, so a regrade long after the campaign still resolves.
+PAIR_MAP_ROOTS = ("run_dir", "workspace", "record")
+
+
+def pair_path_map(pair, producer_command, record=None):
+    """The producer's roots, the pair's copies of them, and where the bytes are read from."""
+    record = record or pair.get("from")
+    producer_dir = pair.get("producer_dir") or ""
+    rows = []
+    run_dir = (producer_command or {}).get("run_dir")
+    if run_dir:
+        rows.append({"which": "run_dir", "producer_root": run_dir,
+                     "pair_root": os.path.join(producer_dir, "run"),
+                     "source_root": os.path.join(record, "run") if record else None})
+    workspace = (producer_command or {}).get("workspace")
+    if workspace:
+        rows.append({"which": "workspace", "producer_root": workspace,
+                     "pair_root": pair.get("workspace"),
+                     "source_root": pair.get("source_workspace") or workspace})
+    if record:
+        rows.append({"which": "record", "producer_root": record,
+                     "pair_root": producer_dir, "source_root": record})
+    return rows
+
+
+def normalize_artifact_path(value, mapping, pair=None):
+    """One artifact path in BOTH forms: as the producer recorded it, and inside the pair.
+
+    Returns `None` for no path at all. Otherwise a row carrying `named` (what was written),
+    `as_producer`, `in_the_pair`, `root` and `key`. `key` is what two references are compared
+    on: the producer's own form when the path resolves through a mapped root, and the plain
+    normalized text when it does not — so the recorded path and the relocated path compare
+    equal, and any other path compares as itself and fails.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    row = {"named": raw, "as_producer": None, "in_the_pair": None, "root": None,
+           "source": None}
+    candidates = [raw]
+    if not os.path.isabs(raw):
+        # a relative reference is read against the pair's own producer directory, which is
+        # where a consumer that walked the pair would have found it
+        if pair and pair.get("producer_dir"):
+            candidates.append(os.path.join(pair["producer_dir"], raw))
+        for entry in mapping or ():
+            if entry.get("producer_root"):
+                candidates.append(os.path.join(entry["producer_root"], raw))
+    for candidate in candidates:
+        normalized = os.path.normpath(candidate)
+        for entry in mapping or ():
+            producer_root, pair_root = entry.get("producer_root"), entry.get("pair_root")
+            if producer_root and path_contains(producer_root, normalized):
+                relative = os.path.relpath(normalized, producer_root)
+                row["as_producer"] = normalized
+                row["in_the_pair"] = (os.path.join(pair_root, relative) if pair_root
+                                      else None)
+                row["root"] = entry["which"]
+                row["relative"] = relative
+                row["source"] = (os.path.join(entry["source_root"], relative)
+                                 if entry.get("source_root") else None)
+                row["key"] = normalized
+                return row
+            if pair_root and path_contains(pair_root, normalized):
+                relative = os.path.relpath(normalized, pair_root)
+                row["as_producer"] = (os.path.join(producer_root, relative) if producer_root
+                                      else None)
+                row["in_the_pair"] = normalized
+                row["root"] = entry["which"]
+                row["relative"] = relative
+                row["source"] = (os.path.join(entry["source_root"], relative)
+                                 if entry.get("source_root") else None)
+                row["key"] = row["as_producer"] or normalized
+                return row
+    row["key"] = os.path.normpath(raw)
+    row["why"] = ("the path is under neither the producer's recorded run directory or "
+                  "workspace nor the pair's copy of either")
+    return row
+
+
+def artifact_key(value, mapping, pair=None):
+    """The one value two evidence references are compared on, or None."""
+    row = normalize_artifact_path(value, mapping, pair)
+    return row["key"] if row else None
+
+
+# Astra's gap 6 (section 5 of the contract): "the plan gains a producer selection rule, so
+# each directed pair is read on several producers". A producer KIND is `continuation:handoff`,
+# `continuation:compaction`, or `comparison:<case>` for a case the plan runs. The trial id
+# carries the kind as its own token so the ids stay unique and readable:
+#
+#     consumer-<producer>-to-<consumer>[-<kind token>]-r<n>
+#
+# The token is the continuation kind or the case id. WITHOUT a token the id is exactly what it
+# always was, which is what a plan that names no `consumer` block still mints.
+CONTINUATION_KINDS = ("handoff", "compaction")
+
+
+def consumer_kind_token(kind):
+    """The id token for a producer kind, or None for `any producer` (the old default)."""
+    if not kind:
+        return None
+    head, _, rest = str(kind).partition(":")
+    if head == "continuation" and rest in CONTINUATION_KINDS:
+        return rest
+    if head == "comparison" and rest:
+        return rest
+    raise Usage("%r is not a producer kind (continuation:handoff, continuation:compaction, "
+                "or comparison:<case>)" % (kind,))
+
+
+def consumer_trial_id(producer, consumer, rep=1, kind=None):
+    token = consumer_kind_token(kind)
+    return "consumer-%s-to-%s%s-r%d" % (producer, consumer,
+                                        "-" + token if token else "", rep)
+
+
+def consumer_kind_of_token(plan, token):
+    """The producer kind a trial id's token names, or None when it carries none."""
+    if not token:
+        return None
+    if token in CONTINUATION_KINDS:
+        return "continuation:%s" % token
+    if token in (plan.get("cases") or ()):
+        return "comparison:%s" % token
+    raise Usage("%r is neither a continuation kind (%s) nor a case this plan runs (%s)"
+                % (token, ", ".join(CONTINUATION_KINDS),
+                   ", ".join(plan.get("cases") or ())))
 
 
 def parse_consumer_id(plan, tid):
     match = re.match(r"^consumer-(?P<rest>.+)-r(?P<rep>\d+)$", tid)
     if not match:
-        raise Usage("%r is not a consumer trial id (consumer-<producer>-to-<consumer>-r<n>)"
-                    % tid)
+        raise Usage("%r is not a consumer trial id "
+                    "(consumer-<producer>-to-<consumer>[-<kind>]-r<n>)" % tid)
     rest = match.group("rest")
     names = sorted((s["name"] for s in plan["setups"]), key=len, reverse=True)
     for producer in names:
         head = producer + "-to-"
-        if rest.startswith(head):
-            consumer = rest[len(head):]
-            if consumer in names:
-                return {"trial": tid, "producer": producer, "consumer": consumer,
-                        "rep": int(match.group("rep"))}
+        if not rest.startswith(head):
+            continue
+        tail = rest[len(head):]
+        for consumer in names:
+            if tail == consumer:
+                token = None
+            elif tail.startswith(consumer + "-"):
+                token = tail[len(consumer) + 1:]
+            else:
+                continue
+            return {"trial": tid, "producer": producer, "consumer": consumer,
+                    "rep": int(match.group("rep")), "token": token,
+                    "kind": consumer_kind_of_token(plan, token)}
     raise Usage("%r names no producer/consumer pair in the plan (%s)" % (tid, ", ".join(names)))
 
 
+def consumer_producer_kinds(plan):
+    """Which producer kinds each directed pair is read on, or None for the old single pair.
+
+    A plan with no `consumer` object keeps the old shape exactly: one trial per ordered pair,
+    on whatever completed record the producer has. A plan that names the object gets one
+    consumer per selected kind; naming no `producers` list selects them all — both
+    continuation kinds and one with-skill comparison record per case the plan runs.
+    """
+    block = plan.get("consumer")
+    if not isinstance(block, dict):
+        return None
+    named = block.get("producers")
+    if named is None:
+        # every kind this plan can actually supply: the continuation kinds only when the plan
+        # runs a continuation set, and one with-skill comparison record per case it runs.
+        kinds = []
+        if plan.get("continuation"):
+            kinds += ["continuation:%s" % k for k in CONTINUATION_KINDS]
+        return kinds + ["comparison:%s" % case for case in (plan.get("cases") or ())]
+    return list(named)
+
+
+def consumer_repetitions(plan):
+    block = plan.get("consumer")
+    if not isinstance(block, dict):
+        return 1
+    return int(block.get("repetitions_per_pair", 1))
+
+
 def consumer_order(plan):
-    """Every ordered pair of distinct setups, one trial each, by the consumer's lane."""
+    """Every ordered pair of distinct setups, by the consumer's lane.
+
+    One trial per pair when the plan names no `consumer` object; otherwise one trial per pair
+    per selected producer kind per repetition.
+    """
     names = [spec["name"] for spec in plan["setups"]]
+    kinds = consumer_producer_kinds(plan)
+    reps = consumer_repetitions(plan)
     lanes = {}
     for consumer in names:
         for producer in names:
             if producer == consumer:
                 continue
-            lanes.setdefault(consumer, []).append(
-                consumer_trial_id(producer, consumer, 1))
+            if kinds is None:
+                lanes.setdefault(consumer, []).append(
+                    consumer_trial_id(producer, consumer, 1))
+                continue
+            for rep in range(1, reps + 1):
+                for kind in kinds:
+                    lanes.setdefault(consumer, []).append(
+                        consumer_trial_id(producer, consumer, rep, kind))
     return {lane: rows for lane, rows in sorted(lanes.items())}
 
 
-def producer_record_for(campaign, plan, producer):
-    """The producer's own completed comparison or continuation record, and why it was chosen."""
-    best = None
+def _trial_repetition(tid):
+    """The `-r<n>` a trial id ends with, or None."""
+    match = re.search(r"-r(\d+)$", tid or "")
+    return int(match.group(1)) if match else None
+
+
+def _producer_is_usable(record, command):
+    """The old rule, stated: no consumer uses a FAILED or EMPTY producer attempt.
+
+    Failed is the attempt's own recorded status — anything but `complete`, which covers
+    `no_result`, `timed_out`, `launch_failed` and the runner's own error record. Empty is a
+    record with no `result.json`, or one whose result carries neither items nor a status, so
+    there is nothing for a consumer to recover.
+    """
+    status = command.get("status")
+    if status is not None and status != "complete":
+        return False, "the producer's own attempt ended %r" % status
+    result_path = os.path.join(record, "result.json")
+    if not os.path.isfile(result_path):
+        return False, "the producer's record holds no result.json"
+    try:
+        result = read_json(result_path)
+    except (Missing, Failure):
+        return False, "the producer's result.json does not parse"
+    if not isinstance(result, dict) or (not result.get("items") and not result.get("status")):
+        return False, "the producer's result carries neither items nor a status"
+    return True, None
+
+
+def _record_matches_kind(command, kind):
+    """Does this record's own `command.json` answer the wanted producer kind?"""
+    recorded = command.get("kind") or "comparison"
+    if kind is None:
+        return True
+    head, _, rest = str(kind).partition(":")
+    if head == "continuation":
+        return recorded == "continuation:%s" % rest
+    if head == "comparison":
+        return recorded == "comparison" and command.get("case") == rest
+    return False
+
+
+def producer_record_for(campaign, plan, producer, kind=None):
+    """The producer's own usable with-skill record of the wanted kind, and why it was chosen.
+
+    Astra's gap 6: a directed pair is read on SEVERAL producers, so the caller names the kind
+    it wants. Selection, in order: repetition 1 first, then the latest attempt of that
+    repetition. A failed or empty attempt is refused and the next repetition is tried; every
+    refusal is recorded beside the choice, so the record says which producers were passed over
+    and why.
+    """
+    candidates, refused = [], []
     # B3(1): the probe folders are skipped here too, but the JOURNAL rule is not applied: this
     # asks which record can be consumed, not which attempt a grade must cover.
     for tid, attempt, record in graded_attempts(campaign, require_journal=False):
@@ -13851,18 +14290,40 @@ def producer_record_for(campaign, plan, producer):
         command = read_json(command_path)
         if command.get("setup") != producer or command.get("condition") != "available":
             continue
-        if not os.path.isfile(os.path.join(record, "result.json")):
+        if not _record_matches_kind(command, kind):
             continue
-        rank = (0 if (command.get("kind") or "").startswith("continuation") else 1, tid, attempt)
-        if best is None or rank < best[0]:
-            best = (rank, tid, attempt, record, command)
-    if best is None:
-        raise Missing("no completed available-condition record of %s to consume; run the "
-                      "producer's own trial first" % producer)
-    _rank, tid, attempt, record, command = best
+        usable, why = _producer_is_usable(record, command)
+        if not usable:
+            refused.append({"trial": tid, "attempt": attempt, "why": why})
+            continue
+        candidates.append((tid, attempt, record, command))
+    if not candidates:
+        raise Missing("no usable available-condition record of %s%s to consume; run the "
+                      "producer's own trial first%s"
+                      % (producer, " of kind %s" % kind if kind else "",
+                         " (%d attempt(s) were refused: %s)"
+                         % (len(refused), "; ".join("%s#%d %s" % (r["trial"], r["attempt"],
+                                                                  r["why"])
+                                                    for r in refused[:6]))
+                         if refused else ""))
+    if kind is None:
+        # the old order, kept for a plan that names no `consumer` object: a continuation
+        # record first, because it carries a continuation state to recover.
+        candidates.sort(key=lambda row: (0 if (row[3].get("kind") or "").startswith(
+            "continuation") else 1, row[0], row[1]))
+        why = ("the producer's own completed available-condition record, continuation "
+               "trials first (they carry a continuation state to recover)")
+    else:
+        # repetition 1 first, then the latest attempt of it
+        candidates.sort(key=lambda row: (_trial_repetition(row[0]) or 0, -row[1], row[0]))
+        why = ("the producer's own usable %s record, earliest repetition first, latest "
+               "attempt of it" % kind)
+    tid, attempt, record, command = candidates[0]
     return {"trial": tid, "attempt": attempt, "record": record, "command": command,
-            "why": "the producer's own completed available-condition record, continuation "
-                   "trials first (they carry a continuation state to recover)"}
+            "kind": kind, "recorded_kind": command.get("kind") or "comparison",
+            "why": why,
+            "considered": [{"trial": row[0], "attempt": row[1]} for row in candidates],
+            "refused": refused}
 
 
 # The result schema (references/result.schema.json) names the evidence reference
@@ -13903,7 +14364,7 @@ CONSUMER_COPIED = ("result.json", "reply.md", "chat.md")
 CONSUMER_RUN_COPIED = ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log")
 
 
-def stage_consumer_pair(campaign, producer_row, pair_dir):
+def stage_consumer_pair(campaign, producer_row, pair_dir, setup=None, plan=None):
     """The producer's bound evidence, copied into the pair directory, and nothing else.
 
     E11-7 item 6: "with unrelated records unavailable". Only the named files of ONE producer
@@ -13945,32 +14406,6 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
                 if not os.path.isfile(destination):
                     shutil.copy2(full, destination)
                     copied.append(relative)
-    artifacts = []
-    for named in _evidence_artifacts(record):
-        relative = named
-        if os.path.isabs(named):
-            if not path_contains(record, named):
-                artifacts.append({"artifact_path": named, "relative": None, "staged": None,
-                                  "copied": False, "sha256": None,
-                                  "why": "the reference names a path outside the producer's "
-                                         "own record; nothing outside it is copied"})
-                continue
-            relative = os.path.relpath(named, record)
-        source = os.path.join(record, relative)
-        destination = os.path.join(producer_dir, relative)
-        row = {"artifact_path": named, "relative": relative, "staged": destination,
-               "copied": False, "sha256": None}
-        if os.path.isfile(source):
-            ensure_dir(os.path.dirname(destination))
-            if not os.path.isfile(destination):
-                shutil.copy2(source, destination)
-                copied.append(relative)
-            row["copied"] = True
-            # the hash of the PRODUCER's own file, so the pair's copy can be proved identical
-            row["sha256"] = file_sha256(source)
-        else:
-            row["why"] = "the producer's evidence names a file its record does not hold"
-        artifacts.append(row)
     # the workspace as the producer left it: its records are what the consumer reads
     workspace = os.path.join(pair_dir, "workspace")
     source_workspace = producer_row["command"].get("workspace")
@@ -13985,11 +14420,60 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
     else:
         raise Missing("the producer %s left no readable workspace to copy"
                       % producer_row["trial"])
+    # Astra's gap 6: the artifacts the producer's evidence names are resolved through the
+    # NORMALIZER, so a reference under the producer's own run directory or workspace — where
+    # `result.schema.json` puts them, and V3 checks containment against — reaches the pair's
+    # copy of that root. Before this, anything outside `<record>/...` was refused as "outside
+    # the producer's own record" and the pair carried no copy of it, so the consumer could
+    # not open a file its own evidence had to name.
+    mapping = pair_path_map({"producer_dir": producer_dir, "workspace": workspace,
+                             "source_workspace": source_workspace, "from": record},
+                            producer_row["command"], record=record)
+    artifacts = []
+    for named in _evidence_artifacts(record):
+        resolved = normalize_artifact_path(named, mapping,
+                                           pair={"producer_dir": producer_dir})
+        row = {"artifact_path": named, "relative": (resolved or {}).get("relative"),
+               "staged": (resolved or {}).get("in_the_pair"),
+               "root": (resolved or {}).get("root"),
+               "as_producer": (resolved or {}).get("as_producer"),
+               "key": (resolved or {}).get("key"),
+               "copied": False, "sha256": None}
+        source = (resolved or {}).get("source")
+        destination = row["staged"]
+        if not destination or not source:
+            row["why"] = (resolved or {}).get("why") or (
+                "the reference names no path the pair's roots reach; nothing outside the "
+                "producer's own run directory, workspace or record is copied")
+            artifacts.append(row)
+            continue
+        if os.path.isfile(source):
+            ensure_dir(os.path.dirname(destination))
+            if not os.path.isfile(destination):
+                shutil.copy2(source, destination)
+                # `copied` names a path under the producer directory the way the walk above
+                # does; an artifact that maps into the pair's WORKSPACE is outside it, so
+                # that one is named from the pair root instead.
+                copied.append(os.path.relpath(destination, producer_dir)
+                              if path_contains(producer_dir, destination)
+                              else os.path.relpath(destination, pair_dir))
+            row["copied"] = True
+            # the hash of the PRODUCER's own file, so the pair's copy can be proved identical
+            row["sha256"] = file_sha256(source)
+            row["source"] = source
+        else:
+            row["why"] = "the producer's evidence names a file its record does not hold"
+        artifacts.append(row)
     # Item 6(b): the pair's own run directory, with the same neutral contract every trial
     # gets, and the input document the caller hands over — the declared input route.
     run_dir = prepare_run_dir(os.path.join(pair_dir, "run"))
+    # Astra's gap 6: the consumer answer's shape is PUBLISHED beside the three schemas every
+    # trial already gets, and the prompt cites this copy by path.
+    shutil.copy2(os.path.join(SKILL_DIR, "references", CONSUMER_ANSWER_SCHEMA),
+                 os.path.join(run_dir, CONSUMER_ANSWER_SCHEMA))
     run_id = "%s-run" % os.path.basename(pair_dir)
-    document = consumer_input(producer_row, workspace, run_dir, run_id)
+    document = consumer_input(producer_row, workspace, run_dir, run_id,
+                              setup=setup, plan=plan)
     input_path = os.path.join(pair_dir, "input.json")
     write_json(input_path, document)
     # Item 6(d): the producer's copied files, hashed before the consumer runs.
@@ -13998,8 +14482,10 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
         for name in sorted(files):
             full = os.path.join(base, name)
             producer_hashes[os.path.relpath(full, producer_dir)] = file_sha256(full)
-    return {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
+    pair = {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
+            "source_workspace": source_workspace,
             "run_dir": run_dir, "run_id": run_id, "input": input_path,
+            "answer_schema": os.path.join(run_dir, CONSUMER_ANSWER_SCHEMA),
             "copied": copied,
             "artifacts": artifacts,
             "producer_hashes_before": producer_hashes,
@@ -14007,16 +14493,27 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
                 name for name in sorted(os.listdir(producer_dir))
                 if name not in CONSUMER_COPIED and name != "run"],
             "from": producer_row["record"], "producer_trial": producer_row["trial"]}
+    pair["path_map"] = pair_path_map(pair, producer_row["command"], record=record)
+    return pair
 
 
-def consumer_input(producer_row, workspace, run_dir, run_id):
+def consumer_input(producer_row, workspace, run_dir, run_id, setup=None, plan=None):
     """The producer's findings as an explicit `items` payload (contract section 2).
 
     Item 6(b): this IS the declared input route for a caller that holds a verdict — "a caller
     that holds a chat verdict passes its findings as explicit items" — so the consumer runs
     the job on records it did not produce, which is what the criterion asks.
+
+    Astra's gap 6: and it carries the CALLER FACTS a station caller owes the core —
+    `invocation.harness`, `invocation.model`, `invocation.run_date` and
+    `invocation.session_wrote_fix`. Without the model object `floor_check` stops the run as
+    `verifier_unavailable (unknown_capability)` before scope, which is how six retained
+    consumer sessions ended in a valid terminal envelope instead of doing the work.
+    `session_wrote_fix` is false by statement: the consumer is a fresh session handed another
+    tool's records, and it authored none of the fixes under review (contract section 7).
     """
     result = read_json(os.path.join(producer_row["record"], "result.json"))
+    run_date = (plan or {}).get("run_date") or now_iso()[:10]
     items = []
     for item in result.get("items") or []:
         location = item.get("location") or {}
@@ -14025,13 +14522,31 @@ def consumer_input(producer_row, workspace, run_dir, run_id):
             "location": {"file": location.get("file"), "line": location.get("line")},
             "claim": item.get("claim"),
             "failure_scenario": item.get("failure_scenario"),
+            # Astra's gap 6, found while making the input sufficient: this default did not
+            # VALIDATE. `record_provenance` needs a heading of at least one character and a
+            # `YYYY-MM-DD` date, and the default supplied two empty strings, so every
+            # consumer input built from a result whose items carry no `record` — which is
+            # every result, since `result.schema.json`'s `item_result` has no such field —
+            # failed the input schema and the run came back `missing_input`. The heading is
+            # the contract's own word for a caller that holds a verdict rather than a
+            # document (section 2, and `record_provenance.heading`'s own example), and the
+            # date is the run's.
             "record": item.get("record") or {"document": "docs/punch-list.md",
-                                             "heading": "", "date": ""},
+                                             "heading": "chat verdict",
+                                             "date": run_date},
             "slice": item.get("slice") or "none"})
+    invocation = {"mode": "headless", "caller": "consumer-test",
+                  "run_id": run_id, "run_dir": run_dir, "resume": False,
+                  "session_wrote_fix": False}
+    if plan and plan.get("run_date"):
+        invocation["run_date"] = plan["run_date"]
+    if setup is not None:
+        facts = caller_invocation_facts(setup, plan or {})
+        invocation["harness"] = facts["harness"]
+        invocation["model"] = facts["model"]
     return {
         "protocol_version": 1,
-        "invocation": {"mode": "headless", "caller": "consumer-test",
-                       "run_id": run_id, "run_dir": run_dir, "resume": False},
+        "invocation": invocation,
         "workspace": workspace,
         "target": {"items": items},
     }
@@ -14093,32 +14608,45 @@ def _consumer_expected(producer_row):
                                   or "").startswith("continuation")}
 
 
-def _same_evidence(theirs, ours):
+def _same_evidence(theirs, ours, mapping=None, pair=None):
     """Item 6(a): one evidence reference against another, every field, whole.
 
     Astra's verification of 31329cd: the grader compared the first forty characters of the
     detail, so an observation changed after that prefix still passed.
+
+    Astra's gap 6: the artifact path is compared on the NORMALIZER's key, so the path as the
+    producer recorded it and the relocated path the consumer actually opened compare equal.
+    Any other path keys as itself and fails, which is the whole point of the mapping.
     """
     if not isinstance(theirs, list):
         return False, "the consumer recorded no evidence list"
     wanted = [{"kind": e.get("kind"), "detail": e.get("detail"),
-               "artifact_path": e.get("artifact_path")} for e in ours]
+               "artifact_key": artifact_key(e.get("artifact_path"), mapping, pair)}
+              for e in ours]
     got = []
     for entry in theirs:
         if isinstance(entry, dict):
             named, _field = _evidence_artifact(entry)
             got.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
-                        "artifact_path": named})
+                        "artifact_key": artifact_key(named, mapping, pair)})
         else:
-            got.append({"kind": None, "detail": entry, "artifact_path": None})
+            got.append({"kind": None, "detail": entry, "artifact_key": None})
     for reference in wanted:
         if reference not in got:
             # a reference whose detail alone matches is named, so a truncation is legible
             near = [g for g in got
                     if str(g.get("detail") or "")[:40] == str(reference.get("detail") or "")[:40]]
-            return False, ("the reference %r is not among the consumer's, whole%s"
-                           % (str(reference.get("detail"))[:60],
-                              "; one matches only its first forty characters" if near else ""))
+            same_detail = [g for g in near if g.get("kind") == reference.get("kind")
+                           and g.get("detail") == reference.get("detail")]
+            why = ("the reference %r is not among the consumer's, whole%s"
+                   % (str(reference.get("detail"))[:60],
+                      "; one matches only its first forty characters" if near else ""))
+            if same_detail:
+                why += ("; one carries the same kind and detail and a different artifact "
+                        "path (%r against %r)"
+                        % (same_detail[0].get("artifact_key"),
+                           reference.get("artifact_key")))
+            return False, why
     return True, "every reference of the producer's appears whole"
 
 
@@ -14143,18 +14671,23 @@ def _states_by_index(state):
             for key, values in out.items()}
 
 
-def _artifact_rows(pair, ours, theirs):
+def _artifact_rows(pair, ours, theirs, mapping=None):
     """Every artifact the producer's evidence names, resolved inside the pair and hashed.
 
     The consumer reaches the producer's files only through the pair, so the reference it
     gives is resolved against the staged copy and that copy's content is compared, by hash,
     with the producer's own file as it was when the pair was staged.
+
+    Astra's gap 6: the pairing is on the NORMALIZER's key, not on the literal string, so the
+    producer's recorded path and the pair path the consumer opened are one artifact. Each row
+    records BOTH forms of each side.
     """
     staged = {}
     for row in pair.get("artifacts") or []:
-        for key in (row.get("artifact_path"), row.get("relative")):
+        for key in (row.get("key"), row.get("artifact_path"), row.get("as_producer"),
+                    row.get("staged"), row.get("relative")):
             if key:
-                staged[key] = row
+                staged.setdefault(key, row)
     # E11-15 send-back (B2): the consumer's references were taken by LIST POSITION while
     # `_same_evidence` accepts them in any order, so two correct references given in the other
     # order failed here with both files unchanged. Each producer reference is paired with the
@@ -14166,31 +14699,38 @@ def _artifact_rows(pair, ours, theirs):
         if isinstance(entry, dict):
             their_named, _field = _evidence_artifact(entry)
             if their_named:
-                unspent.setdefault(their_named, []).append(their_named)
+                resolved = normalize_artifact_path(their_named, mapping, pair)
+                unspent.setdefault(resolved["key"], []).append(resolved)
     rows = []
     for reference in ours:
         named = reference.get("artifact_path")
         if not named:
             continue
-        their_named = None
-        if unspent.get(named):
-            their_named = unspent[named].pop(0)
-        row = {"producer_named": named, "consumer_named": their_named,
+        ours_at = normalize_artifact_path(named, mapping, pair) or {}
+        key = ours_at.get("key")
+        theirs_at = unspent[key].pop(0) if unspent.get(key) else None
+        row = {"producer_named": named,
+               "producer_as_recorded": ours_at.get("as_producer") or named,
+               "producer_in_the_pair": ours_at.get("in_the_pair"),
+               "key": key, "root": ours_at.get("root"),
+               "consumer_named": theirs_at.get("named") if theirs_at else None,
+               "consumer_in_the_pair": theirs_at.get("in_the_pair") if theirs_at else None,
+               "consumer_as_recorded": theirs_at.get("as_producer") if theirs_at else None,
                "in_the_pair": False, "producer_sha256": None, "consumer_sha256": None}
-        source = staged.get(named)
+        source = staged.get(key) or staged.get(named)
         if source:
             row["in_the_pair"] = bool(source.get("copied"))
             row["producer_sha256"] = source.get("sha256")
             row["staged"] = source.get("staged")
         resolved = None
-        if their_named:
-            candidate = staged.get(their_named)
+        if theirs_at:
+            candidate = staged.get(theirs_at["key"])
             if candidate and candidate.get("staged"):
                 resolved = candidate["staged"]
             else:
-                direct = their_named if os.path.isabs(their_named) else os.path.join(
-                    pair.get("producer_dir") or "", their_named)
-                resolved = direct
+                resolved = theirs_at.get("in_the_pair") or (
+                    theirs_at["named"] if os.path.isabs(theirs_at["named"])
+                    else os.path.join(pair.get("producer_dir") or "", theirs_at["named"]))
         if resolved and os.path.isfile(resolved):
             row["consumer_sha256"] = file_sha256(resolved)
             row["consumer_resolved"] = resolved
@@ -14217,6 +14757,9 @@ CONSUMER_CHECKS = frozenset((
     "result_present", "result_validates", "reply_delivered",
     "reply_carries_the_output_block", "source_identity_matches_the_producer",
     "producer_history_preserved", "unrelated_records_unavailable",
+    # Astra's gap 6: "Treat an intended completed outcome separately from a valid terminal
+    # envelope."
+    "consumption_completed",
 ))
 
 # Checks that only apply in one shape of trial; absent is correct, not skipped.
@@ -14253,8 +14796,15 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     contract, not the presence of an answer file.
     """
     expected = _consumer_expected(producer_row)
+    # Astra's gap 6: ONE normalizer, built from the producer's own recorded `command.json`,
+    # used by both `_same_evidence` and `_artifact_rows`. A grade that cannot read the
+    # producer's command still grades; the mapping is then empty and every path keys as
+    # itself, which is the pre-gap-6 behaviour and is recorded as such.
+    mapping = pair.get("path_map") or pair_path_map(pair, producer_row.get("command") or {},
+                                                    record=producer_row.get("record"))
     grade = {"producer_trial": producer_row["trial"], "answer": answer_path,
-             "expected_item_count": len(expected["items"])}
+             "expected_item_count": len(expected["items"]),
+             "artifact_path_map": mapping}
     checks = {}
     # ---- the recovery answer
     answer = None
@@ -14280,8 +14830,8 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
                                 == str(item["claim"] or "").strip()),
             "disposition_recovered": got.get("disposition") == item["disposition"],
             "reason_recovered": (got.get("reason") or None) == (item["reason"] or None)})
-        same, why = _same_evidence(got.get("evidence"), item["evidence"])
-        artifacts = _artifact_rows(pair, item["evidence"], got.get("evidence"))
+        same, why = _same_evidence(got.get("evidence"), item["evidence"], mapping, pair)
+        artifacts = _artifact_rows(pair, item["evidence"], got.get("evidence"), mapping)
         evidence_rows.append({"location": item["location"], "references_the_record": same,
                               "why": why,
                               "producer_evidence_entries": len(item["evidence"]),
@@ -14415,6 +14965,57 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     # ---- Item 6(f): isolation is read access, not folder contents
     isolation = isolation or {}
     checks["unrelated_records_unavailable"] = isolation.get("separated") is True
+    # Astra's gap 7 and batch A: the check above is READ ACCESS, measured by a probe under
+    # the consumer's own wall. The pair-scoped fact — that no unrelated record was STAGED
+    # into the pair in the first place — is a different statement, and it is recorded as its
+    # own field rather than folded into the check. Both are needed: a pair holding only one
+    # producer's records proves nothing about what the session could reach, and a separated
+    # session proves nothing about what was handed to it.
+    unrelated = pair.get("unrelated_records_present")
+    grade["pair_scope"] = {
+        "unrelated_records_staged": list(unrelated or []),
+        "no_unrelated_record_was_staged": not (unrelated or []),
+        "producer_trial": pair.get("producer_trial"),
+        "producer_record": pair.get("from"),
+        "measured": "the names under the pair's producer directory that are neither one of "
+                    "the copied records nor the run directory",
+        "why_not_a_check": "item 6(f) is read ACCESS; this is what the pair held. "
+                           "`unrelated_records_unavailable` stays the required check.",
+    }
+    # ---- Astra's gap 6: the intended outcome, apart from a valid terminal envelope.
+    #
+    # A consumer that answers `missing_input` or `verifier_unavailable` has produced a
+    # CORRECT document: it validates, it carries the output block, and `result_validates`
+    # passes on it. It has not consumed the hand-off. The two are separated here.
+    #
+    # THE RULE FOR A PRODUCER THAT STOPPED: when the producer's own run ended in a terminal
+    # status, the intended outcome of the consumer is the recovery of that stop, not a set of
+    # items the producer never had (E11-46 R3). So this check reads
+    # `producer_stop_recovered` in place of "every producer item is present". The consumer's
+    # OWN run must still have completed either way: recovering a stop is work, and a session
+    # that stopped did not do it.
+    consumer_status = (result or {}).get("status") if isinstance(result, dict) else None
+    if expected["producer_stopped"]:
+        intended = ("the producer's run ended %r, so the intended outcome is that stop, "
+                    "recovered" % expected["producer_status"])
+        recovered = checks.get("producer_stop_recovered") is True
+    else:
+        intended = "every item the producer's record carries, present in the answer"
+        recovered = checks.get("original_scope") is True
+    grade["consumption"] = {
+        "consumer_status": consumer_status,
+        "status_is_completed": consumer_status == "completed",
+        "reply_carries_the_output_block": checks.get("reply_carries_the_output_block") is True,
+        "intended_outcome": intended,
+        "intended_outcome_reached": recovered,
+        "a_valid_terminal_envelope_still_fails_this":
+            "a result whose status is not `completed` is a valid answer and not a "
+            "consumption; `result_validates` can pass on it and this check cannot",
+    }
+    checks["consumption_completed"] = bool(
+        grade["consumption"]["status_is_completed"]
+        and grade["consumption"]["reply_carries_the_output_block"]
+        and recovered)
     grade.update({
         "checks": checks,
         "items": identity_rows,
@@ -14457,30 +15058,56 @@ def consumer_records(campaign):
     return rows
 
 
-def do_consumer_regrade(args):
-    """Grade retained consumer pairs again, read-only (E11-41 R1).
+CONSUMER_GRADE_NAME = "consumer-grade.json"
+RETAINED_PAIR = "pair"
+PAIR_MANIFEST = "pair-manifest.json"
 
-    Astra's read2 asks for the 16 consumer records replayed under the repaired grader and says
-    explicitly not to call `consumer` on old records to obtain new grades: that would launch a
-    session. This launches nothing. It reloads each trial's retained staging record and its
-    answer, regrades, and writes `consumer-grade.<revision>.json` BESIDE the original, which is
-    never touched.
+
+def retained_pair_view(record, pair):
+    """The pair's paths, rebased onto the record's retained copy when the original is gone.
+
+    Astra's gap 6 asks for the whole pair to be retained. The point of retaining it is that a
+    grade run long after the campaign — when `<campaign>/tmp/` has been cleared — still reads
+    the tree the consumer actually ran on. Every path under the original `pair_dir` is
+    rewritten onto `<record>/pair/`; a path outside it is left alone. The original is
+    preferred whenever it is still on disk, so nothing changes during a live campaign.
     """
-    campaign = Campaign(args.campaign)
-    revision = getattr(args, "revision", None)
-    if not revision:
-        raise Usage("--regrade needs --revision <name>: a derived grade never overwrites the "
-                    "original (E10-48)")
-    check_identifier("the revision", revision)
-    targets = consumer_records(campaign)
-    if not getattr(args, "all", False):
-        targets = [row for row in targets if row[0] == args.trial]
-        if not targets:
-            raise Missing("no recorded consumer trial %s" % args.trial)
-    # E11-46 R3: grading happens only after every consumer session has ENDED. This command
-    # launches nothing, but a record whose session is still running is a record still being
-    # written: grading it reads a half-finished answer and calls the result a measurement. The
-    # same campaign-wide barrier `grade` uses, over the consumer records being graded.
+    original = (pair or {}).get("pair_dir")
+    retained = os.path.join(record, RETAINED_PAIR)
+    if not original or os.path.isdir(original) or not os.path.isdir(retained):
+        return pair, {"rebased": False,
+                      "why": ("the pair is still where the consumer ran it"
+                              if original and os.path.isdir(original)
+                              else "the record retained no pair copy to fall back to")}
+
+    def rebase(value):
+        if isinstance(value, str) and path_contains(original, value):
+            return os.path.join(retained, os.path.relpath(value, original))
+        if isinstance(value, list):
+            return [rebase(v) for v in value]
+        if isinstance(value, dict):
+            return {k: rebase(v) for k, v in value.items()}
+        return value
+
+    view = {key: rebase(value) for key, value in pair.items()}
+    view["rebased_from"] = original
+    return view, {"rebased": True, "from": original, "onto": retained,
+                  "why": "the pair directory the consumer ran on is gone; the record's own "
+                         "retained copy is read instead"}
+
+
+def grade_consumer_records(campaign, targets, revision=None, backfill=True):
+    """Grade retained consumer pairs, read-only. Launches nothing.
+
+    `revision=None` writes the FIRST grade, `consumer-grade.json`, and refuses a record that
+    already has one — the same rule a bare `grade` follows (batch B, B3(3)). A revision writes
+    `consumer-grade.<revision>.json` BESIDE the original, which is never touched.
+
+    Astra's gap 7: no consumer is graded while any consumer session is live. The campaign-wide
+    barrier runs first, with batch B's N1 rule (an unknown owner counts as ALIVE).
+    """
+    if revision:
+        check_identifier("the revision", revision)
     refuse_while_alive(campaign, targets)
     rows, errors = [], []
     for tid, attempt, record in targets:
@@ -14488,19 +15115,31 @@ def do_consumer_regrade(args):
             command = read_json(os.path.join(record, "command.json"))
             pair = command.get("pair")
             if not isinstance(pair, dict) or not pair.get("pair_dir"):
-                raise Missing("%s#%d retained no staging record to regrade" % (tid, attempt))
+                raise Missing("%s#%d retained no staging record to grade" % (tid, attempt))
+            path = os.path.join(record, "consumer-grade.%s.json" % revision if revision
+                                else CONSUMER_GRADE_NAME)
+            if revision is None and os.path.isfile(path):
+                raise Usage("%s#%d already has %s: a first grade is never replaced. Pass "
+                            "--revision <name> to write a derived grade beside it (E10-48)"
+                            % (tid, attempt, CONSUMER_GRADE_NAME))
+            pair, rebase = retained_pair_view(record, pair)
             producer = {"record": command.get("producer_record"),
                         "trial": command.get("producer_trial"),
+                        "kind": command.get("producer_kind"),
                         "command": read_json(os.path.join(command["producer_record"],
                                                           "command.json"))}
-            answer = os.path.join(pair["pair_dir"], "consumer.json")
-            after = {}
-            producer_dir = pair.get("producer_dir")
-            if producer_dir and os.path.isdir(producer_dir):
-                for base, _dirs, files in os.walk(producer_dir):
-                    for name in sorted(files):
-                        full = os.path.join(base, name)
-                        after[os.path.relpath(full, producer_dir)] = file_sha256(full)
+            answer = os.path.join(pair["pair_dir"], CONSUMER_ANSWER)
+            # the hashes `do_consumer` took the moment the session ended are the measurement;
+            # walking the tree again here would read whatever has happened to it since.
+            after = command.get("producer_hashes_after")
+            if not isinstance(after, dict):
+                after = {}
+                producer_dir = pair.get("producer_dir")
+                if producer_dir and os.path.isdir(producer_dir):
+                    for base, _dirs, files in os.walk(producer_dir):
+                        for name in sorted(files):
+                            full = os.path.join(base, name)
+                            after[os.path.relpath(full, producer_dir)] = file_sha256(full)
             grade = consumer_grade(pair, producer, answer,
                                    result_path=os.path.join(pair.get("run_dir") or "",
                                                             "result.json"),
@@ -14509,20 +15148,136 @@ def do_consumer_regrade(args):
                                    isolation=command.get("isolation"),
                                    producer_hashes_after=after)
             grade["revision"] = revision
+            grade["graded_from"] = record
             grade["regraded_from"] = record
+            grade["pair_read_from"] = rebase
+            grade["graded_after_every_consumer_session_ended"] = True
             # B3(5): the regrade carries the same witness the live grade does.
             stamp_consumer_witness(grade, campaign, record, command, tid, attempt)
-            path = os.path.join(record, "consumer-grade.%s.json" % revision)
             write_json(path, grade)
+            if revision is None and backfill:
+                _backfill_graded_ok(campaign, tid, attempt, record, grade)
             rows.append({"trial": tid, "attempt": attempt, "grade_path": path,
                          "ok": grade.get("ok"),
                          "why": grade.get("why")})
         except Exception as exc:                        # noqa: BLE001 - reported, not hidden
             errors.append({"trial": tid, "attempt": attempt, "record": record,
                            "exception": type(exc).__name__, "message": str(exc)[:400]})
+    return rows, errors
+
+
+def _backfill_graded_ok(campaign, tid, attempt, record, grade):
+    """Astra's gap 7: the ledger row's `graded_ok`, written once the grade exists.
+
+    `do_consumer` no longer grades inline, so the row it appends carries `graded_ok: null`
+    and `grade_pending: true`. The ledger is APPEND-ONLY — raw history is never edited
+    (E10-48) — so the back-fill is a second row for the same `(id, attempt)` carrying the
+    grade. Every reader of the ledger collapses on that key and takes the last row
+    (`ledger_rows`), so the attempt is still one attempt.
+    """
+    campaign.append_jsonl(campaign.trials_jsonl, {
+        "id": tid, "attempt": attempt, "kind": "consumer",
+        "graded_ok": grade.get("ok"), "grade_pending": False,
+        "backfill": "the consumer's grade, written after every consumer session ended "
+                    "(Astra's gap 7); the earlier row for this attempt is unchanged",
+        "record": record})
+
+
+def retain_pair(record, pair, producer_row, producer_hashes_after=None):
+    """Astra's gap 6: the whole pair tree, COPIED into the consumer's record, with a manifest.
+
+    Before this the record kept the pair's staging document — paths, the copied list, the
+    producer's hashes — and nothing of the tree itself. Everything the consumer actually read
+    lived under `<campaign>/tmp/`, outside the record, where a cleared scratch takes it and
+    where nothing binds it to the record. The copy lands at `<record>/pair/` and
+    `<record>/pair-manifest.json` names every path in it with its size and sha256, beside the
+    producer record's own path and the hash set the pair was staged from.
+
+    Copy, never move: the tree the consumer ran on stays exactly where it ran.
+    """
+    destination = os.path.join(record, RETAINED_PAIR)
+    manifest_path = os.path.join(record, PAIR_MANIFEST)
+    source = pair.get("pair_dir")
+    if os.path.exists(destination):
+        raise Usage("%s already exists: a retained pair is never overwritten (E9-34)"
+                    % destination)
+    if not source or not os.path.isdir(source):
+        manifest = {"copied": False, "pair_dir": source,
+                    "why": "the pair directory is not on disk; nothing was copied"}
+        write_json(manifest_path, manifest)
+        return manifest
+    shutil.copytree(source, destination, symlinks=True)
+    files, total = [], 0
+    for base, _dirs, names in os.walk(destination):
+        for name in sorted(names):
+            full = os.path.join(base, name)
+            if os.path.islink(full) or not os.path.isfile(full):
+                files.append({"path": os.path.relpath(full, destination), "bytes": None,
+                              "sha256": None, "why": "not a regular file"})
+                continue
+            size = os.path.getsize(full)
+            total += size
+            files.append({"path": os.path.relpath(full, destination), "bytes": size,
+                          "sha256": file_sha256(full)})
+    manifest = {
+        "copied": True,
+        "pair_dir": source,
+        "copied_to": destination,
+        "copied_at": now_iso(),
+        "files": sorted(files, key=lambda row: row["path"]),
+        "file_count": len(files),
+        "total_bytes": total,
+        "producer_record": producer_row.get("record"),
+        "producer_trial": producer_row.get("trial"),
+        "producer_kind": producer_row.get("kind"),
+        "producer_hashes_before": pair.get("producer_hashes_before"),
+        "producer_hashes_after": producer_hashes_after,
+        "rule": "Astra's gap 6: the pair is COPIED into the record, never moved, and every "
+                "path in the copy carries its size and its sha256 so the retained tree can "
+                "be proved to be the tree the consumer ran on.",
+    }
+    write_json(manifest_path, manifest)
+    return manifest
+
+
+def do_consumer_regrade(args):
+    """Grade retained consumer pairs again, read-only (E11-41 R1).
+
+    Astra's read2 asks for the 16 consumer records replayed under the repaired grader and says
+    explicitly not to call `consumer` on old records to obtain new grades: that would launch a
+    session. This launches nothing. It reloads each trial's retained staging record and its
+    answer, regrades, and writes `consumer-grade.<revision>.json` BESIDE the original, which is
+    never touched.
+
+    Astra's gap 7: `--revision` is required once a first grade exists, and only then. A record
+    left ungraded by a lone `consumer` run — every one of them, since `do_consumer` stopped
+    grading inline — takes its FIRST grade here with no revision, exactly as the campaign's
+    third phase writes it.
+    """
+    campaign = Campaign(args.campaign)
+    revision = getattr(args, "revision", None)
+    targets = consumer_records(campaign)
+    if not getattr(args, "all", False):
+        targets = [row for row in targets if row[0] == args.trial]
+        if not targets:
+            raise Missing("no recorded consumer trial %s" % args.trial)
+    already = sorted("%s#%d" % (tid, attempt) for tid, attempt, record in targets
+                     if os.path.isfile(os.path.join(record, CONSUMER_GRADE_NAME)))
+    if not revision and already:
+        raise Usage("%d of the %d records named already hold %s (%s); a first grade is never "
+                    "replaced, so --regrade needs --revision <name> here (E10-48)"
+                    % (len(already), len(targets), CONSUMER_GRADE_NAME,
+                       ", ".join(already[:6])))
+    # E11-46 R3: grading happens only after every consumer session has ENDED. This command
+    # launches nothing, but a record whose session is still running is a record still being
+    # written: grading it reads a half-finished answer and calls the result a measurement. The
+    # same campaign-wide barrier `grade` uses, over the consumer records being graded.
+    rows, errors = grade_consumer_records(campaign, targets, revision=revision)
     document = {"campaign": campaign.root, "revision": revision, "regraded": len(rows),
                 "grades": rows, "regrade_errors": errors,
-                "originals_untouched": "consumer-grade.json is never written by --regrade"}
+                "first_grades": revision is None,
+                "originals_untouched": ("consumer-grade.json is never written by --regrade "
+                                        "once one exists")}
     if errors:
         document[FAIL_EXIT_KEY] = ("%d consumer record(s) could not be regraded: %s"
                                    % (len(errors), ", ".join("%s#%d (%s)"
@@ -14551,15 +15306,17 @@ def do_consumer(args, record=None, attempt=0):
         ensure_dir(record)
         campaign.journal_attempt(args.trial, attempt, record, "consumer")
     started = time.time()
-    producer_row = producer_record_for(campaign, plan, parts["producer"])
+    producer_row = producer_record_for(campaign, plan, parts["producer"],
+                                       kind=parts.get("kind"))
     tree = campaign.opaque_tree(args.trial, attempt)
     pair_dir = os.path.join(tree, "pair")
-    pair = stage_consumer_pair(campaign, producer_row, pair_dir)
+    pair = stage_consumer_pair(campaign, producer_row, pair_dir, setup=setup, plan=plan)
     answer_path = os.path.join(pair_dir, CONSUMER_ANSWER)
     prompt = CONSUMER_PROMPT_TEMPLATE.format(
         producer=pair["producer_dir"], workspace=pair["workspace"],
         input=pair["input"], run_dir=pair["run_dir"], run_id=pair["run_id"],
-        run_date=plan["run_date"], answer=answer_path)
+        run_date=plan["run_date"], answer=answer_path,
+        answer_schema=pair["answer_schema"])
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, prompt)
     harness_dir = os.path.join(record, "harness")
@@ -14639,9 +15396,22 @@ def do_consumer(args, record=None, attempt=0):
         for name in sorted(files):
             full = os.path.join(base, name)
             after_hashes[os.path.relpath(full, pair["producer_dir"])] = file_sha256(full)
-    grade = consumer_grade(pair, producer_row, answer_path, result_path=result_path,
-                           reply_path=os.path.join(record, "reply.md"), validator=validator,
-                           isolation=isolation, producer_hashes_after=after_hashes)
+    # Astra's gap 7: THE GRADE DOES NOT HAPPEN HERE. Grading a consumer while other consumer
+    # sessions of the same campaign are still running opens the key directories and writes a
+    # grade document that a later consumer can read — C→D's grade reads in the round-2 root
+    # are the measured consequence. Everything the grade needs is persisted instead, and the
+    # campaign's THIRD PHASE grades every consumer after the last session has ended.
+    grading = {
+        "deferred": True,
+        "graded_here": False,
+        "why": "no consumer is graded while any consumer session of this campaign may still "
+               "be alive (Astra's gap 7); the campaign's third phase grades them all after "
+               "the last one ends",
+        "how": "runner.py campaign start runs it; a lone `consumer --trial <id>` leaves the "
+               "attempt ungraded, and `consumer --regrade --all` (no --revision) writes the "
+               "first grades",
+        "grade_file": CONSUMER_GRADE_NAME,
+    }
     model = setup.model_record(harness_dir)
     cost = setup.cost_record(harness_dir)
     write_json(os.path.join(record, "model.json"), model)
@@ -14657,7 +15427,10 @@ def do_consumer(args, record=None, attempt=0):
         "setup": setup.name, "harness": setup.harness, "condition": "available",
         "producer": parts["producer"], "consumer": parts["consumer"],
         "producer_record": producer_row["record"], "producer_trial": producer_row["trial"],
+        "producer_kind": producer_row.get("kind"),
+        "producer_recorded_kind": producer_row.get("recorded_kind"),
         "producer_chosen_because": producer_row["why"],
+        "producer_attempts_refused": producer_row.get("refused"),
         "pair": pair, "prompt": prompt_path, "workspace": pair["workspace"],
         "opaque_tree": tree, "run_dir": None,
         "argv": step["argv"], "exit": step["exit"], "status": status,
@@ -14665,17 +15438,23 @@ def do_consumer(args, record=None, attempt=0):
         "timeout_verdict": timeout_verdict(step),
         "reply_source": reply_source,
         "staged_commit": campaign.staged()["commit"],
-        "consumer_grade": grade,
+        # everything the deferred grade needs, persisted at the moment the session ended
+        "validator": validator,
+        "isolation": isolation,
+        "producer_hashes_after": after_hashes,
+        "grading": grading,
     }
     write_json(os.path.join(record, "command.json"), command)
-    # B3(5): the cross-trial witness and the identity the report joins on.
-    stamp_consumer_witness(grade, campaign, record, command, args.trial, attempt)
-    write_json(os.path.join(record, "consumer-grade.json"), grade)
+    # Astra's gap 6: the WHOLE pair, copied into the record with a manifest of hashes. Copy,
+    # never move: the tree the consumer ran on stays where it ran.
+    retention = retain_pair(record, pair, producer_row, after_hashes)
+    command["pair_retained"] = retention
+    write_json(os.path.join(record, "command.json"), command)
     campaign.append_jsonl(campaign.trials_jsonl, {
         "id": args.trial, "attempt": attempt, "kind": "consumer", "status": status,
         "exit": step["exit"], "wall": command["wall_seconds"],
         "cost": cost.get("total_cost_usd"), "model": model.get("id"),
-        "graded_ok": grade.get("ok"), "record": record})
+        "graded_ok": None, "grade_pending": True, "record": record})
     # E11-46 R5: the SAME failure interruption every other kind emits. `collect_trial` writes
     # one for a comparison and a continuation that did not complete; the consumer wrote its
     # ledger line and nothing else, so a consumer that timed out or produced no answer left no
@@ -14686,9 +15465,11 @@ def do_consumer(args, record=None, attempt=0):
                               % (status, step["exit"], bool(step.get("timed_out")),
                                  os.path.isfile(answer_path)),
                               "kept the attempt and counted it", attempt=attempt)
-    campaign.note("consumer %s -> ok=%s" % (args.trial, grade.get("ok")))
+    campaign.note("consumer %s -> status=%s, ungraded (the third phase grades it)"
+                  % (args.trial, status))
     return {"trial": args.trial, "attempt": attempt, "record": record, "status": status,
-            "exit": step["exit"], "consumer_grade": grade, "pair": pair}
+            "exit": step["exit"], "consumer_grade": None, "graded": False,
+            "grading": grading, "pair_retained": retention, "pair": pair}
 
 
 # --------------------------------------------------------------------------- key-state, measure
