@@ -1190,3 +1190,29 @@ to exactly the held-out request text.
   verbatim, the goal text Tony sets, and the negative test; it supersedes the pause hand-off. Wall clock:
   Tony's E11-40 ruling 10:25 AM to batch C complete 7:45 PM, with the account switch and two discussions
   inside it.
+- **E11-52, the fresh window: batch C gated green and accepted as `7de6e3b` (2026-09-18 about 7:35 PM by the
+  machine's clock, control room).** Tony cleared the thread, pasted the rerun hand-off's line and set its goal
+  (through the launch; the grading and the report wait for his word). The negative test read as written on all
+  eight lines; report 23e and 46 ruling lines in the round-2 tests were present, so no builder was started.
+  **Gates-R on the tree of `e539078`, 6:50 PM to 7:29 PM:** runner 634 OK on both interpreters; `check` ok with
+  no problems on both; core 383 OK on both jsonschema pins; adapters claude-code 95, codex 39, opencode 101, OK
+  on both interpreters; examples with no failures; E7 9 of 9. Fail-before on `652546b`, pass after: runner E11
+  148 (13 errors before), runner round-2 128 (14 failures and 76 errors before). Three blocks pass on both
+  sides and are not reds: the adapters' output-block tests (batch C changed no adapter file; their fail-before
+  is gates-Q's, on batch A's tree) and the core's E11 and round-2 files (batch C's only core change is the new
+  `consumer-answer.schema.json`; no core test changed). **The control room's own checks:** originals 86 of 86
+  byte-identical before and after; `grade --all --summary --revision e11-round2-1 --against e11-rerun2-fix7-1`
+  graded 126, 0 grade errors, 126 paired, 0 flips either way, none unpaired; checks that moved without a flip:
+  `boundary_not_merely_refused` 74 to true, `no_scope_violations` 4 to true; no numbered spills; the grade
+  left the answer key closed, as designed. **The batch-C commit is `7de6e3b`, an empty acceptance commit on
+  top of the three WIPs** (the tree was already clean at `e539078`; nothing squashed, as the hand-off said; the
+  empty commit is the control room's choice, flagged). Filed on Clerk's packet branch (`0f1240c9`):
+  `control-room/verify/gates-R.sh`, `gates-R.log`, `check-sys-R.json`, `check-uv-R.json`,
+  `replay-R-against-fix7.json`; the kit for the verification: `mandate-round2-verify.md`, `launch.sh` mode
+  `round2-verify`, `round2-copy-additions.sh`. Decided on Tony's behalf and flagged: copy9 also carries the
+  finished round-1 rerun's records with both revisions side by side (copy2's exclusions, scrubbed) and the four
+  round-2 briefs, because R1 and R2's acceptance is judged per attempt and a summary alone cannot be verified.
+  **A correction, kept visible:** the clock times typed in E11-49 to E11-51 and in the rerun hand-off run about
+  an hour ahead of the machine (the board's stamps for the same events read 6:09 PM, 6:34 PM and 6:47 PM); a
+  session has no clock, and this entry's times come from `date`. Next: Astra's one verification at high on
+  copy9 at `7de6e3b`.
