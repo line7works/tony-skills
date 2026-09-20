@@ -916,6 +916,29 @@ def process_rows(campaign):
     return jsonl_lines(campaign.processes)
 
 
+def _pid_exists(pid):
+    """`(exists, why)` for one pid. UNKNOWN IS ALIVE (SB-12, N6).
+
+    `kill(pid, 0)` has three answers and the old reader had two. `ProcessLookupError` is the
+    only definite death: there is no such process. `PermissionError` means the process EXISTS
+    and belongs to somebody else - her probe simulated exactly that and the reader called it
+    dead, which is the dangerous way for a barrier to be wrong. Any other `OSError` is
+    unknown, and unknown counts as alive for the same reason `_pid_is_still_ours` returning
+    None does (batch B, B3(4), N1).
+    """
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False, "no such process"
+    except PermissionError as exc:
+        return True, ("the process exists and is not ours to signal, which is EXISTENCE, "
+                      "not death (%s)" % exc)
+    except OSError as exc:
+        return True, ("the existence of this pid could not be established, and an unknown "
+                      "owner counts as ALIVE (%s)" % exc)
+    return True, "the launched process is alive"
+
+
 def live_processes(campaign, trial=None, attempt=None):
     """Every registered launch still alive, optionally narrowed to one attempt.
 
@@ -945,22 +968,21 @@ def live_processes(campaign, trial=None, attempt=None):
             if row.get("pid") in open_pids:
                 open_pids.pop(row["pid"], None)
     for pid, row in sorted(open_pids.items()):
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        exists, why = _pid_exists(pid)
+        if not exists:
             continue
-        alive.append(dict(row, live_because="the launched process is alive"))
+        alive.append(dict(row, live_because=why))
     for token in sorted(reserved):
         row = reserved[token]
         owner = row.get("owner_pid")
         if not owner:
             continue
-        try:
-            os.kill(owner, 0)
-        except OSError:
+        exists, why = _pid_exists(owner)
+        if not exists:
             continue
         alive.append(dict(row, pid=owner,
-                          live_because="a reserved launch whose owner process is alive"))
+                          live_because="a reserved launch whose owner process is alive (%s)"
+                                       % why))
     return alive
 
 
@@ -2082,7 +2104,7 @@ def walled(campaign, setup, condition, out_dir, launcher=None, workspace=None, r
     record `sealed: false` with the reason; every launch that runs the harness's own
     executable is sealed, and `sandbox-exec` joins the binaries the runner resolves.
     """
-    if launch_is_fake(setup, launcher):
+    if launch_is_fake(setup, launcher, campaign):
         yield _NoWall("fake launcher")
         return
     if campaign.synthetic():
@@ -6623,9 +6645,8 @@ def harness_alive_for(campaign, trial, attempt, record):
     for row in live_processes(campaign, trial=trial, attempt=attempt):
         alive.append({"pid": row["pid"], "source": "processes.jsonl", "label": row.get("kind")})
     for source, pid in _pids_in_record(record):
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        exists, _why = _pid_exists(pid)                   # SB-12, N6: unknown is ALIVE
+        if not exists:
             continue
         # E11-46 R5: a bare pid is not an identity. Pid numbers are RECYCLED, and a recorded
         # one that the operating system has since handed to something else answers `kill(0)`
@@ -6700,6 +6721,42 @@ def _pid_is_still_ours(path, pid):
     return True
 
 
+def campaign_retained_pids(campaign, skip=()):
+    """Every LIVE process a retained record of this campaign names (SB-12, N6).
+
+    `skip` holds the `(trial, attempt)` pairs a caller has already scanned itself. Every
+    other trial directory and every other attempt directory under `trials/` is walked for
+    the pid files a launcher leaves behind, and each live one is reported with where it came
+    from. The recycled-pid test is the same one `harness_alive_for` uses: only a MEASURED
+    False is skipped, and an unknown owner counts as ALIVE.
+    """
+    skip = set(skip or ())
+    found = []
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        places = [(0, path)]
+        for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_path)
+            if name.isdigit() and os.path.isdir(attempt_path):
+                places.append((int(name), attempt_path))
+        for attempt, record in places:
+            if (tid, attempt) in skip:
+                continue
+            for source, pid in _pids_in_record(record):
+                exists, why = _pid_exists(pid)
+                if not exists:
+                    continue
+                whose = _pid_is_still_ours(os.path.join(record, source.split(":")[0]), pid)
+                if whose is False:
+                    continue
+                found.append({"trial": tid, "attempt": attempt, "pid": pid,
+                              "source": os.path.join(record, source.split(":")[0]),
+                              "still_ours": whose, "live_because": why})
+    return found
+
+
 def refuse_while_alive(campaign, rows):
     """No key opens while ANY registered launch of the campaign is alive.
 
@@ -6726,6 +6783,19 @@ def refuse_while_alive(campaign, rows):
                        "attempt": row.get("attempt"), "kind": row.get("kind"),
                        "source": "processes.jsonl", "live_because": row.get("live_because")}
                       for row in others]})
+    # SB-12, N6: the registry is not the only witness. A launcher writes `child.pid`,
+    # `launch.json` and `pointer.json` into the TRIAL RECORD, and the old barrier looked at
+    # those only for the attempts being graded - so grading one consumer while another
+    # consumer's retained child was still alive was allowed, which is the very thing Astra's
+    # gap 7 closed for the registry. Every retained child pid of the whole campaign is
+    # scanned before ANY grading route, not only the selected targets.
+    retained = campaign_retained_pids(campaign, skip=named)
+    if retained:
+        blocked.append({
+            "trial": None, "attempt": None,
+            "why": "a retained child pid somewhere else in this campaign names a live "
+                   "process (SB-12, N6)",
+            "alive": retained})
     if blocked:
         raise Failure("harness processes are still alive; grading waits: %s"
                       % json.dumps(blocked))
@@ -6771,9 +6841,8 @@ def ledger_rows(campaign):
 def journalled_trial_ids(campaign):
     """Every trial id this campaign journalled, from the ledger and the attempt journal.
 
-    Returns `(ids, journals_readable)`. `journals_readable` is False when NEITHER journal has a
-    single object row - a campaign mid-creation, or one whose journals are not written yet - and
-    the caller then falls back to the name rule alone rather than skipping every directory.
+    Returns `(ids, journals_readable)`. Kept for readers that ask about a trial id rather
+    than an attempt; `journalled_attempts` is what the graders use (SB-12, N6).
     """
     ids, rows = set(), 0
     for path in (campaign.trials_jsonl, campaign.attempts_journal):
@@ -6785,12 +6854,38 @@ def journalled_trial_ids(campaign):
     return ids, bool(rows)
 
 
+def journalled_attempts(campaign):
+    """Every `(trial id, attempt)` this campaign journalled, as a set (SB-12, N6).
+
+    The identity of an attempt is the PAIR, not the trial id: her probe journalled `ghost#0`,
+    left an unjournalled `attempts/1` beside it, and both were enumerated for grading. An
+    attempt the campaign never created is not an attempt of the campaign.
+
+    An ABSENT or EMPTY journal is no longer a reason to fall back to the name rule. That
+    fallback is how an unjournalled `ghost` folder was enumerated on a campaign with no
+    journal at all - the one case where "this directory looks like a trial" is the only
+    evidence there is, and it is not evidence. A campaign with no journal grades nothing and
+    says so, which is a loud, recoverable state; grading a directory nobody created is not.
+    """
+    rows = set()
+    for row in jsonl_lines(campaign.trials_jsonl):
+        tid = row.get("id") or row.get("trial")
+        if tid:
+            rows.add((tid, int(row.get("attempt") or 0)))
+    for row in jsonl_lines(campaign.attempts_journal):
+        tid = row.get("trial") or row.get("id")
+        if tid:
+            rows.add((tid, int(row.get("attempt") or 0)))
+    return rows
+
+
 def is_probe_folder(tid):
     """A probe directory that was written under `trials/` before batch A moved them out."""
     return any(tid.startswith(prefix) for prefix in PROBE_FOLDER_PREFIXES)
 
 
-def graded_attempts(campaign, kinds=("comparison", "continuation"), require_journal=True):
+def graded_attempts(campaign, kinds=("comparison", "continuation"), require_journal=True,
+                    skipped=None):
     """Every (trial id, attempt, record) a grade must cover (E10-44, finding 6).
 
     `grade --all` used to list only `trials/*` that did not start with `routing-` or `cont-`,
@@ -6806,8 +6901,19 @@ def graded_attempts(campaign, kinds=("comparison", "continuation"), require_jour
     journalled, so the two agree there; a record placed by hand (the scheduler tests) is not.
     """
     rows = []
-    journalled, journals_readable = journalled_trial_ids(campaign)
-    journals_readable = journals_readable and require_journal
+    skipped = [] if skipped is None else skipped
+    journalled = journalled_attempts(campaign)
+
+    def journalled_or_skipped(tid, attempt, path):
+        """SB-12, N6: membership by `(trial, attempt)`, named and skipped when it is absent."""
+        if not require_journal or (tid, attempt) in journalled:
+            return True
+        skipped.append({"trial": tid, "attempt": attempt, "record": path,
+                        "why": "no journal row creates (%s, %d); an attempt the campaign "
+                               "never journalled is not graded (SB-12, N6)"
+                               % (tid, attempt)})
+        return False
+
     for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
         if not os.path.isdir(path):
             continue
@@ -6816,8 +6922,6 @@ def graded_attempts(campaign, kinds=("comparison", "continuation"), require_jour
             continue
         # B3(1)
         if is_probe_folder(tid):
-            continue
-        if journals_readable and tid not in journalled:
             continue
         # E11-33, a consequence of NEW MAJOR Q: once the queue schedules them, `consumer-*`
         # directories exist on a finished root, and this reader would hand each to `grade_one`
@@ -6828,11 +6932,12 @@ def graded_attempts(campaign, kinds=("comparison", "continuation"), require_jour
         if tid.startswith("consumer-"):
             continue
         kind = "continuation" if tid.startswith("cont-") else "comparison"
-        if kind in kinds:
+        if kind in kinds and journalled_or_skipped(tid, 0, path):
             rows.append((tid, 0, path))
         for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
             name = os.path.basename(attempt_path)
-            if name.isdigit() and os.path.isdir(attempt_path) and kind in kinds:
+            if name.isdigit() and os.path.isdir(attempt_path) and kind in kinds \
+                    and journalled_or_skipped(tid, int(name), attempt_path):
                 rows.append((tid, int(name), attempt_path))
     return rows
 
@@ -6840,11 +6945,18 @@ def graded_attempts(campaign, kinds=("comparison", "continuation"), require_jour
 def do_grade(args):
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
+    not_journalled = []
     if args.all:
-        targets = graded_attempts(campaign)
+        targets = graded_attempts(campaign, skipped=not_journalled)
+        if not_journalled:
+            campaign.note("grade --all: %d directory or attempt(s) under trials/ carry no "
+                          "journal row and are not graded (SB-12, N6): %s"
+                          % (len(not_journalled),
+                             ", ".join("%s#%d" % (r["trial"], r["attempt"])
+                                       for r in not_journalled[:12])))
         if not targets:
             return {"campaign": campaign.root, "graded": 0, "summary": grade_summary([]),
-                    "grades": []}
+                    "grades": [], "not_journalled": not_journalled}
     elif args.trial:
         attempt = int(getattr(args, "attempt", 0) or 0)
         targets = [(args.trial, attempt, attempt_record(campaign, args.trial, attempt))]
@@ -8955,27 +9067,196 @@ def _reply_reason(line):
     return None
 
 
-def _reply_item_lines(text):
-    """Every item call a reply states, in the reply's own order.
+def _reply_dispositions(line):
+    """EVERY disposition a reply line states, distinct, in the line's own order (SB-12, N1).
 
-    An item line is a `·`-separated line that names a location AND a disposition word. The
-    "Still open:" line names a location and no disposition and is not one; the `Method:` line
-    carries no `·` and is not one. The first line for a location wins, as in `_interop`.
+    `_reply_disposition` answers "which one word does this line say" and is UNCHANGED: it is
+    what `_interop` grades the harness's delivery on. This is the collector the judgment
+    extraction needs, because a line that says TWO different things is not a call at all and
+    "the first field wins" hid that. The exact-token matches are returned when there are any,
+    and the loose forms ("still not fixed", "broke: ... not fixed") only when no field states
+    a disposition as a whole token - so a parenthesised or bare CLAIM that happens to carry
+    the words cannot manufacture a second disposition beside a real one.
     """
-    rows, seen = [], set()
+    fields = [f for f in (line or "").split("·")] or [line or ""]
+    exact, loose = [], []
+    for field in fields:
+        token = field.split("(")[0].strip().lower().replace("-", "_").replace(" ", "_")
+        if not token:
+            continue
+        for word in REPLY_DISPOSITIONS:                     # not_fixed before fixed
+            if token == word:
+                if word not in exact:
+                    exact.append(word)
+                break
+        else:
+            for word in REPLY_DISPOSITIONS:
+                if token.endswith("_" + word) or token.startswith(word + "_"):
+                    if word not in loose:
+                        loose.append(word)
+                    break
+    return exact or loose
+
+
+# Ordinary prose, the second half of N1. A session WITHOUT the skill answers in sentences:
+# `src/demo.py:7 is not fixed (reproduces).` The middle-dot block is the skill's own
+# PRESENTATION grammar, so requiring it made the judgment measure compliance with that
+# presentation rather than the call. These read the same four disposition words as whole
+# words in a sentence, with `not fixed` matched first and `fixed` never counted inside a
+# `not fixed` span.
+_PROSE_NOT_FIXED = re.compile(
+    r"(?<![A-Za-z0-9_])(?:still\s+|again\s+)?"
+    r"(?:not|isn't|isn’t|is\s+not|are\s+not|was\s+not|were\s+not|un)"
+    r"[\s_\-]*fixed(?![A-Za-z0-9_])", re.IGNORECASE)
+_PROSE_WORDS = (
+    ("fixed", re.compile(r"(?<![A-Za-z0-9_])fixed(?![A-Za-z0-9_])", re.IGNORECASE)),
+    ("waived", re.compile(r"(?<![A-Za-z0-9_])waived(?![A-Za-z0-9_])", re.IGNORECASE)),
+    ("reopened", re.compile(r"(?<![A-Za-z0-9_])reopened(?![A-Za-z0-9_])", re.IGNORECASE)),
+)
+# A prose location is `<file>:<line>` where the file part carries a dot or a slash, so a
+# clock time or a ratio is never read as an item.
+_PROSE_LOCATION = re.compile(
+    r"(?<![A-Za-z0-9_./\\-])([A-Za-z0-9_][A-Za-z0-9_.\\+-]*(?:/[A-Za-z0-9_.\\+-]+)*"
+    r"[./][A-Za-z0-9_.\\+-]*):(\d+)(?![0-9])")
+
+
+def _prose_calls(text):
+    """Every disposition an ordinary sentence states, distinct, in its own order."""
+    line = text or ""
+    spans, found = [], []
+    for match in _PROSE_NOT_FIXED.finditer(line):
+        spans.append(match.span())
+        if "not_fixed" not in found:
+            found.append("not_fixed")
+    for word, pattern in _PROSE_WORDS:
+        for match in pattern.finditer(line):
+            start, end = match.span()
+            if any(start >= a and end <= b for a, b in spans):
+                continue                                    # inside a `not fixed` span
+            if word not in found:
+                found.append(word)
+            break
+    return found
+
+
+def _prose_locations(text):
+    """Every `file:line` an ordinary sentence names, distinct, in its own order."""
+    out = []
+    for match in _PROSE_LOCATION.finditer(text or ""):
+        key = "%s:%s" % (match.group(1), match.group(2))
+        if key not in out:
+            out.append(key)
+    return out
+
+
+# The fields an expected item may carry its claim text in. A key names the item by file and
+# line; a prose reply may name it by the claim instead, and both are explicit.
+CLAIM_FIELDS = ("claim", "title", "summary", "finding", "text", "description")
+
+
+def _expected_claims(wanted):
+    """`[(item key, claim text)]` for every expected item that states claim text."""
+    rows = []
+    for want in wanted or ():
+        if not isinstance(want, dict):
+            continue
+        key = _item_key(want)
+        if key is None:
+            continue
+        for field in CLAIM_FIELDS:
+            value = want.get(field)
+            if isinstance(value, str) and len(value.strip()) >= 8:
+                rows.append((key, value.strip().lower()))
+                break
+    return rows
+
+
+def _reply_candidate_calls(text, wanted=()):
+    """EVERY candidate call a reply states, in the reply's own order (SB-12, N1).
+
+    Two grammars, one collector. A `·` line is the skill's own item line; any other line
+    is read as ordinary prose. NOTHING is reduced here: a line that states two dispositions
+    yields two candidates, and two lines naming one item yield two candidates. Whether those
+    candidates are ONE call is `_reply_item_lines`'s question, and a disagreement is not a
+    call at all.
+    """
+    claims = _expected_claims(wanted)
+    rows = []
     for number, raw in enumerate((text or "").splitlines()):
         line = raw.strip()
-        if "\u00b7" not in line:
+        if not line:
             continue
-        location = _reply_location(line)
-        disposition = _reply_disposition(line)
-        if location is None or disposition is None or location in seen:
-            continue
-        seen.add(location)
-        rows.append({"location": location, "disposition": disposition,
-                     "reason": _reply_reason(line), "line_number": number + 1,
-                     "line": line[:300]})
+        if "·" in line:
+            location = _reply_location(line)
+            dispositions = _reply_dispositions(line)
+            if location is None or not dispositions:
+                continue
+            locations = [location]
+        else:
+            dispositions = _prose_calls(line)
+            if not dispositions:
+                continue
+            locations = _prose_locations(line)
+            if not locations:
+                # named by its claim text instead of by file and line
+                lowered = line.lower()
+                locations = [key for key, claim in claims if claim in lowered]
+            if len(locations) != 1:
+                # two items in one sentence: which disposition belongs to which is not
+                # stated, and a guess is the thing this item exists to stop.
+                continue
+        reason = _reply_reason(line)
+        for disposition in dispositions:
+            rows.append({"location": locations[0], "disposition": disposition,
+                         "reason": reason, "line_number": number + 1,
+                         "line": line[:300]})
     return rows
+
+
+def _reply_item_lines(text, wanted=()):
+    """Every item call a reply states, in the reply's own order, ONE row per item.
+
+    An item line is a `·`-separated line that names a location AND a disposition word, or
+    an ordinary sentence that names both. The "Still open:" line names a location and no
+    disposition and is not one.
+
+    SB-12, N1: the first line for a location NO LONGER wins. Every candidate for an item is
+    collected, and when they disagree - two dispositions, or two different stated reasons, on
+    two lines or on one - the row carries `conflict` naming the disagreement and the
+    extraction reports the item `unextracted`. Her probe reversed two contradictory lines and
+    the grade reversed with them; a contradiction is not a call in either order. A reason a
+    line does not state is NOT a disagreement with one that does: "not stated" and "stated
+    differently" are different things here for the same reason they are in `$absent`.
+    """
+    rows, order = {}, []
+    for candidate in _reply_candidate_calls(text, wanted):
+        key = candidate["location"]
+        if key not in rows:
+            rows[key] = dict(candidate, dispositions=[candidate["disposition"]],
+                             reasons=([candidate["reason"]]
+                                      if candidate["reason"] is not None else []),
+                             conflict=None)
+            order.append(key)
+            continue
+        row = rows[key]
+        if candidate["disposition"] not in row["dispositions"]:
+            row["dispositions"].append(candidate["disposition"])
+        if candidate["reason"] is not None and candidate["reason"] not in row["reasons"]:
+            row["reasons"].append(candidate["reason"])
+        if row["reason"] is None and candidate["reason"] is not None:
+            row["reason"] = candidate["reason"]
+    out = []
+    for key in order:
+        row = rows[key]
+        if len(row["dispositions"]) > 1:
+            row["conflict"] = ("the reply states a conflict for %s: %s. A contradiction is "
+                               "not a call." % (key, " and ".join(row["dispositions"])))
+        elif len(row["reasons"]) > 1:
+            row["conflict"] = ("the reply states a conflict for %s: %s with two different "
+                               "reasons, %s. A contradiction is not a call."
+                               % (key, row["dispositions"][0], " and ".join(row["reasons"])))
+        out.append(row)
+    return out
 
 
 def _expected_item_list(expected_items):
@@ -9083,9 +9364,21 @@ def _judgment_extraction(record, result, expected_items):
         add(dict(item), "result.json",
             evidence_from="the item's own verification.evidence")
     # 2. and 3. every expected item the record did not answer, from the reply then the chat
+    #
+    # SB-12, N1: a row whose candidates DISAGREE is not added as a call. It is remembered in
+    # `conflicts`, and step 4 reports the item `unextracted` with the conflict as its reason.
+    # Source priority is unchanged: a conflict in the reply never displaces a record item,
+    # and a conflict in the reply does not stop `chat.md` being read for the same item - the
+    # priority list is "the first SOURCE that states a call", and a contradiction states none.
+    conflicts, order_of_conflicts = {}, []
     for source, text in (("reply.md", reply), ("chat.md", chat)):
-        stated = {row["location"]: row for row in _reply_item_lines(text)}
-        if not stated:
+        stated, conflicted = {}, {}
+        for row in _reply_item_lines(text, wanted):
+            if row.get("conflict"):
+                conflicted[row["location"]] = row
+            else:
+                stated[row["location"]] = row
+        if not stated and not conflicted:
             continue
         # an item the record never carried, named by the reply
         for want in wanted:
@@ -9102,18 +9395,46 @@ def _judgment_extraction(record, result, expected_items):
                 if key in taken:
                     continue
                 add(_stated_from_a_reply(row), source, line=row["line"])
-    # 4. what no source named. No item is appended for it at all - an `unextracted` item is
-    #    not a call, and inventing a keyless item would let it match an expected item made
-    #    entirely of `$absent` forms. `_dispositions` reports it as an expected item nothing
-    #    matched, which is what it is.
+        for key, row in sorted(conflicted.items(), key=lambda kv: kv[1]["line_number"]):
+            if key in taken or key in conflicts:
+                continue
+            conflicts[key] = {"source": source, "why": row["conflict"],
+                              "line": row["line"], "line_number": row["line_number"]}
+            order_of_conflicts.append(key)
+
+    def unextracted_row(key, why=None, found_in=None, line=None):
+        return {"location": key, "disposition": None, "reason": None,
+                "stated_fields": [],
+                "evidence": 0, "carries_evidence": False,
+                "evidence_read_from": None, "line_in_the_reply": line,
+                "why": why or "no source named this item",
+                "conflict_found_in": found_in,
+                "source": UNEXTRACTED}
+
+    # 4. what no source named, and what a source contradicted itself about. No item is
+    #    appended for either - an `unextracted` item is not a call, and inventing a keyless
+    #    item would let it match an expected item made entirely of `$absent` forms.
+    #    `_dispositions` reports it as an expected item nothing matched, which is what it is.
+    reported = set()
     for want in wanted:
         key = _item_key(want)
-        if key is not None and key not in taken:
-            rows.append({"location": key, "disposition": None, "reason": None,
-                         "stated_fields": [],
-                         "evidence": 0, "carries_evidence": False,
-                         "evidence_read_from": None, "line_in_the_reply": None,
-                         "source": UNEXTRACTED})
+        if key is None or key in taken or key in reported:
+            continue
+        reported.add(key)
+        clash = conflicts.get(key)
+        rows.append(unextracted_row(key,
+                                    why=clash["why"] if clash else None,
+                                    found_in=clash["source"] if clash else None,
+                                    line=clash["line"] if clash else None))
+    # a contradiction about an item the key does not list is still not a call, and a reader
+    # of the record has to be able to see it.
+    for key in order_of_conflicts:
+        if key in taken or key in reported:
+            continue
+        reported.add(key)
+        clash = conflicts[key]
+        rows.append(unextracted_row(key, why=clash["why"], found_in=clash["source"],
+                                    line=clash["line"]))
     return items, rows
 
 
@@ -12633,12 +12954,14 @@ def _campaign_loop(campaign, plan, args):
         # campaign-wide liveness barrier first anyway (with batch B's N1 rule: an unknown
         # owner counts as alive), writes `consumer-grade.json` as each record's FIRST grade,
         # and back-fills `graded_ok` into the ledger.
-        targets = consumer_records(campaign)
+        not_journalled = []
+        targets = consumer_records(campaign, skipped=not_journalled)
         ungraded = [row for row in targets
                     if not os.path.isfile(os.path.join(row[2], CONSUMER_GRADE_NAME))]
-        campaign.note("the grading phase begins: %d consumer record(s), %d of them ungraded; "
-                      "every consumer thread has joined (Astra's gap 7)"
-                      % (len(targets), len(ungraded)))
+        campaign.note("the grading phase begins: %d consumer record(s), %d of them ungraded, "
+                      "%d unjournalled and skipped (SB-12, N6); every consumer thread has "
+                      "joined (Astra's gap 7)"
+                      % (len(targets), len(ungraded), len(not_journalled)))
         try:
             graded_rows, grade_errors = grade_consumer_records(campaign, ungraded)
         except (Usage, Missing, Failure) as exc:
@@ -12649,6 +12972,7 @@ def _campaign_loop(campaign, plan, args):
                                   "left every consumer ungraded")
         consumer_grading = {
             "records": len(targets), "graded": len(graded_rows),
+            "not_journalled": not_journalled,
             "already_graded": len(targets) - len(ungraded),
             "grades": graded_rows, "errors": grade_errors,
             "when": "after every consumer session of this campaign ended (Astra's gap 7)",
@@ -13614,7 +13938,23 @@ NATIVE_RECORD_REFUSALS = ("auto-rejecting", "permission denied", "operation not 
                           "rejected permission", "denied by your permission settings")
 
 
-def _native_read_outcome(label, text, capture_text=None, target=None):
+# SB-12, N3. What makes a captured line the VERIFIER's own rather than the parent's: the
+# harness's record marks a sub-agent, a sidechain or a child session on the line that carries
+# it. A parent's tool call carries none of these, so a parent refusal can never stand in for
+# the verifier route's measurement - which is exactly what her probe caught, one capture line
+# reported as `parent=refused, child=refused`.
+NATIVE_CHILD_IDENTITY = ("issidechain", "sidechain", "subagent", "sub-agent", "sub_agent",
+                         "spawn_agent", "child_thread", "child_session", "child_rollout",
+                         "\"agent\"", "'agent'", "verifier")
+
+
+def _native_route_of(label):
+    """`verifier` for the verifier half of a native row, `parent` for the session's own."""
+    return "verifier" if label.lower().startswith("verifier ") else "parent"
+
+
+def _native_read_outcome(label, text, capture_text=None, target=None, claimed=None,
+                         route=None):
     """`read`, `refused` or `unclear` for one labelled read.
 
     The session's own reply first. E11-46 R4, measured 2026-09-18: that is not enough. Both
@@ -13623,7 +13963,16 @@ def _native_read_outcome(label, text, capture_text=None, target=None):
     out of the reply collector, in a new place. When the reply is silent the HARNESS'S OWN
     RECORD is read: a refusal line naming the target path is a refusal, and the sentinel
     appearing next to it is a read. Silence in both is still `unclear`, never a pass.
+
+    SB-12, N3, the capture fallback only. ONE captured refusal is never assigned to two
+    labels. (1) The verifier half of a row binds to a capture line that carries its OWN CHILD
+    IDENTITY; a bare parent tool call can no longer be reported as the verifier's refusal
+    too. (2) `claimed` is a set the caller passes across the labels of one probe: a line
+    already counted for one label and one target is not counted again for another. Six
+    measurements have to come from six calls, which is what the check claims to make. The
+    reply route is untouched: a session that answers six lines still answers for itself.
     """
+    route = route or _native_route_of(label)
     for line in (text or "").splitlines():
         stripped = line.strip()
         if not stripped.lower().startswith(label.lower()):
@@ -13635,18 +13984,131 @@ def _native_read_outcome(label, text, capture_text=None, target=None):
             return "refused", said[:200]
         return "unclear", said[:200]
     if capture_text and target:
-        for line in capture_text.splitlines():
+        claimed = claimed if claimed is not None else set()
+        for number, line in enumerate(capture_text.splitlines()):
             if target not in line and os.path.dirname(target) not in line:
                 continue
             lowered = line.lower()
             for phrase in NATIVE_RECORD_REFUSALS:
-                if phrase in lowered:
-                    return "refused", ("the harness's own record: %s"
-                                       % line.strip()[:170])
+                if phrase not in lowered:
+                    continue
+                if route == "verifier" and not any(marker in lowered
+                                                   for marker in NATIVE_CHILD_IDENTITY):
+                    # a refusal the parent's own tool call produced. It is evidence for the
+                    # parent row and for nothing else.
+                    continue
+                key = (number, target, phrase)
+                if key in claimed:
+                    continue
+                claimed.add(key)
+                return "refused", ("the harness's own record: %s" % line.strip()[:170])
         if any(marker in capture_text for marker in NATIVE_READ_SUCCEEDED):
             return "read", ("the reply says nothing, and the sentinel is in the harness's "
                             "own record")
+        if route == "verifier":
+            return "unclear", ("the record carries no refusal of %s bound to a child "
+                               "identity of its own, and the reply carries no line for %s "
+                               "(SB-12, N3)" % (target, label))
     return "unclear", "the reply carries no line for %s" % label
+
+
+# SB-12, N3, the last half. The Codex native proof the reviewer read measured `spawn_agent`
+# with `fork_turns=all` - a sub-agent that INHERITS the parent's whole context - and reported
+# it as the verifier route. The adapter's real route is `adapters/codex/verifier.py`, which
+# starts a FRESH `codex exec` child of its own with a brief on stdin. The two are not the
+# same measurement: one asks "can a fork of this session read it", the other "can a new
+# session of this harness read it", and it is the second the isolation claim rests on.
+#
+# This is built and unit-tested against canned adapter records. It is never run live from
+# here; the control room runs the live proof.
+NATIVE_VERIFIER_CALL_ID = "native-read-boundary"
+
+
+def codex_verifier_helper(setup):
+    """The STAGED adapter's own verifier helper for this setup, else the checkout's."""
+    staged = os.path.join(setup.stage or "", "plugins", "recheck-v2", "skills", "recheck-v2",
+                          "adapters", "codex", "verifier.py")
+    if setup.stage and os.path.isfile(staged):
+        return staged
+    return os.path.join(SKILL_DIR, "adapters", "codex", "verifier.py")
+
+
+def native_verifier_brief(targets):
+    """The brief the fresh verifier child is given: the same three reads, its own prefix."""
+    lines = [
+        "Attempt each of the three reads below and reply with one line per read, in this "
+        "exact shape:",
+        "verifier <label>: <the first line of the file, or the exact reason you could not "
+        "read it>",
+        "",
+    ]
+    for label in NATIVE_READ_TARGETS:
+        lines.append("%s: %s" % (label, targets[label]))
+    lines += [
+        "",
+        "Your FINAL message must be exactly those three lines and nothing else: no preamble, "
+        "no summary, no commentary. Send them only after every read has been attempted. Do "
+        "not stop if a read fails; report what it said.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def codex_native_verifier_reads(campaign, setup, condition, targets, base, extra_env=None,
+                                timeout=900):
+    """The verifier half of the native check, through `adapters/codex/verifier.py`.
+
+    Returns the row the record keeps: the helper, the exact argv, the child's own reply, the
+    three typed outcomes and `separated`. The calls and the outputs stay in the record
+    (SB-12, N3) so a reader can see which route produced which refusal.
+    """
+    run_dir = os.path.join(base, "verifier-route")
+    workspace = os.path.join(base, "workspace")
+    ensure_dir(run_dir)
+    ensure_dir(workspace)
+    # `verifier.py` refuses a brief that is not `<run_dir>/checklist.md`, which is the file
+    # `start` writes in a real run; the native check writes its own there for the same reason.
+    brief = os.path.join(run_dir, "checklist.md")
+    write_text(brief, native_verifier_brief(targets))
+    scratch = os.path.join(run_dir, "scratch")
+    raw = os.path.join(scratch, "%s.md" % NATIVE_VERIFIER_CALL_ID)
+    for path in (raw, os.path.join(scratch, "%s.events.jsonl" % NATIVE_VERIFIER_CALL_ID)):
+        if os.path.exists(path):
+            os.unlink(path)                      # call ids are single-use; this is one probe
+    helper = codex_verifier_helper(setup)
+    argv = [sys.executable, helper, "--brief", brief, "--workspace", workspace,
+            "--scratch", scratch, "--raw", raw,
+            "--call-id", NATIVE_VERIFIER_CALL_ID]
+    extra = {"CODEX_HOME": setup.home(condition)}
+    extra.update(extra_env or {})
+    step = run_cmd(argv, env=tool_env(extra), cwd=workspace, timeout=timeout,
+                   label="adapters/codex/verifier.py, the native read boundary")
+    reply = read_text(raw, "") or ""
+    claimed, reads = set(), {}
+    for label in NATIVE_READ_TARGETS:
+        outcome, said = _native_read_outcome("verifier %s" % label, reply, None,
+                                             targets[label], claimed=claimed,
+                                             route="verifier")
+        reads[label] = {"outcome": outcome, "said": said, "target": targets[label]}
+    return {
+        "route": "adapters/codex/verifier.py, which launches its own fresh `codex exec` "
+                 "child (SB-12, N3); never `spawn_agent`, which forks the parent's context",
+        "helper": helper,
+        "argv": argv,
+        "exit": step.get("exit"),
+        "stdout": (step.get("stdout") or "")[:4000],
+        "stderr": (step.get("stderr") or "")[-2000:],
+        "brief": brief,
+        "raw": raw,
+        "events": os.path.join(scratch, "%s.events.jsonl" % NATIVE_VERIFIER_CALL_ID),
+        "reply": reply[:4000],
+        "targets": dict(targets),
+        "reads": reads,
+        "separated": bool(reads) and all(r["outcome"] == "refused" for r in reads.values()),
+        "not_refused": sorted(label for label, r in reads.items()
+                              if r["outcome"] != "refused"),
+        "measured": "a fresh child of this harness through the adapter's own verifier route, "
+                    "with its brief, its call and its reply retained",
+    }
 
 
 def native_read_boundary_probe(campaign, plan, setups=None, condition="available",
@@ -13719,19 +14181,42 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
                             scratch=probe_tmp)
         reply, reply_source = harness_reply(setup, out_dir)
         capture_text = _fence_capture_text(out_dir)
+        # SB-12, N3: one shared claim set across every label of this probe, so a single
+        # captured refusal cannot be counted for two of them. Six measurements have to come
+        # from six reads.
+        claimed = set()
         reads, verifier_reads = {}, {}
         for label in NATIVE_READ_TARGETS:
-            outcome, said = _native_read_outcome(label, reply, capture_text, targets[label])
+            outcome, said = _native_read_outcome(label, reply, capture_text, targets[label],
+                                                 claimed=claimed, route="parent")
             reads[label] = {"outcome": outcome, "said": said,
-                            "target": targets[label]}
-            v_outcome, v_said = _native_read_outcome("verifier %s" % label, reply,
-                                                    capture_text, targets[label])
-            verifier_reads[label] = {"outcome": v_outcome, "said": v_said}
+                            "target": targets[label],
+                            "bound_to": "this session's own tool call for %s" % label}
+        # The verifier route. For Codex it is the ADAPTER's own route and nothing else: the
+        # session's `spawn_agent` fork is not the route the skill's verifier takes, and the
+        # proof the reviewer read measured the fork (SB-12, N3).
+        adapter_route = None
+        if setup.harness == "codex":
+            adapter_route = codex_native_verifier_reads(campaign, setup, condition, targets,
+                                                        base, timeout=max(timeout, 900))
+            verifier_reads = {label: dict(row, bound_to="the adapter's own fresh `codex "
+                                                        "exec` child")
+                              for label, row in adapter_route["reads"].items()}
+        else:
+            for label in NATIVE_READ_TARGETS:
+                v_outcome, v_said = _native_read_outcome(
+                    "verifier %s" % label, reply, capture_text, targets[label],
+                    claimed=claimed, route="verifier")
+                verifier_reads[label] = {
+                    "outcome": v_outcome, "said": v_said,
+                    "bound_to": "a capture line carrying its own child identity, claimed "
+                                "once (SB-12, N3)"}
         every = list(reads.values()) + list(verifier_reads.values())
         separated = bool(every) and all(r["outcome"] == "refused" for r in every)
         row = {"setup": name, "harness": setup.harness, "condition": condition,
                "trial": trial_id_, "record": record, "targets": targets,
                "reads": reads, "verifier_reads": verifier_reads,
+               "verifier_route": adapter_route,
                "separated": separated,
                "not_refused": sorted(label for label, r in reads.items()
                                      if r["outcome"] != "refused")
@@ -13803,9 +14288,25 @@ def read_boundary_probe(campaign, plan, setups=None):
         their_tree = campaign.opaque_tree(theirs, 0)
         ensure_dir(their_tree)
         their_sentinel = os.path.join(their_tree, "sentinel.txt")
-        write_text(their_sentinel, READ_BOUNDARY_SENTINEL)
         setup = setup_for(campaign, plan, name)
         other_home = setup.home("absent")
+        # SB-12, N3: both sentinels are PLANTED and confirmed from outside the wall before
+        # the child is started. An absent file cannot be refused, and a refusal of nothing is
+        # what her probe turned into `separated: true`. The other condition's home is
+        # ensured for the same reason the native probe ensures it: the measurement is "can
+        # this child read that home's own sentinel", and a home that is not installed yet
+        # answers no question at all.
+        ensure_dir(other_home)
+        planted_sentinel = plant_read_sentinel(their_sentinel)
+        planted_home = plant_read_sentinel(os.path.join(other_home, NATIVE_SENTINEL_NAME))
+        planted = {"sentinel": planted_sentinel["sentinel"],
+                   "sentinel_ok": planted_sentinel["ok"],
+                   "sentinel_bytes": planted_sentinel["bytes"],
+                   "other_home_sentinel": planted_home["sentinel"],
+                   "other_home_sentinel_ok": planted_home["ok"],
+                   "other_home_sentinel_bytes": planted_home["bytes"],
+                   "why": "planted and confirmed present and non-empty from OUTSIDE the "
+                          "wall, before the child ran (SB-12, N3)"}
         env = campaign.env(extra=setup.launch_env("available"), scratch=my_scratch,
                            require_binaries=False)
         argv = [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home]
@@ -13816,6 +14317,7 @@ def read_boundary_probe(campaign, plan, setups=None):
             cwd = walled_record["cwd"]
         probe = run_cmd(argv, env=env, cwd=cwd, label="read-boundary probe")
         answer = _read_boundary_answer(probe)
+        answer["planted"] = planted
         answer["setup"] = name
         answer["this_trial_scratch"] = my_scratch
         answer["the_other_trial_tree"] = their_tree
@@ -13829,6 +14331,7 @@ def read_boundary_probe(campaign, plan, setups=None):
                             other_home],
                            env=env, cwd=my_scratch, label="read-boundary probe, unwalled")
             fact = _read_boundary_answer(bare)
+            fact["planted"] = planted
             fact["separated"] = _read_boundary_separated(fact)
             fact["measured"] = ("the same child with NO profile: what the filesystem allows a "
                                 "process that escaped the wall. Recorded for information; it "
@@ -13873,11 +14376,28 @@ def _read_boundary_answer(probe):
 
 
 def _read_boundary_separated(answer):
+    """SEPARATED means every planted read was REFUSED, and nothing else (SB-12, N3).
+
+    The old reading was "nothing succeeded", which an absent sentinel, an empty file and a
+    child that never started all satisfy. Each of the three reads now carries its own typed
+    outcome and only `refused` counts; anything else leaves the check failed or unmeasured,
+    and a sentinel the runner could not confirm outside the wall fails it too.
+    """
     if not answer.get("probe_ran"):
         return False
-    return not (answer.get("read_the_other_trials_sentinel")
-                or answer.get("discovered_other_trial_trees")
-                or answer.get("read_the_other_conditions_install"))
+    if answer.get("discovered_other_trial_trees"):
+        return False
+    planted = answer.get("planted")
+    if planted is not None:
+        if not planted.get("sentinel_ok") or not planted.get("other_home_sentinel_ok"):
+            return False
+    outcomes = [answer.get("sentinel_outcome"),
+                answer.get("other_home_sentinel_outcome"),
+                answer.get("other_home_outcome")]
+    if any(word is None for word in outcomes):
+        # a record written before the typed outcomes existed: unmeasured, never a pass
+        return False
+    return all(word == "refused" for word in outcomes)
 
 
 def read_boundary_wall(campaign, setup, trial, scratch):
@@ -13913,16 +14433,44 @@ def read_boundary_wall(campaign, setup, trial, scratch):
                    "trial, not the filesystem underneath it"}
 
 
+# SB-12, N3. The child returns a TYPED outcome per read, never a bare boolean. `False` used
+# to mean "the read did not succeed", which is true of a refusal, an absent file, an empty
+# file and a crash alike - and `_read_boundary_separated` read every one of them as
+# SEPARATED. Her probe pointed it at a sentinel that was not there and the preflight passed.
+#
+# The five words, and only the first is a pass:
+#   refused  PermissionError - the wall said no
+#   read     the file was there and had content
+#   empty    the file was there and had none: nothing was measured
+#   absent   FileNotFoundError - there was nothing to refuse
+#   error    anything else, with the exception type named
 READ_BOUNDARY_SOURCE = r"""
 import json, os, sys
 sentinel, other_home = sys.argv[1], sys.argv[2]
 out = {}
-try:
-    with open(sentinel) as handle:
-        out["read_the_other_trials_sentinel"] = bool(handle.read().strip())
-except Exception as exc:
-    out["read_the_other_trials_sentinel"] = False
-    out["sentinel_error"] = type(exc).__name__
+
+
+def outcome(path):
+    try:
+        with open(path) as handle:
+            return ("read" if handle.read().strip() else "empty"), None
+    except PermissionError as exc:
+        return "refused", type(exc).__name__
+    except FileNotFoundError as exc:
+        return "absent", type(exc).__name__
+    except IsADirectoryError as exc:
+        return "error", type(exc).__name__
+    except OSError as exc:
+        return ("refused" if getattr(exc, "errno", None) == 1 else "error"), type(exc).__name__
+    except Exception as exc:
+        return "error", type(exc).__name__
+
+
+word, error = outcome(sentinel)
+out["sentinel_outcome"] = word
+out["read_the_other_trials_sentinel"] = word == "read"
+if error:
+    out["sentinel_error"] = error
 here = os.environ.get("TMPDIR") or os.getcwd()
 found = []
 walk = here
@@ -13938,13 +14486,99 @@ for _ in range(3):
             if os.path.isfile(os.path.join(path, "sentinel.txt")):
                 found.append(path)
 out["discovered_other_trial_trees"] = found[:8]
+home_sentinel = os.path.join(other_home, "native-read-boundary-sentinel.txt")
+word, error = outcome(home_sentinel)
+out["other_home_sentinel"] = home_sentinel
+out["other_home_sentinel_outcome"] = word
+if error:
+    out["other_home_sentinel_error"] = error
 try:
-    out["read_the_other_conditions_install"] = bool(os.path.isdir(other_home)
-                                                    and os.listdir(other_home))
-except Exception:
+    entries = os.listdir(other_home)
+    out["other_home_outcome"] = "read" if entries else "empty"
+    out["read_the_other_conditions_install"] = bool(entries)
+except PermissionError as exc:
+    out["other_home_outcome"] = "refused"
+    out["other_home_error"] = type(exc).__name__
+    out["read_the_other_conditions_install"] = False
+except FileNotFoundError as exc:
+    out["other_home_outcome"] = "absent"
+    out["other_home_error"] = type(exc).__name__
+    out["read_the_other_conditions_install"] = False
+except Exception as exc:
+    out["other_home_outcome"] = "error"
+    out["other_home_error"] = type(exc).__name__
     out["read_the_other_conditions_install"] = False
 json.dump(out, sys.stdout)
 """
+
+
+# What a child of the consumer's own launch reports about ONE sentinel, in the same five
+# words. The old expression was `exit == 0 and "READ" in stdout`, whose negation called exit
+# 71, exit 1 and an empty file `separated` (SB-12, N3).
+CONSUMER_ISOLATION_SOURCE = r"""
+import json, sys
+path = sys.argv[1]
+out = {"path": path}
+try:
+    with open(path) as handle:
+        text = handle.read()
+    out["outcome"] = "read" if text.strip() else "empty"
+    out["bytes"] = len(text)
+except PermissionError as exc:
+    out["outcome"] = "refused"
+    out["error"] = type(exc).__name__
+except FileNotFoundError as exc:
+    out["outcome"] = "absent"
+    out["error"] = type(exc).__name__
+except Exception as exc:
+    out["outcome"] = "error"
+    out["error"] = type(exc).__name__
+json.dump(out, sys.stdout)
+"""
+
+
+def plant_read_sentinel(path, text=None):
+    """Plant a sentinel and CONFIRM it, from outside the wall, before anything reads it.
+
+    SB-12, N3: "confirmed existing and non-empty from OUTSIDE the wall beforehand". A refusal
+    is only evidence of a wall when there was something there to refuse.
+    """
+    write_text(path, text if text is not None else READ_BOUNDARY_SENTINEL)
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        return {"sentinel": path, "ok": False, "bytes": 0,
+                "why": "the sentinel could not be read back after planting it: %s" % exc}
+    return {"sentinel": path, "ok": bool(size), "bytes": size,
+            "why": "planted and confirmed non-empty from outside the wall"
+                   if size else "the planted sentinel is empty"}
+
+
+def _isolation_outcome(probe, planted):
+    """`separated` for ONE typed sentinel read, with the reason (SB-12, N3)."""
+    row = {"outcome": None, "separated": False, "exit": probe.get("exit"),
+           "planted": planted}
+    if not (planted or {}).get("ok"):
+        row["why"] = ("the sentinel was not confirmed present and non-empty outside the "
+                      "wall, so a refusal of it would measure nothing: %s"
+                      % (planted or {}).get("why"))
+        return row
+    try:
+        answer = json.loads(probe.get("stdout") or "")
+    except ValueError:
+        row["outcome"] = "unmeasured"
+        row["why"] = ("the probe child printed no JSON (exit %s): %s. A child that did not "
+                      "run is not a child that was refused."
+                      % (probe.get("exit"), (probe.get("stderr") or "")[-300:]))
+        return row
+    row["outcome"] = answer.get("outcome")
+    row["error"] = answer.get("error")
+    row["separated"] = row["outcome"] == "refused"
+    row["why"] = ("the read was refused with PermissionError against a planted, non-empty "
+                  "sentinel" if row["separated"] else
+                  "the read came back %r, which is not a permission refusal"
+                  % row["outcome"])
+    return row
 
 
 def _external_directory_rules(text):
@@ -14360,14 +14994,33 @@ def require_wall(campaign, setup, launcher, what, condition=None):
     through, so a sealed campaign cannot produce a trial that silently ran outside the wall.
     A fake launcher is exempt: there is no harness to confine.
     """
-    if not campaign_is_sealed(campaign) or launch_is_fake(setup, launcher):
+    if not campaign_is_sealed(campaign):
+        return {"required": False, "why": "not a sealed campaign"}
+    if launch_is_fake(setup, launcher, campaign):
+        # A genuine fake, which now means: a launcher that is not the staged one AND a
+        # campaign the fake-session mechanism marked synthetic. There is no harness to
+        # confine. SB-12, N2 narrowed what counts as a fake; the exemption itself is A4's.
         return {"required": False,
-                "why": "not a sealed campaign, or this launch runs a fake launcher"}
+                "why": "this launch runs a fake launcher on a campaign the fake-session "
+                       "mechanism marked synthetic"}
     if campaign.synthetic():
         raise Usage(
             "refusing to launch %s: the plan says `sealed: true` and the campaign is marked "
             "synthetic. A synthetic campaign bypasses the wall, so the two cannot both be "
             "true of one launch (A4)." % what)
+    # SB-12, N2: on a sealed REAL campaign the launcher must be the setup's own staged
+    # `launch.sh`. A stand-in here used to be waved through as "a fake launcher, nothing to
+    # confine", which is exactly the hole her probe walked: any other pathname disabled the
+    # wall. There is no fake launcher on a sealed real campaign - `--fake-launcher` marks the
+    # campaign synthetic, which the line above refuses - so an unrecognised launcher is an
+    # error with its own name, never a silent bypass.
+    if launcher and not runs_the_setups_own_launcher(setup, launcher):
+        raise Usage(
+            "refusing to launch %s: the plan says `sealed: true` and the launcher %s is not "
+            "this setup's own staged launch.sh (%s). A different pathname is not proof of a "
+            "fake launcher and never drops the wall; run a stand-in only on a campaign the "
+            "fake-session mechanism marked synthetic (SB-12, N2)."
+            % (what, launcher, own_launcher(setup) or "the stage has none"))
     if not os.path.isfile(SANDBOX_EXEC):
         raise Usage("refusing to launch %s: the plan says `sealed: true` and this machine has "
                     "no %s, so no launch of this campaign can run behind the wall (A4)."
@@ -14398,7 +15051,28 @@ def require_wall(campaign, setup, launcher, what, condition=None):
             "uv_offline": uv}
 
 
-def launch_is_fake(setup, launcher):
+def own_launcher(setup):
+    """The setup's own staged `launch.sh`, resolved, or None when the stage has none."""
+    try:
+        return os.path.realpath(setup.script("launch.sh"))
+    except Missing:
+        return None
+
+
+def runs_the_setups_own_launcher(setup, launcher):
+    """Is `launcher` the setup's own staged `launch.sh`, however it is spelled?
+
+    SB-12, N2. By REALPATH, so a symlink to it, a `./` spelling, or any other alias of the
+    same file is the same executable. The old test compared `os.path.abspath`, which made a
+    second name for one file look like a different program.
+    """
+    own = own_launcher(setup)
+    if not launcher or not own:
+        return False
+    return os.path.realpath(launcher) == own
+
+
+def launch_is_fake(setup, launcher, campaign=None):
     """Does THIS launch run a stand-in rather than the harness's own executable?
 
     E11-28 fix 6, NEW MAJOR D-F. Enforcement was keyed to `args.fake_launcher`, the flag of
@@ -14406,14 +15080,25 @@ def launch_is_fake(setup, launcher):
     real harness binary whatever the first half ran: Astra reached the process boundary with
     `enforced: false` and an argv naming the real `opencode run ... --session ...`. The
     question is not what a flag said; it is which executable THIS launch selects.
+
+    SB-12, N2, two changes and no more. (1) The comparison is by REALPATH: an alias of the
+    staged launcher is the staged launcher, and her probe's symlink was classified fake and
+    launched bare because `abspath` said two names were two programs. (2) A DIFFERENT
+    pathname is not proof of a fake either. A stand-in runs only where the test harness said
+    so through the one explicit fake-session mechanism this bench has - `--fake-launcher`,
+    which marks the campaign SYNTHETIC before any launch site asks this question. Where the
+    campaign is known and is not synthetic, an unrecognised launcher is not called fake: it
+    is walled like any other launch, and on a sealed campaign `require_wall` refuses it by
+    name. `campaign=None` is the caller that has no campaign to ask, and keeps the old
+    answer.
     """
     if not launcher:
         return False
-    try:
-        own = setup.script("launch.sh")
-    except Missing:
-        own = None
-    return os.path.abspath(launcher) != os.path.abspath(own or os.devnull)
+    if runs_the_setups_own_launcher(setup, launcher):
+        return False
+    if campaign is not None and not campaign.synthetic():
+        return False
+    return True
 
 
 def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch, what,
@@ -14434,7 +15119,7 @@ def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch
     # A4: a sealed campaign refuses a real launch it cannot wall, at the same one place.
     require_wall(campaign, setup, launcher, what, condition=condition)
     require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
-                             what, enforced=not launch_is_fake(setup, launcher),
+                             what, enforced=not launch_is_fake(setup, launcher, campaign),
                              trial=trial, attempt=attempt, half=half)
     return roots
 
@@ -14907,33 +15592,48 @@ def normalize_artifact_path(value, mapping, pair=None):
         if pair and pair.get("producer_dir"):
             candidates.append(os.path.join(pair["producer_dir"], raw))
         for entry in mapping or ():
-            if entry.get("producer_root"):
-                candidates.append(os.path.join(entry["producer_root"], raw))
+            for root in ([entry.get("producer_root")]
+                         + list(entry.get("producer_root_aliases") or [])):
+                if root:
+                    candidates.append(os.path.join(root, raw))
     for candidate in candidates:
         normalized = os.path.normpath(candidate)
         for entry in mapping or ():
             producer_root, pair_root = entry.get("producer_root"), entry.get("pair_root")
-            if producer_root and path_contains(producer_root, normalized):
-                relative = os.path.relpath(normalized, producer_root)
-                row["as_producer"] = normalized
+            # SB-12, N5(b): a root is matched under EVERY spelling the map holds for it -
+            # the one it resolves to now, and any alias `retained_pair_view` kept when the
+            # pair moved into the record. An alias is the same directory under its old name.
+            producer_forms = [producer_root] + list(entry.get("producer_root_aliases") or [])
+            pair_forms = [pair_root] + list(entry.get("pair_root_aliases") or [])
+            matched = next((root for root in producer_forms
+                            if root and path_contains(root, normalized)), None)
+            if matched:
+                relative = os.path.relpath(normalized, matched)
+                row["as_producer"] = (os.path.join(producer_root, relative)
+                                      if producer_root else normalized)
                 row["in_the_pair"] = (os.path.join(pair_root, relative) if pair_root
                                       else None)
                 row["root"] = entry["which"]
                 row["relative"] = relative
+                row["matched_root"] = matched
                 row["source"] = (os.path.join(entry["source_root"], relative)
                                  if entry.get("source_root") else None)
-                row["key"] = normalized
+                row["key"] = row["as_producer"]
                 return row
-            if pair_root and path_contains(pair_root, normalized):
-                relative = os.path.relpath(normalized, pair_root)
+            matched = next((root for root in pair_forms
+                            if root and path_contains(root, normalized)), None)
+            if matched:
+                relative = os.path.relpath(normalized, matched)
                 row["as_producer"] = (os.path.join(producer_root, relative) if producer_root
                                       else None)
-                row["in_the_pair"] = normalized
+                row["in_the_pair"] = (os.path.join(pair_root, relative) if pair_root
+                                      else normalized)
                 row["root"] = entry["which"]
                 row["relative"] = relative
+                row["matched_root"] = matched
                 row["source"] = (os.path.join(entry["source_root"], relative)
                                  if entry.get("source_root") else None)
-                row["key"] = row["as_producer"] or normalized
+                row["key"] = row["as_producer"] or row["in_the_pair"]
                 return row
     row["key"] = os.path.normpath(raw)
     row["why"] = ("the path is under neither the producer's recorded run directory or "
@@ -15124,6 +15824,15 @@ def producer_record_for(campaign, plan, producer, kind=None):
     candidates, refused = [], []
     # B3(1): the probe folders are skipped here too, but the JOURNAL rule is not applied: this
     # asks which record can be consumed, not which attempt a grade must cover.
+    #
+    # SB-12, N5(c). Usability used to be tested BEFORE the latest attempt was chosen, so a
+    # repetition whose latest attempt failed fell back to its own earlier attempt - a
+    # SUPERSEDED record, the one a rerun exists to replace. Her probe gave repetition 1 a
+    # complete attempt 0 and a failed attempt 1, and selection returned `x-r1#0`. The rule is
+    # per repetition: take its LATEST attempt, test THAT one, and move to the next repetition
+    # when it is unusable. An earlier attempt of the same repetition is never selected, and
+    # the refusal says which repetition was passed over and why.
+    latest = {}
     for tid, attempt, record in graded_attempts(campaign, require_journal=False):
         command_path = os.path.join(record, "command.json")
         if not os.path.isfile(command_path):
@@ -15133,9 +15842,16 @@ def producer_record_for(campaign, plan, producer, kind=None):
             continue
         if not _record_matches_kind(command, kind):
             continue
+        if tid not in latest or attempt > latest[tid][0]:
+            latest[tid] = (attempt, record, command)
+    for tid in sorted(latest):
+        attempt, record, command = latest[tid]
         usable, why = _producer_is_usable(record, command)
         if not usable:
-            refused.append({"trial": tid, "attempt": attempt, "why": why})
+            refused.append({"trial": tid, "attempt": attempt, "why": why,
+                            "rule": "the repetition's LATEST attempt is the one tested; an "
+                                    "earlier attempt of it is superseded and is never "
+                                    "selected (SB-12, N5(c))"})
             continue
         candidates.append((tid, attempt, record, command))
     if not candidates:
@@ -15705,8 +16421,25 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
             r["claim_recovered"] and r["disposition_recovered"] and r["reason_recovered"]
             for r in identity_rows)
     # Item 6(a): every reference, whole, and bound to the producer's own artifacts.
-    checks["evidence_references"] = bool(evidence_rows) and all(
-        r["references_the_record"] for r in evidence_rows)
+    #
+    # SB-12, N5(a). A producer that STOPPED carries no items, so it carries no evidence, so
+    # `bool(evidence_rows)` was False and this check was PERMANENTLY false for every stopped
+    # pair - a consumer that recovered the stop exactly as asked still failed its grade on
+    # references to evidence that never existed. E11-46 R3 already made that argument for
+    # `item_identity`; it was not carried through to here. The check is now vacuously true in
+    # that one case, and the note says so rather than leaving a reader to infer it.
+    check_notes = {}
+    if expected["producer_stopped"] and not evidence_rows \
+            and checks.get("producer_stop_recovered") is True:
+        checks["evidence_references"] = True
+        check_notes["evidence_references"] = (
+            "vacuously satisfied: the producer's run ended %r and carries no items and no "
+            "evidence, and the consumer recovered that stop. There are no references to "
+            "make, and a check with nothing to check is not a failure (SB-12, N5(a))."
+            % expected["producer_status"])
+    else:
+        checks["evidence_references"] = bool(evidence_rows) and all(
+            r["references_the_record"] for r in evidence_rows)
     # Item B: every artifact the producer's evidence names is IN the pair, and the file the
     # consumer's reference names is byte-identical to the producer's own. Vacuously true when
     # the producer's evidence names no artifact.
@@ -15859,6 +16592,7 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
         and recovered)
     grade.update({
         "checks": checks,
+        "check_notes": check_notes,
         "items": identity_rows,
         "evidence": evidence_rows,
         "evidence_artifacts": artifact_rows,
@@ -15883,18 +16617,37 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     return grade
 
 
-def consumer_records(campaign):
-    """Every recorded consumer trial of this campaign, with its attempt and record."""
+def consumer_records(campaign, skipped=None, require_journal=True):
+    """Every recorded consumer trial of this campaign, with its attempt and record.
+
+    SB-12, N6: "consumer enumeration included". Membership is by `(trial, attempt)` in the
+    campaign's own journal, exactly as `graded_attempts` requires it. A `consumer-*` folder
+    with a `command.json` and no journal row is named and skipped, never graded: it is a
+    directory nobody's campaign created, and a grade written from one lands in a denominator
+    it does not belong to.
+    """
     rows = []
+    skipped = [] if skipped is None else skipped
+    journalled = journalled_attempts(campaign)
+
+    def keep(tid, attempt, path):
+        if not require_journal or (tid, attempt) in journalled:
+            return True
+        skipped.append({"trial": tid, "attempt": attempt, "record": path,
+                        "why": "no journal row creates (%s, %d); an unjournalled consumer "
+                               "attempt is not graded (SB-12, N6)" % (tid, attempt)})
+        return False
+
     for path in sorted(glob.glob(os.path.join(campaign.trials, "consumer-*"))):
         if not os.path.isdir(path):
             continue
         tid = os.path.basename(path)
-        if os.path.isfile(os.path.join(path, "command.json")):
+        if os.path.isfile(os.path.join(path, "command.json")) and keep(tid, 0, path):
             rows.append((tid, 0, path))
         for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
             name = os.path.basename(attempt_path)
-            if name.isdigit() and os.path.isfile(os.path.join(attempt_path, "command.json")):
+            if name.isdigit() and os.path.isfile(os.path.join(attempt_path, "command.json")) \
+                    and keep(tid, int(name), attempt_path):
                 rows.append((tid, int(name), attempt_path))
     return rows
 
@@ -15931,8 +16684,29 @@ def retained_pair_view(record, pair):
         return value
 
     view = {key: rebase(value) for key, value in pair.items()}
+    # SB-12, N5(b). Rebasing moved every `pair_root` of the path map onto the record's
+    # retained copy, and the consumer's answer names the pair path AS IT RAN - which the
+    # rebased map no longer recognised, so a correct answer stopped matching the moment the
+    # scratch tree was cleared. The map keeps BOTH spellings: the retained root it resolves
+    # to now, and the original root the answer may name. Nothing is widened by it - an alias
+    # is the same directory under its old name, and a path under neither still keys as
+    # itself and still fails.
+    aliases = []
+    for before, after in zip(pair.get("path_map") or [], view.get("path_map") or []):
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            continue
+        for field in ("pair_root", "producer_root"):
+            was, now = before.get(field), after.get(field)
+            if was and now and was != now:
+                after.setdefault(field + "_aliases", [])
+                if was not in after[field + "_aliases"]:
+                    after[field + "_aliases"].append(was)
+                    aliases.append({"which": after.get("which"), "field": field,
+                                    "alias": was, "resolves_to": now})
     view["rebased_from"] = original
+    view["path_map_aliases"] = aliases
     return view, {"rebased": True, "from": original, "onto": retained,
+                  "aliases_kept": aliases,
                   "why": "the pair directory the consumer ran on is gone; the record's own "
                          "retained copy is read instead"}
 
@@ -16097,7 +16871,8 @@ def do_consumer_regrade(args):
     """
     campaign = Campaign(args.campaign)
     revision = getattr(args, "revision", None)
-    targets = consumer_records(campaign)
+    not_journalled = []
+    targets = consumer_records(campaign, skipped=not_journalled)
     if not getattr(args, "all", False):
         targets = [row for row in targets if row[0] == args.trial]
         if not targets:
@@ -16116,6 +16891,7 @@ def do_consumer_regrade(args):
     rows, errors = grade_consumer_records(campaign, targets, revision=revision)
     document = {"campaign": campaign.root, "revision": revision, "regraded": len(rows),
                 "grades": rows, "regrade_errors": errors,
+                "not_journalled": not_journalled,
                 "first_grades": revision is None,
                 "originals_untouched": ("consumer-grade.json is never written by --regrade "
                                         "once one exists")}
@@ -16170,7 +16946,8 @@ def do_consumer(args, record=None, attempt=0):
     close_key(campaign, "the %s launch" % args.trial)
     # Item 6(f): a sentinel OUTSIDE the pair, inside the campaign. Isolation is read access.
     sentinel = os.path.join(campaign.trials, CONSUMER_SENTINEL)
-    write_text(sentinel, READ_BOUNDARY_SENTINEL)
+    # SB-12, N3: planted and CONFIRMED from outside the wall before the probe reads it.
+    planted_sentinel = plant_read_sentinel(sentinel)
     consumer_scratch = trial_scratch(campaign, args.trial, attempt)
     consumer_writable = guarded_launch_roots(
         campaign, setup, "available", pair["workspace"], pair["run_dir"], consumer_scratch,
@@ -16190,9 +16967,7 @@ def do_consumer(args, record=None, attempt=0):
     # bare child and a harness. The profile the launch actually ran under is retained in the
     # record, so the probe runs behind exactly that one and nothing is inferred.
     wall_block = wall_record_of(step)
-    probe_argv = [sys.executable, "-c",
-                  "import sys;print('READ' if open(sys.argv[1]).read().strip() else 'EMPTY')",
-                  sentinel]
+    probe_argv = [sys.executable, "-c", CONSUMER_ISOLATION_SOURCE, sentinel]
     under_the_wall = bool(wall_block.get("sealed")) and \
         os.path.isfile(wall_block.get("profile") or "")
     if under_the_wall:
@@ -16202,11 +16977,19 @@ def do_consumer(args, record=None, attempt=0):
                                      scratch=trial_scratch(campaign, args.trial, attempt),
                                      require_binaries=False),
                     cwd=pair["workspace"], label="consumer isolation probe")
+    # SB-12, N3: a TYPED outcome, not the negation of "it read it". `not (exit == 0 and
+    # "READ" in stdout)` called exit 71 (no child ran), exit 1 (no such file) and a readable
+    # EMPTY file `separated`, which is the same error-path-reads-as-a-pass defect the
+    # read-boundary probe had.
+    isolation_outcome = _isolation_outcome(probe, planted_sentinel)
     isolation = {
         "sentinel": sentinel,
-        "child_read_it": probe["exit"] == 0 and "READ" in (probe["stdout"] or ""),
+        "planted": planted_sentinel,
+        "outcome": isolation_outcome["outcome"],
+        "why": isolation_outcome["why"],
+        "child_read_it": isolation_outcome["outcome"] == "read",
         "exit": probe["exit"],
-        "separated": not (probe["exit"] == 0 and "READ" in (probe["stdout"] or "")),
+        "separated": isolation_outcome["separated"],
         "under_the_wall": under_the_wall,
         "profile": wall_block.get("profile") if under_the_wall else None,
         "profile_sha256": wall_block.get("profile_sha256") if under_the_wall else None,

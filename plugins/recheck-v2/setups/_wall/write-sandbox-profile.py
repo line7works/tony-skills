@@ -36,10 +36,30 @@ Measured on this Mac (macOS 26.6.2, 2026-09-19) and the reason the shape is what
   is that allow, read and write; `read_files` is its read-only twin.
 - A second `sandbox-exec` inside the first fails (`sandbox_apply: Operation not permitted`,
   exit 71), so nothing under the wall may try to sandbox itself again.
+- `xcrun` writes its cache into the DARWIN USER TEMP DIR, which it reads from
+  `confstr(_CS_DARWIN_USER_TEMP_DIR)` and NOT from `TMPDIR`: setting TMPDIR to an allowed root
+  does not move it (measured 2026-09-19, both ways). Every `/usr/bin/<tool>` on this Mac is
+  Xcode's shim, so once SB-12 N2 closed `/private/var/folders` every `git` and every
+  `/usr/bin/python3` call printed two `error: couldn't create cache file ... xcrun_db-XXXXXXXX
+  (errno=Operation not permitted)` lines into the SESSION's own view. That is the same class of
+  noise the `~/.config/git` allow removed, and it gets the same answer: ONE narrow allow, by
+  regex, for the cache file alone. Measured under the emitted shape:
+    * `git --version`, `git -C <repo> status` and `python3 -c` all run with stderr EMPTY of
+      `Operation not permitted`, and a real `xcrun_db` appears in the temp dir.
+    * NO `file-read-metadata` rule is needed on the ancestors. A `(subpath)` deny does not stop
+      path resolution the way it stops a read, and the create succeeds with the whole chain
+      still denied - so none is emitted, and `file-read-data` on the `T/` directory itself
+      STAYS denied: a listing of `T/` and a listing of `C/` both raise PermissionError inside
+      the wall.
+    * `<T>/not-xcrun.txt` is refused for writing, `<C>/<anything>` is refused for reading, and
+      a listing of `<C>` comes back empty. Nothing else under the darwin per-user area opens.
+  The regex carries no folder name from this machine: the two segments between `folders/` and
+  `/T/` are `[^/]+`, so the rule is the SHAPE of the path and not this Mac's own.
 """
 import argparse
 import json
 import os
+import re
 import sys
 
 # The device nodes a plain process needs to run at all. Writes are denied everywhere by
@@ -52,11 +72,44 @@ DEFAULT_DEVICE_NODES = (
 )
 # The user-area roots the wall closes. Everything a launch may still touch is named back in
 # by the spec, and nothing else is reachable.
-BROAD_DENY = ("/Users", "/private/tmp", "/tmp", "/private/var/tmp", "/Volumes")
+#
+# SB-12, N2, second half. The reviewer evaluated the emitted rules and found
+# `/private/var/folders/zz/some-cache/key.json` READABLE: the darwin per-user cache and
+# temporary area, which is where a running harness puts session caches, security caches and
+# node scratch, was in no deny rule and `(allow default)` therefore gave it away. So was the
+# data volume's own spelling of the home directory, `/System/Volumes/Data/Users/...`, which
+# names the same bytes as `/Users/...` by another path. Both spellings of each are closed
+# here; a launch's OWN declared TMPDIR is named back by the spec's write roots, which are
+# emitted after this block, so last-match-wins still gives the launch its own scratch.
+#
+# NOT DONE in this round, and deliberately: the profile is not inverted to deny-default.
+# Nine live proofs rest on the current `(allow default)` shape and one fix round cannot
+# re-prove an inversion (SB-12 item 2, carried).
+BROAD_DENY = ("/Users", "/private/tmp", "/tmp", "/private/var/tmp", "/Volumes",
+              "/private/var/folders", "/var/folders",
+              "/System/Volumes/Data/Users", "/System/Volumes/Data/private/tmp",
+              "/System/Volumes/Data/tmp")
 
 # The two wildcard operation names, exactly as SBPL spells them. `file-write*` covers the
 # mode, owner, times and flags operations as well as the data ones, so a narrower list would
 # leave `chmod` and `utimes` allowed everywhere by `(allow default)`.
+# The one thing that reopens inside the darwin per-user area, by SHAPE and not by name: the
+# `xcrun` cache file, `xcrun_db` and its `xcrun_db-XXXXXXXX` temporaries. No `$` anchor, so
+# both the final name and the mkstemp form match; the two folder segments are `[^/]+`, so no
+# machine fact is baked in (Tony's ruling 2026-09-05). Emitted in BOTH spellings because a
+# profile matches the path the kernel resolves and a caller may name either.
+XCRUN_DB_PATTERNS = (r"^/private/var/folders/[^/]+/[^/]+/T/xcrun_db",
+                     r"^/var/folders/[^/]+/[^/]+/T/xcrun_db")
+# What `check_profile` evaluates the rule with. Placeholder segments: the check must prove the
+# SHAPE opens and its siblings do not, on any machine.
+XCRUN_DB_SAMPLE = "/private/var/folders/aa/bbbbbbbb/T/xcrun_db-A1b2C3d4"
+XCRUN_DB_SAMPLE_PLAIN = "/private/var/folders/aa/bbbbbbbb/T/xcrun_db"
+XCRUN_NEIGHBOURS = ("/private/var/folders/aa/bbbbbbbb/T/not-xcrun.txt",
+                    "/private/var/folders/aa/bbbbbbbb/T",
+                    "/private/var/folders/aa/bbbbbbbb/C/com.apple.something",
+                    "/private/var/folders/aa/bbbbbbbb/0/anything",
+                    "/var/folders/aa/bbbbbbbb/T/not-xcrun.txt")
+
 READ_OPS = ("file-read*",)
 WRITE_OPS = ("file-write*",)
 # The concrete operations the check evaluates the rules against.
@@ -143,6 +196,10 @@ def matches(filters, path):
             return True
         if kind == "literal" and path == value:
             return True
+        # SBPL's `(regex #"...")`, evaluated the way the kernel does: an UNANCHORED search
+        # over the whole path, with the pattern carrying its own `^` when it wants one.
+        if kind == "regex" and re.search(value, path):
+            return True
     return False
 
 
@@ -216,6 +273,16 @@ def build_rules(spec):
     rules.append(rule("deny", list(READ_OPS) + list(WRITE_OPS),
                       [("subpath", p) for p in BROAD_DENY],
                       "the user area, the temporary roots and removable volumes"))
+    # ONE narrow reopening inside the darwin per-user area, immediately after the deny that
+    # closed it - and BEFORE every refused root, so a spec that explicitly refuses a path
+    # still wins over it. `xcrun` does not honour TMPDIR, so without this every `git` and
+    # every `/usr/bin/python3` call inside the wall prints two `error:` lines into the
+    # session's own view (measured; see the module docstring). Nothing else opens: a sibling
+    # in the same `T/`, the `C/` cache and every other folder stay refused, and
+    # `check_profile` proves all of that by evaluation.
+    rules.append(rule("allow", list(READ_OPS) + list(WRITE_OPS),
+                      [("regex", pattern) for pattern in XCRUN_DB_PATTERNS],
+                      "the xcrun cache file alone, by shape: `<darwin temp>/xcrun_db*`"))
     if pre:
         rules.append(rule("deny", list(READ_OPS) + list(WRITE_OPS),
                           [("subpath", r["path"]) for r in pre],
@@ -292,6 +359,24 @@ def check_profile(built):
             if evaluate(rules, row["path"], operation) != "allow":
                 problems.append("%s is named as writable and is not (%s)"
                                 % (row["path"], operation))
+    # The xcrun cache allow, both halves, on PLACEHOLDER segments so the check proves the
+    # SHAPE and not this machine's own folder names: the cache file opens, and nothing beside
+    # it does. A spec that explicitly refuses one of these wins - the allow is emitted before
+    # every refusal - and the check then reports it here rather than letting it pass silently.
+    for sample in (XCRUN_DB_SAMPLE, XCRUN_DB_SAMPLE_PLAIN):
+        refused_by_the_spec = any(under(sample, row["path"])
+                                  for row in built["refused_roots"])
+        if refused_by_the_spec:
+            continue
+        for operation in CHECKED_READ + CHECKED_WRITE:
+            if evaluate(rules, sample, operation) != "allow":
+                problems.append("the xcrun cache file %s is not reachable (%s)"
+                                % (sample, operation))
+    for sample in XCRUN_NEIGHBOURS:
+        for operation in CHECKED_READ + CHECKED_WRITE:
+            if evaluate(rules, sample, operation) != "deny":
+                problems.append("%s sits beside the xcrun cache file and is NOT refused (%s)"
+                                % (sample, operation))
     return problems
 
 
@@ -310,8 +395,10 @@ def profile_text(spec, built):
         if not row["filters"]:
             lines.append("(%s %s)" % (row["effect"], ops))
             continue
-        filters = " ".join('(%s "%s")' % (kind, escape(value))
-                           for kind, value in row["filters"])
+        filters = " ".join(
+            ('(regex #"%s")' % escape(value)) if kind == "regex"
+            else ('(%s "%s")' % (kind, escape(value)))
+            for kind, value in row["filters"])
         lines.append("(%s %s %s)" % (row["effect"], ops, filters))
     lines.append(";; no network but the loopback proxy the runner started outside the wall")
     lines.append("(deny network*)")
@@ -343,12 +430,19 @@ def build(spec):
         "metadata_ancestors": built["metadata_ancestors"],
         "device_nodes": built["devices"],
         "broad_deny": list(BROAD_DENY),
+        "xcrun_db_allow": list(XCRUN_DB_PATTERNS),
+        "xcrun_db_allow_why": "xcrun does not honour TMPDIR and writes its cache into the "
+                              "darwin user temp dir; without this one narrow allow every "
+                              "`git` and `python3` call inside the wall prints two EPERM "
+                              "lines into the session's own view (SB-12, send-back)",
         "proxy_port": spec.get("proxy_port"),
         "proxy_host": spec.get("proxy_host") or "localhost",
         "rules": len(built["rules"]),
         "bytes": len(text.encode("utf-8")),
         "checked": "every refused root evaluates to deny and every allowed root to allow, "
-                   "by last-match-wins over the emitted rules",
+                   "by last-match-wins over the emitted rules; and the xcrun cache file "
+                   "evaluates to allow while its siblings, the C/ cache and the T/ directory "
+                   "itself evaluate to deny",
     }
 
 

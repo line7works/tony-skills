@@ -217,12 +217,19 @@ class JudgmentApartFromFormat(RunnerCase):
             "Still open: BLOCKER · a.py:1 · the title is not quoted · fix it\n")
         self.assertEqual(rows, [])
 
-    def test_the_first_line_for_a_location_wins(self):
+    def test_two_lines_for_one_location_are_a_conflict_not_first_wins(self):
+        """SB-12, N1: the first line NO LONGER wins. Two calls that disagree are no call.
+
+        This test asserted `first wins` until the fix round. The reviewer reversed the two
+        lines and the grade reversed with them, which is what a first-wins reduction does to
+        a contradiction. One row is still returned, and it now carries the conflict.
+        """
         text = ("BLOCKER · a.py:1 · (claim) · not fixed (reproduces) · executed\n"
                 "MAJOR · a.py:1 · (claim) · fixed · static\n")
         rows = runner._reply_item_lines(text)
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["disposition"], "not_fixed")
+        self.assertEqual(rows[0]["dispositions"], ["not_fixed", "fixed"])
+        self.assertIn("conflict", rows[0]["conflict"])
 
     # ---- the boundary, after batch A's wall --------------------------------------------
 

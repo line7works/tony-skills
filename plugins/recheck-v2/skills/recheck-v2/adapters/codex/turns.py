@@ -51,13 +51,61 @@ def wall_refuses(path):
     return False,'the probe read SUCCEEDED, so no wall refused it'
 
 
+def applied_sandbox():
+    """Does the OPERATING SYSTEM say a sandbox policy is applied to this process? (SB-12, N4)
+
+    `sandbox_check(pid, NULL, 0)` in libsystem answers for the process itself: it returns
+    non-zero only inside a seatbelt. Measured on this Mac (macOS 26.6.2, 2026-09-19): 0 in a
+    plain process, 1 inside `/usr/bin/sandbox-exec -f <profile>`; both measurements are made
+    again by `tests/test_sb_fix_round.py`, with no model.
+
+    Returns `(True, why)`, `(False, why)`, or `(None, why)` when ctypes or the symbol is
+    unavailable - and UNKNOWN IS NOT CONFINED: `wall_witness` fails on None, because a
+    witness that cannot be taken is not a witness that passed.
+    """
+    try:
+        import ctypes,ctypes.util
+    except ImportError as exc:return None,'ctypes is unavailable here: '+str(exc)
+    try:
+        library=ctypes.CDLL(ctypes.util.find_library('System') or '/usr/lib/libSystem.B.dylib')
+        check=library.sandbox_check
+    except (OSError,AttributeError) as exc:
+        return None,'sandbox_check is unavailable in libsystem here: '+str(exc)
+    check.restype=ctypes.c_int
+    check.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_uint64]
+    try:value=check(os.getpid(),None,0)
+    except Exception as exc:                                   # noqa: BLE001 - reported
+        return None,'sandbox_check could not be called: '+str(exc)
+    return bool(value),'sandbox_check(getpid(), NULL, 0) = '+str(value)
+
+
 def wall_witness():
-    """Both halves of SB-2: the launcher's declaration AND a read the wall actually refuses."""
+    """The THREE halves of SB-2 as SB-12 N4 leaves them.
+
+    (1) the launcher declares `RECHECK_HARNESS_SANDBOX=sandbox-exec`; (2) the OPERATING
+    SYSTEM reports a sandbox policy APPLIED to this process; (3) a read of the planted probe
+    is refused.
+
+    (2) is the new one, and it is what her probe took out of the old witness: an ordinary
+    file at mode 000 raises PermissionError in any process on this Mac, so a declaration plus
+    a chmod satisfied the wall test with no wall anywhere - and on that acceptance the
+    verifier may select `codex exec -s danger-full-access`. A file's permission bits are not
+    a confinement. The probe read STAYS: the applied policy says a seatbelt is on, the probe
+    read says it is the bench's seatbelt and that it closes what it must.
+    """
     if os.environ.get('RECHECK_HARNESS_SANDBOX')!=WALL_MARKER:
         return False,'RECHECK_HARNESS_SANDBOX does not declare '+WALL_MARKER
+    applied,how=applied_sandbox()
+    if applied is None:
+        return False,('RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' is declared and the applied '
+                      'sandbox policy could not be measured, so the witness fails: '+how)
+    if not applied:
+        return False,('RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' is declared but the OS reports '
+                      'NO sandbox policy applied to this process, so a refused read is a '
+                      'file mode and not a wall: '+how)
     refused,why=wall_refuses(os.environ.get('RECHECK_WALL_PROBE'))
     if not refused:return False,'RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' is declared but the wall does not refuse: '+why
-    return True,why
+    return True,'a sandbox policy is applied to this process ('+how+') and '+why
 
 
 # What `invocation.py` appends to `harness.sandbox` when a WRITABLE executor rollout was

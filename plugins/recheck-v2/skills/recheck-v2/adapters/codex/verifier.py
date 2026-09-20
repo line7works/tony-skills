@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from turns import WALL_MARKER, Missing, parser, read_records, run, wall_refuses
+from turns import WALL_MARKER, Missing, parser, read_records, run, wall_refuses, wall_witness
 
 
 def status(code, raw, timed_out=False):
@@ -78,6 +78,30 @@ def child_records(events, home):
     return records
 
 
+def confinement_gate():
+    """Refuse to launch unless THIS process is confined (E9-26(a), SB-2, SB-12 N4).
+
+    Lifted out of `main` so the gate can be exercised without starting anything: the tests
+    call it directly, and a test that has to spawn `codex exec` to find out whether the gate
+    holds is a test that defeats its own point.
+
+    The legacy branch is LEFT AS IT WAS. E9-26(a) accepts Codex's own `CODEX_SANDBOX=seatbelt`
+    marker, and under Codex's own seatbelt the applied-policy test would also pass - but that
+    could not be measured here without launching Codex, which this round may not do (SB-12
+    item 4: "if unsure, leave the legacy branch and say so"). It is said in the fix-round
+    report.
+    """
+    if os.environ.get('CODEX_SANDBOX')=='seatbelt':
+        return 'CODEX_SANDBOX=seatbelt, Codex\'s own marker (E9-26(a)); the applied-policy test is not applied to this branch (SB-12, item 4)'
+    accepted,why=wall_witness()
+    if not accepted:
+        raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a), or '
+                      'RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' with an APPLIED sandbox policy '
+                      'and a refused RECHECK_WALL_PROBE read (SB-2, SB-12 N4): '+why+
+                      '; nothing launched')
+    return why
+
+
 def main():
     p=parser('Launch one fresh codex exec with the brief on stdin under the executor sandbox (no second seatbelt, E9-21), no model/effort override. Timeout 900 seconds; never retries.')
     for arg in ['brief','workspace','scratch','raw']:p.add_argument('--'+arg,required=True)
@@ -97,15 +121,7 @@ def main():
     if not canned:
         home=os.environ.get('CODEX_HOME')
         if not home or not Path(home).is_dir():raise Missing('CODEX_HOME is not set or not a directory; inherited isolated child home required (E9-25); nothing launched')
-        if os.environ.get('CODEX_SANDBOX')!='seatbelt':
-            if os.environ.get('RECHECK_HARNESS_SANDBOX')!=WALL_MARKER:
-                raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a), or '
-                              'RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' with a refused '
-                              'RECHECK_WALL_PROBE read (SB-2); nothing launched')
-            refused,why=wall_refuses(os.environ.get('RECHECK_WALL_PROBE'))
-            if not refused:raise Missing('RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' is declared '
-                                         'but the wall does not refuse: '+why+
-                                         '; nothing launched')
+        confinement_gate()
     scratch.mkdir(parents=True,exist_ok=True);raw.parent.mkdir(parents=True,exist_ok=True)
     events=scratch/(a.call_id+'.events.jsonl');err=scratch/(a.call_id+'.stderr.log')
     if events.exists():raise ValueError('call capture already exists')

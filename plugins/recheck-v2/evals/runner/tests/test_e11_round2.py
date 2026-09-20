@@ -329,6 +329,12 @@ class R1CaptureAndSchedule(RunnerCase):
         runner.ensure_dir(record)
         runner.write_json(os.path.join(record, "command.json"), {"kind": "consumer"})
         runner.write_json(os.path.join(record, "consumer-grade.json"), {"ok": True})
+        # SB-12, N6: consumer enumeration now requires journal membership by
+        # `(trial, attempt)`, which `do_consumer` writes for every real attempt
+        # (runner.py, `campaign.journal_attempt(..., "consumer")`). A hand-placed record
+        # journals itself the same way, so this test still measures the regrade rule and not
+        # the new membership rule.
+        campaign.journal_attempt(tid, 0, record, "consumer")
         got = cli(["consumer", "--campaign", self.campaign, "--regrade", "--all"])
         self.assertEqual(got.returncode, 2, got.stdout[-400:])
         self.assertIn("--revision", got.stderr)
@@ -357,6 +363,7 @@ class R1CaptureAndSchedule(RunnerCase):
         runner.write_json(os.path.join(record, "command.json"),
                           {"kind": "consumer", "pair": pair, "producer": "claude-code",
                            "producer_trial": "p", "producer_record": producer})
+        campaign.journal_attempt(tid, 0, record, "consumer")      # SB-12, N6
         original = os.path.join(record, "consumer-grade.json")
         runner.write_json(original, {"ok": False, "why": ["the original"]})
         before = runner.read_text(original)

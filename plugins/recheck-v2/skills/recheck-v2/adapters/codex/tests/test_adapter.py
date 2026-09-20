@@ -188,33 +188,45 @@ class AdapterTests(unittest.TestCase):
 
             self.addCleanup(lambda: closed.exists() and closed.chmod(0o755))
 
-            def run(**extra):
+            # SB-12, N4: the witness also asks the OS whether a sandbox policy is APPLIED,
+            # so the accepted case is run under a REAL tiny seatbelt that refuses the probe.
+            # The mode-000 directory was the stand-in available when this was written; the
+            # child is now actually confined, which is what the witness claims to detect.
+            profile=t/'witness.sb'
+            profile.write_text('(version 1)\n(allow default)\n'
+                               '(deny file-read* file-write* (subpath "'
+                               +os.path.realpath(str(closed))+'"))\n')
+
+            def run(walled=False,**extra):
                 env=dict(os.environ,PATH=str(t),PYTHONDONTWRITEBYTECODE='1',CODEX_HOME=str(t))
                 for key in ['RECHECK_ADAPTER_CANNED','CODEX_SANDBOX','RECHECK_HARNESS_SANDBOX',
                             'RECHECK_WALL_PROBE']:
                     env.pop(key,None)
                 env.update(extra)
-                return subprocess.run([sys.executable,str(ROOT/'verifier.py'),'--brief',
-                                       str(t/'checklist.md'),'--workspace',str(t/'ws'),
-                                       '--scratch',str(t/'verifier'),'--raw',
-                                       str(t/'verifier/raw.md')],
-                                      env=env,capture_output=True,text=True)
+                argv=[sys.executable,str(ROOT/'verifier.py'),'--brief',
+                      str(t/'checklist.md'),'--workspace',str(t/'ws'),
+                      '--scratch',str(t/'verifier'),'--raw',str(t/'verifier/raw.md')]
+                if walled:
+                    argv=['/usr/bin/sandbox-exec','-f',str(profile)]+argv
+                return subprocess.run(argv,env=env,capture_output=True,text=True)
 
             # 1. the declaration with a probe the wall refuses: the launch is allowed to start
             #    (it then fails on this test's stub `codex`, which is not what is being tested)
-            c=run(RECHECK_HARNESS_SANDBOX='sandbox-exec',RECHECK_WALL_PROBE=str(probe))
+            c=run(walled=True,RECHECK_HARNESS_SANDBOX='sandbox-exec',
+                  RECHECK_WALL_PROBE=str(probe))
             self.assertTrue((t/'launched').exists(),'the accepted witness did not launch: '+c.stdout+c.stderr)
             (t/'launched').unlink()
             shutil.rmtree(str(t/'verifier'),ignore_errors=True)
 
             # 2. the same declaration with a probe that READS: refused, nothing launched
-            c=run(RECHECK_HARNESS_SANDBOX='sandbox-exec',RECHECK_WALL_PROBE=str(readable))
+            c=run(walled=True,RECHECK_HARNESS_SANDBOX='sandbox-exec',
+                  RECHECK_WALL_PROBE=str(readable))
             self.assertEqual(c.returncode,3,c.stderr)
             self.assertIn('the probe read SUCCEEDED',c.stdout)
             self.assertFalse((t/'launched').exists());self.assertFalse((t/'verifier').exists())
 
             # 3. the declaration with no probe named at all: refused
-            c=run(RECHECK_HARNESS_SANDBOX='sandbox-exec')
+            c=run(walled=True,RECHECK_HARNESS_SANDBOX='sandbox-exec')
             self.assertEqual(c.returncode,3,c.stderr)
             self.assertFalse((t/'launched').exists())
 

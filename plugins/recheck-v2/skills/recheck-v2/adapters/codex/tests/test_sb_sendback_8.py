@@ -104,13 +104,36 @@ class WalledRolloutCase(unittest.TestCase):
             environment['RECHECK_WALL_PROBE'] = str(probe)
         return environment
 
-    def call(self, helper, marker=None, probe=None):
-        return subprocess.run(
-            [sys.executable, str(self.helpers / helper), '--workspace', self.meta['cwd']],
-            cwd=self.home, env=self.env(marker, probe), capture_output=True, text=True)
+    SANDBOX_EXEC = '/usr/bin/sandbox-exec'
 
-    def both(self, marker=None, probe=None):
-        return [(helper, self.call(helper, marker, probe))
+    def seatbelt(self):
+        """A REAL tiny seatbelt that refuses the probe, written on first use.
+
+        SB-12, N4: the witness now also asks the OS whether a sandbox policy is APPLIED to
+        the process, so a mode-000 file alone is no longer a wall - which is the whole point
+        of that fix. These tests were written when the mode bits were the only stand-in
+        available; the child is now actually confined, so what they measure is the real
+        thing rather than a model of it. Its profile is `(allow default)` plus one deny, so
+        nothing else about the child changes.
+        """
+        profile = self.home / 'witness.sb'
+        if not profile.exists():
+            profile.write_text('(version 1)\n(allow default)\n'
+                               '(deny file-read* file-write* (subpath "%s"))\n'
+                               % os.path.realpath(str(self.closed)))
+        return str(profile)
+
+    def call(self, helper, marker=None, probe=None, walled=None):
+        argv = [sys.executable, str(self.helpers / helper), '--workspace', self.meta['cwd']]
+        walled = (marker == turns.WALL_MARKER and probe is not None
+                  and str(probe) == str(self.probe)) if walled is None else walled
+        if walled:
+            argv = [self.SANDBOX_EXEC, '-f', self.seatbelt()] + argv
+        return subprocess.run(argv, cwd=self.home, env=self.env(marker, probe),
+                              capture_output=True, text=True)
+
+    def both(self, marker=None, probe=None, walled=None):
+        return [(helper, self.call(helper, marker, probe, walled))
                 for helper in ['turns.py', 'invocation.py']]
 
 
@@ -248,7 +271,13 @@ class DangerFullAccessIsNotRefusedAsAValueTest(WalledRolloutCase):
 
 class TheWitnessHelperItselfTest(WalledRolloutCase):
 
-    def test_the_witness_needs_both_halves(self):
+    def test_the_witness_needs_ALL_THREE_halves(self):
+        """SB-12, N4: the applied OS policy joined the marker and the refused read.
+
+        This test ran IN PROCESS, and this process has no wall, so the last step asserts the
+        three halves with the applied-policy measurement supplied. That measurement is made
+        for real - a plain process and a `sandbox-exec` child - in `test_sb_fix_round.py`.
+        """
         os.environ.pop('RECHECK_HARNESS_SANDBOX', None)
         os.environ.pop('RECHECK_WALL_PROBE', None)
         self.assertIs(turns.wall_witness()[0], False)
@@ -258,9 +287,17 @@ class TheWitnessHelperItselfTest(WalledRolloutCase):
             os.environ['RECHECK_WALL_PROBE'] = str(self.readable)
             self.assertIs(turns.wall_witness()[0], False)
             os.environ['RECHECK_WALL_PROBE'] = str(self.probe)
-            held, why = turns.wall_witness()
+            # the marker and a refused read, with NO applied policy: no longer a witness
+            self.assertIs(turns.wall_witness()[0], False)
+            applied = turns.applied_sandbox
+            turns.applied_sandbox = lambda: (True, 'a seatbelt is applied')
+            try:
+                held, why = turns.wall_witness()
+            finally:
+                turns.applied_sandbox = applied
             self.assertIs(held, True)
             self.assertIn('refused', why)
+            self.assertIn('applied', why)
         finally:
             os.environ.pop('RECHECK_HARNESS_SANDBOX', None)
             os.environ.pop('RECHECK_WALL_PROBE', None)

@@ -782,9 +782,20 @@ class GitConfigReadsTest(RunnerCase):
         got = sandbox(profile, ["/usr/bin/git", "-C", repo, "status", "--porcelain"],
                       cwd=repo)
         self.assertEqual(got.returncode, 0, got.stderr)
-        self.assertNotIn("Operation not permitted", got.stderr)
+        # The declared reads: no refusal of `~/.gitconfig` or `~/.config/git`, which is what
+        # this test is for.
         self.assertNotIn("unable to access", got.stderr)
         self.assertIn("a.txt", got.stdout)
+        # SB-12, N2 second half and its SEND-BACK. `/private/var/folders` joined the broad
+        # deny, and `/usr/bin/git` is Xcode's shim: `xcrun` writes its `xcrun_db-*` cache
+        # into the DARWIN USER TEMP DIR, which it reads from
+        # `confstr(_CS_DARWIN_USER_TEMP_DIR)` and NOT from TMPDIR (measured with TMPDIR set
+        # to an allowed root: the message was unchanged). Two `error:` lines on every command
+        # land in the session's own view, so the writer now emits ONE narrow allow, by regex,
+        # for that cache file alone. The line must be GONE, and any `Operation not permitted`
+        # at all in this stderr is a defect.
+        self.assertNotIn("xcrun_db", got.stderr)
+        self.assertNotIn("Operation not permitted", got.stderr)
 
 
 @unittest.skipUnless(os.path.isfile(SANDBOX_EXEC), "this machine has no sandbox-exec")
