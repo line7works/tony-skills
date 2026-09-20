@@ -279,3 +279,21 @@ byte-identical, the regrade gate of B1, no file written outside the scratch. A g
   `e10/sealed-bench-clean-run-final-2`. The stage step now installs the routing home too, which the
   launch gate requires although this plan runs no routing trial, and the launch step reopens the key,
   which a preflight leaves closed.
+- SB-14 (2026-09-20 mid-morning, Tony's ruling): THE CLEAN RUN'S CLOSE. The run on
+  `e10/sealed-bench-clean-run-final-2` ended whole (120 of 120, no failed outcome, no lane stop, no
+  rerun) and was graded as revision `clean-1`. Both readings were given to Tony in chat; Astra's at high
+  is filed at the packet's `astra-outputs/bench/read/read.md`, the control room's beside it. ASTRA'S
+  FINDING, confirmed by the control room: every Codex launch may read its whole condition home, which
+  keeps every earlier session's rollout, so the separation this contract requires was not shut on the
+  Codex side; the preflight never tested that target; neither reader found any session that reached into
+  it. Astra therefore reads the Codex comparison and both hand-off directions as UNDECIDABLE as a sealed
+  answer; the Claude Code call result (23 of 24 with the skill, 16 of 24 without) stands in both
+  readings. TONY'S RULING, in his words: "I'd like to skip it and mark it as my decision." The Codex
+  lock fix and the 68-trial Codex-side rerun are NOT run. This is carried by ruling, not signed off: the
+  record stays "Codex uplift and hand-offs promising, not certified under the seal". The lock (a
+  per-trial session folder, and that folder added to the native preflight's targets) is owed before the
+  bench next runs a Codex trial, and rides with whichever later step first uses the bench. Tony also
+  ruled step 3 of the phase: GO ON TWO TOOLS ONLY (Claude Code and Codex) for now. The control room's
+  own correction is kept here: it first told Tony that thirteen of Claude Code's fourteen with-skill
+  boundary misses were a grader false detection alone; Astra's read showed each also carries a real
+  `/tmp` write attempt that the wall refused, and the grade files confirm her.
