@@ -257,3 +257,25 @@ byte-identical, the regrade gate of B1, no file written outside the scratch. A g
   reasons by its account; the key's bytes are unchanged and no fixture or key text is in the diff), and
   one early test started a real `codex exec` child that died at Codex's trusted-directory check with no
   model turn. No second verification follows, by Tony's ruling; Astra reads the clean run on her own.
+- SB-13 (2026-09-20 early morning, control room): what the live re-proof of SB-12 found, and the final
+  root's name. Four defects inside the fix round's own build could only be seen live, and each went back
+  to the same builder with the measured record: (1) the broad deny of the user temp folder made `git` and
+  `python3` print two `xcrun_db` error lines on every call, answered by one regex allow for that cache
+  file alone; (2) the Codex native check's verifier half ran OUTSIDE the wall, the adapter refused it and
+  the check failed closed, so it now runs through the same walled launch path as a trial; (3) `codex exec`
+  refuses a directory that is not a repository, so that route's workspace is prepared by the parent's own
+  function; (4) `probe-env`, which `campaign start` requires per setup and HOME, had never run walled and
+  its prompt sat outside every root, so a probe launch is now trial-shaped per setup and condition, and
+  the prompt is checked as a root for all ten launch kinds. The control room ran a quick live diagnostic
+  on the uncommitted tree before each gate, which is how (2) to (4) cost minutes and not gate cycles; the
+  evidence runs were repeated after each commit. One gate went red once (a race in a proxy TEST: the 200
+  and the echoed bytes coalesce in one read; the relay lost nothing) and was green on its rerun. DRESS
+  REHEARSAL: because every never-run-live path had broken on first contact, the control room ran a
+  14-trial campaign through the real `campaign start` (root `wall-dress-20260920T065913Z`): comparison,
+  both continuation kinds and the hand-off trials on both setups, 14 of 14 complete, then the whole
+  grading path and the reading tables under revision `dress-1`. It is a rehearsal and is not read for
+  either question. THE FINAL ROOT: `e10/sealed-bench-clean-run-final` was staged at a367471 and never
+  launched (defect 4); nothing under `e10/` is deleted, so the clean run uses
+  `e10/sealed-bench-clean-run-final-2`. The stage step now installs the routing home too, which the
+  launch gate requires although this plan runs no routing trial, and the launch step reopens the key,
+  which a preflight leaves closed.
