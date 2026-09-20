@@ -208,3 +208,23 @@ byte-identical, the regrade gate of B1, no file written outside the scratch. A g
   `judgment_ok`, where a session that answered only in its reply is `not_measurable` on evidence. Both
   are printed per setup and condition, with the count of reply-sourced and unextracted items beside them.
 
+- SB-2a (2026-09-19 evening, control room, on Tony's behalf, open to strike): three consequences of SB-2
+  that the first walled Codex sessions measured. SB-12 stays reserved for the fix round after Astra's
+  verification. (1) Send-back 7, bb015d4: the runner follows a plain `exec <absolute path> "$@"` shell
+  wrapper to the real install and roots a node package at its package root; the first walled Codex
+  launch had exited 126 because the wall refused the Codex program itself. Proved on
+  `wall-proof-codex-20260920T005305Z`: native check separated true, six of six OS refusals, three by the
+  session's shell and three by its sub-agent. (2) Send-back 8: Codex keeps ONE credential store in the
+  with-skill home and links the no-skill home to it, so the no-skill wall refused the credential and the
+  session went out unsigned (401). The profile re-allows that one file, read and write, in both
+  conditions alike; everything else in the other condition's home stays refused. (3) Send-back 8: the
+  Codex adapter's E9-37 check requires the executor's rollout to be unwritable by the session. With
+  Codex's own sandbox off inside one seatbelt that can never hold, so every walled with-skill Codex trial
+  stopped at `verifier_unavailable`. The adapter now accepts a writable rollout only on the same witness
+  batch A gave the verifier (the wall marker AND a refused probe read), and declares it in the record's
+  sandbox string. WHAT IS GIVEN UP: behind the wall a Codex session could alter its own rollout, which
+  the adapter reads the model in force from. The runner's copy is taken after the session, so it does not
+  restore that guarantee. Carried to Astra by name. Network, observed and recorded in
+  `setups/codex/wall-needs.json`: `chatgpt.com` sufficient; `ab.chatgpt.com` allowed through the
+  subdomain rule (the vendor's flag service, as Claude Code's list allows its equivalent); an OpenAI
+  content host, `github.com`, `api.github.com` and `files.openai.com` refused, and the sessions answered.
