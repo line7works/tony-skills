@@ -1,7 +1,10 @@
 """The CLI's shape: help, usage, the missing dependency, JSON-only stdout, component identity.
 
-The A7a interface tests for every command are slice 3's; these are the ones slice 1's own
-commands need to keep honest while they are the only ones on the CLI.
+The A7a interface tests for every command are slice 3's; these are the ones the commands on the
+CLI need to keep honest meanwhile. Slice 2 added `state`, `render`, `import-legacy`, `mirrors`
+and `survey` to `COMMANDS`; the slice 1 test that held those five absent was replaced by
+`test_the_slice_2_commands_are_here_and_are_not_stubs`, which drives each of them against a real
+fixture and requires a real answer.
 """
 import json
 import os
@@ -10,8 +13,9 @@ import unittest
 import testlib
 
 DOC = testlib.DOC
-COMMANDS = ("verify", "events", "identity", "append", "component-identity")
-NOT_YET = ("state", "render", "import-legacy", "mirrors", "survey")
+COMMANDS = ("verify", "events", "identity", "append", "component-identity",
+            "state", "render", "import-legacy", "mirrors", "survey")
+SLICE_2 = ("state", "render", "import-legacy", "mirrors", "survey")
 
 
 class Help(unittest.TestCase):
@@ -30,9 +34,45 @@ class Help(unittest.TestCase):
         code, out, _ = testlib.run_cli(["--help"])
         self.assertIn("uv run records.py append", out, "the top-level help carries the examples")
 
-    def test_slice_2_and_3_commands_are_absent_rather_than_stubbed(self):
-        for name in NOT_YET:
-            code, out, err = testlib.run_cli([name, "--workspace", "."])
+    def test_the_slice_2_commands_are_here_and_are_not_stubs(self):
+        """Each answers from a real fixture workspace, with the fields section 12.2 names."""
+        scratch = testlib.make_scratch("records-cli-slice2-")
+        try:
+            workspace = testlib.fixture_workspace(scratch)
+            doc = "docs/plans/2026-05-12-history.md"
+            code, imported, err = testlib.run_json(
+                ["import-legacy", "--workspace", workspace, "--doc", doc])
+            self.assertEqual(code, 0, err)
+            self.assertGreater(imported["imported"], 0)
+            calls = {
+                "state": ["state", "--workspace", workspace, "--doc", doc],
+                "render": ["render", "--workspace", workspace, "--doc", doc,
+                           "--run-id", imported["run_id"]],
+                "mirrors": ["mirrors", "--workspace", workspace, "--doc", doc],
+                "survey": ["survey", "--workspace", workspace],
+            }
+            for name, args in sorted(calls.items()):
+                code, body, err = testlib.run_json(args)
+                self.assertEqual(code, 0, "%s: %s" % (name, err))
+                self.assertTrue(body["ok"], name)
+                self.assertEqual(body["interface_version"], 1, name)
+                self.assertIn("component_version", body, name)
+            self.assertGreater(len(testlib.run_json(calls["state"])[1]["findings"]), 0)
+            self.assertTrue(testlib.run_json(calls["render"])[1]["text"])
+            self.assertTrue(testlib.run_json(calls["survey"])[1]["documents"])
+        finally:
+            testlib.rmtree(scratch)
+
+    def test_every_command_names_its_side_effects_and_its_exit_codes(self):
+        for name in SLICE_2:
+            code, out, err = testlib.run_cli([name, "--help"])
+            self.assertEqual(code, 0, "%s: %s" % (name, err))
+            self.assertIn("side effects:", out, name)
+            self.assertIn("exit:", out, name)
+
+    def test_a_slice_2_command_without_its_arguments_is_a_usage_error(self):
+        for name in SLICE_2:
+            code, out, err = testlib.run_cli([name])
             self.assertEqual(code, 2, name)
             self.assertEqual(out, "", name)
 

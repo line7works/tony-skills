@@ -1,0 +1,13 @@
+{
+  "document": {
+    "answered_by": "the owner",
+    "answered_on": "2026-05-21",
+    "answers": [
+      {
+        "finding": "f1:0123456789abcdef0123",
+        "line": 16
+      }
+    ]
+  },
+  "reason": "every answer records the line's raw text, which is what makes section 11.5's changed-line rule checkable"
+}

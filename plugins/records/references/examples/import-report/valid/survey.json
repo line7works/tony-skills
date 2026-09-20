@@ -1,0 +1,695 @@
+{
+  "component_version": "0.1.0",
+  "counts": {
+    "blocks": 53,
+    "documents": 25,
+    "documents_that_would_stop": 4,
+    "ledger_documents": 23,
+    "mirrors": 2,
+    "records": 78,
+    "stops": 4
+  },
+  "documents": [
+    {
+      "ambiguous": 1,
+      "blocks": 1,
+      "doc": "docs/plans/2026-05-01-d1-one-identity.md",
+      "doc_sha256": "b7104f63075833ee0f6966e259f1fdd455ca14e950bf31c44bc5db67105c324e",
+      "event_counts": {
+        "card_observed": 1,
+        "finding_raised": 1
+      },
+      "events": 2,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 15,
+      "records": {
+        "finding": 2
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": [
+        {
+          "candidates": [
+            {
+              "finding": "f1:54de8f91cac9a78459c9",
+              "line": 13,
+              "slice": "A"
+            }
+          ],
+          "line": 14,
+          "raw": "- MAJOR · src/cold.py:5 · the store temperature is never logged · a second reviewer found the same thing · Slice A review",
+          "reason": "this line and line 13 compute the same finding id f1:54de8f91cac9a78459c9 (section 7: two raises in one document)"
+        }
+      ]
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-f1-fused-disposition.md",
+      "doc_sha256": "5aedc1caea28d93a6a2c7f46ca3eff1b95f8cbd06366c475eb11e5fc656b283c",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 3,
+        "finding_raised": 3
+      },
+      "events": 7,
+      "join_basis": {
+        "exact": 3,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 20,
+      "records": {
+        "finding": 3,
+        "recheck": 3
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-f2-field-counts.md",
+      "doc_sha256": "6b751d7ad6d164009b1dfa4798b5a9c410c1ff434becd21320c33be2311c3aba",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 3
+      },
+      "events": 5,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 19,
+      "records": {
+        "finding": 3,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-f3-defect-forms.md",
+      "doc_sha256": "9b14dd2f978e9bdf93bad8bb827ca5b09393428defa2217af81b496b262ab72a",
+      "event_counts": {
+        "card_observed": 1,
+        "defect_raised": 3,
+        "disposition": 1,
+        "finding_raised": 1
+      },
+      "events": 6,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 19,
+      "records": {
+        "defect": 3,
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-f4-other-recheck-patterns.md",
+      "doc_sha256": "9e8ca6133875dcc85a8eab498230c1e34a54a5159c3245e4c0a816416a7cb7a6",
+      "event_counts": {
+        "card_observed": 1,
+        "finding_raised": 1,
+        "legacy_unparsed": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 18,
+      "records": {
+        "finding": 1,
+        "unparsed": 2
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-l1-backticks.md",
+      "doc_sha256": "4d39337657dbd1ae1d7404ea555665b9354344d2fd2e6b26353d2349b5ba61ec",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-l2-ranges.md",
+      "doc_sha256": "5d949fc6fe42224b9eaee391b1eacfc9e2f8e7864bd4e86d75379613c6158760",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-l3-no-line-number.md",
+      "doc_sha256": "e420cba00bb0dea6bbcf5ace7f92baabf6aa0b9af007a07634a23c6e495d6054",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-l4-several-locations.md",
+      "doc_sha256": "8324bbe874c63b30c0a5fe9837cd43d9ea386c2c1862628b47a45467eb34f8c9",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-l5-other-forms.md",
+      "doc_sha256": "7e19b49e0692b611720c5dbe244eda99ae1f46ec1424ed51b0a301f007bbf9ea",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-01-l6-glued-tag.md",
+      "doc_sha256": "a5defec8a13f569d86c08f4c54fb62ba61c4c9bd2d027714ce5b2fe01a7864c5",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 2,
+        "finding_raised": 2
+      },
+      "events": 5,
+      "join_basis": {
+        "exact": 2,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 18,
+      "records": {
+        "finding": 2,
+        "recheck": 2
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 1,
+      "doc": "docs/plans/2026-05-01-s1-not-a-severity.md",
+      "doc_sha256": "6b33128b9ae59ff0d9633f23e56f81449fd6b528a6ca2315ec46fee00702bb71",
+      "event_counts": {
+        "card_observed": 1,
+        "finding_raised": 1,
+        "legacy_unparsed": 3
+      },
+      "events": 5,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 16,
+      "records": {
+        "finding": 1,
+        "unparsed": 3
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 1,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-03-join-ambiguous-nothing.md",
+      "doc_sha256": "9df05886c3bfb8e535c8fa05195a96461a0f0bf506c64fc29525296abb57ac34",
+      "event_counts": {
+        "card_observed": 1,
+        "finding_raised": 1
+      },
+      "events": 2,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 15,
+      "records": {
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": [
+        {
+          "candidates": [],
+          "line": 14,
+          "raw": "- MINOR · src/floor.py:90 · (the floor mat curls at the edge) · fixed · executed: the mat is taped down",
+          "reason": "no finding of this document holds the location 'src/floor.py:90'"
+        }
+      ]
+    },
+    {
+      "ambiguous": 1,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-03-join-ambiguous-other-slice.md",
+      "doc_sha256": "33190346e940fbc15b9281aea551887a0e7ef5cc603b707379a1f71b57961193",
+      "event_counts": {
+        "card_observed": 2,
+        "finding_raised": 1
+      },
+      "events": 3,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 19,
+      "records": {
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 2,
+      "stops": [
+        {
+          "candidates": [
+            {
+              "finding": "f1:5d6476162649aa226502",
+              "line": 15,
+              "slice": "A"
+            }
+          ],
+          "line": 18,
+          "raw": "- MAJOR · src/gate.py:8 · (the gate does not wait for the yard to clear) · fixed · executed: the gate waits",
+          "reason": "one finding holds the location 'src/gate.py:8', its claim is worded differently, and its slice 'A' is not one of the heading's (B)"
+        }
+      ]
+    },
+    {
+      "ambiguous": 1,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-03-join-ambiguous-shared.md",
+      "doc_sha256": "300d7af743af9ba90828a644fc4d9b512b2d8a0d1b32d0f8789b907c91eb6941",
+      "event_counts": {
+        "card_observed": 1,
+        "finding_raised": 2
+      },
+      "events": 3,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": [
+        {
+          "candidates": [
+            {
+              "finding": "f1:57e93ec126b994f73888",
+              "line": 12,
+              "slice": "A"
+            },
+            {
+              "finding": "f1:5586405b2bbe49fecba3",
+              "line": 13,
+              "slice": "A"
+            }
+          ],
+          "line": 16,
+          "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite",
+          "reason": "2 findings of this document hold the location 'src/seal.py:30' and none matches the claim"
+        }
+      ]
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-03-join-exact.md",
+      "doc_sha256": "0b2d19d1833039b5cfd01d8f93878b951b7015cced5c59923572f03cfccb1f16",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2
+      },
+      "events": 4,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 2,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-03-join-location-only.md",
+      "doc_sha256": "2b13396e7201c609b97f3fbf0455df4e64ae8093d99cc2bd58a1c8ed8902212a",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 1
+      },
+      "events": 3,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 1,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 17,
+      "records": {
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-03-join-no-claim.md",
+      "doc_sha256": "3adbcdfb4e3563a11bcbe98dbe8918b1861091a169dc2facf85629ca41205d2c",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 1
+      },
+      "events": 3,
+      "join_basis": {
+        "exact": 0,
+        "location_only": 0,
+        "location_only_no_claim": 1,
+        "resolved": 0
+      },
+      "lines": 16,
+      "records": {
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 3,
+      "doc": "docs/plans/2026-05-05-grants.md",
+      "doc_sha256": "c43ae7331fdd461a80d642c7620f2f55955cdf603cd4d4d14ac69af09e091758",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 2,
+        "reopened": 1,
+        "waived": 1
+      },
+      "events": 6,
+      "join_basis": {
+        "exact": 2,
+        "location_only": 1,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 23,
+      "records": {
+        "finding": 2,
+        "recheck": 1,
+        "reopening": 1,
+        "waiver": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 4,
+      "doc": "docs/plans/2026-05-08-cards.md",
+      "doc_sha256": "9889c6ca849f9e574231a33dfc6cd7865b1f5b38fc3739aca03d2b8f53ed03a4",
+      "event_counts": {
+        "card_observed": 3,
+        "disposition": 1,
+        "finding_raised": 3
+      },
+      "events": 7,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 29,
+      "records": {
+        "finding": 3,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 3,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/plans/2026-05-12-history.md",
+      "doc_sha256": "b5895f4d0232f8189783c81e856c17029e74fdecf1b49afe5505821c12cd0f09",
+      "event_counts": {
+        "card_observed": 1,
+        "disposition": 1,
+        "finding_raised": 1
+      },
+      "events": 3,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 16,
+      "records": {
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 1,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 5,
+      "doc": "docs/plans/2026-05-14-mirrors.md",
+      "doc_sha256": "e603eb999db03eb387bf9431645de095e668c1c345eb4d50e5b380e263787e7c",
+      "event_counts": {
+        "card_observed": 3,
+        "disposition": 2,
+        "finding_raised": 3
+      },
+      "events": 8,
+      "join_basis": {
+        "exact": 2,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 33,
+      "records": {
+        "finding": 3,
+        "recheck": 2
+      },
+      "role": "ledger",
+      "slices": 3,
+      "stops": []
+    },
+    {
+      "ambiguous": 0,
+      "blocks": 2,
+      "doc": "docs/punch-list.md",
+      "doc_sha256": "12b27d19f2cbf21662aa9438a86bb1975270de72b5c45c8384de7c314d8b514a",
+      "event_counts": {
+        "disposition": 1,
+        "finding_raised": 1
+      },
+      "events": 2,
+      "join_basis": {
+        "exact": 1,
+        "location_only": 0,
+        "location_only_no_claim": 0,
+        "resolved": 0
+      },
+      "lines": 11,
+      "records": {
+        "finding": 1,
+        "recheck": 1
+      },
+      "role": "ledger",
+      "slices": 0,
+      "stops": []
+    },
+    {
+      "ambiguous": null,
+      "blocks": 1,
+      "doc": "docs/reviews/2026-05-15-signoff-mirrors-a.md",
+      "doc_sha256": "f826d22246c36fa93fdd1f6e701bcfae74e2722feeb1b8c4e23df20bda665f82",
+      "join_basis": {},
+      "lines": 10,
+      "records": {
+        "recheck": 1
+      },
+      "role": "mirror",
+      "slices": 0,
+      "stops": []
+    },
+    {
+      "ambiguous": null,
+      "blocks": 2,
+      "doc": "docs/reviews/2026-05-15-signoff-mirrors-b.md",
+      "doc_sha256": "a3a242693b9eb33ccb2bbc553500a418976475e70da3ad6ecda078bf8b1b222d",
+      "join_basis": {},
+      "lines": 13,
+      "records": {
+        "recheck": 2
+      },
+      "role": "mirror",
+      "slices": 0,
+      "stops": []
+    }
+  ],
+  "interface_version": 1,
+  "ok": true,
+  "report": "survey",
+  "workspace": "/workspace"
+}

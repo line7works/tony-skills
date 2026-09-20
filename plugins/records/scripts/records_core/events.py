@@ -14,9 +14,8 @@ nothing at all: the batch is assembled and checked whole before the first byte i
 (section 10, "batches are atomic").
 
 Section 8.3's third condition needs to know whether a finding is open. `finding_status` answers
-that from the log alone with section 9.2's deciding-event rule and nothing else: it is the
-smallest honest piece slice 1 needs, and slice 2's `state.py` takes it over together with the
-rest of derived state (per-slice cards, `cleared_unbound`, `join_basis`, history addresses).
+that from the log alone with section 9.2's deciding-event rule; since slice 2 the rule itself
+lives in `state.py`, which owns the whole of section 9, and this module calls it.
 """
 import errno
 import json
@@ -161,24 +160,12 @@ def raised_ids(events):
 def finding_status(events, finding):
     """`open` | `fixed` | `waived` for one finding, or None when the log never raised it.
 
-    Section 9.2's rule and nothing more: the deciding event is the last event in seq order that
-    names the finding among `disposition`, `waived`, `reopened`; none means open. Slice 2's
-    `state.py` replaces this with the full derived-state object.
+    Section 9.2's deciding-event rule, owned by `state.py` since slice 2. The import is local
+    because `state` imports this module for section 6.1's addresses; this is the only direction
+    that would otherwise be a cycle.
     """
-    status = None
-    for event in events:
-        if event.get("finding") != finding:
-            continue
-        kind = event.get("kind")
-        if kind in RAISE_KINDS:
-            status = "open"
-        elif kind == "disposition":
-            status = "fixed" if event.get("disposition") == "fixed" else "open"
-        elif kind == "waived":
-            status = "waived"
-        elif kind == "reopened":
-            status = "open"
-    return status
+    from . import state as state_mod
+    return state_mod.finding_status(events, finding)
 
 
 # ---- the lock (section 10) --------------------------------------------------------------------

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/records/state.schema.json",
+  "title": "records state response",
+  "description": "What `records.py state --workspace W --doc D [--at-source F] [--slice S]` prints on stdout (records E12 contract sections 9 and 12.2). State is a pure function of the log's bytes (9.1): the same log gives the same object on any machine, and nothing here reads the workspace, the ledger document, or the clock. The response carries the envelope every command carries (interface_version, component_version, ok) and, because a log is involved, log, head and events.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["interface_version", "component_version", "ok", "log", "head", "events", "exists",
+               "spec", "findings", "slices", "open", "counts", "at_source", "filters"],
+  "properties": {
+    "interface_version": {"type": "integer", "minimum": 1},
+    "component_version": {"type": "string", "minLength": 1},
+    "ok": {"const": true},
+    "log": {"type": "string", "minLength": 1, "description": "the log's workspace-relative path (section 6.1)"},
+    "head": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "the hash of the log's last line; 64 zeros for a log that does not exist"},
+    "events": {"type": "integer", "minimum": 0},
+    "exists": {"type": "boolean"},
+    "spec": {"$ref": "#/$defs/spec"},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "slices": {"type": "array", "items": {"$ref": "#/$defs/slice"}},
+    "open": {"$ref": "#/$defs/severity_counts", "description": "open findings by severity across the findings returned"},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["findings", "open", "fixed", "waived", "cleared_unbound"],
+      "properties": {
+        "findings": {"type": "integer", "minimum": 0},
+        "open": {"type": "integer", "minimum": 0},
+        "fixed": {"type": "integer", "minimum": 0},
+        "waived": {"type": "integer", "minimum": 0},
+        "cleared_unbound": {"type": "integer", "minimum": 0}
+      }
+    },
+    "at_source": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["commit"],
+         "properties": {"commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+        {"type": "null"}
+      ],
+      "description": "the commit --at-source named (section 8.4); null when the flag was not given"
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slice"],
+      "properties": {"slice": {"type": ["string", "null"]}}
+    }
+  },
+  "$defs": {
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doc", "slice"],
+      "properties": {
+        "doc": {"type": "string", "minLength": 1},
+        "slice": {"type": ["string", "null"]}
+      },
+      "description": "section 6.1's specification address; the specification is never copied into the log"
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["log", "seq"],
+      "properties": {
+        "log": {"type": "string", "minLength": 1},
+        "seq": {"type": "integer", "minimum": 0}
+      },
+      "description": "section 6.1's history address: one event"
+    },
+    "severity_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["BLOCKER", "MAJOR", "MINOR"],
+      "properties": {
+        "BLOCKER": {"type": "integer", "minimum": 0},
+        "MAJOR": {"type": "integer", "minimum": 0},
+        "MINOR": {"type": "integer", "minimum": 0}
+      }
+    },
+    "card_value": {
+      "enum": ["not started", "built", "rejected", "signed off with conditions", "signed off", "none"]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "slice", "severity", "location", "claim", "scenario", "status",
+                   "cleared_unbound", "join_basis", "raised", "decided", "events",
+                   "raised_by", "caused_by"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"},
+        "slice": {"type": ["string", "null"]},
+        "severity": {"enum": ["BLOCKER", "MAJOR", "MINOR"]},
+        "location": {"type": "object", "description": "the location object the raising event carried (section 6.2)"},
+        "claim": {"type": ["string", "null"]},
+        "scenario": {"type": ["string", "null"]},
+        "raised_by": {"type": ["string", "null"]},
+        "caused_by": {"type": ["string", "null"], "description": "defect_raised: the finding whose fix introduced this one"},
+        "status": {"enum": ["open", "fixed", "waived"]},
+        "cleared_unbound": {"type": "boolean", "description": "true when the deciding clear carries known: false (owner ruling O4)"},
+        "join_basis": {
+          "oneOf": [{"enum": ["exact", "location_only_no_claim", "location_only"]}, {"type": "null"}],
+          "description": "the deciding event's join basis (section 9.2); null on a native decision or one a person resolved"
+        },
+        "raised": {"$ref": "#/$defs/history"},
+        "decided": {"oneOf": [{"$ref": "#/$defs/history"}, {"type": "null"}]},
+        "events": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1,
+                   "description": "every seq that names this finding"},
+        "cleared_at_this_source": {
+          "type": "boolean",
+          "description": "section 8.4; present only with --at-source. True only when the clear's verified_source commit equals the given commit and the clear was bound"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["status"], "properties": {"status": {"const": "open"}}},
+          "then": {"properties": {"cleared_unbound": {"const": false}}}
+        }
+      ]
+    },
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "open", "open_total", "card_derived", "card_observed",
+                   "card_observed_text", "card_drift"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "open": {"$ref": "#/$defs/severity_counts"},
+        "open_total": {"type": "integer", "minimum": 0},
+        "card_derived": {
+          "oneOf": [{"$ref": "#/$defs/card_value"}, {"type": "null"}],
+          "description": "Appendix A's mapping over what is still open; a slice last observed or set at `built` keeps `built`; null for docs/punch-list.md, which has no card"
+        },
+        "card_observed": {
+          "oneOf": [{"$ref": "#/$defs/card_value"}, {"type": "null"}],
+          "description": "the last card_observed or card_set value; null when no event named one"
+        },
+        "card_observed_text": {
+          "type": ["string", "null"],
+          "description": "the Status: text exactly as written, which is `none` as a card when it is not one of the six values (section 9.3)"
+        },
+        "card_drift": {"type": "boolean", "description": "true when both cards exist and differ; E12 reports drift and never corrects a card"}
+      }
+    }
+  }
+}

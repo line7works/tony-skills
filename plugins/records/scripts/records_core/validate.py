@@ -14,10 +14,17 @@ if the import had failed.
 Draft 2020-12 schema cannot make on its own, both of them section 6 rules - a native event's `at`
 must be a real calendar instant (the `date-time` format goes unchecked without
 `rfc3339-validator`, so the date part is parsed here), and a claim, scenario, `how`, or `words`
-field must be a single line with no ` · ` in it (Appendix A's single-line fields).
+field must be a single line with no ` · ` in it (Appendix A's single-line fields), with the one
+exception `SEPARATOR_KEPT_ON_LEGACY` names and explains.
 
 `known_version` is the E12-7 gate: a reader refuses an event whose `v` it does not know (exit 4,
 naming the line) instead of skipping it.
+
+Slice 2 adds the other three schemas of section 1 (`state`, `import_report`, `resolutions`) to
+the same loader; `validate_document(key, doc, schemas)` checks any of them and returns the same
+`[{"path", "message"}]` shape. The resolutions file is the one of the three that is an INPUT: it
+is checked before the importer reads a single answer, so a malformed file is exit 4 and nothing
+is written.
 """
 import datetime
 import json
@@ -26,10 +33,28 @@ import re
 import sys
 
 MISSING_DEPENDENCY = "missing dependency: jsonschema==4.25.1 (run through uv run, or install it)"
-SCHEMA_FILES = {"event": "event.schema.json"}
+SCHEMA_FILES = {
+    "event": "event.schema.json",
+    "state": "state.schema.json",
+    "import_report": "import-report.schema.json",
+    "resolutions": "resolutions.schema.json",
+}
 KNOWN_VERSIONS = (1,)
 SEP = " · "  # Appendix A's field separator; never inside a single-line field
 SINGLE_LINE_FIELDS = ("claim", "scenario", "how", "words", "raised_by")
+SEPARATOR_KEPT_ON_LEGACY = ("scenario",)
+"""The one field a LEGACY event may carry the separator in (records E12 contract section 11.3).
+
+Appendix A's single-line rule governs what the core WRITES: "The core writes claims, failure
+scenarios, and quoted words as single lines: the input schema rejects a carriage return or line
+feed anywhere in them and the separator `·` inside them." Section 11.3 then tells the importer
+to read a review finding of more than five fields by taking "fields 1 to 4 ... the last field is
+`raised_by`; anything between joins the scenario WITH THE SEPARATOR KEPT" (family F2, 64 lines
+of the measured corpus). Both stand only if the separator rule holds for what this component
+writes natively and not for what a legacy line already said. A claim keeps the rule in every
+case, because Appendix A calls a claim containing the separator ambiguous, and the tolerant
+reader records such a line as `legacy_unparsed` rather than as a finding. A line break is
+refused everywhere: a record is one line of a document, so a legacy field cannot hold one."""
 RFC3339_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?Z$")
 
 try:  # the guarded import: a missing jsonschema is reported once, at the first use
@@ -104,7 +129,8 @@ class Schemas:
             except Exception as exc:  # noqa: BLE001 - a file that parses but is not a schema is the same stop
                 raise ReferenceUnavailable(rel, "not a valid schema: %s" % exc)
         fc = format_checker()
-        self.event = V(self.docs["event"], format_checker=fc)
+        self.validators = dict((key, V(doc, format_checker=fc)) for key, doc in self.docs.items())
+        self.event = self.validators["event"]
 
 
 def format_checker():
@@ -197,7 +223,7 @@ def _semantic_errors(event):
             continue
         if "\n" in value or "\r" in value:
             out.append({"path": "/" + field, "message": "a %s is a single line (Appendix A)" % field})
-        if SEP in value:
+        if SEP in value and (native or field not in SEPARATOR_KEPT_ON_LEGACY):
             out.append({"path": "/" + field, "message": "a %s never contains the field separator %r (Appendix A)" % (field, SEP)})
     out.sort(key=lambda e: (e["path"], e["message"]))
     return out
@@ -212,3 +238,18 @@ def validate_event(event, schemas):
     if not known_version(event):
         return [unknown_version_error(event)]
     return _errors(schemas.event, event) + _semantic_errors(event)
+
+
+def validate_document(key, doc, schemas):
+    """`[{"path", "message"}]` for any of this component's schemas but the event's.
+
+    The event has its own entry point (`validate_event`) because it carries the E12-7 version
+    gate and the two semantic rules a Draft 2020-12 schema cannot make; the other three are plain
+    schema checks.
+    """
+    if key == "event":
+        return validate_event(doc, schemas)
+    validator = schemas.validators.get(key)
+    if validator is None:
+        raise ReferenceUnavailable(SCHEMA_FILES.get(key, key), "no such schema")
+    return _errors(validator, doc)

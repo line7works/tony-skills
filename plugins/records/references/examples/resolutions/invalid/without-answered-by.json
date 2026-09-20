@@ -1,0 +1,13 @@
+{
+  "document": {
+    "answered_on": "2026-05-21",
+    "answers": [
+      {
+        "line": 16,
+        "new_finding": true,
+        "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite"
+      }
+    ]
+  },
+  "reason": "an answer is a person's, and the log records whose (section 11.5)"
+}

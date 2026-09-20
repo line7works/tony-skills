@@ -202,3 +202,127 @@ def read_log(workspace, doc=DOC):
         return b""
     with open(path, "rb") as fh:
         return fh.read()
+
+
+# ---- slice 2: the fixture workspace, the pilot's modules, and the E7 lanes ---------------------
+
+COMPONENT = ROOT
+FIXTURES = os.path.join(ROOT, "fixtures")
+REPO = os.path.dirname(os.path.dirname(ROOT))  # the repository this component sits in
+PILOT_SCRIPTS = os.path.join(REPO, "plugins", "recheck-v2", "skills", "recheck-v2", "scripts")
+EVALS = os.path.join(REPO, "plugins", "recheck-v2", "evals")
+EVAL_FIXTURES = os.path.join(EVALS, "fixtures")
+FIXTURE_DOC = "docs/plans/2026-05-12-history.md"
+
+
+def add_fixtures_to_path():
+    if FIXTURES not in sys.path:
+        sys.path.insert(0, FIXTURES)
+
+
+def add_pilot_to_path():
+    """The pilot's modules, imported READ-ONLY for the parity suite (ruling E12-2).
+
+    Nothing in this suite writes anywhere under plugins/recheck-v2/; the parity tests import
+    `recheck_core.ledger` and compare its behaviour with the copy in `records_core.legacy`.
+    """
+    if PILOT_SCRIPTS not in sys.path:
+        sys.path.insert(0, PILOT_SCRIPTS)
+
+
+def fixture_workspace(parent=None):
+    """Build the synthetic legacy workspace into a temporary directory and return its path."""
+    add_fixtures_to_path()
+    import build as fixture_build
+    base = parent or make_scratch("records-fixture-")
+    return fixture_build.build_case(base, "legacy")["workspace"]
+
+
+def fixture_build_module():
+    add_fixtures_to_path()
+    import build as fixture_build
+    return fixture_build
+
+
+def schemas():
+    """The component's schemas, loaded once from the component root."""
+    add_scripts_to_path()
+    from records_core import validate
+    return validate.load_schemas(COMPONENT)
+
+
+def fixed_now():
+    """The instant every importer test uses, so `at` and the run id never move."""
+    import datetime
+    return datetime.datetime(2026, 5, 20, 12, 0, 0)
+
+
+def import_doc(workspace, doc, **kwargs):
+    """Run the importer in-process against a fixture workspace."""
+    add_scripts_to_path()
+    from records_core import importer
+    kwargs.setdefault("now", fixed_now())
+    return importer.import_legacy(workspace, doc, schemas(), **kwargs)
+
+
+def plan_for(workspace, doc, **kwargs):
+    add_scripts_to_path()
+    from records_core import importer
+    kwargs.setdefault("now", fixed_now())
+    return importer.plan_import(workspace, doc, **kwargs)
+
+
+def events_of(workspace, doc):
+    add_scripts_to_path()
+    from records_core import events as events_mod
+    return events_mod.walk(events_mod.log_path(workspace, doc), schemas())["events"]
+
+
+def doc_sha256(workspace, doc):
+    add_scripts_to_path()
+    from records_core import canon
+    with open(os.path.join(workspace, *doc.split("/")), "rb") as fh:
+        return canon.sha256_hex(fh.read())
+
+
+def porcelain(workspace):
+    """`git status --porcelain` inside a fixture workspace, as a sorted list of lines."""
+    return sorted(line for line in git(workspace, "status", "--porcelain").split("\n") if line)
+
+
+def write_json(path, doc):
+    write(path, json.dumps(doc, indent=2, ensure_ascii=False, sort_keys=True) + "\n")
+    return path
+
+
+def markdown_documents(root):
+    """Every .md file under a directory, as relative paths, sorted."""
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d != ".git")
+        for name in sorted(filenames):
+            if name.endswith(".md"):
+                out.append(os.path.relpath(os.path.join(dirpath, name), root).replace(os.sep, "/"))
+    return sorted(out)
+
+
+def build_eval_lane(lane, out_dir):
+    """Build one E7 fixture lane into out_dir with the lane's own build.py (read-only on the lane).
+
+    The lane's generator writes only inside out_dir, which is a temporary directory; nothing
+    under plugins/recheck-v2/ is touched.
+    """
+    script = os.path.join(EVAL_FIXTURES, lane, "build.py")
+    proc = subprocess.run([FLOOR_PYTHON, script, "--out", out_dir, "--json"],
+                          cwd=tempfile.gettempdir(), env=env_for_child(),
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        raise RuntimeError("building E7 lane %s failed: %s"
+                           % (lane, proc.stderr.decode("utf-8", "replace").strip()))
+    return json.loads(proc.stdout.decode("utf-8"))
+
+
+def eval_lanes():
+    """Every E7 fixture lane, sorted. `_lib` is the shared generator, never a lane."""
+    return sorted(name for name in os.listdir(EVAL_FIXTURES)
+                  if name != "_lib" and os.path.isfile(os.path.join(EVAL_FIXTURES, name, "build.py")))

@@ -10,9 +10,14 @@
     uv run records.py identity --workspace W
     uv run records.py append --workspace W --doc D --events FILE --expect-head H [--break-lock]
     uv run records.py component-identity
+    uv run records.py state --workspace W --doc D [--at-source F] [--slice S]
+    uv run records.py render --workspace W --doc D --run-id R
+    uv run records.py import-legacy --workspace W --doc D [--resolutions R] [--dry-run]
+    uv run records.py mirrors --workspace W --doc D
+    uv run records.py survey --workspace W
 
-Slice 1 ships those five commands. `state`, `render`, `import-legacy`, `mirrors` and `survey`
-arrive with slice 2 and are absent here rather than stubbed.
+Section 12.2's ten commands, all of them. `import-legacy` is the only one slice 2 adds that
+writes; `state`, `render`, `mirrors` and `survey` are read-only.
 
 Every command: JSON on stdout and nothing else; diagnostics on stderr; safe to run from any
 working directory; paths in arguments are absolute or resolved from the current working
@@ -34,11 +39,15 @@ by a station that declares itself the importer. The library keyword that admits 
 `importer=True`, has no flag on this CLI and never will; slice 2's `importer.py` is its one
 caller.
 
-Side effects: only `append` writes, and only two files, both under `docs/records/` inside the
-workspace: the log (replaced whole with its old bytes plus the new lines, through a temporary
-file beside it and a rename over it) and `<log>.lock`, taken before the walk and removed on
-exit. An append that refuses any event writes nothing at all. `verify`, `events`, `identity` and
-`component-identity` write nothing. Git runs read-only, and only inside the workspace given.
+Side effects: only `append` and `import-legacy` write, and only two files, both under
+`docs/records/` inside the workspace: the log (replaced whole with its old bytes plus the new
+lines, through a temporary file beside it and a rename over it) and `<log>.lock`, taken before
+the walk and removed on exit. A pass that refuses any event writes nothing at all.
+`import-legacy` never writes to the ledger document, to a verdict doc, or to anything outside
+`docs/records/`, and `--dry-run` writes nothing and takes no lock. `verify`, `events`,
+`identity`, `component-identity`, `state`, `render`, `mirrors` and `survey` write nothing. Git
+runs read-only (`rev-parse`, `status`, `diff`, `ls-files`, `submodule status`, `blame`), and
+only inside the workspace given.
 
 Partial effects: a process killed between taking the lock and releasing it leaves `<log>.lock`
 behind; the next `append` reports it (exit 7) with its contents, and `--break-lock` removes it
@@ -56,7 +65,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from records_core import canon, events as events_mod, identity as identity_mod, validate  # noqa: E402
+from records_core import (canon, events as events_mod, identity as identity_mod,  # noqa: E402
+                          importer as importer_mod, render as render_mod, state as state_mod,
+                          validate)
 
 INTERFACE_VERSION = 1
 SKIP_DIRS = ("__pycache__",)
@@ -73,11 +84,21 @@ EXAMPLES = """examples:
       --expect-head 0000000000000000000000000000000000000000000000000000000000000000
   uv run records.py component-identity
 
+  uv run records.py survey --workspace .
+  uv run records.py import-legacy --workspace . --doc docs/plans/2026-09-06-readers.md --dry-run
+  uv run records.py import-legacy --workspace . --doc docs/punch-list.md --resolutions answers.json
+  uv run records.py state --workspace . --doc docs/punch-list.md --slice A
+  uv run records.py state --workspace . --doc docs/punch-list.md --at-source identity.json
+  uv run records.py render --workspace . --doc docs/punch-list.md --run-id recheck-2026-09-20-a
+  uv run records.py mirrors --workspace . --doc docs/plans/2026-09-06-readers.md
+
 exit status: 0 success; 1 anything else; 2 usage; 3 jsonschema missing; 4 an input, an event, or a
   log line failed validation; 5 ambiguous identity; 6 stale_source; 7 conflict.
-side effects: only `append` writes, and only the log and its lock under docs/records/ inside the
-  workspace; every other command is read-only. Reruns of the read-only commands are safe; an
-  `append` that already landed fails the next identical run on the head it no longer matches."""
+side effects: only `append` and `import-legacy` write, and only the log and its lock under
+  docs/records/ inside the workspace; `import-legacy --dry-run` and every other command are
+  read-only. Reruns of the read-only commands are safe; an `append` that already landed fails the
+  next identical run on the head it no longer matches, and a second `import-legacy` over an
+  unchanged document appends nothing."""
 
 
 class Usage(ValueError):
@@ -293,9 +314,93 @@ def cmd_component_identity(args, root, schemas):
     return emit(envelope(root, component_identity(root)), 0)
 
 
+def read_json_file(path, what):
+    full = os.path.abspath(os.path.expanduser(path))
+    if not os.path.isfile(full):
+        raise Usage("%s is not a file: %s" % (what, full))
+    try:
+        with open(full, "rb") as fh:
+            return json.loads(fh.read().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise Usage("%s does not read as JSON: %s (%s)" % (what, full, exc))
+
+
+def cmd_state(args, root, schemas):
+    workspace = resolve_workspace(args.workspace)
+    doc = resolve_doc(workspace, args.doc)
+    at_source = None
+    if args.at_source is not None:
+        given = read_json_file(args.at_source, "--at-source")
+        at_source = given.get("identity") if isinstance(given, dict) and "identity" in given else given
+        if not isinstance(at_source, dict) or not isinstance(at_source.get("commit"), str):
+            raise Usage("--at-source names a JSON file holding a six-field identity, or a response "
+                        "carrying one under `identity`: %s" % args.at_source)
+    walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas)
+    body = state_mod.state_of(doc, walked["events"], at_source=at_source, slice_name=args.slice)
+    body.update({"log": events_mod.log_relpath(doc), "head": walked["head"],
+                 "events": len(walked["events"]), "exists": walked["exists"]})
+    return emit(envelope(root, body), 0)
+
+
+def cmd_render(args, root, schemas):
+    workspace = resolve_workspace(args.workspace)
+    doc = resolve_doc(workspace, args.doc)
+    walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas)
+    try:
+        body = render_mod.render_run(doc, walked["events"], args.run_id)
+    except render_mod.RenderError as exc:
+        raise Refusal(4, {"ok": False, "error": "invalid", "reason": str(exc),
+                          "log": events_mod.log_relpath(doc), "head": walked["head"],
+                          "events": len(walked["events"]), "run_id": args.run_id})
+    body.update({"log": events_mod.log_relpath(doc), "head": walked["head"],
+                 "events": len(walked["events"]), "exists": walked["exists"]})
+    return emit(envelope(root, body), 0)
+
+
+def cmd_import_legacy(args, root, schemas):
+    workspace = resolve_workspace(args.workspace)
+    doc = resolve_doc(workspace, args.doc)
+    resolutions = None
+    if args.resolutions is not None:
+        resolutions = read_json_file(args.resolutions, "--resolutions")
+        errors = validate.validate_document("resolutions", resolutions, schemas)
+        if errors:
+            raise Refusal(4, {"ok": False, "error": "invalid", "report": "import",
+                              "reason": "the resolutions file fails resolutions.schema.json at "
+                                        "%s: %s" % (errors[0]["path"] or "/", errors[0]["message"]),
+                              "errors": errors, "doc": doc,
+                              "log": events_mod.log_relpath(doc)})
+        named = resolutions.get("doc")
+        if named is not None and named != doc:
+            raise Refusal(4, {"ok": False, "error": "invalid", "report": "import",
+                              "reason": "the resolutions file answers %r; --doc names %r"
+                                        % (named, doc), "doc": doc,
+                              "log": events_mod.log_relpath(doc)})
+    if not args.dry_run:
+        require_work_tree(workspace)
+    body = importer_mod.import_legacy(
+        workspace, doc, schemas, resolutions=resolutions, dry_run=args.dry_run,
+        break_lock=args.break_lock, component_version=component_meta(root)["version"],
+        interface_version=INTERFACE_VERSION)
+    return emit(envelope(root, body), 0)
+
+
+def cmd_mirrors(args, root, schemas):
+    workspace = resolve_workspace(args.workspace)
+    doc = resolve_doc(workspace, args.doc)
+    return emit(envelope(root, importer_mod.mirrors(workspace, doc)), 0)
+
+
+def cmd_survey(args, root, schemas):
+    workspace = resolve_workspace(args.workspace)
+    return emit(envelope(root, importer_mod.survey(workspace)), 0)
+
+
 COMMANDS = {"verify": cmd_verify, "events": cmd_events, "identity": cmd_identity,
-            "append": cmd_append, "component-identity": cmd_component_identity}
-NEEDS_SCHEMAS = ("verify", "events", "append")
+            "append": cmd_append, "component-identity": cmd_component_identity,
+            "state": cmd_state, "render": cmd_render, "import-legacy": cmd_import_legacy,
+            "mirrors": cmd_mirrors, "survey": cmd_survey}
+NEEDS_SCHEMAS = ("verify", "events", "append", "state", "render", "import-legacy")
 
 
 # ---- argparse --------------------------------------------------------------------------------
@@ -374,6 +479,69 @@ def build_parser():
                     help="the hash of the last line the caller read; 64 zeros for a log that does not exist yet")
     sp.add_argument("--break-lock", action="store_true", default=False,
                     help="remove a stale <log>.lock and say so in the response; refused while its pid is alive")
+
+    sp = add("state", "the derived state of section 9",
+             "Print the derived state of one ledger document's log: every finding with its status, "
+             "its `cleared_unbound` flag, its join basis and its two addresses, and every slice with "
+             "its open counts, its derived card, the card an import observed, and whether they drift. "
+             "State is a pure function of the log's bytes: the same log gives the same object on any "
+             "machine, and nothing here reads the document or the clock.",
+             "none (read-only); reruns are safe and give byte-equal output")
+    workspace_doc(sp)
+    sp.add_argument("--at-source", metavar="F", default=None,
+                    help="a JSON file holding a six-field identity (or a response carrying one under "
+                         "`identity`): each cleared finding then carries `cleared_at_this_source`, "
+                         "true only when the clear was bound and names that commit (section 8.4). "
+                         "It changes no state.")
+    sp.add_argument("--slice", metavar="S", default=None,
+                    help="only this slice's findings and card")
+
+    sp = add("render", "the Appendix A text one run's events produce",
+             "Print the exact Appendix A text the pilot writes for the same facts: the block heading, "
+             "the recheck and defect lines, and the waiver and reopening lines of the run named by "
+             "--run-id. Nothing in E12 writes that text into a document.",
+             "none (read-only); reruns are safe")
+    workspace_doc(sp)
+    sp.add_argument("--run-id", metavar="R", required=True,
+                    help="the run whose events to render (matched against actor.run_id)")
+
+    sp = add("import-legacy", "import one legacy ledger document's records",
+             "Read one ledger document and append the events its records represent, in file order, to "
+             "that document's log. The document itself is never written, and neither is a verdict doc "
+             "or anything outside docs/records/. A second pass over an unchanged document appends "
+             "nothing; a document that has only grown at its tail contributes only its new records; a "
+             "document whose imported lines changed or moved is exit 7 and nothing is written. Any "
+             "ambiguous line stops the whole document with exit 5 and a report that lists every field "
+             "an answer needs; --resolutions supplies those answers. Every imported clear keeps its "
+             "effect and carries `known: false` (owner ruling O4), which derived state reports as "
+             "`cleared_unbound`.",
+             "writes the log and <log>.lock under docs/records/ inside the workspace, and nothing "
+             "else; --dry-run writes nothing and takes no lock; a refusal writes nothing")
+    workspace_doc(sp)
+    sp.add_argument("--resolutions", metavar="R", default=None,
+                    help="a JSON file of answers to the ambiguous lines (resolutions.schema.json)")
+    sp.add_argument("--dry-run", action="store_true", default=False,
+                    help="report what would be appended and write nothing")
+    sp.add_argument("--break-lock", action="store_true", default=False,
+                    help="remove a stale <log>.lock and say so in the response; refused while its pid "
+                         "is alive; ignored under --dry-run, which takes no lock")
+
+    sp = add("mirrors", "compare the verdict docs that mirror this document's blocks",
+             "Report the verdict docs the pilot's glob associates with this document's slices, each of "
+             "their blocks as same, differs or absent against the ledger document, and every record a "
+             "verdict doc holds that the ledger document does not. A difference is reported, never "
+             "repaired, never imported, and never blocks an import: a verdict doc is a copy, never a "
+             "second source.",
+             "none (read-only); reruns are safe")
+    workspace_doc(sp)
+
+    sp = add("survey", "what every document of the workspace would import",
+             "Walk the workspace's Markdown documents, keep the ones carrying Appendix A records, and "
+             "report for each the counts by record kind, the counts by join basis, and every line that "
+             "would stop an import. Documents under docs/reviews/ are mirrors and are listed as such. "
+             "Nothing is imported and nothing is written.",
+             "none (read-only); reruns are safe")
+    sp.add_argument("--workspace", metavar="W", required=True, help="the workspace root (a directory)")
 
     add("component-identity", "{name, version, commit, content_sha256} of the component root",
         "Print the component's own identity: its plugin name and version, the commit of the repository it "

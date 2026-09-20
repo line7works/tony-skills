@@ -1,0 +1,79 @@
+{
+  "at_source": null,
+  "component_version": "0.1.0",
+  "counts": {
+    "cleared_unbound": 1,
+    "findings": 1,
+    "fixed": 1,
+    "open": 0,
+    "waived": 0
+  },
+  "events": 5,
+  "exists": true,
+  "filters": {
+    "slice": null
+  },
+  "findings": [
+    {
+      "caused_by": null,
+      "claim": "the yard map is out of date",
+      "cleared_unbound": true,
+      "decided": {
+        "log": "docs/records/docs__punch-list.events.jsonl",
+        "seq": 3
+      },
+      "events": [
+        2,
+        3
+      ],
+      "id": "f1:635c815615c6bf9b55db",
+      "join_basis": "exact",
+      "location": {
+        "file": "src/yard.py",
+        "line": 2,
+        "line_end": null,
+        "more": [],
+        "raw": "src/yard.py:2",
+        "resolved": true,
+        "tag": null
+      },
+      "raised": {
+        "log": "docs/records/docs__punch-list.events.jsonl",
+        "seq": 2
+      },
+      "raised_by": "the yard walk",
+      "scenario": "a driver parks in the wrong lane",
+      "severity": "MAJOR",
+      "slice": "none",
+      "status": "fixed"
+    }
+  ],
+  "head": "11a4b80ea3a9f962a8c87e77187efb9e713f5d4afa49c1615da6b78f569ca2a0",
+  "interface_version": 1,
+  "log": "docs/records/docs__punch-list.events.jsonl",
+  "ok": true,
+  "open": {
+    "BLOCKER": 0,
+    "MAJOR": 0,
+    "MINOR": 0
+  },
+  "slices": [
+    {
+      "card_derived": null,
+      "card_drift": false,
+      "card_observed": null,
+      "card_observed_text": null,
+      "name": "none",
+      "open": {
+        "BLOCKER": 0,
+        "MAJOR": 0,
+        "MINOR": 0
+      },
+      "open_total": 0
+    }
+  ],
+  "spec": {
+    "doc": "docs/punch-list.md",
+    "slice": null
+  }
+}

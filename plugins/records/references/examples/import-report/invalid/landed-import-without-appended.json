@@ -1,0 +1,38 @@
+{
+  "document": {
+    "ambiguities": [],
+    "ambiguous": 0,
+    "blocks": 3,
+    "component_version": "0.1.0",
+    "counts": {
+      "card_observed": 1,
+      "disposition": 1,
+      "finding_raised": 2,
+      "reopened": 1,
+      "waived": 1
+    },
+    "doc": "docs/plans/2026-05-05-grants.md",
+    "doc_sha256": "c43ae7331fdd461a80d642c7620f2f55955cdf603cd4d4d14ac69af09e091758",
+    "dry_run": false,
+    "events": 9,
+    "head": "f93aa38a940ac46e3678e6a14b40ff9171cb1f7c714c9e6de9143b43e89a84d0",
+    "imported": 9,
+    "interface_version": 1,
+    "lines_classified": 6,
+    "lines_read": 23,
+    "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+    "ok": true,
+    "opened_log": true,
+    "previously_imported": 0,
+    "rejected_resolutions": [],
+    "report": "import",
+    "run_id": "import-docs__plans__2026-05-05-grants-20260520T120000Z",
+    "slices": 1,
+    "spec": {
+      "doc": "docs/plans/2026-05-05-grants.md",
+      "slice": null
+    },
+    "would_import": null
+  },
+  "reason": "an import that wrote says which events it wrote, each with its history address (section 6.1)"
+}

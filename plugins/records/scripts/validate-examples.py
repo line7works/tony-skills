@@ -3,7 +3,7 @@
 # requires-python = ">=3.9"
 # dependencies = ["jsonschema==4.25.1"]
 # ///
-"""Validate the records component's example events against event.schema.json.
+"""Validate the records component's examples against its four schemas.
 
     uv run validate-examples.py [--records-root DIR] [--verbose]      (from any directory)
 
@@ -19,11 +19,17 @@ Checks:
   `required` list that quietly stopped being enforced is caught here (the guide's "rerun both
   sets after tightening a schema");
 - `references/examples/example.events.jsonl` walks clean: every line parses and validates, `seq`
-  equals the line index, and every `prev` equals the hash of the line before (section 10).
+  equals the line index, and every `prev` equals the hash of the line before (section 10);
+- the same three checks for the other three schemas of section 1, whose examples live under
+  `references/examples/<state | import-report | resolutions>/valid` and `/invalid`. An invalid
+  example there is `{"reason": ..., "document": ...}`. The dropped-field pass reads the required
+  list from the schema's top level and, where the schema is a `oneOf` over branches in `$defs`,
+  from the one branch the example matches, so a branch that quietly stopped requiring a field is
+  caught too.
 
 stdout: one JSON object {"ok", "valid": {"files", "failing"}, "invalid": {"total", "rejected"},
-"mutations": {"total", "rejected"}, "log": {"lines", "ok"}, "failures": [strings]} and nothing
-else. stderr: diagnostics; with --verbose one line per check.
+"mutations": {"total", "rejected"}, "log": {"lines", "ok"}, "documents": {<schema>: {...}},
+"failures": [strings]} and nothing else. stderr: diagnostics; with --verbose one line per check.
 
 Exit status: 0 every check passed; 4 a check failed (the failures list names each, an example
 that does not load included); 2 usage (an unknown argument, a --records-root that is not a
@@ -87,6 +93,90 @@ def files_in(directory):
     if not os.path.isdir(directory):
         return []
     return sorted(os.path.join(directory, n) for n in os.listdir(directory) if n.endswith(".json"))
+
+
+DOCUMENT_SCHEMAS = {"state": "state", "import-report": "import_report",
+                    "resolutions": "resolutions"}
+
+
+def branch_required(schema, doc):
+    """The required lists this document is held to: the top level's, plus its matched branch's.
+
+    A schema whose top level is a `oneOf` over `$defs` branches (import-report.schema.json) says
+    nothing useful at the top about a document's own shape; the branch does. The branch is found
+    by its `const` properties, which is what tells the shapes apart.
+    """
+    out = set(schema.get("required", []))
+    defs = schema.get("$defs", {})
+    for entry in schema.get("oneOf", []):
+        ref = entry.get("$ref", "")
+        if not ref.startswith("#/$defs/"):
+            continue
+        branch = defs.get(ref[len("#/$defs/"):], {})
+        consts = [(name, rule["const"]) for name, rule in (branch.get("properties") or {}).items()
+                  if isinstance(rule, dict) and "const" in rule]
+        if consts and all(doc.get(name) == value for name, value in consts):
+            out.update(branch.get("required", []))
+    return sorted(out)
+
+
+def check_documents(key, folder, root, schemas, verbose):
+    """The valid / invalid / dropped-field passes for one of the three document schemas."""
+    base = os.path.join(root, "references", "examples", folder)
+    failures = []
+    valid_files = files_in(os.path.join(base, "valid"))
+    failing = mutations = rejected_mutations = 0
+    schema = schemas.docs[key]
+    for path in valid_files:
+        name = os.path.relpath(path, os.path.join(root, "references", "examples"))
+        try:
+            doc = load(path)
+        except (OSError, ValueError) as exc:
+            failures.append("%s: %s" % (name, exc))
+            failing += 1
+            continue
+        errors = validate.validate_document(key, doc, schemas)
+        if errors:
+            failing += 1
+            failures.append("%s: %s %s" % (name, errors[0]["path"] or "/", errors[0]["message"]))
+            log(verbose, "FAIL     %s" % name)
+        else:
+            log(verbose, "PASS     %s" % name)
+        for field in branch_required(schema, doc):
+            if not isinstance(doc, dict) or field not in doc:
+                continue
+            mutated = copy.deepcopy(doc)
+            mutated.pop(field)
+            mutations += 1
+            if validate.validate_document(key, mutated, schemas):
+                rejected_mutations += 1
+                log(verbose, "REJECTED %s without /%s" % (name, field))
+            else:
+                failures.append("%s: dropping /%s is still accepted" % (name, field))
+                log(verbose, "ACCEPTED (BUG) %s without /%s" % (name, field))
+    invalid_files = files_in(os.path.join(base, "invalid"))
+    rejected = 0
+    for path in invalid_files:
+        name = os.path.relpath(path, os.path.join(root, "references", "examples"))
+        try:
+            entry = load(path)
+            reason, doc = entry["reason"], entry["document"]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            failures.append("%s: %s" % (name, exc))
+            continue
+        if not isinstance(reason, str) or not reason.strip():
+            failures.append("%s: an invalid example says which rule rejects it" % name)
+        if validate.validate_document(key, doc, schemas):
+            rejected += 1
+            log(verbose, "REJECTED %s" % name)
+        else:
+            failures.append("%s: accepted, though it must be rejected (%s)" % (name, reason))
+            log(verbose, "ACCEPTED (BUG) %s" % name)
+    return {
+        "valid": {"files": len(valid_files), "failing": failing},
+        "invalid": {"total": len(invalid_files), "rejected": rejected},
+        "mutations": {"total": mutations, "rejected": rejected_mutations},
+    }, failures
 
 
 def required_fields(event, schemas):
@@ -184,8 +274,15 @@ def main(argv=None):
             failures.append("example.events.jsonl: %s" % exc.document.get("reason"))
             log(args.verbose, "CHAIN (BUG) example.events.jsonl")
 
+    documents = {}
+    for folder, key in sorted(DOCUMENT_SCHEMAS.items()):
+        summary, more = check_documents(key, folder, root, schemas, args.verbose)
+        documents[folder] = summary
+        failures.extend(more)
+
     out = {
         "ok": not failures,
+        "documents": documents,
         "valid": {"files": len(valid_files), "failing": failing},
         "invalid": {"total": len(invalid_files), "rejected": rejected},
         "mutations": {"total": mutations, "rejected": rejected_mutations},
