@@ -230,3 +230,20 @@ Line shape (fields separated by ` · `):
 ## Compiled
 
 (Each compile at E11 and E19 adds a dated line here pointing at the guide's revision-history entry.)
+
+- 2026-09-20 · first compile (the E11 compile, amendment A12a) · 204 lines, L21 to L228 (15 contradicts, 155 adds, 34 held; 0 malformed). Two independent evaluations, the control room's and GPT-6 Astra's at high, were merged into one assessment at Tony's request. Result, on his word: 15 guide changes from 35 lines (1 fix, 14 additions), 54 lines stamped as confirming rules the guide already had, 94 true lines moved to four companion notes beside the guide (`skills-harness-notes`, `skills-evals-and-benches`, `skills-helper-recipes`, `skills-crew-and-review-loop`), 10 skipped, 11 rejected. The guide's revision-history entry is dated 2026-09-20. Both evaluations, both per-line ledgers and the combined assessment are in the Clerk audit packet under `astra-outputs/guide-compile/`.
+
+### Corrections recorded at the first compile
+
+The lines above are never edited, so corrections live here. The compile script reads only the Inbox, so these change no count.
+
+- L199 holds two findings joined by a missing line break: the 2026-09-16 shared-TMPDIR finding, and a 2026-09-18 Claude Code finding that `permissions.deny` fences a path only when it is written with a double leading slash. The format check passes because the second one sits in the evidence field; the true count of findings is 205. Left as written on Tony's word ("no split, one doc").
+- L216 overreaches. "120 of 120 trials launched sealed" reports the wall records; six refused probes per tool are not a full seal. L220 and contract ruling SB-14 record that every Codex launch could read its whole condition home, and the outside reviewer withholds a sealed conclusion on the Codex side.
+- L57 is wrong as stated. Python's argparse sends a bad-flag usage error to stderr by default (checked 2026-09-20: 0 bytes on stdout, 65 on stderr, exit 2). Whatever the cited helper did, it was not argparse's default.
+- L23 is wrong as stated. The maintenance report (its line 23) says the initial tool invocation read the standing profile and calls that a contract violation by the session. It does not show the harness injecting the profile unavoidably, and rewording "read nothing" to "do not open" would not have prevented that read.
+- L79's remedy is unsafe and is overturned by L109: making the executor's home writable for a nested launch let the executor append to its own rollout and mint a user turn. The nested-launch mechanics stand as L82 records them.
+- L117's "372 assistant records" witness was withdrawn by lane-contract entry E9-39 because it came from a record outside the retained packet. The rule it supports (read the harness record, not the model's account of itself) stands without that count.
+- L190 is overturned by L211 and L204: the traces show tool calls and reasoning, not an echoed prompt, and an unfiltered reply collector could itself return the user's prompt as the reply.
+- L194's activation comparison is unreliable: L197 shows the Claude Code witness counted all six slash-form requests as misses.
+- L63's conflict is already resolved by the guide's Scripts table (a summary and artifact path, or limits and pagination). L68 quotes a rule this guide never had; it belongs to the pilot contract and the readers contract. L72's causal claim (security vocabulary tripped a content filter) is unproven; writing a verdict to a file as the work goes is sound practice on its own. L148's conclusion is wrong: a brief does not satisfy a no-access requirement while access remains possible. L181 overstates: a traceback after a fix may only mean the probe is obsolete.
+- Lines L152 to L187 carry no evidence field; their support is in the E10 lane contract's amendments.
