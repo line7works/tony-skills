@@ -1,0 +1,31 @@
+{
+  "event": {
+    "actor": {
+      "harness": "claude-code",
+      "run_id": "import-1",
+      "station": "records-import"
+    },
+    "at": "2026-03-02",
+    "kind": "card_observed",
+    "ledger_doc": "docs/plans/2026-04-01-widget.md",
+    "origin": {
+      "commit_named": null,
+      "doc": "docs/plans/2026-04-01-widget.md",
+      "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
+      "heading_line": 40,
+      "kind": "legacy",
+      "line": 12,
+      "raw": "Status: built (2026-03-01; awaiting signoff)",
+      "recorded_commit": null
+    },
+    "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "seq": 7,
+    "slice": "A",
+    "source": {
+      "known": false
+    },
+    "v": 1,
+    "value": "built (2026-03-01; awaiting signoff)"
+  },
+  "reason": "a card_observed carries both the text as written and its card value (section 9.3)"
+}

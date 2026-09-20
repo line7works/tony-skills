@@ -1,0 +1,37 @@
+{
+  "event": {
+    "actor": {
+      "harness": "claude-code",
+      "run_id": "2026-04-01-widget-a",
+      "station": "signoff"
+    },
+    "at": "2026-04-01T09:00:01Z",
+    "claim": "the retry loop never ends",
+    "finding": "f1:c717ee83a8ab2571efc7",
+    "kind": "finding_raised",
+    "ledger_doc": "docs/plans/2026-04-01-widget.md",
+    "location": {
+      "file": "src/widget.py",
+      "line": 88,
+      "line_end": null,
+      "more": [],
+      "raw": "src/widget.py:88",
+      "resolved": true,
+      "tag": null
+    },
+    "origin": {
+      "kind": "native"
+    },
+    "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "raised_by": "A",
+    "scenario": "a failed call spins until the process is killed",
+    "seq": 7,
+    "severity": "BLOCKER",
+    "slice": "A",
+    "source": {
+      "known": true
+    },
+    "v": 1
+  },
+  "reason": "`known: true` carries the six-field identity (section 8.1)"
+}

@@ -1,0 +1,35 @@
+{
+  "event": {
+    "actor": {
+      "harness": "claude-code",
+      "run_id": "import-1",
+      "station": "records-import"
+    },
+    "answer": {
+      "maybe": "later"
+    },
+    "answered_by": "the owner",
+    "answered_on": "2026-04-04",
+    "at": "2026-03-09",
+    "kind": "resolution_applied",
+    "ledger_doc": "docs/plans/2026-04-01-widget.md",
+    "line": 77,
+    "origin": {
+      "commit_named": null,
+      "doc": "docs/plans/2026-04-01-widget.md",
+      "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
+      "heading_line": 40,
+      "kind": "legacy",
+      "line": 77,
+      "raw": "- MAJOR . src/widget.py:88 . (the retry loop never ends) . fixed - the loop now stops",
+      "recorded_commit": null
+    },
+    "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "seq": 7,
+    "source": {
+      "known": false
+    },
+    "v": 1
+  },
+  "reason": "an answer is one of the three shapes of section 11.5"
+}

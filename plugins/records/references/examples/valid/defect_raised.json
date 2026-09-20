@@ -1,0 +1,43 @@
+{
+  "actor": {
+    "harness": "claude-code",
+    "run_id": "2026-04-01-widget-a",
+    "station": "signoff"
+  },
+  "at": "2026-04-01T11:32:00Z",
+  "caused_by": "f1:c717ee83a8ab2571efc7",
+  "claim": "the retry counter is never reset",
+  "finding": "f1:cf463f0cc63792ed4f6b",
+  "kind": "defect_raised",
+  "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "location": {
+    "file": "src/widget.py",
+    "line": 88,
+    "line_end": null,
+    "more": [],
+    "raw": "src/widget.py:88 (legacy tag)",
+    "resolved": true,
+    "tag": "legacy tag"
+  },
+  "origin": {
+    "kind": "native"
+  },
+  "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "raised_by": "A",
+  "scenario": "a second failure starts from the first failure's count",
+  "seq": 7,
+  "severity": "MINOR",
+  "slice": "A",
+  "source": {
+    "identity": {
+      "commit": "1f0c9b7a4d2e6f80315c8ab4d9e2071c6b35a8f4",
+      "dirty": false,
+      "submodules": [],
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked": [],
+      "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "known": true
+  },
+  "v": 1
+}

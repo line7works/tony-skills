@@ -1,0 +1,42 @@
+{
+  "actor": {
+    "harness": "claude-code",
+    "run_id": "2026-04-01-widget-a",
+    "station": "signoff"
+  },
+  "at": "2026-04-01T11:30:00Z",
+  "disposition": "fixed",
+  "finding": "f1:c717ee83a8ab2571efc7",
+  "how": "ran the widget suite on the same revision",
+  "join_basis": null,
+  "kind": "disposition",
+  "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "origin": {
+    "kind": "native"
+  },
+  "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "seq": 7,
+  "source": {
+    "identity": {
+      "commit": "1f0c9b7a4d2e6f80315c8ab4d9e2071c6b35a8f4",
+      "dirty": false,
+      "submodules": [],
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked": [],
+      "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "known": true
+  },
+  "v": 1,
+  "verified_source": {
+    "identity": {
+      "commit": "1f0c9b7a4d2e6f80315c8ab4d9e2071c6b35a8f4",
+      "dirty": false,
+      "submodules": [],
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked": [],
+      "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "known": true
+  }
+}

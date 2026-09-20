@@ -1,0 +1,33 @@
+{
+  "actor": {
+    "harness": "claude-code",
+    "run_id": "import-1",
+    "station": "records-import"
+  },
+  "at": "2026-03-09",
+  "disposition": "fixed",
+  "finding": "f1:c717ee83a8ab2571efc7",
+  "how": "the loop now stops after three tries",
+  "join_basis": "location_only",
+  "kind": "disposition",
+  "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "origin": {
+    "commit_named": null,
+    "doc": "docs/plans/2026-04-01-widget.md",
+    "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
+    "heading_line": 40,
+    "kind": "legacy",
+    "line": 77,
+    "raw": "- MAJOR . src/widget.py:88 . (the retry loop never ends) . fixed - the loop now stops after three tries",
+    "recorded_commit": null
+  },
+  "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "seq": 7,
+  "source": {
+    "known": false
+  },
+  "v": 1,
+  "verified_source": {
+    "known": false
+  }
+}
