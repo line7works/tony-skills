@@ -14053,53 +14053,205 @@ def native_verifier_brief(targets):
     return "\n".join(lines) + "\n"
 
 
-def codex_native_verifier_reads(campaign, setup, condition, targets, base, extra_env=None,
-                                timeout=900):
-    """The verifier half of the native check, through `adapters/codex/verifier.py`.
+def _native_child_identity(events_path):
+    """The fresh child's OWN identity, out of the helper's retained events.
 
-    Returns the row the record keeps: the helper, the exact argv, the child's own reply, the
-    three typed outcomes and `separated`. The calls and the outputs stay in the record
-    (SB-12, N3) so a reader can see which route produced which refusal.
+    `thread.started` is written by `codex exec --json` for the child it starts, and
+    `adapters/codex/verifier.py` refuses an absent or ambiguous one when it goes to fetch the
+    child's rollout. Nothing here is inferred from the parent: the file belongs to one child
+    and names it.
+    """
+    for line in (read_text(events_path, "") or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("type") == "thread.started" and row.get("thread_id"):
+            return str(row["thread_id"])
+    return None
+
+
+def verifier_workspace_state(campaign, workspace):
+    """Is this workspace a repository a `codex exec` child will actually run in?
+
+    SB-12 send-back 3. `codex exec -C <dir>` refuses a directory that is neither a git
+    repository nor a trusted project: `Not inside a trusted directory and
+    --skip-git-repo-check was not specified`. Every real trial's workspace is a repository -
+    `evals/fixtures/_lib/fixturelib.py` git-inits each fixture, and the parent native probe
+    calls `_empty_git_workspace` - so a verifier child has always had one; the native
+    verifier route handed it a bare directory and the child never started.
+
+    Measured, never assumed: `rev-parse HEAD` must succeed (the helper's child needs a
+    repository with a commit, not an empty `.git`) and `status --porcelain` must be empty.
+    """
+    env = campaign.env()
+    head = run_cmd(["git", "-C", workspace, "rev-parse", "HEAD"], env=env,
+                   label="git rev-parse HEAD")
+    status = run_cmd(["git", "-C", workspace, "status", "--porcelain"], env=env,
+                     label="git status --porcelain")
+    row = {
+        "workspace": workspace,
+        "is_a_repository": head["exit"] == 0,
+        "head": (head["stdout"] or "").strip() or None,
+        "clean": status["exit"] == 0 and not (status["stdout"] or "").strip(),
+        "dirty_entries": [line for line in (status["stdout"] or "").splitlines() if line][:8],
+        "why": "`codex exec -C <dir>` refuses a directory that is neither a git repository "
+               "nor a trusted project, and every real trial's workspace is a repository "
+               "(SB-12, send-back 3)",
+    }
+    row["ok"] = bool(row["is_a_repository"] and row["head"] and row["clean"])
+    if not row["ok"]:
+        row["problem"] = ("the verifier route's workspace is not a clean repository with a "
+                          "HEAD: rev-parse exit %s, status exit %s"
+                          % (head["exit"], status["exit"]))
+    return row
+
+
+def codex_native_verifier_reads(campaign, setup, condition, targets, base, out_dir,
+                                extra_env=None, timeout=900, registry=None, trial=None):
+    """The verifier half of the native check, through `adapters/codex/verifier.py`, WALLED.
+
+    SB-12 send-back 2. The first build ran the helper DIRECTLY - `python3 <stage>/.../
+    verifier.py ...` with the runner's own tool environment and no `sandbox-exec` prefix - and
+    the live re-proof caught it at once: the adapter's own gate refused with
+    `RECHECK_HARNESS_SANDBOX does not declare sandbox-exec; nothing launched`, exit 3, and the
+    check correctly read not separated. The gate was right and the ROUTE was wrong. A
+    measurement of "can a fresh verifier child cross the boundary" has to be taken where a
+    real verifier child lives: inside the same wall, with the same declared environment, from
+    the same named cwd.
+
+    So this goes through `setup.walled(...)`, the one helper every launch site uses. It gets a
+    profile built by `wall_spec` for THIS setup and condition, the loopback proxy started
+    outside the wall for the length of the call, the `/usr/bin/sandbox-exec -f <profile>`
+    prefix, the full declared launch environment (the proxy names, `RECHECK_HARNESS_SANDBOX`,
+    `RECHECK_WALL_PROBE`, `UV_CACHE_DIR`, `UV_OFFLINE`, `TMPDIR`, and `CODEX_HOME` pointed at
+    the condition's home exactly as `setups/codex/launch.sh` exports it), and the wall's own
+    named cwd. `launch.sb`, `launch-wall.json` and `proxy.jsonl` are retained in `out_dir`,
+    beside the parent's, and the returned row carries the whole wall record.
+
+    The helper's own constraints are met by construction and every one of them is checked by a
+    test: `--brief` IS `<run_dir>/checklist.md`; the workspace is a directory OUTSIDE the
+    scratch and is not one of its parents; `--raw` is inside `--scratch` and does not exist
+    yet; `CODEX_HOME` is set and is a directory. It needs NO executor thread id and no
+    installed-home lookup - those are `turns.locate`'s requirements, which `verifier.py` does
+    not use - and it finds the child's rollout under `<CODEX_HOME>/sessions` by the child's own
+    `thread.started`, which the child writes for itself.
+
+    Returns the row the record keeps. Never run live from here; the control room runs the
+    proof.
     """
     run_dir = os.path.join(base, "verifier-route")
-    workspace = os.path.join(base, "workspace")
-    ensure_dir(run_dir)
-    ensure_dir(workspace)
-    # `verifier.py` refuses a brief that is not `<run_dir>/checklist.md`, which is the file
-    # `start` writes in a real run; the native check writes its own there for the same reason.
+    # OUTSIDE the scratch and not one of its parents: `verifier.py` refuses both.
+    workspace = os.path.join(base, "verifier-workspace")
+    scratch = os.path.join(run_dir, "scratch")
+    for path in (run_dir, out_dir):
+        ensure_dir(path)
+    # SB-12 send-back 3: the workspace is prepared the way the PARENT native workspace is,
+    # by the same function, OUTSIDE the wall and before the walled call - `git init`, an
+    # identity, a `.gitkeep` and one empty commit, so it has a HEAD and a clean tree. Without
+    # it the fresh `codex exec` child refused to start at all and the route read `unclear`.
+    _empty_git_workspace(campaign, workspace)
+    prepared = verifier_workspace_state(campaign, workspace)
     brief = os.path.join(run_dir, "checklist.md")
     write_text(brief, native_verifier_brief(targets))
-    scratch = os.path.join(run_dir, "scratch")
     raw = os.path.join(scratch, "%s.md" % NATIVE_VERIFIER_CALL_ID)
-    for path in (raw, os.path.join(scratch, "%s.events.jsonl" % NATIVE_VERIFIER_CALL_ID)):
+    events = os.path.join(scratch, "%s.events.jsonl" % NATIVE_VERIFIER_CALL_ID)
+    rollout = os.path.join(scratch, "%s.rollout.jsonl" % NATIVE_VERIFIER_CALL_ID)
+    for path in (raw, events, rollout):
         if os.path.exists(path):
             os.unlink(path)                      # call ids are single-use; this is one probe
     helper = codex_verifier_helper(setup)
+    if not prepared["ok"]:
+        # Nothing is launched on a workspace the child would refuse. A route that could not
+        # run is never separated (SB-12, N3): three `unclear` reads and the reason.
+        return {
+            "route": "adapters/codex/verifier.py, walled; NOT CALLED",
+            "helper": helper, "argv": None, "walled": None, "wall": None, "cwd": None,
+            "declared_env_names": [], "exit": None, "stdout": "", "stderr": "",
+            "brief": brief, "workspace": workspace, "workspace_prepared": prepared,
+            "scratch": scratch, "raw": raw, "events": events, "rollout": rollout,
+            "child_identity": None, "reply": "", "targets": dict(targets),
+            "reads": {label: {"outcome": "unclear",
+                              "said": prepared["problem"],
+                              "target": targets[label],
+                              "bound_to": "no child ran"}
+                      for label in NATIVE_READ_TARGETS},
+            "separated": False,
+            "not_refused": sorted(NATIVE_READ_TARGETS),
+            "measured": "nothing: the route's workspace could not be prepared as a "
+                        "repository, so no child was started (SB-12, send-back 3)",
+        }
     argv = [sys.executable, helper, "--brief", brief, "--workspace", workspace,
             "--scratch", scratch, "--raw", raw,
             "--call-id", NATIVE_VERIFIER_CALL_ID]
-    extra = {"CODEX_HOME": setup.home(condition)}
-    extra.update(extra_env or {})
-    step = run_cmd(argv, env=tool_env(extra), cwd=workspace, timeout=timeout,
-                   label="adapters/codex/verifier.py, the native read boundary")
+    # What `setups/codex/launch.sh` exports for the session, built from the same hook the
+    # launcher reads: `CODEX_HOME="${RECHECK_CODEX_HOME}"`. The helper inherits CODEX_HOME and
+    # is forbidden from setting it itself (E9-25), so the runner supplies it here.
+    launcher_env = dict(setup.launch_env(condition))
+    launcher_env["CODEX_HOME"] = setup.home(condition)
+    launcher_env.update(setup.scratch_env(scratch))
+    env = campaign.env(extra=launcher_env, scratch=scratch)
+    # The same gate every launch site passes through: the sealed-campaign check and the
+    # writable-run-dir check, with this route's OWN run leaf rather than the parent probe's.
+    roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch,
+                                 "the native read-boundary verifier route for %s" % setup.name,
+                                 trial=trial, attempt=0, half="native-read-verifier")
+    with setup.walled(condition, out_dir, launcher=None, workspace=workspace,
+                      run_dir=run_dir, scratch=scratch, roots=roots,
+                      label="the native read-boundary verifier route for %s"
+                            % setup.name) as wall:
+        walled_argv = wall.prefix(argv)
+        child_env = dict(env)
+        child_env.update(wall.env)
+        child_env.update(extra_env or {})
+        if registry is not None:
+            registry.reserved(walled_argv, "adapters/codex/verifier.py")
+        step = run_cmd(walled_argv, env=child_env, cwd=wall.cwd, timeout=timeout,
+                       label="adapters/codex/verifier.py, the native read boundary, walled",
+                       registry=registry)
     reply = read_text(raw, "") or ""
+    events_text = read_text(events, "") or ""
+    identity = _native_child_identity(events)
     claimed, reads = set(), {}
     for label in NATIVE_READ_TARGETS:
-        outcome, said = _native_read_outcome("verifier %s" % label, reply, None,
-                                             targets[label], claimed=claimed,
-                                             route="verifier")
-        reads[label] = {"outcome": outcome, "said": said, "target": targets[label]}
+        # The capture here is the CHILD's own events file and nothing else, so when the child
+        # named itself the whole file belongs to it and a refusal in it needs no further
+        # in-line marker. When it did NOT name itself there is no established child identity,
+        # and the verifier rule applies in full: the fallback finds nothing and the read is
+        # `unclear`, never a pass (SB-12, N3).
+        outcome, said = _native_read_outcome(
+            "verifier %s" % label, reply, events_text if identity else None, targets[label],
+            claimed=claimed, route="parent" if identity else "verifier")
+        reads[label] = {"outcome": outcome, "said": said, "target": targets[label],
+                        "bound_to": ("the fresh `codex exec` child %s, from its own "
+                                     "thread.started" % identity) if identity else
+                                    "no child identity was established from the helper's "
+                                    "retained events"}
     return {
         "route": "adapters/codex/verifier.py, which launches its own fresh `codex exec` "
-                 "child (SB-12, N3); never `spawn_agent`, which forks the parent's context",
+                 "child (SB-12, N3), run INSIDE the wall through setup.walled() exactly as a "
+                 "trial's own verifier child runs (SB-12, send-back 2); never `spawn_agent`, "
+                 "which forks the parent's context, and never an unwalled direct call",
         "helper": helper,
-        "argv": argv,
+        "argv": walled_argv,
+        "walled": bool(wall.record.get("sealed")),
+        "wall": wall.record,
+        "cwd": wall.cwd,
+        "declared_env_names": sorted(child_env),
         "exit": step.get("exit"),
         "stdout": (step.get("stdout") or "")[:4000],
         "stderr": (step.get("stderr") or "")[-2000:],
         "brief": brief,
+        "workspace": workspace,
+        "workspace_prepared": prepared,
+        "scratch": scratch,
         "raw": raw,
-        "events": os.path.join(scratch, "%s.events.jsonl" % NATIVE_VERIFIER_CALL_ID),
+        "events": events,
+        "rollout": rollout,
+        "child_identity": identity,
         "reply": reply[:4000],
         "targets": dict(targets),
         "reads": reads,
@@ -14107,7 +14259,8 @@ def codex_native_verifier_reads(campaign, setup, condition, targets, base, extra
         "not_refused": sorted(label for label, r in reads.items()
                               if r["outcome"] != "refused"),
         "measured": "a fresh child of this harness through the adapter's own verifier route, "
-                    "with its brief, its call and its reply retained",
+                    "behind this setup and condition's own wall profile, with its brief, its "
+                    "argv, its declared environment, its call and its reply retained",
     }
 
 
@@ -14197,11 +14350,16 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
         # proof the reviewer read measured the fork (SB-12, N3).
         adapter_route = None
         if setup.harness == "codex":
-            adapter_route = codex_native_verifier_reads(campaign, setup, condition, targets,
-                                                        base, timeout=max(timeout, 900))
-            verifier_reads = {label: dict(row, bound_to="the adapter's own fresh `codex "
-                                                        "exec` child")
-                              for label, row in adapter_route["reads"].items()}
+            # SB-12 send-back 2: its own walled capture, BESIDE the parent's, under the same
+            # record - so the profile, the spec and the proxy log of the verifier route are
+            # retained the way the parent launch's are and can be compared with them.
+            adapter_route = codex_native_verifier_reads(
+                campaign, setup, condition, targets, base,
+                os.path.join(record, "verifier-route-%s" % stamp),
+                timeout=max(timeout, 900), registry=registry, trial=trial_id_)
+            # the row's OWN `bound_to` is kept: it names the fresh child's thread id when
+            # the helper established one, and says so when it did not.
+            verifier_reads = dict(adapter_route["reads"])
         else:
             for label in NATIVE_READ_TARGETS:
                 v_outcome, v_said = _native_read_outcome(
