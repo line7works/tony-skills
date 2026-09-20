@@ -231,7 +231,7 @@ Line shape (fields separated by ` · `):
 
 (Each compile at E11 and E19 adds a dated line here pointing at the guide's revision-history entry.)
 
-- 2026-09-20 · first compile (the E11 compile, amendment A12a) · 204 lines, L21 to L228 (15 contradicts, 155 adds, 34 held; 0 malformed). Two independent evaluations, the control room's and GPT-6 Astra's at high, were merged into one assessment at Tony's request. Result, on his word: 15 guide changes from 35 lines (1 fix, 14 additions), 54 lines stamped as confirming rules the guide already had, 94 true lines moved to four companion notes beside the guide (`skills-harness-notes`, `skills-evals-and-benches`, `skills-helper-recipes`, `skills-crew-and-review-loop`), 10 skipped, 11 rejected. The guide's revision-history entry is dated 2026-09-20. Both evaluations, both per-line ledgers and the combined assessment are in the Clerk audit packet under `astra-outputs/guide-compile/`.
+- 2026-09-20 · first compile (the E11 compile, amendment A12a) · 204 lines, L21 to L228 (15 contradicts, 155 adds, 34 held; 0 malformed). Two independent evaluations, the control room's and GPT-6 Astra's at high, were merged into one assessment at Tony's request. Result, on his word: 15 guide changes from 35 lines (1 fix, 14 additions), 54 lines stamped as confirming rules the guide already had, 94 lines retained, with qualifications, in four companion notes beside the guide (`skills-harness-notes`, `skills-evals-and-benches`, `skills-helper-recipes`, `skills-crew-and-review-loop`), 10 skipped, 11 rejected. The guide's revision-history entry is dated 2026-09-20. Both evaluations, both per-line ledgers and the combined assessment are in the Clerk audit packet under `astra-outputs/guide-compile/`.
 
 ### Corrections recorded at the first compile
 
@@ -247,3 +247,9 @@ The lines above are never edited, so corrections live here. The compile script r
 - L194's activation comparison is unreliable: L197 shows the Claude Code witness counted all six slash-form requests as misses.
 - L63's conflict is already resolved by the guide's Scripts table (a summary and artifact path, or limits and pagination). L68 quotes a rule this guide never had; it belongs to the pilot contract and the readers contract. L72's causal claim (security vocabulary tripped a content filter) is unproven; writing a verdict to a file as the work goes is sound practice on its own. L148's conclusion is wrong: a brief does not satisfy a no-access requirement while access remains possible. L181 overstates: a traceback after a fix may only mean the probe is obsolete.
 - Lines L152 to L187 carry no evidence field; their support is in the E10 lane contract's amendments.
+- L219's four condition counts total 66, not the 80 it reports. Both are right: the outside reviewer's read of that run gives 80 distinct trials as comparison trials 21, 24, 1 and 20, plus 5 continuation and 9 hand-off trials. L219 left the last two out.
+- L171's proposed fix is half wrong. A process start time beside the pid detects pid reuse; a boot id does not, because a pid can be reused within one boot. Found by the outside reviewer's check of the companion notes.
+
+### Second pass, 2026-09-20
+
+GPT-6 Astra at high checked the applied compile (the guide, the four notes, the index lines and this section): 0 blockers, 3 majors, 7 minors, each with an exact replacement. All ten were applied the same day. The majors: two notes certified isolation beyond the six probes; version labels claimed releases that some lines never recorded; and the pid-reuse recipe above. Her check and the control room's record of it are in the Clerk audit packet under `astra-outputs/guide-compile/kit-check/`.
