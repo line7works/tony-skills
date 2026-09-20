@@ -228,3 +228,32 @@ byte-identical, the regrade gate of B1, no file written outside the scratch. A g
   `setups/codex/wall-needs.json`: `chatgpt.com` sufficient; `ab.chatgpt.com` allowed through the
   subdomain rule (the vendor's flag service, as Claude Code's list allows its equivalent); an OpenAI
   content host, `github.com`, `api.github.com` and `files.openai.com` refused, and the sessions answered.
+- SB-12 (2026-09-19 night, control room): the ONE fix round after Astra's verification at high (filed at
+  the Clerk packet, `astra-outputs/bench/verify/verify.md`; two lines CLEARED, W5 and G2; eight OPEN).
+  BUILT, the six she ties to question 2 or 3, each with her probe reproduced before and after:
+  G1/N1 every candidate call is collected, a conflict is `unextracted` and never first-wins, ordinary
+  prose is extracted without the skill's output grammar, no branch on condition, round-2 regrade still 0
+  flips; W1/N2 a launcher is compared by realpath, a sealed real campaign refuses a launcher that is not
+  its staged one, an alias gets the wall, and the broad deny gains the user temp and cache folders and
+  the data-volume spellings, with one regex allow for Apple's `xcrun_db` cache file so `git` and `python3`
+  do not print an error on every call in a session's view; W4/N3 typed read outcomes, a refusal counts
+  only on a sentinel planted and confirmed outside the wall, one captured refusal never serves two
+  labels, and the Codex verifier half of the native check goes through the adapter's own fresh
+  `codex exec` route; W3/N4 the wall witness requires the process's APPLIED sandbox
+  (`sandbox_check`) as well as the marker and the refused probe, so a mode-000 file no longer passes;
+  H1/N5 vacuous evidence recovery for a correctly recovered stop, both pair aliases kept, the latest
+  attempt of each repetition selected first; G3+H1/N6 journal membership required even with no journal,
+  a permission error from the liveness check means alive, a campaign-wide scan before any grading route.
+  CARRIED with her label: W2/N7 (proxy log completeness; she ties it to neither question). CLOSED by the
+  control room: P1, 21 of 21 key files byte-identical by sha256 between main 2054b92 and the tip
+  (`verify/P1-key-hashes-main-vs-tip.md`); her note on `reading_tables.py`, which now counts unextracted
+  sessions apart from reply-sourced ones. CARRIED on the control room's call: inverting the profile to
+  deny-by-default (nine live proofs rest on the current shape and one round cannot re-prove an
+  inversion); the legacy `CODEX_SANDBOX=seatbelt` branch, unmeasurable without a live Codex seatbelt;
+  three more error-path-reads-as-pass sites the builder named and did not fix
+  (`evidence_artifacts_recovered` and `card_interpretation` vacuous on absence, `pair_path_map`
+  degrading silently); the zsh here-document `/tmp` failure. TWO BUILDER RULE BREAKS, disclosed by the
+  builder and reported to Tony in chat: it opened one answer-key file's head (no items, dispositions or
+  reasons by its account; the key's bytes are unchanged and no fixture or key text is in the diff), and
+  one early test started a real `codex exec` child that died at Codex's trusted-directory check with no
+  model turn. No second verification follows, by Tony's ruling; Astra reads the clean run on her own.
