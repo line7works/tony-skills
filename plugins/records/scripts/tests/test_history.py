@@ -115,7 +115,12 @@ class BulletTwoASecondImportOfAnUnchangedDocument(HistoryCase):
         code, second, _ = self.run_import(HISTORY)
         self.assertEqual(second["head"], first["head"])
         self.assertEqual(second["events"], first["events"])
-        self.assertEqual(second["previously_imported"], first["lines_classified"])
+        # `previously_imported` counts RECORD lines. A `Status:` line is an observation and is
+        # outside both 11.7 checks (owner amendment A4), so it is classified again every pass
+        # and compared by its text instead.
+        cards = first["counts"].get("card_observed", 0)
+        self.assertEqual(second["previously_imported"], first["lines_classified"] - cards)
+        self.assertEqual(second["lines_classified"], cards)
 
     def test_the_log_still_verifies(self):
         self.run_import(HISTORY)
@@ -157,8 +162,12 @@ class BulletThreeADocumentThatOnlyGrewAtItsTail(HistoryCase):
         code, first, _ = self.run_import(HISTORY)
         self.grow()
         code, second, _ = self.run_import(HISTORY)
-        self.assertEqual(second["previously_imported"], first["lines_classified"])
-        self.assertEqual(second["lines_classified"], 1)
+        # the card line is classified again every pass and compared by its text (amendment A4),
+        # so it is in neither `previously_imported` nor the first pass's record count
+        cards = first["counts"].get("card_observed", 0)
+        self.assertEqual(second["previously_imported"], first["lines_classified"] - cards)
+        self.assertEqual(second["lines_classified"], 1 + cards, "the new record, and the card")
+        self.assertEqual(second["counts"], {"disposition": 1}, "the card's text did not change")
 
     def test_a_second_log_opened_is_not_written(self):
         self.run_import(HISTORY)
@@ -296,7 +305,7 @@ class BulletThreeAndAHalfARecordAboveTheImportedTail(HistoryCase):
         self.assertEqual(lines, sorted(lines), lines)
 
     def test_a_card_line_neither_sets_the_mark_nor_is_judged_by_it(self):
-        """Cards are outside the rule in both directions; what a moved card means is the owner's."""
+        """Cards are outside the rule in both directions (owner amendment A4)."""
         from records_core import importer as importer_mod
         self.run_import(HISTORY)
         events = testlib.events_of(self.workspace, HISTORY)
@@ -388,6 +397,134 @@ class WhatAnImportedEventCarries(HistoryCase):
         self.assertEqual(finished["lines_read"], len(self.read(HISTORY).split("\n")))
         self.assertEqual(finished["counts"],
                          {"card_observed": 1, "finding_raised": 1, "disposition": 1})
+
+
+class OwnerAmendmentA4AStatusLineIsAnObservation(HistoryCase):
+    """Owner amendment A4 (2026-09-20): a `Status:` line is an observation, not a record.
+
+    It is outside BOTH of section 11.7's checks, so a card a station flips in place, or that
+    moves because lines were written above it, never stops a later import. Each pass appends a
+    `card_observed` for a slice only when the current text differs from the `value` of that
+    slice's last `card_observed` in the log, matched by slice name and never by line number.
+    RECORD lines keep section 11.7 exactly as it was built.
+    """
+
+    CARDS_ONLY = "docs/plans/2026-05-20-cards-only.md"
+    CARDS_ONLY_TEXT = ("# Loading board\n\nA board with cards and no punch list yet.\n\n"
+                       "## Slice A - the bay\nStatus: built\n\n"
+                       "## Slice B - the ramp\nStatus: signed off\n")
+
+    def cards_of(self, doc=HISTORY):
+        return [e for e in testlib.events_of(self.workspace, doc) if e["kind"] == "card_observed"]
+
+    def flip_the_card(self, text):
+        """Rewrite the one `Status:` line of the history fixture in place, nothing else."""
+        old = self.read(HISTORY)
+        self.assertIn("Status: signed off\n", old, "the fixture's card moved")
+        self.write(HISTORY, old.replace("Status: signed off\n", "Status: %s\n" % text, 1))
+
+    def state_of(self, doc=HISTORY):
+        code, body, err = testlib.run_json(["state", "--workspace", self.workspace, "--doc", doc])
+        self.assertEqual(code, 0, err)
+        return dict((row["name"], row) for row in body["slices"])
+
+    def test_a_card_flipped_in_place_is_imported_as_one_new_observation(self):
+        code, _, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, err)
+        self.assertEqual([c["value"] for c in self.cards_of()], ["signed off"])
+        before = self.state_of()["A"]
+        self.assertEqual(before["card_observed"], "signed off")
+        self.assertFalse(before["card_drift"], "the fixture's card agrees with what is open")
+
+        self.flip_the_card("rejected")
+        code, body, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, "%s %s" % (body, err))
+        self.assertEqual(body["counts"], {"card_observed": 1},
+                         "the only news is the card; no record is read again")
+        self.assertEqual(body["imported"], 3, "import_started, the card, import_finished")
+        self.assertEqual([c["value"] for c in self.cards_of()], ["signed off", "rejected"])
+
+        after = self.state_of()["A"]
+        self.assertEqual(after["card_observed"], "rejected", "state follows the last observation")
+        self.assertEqual(after["card_derived"], "signed off", "nothing is open")
+        self.assertTrue(after["card_drift"], "the drift is recomputed from the new observation")
+
+    def test_a_card_flipped_and_a_block_appended_both_land_in_file_order(self):
+        code, _, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, err)
+        self.flip_the_card("rejected")
+        self.write(HISTORY, self.read(HISTORY).rstrip("\n") + "\n" + self.build.GROWN_TAIL)
+        code, body, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, "%s %s" % (body, err))
+        self.assertEqual(body["counts"].get("card_observed"), 1)
+        self.assertGreater(sum(v for k, v in body["counts"].items() if k != "card_observed"), 0,
+                           "the appended block is read too")
+        events = testlib.events_of(self.workspace, HISTORY)
+        self.assertEqual([c["value"] for c in self.cards_of()], ["signed off", "rejected"])
+        records = [e["origin"]["line"] for e in events
+                   if e["origin"]["kind"] == "legacy" and e["kind"] != "card_observed"]
+        self.assertEqual(records, sorted(records), records)
+
+    def test_a_status_line_that_only_moved_appends_nothing_and_does_not_conflict(self):
+        """No imported RECORD sits below the insertion, so only the card moved (A4)."""
+        self.write(self.CARDS_ONLY, self.CARDS_ONLY_TEXT)
+        code, body, err = self.run_import(self.CARDS_ONLY)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(body["counts"], {"card_observed": 2})
+        before = self.log_bytes(self.CARDS_ONLY)
+
+        self.write(self.CARDS_ONLY,
+                   self.CARDS_ONLY_TEXT.replace("A board with cards",
+                                                "One more paragraph.\n\nA board with cards", 1))
+        code, body, err = self.run_import(self.CARDS_ONLY)
+        self.assertEqual(code, 0, "%s %s" % (body, err))
+        self.assertEqual(body["imported"], 0, "the text did not change, so there is no news")
+        self.assertEqual(self.log_bytes(self.CARDS_ONLY), before, "nothing is written")
+        self.assertEqual([c["slice"] for c in self.cards_of(self.CARDS_ONLY)], ["A", "B"])
+
+    def test_one_slices_card_changing_leaves_the_other_alone(self):
+        self.write(self.CARDS_ONLY, self.CARDS_ONLY_TEXT)
+        code, _, err = self.run_import(self.CARDS_ONLY)
+        self.assertEqual(code, 0, err)
+        self.write(self.CARDS_ONLY, self.CARDS_ONLY_TEXT.replace("Status: built", "Status: rejected", 1))
+        code, body, err = self.run_import(self.CARDS_ONLY)
+        self.assertEqual(code, 0, "%s %s" % (body, err))
+        self.assertEqual(body["counts"], {"card_observed": 1})
+        self.assertEqual([(c["slice"], c["value"]) for c in self.cards_of(self.CARDS_ONLY)],
+                         [("A", "built"), ("B", "signed off"), ("A", "rejected")])
+
+    def test_a_second_import_of_an_unchanged_document_still_appends_nothing(self):
+        code, _, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, err)
+        before = self.log_bytes(HISTORY)
+        code, body, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, "%s %s" % (body, err))
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(body["counts"], {}, "not even a bracket")
+        self.assertEqual(self.log_bytes(HISTORY), before)
+
+    def test_a_changed_record_line_is_still_a_conflict(self):
+        code, _, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, err)
+        before = self.log_bytes(HISTORY)
+        self.write(HISTORY, self.read(HISTORY).replace(
+            "the loading list is not sorted · a heavy crate",
+            "the loading list is not sorted at all · a heavy crate", 1))
+        code, body, err = self.run_import(HISTORY)
+        self.assertEqual(code, 7, "%s %s" % (body, err))
+        self.assertEqual(body["error"], "conflict")
+        self.assertEqual(self.log_bytes(HISTORY), before, "nothing is written")
+
+    def test_a_card_set_is_not_an_observation_of_the_documents_text(self):
+        """A native card move does not tell the importer what the `Status:` line says (A4)."""
+        from records_core import importer as importer_mod
+        events = [{"kind": "card_set", "ledger_doc": HISTORY, "slice": "A",
+                   "before": "built", "after": "signed off"},
+                  {"kind": "card_observed", "ledger_doc": HISTORY, "slice": "A",
+                   "value": "built"},
+                  {"kind": "card_observed", "ledger_doc": "docs/other.md", "slice": "A",
+                   "value": "rejected"}]
+        self.assertEqual(importer_mod.last_card_values(events, HISTORY), {"A": "built"})
 
 
 if __name__ == "__main__":

@@ -54,7 +54,11 @@ behind; the next `append` reports it (exit 7) with its contents, and `--break-lo
 once its pid is not alive. The log itself is never left half-written: the rename is atomic.
 
 Test hooks (honored only with RECORDS_TEST=1): RECORDS_TEST_NO_JSONSCHEMA=1 behaves as if
-jsonschema were not importable (exit 3).
+jsonschema were not importable (exit 3). The test-only flag `--component-root DIR` reads this
+component's references and computes its identity from DIR instead of from this script's own
+location; it is NOT section 12.1's `--records-root`, which is the argument a STATION takes to
+find this component (`references/interface.md`, "Reaching the component"). records.py is the
+component: it never performs that lookup, and it reads no `RECORDS_ROOT`.
 """
 import argparse
 import json
@@ -418,8 +422,11 @@ def build_parser():
                            "document, its chain, its identities, and its addresses (records E12 contract "
                            "section 12). JSON on stdout and nothing else.",
                epilog=EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--records-root", metavar="DIR", default=None,
-                   help="test only: load references from DIR instead of this script's own component root")
+    p.add_argument("--component-root", metavar="DIR", default=None,
+                   help="test only: read this component's references and compute its identity from DIR "
+                        "instead of from this script's own location. Not section 12.1's --records-root, "
+                        "which is the argument a STATION takes to find this component; records.py is the "
+                        "component and is never the one doing that lookup.")
     sub = p.add_subparsers(dest="command", metavar="command")
     sub.required = True
 
@@ -510,7 +517,10 @@ def build_parser():
              "that document's log. The document itself is never written, and neither is a verdict doc "
              "or anything outside docs/records/. A second pass over an unchanged document appends "
              "nothing; a document that has only grown at its tail contributes only its new records; a "
-             "document whose imported lines changed or moved is exit 7 and nothing is written. Any "
+             "document whose imported RECORD lines changed or moved is exit 7 and nothing is written. "
+             "A `Status:` line is an observation, not a record (amendment A4): it never conflicts, and "
+             "a pass appends a card_observed for a slice only when its text differs from the last one "
+             "observed for that slice. Any "
              "ambiguous line stops the whole document with exit 5 and a report that lists every field "
              "an answer needs; --resolutions supplies those answers. Every imported clear keeps its "
              "effect and carries `known: false` (owner ruling O4), which derived state reports as "
@@ -554,15 +564,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
     validate.require_jsonschema()
     try:
-        root = validate.component_root(args.records_root)
+        root = validate.component_root(args.component_root)
         schemas = validate.load_schemas(root) if args.command in NEEDS_SCHEMAS else None
         return COMMANDS[args.command](args, root, schemas)
     except (Usage, validate.ComponentRootMissing) as exc:
         parser.error(str(exc))
     except events_mod.RecordsError as exc:
-        return emit(envelope(validate.component_root(args.records_root), exc.document), exc.code)
+        return emit(envelope(validate.component_root(args.component_root), exc.document), exc.code)
     except Refusal as exc:
-        return emit(envelope(validate.component_root(args.records_root), exc.document), exc.code)
+        return emit(envelope(validate.component_root(args.component_root), exc.document), exc.code)
     except validate.ReferenceUnavailable as exc:
         log(str(exc))
         return 1

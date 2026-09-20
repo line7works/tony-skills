@@ -1,0 +1,11 @@
+{
+  "name": "records",
+  "description": "The shared records component: the append-only event log of a ledger document, versioned finding IDs, source identifiers, derived state, a legacy importer, and a documented reader interface. No SKILL.md and no model trigger: stations and consumers reach it through the one CLI (scripts/records.py) and write against references/interface.md.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

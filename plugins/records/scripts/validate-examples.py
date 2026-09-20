@@ -5,10 +5,10 @@
 # ///
 """Validate the records component's examples against its four schemas.
 
-    uv run validate-examples.py [--records-root DIR] [--verbose]      (from any directory)
+    uv run validate-examples.py [--component-root DIR] [--verbose]      (from any directory)
 
 Resolves `references/` from the component root, which is this script's own location
-(`scripts/..`) unless `--records-root` names another directory (test only).
+(`scripts/..`) unless `--component-root` names another directory (test only).
 
 Checks:
 
@@ -32,7 +32,7 @@ stdout: one JSON object {"ok", "valid": {"files", "failing"}, "invalid": {"total
 "failures": [strings]} and nothing else. stderr: diagnostics; with --verbose one line per check.
 
 Exit status: 0 every check passed; 4 a check failed (the failures list names each, an example
-that does not load included); 2 usage (an unknown argument, a --records-root that is not a
+that does not load included); 2 usage (an unknown argument, a --component-root that is not a
 directory); 3 jsonschema missing (nothing on stdout); 1 a schema under the component root
 missing or unreadable.
 Side effects: none (read-only). Reruns are safe.
@@ -73,7 +73,7 @@ def build_parser():
                            "reject every invalid example and every dropped-field mutation, and walk the "
                            "example log's chain.",
                epilog=EXAMPLE, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--records-root", metavar="DIR", default=None,
+    p.add_argument("--component-root", metavar="DIR", default=None,
                    help="test only: load references from DIR instead of this script's own component root")
     p.add_argument("--verbose", action="store_true", default=False, help="one line per check on stderr")
     return p
@@ -200,7 +200,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     validate.require_jsonschema()
     try:
-        root = validate.component_root(args.records_root)
+        root = validate.component_root(args.component_root)
         schemas = validate.load_schemas(root)
     except validate.ComponentRootMissing as exc:
         parser.error(str(exc))

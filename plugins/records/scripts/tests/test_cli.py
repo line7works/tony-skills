@@ -126,10 +126,10 @@ class Usage(unittest.TestCase):
         finally:
             testlib.rmtree(scratch)
 
-    def test_a_records_root_that_is_not_a_directory_is_a_usage_error(self):
-        code, out, err = testlib.run_cli(["--records-root", "/no/such/root", "component-identity"])
+    def test_a_component_root_that_is_not_a_directory_is_a_usage_error(self):
+        code, out, err = testlib.run_cli(["--component-root", "/no/such/root", "component-identity"])
         self.assertEqual(code, 2)
-        self.assertIn("--records-root", err)
+        self.assertIn("--component-root", err)
 
 
 class MissingDependency(unittest.TestCase):
@@ -179,10 +179,10 @@ class ComponentIdentity(unittest.TestCase):
             copy_root = os.path.join(scratch, "records")
             shutil.copytree(testlib.ROOT, copy_root,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-            code, first, err = testlib.run_json(["--records-root", copy_root, "component-identity"])
+            code, first, err = testlib.run_json(["--component-root", copy_root, "component-identity"])
             self.assertEqual(code, 0, err)
             testlib.write(os.path.join(copy_root, "references", "examples", "valid", "extra.json"), "{}\n")
-            code, second, err = testlib.run_json(["--records-root", copy_root, "component-identity"])
+            code, second, err = testlib.run_json(["--component-root", copy_root, "component-identity"])
             self.assertEqual(code, 0, err)
             self.assertNotEqual(first["content_sha256"], second["content_sha256"])
         finally:
@@ -259,7 +259,7 @@ class Examples(unittest.TestCase):
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             testlib.write(os.path.join(copy_root, "references", "examples", "valid", "broken.json"),
                           json.dumps({"v": 1, "kind": "card_set"}) + "\n")
-            code, out, err = testlib.run_cli(["--records-root", copy_root], script=testlib.EXAMPLES_CLI)
+            code, out, err = testlib.run_cli(["--component-root", copy_root], script=testlib.EXAMPLES_CLI)
             self.assertEqual(code, 4)
             document = json.loads(out)
             self.assertFalse(document["ok"])

@@ -73,7 +73,7 @@ class ReferenceUnavailable(RuntimeError):
 
 
 class ComponentRootMissing(ValueError):
-    """An explicit --records-root that is not a directory: a usage error (exit 2), never exit 1."""
+    """An explicit --component-root that is not a directory: a usage error (exit 2), never exit 1."""
 
 
 def jsonschema_unavailable():
@@ -96,7 +96,7 @@ def component_root(explicit=None):
     if explicit:
         path = os.path.abspath(explicit)
         if not os.path.isdir(path):
-            raise ComponentRootMissing("--records-root is not a directory: %s" % path)
+            raise ComponentRootMissing("--component-root is not a directory: %s" % path)
         return path
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

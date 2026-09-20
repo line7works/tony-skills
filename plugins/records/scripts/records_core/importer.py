@@ -7,7 +7,7 @@ that changes state; `git blame` is read-only and is the only one it runs.
 
 What it produces, per line of the document, in file order:
 
-    a `Status:` line under a `## Slice X` heading     -> card_observed
+    a `Status:` line whose text is new for its slice  -> card_observed (amendment A4)
     a review finding line                            -> finding_raised
     a fix-introduced defect line                     -> defect_raised
     a recheck line                                   -> disposition
@@ -38,6 +38,13 @@ Readings this module takes where the contract left a choice; each is in the slic
   `card_observed`, because a `Status:` line carries no date and section 6.2 says a `card_observed`
   records what the line said "when an import read it". `import_started` and `import_finished`
   are not legacy records at all: they carry `origin.kind: "native"` and an RFC 3339 instant.
+- Owner amendment A4: a `Status:` line is an observation, not a record. It is outside both of
+  section 11.7's checks (changed or moved, and the tail rule), and each pass appends a
+  `card_observed` for a slice only when the current text differs from the `value` of that slice's
+  last `card_observed` in the log, or when the log holds none for it. A slice whose `Status:`
+  line is gone appends nothing, and a pass whose only news is one flipped card appends
+  `import_started`, that `card_observed`, and `import_finished`. RECORD lines keep section 11.7
+  exactly as written.
 - A resolutions file carries `answered_by`, `answered_on`, and one answer per line, each with
   the `raw` text of the line as the answer was given, which is what makes section 11.5's
   "a resolution that names a line whose raw text has changed ... is rejected" checkable. The
@@ -153,18 +160,42 @@ def units_of(parsed, doc):
 # ---- section 11.7: the document has only grown ------------------------------------------------
 
 def previously_imported(existing_events, doc):
-    """{line: raw} for every line of `doc` an earlier pass of this importer already recorded."""
+    """{line: raw} for every RECORD line of `doc` an earlier pass of this importer recorded.
+
+    A `card_observed` is not one of them (owner amendment A4): a `Status:` line is an
+    observation, not a record, so it is outside both of section 11.7's checks. A card that a
+    station flips in place, or that moves because lines were written above it, is therefore not a
+    conflict; what it is instead is decided in `plan_import`, by comparing its text with the last
+    value observed for that slice.
+    """
     seen = {}
     for event in existing_events:
         origin = event.get("origin")
         if not isinstance(origin, dict) or origin.get("kind") != "legacy":
             continue
-        if origin.get("doc") != doc:
+        if origin.get("doc") != doc or event.get("kind") == "card_observed":
             continue
         line = origin.get("line")
         if isinstance(line, int):
             seen.setdefault(line, origin.get("raw"))
     return seen
+
+
+def last_card_values(existing_events, doc):
+    """{slice name: the `value` of that slice's LAST `card_observed` in the log} (amendment A4).
+
+    Matched by slice name, never by line number, so a `Status:` line that moved is still the same
+    slice's card. A `card_set` is a native card move, not an observation of the document's text,
+    and does not count here.
+    """
+    out = {}
+    for event in existing_events:
+        if event.get("kind") != "card_observed" or event.get("ledger_doc") != doc:
+            continue
+        name = event.get("slice")
+        if isinstance(name, str):
+            out[name] = event.get("value")
+    return out
 
 
 def check_only_grown(seen, lines, doc, log_rel):
@@ -190,8 +221,8 @@ def high_water_line(existing_events, doc):
 
     A `card_observed` is left out in both directions: a `Status:` line sits above every record of
     its document and would make the mark useless, and a `Status:` line that appears or moves is
-    not a record moving. What a `Status:` line does to a re-import is the one point of section 9.3
-    the control room has put to the owner; nothing here decides it.
+    not a record moving. Owner amendment A4 settles the rest: a `Status:` line is an observation
+    and is outside both of section 11.7's checks.
     """
     highest = None
     for event in existing_events:
@@ -216,7 +247,7 @@ def check_only_grew_at_the_tail(units, highest, doc, log_rel):
     nothing is written and the owner decides what happened.
 
     `card` units are outside this rule in both directions: they neither set the mark nor are
-    judged by it.
+    judged by it (owner amendment A4).
     """
     if highest is None:
         return
@@ -336,6 +367,7 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     counts = {}
     candidates = findings_from_log(existing_events, doc)
     by_id = dict((f.id, f) for f in candidates)
+    cards_seen = last_card_values(existing_events, doc)
     run_id = run_id_for(doc, moment)
     actor = {"station": STATION, "run_id": run_id, "harness": None}
 
@@ -455,8 +487,14 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     for unit in units:
         if unit.kind == "card":
             value = unit.raw[len("Status:"):].strip() if unit.raw.startswith("Status:") else unit.raw
+            # Amendment A4: one observation per change. The comparison is against the last value
+            # observed for this SLICE, whatever line the `Status:` line sits on now; an unchanged
+            # card appends nothing, so a second import of an unchanged document is still empty.
+            if unit.slice_name in cards_seen and cards_seen[unit.slice_name] == value:
+                continue
             card = value if value in legacy.CARD_VALUES else "none"
             out.append(event_of(unit, "card_observed", slice=unit.slice_name, value=value, card=card))
+            cards_seen[unit.slice_name] = value
             continue
         item = unit.item
         if item["kind"] == "unparsed":
