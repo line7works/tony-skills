@@ -257,7 +257,10 @@ class R1CaptureAndSchedule(RunnerCase):
             runner.write_json(os.path.join(directory, "command.json"),
                               {"setup": "codex", "condition": "available", "kind": kind,
                                "status": "complete"})
-            runner.write_json(os.path.join(directory, "result.json"), {})
+            # batch C: a producer with NOTHING to recover is refused, so the record this
+            # scheduler test places by hand carries a terminal status the way a real one does.
+            runner.write_json(os.path.join(directory, "result.json"),
+                              {"status": "completed", "items": []})
         plan = {"order": {"codex": [comparison]},
                 "continuation_order": {"codex": [continuation]},
                 "consumer_order": {"claude-code": ["consumer-codex-to-claude-code-r1"]}}
@@ -269,7 +272,8 @@ class R1CaptureAndSchedule(RunnerCase):
             runner.write_json(os.path.join(directory, "command.json"),
                               {"setup": "codex", "condition": "available",
                                "kind": "continuation:compaction", "status": "complete"})
-            runner.write_json(os.path.join(directory, "result.json"), {})
+            runner.write_json(os.path.join(directory, "result.json"),
+                              {"status": "completed", "items": []})
 
         def consume(one):
             selected.append(runner.producer_record_for(campaign, plan, "codex")["trial"])
@@ -312,10 +316,29 @@ class R1CaptureAndSchedule(RunnerCase):
         self.assertEqual(one, continuation)
 
     # ---- the read-only consumer regrade command
-    def test_the_regrade_command_needs_a_revision(self):
+    def test_the_regrade_command_needs_a_revision_once_a_first_grade_exists(self):
+        """Batch C: `--regrade` with no revision writes the FIRST grade, and only that.
+
+        Deferred grading (Astra's gap 7) means every consumer attempt starts ungraded, so a
+        bare `--regrade` has a job to do: write `consumer-grade.json`. A record that already
+        holds one is refused by name, which is the E10-48 rule the old message carried.
+        """
+        campaign = runner.Campaign(self.campaign)
+        tid = "consumer-claude-code-to-codex-r1"
+        record = campaign.trial_dir(tid)
+        runner.ensure_dir(record)
+        runner.write_json(os.path.join(record, "command.json"), {"kind": "consumer"})
+        runner.write_json(os.path.join(record, "consumer-grade.json"), {"ok": True})
+        # SB-12, N6: consumer enumeration now requires journal membership by
+        # `(trial, attempt)`, which `do_consumer` writes for every real attempt
+        # (runner.py, `campaign.journal_attempt(..., "consumer")`). A hand-placed record
+        # journals itself the same way, so this test still measures the regrade rule and not
+        # the new membership rule.
+        campaign.journal_attempt(tid, 0, record, "consumer")
         got = cli(["consumer", "--campaign", self.campaign, "--regrade", "--all"])
         self.assertEqual(got.returncode, 2, got.stdout[-400:])
         self.assertIn("--revision", got.stderr)
+        self.assertIn("consumer-grade.json", got.stderr)
 
     def test_the_regrade_command_writes_beside_the_original(self):
         campaign = runner.Campaign(self.campaign)
@@ -340,6 +363,7 @@ class R1CaptureAndSchedule(RunnerCase):
         runner.write_json(os.path.join(record, "command.json"),
                           {"kind": "consumer", "pair": pair, "producer": "claude-code",
                            "producer_trial": "p", "producer_record": producer})
+        campaign.journal_attempt(tid, 0, record, "consumer")      # SB-12, N6
         original = os.path.join(record, "consumer-grade.json")
         runner.write_json(original, {"ok": False, "why": ["the original"]})
         before = runner.read_text(original)
@@ -427,12 +451,9 @@ class S1WriteFence(unittest.TestCase):
         self.assertEqual(sorted(table), ["claude-code", "codex", "opencode"])
         for harness, row in table.items():
             self.assertTrue(row["writes"] and row["outbound"])
-            self.assertTrue(row["prevented"])
         # AMENDED after the live proof (e11-round2-proof-s1, 2026-09-18). The table first
         # claimed Codex prevented everything and that Claude Code could not fence a shell
         # redirection. Both were wrong, and the measurement wins:
-        #   * Codex refuses both write routes but does NOT refuse an outbound call - its
-        #     launcher passes sandbox_workspace_write.network_access=true;
         #   * Claude Code refuses the shell redirection too, once the deny path is written
         #     with the double leading slash;
         #   * OpenCode is the harness where the shell redirection actually lands.
@@ -440,9 +461,30 @@ class S1WriteFence(unittest.TestCase):
         self.assertIn("shell redirection", " ".join(table["opencode"]["detected_only"]))
         self.assertNotIn("shell redirection",
                          " ".join(table["claude-code"]["detected_only"]))
-        for harness in ("claude-code", "codex", "opencode"):
+        for harness in ("claude-code", "opencode"):
             joined = " ".join(table[harness]["prevented"])
             self.assertIn("write-kind tool call", joined)
+        # AMENDED AGAIN by SB-2 (2026-09-19). Codex's own sandbox is OFF inside the wall, so
+        # its NATIVE row prevents nothing and says so; what used to be its sandbox's job is
+        # the wall's. A row that kept the old claim would be a false claim in every
+        # `writable-roots` record.
+        self.assertEqual(table["codex"]["prevented"], [])
+        self.assertIn("danger-full-access", table["codex"]["writes"])
+        self.assertIn("write-kind tool call", " ".join(table["codex"]["detected_only"]))
+
+    def test_the_wall_carries_one_service_policy_on_every_route(self):
+        """A2 / Astra's gap 4: the harness rows are per harness; the wall's row is not."""
+        wall = runner.WALL_MECHANISM
+        self.assertEqual(wall["detected_only"], [])
+        joined = " ".join(wall["prevented"])
+        for expected in ("write-kind tool call", "shell redirection",
+                         "another trial's record", "tool, shell, interpreter or verifier"):
+            self.assertIn(expected, joined)
+        import tempfile
+        campaign = runner.Campaign(os.path.join(tempfile.mkdtemp(prefix="fence-"), "c"))
+        for cls in (runner.ClaudeCodeSetup, runner.CodexSetup, runner.OpenCodeSetup):
+            row = runner.fence_mechanism(cls(campaign, stage=campaign.stage))
+            self.assertEqual(row["wall"], wall)
 
     def test_the_claude_code_fence_denies_the_named_roots_and_the_outbound_names(self):
         import importlib.util
@@ -458,9 +500,14 @@ class S1WriteFence(unittest.TestCase):
         self.assertIn("Write(//pilot/home/**)", deny)
         self.assertIn("Edit(//pilot/home/**)", deny)
         self.assertNotIn("Write(/pilot/home/**)", deny)
-        # E11-46 R4: the read side of the same fence, for E11-40's native isolation check.
-        self.assertIn("Read(//pilot/home/**)", deny)
-        self.assertIn("Grep(//pilot/home/**)", deny)
+        # E11-46 R4's READ side is GONE (Astra's gap 1, the sealed bench's A5). `denied_roots`
+        # names the pilot HOMES, and a session's own installed skill lives inside its home, so
+        # the read denials denied the skill its own references, scripts, adapters and schemas
+        # in all twelve with-skill sessions of the round-2 rerun. The read boundary is the
+        # WALL now; the write denials and the outbound denials stay as a second layer.
+        for tool in ("Read", "Glob", "Grep", "NotebookRead"):
+            self.assertNotIn("%s(//pilot/home/**)" % tool, deny)
+        self.assertEqual(module.READ_TOOLS, ())
         self.assertIn("Bash(curl:*)", deny)
         self.assertIn("WebFetch", deny)
         self.assertEqual(len(deny), len(set(deny)))
@@ -1516,10 +1563,14 @@ class R3GradingWaitsForTheSessions(RunnerCase):
     """R3: grading happens only after every consumer session has ended."""
 
     def test_the_regrade_goes_through_the_same_campaign_wide_barrier(self):
+        """Batch C moved the barrier into the one grading path both callers share."""
         source = runner.read_text(os.path.join(runner.EVALS_DIR, "runner", "runner.py"))
-        body = source[source.index("def do_consumer_regrade("):
-                      source.index("def do_lane_stop(")]
+        body = source[source.index("def grade_consumer_records("):
+                      source.index("def _backfill_graded_ok(")]
         self.assertIn("refuse_while_alive(campaign, targets)", body)
+        regrade = source[source.index("def do_consumer_regrade("):
+                         source.index("def do_consumer(")]
+        self.assertIn("grade_consumer_records(campaign, targets", regrade)
 
     def test_a_live_consumer_session_stops_the_regrade(self):
         campaign = runner.Campaign(self.campaign)

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -165,10 +166,76 @@ class AdapterTests(unittest.TestCase):
                 for key,value in [('CODEX_HOME',home),('CODEX_SANDBOX',marker)]:
                     env.pop(key,None)
                     if value is not None:env[key]=value
-                env.pop('RECHECK_ADAPTER_CANNED',None)
+                for key in ['RECHECK_ADAPTER_CANNED','RECHECK_HARNESS_SANDBOX','RECHECK_WALL_PROBE']:
+                    env.pop(key,None)
                 c=subprocess.run([sys.executable,str(ROOT/'verifier.py'),'--brief',str(t/'checklist.md'),'--workspace',str(t/'ws'),'--scratch',str(t/'verifier'),'--raw',str(t/'verifier/raw.md')],env=env,capture_output=True,text=True)
                 self.assertEqual(c.returncode,3,c.stderr);self.assertIn(expected,c.stdout)
                 self.assertFalse((t/'launched').exists());self.assertFalse((t/'verifier').exists())
+
+    def test_the_wall_marker_is_accepted_only_when_the_probe_read_is_refused(self):
+        """SB-2: the launcher's declaration is not the witness; the refused read is.
+
+        No model and no codex binary is involved: the probe path is a directory this test
+        makes unreadable (mode 000), which is the same PermissionError a seatbelt profile
+        produces, and the control case is a probe file the process CAN read.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            t=Path(tmp);(t/'ws').mkdir();(t/'checklist.md').write_text('neutral brief')
+            binary=t/'codex';binary.write_text('#!/bin/sh\nprintf launched > "'+str(t/'launched')+'"\n');binary.chmod(0o755)
+            closed=t/'closed';closed.mkdir();probe=closed/'wall-probe.txt'
+            probe.write_text('the file the wall must refuse\n');closed.chmod(0o000)
+            readable=t/'readable-probe.txt';readable.write_text('a probe nothing refuses\n')
+
+            self.addCleanup(lambda: closed.exists() and closed.chmod(0o755))
+
+            # SB-12, N4: the witness also asks the OS whether a sandbox policy is APPLIED,
+            # so the accepted case is run under a REAL tiny seatbelt that refuses the probe.
+            # The mode-000 directory was the stand-in available when this was written; the
+            # child is now actually confined, which is what the witness claims to detect.
+            profile=t/'witness.sb'
+            profile.write_text('(version 1)\n(allow default)\n'
+                               '(deny file-read* file-write* (subpath "'
+                               +os.path.realpath(str(closed))+'"))\n')
+
+            def run(walled=False,**extra):
+                env=dict(os.environ,PATH=str(t),PYTHONDONTWRITEBYTECODE='1',CODEX_HOME=str(t))
+                for key in ['RECHECK_ADAPTER_CANNED','CODEX_SANDBOX','RECHECK_HARNESS_SANDBOX',
+                            'RECHECK_WALL_PROBE']:
+                    env.pop(key,None)
+                env.update(extra)
+                argv=[sys.executable,str(ROOT/'verifier.py'),'--brief',
+                      str(t/'checklist.md'),'--workspace',str(t/'ws'),
+                      '--scratch',str(t/'verifier'),'--raw',str(t/'verifier/raw.md')]
+                if walled:
+                    argv=['/usr/bin/sandbox-exec','-f',str(profile)]+argv
+                return subprocess.run(argv,env=env,capture_output=True,text=True)
+
+            # 1. the declaration with a probe the wall refuses: the launch is allowed to start
+            #    (it then fails on this test's stub `codex`, which is not what is being tested)
+            c=run(walled=True,RECHECK_HARNESS_SANDBOX='sandbox-exec',
+                  RECHECK_WALL_PROBE=str(probe))
+            self.assertTrue((t/'launched').exists(),'the accepted witness did not launch: '+c.stdout+c.stderr)
+            (t/'launched').unlink()
+            shutil.rmtree(str(t/'verifier'),ignore_errors=True)
+
+            # 2. the same declaration with a probe that READS: refused, nothing launched
+            c=run(walled=True,RECHECK_HARNESS_SANDBOX='sandbox-exec',
+                  RECHECK_WALL_PROBE=str(readable))
+            self.assertEqual(c.returncode,3,c.stderr)
+            self.assertIn('the probe read SUCCEEDED',c.stdout)
+            self.assertFalse((t/'launched').exists());self.assertFalse((t/'verifier').exists())
+
+            # 3. the declaration with no probe named at all: refused
+            c=run(walled=True,RECHECK_HARNESS_SANDBOX='sandbox-exec')
+            self.assertEqual(c.returncode,3,c.stderr)
+            self.assertFalse((t/'launched').exists())
+
+            # 4. a probe that is refused but NO declaration: still refused (E9-26(a) stands)
+            c=run(RECHECK_WALL_PROBE=str(probe))
+            self.assertEqual(c.returncode,3,c.stderr)
+            self.assertIn('CODEX_SANDBOX',c.stdout)
+            self.assertFalse((t/'launched').exists())
+            closed.chmod(0o755)   # or the temporary directory cannot be removed
 
     def test_usage_edges(self):
         self.assertEqual(self.call('turns.py','--find','').returncode,2)

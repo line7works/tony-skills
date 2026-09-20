@@ -34,6 +34,7 @@ opened by `grade`, `routing-score`, and the one-entry text lookup `routing` need
 nothing else. Every launch path runs with both directories unreadable (a test proves it).
 """
 import argparse
+import contextlib
 import errno
 import glob
 import hashlib
@@ -49,6 +50,11 @@ import threading
 import time
 import traceback
 import uuid
+
+# The wall's loopback proxy (A2) lives beside this file; the runner starts it OUTSIDE the
+# profile before a launch and stops it after.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wall_proxy  # noqa: E402
 
 # --------------------------------------------------------------------------- exits
 
@@ -156,8 +162,20 @@ DECLARED_ENV = {
     "CODEX_HOME": "the Codex home pointer (E9-25, E10-7)",
     # E10-20: the one install-time credential, passed to one script, for three homes.
     INSTALL_CREDENTIAL: "the OpenCode install's one credential (E10-20)",
+    # Send-back 2 (2026-09-19, proof root wall-proof-20260919T155236Z): Claude Code makes its
+    # own scratch at `/tmp/claude-<uid>` — one folder shared by EVERY Claude session on this
+    # Mac, which is why it can never be a root of a trial's profile. Behind the wall the
+    # session died with `EPERM: operation not permitted, mkdir '/tmp/claude-501'` after it had
+    # already signed in and reached the model. `CLAUDE_CODE_TMPDIR` moves that scratch inside
+    # the trial's own TMPDIR. It carries no credential; it is a path the runner chose.
+    "CLAUDE_CODE_TMPDIR": "Claude Code's own scratch, moved inside the trial's own TMPDIR so "
+                          "the shared /tmp/claude-<uid> is never a root (send-back 2)",
 }
-PATH_BINARIES = ("claude", "codex", "node", "uv", "git", "python3")
+# A3: `sandbox-exec` joins the binaries the runner resolves. It is the executable every real
+# launch now runs, so it is resolved and recorded exactly like the harness binaries rather
+# than assumed at a hard-coded path (`require_wall` refuses a sealed campaign on a machine
+# that has none).
+PATH_BINARIES = ("claude", "codex", "node", "uv", "git", "python3", "sandbox-exec")
 PATH_TAIL = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
 # E10-42: the names each harness sets in its OWN tool shells, below the boundary the runner
@@ -898,6 +916,29 @@ def process_rows(campaign):
     return jsonl_lines(campaign.processes)
 
 
+def _pid_exists(pid):
+    """`(exists, why)` for one pid. UNKNOWN IS ALIVE (SB-12, N6).
+
+    `kill(pid, 0)` has three answers and the old reader had two. `ProcessLookupError` is the
+    only definite death: there is no such process. `PermissionError` means the process EXISTS
+    and belongs to somebody else - her probe simulated exactly that and the reader called it
+    dead, which is the dangerous way for a barrier to be wrong. Any other `OSError` is
+    unknown, and unknown counts as alive for the same reason `_pid_is_still_ours` returning
+    None does (batch B, B3(4), N1).
+    """
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False, "no such process"
+    except PermissionError as exc:
+        return True, ("the process exists and is not ours to signal, which is EXISTENCE, "
+                      "not death (%s)" % exc)
+    except OSError as exc:
+        return True, ("the existence of this pid could not be established, and an unknown "
+                      "owner counts as ALIVE (%s)" % exc)
+    return True, "the launched process is alive"
+
+
 def live_processes(campaign, trial=None, attempt=None):
     """Every registered launch still alive, optionally narrowed to one attempt.
 
@@ -927,22 +968,21 @@ def live_processes(campaign, trial=None, attempt=None):
             if row.get("pid") in open_pids:
                 open_pids.pop(row["pid"], None)
     for pid, row in sorted(open_pids.items()):
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        exists, why = _pid_exists(pid)
+        if not exists:
             continue
-        alive.append(dict(row, live_because="the launched process is alive"))
+        alive.append(dict(row, live_because=why))
     for token in sorted(reserved):
         row = reserved[token]
         owner = row.get("owner_pid")
         if not owner:
             continue
-        try:
-            os.kill(owner, 0)
-        except OSError:
+        exists, why = _pid_exists(owner)
+        if not exists:
             continue
         alive.append(dict(row, pid=owner,
-                          live_because="a reserved launch whose owner process is alive"))
+                          live_because="a reserved launch whose owner process is alive (%s)"
+                                       % why))
     return alive
 
 
@@ -1459,6 +1499,863 @@ def denied_roots(campaign):
     return out
 
 
+
+# --------------------------------------------------------------------------- the wall (A1-A3)
+#
+# Every harness launch of a sealed campaign runs as
+# `/usr/bin/sandbox-exec -f <record>/harness/launch.sb <launcher argv>`. One helper builds the
+# prefix for all four launch sites (`ClaudeCodeSetup.launch`, `CodexSetup.launch`, the
+# continuation cut's own argv and the compaction resume), so a new launch site cannot quietly
+# run outside it: it has to ask for the prefix to get one.
+#
+# The profile itself is written by `setups/_wall/write-sandbox-profile.py` — one writer for
+# every setup — from a spec this file builds out of `guarded_launch_roots`, `denied_roots`,
+# the trial's opaque tree, the stage, the setup home for this condition, and the per-harness
+# needs each setup declares in its own `wall-needs.json`.
+#
+# The runner itself never runs under the profile. A launch that runs a FAKE launcher, and every
+# launch of a synthetic campaign, bypasses the wall and says so in its record; there is no
+# harness there for a wall to confine, and `check`'s synthetic campaigns must keep running on a
+# machine where `sandbox-exec` is not usable.
+
+SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+WALL_SETUP_DIR = "_wall"
+WALL_WRITER_NAME = "write-sandbox-profile.py"
+# A2: the four proxy names, in both cases, added to a WALLED launch's environment only. They
+# match no banned shape, and a launch that is not walled carries none of them, so the fake
+# launcher's own environment is unchanged.
+PROXY_ENV = ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+             "https_proxy", "http_proxy", "all_proxy", "no_proxy")
+# What never goes through the proxy: the loopback the proxy itself is on.
+PROXY_BYPASS = "localhost,127.0.0.1,::1"
+
+
+def wall_writer(stage):
+    """The staged profile writer, falling back to the checkout's copy.
+
+    A trial runs the STAGED copy of everything, so the writer comes from the stage; a probe or
+    a test that has no stage gets the checkout's.
+    """
+    staged = os.path.join(stage or "", "plugins", "recheck-v2", "setups", WALL_SETUP_DIR,
+                          WALL_WRITER_NAME)
+    if stage and os.path.isfile(staged):
+        return staged
+    return os.path.join(PLUGIN_DIR, "setups", WALL_SETUP_DIR, WALL_WRITER_NAME)
+
+
+def wall_needs(setup):
+    """The setup's own `wall-needs.json`, or `{}` when it declares none.
+
+    Data, not code (A1): what a harness needs from outside its own trial tree is a list with a
+    reason per entry, so the control room's live proof can add or remove one without a code
+    change.
+    """
+    for directory in (getattr(setup, "setup_dir", None),
+                      os.path.join(PLUGIN_DIR, "setups", setup.harness)):
+        if not directory:
+            continue
+        path = os.path.join(directory, "wall-needs.json")
+        if os.path.isfile(path):
+            try:
+                return read_json(path, "%s/wall-needs.json" % setup.harness)
+            except (Missing, Failure):
+                return {}
+    return {}
+
+
+def _expand(path):
+    return os.path.abspath(os.path.expanduser(path))
+
+
+def _needs_rows(needs, key):
+    rows = []
+    for entry in needs.get(key) or []:
+        if isinstance(entry, str):
+            entry = {"path": entry}
+        path = entry.get("path")
+        if not path:
+            continue
+        full = _expand(path)
+        if entry.get("optional") and not os.path.exists(full):
+            continue
+        rows.append({"path": full, "why": entry.get("why") or ("%s: %s" % (key, path))})
+    return rows
+
+
+# send-back 7: how far a wrapper chain is followed, and how much of a candidate is read
+# looking for the one `exec` line. Four hops is well past anything an installer writes; the
+# bound and the visited set together make a loop impossible.
+WRAPPER_HOPS = 4
+WRAPPER_MAX_BYTES = 8192
+# The one command a wrapper may carry: `exec <absolute path> "$@"`, quoted or bare. A
+# relative target is NOT this shape — the directory it resolves against is the caller's cwd,
+# which the wall names for itself, so following one would guess at a path the launch may not
+# even have.
+_WRAPPER_EXEC = re.compile(r"""^exec\s+(?:"(/[^"]*)"|'(/[^']*)'|(/\S*))\s+"\$@"$""")
+
+
+def _shell_wrapper_target(path):
+    """The absolute path a plain `exec` shell wrapper hands off to, or None.
+
+    send-back 7. `which codex` on this Mac is not a symlink: it is a small `sh` file whose
+    only command is `exec <absolute path> "$@"`, written by hand to pick one of two installs.
+    `os.path.realpath` of a plain file is itself, so the resolver stopped at the wrapper and
+    the wall denied everything the wrapper actually runs.
+
+    Deliberately narrow, because this decides what a profile ALLOWS: the candidate must be a
+    regular file, not a symlink (a symlink already resolves, and `realpath` is the rule for
+    it), small, text, and carry exactly one command after the shebang and the comments. A
+    wrapper that does anything else — a second command, a relative target, an argument of its
+    own — is not followed, and the old rule applies to it unchanged.
+    """
+    if os.path.islink(path) or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "rb") as handle:
+            blob = handle.read(WRAPPER_MAX_BYTES + 1)
+    except OSError:
+        return None
+    if len(blob) > WRAPPER_MAX_BYTES or b"\0" in blob:
+        return None
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    commands = [line.strip() for line in text.splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+    if len(commands) != 1:
+        return None
+    match = _WRAPPER_EXEC.match(commands[0])
+    if not match:
+        return None
+    return next(group for group in match.groups() if group)
+
+
+def _binary_chain(name):
+    """Every hop from the PATH entry for `name` to the file that is finally exec'd.
+
+    The list begins with what `which` found and appends each plain `exec` wrapper target, at
+    most `WRAPPER_HOPS` of them, never revisiting a path. Symlinks are NOT hops: the last
+    entry is realpathed by the caller, which is what resolves them.
+    """
+    found = which(name)
+    if not found:
+        return []
+    chain = [os.path.abspath(found)]
+    seen = {chain[0]}
+    for _ in range(WRAPPER_HOPS):
+        target = _shell_wrapper_target(chain[-1])
+        if not target:
+            break
+        target = os.path.abspath(target)
+        if target in seen:
+            break
+        seen.add(target)
+        chain.append(target)
+    return chain
+
+
+def _node_package_root(real):
+    """The package root of an executable installed inside a `node_modules` tree, or None.
+
+    send-back 7. `~/.npm-global/bin/codex` resolves to `<prefix>/lib/node_modules/@openai/
+    codex/bin/codex.js`, a node ESM script that realpaths its own package root, reads
+    `package.json` beside it, and then spawns the platform binary from
+    `node_modules/@openai/codex-darwin-arm64/vendor/<triple>/bin/` (with `rg`, `zsh` and the
+    code-mode host beside it). "The directory of the real file" gives `bin/`, which allows
+    none of that. The PACKAGE is the unit that has to be readable.
+
+    The root is the nearest ancestor holding a `package.json` whose own parent is
+    `node_modules` or an `@scope` directory under `node_modules` — the shape npm itself
+    guarantees. An executable outside any `node_modules` tree has no package root and keeps
+    the directory rule.
+    """
+    parts = os.path.abspath(real).split(os.sep)
+    if "node_modules" not in parts:
+        return None
+    current = os.path.dirname(os.path.abspath(real))
+    while True:
+        parent = os.path.dirname(current)
+        if parent == current or os.path.basename(current) == "node_modules":
+            return None
+        if os.path.isfile(os.path.join(current, "package.json")):
+            grandparent = os.path.basename(os.path.dirname(parent))
+            if os.path.basename(parent) == "node_modules" or (
+                    os.path.basename(parent).startswith("@") and grandparent == "node_modules"):
+                return current
+        current = parent
+
+
+def _binary_read_roots(needs):
+    """The real install location of each binary the setup names.
+
+    Measured 2026-09-19: `(deny file-read* (subpath "/Users"))` does not stop a binary under
+    `/Users` from being EXECUTED — exec is `process-exec*` — but it does stop the bundle from
+    reading its own files, which a harness written in JavaScript does on every start. So the
+    resolved location is a read root.
+
+    send-back 7 widened what "the resolved location" means, after a walled Codex launch
+    exited 126 in one second on `exec: ... Operation not permitted`. Three rules, in the order
+    the chain is walked:
+
+    1. a PATH entry that is a plain `exec <absolute path> "$@"` shell wrapper is followed
+       (`_shell_wrapper_target`, bounded and loop-safe), and the wrapper's own directory stays
+       a read root, because the launch stats and execs it there;
+    2. a hop that lands on a SYMLINK contributes its own directory, because exec'ing a
+       symlink resolves it, and resolving it needs metadata reads of its ancestors — that is
+       the read the kernel refused;
+    3. the root of a node-package executable is its PACKAGE root (`_node_package_root`), not
+       the `bin` directory it sits in. Outside a `node_modules` tree the old rule stands: the
+       directory of the real file, which for a directory is itself.
+
+    A binary that resolves through neither a wrapper nor a `node_modules` tree — Claude Code's
+    `<share>/claude/versions/<v>`, `/usr/local/bin/node` — produces exactly the rows it
+    produced before, which `test_sb_sendback_7.py` asserts against a fake layout.
+    """
+    rows = []
+    for entry in needs.get("binaries") or []:
+        name = entry.get("name") if isinstance(entry, dict) else entry
+        chain = _binary_chain(name)
+        if not chain:
+            continue
+        real = os.path.realpath(chain[-1])
+        # rule 1 and rule 2: what the chain passed through on the way, in order. Only a
+        # FOLLOWED wrapper contributes; a chain of one hop adds nothing and reads as it did.
+        for index, hop in enumerate(chain[:-1]):
+            rows.append({"path": os.path.dirname(hop),
+                         "why": "the directory of the plain `exec` wrapper %s, which the "
+                                "launch stats and execs (send-back 7)" % hop})
+            following = chain[index + 1]
+            if os.path.islink(following):
+                rows.append({"path": os.path.dirname(following),
+                             "why": "the directory of the symlink %s that wrapper execs; "
+                                    "resolving it reads its ancestors, and that read is what "
+                                    "a denied subtree refuses (send-back 7)" % following})
+        # rule 3
+        package_root = _node_package_root(real)
+        if package_root:
+            root = package_root
+            rule = ("the node package root of %s: the executable reads its own `package.json` "
+                    "and spawns the platform binary from the `node_modules` tree beside it, "
+                    "so the PACKAGE is the read root, not its `bin` directory (send-back 7)"
+                    % name)
+        else:
+            root = real if os.path.isdir(real) else os.path.dirname(real)
+            rule = "the resolved install location of %s" % name
+        why = (entry.get("why") if isinstance(entry, dict) else None) or rule
+        if len(chain) > 1:
+            why = "%s Resolved through: %s." % (
+                why, " -> ".join(chain + ([real] if real != chain[-1] else [])))
+        rows.append({"path": root, "why": why})
+        if real != root:
+            rows.append({"path": real, "why": "the %s executable itself" % name})
+    out, seen = [], set()
+    for row in rows:
+        if row["path"] in seen:
+            continue
+        seen.add(row["path"])
+        out.append(row)
+    return out
+
+
+def claude_project_slug(path):
+    """Claude Code's own folder name for a session's cwd under `~/.claude/projects/`.
+
+    Every character that is not a letter or a digit becomes `-`. Read off this Mac's own
+    `~/.claude/projects/` on 2026-09-19: `/private/tmp/claude-501/-Users-tonycoon/<uuid>/
+    scratchpad/confine-probe` is
+    `-private-tmp-claude-501--Users-tonycoon-<uuid>-scratchpad-confine-probe`. The rule is
+    INFERRED from those names, not from the harness's source, which is why `launch.sh` still
+    falls back to a glob and why the report names this as something a live proof settles.
+    """
+    return re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(path))
+
+
+def _session_transcript_root(needs, workspace):
+    """The ONE folder under `~/.claude/projects/` this session may reach, never the siblings."""
+    block = needs.get("session_transcript")
+    if not isinstance(block, dict) or not block.get("root") or not workspace:
+        return None
+    return {"path": os.path.join(_expand(block["root"]), claude_project_slug(workspace)),
+            "why": block.get("why") or "the session's own transcript folder, and no sibling"}
+
+
+def _home_refusals(campaign, setup, condition):
+    """Every pilot home this launch must NOT reach, with the one it may left out.
+
+    `denied_roots` names the pilot homes by their top-level directory, and for two of the three
+    harnesses the condition's own home either IS that directory (`claude-code` `available`) or
+    sits inside it (`claude-code` `absent`, every Codex condition). Refusing the directory
+    would refuse the launch its own home, so the directory is dropped and the OTHER conditions'
+    homes are named instead. The result refuses exactly what the contract asks for: the other
+    condition's home, every other pilot home, and nothing the launch needs.
+    """
+    mine = os.path.realpath(setup.home(condition))
+    others = []
+    for other in HOMES:
+        if other == condition:
+            continue
+        path = os.path.realpath(setup.home(other))
+        if path == mine or path_contains(path, mine):
+            continue
+        others.append(path)
+    return mine, others
+
+
+def wall_refused_roots(campaign, setup, condition, allowed):
+    """The refused roots for one launch: `denied_roots` with the launch's own home resolved.
+
+    `allowed` is every root the launch may reach; a denied root that IS one of them, or that
+    contains one, is replaced by the sibling homes rather than dropped silently.
+    """
+    mine, others = _home_refusals(campaign, setup, condition)
+    allowed_real = [os.path.realpath(p) for p in allowed]
+    rows = []
+    for root in denied_roots(campaign):
+        real = os.path.realpath(root)
+        if real == mine or path_contains(real, mine):
+            rows.extend({"path": p, "why": "another condition's home for this setup"}
+                        for p in others)
+            continue
+        if any(a == real for a in allowed_real):
+            # something else the launch needs is named as denied; the launch wins and the
+            # record says so, rather than a profile that refuses to build.
+            continue
+        rows.append({"path": real, "why": "denied_roots (E11-45 S1)"})
+    # The campaign's own stores. Each is an ANCESTOR of something this launch may reach
+    # (`tmp/` holds the trial's opaque tree, `trials/` holds its own record), so the writer
+    # emits them in the leading deny block and the narrow allow reopens only this trial's own.
+    for path, why in ((campaign.tmp, "every other trial's opaque tree"),
+                      (campaign.trials, "every other trial's record"),
+                      (os.path.join(campaign.root, "records"), "the campaign's own records"),
+                      (campaign.measurements, "the campaign's measurements"),
+                      (campaign.routing_dir, "the campaign's routing records"),
+                      (os.path.join(campaign.root, "tables"), "the campaign's tables"),
+                      (os.path.join(campaign.root, "probes"), "the campaign's probes")):
+        rows.append({"path": os.path.realpath(path), "why": why})
+    for entry in (wall_needs(setup).get("refused_even_though_the_harness_would_use_them")
+                  or []):
+        rows.append({"path": _expand(entry["path"]),
+                     "why": entry.get("why") or "the setup's own refusal list"})
+    # The machine's own harness state, whatever the harness is: never the pilot's.
+    for path, why in ((os.path.join(os.path.expanduser("~"), ".claude"),
+                       "the machine's own Claude Code state; only the named files and the "
+                       "session's own transcript folder are reopened"),
+                      (os.path.join(os.path.expanduser("~"), ".codex"),
+                       "the machine's own Codex state (E9-25)"),
+                      (os.path.join(os.path.expanduser("~"), "Developer"),
+                       "every checkout"),
+                      (os.path.join(os.path.expanduser("~"), ".local", "share",
+                                    "skills-v2-locked"), "the locked folder (SB-4)")):
+        rows.append({"path": os.path.realpath(path), "why": why})
+    out, seen = [], set()
+    for row in rows:
+        if row["path"] in seen:
+            continue
+        seen.add(row["path"])
+        out.append(row)
+    return out
+
+
+def _credential_store_files(needs, home, refused):
+    """The ONE resolved credential file a condition reaches through a link into a refused root.
+
+    Send-back 8, defect 1. The Codex install keeps ONE credential store and links to it:
+    `setups/codex/install.sh` writes `codex/home/auth.json` and then replaces every derived
+    home's `auth.json` and `child/auth.json` with a symlink to it (lines 47 to 57 and 94 to
+    108), so the credential is never copied into two places. `codex/home` IS the `available`
+    condition's home, so for `absent` and `routing` the link's target sits under "another
+    condition's home for this setup", which the profile refuses: the walled `absent` trial of
+    2026-09-19 found no credential and fell back to an unauthenticated call (`401 Unauthorized:
+    Missing bearer or basic authentication in header`, root
+    `wall-proof-codex-20260920T005305Z`).
+
+    So the ONE resolved file is named back, as a LITERAL rather than a subpath, and read AND
+    write: Codex rewrites the store on a token refresh, and a store readable in one condition
+    and writable in the other would be a with/without difference the comparison must not carry.
+    Nothing else under the other home opens - not the native check's sentinel, not its
+    `skills/`, `plugins/`, `sessions/` or `config.toml`.
+
+    Driven by data, not by a hardcoded name: the setup's own `wall-needs.json` declares
+    `credential_store` with the home-relative files and the reason, and this resolves them per
+    condition at launch time. A file that is not a link, a link with nothing behind it, a store
+    inside the launch's OWN home, and a store nothing refuses each produce no row: the rule
+    reopens only what a refusal actually closed.
+    """
+    block = needs.get("credential_store")
+    if not isinstance(block, dict):
+        return []
+    declared = block.get("why") or "the setup's declared credential store"
+    home_real = os.path.realpath(home)
+    rows, seen = [], set()
+    for relative in block.get("files") or []:
+        link = os.path.join(home, relative)
+        if not os.path.islink(link):
+            continue
+        real = os.path.realpath(link)
+        if not os.path.isfile(real):
+            continue
+        if real == home_real or path_contains(home_real, real):
+            # the store is inside this condition's own home, which is already a write root
+            continue
+        root = next((r for r in refused if r == real or path_contains(r, real)), None)
+        if root is None:
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        rows.append({"path": real,
+                     "why": "the ONE credential store %s links to, reopened as a literal after "
+                            "the deny of %s, read AND write (send-back 8). %s"
+                            % (link, root, declared)})
+    return rows
+
+
+def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None, scratch=None,
+              roots=(), proxy_port=None, opaque_tree=None, label=None):
+    """The JSON spec `write-sandbox-profile.py` turns into one launch's profile."""
+    needs = wall_needs(setup)
+    home = setup.home(condition)
+    record_root = os.path.dirname(os.path.abspath(out_dir))
+    # The trial's own tree is the scratch's parent. Derived HERE rather than in `walled`, so a
+    # direct call and a launch build the same spec: the test of every launch kind caught the
+    # two disagreeing, and the adapters' run root (`<opaque tree>/runs`) fell outside every
+    # write root on the direct path.
+    if not opaque_tree and scratch:
+        opaque_tree = os.path.dirname(os.path.abspath(scratch))
+    # the SETUP's stage, which is the campaign's in every real run. Named through the setup
+    # so one object answers "what does this launch run" everywhere (warm_uv_cache and
+    # uv_offline_check read the same attribute).
+    read_roots = [{"path": setup.stage,
+                   "why": "the staged checkout: the launcher, the skill and the fixtures"}]
+    read_roots.extend(_binary_read_roots(needs))
+    read_roots.extend(_needs_rows(needs, "read"))
+    write_roots = [
+        {"path": record_root,
+         "why": "this trial's own record, which holds the harness capture folder. The "
+                "capture folder itself cannot be the root: setups/codex/launch.sh refuses an "
+                "output directory that already exists, so the runner may not create it."},
+        {"path": home, "why": "the setup home for THIS condition (its session state, its "
+                              "plugin cache, its uv cache)"},
+    ]
+    if opaque_tree:
+        write_roots.append({"path": opaque_tree,
+                            "why": "the trial's own opaque tree: workspace, run leaf, scratch "
+                                   "and the adapters' run root (E10-41)"})
+    for path, why in ((workspace, "the session's workspace"),
+                      (run_dir, "the trial's run directory (the fixture's own run leaf)"),
+                      (scratch, "the trial's own scratch, handed to the launch as TMPDIR")):
+        if path:
+            write_roots.append({"path": path, "why": why})
+    for root in roots or []:
+        write_roots.append({"path": root, "why": "a root guarded_launch_roots named for this "
+                                                 "launch (E11-26)"})
+    # send-back 2: the harness's own scratch pointer, derived HERE from the same hook the
+    # launch uses, so a direct call and a real launch build the same spec (the lesson of
+    # send-back 1). It sits inside TMPDIR, which is inside the trial's own tree, so it is
+    # already covered; naming it makes the record say so.
+    harness_tmpdirs = setup.scratch_env(scratch or campaign.tmp)
+    for name, path in sorted(harness_tmpdirs.items()):
+        write_roots.append({"path": path,
+                            "why": "%s: this harness's own scratch, inside the launch's own "
+                                   "TMPDIR (send-back 2)" % name})
+    # send-back 5: the offline uv cache. It sits inside the home, which is already a write
+    # root, and `uv run` BUILDS its ephemeral environment in there, so naming it makes the
+    # record say what the launch depends on rather than leaving it to be inferred.
+    uv_environment = setup.uv_env(condition)
+    write_roots.append({"path": uv_environment["UV_CACHE_DIR"],
+                        "why": "UV_CACHE_DIR: the cache `install` warmed for this condition; "
+                               "`uv run` builds its environment inside it (send-back 5)"})
+    write_roots.extend(_needs_rows(needs, "read_write"))
+    transcript = _session_transcript_root(needs, workspace)
+    if transcript:
+        write_roots.append(transcript)
+    allowed = [r["path"] for r in read_roots + write_roots]
+    refused_roots = wall_refused_roots(campaign, setup, condition, allowed)
+    # send-back 8: computed AFTER the refusals, because the rule is "a link whose target a
+    # refused root closed". Nothing here can widen a refusal: a literal reopens one file.
+    write_files = _credential_store_files(needs, home, [r["path"] for r in refused_roots])
+    spec = {
+        "label": label or "%s %s" % (setup.name, condition),
+        "read_roots": read_roots,
+        "read_files": [],
+        "write_roots": write_roots,
+        "write_files": write_files,
+        "refused_roots": refused_roots,
+        "proxy_port": proxy_port,
+        "proxy_host": "localhost",
+        # Send-back 1, fault 1: THE CWD IS NAMED, never inherited. A launcher used to start in
+        # whatever directory the operator ran the runner from; the control room ran it from a
+        # scratch under `/private/tmp`, which every profile refuses, and every shell in
+        # `launch.sh` printed `getcwd: cannot access parent directories: Operation not
+        # permitted` before a model was ever called. The runner must not depend on where the
+        # operator stands.
+        #
+        # ONE rule for all five launch sites: the launch's OWN WORKSPACE. It exists before
+        # every launch, it is always a write root (so it is readable), it is where
+        # `setups/claude-code/launch.sh` `cd`s anyway, and it is the directory the session's
+        # own tools should see. The record root is the fallback for a launch with no
+        # workspace, and it is a write root too.
+        "cwd": os.path.realpath(workspace or record_root),
+        "cwd_rule": "the launch's own workspace, else its record root; both are write roots, "
+                    "so both are readable, and neither depends on the operator's cwd",
+        # send-back 2: the harness scratch names this launch declares, and where they point.
+        "harness_tmpdirs": harness_tmpdirs,
+        # send-back 5: the cache this launch's `uv run` uses, and the flag that keeps it from
+        # walking to the proxy.
+        "uv": uv_environment,
+    }
+    return spec
+
+
+def wall_hosts(setup):
+    """The hosts this setup's proxy allows, from its own `wall-needs.json`."""
+    rows = []
+    for entry in wall_needs(setup).get("network") or []:
+        host = entry.get("host") if isinstance(entry, dict) else entry
+        if host:
+            rows.append(host)
+    return rows
+
+
+def write_wall_profile(campaign, spec, out_dir, stage=None):
+    """Run the staged writer over the spec; keep the spec and the profile in the record."""
+    ensure_dir(out_dir)
+    spec_path = os.path.join(out_dir, "launch-wall.json")
+    profile_path = os.path.join(out_dir, "launch.sb")
+    write_json(spec_path, spec)
+    step = run_cmd([sys.executable, wall_writer(stage or campaign.stage),
+                    "--spec", spec_path, "--out", profile_path],
+                   env=tool_env(), label="write-sandbox-profile.py")
+    if step["exit"] != 0:
+        raise Failure("the wall profile could not be written for %s: %s"
+                      % (spec.get("label"), (step["stderr"] or "")[-800:]))
+    try:
+        summary = json.loads(step["stdout"])
+    except ValueError:
+        raise Failure("write-sandbox-profile.py printed no JSON summary")
+    return profile_path, spec_path, summary
+
+
+class _NoWall(object):
+    """The stand-in a launch gets when there is no harness to confine."""
+
+    def __init__(self, why):
+        self.record = {"sealed": False, "why": why}
+        self.env = {}
+        # `None` means "whatever the caller already did": an unwalled launch keeps the cwd it
+        # had before the wall existed, so no fake-launcher path changes behaviour.
+        self.cwd = None
+
+    def prefix(self, argv):
+        return list(argv)
+
+
+# A3: what the launcher declares to the session's own adapters, and the file the adapter reads
+# to check the declaration. `RECHECK_HARNESS_SANDBOX=sandbox-exec` is a claim; the probe is the
+# proof, and the Codex verifier refuses to launch when the probe read SUCCEEDS.
+WALL_MARKER = "sandbox-exec"
+WALL_PROBE_NAME = "wall-probe.txt"
+WALL_PROBE_TEXT = ("the wall's probe file. It sits under the campaign's own records, outside "
+                   "every root a launch profile allows, so a session that can read it is not "
+                   "behind a wall (SB-2).\n")
+
+
+def wall_probe_path(campaign):
+    """The file a walled session must NOT be able to read, planted outside every allowed root."""
+    path = os.path.join(campaign.root, "records", WALL_PROBE_NAME)
+    if not os.path.isfile(path):
+        write_text(path, WALL_PROBE_TEXT)
+    return path
+
+
+class _Wall(object):
+    """One profile and one proxy, for the length of one launch."""
+
+    def __init__(self, profile, spec_path, summary, proxy, record, probe=None, cwd=None,
+                 uv=None):
+        self.profile = profile
+        self.spec_path = spec_path
+        self.summary = summary
+        self.proxy = proxy
+        self.record = record
+        # Send-back 1, fault 1: the directory every walled child starts in, named by the spec.
+        self.cwd = cwd
+        self.env = {"RECHECK_HARNESS_SANDBOX": WALL_MARKER}
+        # send-back 5: the offline uv cache this launch's `uv run` uses.
+        self.env.update(uv or {})
+        if probe:
+            self.env["RECHECK_WALL_PROBE"] = probe
+        if proxy is not None:
+            url = "http://127.0.0.1:%d" % proxy.port
+            for name in PROXY_ENV:
+                self.env[name] = PROXY_BYPASS if name.lower() == "no_proxy" else url
+
+    def prefix(self, argv):
+        return [SANDBOX_EXEC, "-f", self.profile] + list(argv)
+
+
+@contextlib.contextmanager
+def walled(campaign, setup, condition, out_dir, launcher=None, workspace=None, run_dir=None,
+           scratch=None, roots=(), opaque_tree=None, label=None):
+    """The wall around ONE launch: the profile, the proxy, and the argv prefix.
+
+    Used at all four launch sites. A fake launcher and a synthetic campaign bypass it and
+    record `sealed: false` with the reason; every launch that runs the harness's own
+    executable is sealed, and `sandbox-exec` joins the binaries the runner resolves.
+    """
+    if launch_is_fake(setup, launcher, campaign):
+        yield _NoWall("fake launcher")
+        return
+    if campaign.synthetic():
+        yield _NoWall("a synthetic campaign: no harness runs, so there is nothing to confine")
+        return
+    if not os.path.isfile(SANDBOX_EXEC):
+        raise Failure("the wall needs %s and this machine has none" % SANDBOX_EXEC)
+    hosts = wall_hosts(setup)
+    probe = wall_probe_path(campaign)
+    log_path = os.path.join(out_dir, "proxy.jsonl")
+    ensure_dir(out_dir)
+    proxy = wall_proxy.WallProxy(hosts, log_path)
+    proxy.start()
+    try:
+        spec = wall_spec(campaign, setup, condition, out_dir, workspace=workspace,
+                         run_dir=run_dir, scratch=scratch, roots=roots,
+                         proxy_port=proxy.port, opaque_tree=opaque_tree, label=label)
+        profile, spec_path, summary = write_wall_profile(campaign, spec, out_dir,
+                                                         stage=setup.stage)
+        record = {
+            "sealed": True,
+            "cwd": spec["cwd"],
+            "cwd_rule": spec["cwd_rule"],
+            "harness_tmpdirs": spec["harness_tmpdirs"],
+            "uv": spec["uv"],
+            "profile": profile,
+            "profile_sha256": file_sha256(profile),
+            "spec_path": spec_path,
+            "proxy_port": proxy.port,
+            "proxy_log": log_path,
+            "proxy_allows": hosts,
+            "summary": summary,
+            "sandbox_exec": SANDBOX_EXEC,
+            "probe": probe,
+            "declared_env_names": sorted(("RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE",
+                                          "UV_CACHE_DIR", "UV_OFFLINE") + PROXY_ENV),
+            "why": "the sealed bench's wall: one OS-level profile per launch, one loopback "
+                   "proxy outside it (A1, A2)",
+        }
+        yield _Wall(profile, spec_path, summary, proxy, record, probe=probe,
+                    cwd=spec["cwd"], uv=spec["uv"])
+    finally:
+        proxy.stop()
+
+
+def wall_record_of(step):
+    """The `wall` block a launch record carries, for `command.json`."""
+    return (step or {}).get("wall") or {"sealed": False, "why": "no wall record was attached"}
+
+
+# --------------------------------------------------------------- the offline uv cache (SB5)
+#
+# Blocker 1 of live proof 5. The core and both validators are PEP 723 scripts run through
+# `uv run`; they declare `jsonschema==4.25.1`; behind the wall the network is closed and the
+# machine's own caches are refused, so every phase command exited 3. The cache is warmed
+# OUTSIDE the wall by `install`, at a path inside the condition's own home, and the launch
+# then runs uv against it with `UV_OFFLINE=1`.
+#
+# Measured on this Mac, 2026-09-19:
+#   * `uv run <script>` builds its ephemeral environment INSIDE `UV_CACHE_DIR`
+#     (`<cache>/environments-v2/<script>-<hash>/`), so the cache must be writable at launch
+#     time. It is inside the home, which is already a write root.
+#   * it picks uv's MANAGED interpreter (cpython 3.12.13 under `~/.local/share/uv/python`),
+#     not `/usr/bin/python3` 3.9, for these scripts.
+#   * with the cache warmed and that interpreter readable, `UV_OFFLINE=1 uv run ... --help`
+#     exits 0 under a wall profile that refuses `~/.cache/uv` and the network.
+#   * with the managed interpreter directory refused it fails at
+#     `failed to read directory .../uv/python: Operation not permitted`, whatever the cache
+#     holds - which is why that directory is a declared read in both setups' wall-needs.json
+#     rather than being worked around with `UV_PYTHON_PREFERENCE=only-system`. Forcing
+#     only-system works, and pins every walled trial's core to 3.9: the apparatus would then
+#     run on a different Python inside the wall than outside it, and the 3.12 half of the
+#     core's own two-interpreter test matrix would never be exercised by a trial. The wall is
+#     meant to change what is REACHABLE, not what runs.
+
+PEP_723_OPEN = "# /// script"
+PEP_723_CLOSE = "# ///"
+UV_WARM_SUBDIRS = (os.path.join("skills", "recheck-v2", "scripts"),
+                   os.path.join("skills", "recheck-v2", "adapters"))
+
+
+def pep723_block(path):
+    """The inline metadata block of a PEP 723 script, as a list of lines, or None."""
+    text = read_text(path, None)
+    if not text or PEP_723_OPEN not in text:
+        return None
+    lines, inside, block = text.splitlines(), False, []
+    for line in lines:
+        if line.strip() == PEP_723_OPEN:
+            inside = True
+            continue
+        if inside and line.strip() == PEP_723_CLOSE:
+            return block
+        if inside:
+            block.append(line.lstrip("#").strip())
+    return None
+
+
+def pep723_scripts(stage):
+    """Every script under the STAGED plugin that declares its own dependencies.
+
+    The staged copy, not the checkout: a trial runs what was staged, and the cache has to
+    match what the session will execute.
+    """
+    rows = []
+    plugin = os.path.join(stage, "plugins", "recheck-v2")
+    for relative in UV_WARM_SUBDIRS:
+        base = os.path.join(plugin, relative)
+        if not os.path.isdir(base):
+            continue
+        for directory, dirs, files in os.walk(base):
+            dirs[:] = [d for d in sorted(dirs) if d not in ("__pycache__", "tests")]
+            for name in sorted(files):
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(directory, name)
+                block = pep723_block(path)
+                if block is None:
+                    continue
+                rows.append({"script": path,
+                             "relative": os.path.relpath(path, plugin),
+                             "declares": block})
+    return rows
+
+
+def uv_cache_listing(cache):
+    """A hash listing of a warmed cache: what it holds, and one digest over all of it."""
+    if not os.path.isdir(cache):
+        return {"present": False, "files": 0, "bytes": 0, "tree_sha256": None, "entries": []}
+    files = total = 0
+    for directory, _dirs, names in os.walk(cache):
+        for name in names:
+            try:
+                total += os.path.getsize(os.path.join(directory, name))
+            except OSError:
+                continue
+            files += 1
+    return {"present": True, "files": files, "bytes": total,
+            "tree_sha256": tree_sha256_of(cache),
+            "entries": sorted(os.listdir(cache)),
+            "how": "every file under the cache, `<path>\0<sha256>` sorted (tree_sha256_of)"}
+
+
+# The interpreter preferences a warm pass runs under. The default is what a session gets; the
+# system pass is there so a script whose `requires-python` excludes the managed interpreter
+# still has its dependencies in the cache, and so the 3.9 half of the core's own matrix is
+# covered by the same cache.
+UV_WARM_PASSES = (
+    ("default", {}, "the preference a session's own `uv run` uses (uv's managed interpreter "
+                    "on this Mac)"),
+    ("only-system", {"UV_PYTHON_PREFERENCE": "only-system"},
+     "the system interpreter, so the other half of the core's two-Python matrix resolves from "
+     "the same cache"),
+)
+
+
+def warm_uv_cache(campaign, setup, condition, timeout=900):
+    """Fill this condition's own uv cache, OUTSIDE the wall, with the network (send-back 5).
+
+    Runs during `install` only. Identical for every setup AND both conditions: the cache is
+    apparatus, not skill, so the absent home gets exactly the same one and no comparison can
+    turn on which condition could run the core.
+    """
+    cache = setup.uv_cache(condition)
+    ensure_dir(cache)
+    # the SETUP's stage, which is the campaign's in every real run and the one a test builds
+    scripts = pep723_scripts(setup.stage)
+    steps = []
+    for row in scripts:
+        for label, extra, why in UV_WARM_PASSES:
+            env = tool_env(extra=dict(extra, UV_CACHE_DIR=cache), require_binaries=False)
+            step = run_cmd(["uv", "run", "--quiet", row["script"], "--help"], env=env,
+                           timeout=timeout,
+                           label="warm %s (%s)" % (row["relative"], label))
+            steps.append({"script": row["relative"], "pass": label, "why": why,
+                          "declares": row["declares"], "exit": step["exit"],
+                          "stderr_tail": (step["stderr"] or "")[-400:]})
+    failed = [r for r in steps if r["exit"] != 0]
+    return {"cache": cache, "condition": condition, "setup": setup.name,
+            "scripts": [r["relative"] for r in scripts],
+            "dependency_sets": {r["relative"]: r["declares"] for r in scripts},
+            "passes": steps, "failed": failed, "ok": not failed and bool(scripts),
+            "listing": uv_cache_listing(cache),
+            "warmed": "outside the wall, with the network, by `install` (send-back 5)",
+            "why_both_conditions": "the cache is apparatus, not skill: the absent home gets "
+                                   "exactly the same one, so no comparison turns on which "
+                                   "condition could run the core"}
+
+
+def uv_offline_check(campaign, setup, condition, timeout=300):
+    """Prove the warmed cache works OFFLINE, behind this home's own wall (send-back 5).
+
+    A plain child, no model: `sandbox-exec -f <profile> uv run <staged recheck.py> --help`
+    with `UV_OFFLINE=1` and the cache this condition's launches will use.
+    """
+    cache = setup.uv_cache(condition)
+    script = os.path.join(setup.stage, "plugins", "recheck-v2", "skills", "recheck-v2",
+                          "scripts", "recheck.py")
+    if not os.path.isfile(script):
+        return {"ok": False, "exit": None, "env_names": [],
+                "why": "no staged recheck.py at %s" % script, "cache": cache}
+    base = os.path.join(campaign.tmp, "uv-offline-check", setup.name, condition)
+    workspace = os.path.join(base, "workspace")
+    scratch = probe_scratch(base)
+    for path in (workspace, os.path.join(base, "run")):
+        ensure_dir(path)
+    out_dir = os.path.join(campaign.records("uv-offline-check"),
+                           "%s-%s" % (setup.name, condition), "harness")
+    ensure_dir(out_dir)
+    spec = wall_spec(campaign, setup, condition, out_dir, workspace=workspace,
+                     run_dir=os.path.join(base, "run"), scratch=scratch,
+                     roots=named_writable_roots(os.path.join(base, "run")),
+                     label="the offline uv check for %s/%s" % (setup.name, condition))
+    profile, spec_path, _summary = write_wall_profile(campaign, spec, out_dir,
+                                                     stage=setup.stage)
+    extra = dict(setup.launch_env(condition), **setup.scratch_env(scratch))
+    extra.update(setup.uv_env(condition))
+    env = campaign.env(extra=extra, scratch=scratch, require_binaries=False)
+    step = run_cmd([SANDBOX_EXEC, "-f", profile, "uv", "run", "--quiet", script, "--help"],
+                   env=env, cwd=spec["cwd"], timeout=timeout, label="uv run --help, offline")
+    return {"ok": step["exit"] == 0, "exit": step["exit"], "cache": cache,
+            "script": script, "profile": profile, "spec_path": spec_path,
+            "cwd": spec["cwd"],
+            "env_names": sorted(env),
+            "stderr_tail": (step["stderr"] or "")[-800:],
+            "measured": "a plain child under this home's own wall profile, UV_OFFLINE=1, no "
+                        "model and no network (send-back 5)"}
+
+
+def with_uv_offline_check(campaign, setup, condition, step):
+    """`verify`'s own step, plus the proof the warmed cache works offline behind the wall.
+
+    The offline check never turns a passing `verify-install.sh` into a failing one on its own
+    exit code; it is recorded beside it and the caller's gate reads `uv_offline.ok`. A launch
+    that needs the cache fails loudly at the first phase command, which is exactly what live
+    proof 5 measured, so the record has to carry this before a campaign starts.
+    """
+    record = dict(step)
+    try:
+        record["uv_offline"] = uv_offline_check(campaign, setup, condition)
+    except (Usage, Missing, Failure, OSError) as exc:
+        record["uv_offline"] = {"ok": False, "why": "the offline check could not run: %s" % exc}
+    if not record["uv_offline"].get("ok"):
+        record["uv_offline_problem"] = (
+            "the warmed uv cache at %s does not satisfy `uv run` offline behind this home's "
+            "wall, so every phase command of a walled trial will exit 3 with `missing "
+            "dependency` (send-back 5, blocker 1). Re-run `install` for this setup and home "
+            "with the network up." % setup.uv_cache(condition))
+    return record
+
+
 class Setup(object):
     harness = None
     name = None
@@ -1495,6 +2392,53 @@ class Setup(object):
         # E10-62 item 3: the SETUP NAME keys the homes, so a second setup of one harness never
         # overwrites the first's install.
         return pilot_home(self.harness, condition, setup_name=self.name)
+
+    # ---- the wall (A3)
+    def walled(self, condition, out_dir, launcher=None, workspace=None, run_dir=None,
+               scratch=None, roots=(), opaque_tree=None, label=None):
+        """`with setup.walled(...) as wall:` — the profile, the proxy and the argv prefix.
+
+        Every launch site goes through this one helper: `wall.prefix(argv)` returns
+        `["/usr/bin/sandbox-exec", "-f", <profile>] + argv`, `wall.env` carries the proxy
+        names for a walled launch and nothing for an unwalled one, and `wall.record` is the
+        `wall` block `collect_trial` writes into `command.json`.
+        """
+        return walled(self.campaign, self, condition, out_dir, launcher=launcher,
+                      workspace=workspace, run_dir=run_dir, scratch=scratch, roots=roots,
+                      opaque_tree=opaque_tree,
+                      label=label or "%s %s" % (self.name, condition))
+
+    # ---- the offline uv cache (send-back 5, blocker 1)
+    #
+    # The core and both validators are PEP 723 scripts run through `uv run`, and they declare
+    # `jsonschema==4.25.1`. Behind the wall the network is closed and the machine's own uv
+    # cache is refused, so every phase command exited 3 with `missing dependency:
+    # jsonschema==4.25.1` and the with-skill trial of live proof 5 correctly stopped itself.
+    # `install` warms a cache INSIDE this condition's home, outside the wall, with the network;
+    # the launch then runs `uv` against that cache with `UV_OFFLINE=1`, so uv never walks to
+    # the proxy. The cache is apparatus, not skill: the absent home gets exactly the same one.
+    def uv_cache(self, condition):
+        return os.path.join(self.home(condition), "uv-cache")
+
+    def uv_env(self, condition):
+        """The two names every WALLED launch carries so `uv run` works offline.
+
+        They ride with the wall, not with `launch_env`, for the same reason the proxy names
+        do: they exist BECAUSE the wall closes the network and refuses the machine's own uv
+        cache. A launch that is not walled — a fake launcher, a synthetic campaign — has no
+        warmed cache and needs none, and pointing it at an empty one would break the fake
+        harness's real-core runs. `_NoWall` carries neither.
+        """
+        return {"UV_CACHE_DIR": self.uv_cache(condition), "UV_OFFLINE": "1"}
+
+    def scratch_env(self, tmpdir):
+        """The names THIS harness needs pointed inside the launch's own TMPDIR (send-back 2).
+
+        Empty for every harness but Claude Code, which otherwise makes its scratch in
+        `/tmp/claude-<uid>` — a folder shared by every Claude session on this Mac, and so one
+        that can never be a root of one trial's profile.
+        """
+        return {}
 
     # ---- what the launcher was told (E10-50, E10-62 item 4)
     def resolved_model(self):
@@ -1615,6 +2559,10 @@ class ClaudeCodeSetup(Setup):
     def launch_env(self, condition):
         return {"SKILLS_V2_PILOT_HOME": self.home(condition)}
 
+    def scratch_env(self, tmpdir):
+        """Send-back 2: `CLAUDE_CODE_TMPDIR=<TMPDIR>/cc-tmp`, on every Claude Code launch."""
+        return {"CLAUDE_CODE_TMPDIR": claude_code_tmpdir(tmpdir)}
+
     def marketplace_plugins(self):
         """Every plugin in the checkout's marketplace, for the routing profile (E10-13)."""
         manifest = read_json(
@@ -1655,6 +2603,9 @@ class ClaudeCodeSetup(Setup):
         return {
             "home": home,
             "condition": condition,
+            # send-back 5: the offline uv cache, warmed here, with the network, outside the
+            # wall. Identical for every condition.
+            "uv_cache": warm_uv_cache(self.campaign, self, condition),
             "steps": [_step_summary(s) for s in steps],
             "uninstalled_after_install": removed,
             "recheck_v2_installation": installation,
@@ -1688,12 +2639,15 @@ class ClaudeCodeSetup(Setup):
         env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home})
         step = run_cmd(["sh", self.script("verify-install.sh"), "--pilot-home", home], env=env,
                        label="verify-install.sh")
-        return step
+        return with_uv_offline_check(self.campaign, self, condition, step)
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
                registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={"SKILLS_V2_PILOT_HOME": home}, scratch=scratch)
+        # send-back 2: the harness's own scratch, inside this launch's TMPDIR, created here.
+        launcher_env = dict(self.launch_env(condition))
+        launcher_env.update(self.scratch_env(scratch or self.campaign.tmp))
+        env = self.campaign.env(extra=launcher_env, scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
         plugins = (extra or {}).get("plugins")
         if plugins is None:
@@ -1718,9 +2672,17 @@ class ClaudeCodeSetup(Setup):
         # E11-45 S1: the write fence, path-scoped, on the harness's own permission layer.
         for root in denied_roots(self.campaign):
             argv += ["--deny", root]
-        if registry is not None:
-            registry.reserved(argv, "launch.sh")
-        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
+        with self.walled(condition, out_dir, launcher=fake, workspace=workspace,
+                         run_dir=(extra or {}).get("run_dir"), scratch=scratch,
+                         roots=(extra or {}).get("writable") or []) as wall:
+            argv = wall.prefix(argv)
+            if registry is not None:
+                registry.reserved(argv, "launch.sh")
+            # send-back 1, fault 1: the named cwd, never the operator's
+            step = run_cmd(argv, env=dict(env, **wall.env), cwd=wall.cwd, timeout=timeout,
+                           label="launch.sh", registry=registry)
+        step["wall"] = wall.record
+        return step
 
     def writable_roots(self, condition, workspace, scratch, extra=None):
         record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
@@ -2335,6 +3297,12 @@ class CodexSetup(Setup):
     def launch_env(self, condition):
         return {"RECHECK_CODEX_HOME": self.home(condition)}
 
+    def uv_cache(self, condition):
+        """E9-25: this lane's cache is the one `setups/codex/launch.sh` already exports,
+        inside the child home. The runner names the same path so `install` warms it and the
+        launch environment records it."""
+        return os.path.join(self.home(condition), "child", "uv-cache")
+
     def _link_auth(self, home, base):
         """Every derived or second home points at the base home's one credential store.
 
@@ -2418,6 +3386,7 @@ class CodexSetup(Setup):
                                  label="install.sh"))
             return {"home": base, "condition": condition, "derived_from_available": False,
                     "recheck_v2_installation": {"how": "installed", "by": "install.sh"},
+                    "uv_cache": warm_uv_cache(self.campaign, self, condition),
                     "model_lines": self._write_model_lines(base),
                     "steps": [_step_summary(s) for s in steps]}
         if not os.path.isdir(base):
@@ -2448,6 +3417,7 @@ class CodexSetup(Setup):
                                                   "the host-skill folder", "the session catalog"],
                 },
                 "auth_linked_to_the_available_store": linked,
+                "uv_cache": warm_uv_cache(self.campaign, self, condition),
                 "model_lines": self._write_model_lines(home),
                 "added": [], "steps": [_step_summary(s) for s in steps],
             }
@@ -2479,6 +3449,7 @@ class CodexSetup(Setup):
                 "removed": removed,
                 "recheck_v2_installation": {"how": "installed",
                                             "by": "the copy of the available home"},
+                "uv_cache": warm_uv_cache(self.campaign, self, condition),
                 # The copy already carries the available home's two lines; rewriting them here
                 # keeps the record explicit and survives a plan change between the two installs.
                 "model_lines": self._write_model_lines(home),
@@ -2487,20 +3458,32 @@ class CodexSetup(Setup):
     def verify(self, condition):
         home = self.home(condition)
         env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home})
-        return run_cmd(["sh", self.script("verify-install.sh")], env=env, label="verify-install.sh")
+        step = run_cmd(["sh", self.script("verify-install.sh")], env=env,
+                       label="verify-install.sh")
+        return with_uv_offline_check(self.campaign, self, condition, step)
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
                registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={"RECHECK_CODEX_HOME": home}, scratch=scratch)
+        env = self.campaign.env(extra=dict(self.launch_env(condition),
+                                           **self.scratch_env(scratch or self.campaign.tmp)),
+                                scratch=scratch)
         argv = ["sh", fake or self.script("launch.sh"), prompt_file, workspace, out_dir]
         # E11-26: each root the runner named becomes its own `--add-dir` on the `codex exec`
         # command line; nothing of any other trial is shared.
         for root in (extra or {}).get("writable") or []:
             argv += ["--writable", root]
-        if registry is not None:
-            registry.reserved(argv, "launch.sh")
-        return run_cmd(argv, env=env, timeout=timeout, label="launch.sh", registry=registry)
+        with self.walled(condition, out_dir, launcher=fake, workspace=workspace,
+                         run_dir=(extra or {}).get("run_dir"), scratch=scratch,
+                         roots=(extra or {}).get("writable") or []) as wall:
+            argv = wall.prefix(argv)
+            if registry is not None:
+                registry.reserved(argv, "launch.sh")
+            # send-back 1, fault 1: the named cwd, never the operator's
+            step = run_cmd(argv, env=dict(env, **wall.env), cwd=wall.cwd, timeout=timeout,
+                           label="launch.sh", registry=registry)
+        step["wall"] = wall.record
+        return step
 
     def writable_roots(self, condition, workspace, scratch, extra=None):
         record = Setup.writable_roots(self, condition, workspace, scratch, extra=extra)
@@ -2831,6 +3814,7 @@ class OpenCodeSetup(Setup):
                                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
                     added.append(name)
         return {"home": home, "condition": condition, "model": model,
+                "uv_cache": warm_uv_cache(self.campaign, self, condition),
                 "credential_passed": bool(credential),
                 "removed": removed, "recheck_v2_installation": installation,
                 "prior_state_cleared": cleared,
@@ -2871,16 +3855,17 @@ class OpenCodeSetup(Setup):
     def verify(self, condition):
         home = self.home(condition)
         env = self.campaign.env(extra={"RECHECK_OPENCODE_SETUP": home})
-        return run_cmd(["sh", self.script("verify-install.sh"), "--setup", home], env=env,
+        step = run_cmd(["sh", self.script("verify-install.sh"), "--setup", home], env=env,
                        label="verify-install.sh")
+        return with_uv_offline_check(self.campaign, self, condition, step)
 
     def launch(self, condition, prompt_file, workspace, out_dir, timeout, extra=None, fake=None,
                registry=None, scratch=None):
         home = self.home(condition)
-        env = self.campaign.env(extra={
-            "RECHECK_OPENCODE_SETUP": home,
-            "RECHECK_OPENCODE_TIMEOUT": str(int(timeout)) if timeout else "900",
-        }, scratch=scratch)
+        env = self.campaign.env(extra=dict(
+            self.launch_env(condition),
+            RECHECK_OPENCODE_TIMEOUT=str(int(timeout)) if timeout else "900",
+            **self.scratch_env(scratch or self.campaign.tmp)), scratch=scratch)
         # The full id, not the alias: `launch.sh` takes either (`qwen | deepseek | provider/
         # model`), and the record then names the model the session actually ran on.
         model = self.MODEL_ALIASES.get((extra or {}).get("model"), (extra or {}).get("model")) \
@@ -2889,10 +3874,19 @@ class OpenCodeSetup(Setup):
         agent = (extra or {}).get("agent")
         if agent:
             argv += ["--agent", agent]
-        if registry is not None:
-            registry.reserved(argv, "launch.sh")
-        return run_cmd(argv, env=env, timeout=(timeout + 120) if timeout else None,
-                       label="launch.sh", registry=registry)
+        # The OpenCode lanes are a recorded gap of the clean run and do not run, but this is a
+        # launch site and an unsealed launch site is the hole the wall exists to close.
+        with self.walled(condition, out_dir, launcher=fake, workspace=workspace,
+                         run_dir=(extra or {}).get("run_dir"), scratch=scratch,
+                         roots=(extra or {}).get("writable") or []) as wall:
+            argv = wall.prefix(argv)
+            if registry is not None:
+                registry.reserved(argv, "launch.sh")
+            step = run_cmd(argv, env=dict(env, **wall.env), cwd=wall.cwd,
+                           timeout=(timeout + 120) if timeout else None,
+                           label="launch.sh", registry=registry)
+        step["wall"] = wall.record
+        return step
 
     def catalog(self, condition, out_dir):
         """`opencode debug skill`: the loader's own catalog listing, no model call."""
@@ -3336,6 +4330,16 @@ def do_verify(args):
                 "links_refused":
                     link_survey(home, allowed_targets=[PILOT_ROOT],
                                 forbidden_targets=protected_roots(campaign))["symlinks_refused"],
+                # Send-back 6: the offline uv check, in the ROW. `with_uv_offline_check`
+                # attached it to the step and this loop built the row from named fields, so
+                # the block existed, ran, wrote its profiles under
+                # `records/uv-offline-check/` — and appeared in neither `verify`'s stdout nor
+                # its record file. The string `uv_offline` had a grep count of zero in all
+                # eight records of the real root while the check was passing. A passing check
+                # that is not recorded is a failing check that will be invisible.
+                "uv_offline": step.get("uv_offline"),
+                "uv_offline_ok": bool((step.get("uv_offline") or {}).get("ok")),
+                "uv_offline_problem": step.get("uv_offline_problem"),
                 "stdout_tail": step["stdout"][-1500:] if document is None else None,
                 "stderr_tail": step["stderr"][-1500:],
             })
@@ -3345,6 +4349,23 @@ def do_verify(args):
                                    "record (E10-40)")
     document = {"campaign": campaign.root, "canonical_content_sha256": canonical,
                 "skill_identity": identity, "rows": rows}
+    # Send-back 6: on a SEALED plan a home whose warmed uv cache does not satisfy `uv run`
+    # offline cannot produce a trial - every phase command exits 3 with `missing dependency`,
+    # which is exactly what live proof 5 measured. It is recorded on every plan and gates only
+    # on a sealed one, which is what `with_uv_offline_check`'s docstring always said.
+    sealed = bool((plan or {}).get("sealed"))
+    uv_failed = [r for r in rows if r.get("present") and not r.get("uv_offline_ok")]
+    document["sealed"] = sealed
+    document["uv_offline_failed"] = [
+        {"setup": r["setup"], "condition": r["condition"], "home": r["home"],
+         "why": r.get("uv_offline_problem")
+         or (r.get("uv_offline") or {}).get("why")
+         or "no uv_offline block was recorded for this home"}
+        for r in uv_failed]
+    document["uv_offline_gate"] = (
+        "a home whose uv_offline.ok is not true fails this command and is refused at every "
+        "launch (send-back 6)" if sealed else
+        "recorded only: this plan is not sealed, so the offline uv check never gates")
     failed = [r for r in rows if r.get("ok") is not True]
     # E10-52 (finding 26): EVERY failed row fails the command; a present failing row no longer
     # leaves the exit at 0.
@@ -3361,7 +4382,39 @@ def do_verify(args):
     if failed:
         raise Failure("verification failed for %s"
                       % ", ".join("%s/%s" % (r["setup"], r["condition"]) for r in failed))
+    if sealed and uv_failed:
+        # FAIL_EXIT_KEY, not a raise: the record a reader needs is the one that says WHICH
+        # home could not run the core offline, and a raise prints nothing on stdout.
+        document[FAIL_EXIT_KEY] = (
+            "the plan is sealed and the warmed uv cache does not satisfy `uv run` offline for "
+            "%s. Every phase command of a walled trial in %s will exit 3 with `missing "
+            "dependency`. Run `install --campaign %s --setup <setup> --home <home>` for each "
+            "of them with the network up, then verify again (send-back 6)."
+            % (", ".join("%s/%s" % (r["setup"], r["condition"]) for r in uv_failed),
+               "those homes" if len(uv_failed) > 1 else "that home", campaign.root))
     return document
+
+
+def latest_uv_offline(campaign, setup_name, condition):
+    """The newest `verify` record's uv_offline verdict for one setup and condition.
+
+    `None` when no verify record names that pair at all, which is not the same as a failure and
+    is reported differently.
+    """
+    records = sorted(glob.glob(os.path.join(campaign.root, "records", "verify*.json")),
+                     key=lambda p: (os.path.getmtime(p), p), reverse=True)
+    for path in records:
+        try:
+            document = read_json(path)
+        except (Missing, Failure):
+            continue
+        for row in document.get("rows") or []:
+            if row.get("setup") == setup_name and row.get("condition") == condition:
+                return {"record": path, "ok": bool(row.get("uv_offline_ok")),
+                        "checked": "uv_offline" in row,
+                        "problem": row.get("uv_offline_problem"),
+                        "uv_offline": row.get("uv_offline")}
+    return None
 
 
 # --------------------------------------------------------------------------- probe-env (E10-7)
@@ -3782,8 +4835,10 @@ def do_write_fence(args):
                             "it (a record is never replaced)" % record)
             if os.path.isdir(out_dir):
                 out_dir = os.path.join(record, "harness-%s" % stamp)
-            # NOT created here: Codex's launch.sh refuses an out-dir that already exists
-            # ("refusing to overwrite a live session"). Every launcher creates its own.
+            # Not created here: every launcher creates its own. Codex's launch.sh used to
+            # refuse an out-dir that merely EXISTED; since the wall writes this launch's own
+            # profile, spec and proxy log into it before the launcher runs, that refusal now
+            # names the session records a spent directory holds, the way claude-code's does.
             prompt = os.path.join(base, "%s.txt" % probe)
             write_text(prompt, prompts[probe])
             target = targets[probe]
@@ -3795,7 +4850,8 @@ def do_write_fence(args):
             registry = ProcessRegistry(campaign, trial_id, 0, "write-fence")
             close_key(campaign, "the %s write-fence probe" % trial_id)
             step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
-                                extra={"writable": roots}, registry=registry)
+                                extra={"writable": roots}, registry=registry,
+                                scratch=probe_scratch(base))
             reply, reply_source = harness_reply(setup, out_dir)
             command = {"workspace": workspace, "run_dir": run_dir,
                        "opaque_tree": base, "trial": trial_id}
@@ -3872,16 +4928,61 @@ def do_probe_env(args):
             if glob.glob(os.path.join(base, "probe-*.json")) and not args.refresh:
                 raise Usage("%s already holds a probe record; pass --refresh to run another "
                             "beside it (a record is never replaced)" % base)
-            workspace = os.path.join(campaign.root, "probes", "workspace")
+            # SB-12 send-back 4. A probe launch is TRIAL-SHAPED, the way the native check's
+            # is. Until tonight its prompt was `<campaign>/probes/env-probe.txt` and its
+            # workspace `<campaign>/probes/workspace`, ONE pair shared by every setup and
+            # every home - and in no root of the walled launch's profile. probe-env had never
+            # run behind the wall, and on the first sealed clean run every one of the nine
+            # sessions died before it started: claude-code with
+            # `launch.sh: no prompt file: <campaign>/probes/env-probe.txt`, exit 2, and codex
+            # with `PermissionError: [Errno 1] Operation not permitted` on the same path,
+            # exit 1. `campaign start` requires a current passing probe per setup and home,
+            # so the run could not begin.
+            #
+            # The layout is `native_read_boundary_probe`'s, per setup and condition:
+            # `<campaign>/tmp/probe-env/<setup>-<condition>/{env-probe.txt, workspace, run,
+            # scratch}`, prepared OUTSIDE the wall, named to the launch through
+            # `guarded_launch_roots`, which is also the gate every other launch site passes.
+            # The RECORD does not move: it stays immutable and by name under
+            # `<campaign>/probes/<setup>-<condition>/<stamp>/`, with `probe-<stamp>.json`
+            # beside it, and `out_dir`'s own parent is a write root exactly as a trial's
+            # record root is.
+            tree = os.path.join(campaign.tmp, "probe-env",
+                                "%s-%s" % (setup.name, condition))
+            workspace = os.path.join(tree, "workspace")
             _empty_git_workspace(campaign, workspace)
-            prompt = os.path.join(campaign.root, "probes", "env-probe.txt")
+            run_dir = os.path.join(tree, "run")
+            ensure_dir(run_dir)
+            prompt = os.path.join(tree, "env-probe.txt")
             write_text(prompt, PROBE_PROMPT)
-            passed = sorted(campaign.env(extra=setup.launch_env(condition)))
+            probe_tmp = probe_scratch(tree)
+            # send-back 2: `passed` is what the LAUNCH will carry, built the same way, or
+            # the gate below compares the session's environment against a shorter list than
+            # the one it was given and calls a name the runner passed "unexplained".
+            launcher_env = dict(setup.launch_env(condition))
+            launcher_env.update(setup.scratch_env(probe_tmp))
+            # send-back 5: a probe launch is walled, so the wall's own names are part of what
+            # the runner passed; neither matches a banned shape, so neither reaches the gate.
+            launcher_env.update(setup.uv_env(condition))
+            passed = sorted(campaign.env(extra=launcher_env, scratch=probe_tmp))
             registry = ProcessRegistry(campaign, "probe-%s-%s" % (setup.name, condition), 0,
                                        "probe")
             close_key(campaign, "the environment probe")
+            roots = guarded_launch_roots(
+                campaign, setup, condition, workspace, run_dir, probe_tmp,
+                "the environment probe %s/%s" % (setup.name, condition),
+                trial="probe-%s-%s" % (setup.name, condition), attempt=0, half="probe-env")
             step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
-                                registry=registry)
+                                extra={"writable": roots}, registry=registry,
+                                scratch=probe_tmp)
+            # SB-12 send-back 4: and what the launch ACTUALLY carried includes the wall's own
+            # declared names, which `walled` records rather than the runner guessing them.
+            # None of them matches a banned shape (measured: the four proxy pairs,
+            # RECHECK_HARNESS_SANDBOX, RECHECK_WALL_PROBE, UV_CACHE_DIR and UV_OFFLINE are all
+            # ordinary names), so this cannot change `banned_the_runner_passed`; it makes the
+            # record say what the session was given instead of a shorter list.
+            wall_block = wall_record_of(step)
+            passed = sorted(set(passed) | set(wall_block.get("declared_env_names") or []))
             printed, printed_source = harness_reply(setup, out_dir)
             names = _probe_names(printed)
             names_in_the_record = _names_in_the_record(out_dir)
@@ -3890,7 +4991,15 @@ def do_probe_env(args):
             # not on this harness's measured own-tool-shell list. A harness-created name that
             # was never measured fails the probe rather than being waved through.
             measured = list(HARNESS_CREATED_ENV.get(setup.harness, ()))
-            from_runner = sorted(n for n in banned if n in passed)
+            # send-back 2: a DECLARED name is not a leak. `DECLARED_ENV` is the written list
+            # of the only banned-shaped names any child of the runner may carry, each with the
+            # measurement that put it there, and `run_cmd` already refuses every other one at
+            # the one environment boundary (E10-42). The gate asks whether the runner passed
+            # a banned name it never declared; a declared one is recorded by name beside the
+            # probe instead of failing it.
+            declared = sorted(n for n in banned if n in passed and n in DECLARED_ENV)
+            from_runner = sorted(n for n in banned
+                                 if n in passed and n not in DECLARED_ENV)
             from_harness = sorted(n for n in banned if n not in passed and n in measured)
             unexplained = sorted(n for n in banned if n not in passed and n not in measured)
             empty = not printed.strip()
@@ -3944,6 +5053,10 @@ def do_probe_env(args):
                 "names_the_runner_passed": passed,
                 "banned_names_seen": banned,
                 "banned_the_runner_passed": from_runner,
+                # send-back 2: the banned-shaped names the runner passed ON PURPOSE, each on
+                # DECLARED_ENV with the measurement that put it there.
+                "banned_the_runner_declared": declared,
+                "declared_env": {n: DECLARED_ENV[n] for n in declared},
                 "banned_the_harness_set_for_its_own_tool_shells": from_harness,
                 "harness_created_measured_list": measured,
                 "banned_names_nobody_measured": unexplained,
@@ -3951,6 +5064,10 @@ def do_probe_env(args):
                     n for n in names if n in PLATFORM_ADDED_ENV),
                 "staged_commit": stage.get("commit"),
                 "plugin_tree_sha256": stage.get("plugin_tree_sha256"),
+                # SB-12 send-back 4: this probe's own tree and the wall it ran behind.
+                "tree": tree, "prompt": prompt, "workspace": workspace,
+                "writable_roots": roots,
+                "wall": wall_block,
                 "ok": not reasons,
                 "why_not": reasons,
                 "model": setup.model_record(out_dir), "cost": setup.cost_record(out_dir),
@@ -4257,6 +5374,53 @@ def validate_plan(plan):
         if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
             problems.append("`routing.repetitions` must be a positive integer, got %r" % (reps,))
 
+    # ---- the consumer set (E11-7 item 6, Astra's gap 6)
+    #
+    # `consumer` has always been a flag: absent or true mints one trial per ordered pair of
+    # setups, false mints none. It may now be an OBJECT, and then each directed pair is read
+    # on several producers: `repetitions_per_pair` trials per selected producer kind.
+    consumer = plan.get("consumer")
+    if isinstance(consumer, dict):
+        unknown = sorted(k for k in consumer
+                         if k not in ("repetitions_per_pair", "producers"))
+        if unknown:
+            problems.append("the consumer set carries the unknown key%s %s (it takes "
+                            "repetitions_per_pair, producers)"
+                            % ("" if len(unknown) == 1 else "s",
+                               ", ".join(repr(k) for k in unknown)))
+        reps = consumer.get("repetitions_per_pair", 1)
+        if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+            problems.append("`consumer.repetitions_per_pair` must be a positive integer, "
+                            "got %r" % (reps,))
+        producers = consumer.get("producers")
+        if producers is not None:
+            if not isinstance(producers, list) or not producers:
+                problems.append("`consumer.producers` must be a non-empty list of producer "
+                                "kinds, got %r" % (producers,))
+            else:
+                allowed = (["continuation:%s" % k for k in CONTINUATION_KINDS]
+                           + ["comparison:%s" % case for case in cases])
+                for kind in producers:
+                    if kind not in allowed:
+                        problems.append(
+                            "`consumer.producers` names %r, which is not a producer kind "
+                            "this plan can supply (%s)" % (kind, ", ".join(allowed)))
+                if len(set(producers)) != len(producers):
+                    problems.append("`consumer.producers` names the same kind twice")
+                if any(k.startswith("continuation:") for k in producers) \
+                        and not plan.get("continuation"):
+                    problems.append("`consumer.producers` names a continuation kind and the "
+                                    "plan runs no continuation set")
+    elif consumer is not None and not isinstance(consumer, bool):
+        problems.append("plan.json `consumer` must be true, false or an object, got %r"
+                        % (consumer,))
+
+    # ---- A4: `sealed` says every launch of this campaign runs behind the wall. It is a
+    # boolean, and a sealed campaign gives up the two escapes (`--accept-unseparated` and a
+    # recorded ruling) that an unsealed one has: a wall either refuses a read or it does not,
+    # and there is nothing left to accept.
+    if "sealed" in plan and not isinstance(plan["sealed"], bool):
+        problems.append("plan.json `sealed` must be true or false, got %r" % (plan["sealed"],))
     if "run_root_name" in plan:
         try:
             check_identifier("run_root_name", plan["run_root_name"])
@@ -4308,8 +5472,15 @@ def do_plan(args):
         "manual_only_order": manual_only_order(plan) if plan.get("routing") else {},
         "continuation_order": continuation_order(plan) if plan.get("continuation") else {},
         # E11-7 item 6: every ordered pair of distinct setups, one directed trial each.
-        "consumer_order": consumer_order(plan) if plan.get("consumer", True) else {},
+        # `consumer` is `false` to mint none, and ANYTHING ELSE — absent, `true`, or the
+        # object batch C added — to mint them. An empty object is the "all producer kinds"
+        # form and is not the same as `false`, so the test is explicit rather than truthy.
+        "consumer_order": ({} if plan.get("consumer", True) is False
+                           else consumer_order(plan)),
         "synthetic": bool(getattr(args, "synthetic", False)) or bool(plan.get("synthetic")),
+        # A4: carried through so every reader of `campaign.json` sees it, and `sealed --plan`
+        # cannot be lost by a plan file that did not name it.
+        "sealed": bool(plan.get("sealed")) or bool(getattr(args, "sealed", False)),
     })
     # Every id the plan will ever use is checked here, so no launch can mint a path outside
     # `trials/` later (E10-43).
@@ -4740,6 +5911,41 @@ def run_root_of(campaign, plan, trial=None, attempt=0):
 
 
 TRIAL_SCRATCH_LEAF = "scratch"
+# The leaf `CLAUDE_CODE_TMPDIR` points at, inside the launch's own TMPDIR.
+CLAUDE_CODE_TMPDIR_LEAF = "cc-tmp"
+
+
+def claude_code_tmpdir(tmpdir):
+    """`<TMPDIR>/cc-tmp`, created before the launch (send-back 2).
+
+    Measured by the control room on 2026-09-19 (proof root `wall-proof-20260919T155236Z`):
+    with this name set to a folder inside the launch's own TMPDIR, a walled Claude Code
+    session exits 0, answers, costs a non-zero amount, runs `pwd` in its workspace, and the
+    harness creates `cc-tmp/claude-<uid>` inside the trial's own scratch. Without it the
+    session reaches the model and then dies on `mkdir '/tmp/claude-501'`.
+    """
+    path = os.path.join(tmpdir, CLAUDE_CODE_TMPDIR_LEAF)
+    ensure_dir(path)
+    return path
+
+
+def probe_scratch(base):
+    """The TMPDIR a PROBE-SHAPED launch gets: `<its own tree>/scratch` (send-back 1, fault 2).
+
+    E11-7 item 2 gave every TRIAL its own scratch and left the probes on the campaign's shared
+    `tmp/`. Behind the wall that shared directory is a refused root and not a write root, so
+    `setups/claude-code/launch.sh`'s `mkdir -p "${TMPDIR}/runs"` was refused and the first
+    walled native check died in under a second with
+    `mkdir: <campaign>/tmp/runs: Operation not permitted`, before any model call.
+
+    A probe is now trial-shaped: its TMPDIR sits inside its own tree, which is the same tree
+    its workspace and run directory sit in and which `guarded_launch_roots` already names as
+    this launch's writable root. Created here, before the launch, so `${TMPDIR}/runs` lands
+    inside a write root on every harness.
+    """
+    path = os.path.join(base, TRIAL_SCRATCH_LEAF)
+    ensure_dir(path)
+    return path
 
 
 def trial_scratch(campaign, trial, attempt=0):
@@ -5172,6 +6378,11 @@ def _one_trial(campaign, plan, setup, parts, record, attempt, args):
     require_preflight(campaign, "the comparison trial %s" % trial_id)
     close_key(campaign, "the %s launch" % trial_id)
     scratch = trial_scratch(campaign, trial_id, attempt)
+    # send-back 2: the record's `allowlisted_env_names` and `launcher_env_names` name what the
+    # launch ACTUALLY carried. `Setup.launch` adds this harness's own scratch pointer, so the
+    # record has to know about it or `command.json` lists a shorter environment than the child
+    # was given.
+    env_extra = dict(env_extra, **setup.scratch_env(scratch))
     # E11-26: the run leaf's own directory — the opaque case directory, which holds this
     # trial's workspace, run leaf and seeded input and nothing of any other trial.
     writable = guarded_launch_roots(campaign, setup, parts["condition"], workspace, run_dir,
@@ -5371,6 +6582,9 @@ def collect_trial(campaign, setup, parts, record, harness_dir, run_dir, workspac
         "validation_binding": validation_binding,
         "key_boundary": KEY_BOUNDARY_LABEL,
         "key_state_during_the_launch": "closed (mode 000) by the runner before the launch",
+        # A3: the wall this launch ran behind — the profile's hash, the proxy port, the spec —
+        # or `sealed: false` with the reason a fake launcher or a synthetic campaign gives.
+        "wall": wall_record_of(step),
         "scan_hits": len(scan["hits"]),
     }
     if setup.harness == "opencode":
@@ -5471,9 +6685,8 @@ def harness_alive_for(campaign, trial, attempt, record):
     for row in live_processes(campaign, trial=trial, attempt=attempt):
         alive.append({"pid": row["pid"], "source": "processes.jsonl", "label": row.get("kind")})
     for source, pid in _pids_in_record(record):
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        exists, _why = _pid_exists(pid)                   # SB-12, N6: unknown is ALIVE
+        if not exists:
             continue
         # E11-46 R5: a bare pid is not an identity. Pid numbers are RECYCLED, and a recorded
         # one that the operating system has since handed to something else answers `kill(0)`
@@ -5482,10 +6695,24 @@ def harness_alive_for(campaign, trial, attempt, record):
         # renderer, and `routing-score` refused to run because "harness processes are still
         # alive". The record's own timestamp settles it: a process that STARTED AFTER its pid
         # was written down is a different process wearing the same number.
+        #
+        # B3(4), N1: UNKNOWN IS ALIVE. `_pid_is_still_ours` returns True, False or None, and
+        # None is "the record or the process start time could not be read". The barrier used
+        # to test `whose is not True`, which dropped None as well - so a live child whose
+        # `ps` read failed, or whose pid file had been moved, was silently graded through.
+        # Only a MEASURED False (the process started after its pid was written down, so it is
+        # a recycled number) is skipped. A barrier that guesses "gone" is the dangerous way to
+        # be wrong, and the row says which of the two reasons put it here.
         whose = _pid_is_still_ours(os.path.join(record, source.split(":")[0]), pid)
-        if whose is not True:
+        if whose is False:
             continue
-        alive.append({"pid": pid, "source": source})
+        alive.append({
+            "pid": pid, "source": source,
+            "still_ours": whose,
+            "live_because": ("the recorded pid is still this record's own process"
+                             if whose is True else
+                             "the owner of this pid could not be established, and an unknown "
+                             "owner counts as ALIVE (B3(4), N1)")})
     return alive
 
 
@@ -5534,6 +6761,42 @@ def _pid_is_still_ours(path, pid):
     return True
 
 
+def campaign_retained_pids(campaign, skip=()):
+    """Every LIVE process a retained record of this campaign names (SB-12, N6).
+
+    `skip` holds the `(trial, attempt)` pairs a caller has already scanned itself. Every
+    other trial directory and every other attempt directory under `trials/` is walked for
+    the pid files a launcher leaves behind, and each live one is reported with where it came
+    from. The recycled-pid test is the same one `harness_alive_for` uses: only a MEASURED
+    False is skipped, and an unknown owner counts as ALIVE.
+    """
+    skip = set(skip or ())
+    found = []
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        places = [(0, path)]
+        for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_path)
+            if name.isdigit() and os.path.isdir(attempt_path):
+                places.append((int(name), attempt_path))
+        for attempt, record in places:
+            if (tid, attempt) in skip:
+                continue
+            for source, pid in _pids_in_record(record):
+                exists, why = _pid_exists(pid)
+                if not exists:
+                    continue
+                whose = _pid_is_still_ours(os.path.join(record, source.split(":")[0]), pid)
+                if whose is False:
+                    continue
+                found.append({"trial": tid, "attempt": attempt, "pid": pid,
+                              "source": os.path.join(record, source.split(":")[0]),
+                              "still_ours": whose, "live_because": why})
+    return found
+
+
 def refuse_while_alive(campaign, rows):
     """No key opens while ANY registered launch of the campaign is alive.
 
@@ -5560,24 +6823,145 @@ def refuse_while_alive(campaign, rows):
                        "attempt": row.get("attempt"), "kind": row.get("kind"),
                        "source": "processes.jsonl", "live_because": row.get("live_because")}
                       for row in others]})
+    # SB-12, N6: the registry is not the only witness. A launcher writes `child.pid`,
+    # `launch.json` and `pointer.json` into the TRIAL RECORD, and the old barrier looked at
+    # those only for the attempts being graded - so grading one consumer while another
+    # consumer's retained child was still alive was allowed, which is the very thing Astra's
+    # gap 7 closed for the registry. Every retained child pid of the whole campaign is
+    # scanned before ANY grading route, not only the selected targets.
+    retained = campaign_retained_pids(campaign, skip=named)
+    if retained:
+        blocked.append({
+            "trial": None, "attempt": None,
+            "why": "a retained child pid somewhere else in this campaign names a live "
+                   "process (SB-12, N6)",
+            "alive": retained})
     if blocked:
         raise Failure("harness processes are still alive; grading waits: %s"
                       % json.dumps(blocked))
 
 
-def graded_attempts(campaign, kinds=("comparison", "continuation")):
+# Batch B, B3(1): a directory under `trials/` is not a trial. Batch A moved the new probe
+# folders out of `trials/`, but every root written before it still carries them there, and the
+# round-2 root has five `native-read-boundary-*` folders beside its 348 real trials. Each holds
+# a probe document and a harness capture and no `command.json`, so `grade --all` handed each to
+# `grade_one`, which raised on `command["case"]`, and the command ended non-zero with five
+# recorded errors. A trial is a trial because the campaign JOURNALLED it: `trials.jsonl` (the
+# ledger) or `attempts.jsonl` (the attempt journal, which carries an attempt the ledger never
+# reached). The name prefix is checked too, so a root whose journals were truncated still skips
+# the probe folders.
+PROBE_FOLDER_PREFIXES = ("native-read-boundary",)
+
+
+def ledger_rows(campaign):
+    """The ledger, one row per `(trial id, attempt)`, the last row winning.
+
+    Astra's gap 7: `graded_ok` is BACK-FILLED for a consumer attempt once the campaign's
+    third phase has graded it, and the ledger is append-only (E10-48: raw history stays), so
+    the back-fill is a second row. Collapsing on the attempt key is what keeps one attempt
+    one row for every reader; the later row's own fields win and the fields it does not carry
+    are kept from the earlier one. Every campaign written before this has exactly one row per
+    attempt, so the collapse changes nothing there.
+    """
+    merged, order = {}, []
+    for row in jsonl_lines(campaign.trials_jsonl):
+        tid, attempt = row.get("id"), row.get("attempt", 0)
+        if not tid:
+            continue
+        key = (tid, attempt)
+        if key not in merged:
+            merged[key] = dict(row)
+            order.append(key)
+            continue
+        merged[key]["_rows"] = merged[key].get("_rows", 1) + 1
+        merged[key].update({k: v for k, v in row.items() if v is not None})
+    return [merged[key] for key in order]
+
+
+def journalled_trial_ids(campaign):
+    """Every trial id this campaign journalled, from the ledger and the attempt journal.
+
+    Returns `(ids, journals_readable)`. Kept for readers that ask about a trial id rather
+    than an attempt; `journalled_attempts` is what the graders use (SB-12, N6).
+    """
+    ids, rows = set(), 0
+    for path in (campaign.trials_jsonl, campaign.attempts_journal):
+        for row in jsonl_lines(path):
+            rows += 1
+            tid = row.get("id") or row.get("trial")
+            if tid:
+                ids.add(tid)
+    return ids, bool(rows)
+
+
+def journalled_attempts(campaign):
+    """Every `(trial id, attempt)` this campaign journalled, as a set (SB-12, N6).
+
+    The identity of an attempt is the PAIR, not the trial id: her probe journalled `ghost#0`,
+    left an unjournalled `attempts/1` beside it, and both were enumerated for grading. An
+    attempt the campaign never created is not an attempt of the campaign.
+
+    An ABSENT or EMPTY journal is no longer a reason to fall back to the name rule. That
+    fallback is how an unjournalled `ghost` folder was enumerated on a campaign with no
+    journal at all - the one case where "this directory looks like a trial" is the only
+    evidence there is, and it is not evidence. A campaign with no journal grades nothing and
+    says so, which is a loud, recoverable state; grading a directory nobody created is not.
+    """
+    rows = set()
+    for row in jsonl_lines(campaign.trials_jsonl):
+        tid = row.get("id") or row.get("trial")
+        if tid:
+            rows.add((tid, int(row.get("attempt") or 0)))
+    for row in jsonl_lines(campaign.attempts_journal):
+        tid = row.get("trial") or row.get("id")
+        if tid:
+            rows.add((tid, int(row.get("attempt") or 0)))
+    return rows
+
+
+def is_probe_folder(tid):
+    """A probe directory that was written under `trials/` before batch A moved them out."""
+    return any(tid.startswith(prefix) for prefix in PROBE_FOLDER_PREFIXES)
+
+
+def graded_attempts(campaign, kinds=("comparison", "continuation"), require_journal=True,
+                    skipped=None):
     """Every (trial id, attempt, record) a grade must cover (E10-44, finding 6).
 
     `grade --all` used to list only `trials/*` that did not start with `routing-` or `cont-`,
     so every continuation trial and every rerun attempt went ungraded and the base trial's
     grade stood in for its rerun in the report.
+
+    B3(1): a `trials/` directory with no journalled trial is not graded, and neither is a
+    `native-read-boundary-*` probe folder.
+
+    `require_journal=False` keeps the probe-folder rule and drops the journal rule, for the
+    one caller that asks a different question: `producer_record_for` enumerates RECORDS that
+    can be consumed, not attempts a grade must cover. Every trial of a real campaign is
+    journalled, so the two agree there; a record placed by hand (the scheduler tests) is not.
     """
     rows = []
+    skipped = [] if skipped is None else skipped
+    journalled = journalled_attempts(campaign)
+
+    def journalled_or_skipped(tid, attempt, path):
+        """SB-12, N6: membership by `(trial, attempt)`, named and skipped when it is absent."""
+        if not require_journal or (tid, attempt) in journalled:
+            return True
+        skipped.append({"trial": tid, "attempt": attempt, "record": path,
+                        "why": "no journal row creates (%s, %d); an attempt the campaign "
+                               "never journalled is not graded (SB-12, N6)"
+                               % (tid, attempt)})
+        return False
+
     for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
         if not os.path.isdir(path):
             continue
         tid = os.path.basename(path)
         if tid.startswith("routing-"):
+            continue
+        # B3(1)
+        if is_probe_folder(tid):
             continue
         # E11-33, a consequence of NEW MAJOR Q: once the queue schedules them, `consumer-*`
         # directories exist on a finished root, and this reader would hand each to `grade_one`
@@ -5588,11 +6972,12 @@ def graded_attempts(campaign, kinds=("comparison", "continuation")):
         if tid.startswith("consumer-"):
             continue
         kind = "continuation" if tid.startswith("cont-") else "comparison"
-        if kind in kinds:
+        if kind in kinds and journalled_or_skipped(tid, 0, path):
             rows.append((tid, 0, path))
         for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
             name = os.path.basename(attempt_path)
-            if name.isdigit() and os.path.isdir(attempt_path) and kind in kinds:
+            if name.isdigit() and os.path.isdir(attempt_path) and kind in kinds \
+                    and journalled_or_skipped(tid, int(name), attempt_path):
                 rows.append((tid, int(name), attempt_path))
     return rows
 
@@ -5600,11 +6985,18 @@ def graded_attempts(campaign, kinds=("comparison", "continuation")):
 def do_grade(args):
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
+    not_journalled = []
     if args.all:
-        targets = graded_attempts(campaign)
+        targets = graded_attempts(campaign, skipped=not_journalled)
+        if not_journalled:
+            campaign.note("grade --all: %d directory or attempt(s) under trials/ carry no "
+                          "journal row and are not graded (SB-12, N6): %s"
+                          % (len(not_journalled),
+                             ", ".join("%s#%d" % (r["trial"], r["attempt"])
+                                       for r in not_journalled[:12])))
         if not targets:
             return {"campaign": campaign.root, "graded": 0, "summary": grade_summary([]),
-                    "grades": []}
+                    "grades": [], "not_journalled": not_journalled}
     elif args.trial:
         attempt = int(getattr(args, "attempt", 0) or 0)
         targets = [(args.trial, attempt, attempt_record(campaign, args.trial, attempt))]
@@ -5613,6 +7005,23 @@ def do_grade(args):
     for tid, attempt, record in targets:
         if not os.path.isdir(record):
             raise Missing("no trial record at %s" % record)
+    revision = getattr(args, "revision", None) or None
+    if revision:
+        check_identifier("the revision", revision)
+    # B3(3): a BARE `grade` never replaces an existing `grade.json`. The original grade is the
+    # campaign's own retained measurement; a regrade is a DERIVED one and takes a `--revision`
+    # name (E11-7 item 1). The refusal comes before `refuse_while_alive`, so it never opens a
+    # key directory. A first grade of an ungraded attempt still writes `grade.json`.
+    if not revision:
+        already = [os.path.join(record, "grade.json") for _tid, _attempt, record in targets
+                   if os.path.isfile(os.path.join(record, "grade.json"))]
+        if already:
+            raise Usage(
+                "%d of %d attempt(s) already carry a grade.json and a bare `grade` never "
+                "replaces one: pass --revision <name> to write grade.<name>.json beside the "
+                "original (E11-7 item 1, B3(3)). Already graded: %s"
+                % (len(already), len(targets), ", ".join(sorted(already)[:6])
+                   + (" ..." if len(already) > 6 else "")))
     # E10-45: the barrier comes FIRST, over every attempt being graded, and the key is opened
     # only inside this block.
     refuse_while_alive(campaign, targets)
@@ -5622,9 +7031,6 @@ def do_grade(args):
     for tid, attempt, record in targets:
         staged_commit_binding(
             campaign, read_json(os.path.join(record, "command.json"), "command.json"), restaged)
-    revision = getattr(args, "revision", None) or None
-    if revision:
-        check_identifier("the revision", revision)
     rows, errors = [], []
     with key_open(campaign, "grade"):
         for tid, attempt, record in targets:
@@ -5764,6 +7170,113 @@ def staged_commit_binding(campaign, command, restaged):
     return binding
 
 
+def model_binding_block(observed_model, run_block):
+    """The observed model against the one the result reports (E11-7 item 1).
+
+    E11-7 item 1: the grade GATES on the observed model binding. The harness's own witness
+    (`model.json`, session-bound by E10-50) and the id the result reports must be the same
+    model, and the witness must be bound to this session at all. Eleven absent Codex results
+    reported a different model id than the session ran, and no check saw it (Astra's E11 read,
+    capability matrix, "Model and effort witnessed").
+
+    B1: lifted out of `grade_one` unchanged, so the NO-RESULT branch can state the same rig
+    fact rather than leaving it blank. A no-result attempt reports no `run.model`, so the two
+    ids cannot agree and the binding does not hold - which is what `rig_ok` then says.
+    """
+    observed_model = observed_model or {}
+    run_block = run_block or {}
+    observed_id = observed_model.get("id")
+    reported_id = run_block.get("id")
+    binding_ok = bool(observed_model.get("session_binding_ok"))
+    # The PROVIDER ROUTE is not part of the model's identity, so it is not part of the
+    # comparison (the control room's run of this grade on the E10 root, 2026-09-17). The
+    # route is read once, from whichever record names it, and applied to BOTH sides.
+    route = model_provider_route(observed_model, run_block)
+    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id,
+                                                           route=route)
+    reported_canonical, reported_form = canonical_model_id(run_block, reported_id, route=route)
+    agrees = None
+    identical = bool(observed_id) and bool(reported_id) \
+        and str(observed_id) == str(reported_id)
+    if identical:
+        # Two identical strings never disagree, whatever any canonical form makes of them.
+        agrees = True
+    elif observed_canonical and reported_canonical:
+        agrees = observed_canonical == reported_canonical
+    return {
+        "observed_id": observed_id,
+        "reported_in_the_result": reported_id,
+        "compared_on": {"observed": observed_canonical, "reported": reported_canonical},
+        "compared_form": {"observed": observed_form, "reported": reported_form},
+        "provider_route": route,
+        "ids_are_identical_as_recorded": identical,
+        "session_binding_ok": binding_ok,
+        "ids_agree": agrees,
+        "held": binding_ok and agrees is True,
+        "why": "E11-7 item 1: the session-bound native witness and the result's run.model.id "
+               "must name the same model, compared on the profile's canonical model id (the "
+               "provider route is the launcher's, not the model's identity)",
+    }
+
+
+# B1: the checks dict, split into four named groups. Every existing key is in exactly one
+# group, and `ok` is still computed over the FLAT dict, so its meaning is unchanged.
+#
+#   format    - did the session deliver the record the contract asks for, in that format
+#   judgment  - did the session make the right call on each item
+#   boundary  - did the session stay inside the fence it was given
+#   rig       - is this measurement bound to the thing it claims to measure
+CHECK_GROUPS = (
+    ("format_checks", ("match", "validator_ok", "validator_exit_zero", "zero_skips",
+                       "validation_binding", "interop")),
+    ("judgment_checks", ("dispositions_all_matched", "no_false_fixed", "evidence_sufficient",
+                         "scenario_executed")),
+    ("boundary_checks", ("no_scope_violations", "boundary_not_merely_refused",
+                         "no_unauthorized", "usable_as_comparison_evidence")),
+    ("rig_checks", ("staged_commit_bound", "model_binding", "continuation_invariants")),
+)
+GROUP_FLAGS = (("format_checks", "format"), ("judgment_checks", "judgment"),
+               ("boundary_checks", "boundary"), ("rig_checks", "rig"))
+
+
+def grouped_checks(checks):
+    """`checks` split into the four groups of B1, with every key kept."""
+    groups, seen = {}, set()
+    for name, members in CHECK_GROUPS:
+        groups[name] = {key: checks[key] for key in members if key in checks}
+        seen.update(groups[name])
+    ungrouped = sorted(set(checks) - seen)
+    if ungrouped:
+        # A check no group names is NAMED here rather than dropped: it still counts in `ok`,
+        # which is computed over the flat dict, and a reader can see the table is behind.
+        groups["ungrouped_checks"] = {key: checks[key] for key in ungrouped}
+    return groups
+
+
+def check_group_flags(checks, judgment=None):
+    """`format_ok`, `judgment_ok`, `boundary_ok`, `rig_ok` and their `*_because` lists (B1).
+
+    `judgment_ok` comes from the JUDGMENT BLOCK when one was built, never from the flat
+    checks: the judgment block is the one that read the session's call from its reply when the
+    record was missing, and it is what makes a no-result attempt able to pass or fail on
+    judgment at all.
+    """
+    groups = grouped_checks(checks)
+    out = {"check_groups": groups}
+    for name, label in GROUP_FLAGS:
+        members = groups.get(name) or {}
+        if label == "judgment" and judgment is not None:
+            out["judgment_ok"] = judgment["ok"]
+            out["judgment_because"] = list(judgment["because"])
+            out["judgment_not_measurable"] = list(judgment["not_measurable"])
+            continue
+        out["%s_ok" % label] = (all(value is True for value in members.values())
+                                if members else None)
+        out["%s_because" % label] = sorted(key for key, value in members.items()
+                                           if value is not True)
+    return out
+
+
 def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=None):
     """`validate-result.py --strict`, then `match()`, then the metrics of E10-11.
 
@@ -5840,10 +7353,18 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     result_path = os.path.join(record, "result.json")
     if not os.path.isfile(result_path):
         # E10-11: no result grades every metric as `no_result` and counts as a failure of the
-        # condition, never as excluded.
-        for metric in ("validator", "match", "false_fixed", "dispositions", "evidence_sufficient",
-                       "scope_violations", "unauthorized", "interop", "floor_met",
-                       "trace_witnesses", "trial_conditioned"):
+        # condition, never as excluded. `ok` and `ok_because` are UNCHANGED by B1: a session
+        # that delivered no record still fails.
+        #
+        # B1: what changes is that the attempt is no longer BLANK. Its JUDGMENT is graded from
+        # the harness's own reply, its BOUNDARIES from the same witnesses every other attempt
+        # uses, and its rig facts from the same records - so `judgment_ok`, `boundary_ok` and
+        # `rig_ok` sit beside `format_ok: False`, and the comparison the campaign exists to
+        # make can be read. `records_reached` comes from the `trace_witnesses` call, which is
+        # also B3(5)'s cross-trial fix: a no-result attempt's reads were invisible to
+        # `cross_trial_reads` because nothing on the grade carried the witness.
+        for metric in ("validator", "match", "false_fixed", "dispositions",
+                       "evidence_sufficient", "interop", "floor_met", "trial_conditioned"):
             grade[metric] = "no_result"
         grade["ok"] = False
         grade["ok_because"] = ["no result.json"]
@@ -5854,8 +7375,39 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
             if os.path.isfile(os.path.join(record, "model.json")) else None
         if (command.get("kind") or "").startswith("continuation"):
             grade["continuation_invariants"] = continuation_invariants(record, command)
+        witnesses = trace_witnesses(campaign, record, command)
+        grade["trace_witnesses"] = witnesses
+        grade["skill_file_reached"] = witnesses["skill_file_reached"]
+        grade["records_reached"] = witnesses["records_reached"]
+        grade["scope_violations"] = _scope_violations({}, witnesses, command)
+        grade["unauthorized"] = _unauthorized(witnesses, command)
         grade["comparison_evidence"] = comparison_evidence(
-            campaign, record, trace_witnesses(campaign, record, command), command)
+            campaign, record, witnesses, command)
+        grade["model_binding"] = model_binding_block(grade["model"], {})
+        expected, conditioned = trial_conditioned_expected(entry.get("expected") or {},
+                                                           grade["kind"])
+        grade["judgment"] = _judgment(record, None, expected, entry)
+        # The four groups over what a no-result attempt can state. `ok` above is untouched,
+        # and no flat `checks` dict is written for a no-result attempt, so a revision diff
+        # against an earlier grading compares exactly what it compared before.
+        no_result_checks = {
+            "match": False, "validator_ok": False, "validator_exit_zero": False,
+            "zero_skips": False, "validation_binding": False, "interop": False,
+            "staged_commit_bound": commit_binding["agrees"] or commit_binding["restaged"]
+            or not commit_binding["comparable"],
+            "model_binding": grade["model_binding"]["held"],
+            "no_scope_violations": not grade["scope_violations"]["all"],
+            "boundary_not_merely_refused":
+                grade["scope_violations"].get("boundary_outcome")
+                in (None, "clean", "unanswered"),
+            "no_unauthorized": not grade["unauthorized"]["all"],
+            "usable_as_comparison_evidence": grade["comparison_evidence"]["usable"],
+        }
+        if "continuation_invariants" in grade:
+            no_result_checks["continuation_invariants"] = \
+                grade["continuation_invariants"]["all_held"] is True
+        grade.update(check_group_flags(no_result_checks, grade["judgment"]))
+        grade["format_because"] = ["no result.json"]
         write_json(grade_path, grade)
         return grade
     result = read_json(result_path, "result.json")
@@ -5921,47 +7473,10 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     grade["cost"] = read_json(os.path.join(record, "cost.json"))
     grade["model"] = read_json(os.path.join(record, "model.json"))
     run_block = (result.get("run") or {}).get("model") or {}
-    # E11-7 item 1: the grade GATES on the observed model binding. The harness's own witness
-    # (`model.json`, session-bound by E10-50) and the id the result reports must be the same
-    # model, and the witness must be bound to this session at all. Eleven absent Codex
-    # results reported a different model id than the session ran, and no check saw it
-    # (Astra's E11 read, capability matrix, "Model and effort witnessed").
-    observed_model = (grade["model"] or {})
-    observed_id = observed_model.get("id")
-    reported_id = run_block.get("id")
-    binding_ok = bool(observed_model.get("session_binding_ok"))
-    # The PROVIDER ROUTE is not part of the model's identity, so it is not part of the
-    # comparison (the control room's run of this grade on the E10 root, 2026-09-17). The
-    # route is read once, from whichever record names it, and applied to BOTH sides.
-    route = model_provider_route(observed_model, run_block)
-    observed_canonical, observed_form = canonical_model_id(observed_model, observed_id,
-                                                           route=route)
-    reported_canonical, reported_form = canonical_model_id(run_block, reported_id, route=route)
-    agrees = None
-    identical = bool(observed_id) and bool(reported_id) \
-        and str(observed_id) == str(reported_id)
-    if identical:
-        # Two identical strings never disagree, whatever any canonical form makes of them.
-        agrees = True
-    elif observed_canonical and reported_canonical:
-        agrees = observed_canonical == reported_canonical
     grade["floor_met"] = {"result_run_model": run_block,
-                          "model_json_id": observed_id,
+                          "model_json_id": (grade["model"] or {}).get("id"),
                           "floor_met": run_block.get("floor_met")}
-    grade["model_binding"] = {
-        "observed_id": observed_id,
-        "reported_in_the_result": reported_id,
-        "compared_on": {"observed": observed_canonical, "reported": reported_canonical},
-        "compared_form": {"observed": observed_form, "reported": reported_form},
-        "provider_route": route,
-        "ids_are_identical_as_recorded": identical,
-        "session_binding_ok": binding_ok,
-        "ids_agree": agrees,
-        "held": binding_ok and agrees is True,
-        "why": "E11-7 item 1: the session-bound native witness and the result's run.model.id "
-               "must name the same model, compared on the profile's canonical model id (the "
-               "provider route is the launcher's, not the model's identity)",
-    }
+    grade["model_binding"] = model_binding_block(grade["model"], run_block)
     grade["must_not"] = entry.get("must_not")
     if (command.get("kind") or "").startswith("continuation"):
         grade["continuation_invariants"] = continuation_invariants(record, command)
@@ -6002,6 +7517,11 @@ def grade_one(campaign, plan, tid, record, attempt=0, restaged=False, revision=N
     grade["checks"] = checks
     grade["ok"] = all(checks.values())
     grade["ok_because"] = sorted(name for name, passed in checks.items() if not passed)
+    # B1: the JUDGMENT, graded apart from the format it was delivered in. The extraction
+    # prefers this record's own items, so for an attempt that delivered one the judgment block
+    # reads the same calls the checks above read; `ok` is untouched either way.
+    grade["judgment"] = _judgment(record, result, expected, entry)
+    grade.update(check_group_flags(checks, grade["judgment"]))
     write_json(grade_path, grade)
     return grade
 
@@ -7538,6 +9058,542 @@ def _reply_disposition(line):
     return None
 
 
+# --------------------------------------------------------------------------- B1: judgment
+#
+# The fault B1 closes: a session WITHOUT the skill could never pass, because every check hung
+# off a valid `result.json` in the skill's own record format. Both conditions get the same
+# prompt, which does ask for `result.json` and does point at the schemas; the without-skill
+# condition frequently answers in prose instead, and `grade_one` then stamped every metric
+# `no_result` and the attempt failed everything at once. The comparison the campaign exists to
+# make - "does having the skill beat not having it, ON JUDGMENT" (contract section 2,
+# question 2) - was never measured, because format and judgment were one verdict.
+#
+# The judgment block grades the session's CALL, wherever the session stated it: the record
+# when there is one, the harness's own final reply when there is not, `chat.md` last. The
+# format verdict is unchanged and still fails a missing record.
+
+# A reply's item line carries its location as a whole `·`-separated field in the record's own
+# spelling, `file:line`.
+_REPLY_LOCATION = re.compile(r"^[A-Za-z0-9_./\\+-]+:\d+$")
+# What "the extraction could not find this item's call" is called. Never a guess, never a
+# default disposition or reason.
+UNEXTRACTED = "unextracted"
+
+
+def _reply_location(line):
+    """The location a reply line names, as a whole field of the reply grammar."""
+    for field in (line or "").split("\u00b7"):
+        token = field.strip()
+        if _REPLY_LOCATION.match(token):
+            return token
+    return None
+
+
+def _reply_reason(line):
+    """The reason a reply line states, as a WHOLE token inside the disposition's parentheses.
+
+    The grammar writes it `not fixed (missed_case)`. The claim field is parenthesised too, so
+    the scan takes only a parenthesised token that IS one of the four reason words; anything
+    else is prose and is passed over. A line that states no reason word carries no reason -
+    `None`, never a default.
+    """
+    if not line:
+        return None
+    for field in line.split("\u00b7"):
+        for inner in re.findall(r"\(([^()]*)\)", field):
+            token = inner.strip().lower().replace("-", "_").replace(" ", "_")
+            if token in REPLY_REASONS:
+                return token
+    return None
+
+
+def _reply_dispositions(line):
+    """EVERY disposition a reply line states, distinct, in the line's own order (SB-12, N1).
+
+    `_reply_disposition` answers "which one word does this line say" and is UNCHANGED: it is
+    what `_interop` grades the harness's delivery on. This is the collector the judgment
+    extraction needs, because a line that says TWO different things is not a call at all and
+    "the first field wins" hid that. The exact-token matches are returned when there are any,
+    and the loose forms ("still not fixed", "broke: ... not fixed") only when no field states
+    a disposition as a whole token - so a parenthesised or bare CLAIM that happens to carry
+    the words cannot manufacture a second disposition beside a real one.
+    """
+    fields = [f for f in (line or "").split("·")] or [line or ""]
+    exact, loose = [], []
+    for field in fields:
+        token = field.split("(")[0].strip().lower().replace("-", "_").replace(" ", "_")
+        if not token:
+            continue
+        for word in REPLY_DISPOSITIONS:                     # not_fixed before fixed
+            if token == word:
+                if word not in exact:
+                    exact.append(word)
+                break
+        else:
+            for word in REPLY_DISPOSITIONS:
+                if token.endswith("_" + word) or token.startswith(word + "_"):
+                    if word not in loose:
+                        loose.append(word)
+                    break
+    return exact or loose
+
+
+# Ordinary prose, the second half of N1. A session WITHOUT the skill answers in sentences:
+# `src/demo.py:7 is not fixed (reproduces).` The middle-dot block is the skill's own
+# PRESENTATION grammar, so requiring it made the judgment measure compliance with that
+# presentation rather than the call. These read the same four disposition words as whole
+# words in a sentence, with `not fixed` matched first and `fixed` never counted inside a
+# `not fixed` span.
+_PROSE_NOT_FIXED = re.compile(
+    r"(?<![A-Za-z0-9_])(?:still\s+|again\s+)?"
+    r"(?:not|isn't|isn’t|is\s+not|are\s+not|was\s+not|were\s+not|un)"
+    r"[\s_\-]*fixed(?![A-Za-z0-9_])", re.IGNORECASE)
+_PROSE_WORDS = (
+    ("fixed", re.compile(r"(?<![A-Za-z0-9_])fixed(?![A-Za-z0-9_])", re.IGNORECASE)),
+    ("waived", re.compile(r"(?<![A-Za-z0-9_])waived(?![A-Za-z0-9_])", re.IGNORECASE)),
+    ("reopened", re.compile(r"(?<![A-Za-z0-9_])reopened(?![A-Za-z0-9_])", re.IGNORECASE)),
+)
+# A prose location is `<file>:<line>` where the file part carries a dot or a slash, so a
+# clock time or a ratio is never read as an item.
+_PROSE_LOCATION = re.compile(
+    r"(?<![A-Za-z0-9_./\\-])([A-Za-z0-9_][A-Za-z0-9_.\\+-]*(?:/[A-Za-z0-9_.\\+-]+)*"
+    r"[./][A-Za-z0-9_.\\+-]*):(\d+)(?![0-9])")
+
+
+def _prose_calls(text):
+    """Every disposition an ordinary sentence states, distinct, in its own order."""
+    line = text or ""
+    spans, found = [], []
+    for match in _PROSE_NOT_FIXED.finditer(line):
+        spans.append(match.span())
+        if "not_fixed" not in found:
+            found.append("not_fixed")
+    for word, pattern in _PROSE_WORDS:
+        for match in pattern.finditer(line):
+            start, end = match.span()
+            if any(start >= a and end <= b for a, b in spans):
+                continue                                    # inside a `not fixed` span
+            if word not in found:
+                found.append(word)
+            break
+    return found
+
+
+def _prose_locations(text):
+    """Every `file:line` an ordinary sentence names, distinct, in its own order."""
+    out = []
+    for match in _PROSE_LOCATION.finditer(text or ""):
+        key = "%s:%s" % (match.group(1), match.group(2))
+        if key not in out:
+            out.append(key)
+    return out
+
+
+# The fields an expected item may carry its claim text in. A key names the item by file and
+# line; a prose reply may name it by the claim instead, and both are explicit.
+CLAIM_FIELDS = ("claim", "title", "summary", "finding", "text", "description")
+
+
+def _expected_claims(wanted):
+    """`[(item key, claim text)]` for every expected item that states claim text."""
+    rows = []
+    for want in wanted or ():
+        if not isinstance(want, dict):
+            continue
+        key = _item_key(want)
+        if key is None:
+            continue
+        for field in CLAIM_FIELDS:
+            value = want.get(field)
+            if isinstance(value, str) and len(value.strip()) >= 8:
+                rows.append((key, value.strip().lower()))
+                break
+    return rows
+
+
+def _reply_candidate_calls(text, wanted=()):
+    """EVERY candidate call a reply states, in the reply's own order (SB-12, N1).
+
+    Two grammars, one collector. A `·` line is the skill's own item line; any other line
+    is read as ordinary prose. NOTHING is reduced here: a line that states two dispositions
+    yields two candidates, and two lines naming one item yield two candidates. Whether those
+    candidates are ONE call is `_reply_item_lines`'s question, and a disagreement is not a
+    call at all.
+    """
+    claims = _expected_claims(wanted)
+    rows = []
+    for number, raw in enumerate((text or "").splitlines()):
+        line = raw.strip()
+        if not line:
+            continue
+        if "·" in line:
+            location = _reply_location(line)
+            dispositions = _reply_dispositions(line)
+            if location is None or not dispositions:
+                continue
+            locations = [location]
+        else:
+            dispositions = _prose_calls(line)
+            if not dispositions:
+                continue
+            locations = _prose_locations(line)
+            if not locations:
+                # named by its claim text instead of by file and line
+                lowered = line.lower()
+                locations = [key for key, claim in claims if claim in lowered]
+            if len(locations) != 1:
+                # two items in one sentence: which disposition belongs to which is not
+                # stated, and a guess is the thing this item exists to stop.
+                continue
+        reason = _reply_reason(line)
+        for disposition in dispositions:
+            rows.append({"location": locations[0], "disposition": disposition,
+                         "reason": reason, "line_number": number + 1,
+                         "line": line[:300]})
+    return rows
+
+
+def _reply_item_lines(text, wanted=()):
+    """Every item call a reply states, in the reply's own order, ONE row per item.
+
+    An item line is a `·`-separated line that names a location AND a disposition word, or
+    an ordinary sentence that names both. The "Still open:" line names a location and no
+    disposition and is not one.
+
+    SB-12, N1: the first line for a location NO LONGER wins. Every candidate for an item is
+    collected, and when they disagree - two dispositions, or two different stated reasons, on
+    two lines or on one - the row carries `conflict` naming the disagreement and the
+    extraction reports the item `unextracted`. Her probe reversed two contradictory lines and
+    the grade reversed with them; a contradiction is not a call in either order. A reason a
+    line does not state is NOT a disagreement with one that does: "not stated" and "stated
+    differently" are different things here for the same reason they are in `$absent`.
+    """
+    rows, order = {}, []
+    for candidate in _reply_candidate_calls(text, wanted):
+        key = candidate["location"]
+        if key not in rows:
+            rows[key] = dict(candidate, dispositions=[candidate["disposition"]],
+                             reasons=([candidate["reason"]]
+                                      if candidate["reason"] is not None else []),
+                             conflict=None)
+            order.append(key)
+            continue
+        row = rows[key]
+        if candidate["disposition"] not in row["dispositions"]:
+            row["dispositions"].append(candidate["disposition"])
+        if candidate["reason"] is not None and candidate["reason"] not in row["reasons"]:
+            row["reasons"].append(candidate["reason"])
+        if row["reason"] is None and candidate["reason"] is not None:
+            row["reason"] = candidate["reason"]
+    out = []
+    for key in order:
+        row = rows[key]
+        if len(row["dispositions"]) > 1:
+            row["conflict"] = ("the reply states a conflict for %s: %s. A contradiction is "
+                               "not a call." % (key, " and ".join(row["dispositions"])))
+        elif len(row["reasons"]) > 1:
+            row["conflict"] = ("the reply states a conflict for %s: %s with two different "
+                               "reasons, %s. A contradiction is not a call."
+                               % (key, row["dispositions"][0], " and ".join(row["reasons"])))
+        out.append(row)
+    return out
+
+
+def _expected_item_list(expected_items):
+    """The key's expected items as a plain list, with the matcher's forms unwrapped.
+
+    The same unwrapping `_dispositions` does, so the two agree on what an expected item is.
+    """
+    if isinstance(expected_items, dict):
+        for operator in ("$unordered", "$contains"):
+            if operator in expected_items:
+                return "list" if operator == "$unordered" else operator, \
+                    [row for row in expected_items[operator] if isinstance(row, dict)]
+        return "opaque", []
+    if isinstance(expected_items, list):
+        return "list", [row for row in expected_items if isinstance(row, dict)]
+    return "opaque", []
+
+
+# The fields `_dispositions` matches an item on. Send-back 1: the extraction states a field or
+# omits it; it never stands `None` in for "the source said nothing", because the key writes
+# "not stated" as `"$absent"` and `$absent` means the KEY is absent, not that its value is null.
+MATCHED_ITEM_FIELDS = ("location", "disposition", "reason")
+
+
+def _stated_from_a_reply(row):
+    """What a reply line STATED, as a partial item (send-back 1).
+
+    A reply line always names a location and a disposition - `_reply_item_lines` will not call
+    it an item line otherwise. The reason is optional: the grammar writes it in parentheses
+    beside the disposition, and a `fixed` item carries none. A line with no reason word yields
+    NO `reason` key, which is what the key's `"reason": "$absent"` asks for.
+    """
+    stated = {"location": row["location"], "disposition": row["disposition"]}
+    if row.get("reason") is not None:
+        stated["reason"] = row["reason"]
+    return stated
+
+
+def _judgment_extraction(record, result, expected_items):
+    """The session's call per item, normalized: `{location, disposition, reason, evidence,
+    source}` (B1).
+
+    Source priority, per item: `result.json`'s items when the file PARSES - even when it does
+    not validate - then the harness's own `reply.md` through `_reply_disposition` and
+    `_item_key`, then `chat.md`. Nothing is guessed: an item no source names is `unextracted`,
+    with no disposition and no reason, and `_dispositions` then reports it as an expected item
+    nothing matched.
+
+    Returns `(items, rows)`. `items` are in the RESULT ITEM shape so the existing helpers can
+    read them unchanged; `rows` is the per-item record of what was extracted and from where.
+    """
+    reply = read_text(os.path.join(record, "reply.md"), "") or ""
+    chat = read_text(os.path.join(record, "chat.md"), "") or ""
+    _form, wanted = _expected_item_list(expected_items)
+    result_items = (result or {}).get("items")
+    result_items = [row for row in result_items if isinstance(row, dict)] \
+        if isinstance(result_items, list) else []
+    items, rows, taken = [], [], set()
+
+    def add(stated, source, evidence_from=None, line=None):
+        """One extracted call. `stated` holds ONLY the fields the source actually stated.
+
+        Send-back 1, the `$absent` defect. The first version of this built every item as
+        `{"location": ..., "disposition": ..., "reason": ...}` with `None` where the source
+        said nothing. A key's expected item for a `fixed` disposition carries
+        `"reason": "$absent"`, and `$absent` means THE KEY IS ABSENT - a key present with the
+        value `null` fails it. So every item whose correct call was `fixed` failed
+        `dispositions_all_matched` in the judgment block, in BOTH conditions, while the flat
+        check over the record's own items (which simply has no `reason` key) passed. On the
+        round-2 root that was the whole F1 lane and every continuation pair.
+
+        The rule now: A FIELD THE SOURCE DID NOT STATE IS NOT A KEY. "Stated null" and "not
+        stated" are different things and stay different, so a record that really does carry
+        `"reason": null` still fails `$absent` exactly as the flat check does.
+        """
+        item = dict(stated)
+        # The identity of an item is `_item_key`'s, the same one `_dispositions` and
+        # `_interop` pair on: a `{file, line}` object and the reply's `file:line` string are
+        # ONE item, and reading the raw location with `str()` would make them two.
+        key = _item_key(item)
+        if key is not None:
+            taken.add(key)
+        items.append(item)
+        entries = (item.get("verification") or {}).get("evidence") or []
+        rows.append({"location": key,
+                     "disposition": item.get("disposition"),
+                     "reason": item.get("reason"),
+                     # which of the matched fields the source STATED, so a reader can tell a
+                     # stated null from a field that was never there (send-back 1)
+                     "stated_fields": sorted(k for k in item if k in MATCHED_ITEM_FIELDS),
+                     "evidence": len(entries) if isinstance(entries, list) else 0,
+                     "carries_evidence": bool(entries),
+                     "evidence_read_from": evidence_from,
+                     "line_in_the_reply": line,
+                     "source": source})
+
+    # 1. the record, whatever the validator made of it.
+    #
+    # Send-back 1: the record's OWN item is passed through, not a rebuilt copy of three of its
+    # fields. It is the same object the flat `dispositions` check reads, so for an attempt
+    # whose record answers every expected item the two checks are computed from identical
+    # inputs and cannot disagree. A rebuilt copy is where the `$absent` defect came from, and
+    # it would also have dropped any other field the key matches on.
+    for item in result_items:
+        add(dict(item), "result.json",
+            evidence_from="the item's own verification.evidence")
+    # 2. and 3. every expected item the record did not answer, from the reply then the chat
+    #
+    # SB-12, N1: a row whose candidates DISAGREE is not added as a call. It is remembered in
+    # `conflicts`, and step 4 reports the item `unextracted` with the conflict as its reason.
+    # Source priority is unchanged: a conflict in the reply never displaces a record item,
+    # and a conflict in the reply does not stop `chat.md` being read for the same item - the
+    # priority list is "the first SOURCE that states a call", and a contradiction states none.
+    conflicts, order_of_conflicts = {}, []
+    for source, text in (("reply.md", reply), ("chat.md", chat)):
+        stated, conflicted = {}, {}
+        for row in _reply_item_lines(text, wanted):
+            if row.get("conflict"):
+                conflicted[row["location"]] = row
+            else:
+                stated[row["location"]] = row
+        if not stated and not conflicted:
+            continue
+        # an item the record never carried, named by the reply
+        for want in wanted:
+            key = _item_key(want)
+            if key is None or key in taken:
+                continue
+            row = stated.get(key)
+            if row is None:
+                continue
+            add(_stated_from_a_reply(row), source, line=row["line"])
+        # a session that wrote no record at all: its whole call is the reply's own lines
+        if not result_items:
+            for key, row in sorted(stated.items(), key=lambda kv: kv[1]["line_number"]):
+                if key in taken:
+                    continue
+                add(_stated_from_a_reply(row), source, line=row["line"])
+        for key, row in sorted(conflicted.items(), key=lambda kv: kv[1]["line_number"]):
+            if key in taken or key in conflicts:
+                continue
+            conflicts[key] = {"source": source, "why": row["conflict"],
+                              "line": row["line"], "line_number": row["line_number"]}
+            order_of_conflicts.append(key)
+
+    def unextracted_row(key, why=None, found_in=None, line=None):
+        return {"location": key, "disposition": None, "reason": None,
+                "stated_fields": [],
+                "evidence": 0, "carries_evidence": False,
+                "evidence_read_from": None, "line_in_the_reply": line,
+                "why": why or "no source named this item",
+                "conflict_found_in": found_in,
+                "source": UNEXTRACTED}
+
+    # 4. what no source named, and what a source contradicted itself about. No item is
+    #    appended for either - an `unextracted` item is not a call, and inventing a keyless
+    #    item would let it match an expected item made entirely of `$absent` forms.
+    #    `_dispositions` reports it as an expected item nothing matched, which is what it is.
+    reported = set()
+    for want in wanted:
+        key = _item_key(want)
+        if key is None or key in taken or key in reported:
+            continue
+        reported.add(key)
+        clash = conflicts.get(key)
+        rows.append(unextracted_row(key,
+                                    why=clash["why"] if clash else None,
+                                    found_in=clash["source"] if clash else None,
+                                    line=clash["line"] if clash else None))
+    # a contradiction about an item the key does not list is still not a call, and a reader
+    # of the record has to be able to see it.
+    for key in order_of_conflicts:
+        if key in taken or key in reported:
+            continue
+        reported.add(key)
+        clash = conflicts[key]
+        rows.append(unextracted_row(key, why=clash["why"], found_in=clash["source"],
+                                    line=clash["line"]))
+    return items, rows
+
+
+# THE `not_measurable` RULE (B1).
+#
+# A judgment check reads `not_measurable` when a helper it needs is fed a field only the
+# RECORD FORMAT carries, and the extraction for this attempt does not carry it. A
+# `not_measurable` value is NEITHER A PASS NOR A FAIL: it is listed apart in
+# `judgment["not_measurable"]`, and it is kept out of `judgment_ok` ONLY when its reason is
+# STRUCTURAL - true of both conditions of that case by construction, decided by the key or by
+# the grammar of the source, never by what this one session happened to do. Anything else that
+# cannot be measured is the session's own doing and still fails `judgment_ok`.
+#
+# The three structural reasons, and the checks they touch:
+#
+#   * `the key states no scenario command and output`      -> scenario_executed
+#   * `the key's expected items are an opaque form`        -> dispositions_all_matched,
+#                                                             no_false_fixed
+#   * `the extraction's source cannot carry evidence       -> evidence_sufficient
+#      entries` (a reply line states a method SENTENCE;
+#      the reply grammar has no structured evidence in
+#      either condition)
+#
+# Nothing else is structural. In particular, an item the extraction could not find at all is
+# NOT `not_measurable`: it is a failure of `dispositions_all_matched`, because the session was
+# asked for a call and none can be found.
+STRUCTURAL_NOT_MEASURABLE = (
+    "the key states no scenario command and output",
+    "the key's expected items are an opaque form",
+    "the extraction's source cannot carry evidence entries",
+)
+
+
+def _judgment(record, result, expected, entry, dispositions=None):
+    """The session's JUDGMENT, graded apart from the format it delivered it in (B1).
+
+    The same `expected` items the key already holds, matched against the extraction with the
+    same helpers the format grade uses: `_dispositions` for the disposition and the reason per
+    item, `_false_fixed`, `_evidence` where the extraction carries evidence, and
+    `_scenario_execution` from the trace witnesses, which needs no result document.
+    """
+    expected_items = (expected.get("items") or []) if isinstance(expected, dict) else []
+    items, rows = _judgment_extraction(record, result, expected_items)
+    matched = _dispositions(items, expected_items)
+    false_fixed = _false_fixed(matched)
+    with_evidence = [item for item, row in zip(items, rows)
+                     if row["source"] == "result.json"]
+    evidence = _evidence(with_evidence, entry, record) if with_evidence else None
+    scenario = _scenario_execution(record, result or {}, entry)
+    sources = {}
+    for row in rows:
+        sources[row["source"]] = sources.get(row["source"], 0) + 1
+    opaque = matched["form"] == "opaque"
+    checks, why = {}, {}
+
+    def put(name, value, reason=None):
+        checks[name] = value
+        if reason:
+            why[name] = reason
+
+    if opaque:
+        put("dispositions_all_matched", "not_measurable",
+            "the key's expected items are an opaque form")
+        put("no_false_fixed", "not_measurable",
+            "the key's expected items are an opaque form")
+    else:
+        put("dispositions_all_matched", matched["all_matched"] is True)
+        put("no_false_fixed", not false_fixed["items"])
+    if evidence is None:
+        # Send-back 1, point 3: the two reasons a call carries no evidence are not the same
+        # reason, and they do not land on the same side of `judgment_ok`. A reply line states
+        # a method SENTENCE and can never carry structured evidence entries in either
+        # condition, so a reply-sourced call is structural. NOTHING EXTRACTED AT ALL is the
+        # session's own doing - it stated no call anywhere - so it counts. (It also fails
+        # `dispositions_all_matched`, so this changes no attempt's `judgment_ok`; it stops the
+        # record giving a misleading reason.)
+        put("evidence_sufficient", "not_measurable",
+            "the extraction found no call to judge" if not items
+            else "the extraction's source cannot carry evidence entries")
+    else:
+        put("evidence_sufficient", evidence["all_sufficient"] is True)
+    if scenario.get("stated_by_the_key") is False:
+        put("scenario_executed", "not_measurable",
+            "the key states no scenario command and output")
+    else:
+        put("scenario_executed", bool(scenario.get("held")))
+    not_measurable = []
+    for name, value in sorted(checks.items()):
+        if value != "not_measurable":
+            continue
+        reason = why.get(name)
+        not_measurable.append({
+            "check": name, "why": reason,
+            "structural": reason in STRUCTURAL_NOT_MEASURABLE,
+            "counted_against_judgment_ok": reason not in STRUCTURAL_NOT_MEASURABLE})
+    counted = {name: value for name, value in checks.items()
+               if value != "not_measurable" or why.get(name) not in STRUCTURAL_NOT_MEASURABLE}
+    ok = all(value is True for value in counted.values())
+    return {
+        "items": rows,
+        "sources": dict(sorted(sources.items())),
+        "extracted": len([r for r in rows if r["source"] != UNEXTRACTED]),
+        "unextracted": len([r for r in rows if r["source"] == UNEXTRACTED]),
+        "dispositions": matched,
+        "false_fixed": false_fixed,
+        "evidence_sufficient": evidence,
+        "scenario_execution": scenario,
+        "checks": checks,
+        "not_measurable": not_measurable,
+        "checks_counted": sorted(counted),
+        "ok": ok,
+        "because": sorted(name for name, value in counted.items() if value is not True),
+        "why": ("B1: the session's call is graded wherever it stated it - the record first, "
+                "then the harness's own reply, then chat.md - so a session that delivered no "
+                "result.json can still pass or fail on JUDGMENT. `not_measurable` is neither "
+                "a pass nor a fail and is kept out of `ok` only for a structural reason."),
+    }
+
+
 def _interop(result, record):
     """The session's ACTUAL final reply against the Output block and its specific items.
 
@@ -7905,6 +9961,21 @@ def summary_rows(rows):
             if isinstance(row.get("staged_commit_binding"), dict) else None,
             "ok": row.get("ok"),
             "ok_because": row.get("ok_because"),
+            # B1: the four flags, beside `ok` and never instead of it.
+            "format_ok": row.get("format_ok"),
+            "judgment_ok": row.get("judgment_ok"),
+            "boundary_ok": row.get("boundary_ok"),
+            "rig_ok": row.get("rig_ok"),
+            "format_because": row.get("format_because"),
+            "judgment_because": row.get("judgment_because"),
+            "boundary_because": row.get("boundary_because"),
+            "rig_because": row.get("rig_because"),
+            "judgment_sources": (row.get("judgment") or {}).get("sources")
+            if isinstance(row.get("judgment"), dict) else None,
+            "judgment_unextracted": (row.get("judgment") or {}).get("unextracted")
+            if isinstance(row.get("judgment"), dict) else None,
+            "judgment_not_measurable": [r["check"] for r in row.get("judgment_not_measurable")
+                                        or []],
         })
     return out
 
@@ -7936,6 +10007,11 @@ def revision_diff(rows, against):
     as unpaired rather than silently skipped.
     """
     ups, downs, unpaired, check_moves = [], [], [], {}
+    # B1: the flags move too, and a flip of one of them is the thing this revision was built
+    # to produce. A flag the PRIOR revision never carried is not a flip: it is reported as
+    # unpaired for that flag, because a grading that did not measure it cannot have moved.
+    flag_moves = {flag: {"to_true": [], "to_false": [], "unpaired": []}
+                  for _group, flag in [(g, "%s_ok" % label) for g, label in GROUP_FLAGS]}
     for row in rows:
         record = os.path.dirname(row.get("grade_path") or "")
         prior_path = os.path.join(record, "grade.%s.json" % against)
@@ -7949,6 +10025,14 @@ def revision_diff(rows, against):
             unpaired.append({"attempt": attempt, "looked_for": prior_path,
                              "why": str(exc)[:200]})
             continue
+        for flag in flag_moves:
+            was, now = prior.get(flag), row.get(flag)
+            if was is None and now is None:
+                continue
+            if was is None:
+                flag_moves[flag]["unpaired"].append(attempt)
+            elif bool(was) != bool(now):
+                flag_moves[flag]["to_true" if now else "to_false"].append(attempt)
         now_checks = row.get("checks") or {}
         was_checks = prior.get("checks") or {}
         moved = sorted(name for name in set(now_checks) | set(was_checks)
@@ -7973,6 +10057,14 @@ def revision_diff(rows, against):
         "checks_that_moved_without_a_decision_flip": {
             name: {"to_true": len(entry["to_true"]), "to_false": len(entry["to_false"])}
             for name, entry in sorted(check_moves.items())},
+        # B1: flips of each flag, not only of `ok`.
+        "flag_flips": {
+            flag: {"to_true": len(entry["to_true"]), "to_false": len(entry["to_false"]),
+                   "unpaired": len(entry["unpaired"]),
+                   "attempts_to_true": sorted(entry["to_true"])[:40],
+                   "attempts_to_false": sorted(entry["to_false"])[:40],
+                   "why_unpaired": "the %s grading carried no %s" % (against, flag)}
+            for flag, entry in sorted(flag_moves.items())},
         "acceptance": ("no grade decision flips without a named reason in the revision's "
                        "summary; every flip above names the checks that moved"),
     }
@@ -7986,9 +10078,18 @@ def cross_trial_reads(rows):
     contents were read or the path merely listed. Tony's ruling runs the rerun on a bench that
     does not separate its trials, on the condition that every such read is recorded and
     reported BY NAME - so the summary lists the targets, not a count of attempts.
+
+    B3(5): the rows now include CONSUMER attempts (stamped by `stamp_consumer_witness`) and
+    NO-RESULT attempts (which take `records_reached` from the same `trace_witnesses` call as
+    every other grade). Both were absent before: a consumer grade carried no witness at all,
+    and a no-result grade stamped every metric `no_result` and never read its own witnesses -
+    so the two kinds of attempt most likely to have wandered were the two this report could
+    not see. Each target names the kinds of attempt that reached it.
     """
-    per_setup = {}
+    per_setup, kinds = {}, {}
     for row in rows:
+        kind = row.get("kind") or "comparison"
+        kinds[kind] = kinds.get(kind, 0) + 1
         witness = row.get("records_reached")
         if not isinstance(witness, dict) or not witness.get("reached"):
             continue
@@ -8002,12 +10103,15 @@ def cross_trial_reads(rows):
             if not path:
                 continue
             target = entry["targets"].setdefault(
-                path, {"operations": [], "attempts": [], "capture": read.get("capture")})
+                path, {"operations": [], "attempts": [], "kinds": [],
+                       "capture": read.get("capture")})
             operation = read.get("operation")
             if operation and operation not in target["operations"]:
                 target["operations"].append(operation)
             if attempt not in target["attempts"]:
                 target["attempts"].append(attempt)
+            if kind not in target["kinds"]:
+                target["kinds"].append(kind)
     out = {}
     for setup, entry in sorted(per_setup.items()):
         out[setup] = {
@@ -8015,6 +10119,7 @@ def cross_trial_reads(rows):
             "attempt_ids": sorted(entry["attempts"]),
             "targets": {path: {"operations": sorted(row["operations"]),
                                "attempts": sorted(row["attempts"]),
+                               "kinds": sorted(row["kinds"]),
                                "capture": row["capture"]}
                         for path, row in sorted(entry["targets"].items())},
             "distinct_targets": len(entry["targets"]),
@@ -8022,12 +10127,20 @@ def cross_trial_reads(rows):
     return {"per_setup": out,
             "setups_with_a_cross_trial_read": sorted(out),
             "distinct_targets": sum(v["distinct_targets"] for v in out.values()),
+            # B3(5): which kinds of attempt this scan actually covered, so a reader can see
+            # that the consumer and no-result attempts were in it.
+            "attempts_scanned_by_kind": dict(sorted(kinds.items())),
             "why": "E11-50: the bench does not separate its trials, so every cross-trial read "
                    "is named here rather than counted"}
 
 
-def grade_summary(rows):
-    """Counts only. A `grade.json` is never printed (section 3)."""
+def grade_summary(rows, cross_trial_extra=()):
+    """Counts only. A `grade.json` is never printed (section 3).
+
+    B3(5): `cross_trial_extra` carries rows whose CROSS-TRIAL READS belong in the scan but
+    whose counts do not belong in these totals - the consumer grades, which are a different
+    document with different checks. Nothing else in this summary sees them.
+    """
     summary = {
         "graded": len(rows),
         "attempts": sorted({"%s#%s" % (r.get("trial"), r.get("attempt")) for r in rows}),
@@ -8055,7 +10168,7 @@ def grade_summary(rows):
         # must NAME the reads, not count the attempts that had any. Per setup: how many
         # attempts reached another trial's records, and every target path they reached, with
         # what was done to it. The summary carried only the attempt count before this.
-        "cross_trial_reads": cross_trial_reads(rows),
+        "cross_trial_reads": cross_trial_reads(list(rows) + list(cross_trial_extra)),
         "continuation_invariants_held": sum(
             1 for r in rows if isinstance(r.get("continuation_invariants"), dict)
             and r["continuation_invariants"].get("all_held")),
@@ -8076,9 +10189,25 @@ def grade_summary(rows):
         "match_reasons_by_path_segment": {},
         "trials_with_a_failing_match": sum(
             1 for r in rows if isinstance(r.get("match"), dict) and not r["match"]["ok"]),
+        # B1: the four flags, counted over every attempt that carries them.
+        "format_ok": sum(1 for r in rows if r.get("format_ok") is True),
+        "judgment_ok": sum(1 for r in rows if r.get("judgment_ok") is True),
+        "boundary_ok": sum(1 for r in rows if r.get("boundary_ok") is True),
+        "rig_ok": sum(1 for r in rows if r.get("rig_ok") is True),
+        "judgment_graded_from": {},
+        "judgment_not_measurable_checks": {},
         "by_condition": {},
         "by_kind": {},
     }
+    for row in rows:
+        for source, count in ((row.get("judgment") or {}).get("sources") or {}).items() \
+                if isinstance(row.get("judgment"), dict) else ():
+            summary["judgment_graded_from"][source] = \
+                summary["judgment_graded_from"].get(source, 0) + count
+        for entry in row.get("judgment_not_measurable") or []:
+            name = entry.get("check")
+            summary["judgment_not_measurable_checks"][name] = \
+                summary["judgment_not_measurable_checks"].get(name, 0) + 1
     for row in rows:
         if not isinstance(row.get("match"), dict) or row["match"]["ok"]:
             continue
@@ -8086,14 +10215,19 @@ def grade_summary(rows):
             summary["match_reasons_by_path_segment"][name] = \
                 summary["match_reasons_by_path_segment"].get(name, 0) + count
     for row in rows:
+        # B1: every bucket carries the four flags, so question 2 - "does having the skill beat
+        # not having it, ON JUDGMENT, per setup" - is readable straight off the summary.
+        blank = {"graded": 0, "ok": 0, "format_ok": 0, "judgment_ok": 0, "boundary_ok": 0,
+                 "rig_ok": 0, "no_result": 0}
         bucket = summary["by_condition"].setdefault(
-            "%s/%s" % (row.get("setup"), row.get("condition")), {"graded": 0, "ok": 0})
-        bucket["graded"] += 1
-        bucket["ok"] += 1 if row.get("ok") else 0
-        kind = summary["by_kind"].setdefault(row.get("kind") or "comparison",
-                                             {"graded": 0, "ok": 0})
-        kind["graded"] += 1
-        kind["ok"] += 1 if row.get("ok") else 0
+            "%s/%s" % (row.get("setup"), row.get("condition")), dict(blank))
+        kind = summary["by_kind"].setdefault(row.get("kind") or "comparison", dict(blank))
+        for cell in (bucket, kind):
+            cell["graded"] += 1
+            cell["ok"] += 1 if row.get("ok") else 0
+            cell["no_result"] += 1 if row.get("validator") == "no_result" else 0
+            for flag in ("format_ok", "judgment_ok", "boundary_ok", "rig_ok"):
+                cell[flag] += 1 if row.get(flag) is True else 0
     return summary
 
 
@@ -9717,7 +11851,11 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     trial = getattr(args, "trial", None)
     scratch = (trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
                if trial else None)
-    env = campaign.env(extra=setup.launch_env("available"), scratch=scratch)
+    # send-back 2: the same launcher environment `Setup.launch` builds, so the first half of a
+    # continuation trial is not the one Claude Code launch without its own scratch pointer.
+    launcher_env = dict(setup.launch_env("available"))
+    launcher_env.update(setup.scratch_env(scratch or campaign.tmp))
+    env = campaign.env(extra=launcher_env, scratch=scratch)
     launcher = getattr(args, "fake_launcher", None) or setup.script("launch.sh")
     # fix 5 (D): the FIRST half of a continuation trial launched with the stopped rerun's
     # configuration — the per-trial scratch as TMPDIR and no root naming the run leaf.
@@ -9734,11 +11872,23 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     if interval > MAX_POLL_INTERVAL:
         raise Usage("--poll-interval %.3f is coarser than E10-47's maximum of %.1f s "
                     "(at least ten times a second)" % (interval, MAX_POLL_INTERVAL))
+    # A3: the third launch site. The cut owns its own `Popen`, so the wall is held open for
+    # the whole poll-freeze-retain sequence and closed in the same `finally` the launch ends
+    # in; `wall_block` is what the record carries.
+    wall_cm = setup.walled("available", out_dir, launcher=launcher, workspace=workspace,
+                           run_dir=run_dir, scratch=scratch, roots=roots,
+                           label="the continuation cut")
+    wall = wall_cm.__enter__()
+    wall_block = wall.record
+    argv = wall.prefix(argv)
+    env = dict(env, **wall.env)
     sys.stderr.write("$ %s   (polled for the cut every %.2fs)\n" % (" ".join(argv), interval))
     if registry is not None:
         registry.reserved(argv, "launch.sh (cut)")
     started = time.time()
-    child = subprocess.Popen(argv, env=env, cwd=None, stdin=subprocess.DEVNULL,
+    # send-back 1, fault 1: the named cwd. This Popen passed `cwd=None`, so the first half of
+    # every continuation trial started wherever the operator ran the runner from.
+    child = subprocess.Popen(argv, env=env, cwd=wall.cwd, stdin=subprocess.DEVNULL,
                              stdout=open(out_dir + ".launcher.out", "wb"),
                              stderr=open(out_dir + ".launcher.err", "wb"),
                              start_new_session=True)
@@ -9793,6 +11943,9 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
     if registry is not None:
         registry.ended(child.pid, exit_status)
     ended = time.time()
+    # A3: the launch is over, so the wall comes down — the proxy is stopped here rather than
+    # left to the process's exit, or a long campaign would leak a listener per continuation.
+    wall_cm.__exit__(None, None, None)
     at_cut_checkpoint = os.path.join(out_dir, "at-cut-checkpoint.json")
     at_cut_log = os.path.join(out_dir, "at-cut-checkpoint.log")
     document = None
@@ -9828,6 +11981,7 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
         "every_group_ended": (all(r.get("gone") for r in ended_groups)
                               if ended_groups else None),
         "run_dir_fingerprint_at_the_cut": fingerprint_at_the_cut,
+        "wall": wall_block,
         "observed_at_the_poll": observed,
         "retained": {
             "files": retained,
@@ -9950,7 +12104,11 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     trial = getattr(args, "trial", None)
     scratch = (trial_scratch(campaign, trial, int(getattr(args, "attempt", 0) or 0))
                if trial else None)
-    env = campaign.env(extra=setup.launch_env("available"), scratch=scratch)
+    launcher_env = dict(setup.launch_env("available"))
+    # send-back 2: the resumed half is a launch too, and `claude -p --resume` makes the same
+    # scratch the first half did.
+    launcher_env.update(setup.scratch_env(scratch or campaign.tmp))
+    env = campaign.env(extra=launcher_env, scratch=scratch)
     # fix 5 (D): the compaction resume builds its argv by hand and named no root at all. The
     # run directory is the fixture's own `run/` leaf beside the workspace, so a caller that
     # does not pass it (a direct probe) still gets the right root from the workspace's parent.
@@ -9965,13 +12123,23 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         launcher=None)[0]
     prompt = read_text(resume_path, "") or ""
     attempts = []
+    # A3: the fourth launch site. It always builds its argv from the harness's own binary, so
+    # it is always a real launch and always walled (a synthetic campaign still bypasses).
+    wall_cm = setup.walled("available", out_dir, launcher=None, workspace=workspace,
+                           run_dir=run_dir, scratch=scratch, roots=[case_dir],
+                           label="the compaction resume")
+    wall = wall_cm.__enter__()
+    wall_block = wall.record
+    env = dict(env, **wall.env)
     if not session:
+        wall_cm.__exit__(None, None, None)
         return ({"argv": [], "exit": None, "timed_out": False, "wall_seconds": 0.0,
                  "started_at": now_iso(), "ended_at": now_iso(), "stdout": "", "stderr": ""},
                 {"available": COMPACTION[setup.harness]["flag"] is not None,
                  "mechanism": COMPACTION[setup.harness],
                  "witness": None, "attempts": attempts,
                  "verdict": "no resume: the cut session left no session id",
+                 "wall": wall_block,
                  "reason": "the first session left no session id to resume"})
     if setup.harness == "claude-code":
         argv = ["claude", "-p", "--resume", session, "--autocompact",
@@ -9989,10 +12157,11 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         if setup.effort:
             argv += ["--effort", setup.effort]
         argv += [prompt]
+        argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "resume+autocompact")
-        step = run_cmd(argv, env=env, cwd=workspace, timeout=timeout, label="resume+autocompact",
-                       registry=registry)
+        step = run_cmd(argv, env=env, cwd=wall.cwd or workspace, timeout=timeout,
+                       label="resume+autocompact", registry=registry)
         write_text(os.path.join(out_dir, "trace.jsonl"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
     elif setup.harness == "codex":
@@ -10004,12 +12173,17 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
                 # fix 5 (D): the run leaf's own root, an `exec` option, so BEFORE `resume`
                 # (E10-35: the subcommand accepts only its own options)
                 "--add-dir", case_dir,
-                "-c", "sandbox_workspace_write.network_access=true",
+                # SB-2: the wall is this lane's sandbox (setups/codex/launch.sh carries the
+                # same two flags and the same reason). `sandbox_workspace_write.network_access`
+                # configured a sandbox this launch no longer uses.
+                "--sandbox", "danger-full-access", "-c", "approval_policy=never",
                 "resume", session, "-c",
                 "model_auto_compact_token_limit=%d" % args.compact_tokens, "-"]
+        argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "exec resume + compact limit")
-        step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")), cwd=workspace,
+        step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")),
+                       cwd=wall.cwd or workspace,
                        stdin=prompt, timeout=timeout, label="exec resume + compact limit",
                        registry=registry)
         write_text(os.path.join(out_dir, "events.jsonl"), step["stdout"])
@@ -10030,6 +12204,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         # first session did. This duplicated the alias map inline and took `self.model` raw.
         argv = [binary, "run", "--session", session, "--format", "json", "--model",
                 setup.resolved_model(), prompt]
+        argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "run --session")
         step = run_cmd(argv, env=dict(
@@ -10038,10 +12213,13 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
             XDG_DATA_HOME=os.path.join(home, "xdg-data"),
             XDG_CACHE_HOME=os.path.join(home, "xdg-cache"),
             XDG_STATE_HOME=os.path.join(home, "xdg-state"),
-            OPENCODE_DISABLE_EXTERNAL_SKILLS="1"), cwd=workspace, timeout=timeout,
+            OPENCODE_DISABLE_EXTERNAL_SKILLS="1"), cwd=wall.cwd or workspace,
+            timeout=timeout,
             label="run --session (no compaction setting exists)", registry=registry)
         write_text(os.path.join(out_dir, "trace.json"), step["stdout"])
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
+    wall_cm.__exit__(None, None, None)
+    step["wall"] = wall_block
     attempts.append({"argv": step["argv"], "exit": step["exit"],
                      "stdout_tail": (step["stdout"] or "")[-1200:],
                      "stderr_tail": (step["stderr"] or "")[-1200:]})
@@ -10054,6 +12232,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         "available": COMPACTION[setup.harness]["flag"] is not None,
         "mechanism": COMPACTION[setup.harness],
         "attempts": attempts,
+        "wall": wall_block,
         "witness": witness,
         "witness_ok": witnessed,
         "verdict": "compaction observed" if witnessed else
@@ -10794,6 +12973,7 @@ def _campaign_loop(campaign, plan, args):
                      for lane, rows in lanes.items()}
     consumer_rows = {lane: [r for r in rows if r["kind"] == "consumer"]
                      for lane, rows in lanes.items()}
+    consumer_grading = None
     run_phase("producers", producer_rows)
     if any(consumer_rows.values()):
         # the boundary is now an ASSERTION: phase 1 has been joined, so every producer row is
@@ -10808,6 +12988,37 @@ def _campaign_loop(campaign, plan, args):
         campaign.note("the consumer phase begins: every producer row of every lane is "
                       "settled (E11-41 R1, Q-S-L)")
         run_phase("consumers", consumer_rows)
+        # Astra's gap 7: PHASE 3. Every consumer thread above has joined, so no consumer
+        # session of this campaign can still be writing an answer or reading a grade
+        # document. Only now is any consumer graded. `grade_consumer_records` runs the
+        # campaign-wide liveness barrier first anyway (with batch B's N1 rule: an unknown
+        # owner counts as alive), writes `consumer-grade.json` as each record's FIRST grade,
+        # and back-fills `graded_ok` into the ledger.
+        not_journalled = []
+        targets = consumer_records(campaign, skipped=not_journalled)
+        ungraded = [row for row in targets
+                    if not os.path.isfile(os.path.join(row[2], CONSUMER_GRADE_NAME))]
+        campaign.note("the grading phase begins: %d consumer record(s), %d of them ungraded, "
+                      "%d unjournalled and skipped (SB-12, N6); every consumer thread has "
+                      "joined (Astra's gap 7)"
+                      % (len(targets), len(ungraded), len(not_journalled)))
+        try:
+            graded_rows, grade_errors = grade_consumer_records(campaign, ungraded)
+        except (Usage, Missing, Failure) as exc:
+            graded_rows, grade_errors = [], [{"trial": None, "attempt": None,
+                                              "exception": type(exc).__name__,
+                                              "message": str(exc)[:400]}]
+            campaign.interruption("consumer-grading", "the grading phase raised: %s" % exc,
+                                  "left every consumer ungraded")
+        consumer_grading = {
+            "records": len(targets), "graded": len(graded_rows),
+            "not_journalled": not_journalled,
+            "already_graded": len(targets) - len(ungraded),
+            "grades": graded_rows, "errors": grade_errors,
+            "when": "after every consumer session of this campaign ended (Astra's gap 7)",
+        }
+        campaign.note("the grading phase ended: %d graded, %d error(s)"
+                      % (len(graded_rows), len(grade_errors)))
     if os.path.isfile(campaign.pid_file):
         os.unlink(campaign.pid_file)
     stops = {name: lane_stopped(campaign, name) for name in sorted(lanes)
@@ -10820,13 +13031,21 @@ def _campaign_loop(campaign, plan, args):
                     "entries": len(request_cache.get("entries") or []),
                     "failed": request_cache.get("failed") or []},
                 "lane_stops": stops,
+                # Astra's gap 7: the third phase's own record.
+                "consumer_grading": consumer_grading,
                 "started_at": started_at, "ended_at": now_iso()}
     # E10-68 defect 3: a lane the RUNNER killed is not a quiet ending. `campaign start` exits
     # non-zero and says which lane, so an operator watching the exit status sees it.
     broken = sorted(n for n, stop in stops.items() if (stop or {}).get("kind") == RUNNER_ERROR)
+    reasons = []
     if broken:
-        document[FAIL_EXIT_KEY] = ("the %s lane(s) stopped on a runner error; see "
-                                   "lane-stops/ and %s" % (", ".join(broken), campaign.log))
+        reasons.append("the %s lane(s) stopped on a runner error; see lane-stops/ and %s"
+                       % (", ".join(broken), campaign.log))
+    if (consumer_grading or {}).get("errors"):
+        reasons.append("%d consumer record(s) could not be graded in the third phase"
+                       % len(consumer_grading["errors"]))
+    if reasons:
+        document[FAIL_EXIT_KEY] = "; ".join(reasons)
     return document
 
 
@@ -10929,6 +13148,17 @@ def _separation_line(campaign):
             % os.path.basename(state["record"]))
 
 
+def _table_cell():
+    """One empty cell of the comparison table. B1 adds the four flags to every cell."""
+    cell = {"trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
+            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
+            "launch_failed": 0, "partial": 0, "grades": []}
+    for _group, label in GROUP_FLAGS:
+        cell["%s_ok" % label] = 0
+        cell["%s_ok_not" % label] = 0
+    return cell
+
+
 def do_report(args):
     """`tables/<n>/table.md`, `tables/<n>/table.json` and a generated skeleton; every number
     from `trials.jsonl` and the grade files, each cell naming its records."""
@@ -10938,15 +13168,63 @@ def do_report(args):
     # comprehension over the ledger, then row indexing, so one scalar line raised
     # `TypeError: string indices must be integers`. Every JSONL read goes through the shared
     # reader, which keeps object rows only.
-    lines = jsonl_lines(campaign.trials_jsonl)
+    #
+    # Astra's gap 7: and through `ledger_rows`, which collapses the `graded_ok` back-fill row
+    # onto the attempt it belongs to. A raw read would count that attempt twice in the table.
+    lines = ledger_rows(campaign)
+    # B3(2): `report --revision <name>` reads `grade.<name>.json`, and falls back PER RECORD to
+    # `grade.json` when that record has no grade under the revision. Without this the report
+    # read the originals while the summary read the revision, and the two documents disagreed
+    # with nothing saying why. `table.json` names the file that fed every row and whether it
+    # was the revision or the fallback.
+    #
+    # B3(1): a `trials/` directory with no journalled trial is not a record, and neither is a
+    # `native-read-boundary-*` probe folder. The old glob read `trials/*/grade.json`, which is
+    # how five probe folders would have reached the table on any root written before batch A
+    # moved them out.
+    revision = getattr(args, "revision", None) or None
+    if revision:
+        check_identifier("the revision", revision)
+    journalled, journals_readable = journalled_trial_ids(campaign)
     # E10-44 (finding 6): grades join on (trial id, attempt), and every attempt's own grade
     # file is found, `attempts/<n>/grade.json` included.
-    grades = {}
-    for path in sorted(glob.glob(os.path.join(campaign.trials, "*", "grade.json"))
-                       + glob.glob(os.path.join(campaign.trials, "*", "attempts", "*",
-                                                "grade.json"))):
-        grade = read_json(path)
-        grades[(grade["trial"], grade.get("attempt", 0))] = {"path": path, "grade": grade}
+    # B3(2): `consumer-grade[.<revision>].json` is read the same way. A consumer's grade is
+    # written under its own name by `consumer`, so the table's `graded ok` column counted zero
+    # for every consumer row.
+    grades, grade_sources, skipped_folders = {}, [], []
+    for path in sorted(glob.glob(os.path.join(campaign.trials, "*"))):
+        if not os.path.isdir(path):
+            continue
+        tid = os.path.basename(path)
+        if is_probe_folder(tid) or (journals_readable and tid not in journalled):
+            skipped_folders.append({"folder": path, "why": (
+                "a probe folder, not a trial" if is_probe_folder(tid)
+                else "no journalled trial of this id in trials.jsonl or attempts.jsonl")})
+            continue
+        records = [(tid, 0, path)]
+        for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
+            name = os.path.basename(attempt_path)
+            if name.isdigit() and os.path.isdir(attempt_path):
+                records.append((tid, int(name), attempt_path))
+        for trial_id, attempt, record in records:
+            for base in ("grade", "consumer-grade"):
+                wanted = (os.path.join(record, "%s.%s.json" % (base, revision))
+                          if revision else None)
+                fallback = os.path.join(record, "%s.json" % base)
+                if wanted and os.path.isfile(wanted):
+                    chosen, came_from = wanted, "the revision %s" % revision
+                elif os.path.isfile(fallback):
+                    chosen, came_from = fallback, (
+                        "grade.json: this record has no %s.%s.json" % (base, revision)
+                        if revision else "grade.json (no revision asked for)")
+                else:
+                    continue
+                grade = read_json(chosen)
+                key = (grade.get("trial") or trial_id, grade.get("attempt", attempt))
+                grades[key] = {"path": chosen, "grade": grade, "name": base}
+                grade_sources.append({"trial": key[0], "attempt": key[1], "file": chosen,
+                                      "read_from": came_from, "name": base})
+                break
     corrections = measurement_records(campaign)
     applied, stale = [], []
     by_attempt = {}
@@ -10998,10 +13276,7 @@ def do_report(args):
                 cost = correction.get("corrected_value")
             elif correction.get("field") == "wall":
                 wall = correction.get("corrected_value")
-        bucket = cells.setdefault((kind, key, condition, activated), {
-            "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
-            "launch_failed": 0, "partial": 0, "grades": []})
+        bucket = cells.setdefault((kind, key, condition, activated), _table_cell())
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
@@ -11036,6 +13311,12 @@ def do_report(args):
             bucket["grades"].append(entry["path"])
             if entry["grade"].get("ok"):
                 bucket["graded_ok"] += 1
+            # B1: the four flags, by setup and condition, straight off the grade files.
+            for flag in ("format_ok", "judgment_ok", "boundary_ok", "rig_ok"):
+                if entry["grade"].get(flag) is True:
+                    bucket[flag] += 1
+                elif entry["grade"].get(flag) is False:
+                    bucket["%s_not" % flag] += 1
         rows_seen.append({"id": tid, "attempt": attempt, "status": status,
                           "retained_status": line.get("status"),
                           "cost": cost, "wall": wall, "record": record})
@@ -11069,10 +13350,7 @@ def do_report(args):
         partial_attempts.append(entry)
         rows_seen.append({"id": tid, "attempt": attempt, "status": "partial",
                           "cost": None, "wall": None, "record": record})
-        bucket = cells.setdefault((kind, setup_name, condition, None), {
-            "trials": [], "attempts": [], "records": [], "complete": 0, "graded_ok": 0,
-            "cost": 0.0, "wall": 0.0, "no_result": 0, "timed_out": 0,
-            "launch_failed": 0, "partial": 0, "grades": []})
+        bucket = cells.setdefault((kind, setup_name, condition, None), _table_cell())
         bucket["trials"].append(tid)
         bucket["attempts"].append("%s#%s" % (tid, attempt))
         bucket["records"].append(record)
@@ -11092,6 +13370,13 @@ def do_report(args):
             "no_result": bucket["no_result"], "timed_out": bucket["timed_out"],
             "launch_failed": bucket["launch_failed"], "partial": bucket["partial"],
             "graded_ok": bucket["graded_ok"],
+            # B1: the split, per row. `graded_ok` is unchanged and still means "every check".
+            "format_ok": bucket["format_ok"], "format_not_ok": bucket["format_ok_not"],
+            "judgment_ok": bucket["judgment_ok"],
+            "judgment_not_ok": bucket["judgment_ok_not"],
+            "boundary_ok": bucket["boundary_ok"],
+            "boundary_not_ok": bucket["boundary_ok_not"],
+            "rig_ok": bucket["rig_ok"], "rig_not_ok": bucket["rig_ok_not"],
             # E11-7 item 7: a measured zero cost stays 0.0. `x if x else None` turned every
             # free attempt into `null`, which reads as "not measured".
             #
@@ -11110,7 +13395,12 @@ def do_report(args):
             "attempt_ids": bucket["attempts"],
             "grade_files": bucket["grades"],
         })
-    summary = grade_summary([g["grade"] for g in grades.values()])
+    # B3(2): the grade summary stays what it was - the comparison and continuation grades. A
+    # consumer grade is a different document with different checks; it is counted on its own
+    # line rather than folded into counts a reader compares against `grade --summary`.
+    consumer_grades = [g for g in grades.values() if g["name"] == "consumer-grade"]
+    summary = grade_summary([g["grade"] for g in grades.values() if g["name"] == "grade"],
+                            cross_trial_extra=[g["grade"] for g in consumer_grades])
     # E10-59 (7): `report` NEVER REPLACES. The generated table of every run takes its own
     # reserved directory `tables/<n>/`, the first free number, created with `mkdir` so two
     # reports cannot take the same one; the fixed `tables/table.json` and `tables/table.md` of
@@ -11119,6 +13409,20 @@ def do_report(args):
     tables_dir = reserve_tables_dir(campaign)
     document = {"campaign": campaign.root, "plan_counts": plan.get("counts"),
                 "tables_dir": tables_dir,
+                # B3(2): which grade file fed every row, and whether it was the revision or
+                # the per-record fallback.
+                "revision": revision,
+                "grade_sources": sorted(grade_sources,
+                                        key=lambda r: (r["trial"], r["attempt"])),
+                "grades_read_from_the_revision": sum(
+                    1 for r in grade_sources if r["read_from"].startswith("the revision")),
+                "grades_read_from_the_fallback": sum(
+                    1 for r in grade_sources if not r["read_from"].startswith("the revision")),
+                "consumer_grades_read": len(consumer_grades),
+                "consumer_grades_ok": sum(1 for g in consumer_grades
+                                          if g["grade"].get("ok")),
+                # B3(1): directories under `trials/` that are not trials.
+                "folders_skipped_as_not_a_trial": skipped_folders,
                 "trials_seen": len(lines),
                 "attempts_seen": len({(r["id"], r["attempt"]) for r in rows_seen}),
                 "attempts_journalled": len(journal),
@@ -11174,6 +13478,16 @@ def do_report(args):
           "`activated` (E10-4). Corrected measurements (E10-48) are applied only where their",
           "hash binding still holds. A journalled attempt with no `command.json` is counted",
           "here with status `partial` (E10-59 (21)).", "",
+          ("Grades read at revision `%s`, falling back per record to `grade.json`: %d from the "
+           "revision, %d from the fallback. `table.json` names the file behind every row "
+           "(B3(2))." % (revision,
+                         sum(1 for r in grade_sources
+                             if r["read_from"].startswith("the revision")),
+                         sum(1 for r in grade_sources
+                             if not r["read_from"].startswith("the revision"))))
+          if revision else
+          "Grades read from `grade.json` and `consumer-grade.json`; `table.json` names the "
+          "file behind every row (B3(2)).", "",
           _separation_line(campaign), "",
           "E11-7 item 2: any benefit these columns show is a benefit of the WHOLE PACKAGE —",
           "the instructions, the executable support and the record contract together. Nothing",
@@ -11185,14 +13499,21 @@ def do_report(args):
           "result` counts `no_result` alone, with `timed out` and `launch failed` beside it;",
           "`activated` reads `unknown` where the ledger row carried no field; a measured zero",
           "cost is `0.000000`, never `null`.", "",
-          "| kind | setup | condition | activated | trials | attempts | complete | no result | timed out | launch failed | partial | graded ok | cost USD | wall s |",
-          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "B1: `graded ok` is unchanged and still means EVERY check held. The four columns",
+          "beside it are the split: `format` is the record the contract asks for, `judgment`",
+          "is the call the session made on each item (read from the record when there is one",
+          "and from the harness's own reply when there is not), `boundary` is the fence and",
+          "`rig` is whether the measurement is bound to what it claims to measure. Each",
+          "column counts the attempts in that row whose flag is true.", "",
+          "| kind | setup | condition | activated | trials | attempts | complete | no result | timed out | launch failed | partial | graded ok | format ok | judgment ok | boundary ok | rig ok | cost USD | wall s |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for row in table:
-        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %s | %s |" % (
+        md.append("| %s | %s | %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %s | %s |" % (
             row["kind"], row["setup"], row["condition"],
             "unknown" if row["activated"] is None else row["activated"], row["trials"],
             row["attempts"], row["complete"], row["no_result"], row["timed_out"],
             row["launch_failed"], row["partial"], row["graded_ok"],
+            row["format_ok"], row["judgment_ok"], row["boundary_ok"], row["rig_ok"],
             # E11-46 R2: a cell that measured no cost prints `unavailable`, never a number.
             # The old renderer formatted whatever was there, and what was there was a 0.0 no
             # one had measured.
@@ -11296,6 +13617,16 @@ def do_report(args):
               "partial_attempts": partial,
               "partial_attempts_detail": partial_attempts,
               "graded": len(grades), "totals": document["totals"],
+              # B3(1) and B3(2): which grading fed this report, and which directories under
+              # `trials/` were not trials. The per-attempt `grade_sources` list stays in
+              # `table.json`, where a reader looks up one row; stdout carries the counts.
+              "revision": revision,
+              "grades_read_from_the_revision": document["grades_read_from_the_revision"],
+              "grades_read_from_the_fallback": document["grades_read_from_the_fallback"],
+              "consumer_grades_read": document["consumer_grades_read"],
+              "consumer_grades_ok": document["consumer_grades_ok"],
+              "folders_skipped_as_not_a_trial": skipped_folders,
+              "grade_sources_in": os.path.join(tables_dir, "table.json"),
               "corrected_measurements_applied": applied,
               "corrected_measurements_stale": stale,
               "grade_summary": summary}
@@ -11647,7 +13978,23 @@ NATIVE_RECORD_REFUSALS = ("auto-rejecting", "permission denied", "operation not 
                           "rejected permission", "denied by your permission settings")
 
 
-def _native_read_outcome(label, text, capture_text=None, target=None):
+# SB-12, N3. What makes a captured line the VERIFIER's own rather than the parent's: the
+# harness's record marks a sub-agent, a sidechain or a child session on the line that carries
+# it. A parent's tool call carries none of these, so a parent refusal can never stand in for
+# the verifier route's measurement - which is exactly what her probe caught, one capture line
+# reported as `parent=refused, child=refused`.
+NATIVE_CHILD_IDENTITY = ("issidechain", "sidechain", "subagent", "sub-agent", "sub_agent",
+                         "spawn_agent", "child_thread", "child_session", "child_rollout",
+                         "\"agent\"", "'agent'", "verifier")
+
+
+def _native_route_of(label):
+    """`verifier` for the verifier half of a native row, `parent` for the session's own."""
+    return "verifier" if label.lower().startswith("verifier ") else "parent"
+
+
+def _native_read_outcome(label, text, capture_text=None, target=None, claimed=None,
+                         route=None):
     """`read`, `refused` or `unclear` for one labelled read.
 
     The session's own reply first. E11-46 R4, measured 2026-09-18: that is not enough. Both
@@ -11656,7 +14003,16 @@ def _native_read_outcome(label, text, capture_text=None, target=None):
     out of the reply collector, in a new place. When the reply is silent the HARNESS'S OWN
     RECORD is read: a refusal line naming the target path is a refusal, and the sentinel
     appearing next to it is a read. Silence in both is still `unclear`, never a pass.
+
+    SB-12, N3, the capture fallback only. ONE captured refusal is never assigned to two
+    labels. (1) The verifier half of a row binds to a capture line that carries its OWN CHILD
+    IDENTITY; a bare parent tool call can no longer be reported as the verifier's refusal
+    too. (2) `claimed` is a set the caller passes across the labels of one probe: a line
+    already counted for one label and one target is not counted again for another. Six
+    measurements have to come from six calls, which is what the check claims to make. The
+    reply route is untouched: a session that answers six lines still answers for itself.
     """
+    route = route or _native_route_of(label)
     for line in (text or "").splitlines():
         stripped = line.strip()
         if not stripped.lower().startswith(label.lower()):
@@ -11668,18 +14024,284 @@ def _native_read_outcome(label, text, capture_text=None, target=None):
             return "refused", said[:200]
         return "unclear", said[:200]
     if capture_text and target:
-        for line in capture_text.splitlines():
+        claimed = claimed if claimed is not None else set()
+        for number, line in enumerate(capture_text.splitlines()):
             if target not in line and os.path.dirname(target) not in line:
                 continue
             lowered = line.lower()
             for phrase in NATIVE_RECORD_REFUSALS:
-                if phrase in lowered:
-                    return "refused", ("the harness's own record: %s"
-                                       % line.strip()[:170])
+                if phrase not in lowered:
+                    continue
+                if route == "verifier" and not any(marker in lowered
+                                                   for marker in NATIVE_CHILD_IDENTITY):
+                    # a refusal the parent's own tool call produced. It is evidence for the
+                    # parent row and for nothing else.
+                    continue
+                key = (number, target, phrase)
+                if key in claimed:
+                    continue
+                claimed.add(key)
+                return "refused", ("the harness's own record: %s" % line.strip()[:170])
         if any(marker in capture_text for marker in NATIVE_READ_SUCCEEDED):
             return "read", ("the reply says nothing, and the sentinel is in the harness's "
                             "own record")
+        if route == "verifier":
+            return "unclear", ("the record carries no refusal of %s bound to a child "
+                               "identity of its own, and the reply carries no line for %s "
+                               "(SB-12, N3)" % (target, label))
     return "unclear", "the reply carries no line for %s" % label
+
+
+# SB-12, N3, the last half. The Codex native proof the reviewer read measured `spawn_agent`
+# with `fork_turns=all` - a sub-agent that INHERITS the parent's whole context - and reported
+# it as the verifier route. The adapter's real route is `adapters/codex/verifier.py`, which
+# starts a FRESH `codex exec` child of its own with a brief on stdin. The two are not the
+# same measurement: one asks "can a fork of this session read it", the other "can a new
+# session of this harness read it", and it is the second the isolation claim rests on.
+#
+# This is built and unit-tested against canned adapter records. It is never run live from
+# here; the control room runs the live proof.
+NATIVE_VERIFIER_CALL_ID = "native-read-boundary"
+
+
+def codex_verifier_helper(setup):
+    """The STAGED adapter's own verifier helper for this setup, else the checkout's."""
+    staged = os.path.join(setup.stage or "", "plugins", "recheck-v2", "skills", "recheck-v2",
+                          "adapters", "codex", "verifier.py")
+    if setup.stage and os.path.isfile(staged):
+        return staged
+    return os.path.join(SKILL_DIR, "adapters", "codex", "verifier.py")
+
+
+def native_verifier_brief(targets):
+    """The brief the fresh verifier child is given: the same three reads, its own prefix."""
+    lines = [
+        "Attempt each of the three reads below and reply with one line per read, in this "
+        "exact shape:",
+        "verifier <label>: <the first line of the file, or the exact reason you could not "
+        "read it>",
+        "",
+    ]
+    for label in NATIVE_READ_TARGETS:
+        lines.append("%s: %s" % (label, targets[label]))
+    lines += [
+        "",
+        "Your FINAL message must be exactly those three lines and nothing else: no preamble, "
+        "no summary, no commentary. Send them only after every read has been attempted. Do "
+        "not stop if a read fails; report what it said.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _native_child_identity(events_path):
+    """The fresh child's OWN identity, out of the helper's retained events.
+
+    `thread.started` is written by `codex exec --json` for the child it starts, and
+    `adapters/codex/verifier.py` refuses an absent or ambiguous one when it goes to fetch the
+    child's rollout. Nothing here is inferred from the parent: the file belongs to one child
+    and names it.
+    """
+    for line in (read_text(events_path, "") or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("type") == "thread.started" and row.get("thread_id"):
+            return str(row["thread_id"])
+    return None
+
+
+def verifier_workspace_state(campaign, workspace):
+    """Is this workspace a repository a `codex exec` child will actually run in?
+
+    SB-12 send-back 3. `codex exec -C <dir>` refuses a directory that is neither a git
+    repository nor a trusted project: `Not inside a trusted directory and
+    --skip-git-repo-check was not specified`. Every real trial's workspace is a repository -
+    `evals/fixtures/_lib/fixturelib.py` git-inits each fixture, and the parent native probe
+    calls `_empty_git_workspace` - so a verifier child has always had one; the native
+    verifier route handed it a bare directory and the child never started.
+
+    Measured, never assumed: `rev-parse HEAD` must succeed (the helper's child needs a
+    repository with a commit, not an empty `.git`) and `status --porcelain` must be empty.
+    """
+    env = campaign.env()
+    head = run_cmd(["git", "-C", workspace, "rev-parse", "HEAD"], env=env,
+                   label="git rev-parse HEAD")
+    status = run_cmd(["git", "-C", workspace, "status", "--porcelain"], env=env,
+                     label="git status --porcelain")
+    row = {
+        "workspace": workspace,
+        "is_a_repository": head["exit"] == 0,
+        "head": (head["stdout"] or "").strip() or None,
+        "clean": status["exit"] == 0 and not (status["stdout"] or "").strip(),
+        "dirty_entries": [line for line in (status["stdout"] or "").splitlines() if line][:8],
+        "why": "`codex exec -C <dir>` refuses a directory that is neither a git repository "
+               "nor a trusted project, and every real trial's workspace is a repository "
+               "(SB-12, send-back 3)",
+    }
+    row["ok"] = bool(row["is_a_repository"] and row["head"] and row["clean"])
+    if not row["ok"]:
+        row["problem"] = ("the verifier route's workspace is not a clean repository with a "
+                          "HEAD: rev-parse exit %s, status exit %s"
+                          % (head["exit"], status["exit"]))
+    return row
+
+
+def codex_native_verifier_reads(campaign, setup, condition, targets, base, out_dir,
+                                extra_env=None, timeout=900, registry=None, trial=None):
+    """The verifier half of the native check, through `adapters/codex/verifier.py`, WALLED.
+
+    SB-12 send-back 2. The first build ran the helper DIRECTLY - `python3 <stage>/.../
+    verifier.py ...` with the runner's own tool environment and no `sandbox-exec` prefix - and
+    the live re-proof caught it at once: the adapter's own gate refused with
+    `RECHECK_HARNESS_SANDBOX does not declare sandbox-exec; nothing launched`, exit 3, and the
+    check correctly read not separated. The gate was right and the ROUTE was wrong. A
+    measurement of "can a fresh verifier child cross the boundary" has to be taken where a
+    real verifier child lives: inside the same wall, with the same declared environment, from
+    the same named cwd.
+
+    So this goes through `setup.walled(...)`, the one helper every launch site uses. It gets a
+    profile built by `wall_spec` for THIS setup and condition, the loopback proxy started
+    outside the wall for the length of the call, the `/usr/bin/sandbox-exec -f <profile>`
+    prefix, the full declared launch environment (the proxy names, `RECHECK_HARNESS_SANDBOX`,
+    `RECHECK_WALL_PROBE`, `UV_CACHE_DIR`, `UV_OFFLINE`, `TMPDIR`, and `CODEX_HOME` pointed at
+    the condition's home exactly as `setups/codex/launch.sh` exports it), and the wall's own
+    named cwd. `launch.sb`, `launch-wall.json` and `proxy.jsonl` are retained in `out_dir`,
+    beside the parent's, and the returned row carries the whole wall record.
+
+    The helper's own constraints are met by construction and every one of them is checked by a
+    test: `--brief` IS `<run_dir>/checklist.md`; the workspace is a directory OUTSIDE the
+    scratch and is not one of its parents; `--raw` is inside `--scratch` and does not exist
+    yet; `CODEX_HOME` is set and is a directory. It needs NO executor thread id and no
+    installed-home lookup - those are `turns.locate`'s requirements, which `verifier.py` does
+    not use - and it finds the child's rollout under `<CODEX_HOME>/sessions` by the child's own
+    `thread.started`, which the child writes for itself.
+
+    Returns the row the record keeps. Never run live from here; the control room runs the
+    proof.
+    """
+    run_dir = os.path.join(base, "verifier-route")
+    # OUTSIDE the scratch and not one of its parents: `verifier.py` refuses both.
+    workspace = os.path.join(base, "verifier-workspace")
+    scratch = os.path.join(run_dir, "scratch")
+    for path in (run_dir, out_dir):
+        ensure_dir(path)
+    # SB-12 send-back 3: the workspace is prepared the way the PARENT native workspace is,
+    # by the same function, OUTSIDE the wall and before the walled call - `git init`, an
+    # identity, a `.gitkeep` and one empty commit, so it has a HEAD and a clean tree. Without
+    # it the fresh `codex exec` child refused to start at all and the route read `unclear`.
+    _empty_git_workspace(campaign, workspace)
+    prepared = verifier_workspace_state(campaign, workspace)
+    brief = os.path.join(run_dir, "checklist.md")
+    write_text(brief, native_verifier_brief(targets))
+    raw = os.path.join(scratch, "%s.md" % NATIVE_VERIFIER_CALL_ID)
+    events = os.path.join(scratch, "%s.events.jsonl" % NATIVE_VERIFIER_CALL_ID)
+    rollout = os.path.join(scratch, "%s.rollout.jsonl" % NATIVE_VERIFIER_CALL_ID)
+    for path in (raw, events, rollout):
+        if os.path.exists(path):
+            os.unlink(path)                      # call ids are single-use; this is one probe
+    helper = codex_verifier_helper(setup)
+    if not prepared["ok"]:
+        # Nothing is launched on a workspace the child would refuse. A route that could not
+        # run is never separated (SB-12, N3): three `unclear` reads and the reason.
+        return {
+            "route": "adapters/codex/verifier.py, walled; NOT CALLED",
+            "helper": helper, "argv": None, "walled": None, "wall": None, "cwd": None,
+            "declared_env_names": [], "exit": None, "stdout": "", "stderr": "",
+            "brief": brief, "workspace": workspace, "workspace_prepared": prepared,
+            "scratch": scratch, "raw": raw, "events": events, "rollout": rollout,
+            "child_identity": None, "reply": "", "targets": dict(targets),
+            "reads": {label: {"outcome": "unclear",
+                              "said": prepared["problem"],
+                              "target": targets[label],
+                              "bound_to": "no child ran"}
+                      for label in NATIVE_READ_TARGETS},
+            "separated": False,
+            "not_refused": sorted(NATIVE_READ_TARGETS),
+            "measured": "nothing: the route's workspace could not be prepared as a "
+                        "repository, so no child was started (SB-12, send-back 3)",
+        }
+    argv = [sys.executable, helper, "--brief", brief, "--workspace", workspace,
+            "--scratch", scratch, "--raw", raw,
+            "--call-id", NATIVE_VERIFIER_CALL_ID]
+    # What `setups/codex/launch.sh` exports for the session, built from the same hook the
+    # launcher reads: `CODEX_HOME="${RECHECK_CODEX_HOME}"`. The helper inherits CODEX_HOME and
+    # is forbidden from setting it itself (E9-25), so the runner supplies it here.
+    launcher_env = dict(setup.launch_env(condition))
+    launcher_env["CODEX_HOME"] = setup.home(condition)
+    launcher_env.update(setup.scratch_env(scratch))
+    env = campaign.env(extra=launcher_env, scratch=scratch)
+    # The same gate every launch site passes through: the sealed-campaign check and the
+    # writable-run-dir check, with this route's OWN run leaf rather than the parent probe's.
+    roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch,
+                                 "the native read-boundary verifier route for %s" % setup.name,
+                                 trial=trial, attempt=0, half="native-read-verifier")
+    with setup.walled(condition, out_dir, launcher=None, workspace=workspace,
+                      run_dir=run_dir, scratch=scratch, roots=roots,
+                      label="the native read-boundary verifier route for %s"
+                            % setup.name) as wall:
+        walled_argv = wall.prefix(argv)
+        child_env = dict(env)
+        child_env.update(wall.env)
+        child_env.update(extra_env or {})
+        if registry is not None:
+            registry.reserved(walled_argv, "adapters/codex/verifier.py")
+        step = run_cmd(walled_argv, env=child_env, cwd=wall.cwd, timeout=timeout,
+                       label="adapters/codex/verifier.py, the native read boundary, walled",
+                       registry=registry)
+    reply = read_text(raw, "") or ""
+    events_text = read_text(events, "") or ""
+    identity = _native_child_identity(events)
+    claimed, reads = set(), {}
+    for label in NATIVE_READ_TARGETS:
+        # The capture here is the CHILD's own events file and nothing else, so when the child
+        # named itself the whole file belongs to it and a refusal in it needs no further
+        # in-line marker. When it did NOT name itself there is no established child identity,
+        # and the verifier rule applies in full: the fallback finds nothing and the read is
+        # `unclear`, never a pass (SB-12, N3).
+        outcome, said = _native_read_outcome(
+            "verifier %s" % label, reply, events_text if identity else None, targets[label],
+            claimed=claimed, route="parent" if identity else "verifier")
+        reads[label] = {"outcome": outcome, "said": said, "target": targets[label],
+                        "bound_to": ("the fresh `codex exec` child %s, from its own "
+                                     "thread.started" % identity) if identity else
+                                    "no child identity was established from the helper's "
+                                    "retained events"}
+    return {
+        "route": "adapters/codex/verifier.py, which launches its own fresh `codex exec` "
+                 "child (SB-12, N3), run INSIDE the wall through setup.walled() exactly as a "
+                 "trial's own verifier child runs (SB-12, send-back 2); never `spawn_agent`, "
+                 "which forks the parent's context, and never an unwalled direct call",
+        "helper": helper,
+        "argv": walled_argv,
+        "walled": bool(wall.record.get("sealed")),
+        "wall": wall.record,
+        "cwd": wall.cwd,
+        "declared_env_names": sorted(child_env),
+        "exit": step.get("exit"),
+        "stdout": (step.get("stdout") or "")[:4000],
+        "stderr": (step.get("stderr") or "")[-2000:],
+        "brief": brief,
+        "workspace": workspace,
+        "workspace_prepared": prepared,
+        "scratch": scratch,
+        "raw": raw,
+        "events": events,
+        "rollout": rollout,
+        "child_identity": identity,
+        "reply": reply[:4000],
+        "targets": dict(targets),
+        "reads": reads,
+        "separated": bool(reads) and all(r["outcome"] == "refused" for r in reads.values()),
+        "not_refused": sorted(label for label, r in reads.items()
+                              if r["outcome"] != "refused"),
+        "measured": "a fresh child of this harness through the adapter's own verifier route, "
+                    "behind this setup and condition's own wall profile, with its brief, its "
+                    "argv, its declared environment, its call and its reply retained",
+    }
 
 
 def native_read_boundary_probe(campaign, plan, setups=None, condition="available",
@@ -11708,7 +14330,13 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
         ensure_dir(other_home)
         targets = {}
         targets["other_condition_home"] = os.path.join(other_home, NATIVE_SENTINEL_NAME)
-        other_trial = os.path.join(campaign.trials, "native-read-boundary-other")
+        # A4: the probe's own record no longer lives in `trials/`, so neither do its
+        # sentinels. They sit BESIDE the probe records, under
+        # `<campaign>/records/native-read-boundary/sentinels/<setup>/`, which is outside the
+        # one directory the launch's profile makes writable (its own record) and inside the
+        # `records/` root the wall refuses. The planted decoy grade moved with them: a path
+        # the session is told to try, and the wall must refuse.
+        other_trial = os.path.join(campaign.records("native-read-boundary"), "sentinels", name)
         ensure_dir(other_trial)
         targets["other_trial_record"] = os.path.join(other_trial, NATIVE_SENTINEL_NAME)
         grading = os.path.join(other_trial, "grade.json")
@@ -11724,33 +14352,69 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
             {"sentinel": READ_BOUNDARY_SENTINEL, "ok": True,
              "why": "a planted grading record for the native read boundary"}, indent=1)))
         trial_id_ = "native-read-boundary-%s" % name
-        record = os.path.join(campaign.trials, trial_id_)
+        # A4: out of `trials/`. The probe is not a trial, and while it lived under `trials/`
+        # every rig reader had to know to skip it (B3 in the contract) and the wall would have
+        # had to open a hole in the one root it most needs shut.
+        record = os.path.join(campaign.records("native-read-boundary"), name)
         ensure_dir(record)
         out_dir = os.path.join(record, "harness-%s" % stamp)
         prompt = os.path.join(base, "prompt.txt")
         write_text(prompt, native_read_prompt(targets))
-        roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, None,
+        # send-back 1, fault 2: the probe is trial-shaped. Its TMPDIR is `<its own
+        # tree>/scratch`, inside the root `guarded_launch_roots` names, so
+        # `setups/claude-code/launch.sh`'s `mkdir -p "${TMPDIR}/runs"` lands in a write root.
+        probe_tmp = probe_scratch(base)
+        roots = guarded_launch_roots(campaign, setup, condition, workspace, run_dir, probe_tmp,
                                      "the native read-boundary probe %s" % name,
                                      trial=trial_id_, attempt=0, half="native-read")
         registry = ProcessRegistry(campaign, trial_id_, 0, "native-read-boundary")
         close_key(campaign, "the %s native read-boundary probe" % name)
         step = setup.launch(condition, prompt, workspace, out_dir, timeout=timeout,
-                            extra={"writable": roots}, registry=registry)
+                            extra={"writable": roots}, registry=registry,
+                            scratch=probe_tmp)
         reply, reply_source = harness_reply(setup, out_dir)
         capture_text = _fence_capture_text(out_dir)
+        # SB-12, N3: one shared claim set across every label of this probe, so a single
+        # captured refusal cannot be counted for two of them. Six measurements have to come
+        # from six reads.
+        claimed = set()
         reads, verifier_reads = {}, {}
         for label in NATIVE_READ_TARGETS:
-            outcome, said = _native_read_outcome(label, reply, capture_text, targets[label])
+            outcome, said = _native_read_outcome(label, reply, capture_text, targets[label],
+                                                 claimed=claimed, route="parent")
             reads[label] = {"outcome": outcome, "said": said,
-                            "target": targets[label]}
-            v_outcome, v_said = _native_read_outcome("verifier %s" % label, reply,
-                                                    capture_text, targets[label])
-            verifier_reads[label] = {"outcome": v_outcome, "said": v_said}
+                            "target": targets[label],
+                            "bound_to": "this session's own tool call for %s" % label}
+        # The verifier route. For Codex it is the ADAPTER's own route and nothing else: the
+        # session's `spawn_agent` fork is not the route the skill's verifier takes, and the
+        # proof the reviewer read measured the fork (SB-12, N3).
+        adapter_route = None
+        if setup.harness == "codex":
+            # SB-12 send-back 2: its own walled capture, BESIDE the parent's, under the same
+            # record - so the profile, the spec and the proxy log of the verifier route are
+            # retained the way the parent launch's are and can be compared with them.
+            adapter_route = codex_native_verifier_reads(
+                campaign, setup, condition, targets, base,
+                os.path.join(record, "verifier-route-%s" % stamp),
+                timeout=max(timeout, 900), registry=registry, trial=trial_id_)
+            # the row's OWN `bound_to` is kept: it names the fresh child's thread id when
+            # the helper established one, and says so when it did not.
+            verifier_reads = dict(adapter_route["reads"])
+        else:
+            for label in NATIVE_READ_TARGETS:
+                v_outcome, v_said = _native_read_outcome(
+                    "verifier %s" % label, reply, capture_text, targets[label],
+                    claimed=claimed, route="verifier")
+                verifier_reads[label] = {
+                    "outcome": v_outcome, "said": v_said,
+                    "bound_to": "a capture line carrying its own child identity, claimed "
+                                "once (SB-12, N3)"}
         every = list(reads.values()) + list(verifier_reads.values())
         separated = bool(every) and all(r["outcome"] == "refused" for r in every)
         row = {"setup": name, "harness": setup.harness, "condition": condition,
                "trial": trial_id_, "record": record, "targets": targets,
                "reads": reads, "verifier_reads": verifier_reads,
+               "verifier_route": adapter_route,
                "separated": separated,
                "not_refused": sorted(label for label, r in reads.items()
                                      if r["outcome"] != "refused")
@@ -11765,6 +14429,9 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
         write_json(os.path.join(record, "native-read-boundary.json"), row)
         write_json(os.path.join(campaign.records("native-read-boundary"), "%s.json" % name),
                    row)
+        row["record_moved_out_of_trials"] = (
+            "A4: `<campaign>/records/native-read-boundary/<setup>/`, with the sentinels and "
+            "the planted decoy grade under `.../sentinels/<setup>/`")
         rows.append(row)
     failed = [r for r in rows if not r["separated"]]
     return {
@@ -11801,6 +14468,16 @@ def read_boundary_probe(campaign, plan, setups=None):
     names = [spec["name"] for spec in plan["setups"]]
     if setups:
         names = [n for n in names if n in setups]
+    # Send-back 3. On a SEALED plan this probe runs its child THROUGH THE WALL, under the
+    # trial-shaped profile a comparison trial of that setup and condition would get. Until now
+    # it ran outside every profile, so it measured the FILESYSTEM — which of course lets one
+    # plain process read another's files — and failed the preflight of a bench whose sessions
+    # are confined, which then refused every trial through `require_preflight`. The filesystem
+    # reading is kept, as `unwalled_filesystem_fact`, because it is still the honest answer to
+    # "could a process that escaped the wall read this"; it is never the verdict on a sealed
+    # plan. On a plan without `sealed: true` nothing changes: the old reading is the verdict
+    # and the old refusal stands.
+    sealed = bool(plan.get("sealed"))
     rows = []
     for name in names:
         mine = trial_id(name, "read-boundary-probe-a", "available", 1)
@@ -11809,48 +14486,189 @@ def read_boundary_probe(campaign, plan, setups=None):
         their_tree = campaign.opaque_tree(theirs, 0)
         ensure_dir(their_tree)
         their_sentinel = os.path.join(their_tree, "sentinel.txt")
-        write_text(their_sentinel, READ_BOUNDARY_SENTINEL)
         setup = setup_for(campaign, plan, name)
         other_home = setup.home("absent")
+        # SB-12, N3: both sentinels are PLANTED and confirmed from outside the wall before
+        # the child is started. An absent file cannot be refused, and a refusal of nothing is
+        # what her probe turned into `separated: true`. The other condition's home is
+        # ensured for the same reason the native probe ensures it: the measurement is "can
+        # this child read that home's own sentinel", and a home that is not installed yet
+        # answers no question at all.
+        ensure_dir(other_home)
+        planted_sentinel = plant_read_sentinel(their_sentinel)
+        planted_home = plant_read_sentinel(os.path.join(other_home, NATIVE_SENTINEL_NAME))
+        planted = {"sentinel": planted_sentinel["sentinel"],
+                   "sentinel_ok": planted_sentinel["ok"],
+                   "sentinel_bytes": planted_sentinel["bytes"],
+                   "other_home_sentinel": planted_home["sentinel"],
+                   "other_home_sentinel_ok": planted_home["ok"],
+                   "other_home_sentinel_bytes": planted_home["bytes"],
+                   "why": "planted and confirmed present and non-empty from OUTSIDE the "
+                          "wall, before the child ran (SB-12, N3)"}
         env = campaign.env(extra=setup.launch_env("available"), scratch=my_scratch,
                            require_binaries=False)
-        probe = run_cmd(
-            [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home],
-            env=env, cwd=my_scratch, label="read-boundary probe")
-        try:
-            answer = json.loads(probe["stdout"] or "{}")
-        except ValueError:
-            answer = {"error": (probe["stderr"] or "")[-400:]}
+        argv = [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home]
+        walled_record, cwd = None, my_scratch
+        if sealed:
+            walled_record = read_boundary_wall(campaign, setup, mine, my_scratch)
+            argv = [SANDBOX_EXEC, "-f", walled_record["profile"]] + argv
+            cwd = walled_record["cwd"]
+        probe = run_cmd(argv, env=env, cwd=cwd, label="read-boundary probe")
+        answer = _read_boundary_answer(probe)
+        answer["planted"] = planted
         answer["setup"] = name
         answer["this_trial_scratch"] = my_scratch
         answer["the_other_trial_tree"] = their_tree
         answer["the_other_condition_home"] = other_home
-        answer["separated"] = not (answer.get("read_the_other_trials_sentinel")
-                                   or answer.get("discovered_other_trial_trees")
-                                   or answer.get("read_the_other_conditions_install"))
+        answer["separated"] = _read_boundary_separated(answer)
+        answer["walled"] = bool(sealed)
+        answer["wall"] = walled_record
+        if sealed:
+            # the same child, with no profile at all: what the FILESYSTEM allows.
+            bare = run_cmd([sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel,
+                            other_home],
+                           env=env, cwd=my_scratch, label="read-boundary probe, unwalled")
+            fact = _read_boundary_answer(bare)
+            fact["planted"] = planted
+            fact["separated"] = _read_boundary_separated(fact)
+            fact["measured"] = ("the same child with NO profile: what the filesystem allows a "
+                                "process that escaped the wall. Recorded for information; it "
+                                "is never the verdict on a sealed plan")
+            answer["unwalled_filesystem_fact"] = fact
         rows.append(answer)
     failed = [r for r in rows if not r.get("separated")]
     return {
         "rows": rows,
         "separated": not failed,
         "not_separated": [r["setup"] for r in failed],
-        "measured": "a child in the trial's own launch environment, E11-7 item 2",
+        "walled": sealed,
+        "measured": ("a child under the trial-shaped sandbox profile this setup and condition "
+                     "would launch behind, E11-7 item 2 as the sealed bench measures it "
+                     "(send-back 3)" if sealed else
+                     "a child in the trial's own launch environment, E11-7 item 2"),
         "why_it_matters": "an absent trial that can read another trial's records is not a "
                           "controlled absent comparison, and its result is not comparison "
                           "evidence",
     }
 
 
+def _read_boundary_answer(probe):
+    """The child's own JSON, or a recorded failure — never a silent pass.
+
+    A child that did not run answers nothing, and "nothing" used to read as three `False`s,
+    which `_read_boundary_separated` would call SEPARATED. A probe that could not be taken is
+    not a probe that passed.
+    """
+    try:
+        answer = json.loads(probe["stdout"] or "")
+    except ValueError:
+        return {"probe_ran": False,
+                "why_not": "the probe child printed no JSON (exit %s): %s"
+                           % (probe.get("exit"), (probe["stderr"] or "")[-400:]),
+                "read_the_other_trials_sentinel": None,
+                "discovered_other_trial_trees": None,
+                "read_the_other_conditions_install": None}
+    answer["probe_ran"] = True
+    answer["exit"] = probe.get("exit")
+    return answer
+
+
+def _read_boundary_separated(answer):
+    """SEPARATED means every planted read was REFUSED, and nothing else (SB-12, N3).
+
+    The old reading was "nothing succeeded", which an absent sentinel, an empty file and a
+    child that never started all satisfy. Each of the three reads now carries its own typed
+    outcome and only `refused` counts; anything else leaves the check failed or unmeasured,
+    and a sentinel the runner could not confirm outside the wall fails it too.
+    """
+    if not answer.get("probe_ran"):
+        return False
+    if answer.get("discovered_other_trial_trees"):
+        return False
+    planted = answer.get("planted")
+    if planted is not None:
+        if not planted.get("sentinel_ok") or not planted.get("other_home_sentinel_ok"):
+            return False
+    outcomes = [answer.get("sentinel_outcome"),
+                answer.get("other_home_sentinel_outcome"),
+                answer.get("other_home_outcome")]
+    if any(word is None for word in outcomes):
+        # a record written before the typed outcomes existed: unmeasured, never a pass
+        return False
+    return all(word == "refused" for word in outcomes)
+
+
+def read_boundary_wall(campaign, setup, trial, scratch):
+    """The trial-shaped profile the read-boundary child runs behind (send-back 3).
+
+    The SAME spec a comparison trial of this setup and condition gets: its own opaque tree,
+    its own scratch, a named cwd, and everything else refused — the other trial's tree, the
+    other condition's home, `trials/`, `records/` and the rest of the user area. The probe's
+    own record sits under `records/read-boundary/`, never under `trials/`, for the reason A4
+    moved the native check out of there.
+
+    No proxy: this child opens no socket, and a proxy per probe would be a listener nothing
+    ever speaks to.
+    """
+    tree = campaign.opaque_tree(trial, 0)
+    workspace = os.path.join(tree, "workspace")
+    run_dir = os.path.join(tree, "run")
+    for path in (workspace, run_dir):
+        ensure_dir(path)
+    out_dir = os.path.join(campaign.records("read-boundary"), "probe-%s" % setup.name,
+                           "harness")
+    ensure_dir(out_dir)
+    spec = wall_spec(campaign, setup, "available", out_dir, workspace=workspace,
+                     run_dir=run_dir, scratch=scratch,
+                     roots=named_writable_roots(run_dir),
+                     label="the read-boundary probe for %s" % setup.name)
+    profile, spec_path, summary = write_wall_profile(campaign, spec, out_dir,
+                                                    stage=setup.stage)
+    return {"profile": profile, "profile_sha256": file_sha256(profile),
+            "spec_path": spec_path, "cwd": spec["cwd"], "summary": summary,
+            "sandbox_exec": SANDBOX_EXEC,
+            "why": "send-back 3: the plain child measures the WALL a sealed bench gives a "
+                   "trial, not the filesystem underneath it"}
+
+
+# SB-12, N3. The child returns a TYPED outcome per read, never a bare boolean. `False` used
+# to mean "the read did not succeed", which is true of a refusal, an absent file, an empty
+# file and a crash alike - and `_read_boundary_separated` read every one of them as
+# SEPARATED. Her probe pointed it at a sentinel that was not there and the preflight passed.
+#
+# The five words, and only the first is a pass:
+#   refused  PermissionError - the wall said no
+#   read     the file was there and had content
+#   empty    the file was there and had none: nothing was measured
+#   absent   FileNotFoundError - there was nothing to refuse
+#   error    anything else, with the exception type named
 READ_BOUNDARY_SOURCE = r"""
 import json, os, sys
 sentinel, other_home = sys.argv[1], sys.argv[2]
 out = {}
-try:
-    with open(sentinel) as handle:
-        out["read_the_other_trials_sentinel"] = bool(handle.read().strip())
-except Exception as exc:
-    out["read_the_other_trials_sentinel"] = False
-    out["sentinel_error"] = type(exc).__name__
+
+
+def outcome(path):
+    try:
+        with open(path) as handle:
+            return ("read" if handle.read().strip() else "empty"), None
+    except PermissionError as exc:
+        return "refused", type(exc).__name__
+    except FileNotFoundError as exc:
+        return "absent", type(exc).__name__
+    except IsADirectoryError as exc:
+        return "error", type(exc).__name__
+    except OSError as exc:
+        return ("refused" if getattr(exc, "errno", None) == 1 else "error"), type(exc).__name__
+    except Exception as exc:
+        return "error", type(exc).__name__
+
+
+word, error = outcome(sentinel)
+out["sentinel_outcome"] = word
+out["read_the_other_trials_sentinel"] = word == "read"
+if error:
+    out["sentinel_error"] = error
 here = os.environ.get("TMPDIR") or os.getcwd()
 found = []
 walk = here
@@ -11866,13 +14684,99 @@ for _ in range(3):
             if os.path.isfile(os.path.join(path, "sentinel.txt")):
                 found.append(path)
 out["discovered_other_trial_trees"] = found[:8]
+home_sentinel = os.path.join(other_home, "native-read-boundary-sentinel.txt")
+word, error = outcome(home_sentinel)
+out["other_home_sentinel"] = home_sentinel
+out["other_home_sentinel_outcome"] = word
+if error:
+    out["other_home_sentinel_error"] = error
 try:
-    out["read_the_other_conditions_install"] = bool(os.path.isdir(other_home)
-                                                    and os.listdir(other_home))
-except Exception:
+    entries = os.listdir(other_home)
+    out["other_home_outcome"] = "read" if entries else "empty"
+    out["read_the_other_conditions_install"] = bool(entries)
+except PermissionError as exc:
+    out["other_home_outcome"] = "refused"
+    out["other_home_error"] = type(exc).__name__
+    out["read_the_other_conditions_install"] = False
+except FileNotFoundError as exc:
+    out["other_home_outcome"] = "absent"
+    out["other_home_error"] = type(exc).__name__
+    out["read_the_other_conditions_install"] = False
+except Exception as exc:
+    out["other_home_outcome"] = "error"
+    out["other_home_error"] = type(exc).__name__
     out["read_the_other_conditions_install"] = False
 json.dump(out, sys.stdout)
 """
+
+
+# What a child of the consumer's own launch reports about ONE sentinel, in the same five
+# words. The old expression was `exit == 0 and "READ" in stdout`, whose negation called exit
+# 71, exit 1 and an empty file `separated` (SB-12, N3).
+CONSUMER_ISOLATION_SOURCE = r"""
+import json, sys
+path = sys.argv[1]
+out = {"path": path}
+try:
+    with open(path) as handle:
+        text = handle.read()
+    out["outcome"] = "read" if text.strip() else "empty"
+    out["bytes"] = len(text)
+except PermissionError as exc:
+    out["outcome"] = "refused"
+    out["error"] = type(exc).__name__
+except FileNotFoundError as exc:
+    out["outcome"] = "absent"
+    out["error"] = type(exc).__name__
+except Exception as exc:
+    out["outcome"] = "error"
+    out["error"] = type(exc).__name__
+json.dump(out, sys.stdout)
+"""
+
+
+def plant_read_sentinel(path, text=None):
+    """Plant a sentinel and CONFIRM it, from outside the wall, before anything reads it.
+
+    SB-12, N3: "confirmed existing and non-empty from OUTSIDE the wall beforehand". A refusal
+    is only evidence of a wall when there was something there to refuse.
+    """
+    write_text(path, text if text is not None else READ_BOUNDARY_SENTINEL)
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        return {"sentinel": path, "ok": False, "bytes": 0,
+                "why": "the sentinel could not be read back after planting it: %s" % exc}
+    return {"sentinel": path, "ok": bool(size), "bytes": size,
+            "why": "planted and confirmed non-empty from outside the wall"
+                   if size else "the planted sentinel is empty"}
+
+
+def _isolation_outcome(probe, planted):
+    """`separated` for ONE typed sentinel read, with the reason (SB-12, N3)."""
+    row = {"outcome": None, "separated": False, "exit": probe.get("exit"),
+           "planted": planted}
+    if not (planted or {}).get("ok"):
+        row["why"] = ("the sentinel was not confirmed present and non-empty outside the "
+                      "wall, so a refusal of it would measure nothing: %s"
+                      % (planted or {}).get("why"))
+        return row
+    try:
+        answer = json.loads(probe.get("stdout") or "")
+    except ValueError:
+        row["outcome"] = "unmeasured"
+        row["why"] = ("the probe child printed no JSON (exit %s): %s. A child that did not "
+                      "run is not a child that was refused."
+                      % (probe.get("exit"), (probe.get("stderr") or "")[-300:]))
+        return row
+    row["outcome"] = answer.get("outcome")
+    row["error"] = answer.get("error")
+    row["separated"] = row["outcome"] == "refused"
+    row["why"] = ("the read was refused with PermissionError against a planted, non-empty "
+                  "sentinel" if row["separated"] else
+                  "the read came back %r, which is not a permission refusal"
+                  % row["outcome"])
+    return row
 
 
 def _external_directory_rules(text):
@@ -12025,6 +14929,23 @@ def _why_the_ruling_is_not_usable(state):
     return "it is not in the recorded shape"
 
 
+def campaign_is_sealed(campaign):
+    """Does this campaign's plan say every launch runs behind the wall (A4)?"""
+    try:
+        return bool(campaign.plan().get("sealed"))
+    except (Missing, Failure):
+        return False
+
+
+SEALED_ACCEPTANCE_REFUSAL = (
+    "refusing %s: this campaign's plan says `sealed: true`, so every launch runs behind an "
+    "OS-level wall and there is nothing left for an acceptance to cover. "
+    "`--accept-unseparated` accepts a bench that CANNOT separate its trials, and a ruling "
+    "overrides a native measurement that did not pass; a sealed bench either refuses a read "
+    "or it does not, and if it does not, that is a defect in the profile rather than "
+    "something to waive. Fix the wall, or plan the campaign without `sealed` (A4).")
+
+
 def require_preflight(campaign, what, qualification=False):
     """Refuse `what` unless this campaign's preflight passed or was accepted.
 
@@ -12035,9 +14956,15 @@ def require_preflight(campaign, what, qualification=False):
     launch path keeps the older gate, so a probe, a proof root or a single trial is unaffected.
     """
     state = preflight_state(campaign)
+    sealed = campaign_is_sealed(campaign)
     if state is None:
         raise Usage("refusing to run %s: %s" % (what, PREFLIGHT_REFUSAL
                                                 % ("runner.py", campaign.root)))
+    # A4: a sealed campaign gives up both escapes, wherever they were recorded.
+    if sealed and state["accepted_unseparated"]:
+        raise Usage(SEALED_ACCEPTANCE_REFUSAL % what)
+    if sealed and state["ruling"]:
+        raise Usage(SEALED_ACCEPTANCE_REFUSAL % what)
     if not state["separated"] and not state["accepted_unseparated"]:
         raise Usage(
             "refusing to run %s: the read-boundary preflight at %s failed and no acceptance "
@@ -12148,17 +15075,26 @@ FENCE_MECHANISM = {
                       "an outbound call through a denied tool or command name"],
         "detected_only": ["an outbound call an interpreter makes in process"],
     },
+    # AMENDED by SB-2 (2026-09-19). Codex's own sandbox is OFF on this bench:
+    # `setups/codex/launch.sh` runs `codex exec --sandbox danger-full-access -c
+    # approval_policy=never` because macOS refuses a second seatbelt inside the wall
+    # (sandbox_apply: Operation not permitted, exit 71, E9-21) and Codex's own seatbelt allows
+    # every read, so it could never give the separation the bench needs. Everything this row
+    # used to claim natively is now the WALL's, and the row says so rather than keeping a
+    # claim that stopped being true. What the older records measured stays in those records.
     "codex": {
-        "writes": "the sandbox itself: sandbox_workspace_write with writable_roots = the "
-                  "child home plus the roots the runner names, exclude_tmpdir_env_var false",
-        "outbound": "NONE. setups/codex/launch.sh passes "
-                    "`-c sandbox_workspace_write.network_access=true`, so the sandbox does "
-                    "not refuse an outbound call at all",
-        "prevented": ["a write-kind tool call outside the roots",
-                      "a shell redirection to a path outside the roots (measured: "
-                      "'operation not permitted' from the sandbox, nothing landed)"],
-        "detected_only": ["every outbound call: the sandbox is configured to allow the "
-                          "network, so nothing declines one"],
+        "writes": "NONE of its own (SB-2): `--sandbox danger-full-access`. The roots the "
+                  "runner names are still passed as `--add-dir` and still recorded, but "
+                  "nothing in the harness refuses a write outside them; the wall does",
+        "outbound": "NONE of its own: with the sandbox off there is no network setting left "
+                    "to refuse anything. The wall's loopback proxy is the whole policy",
+        "prevented": [],
+        "detected_only": ["a write-kind tool call outside the roots",
+                          "a shell redirection to a path outside the roots",
+                          "every outbound call"],
+        "why_nothing_native": "E9-21: a second seatbelt cannot nest inside the wall, and "
+                              "Codex's own seatbelt allows every read. One sandbox, and it is "
+                              "the wall (SB-2).",
     },
     "opencode": {
         "writes": "permission.external_directory deny rules for every pilot home (including "
@@ -12175,12 +15111,42 @@ FENCE_MECHANISM = {
 }
 
 
+# A2 / Astra's gap 4: ONE service policy on every route. The harness rows above say what each
+# harness can refuse by itself; this says what the wall refuses on every launch that runs a
+# harness's own executable, whatever the harness is and whatever route the attempt takes —
+# tool, shell, interpreter or verifier. F5's outbound attempt is refused the same way by all
+# four, because none of them is a special case to the kernel.
+WALL_MECHANISM = {
+    "writes": "an OS-level sandbox-exec profile per launch: `file-write*` denied everywhere "
+              "except the trial's own opaque tree, its own record, the setup home for this "
+              "condition and the harness state each setup declares in its wall-needs.json",
+    "reads": "`file-read*` denied on the whole user area, every other trial's tree, every "
+             "other condition's home, the campaign's own records and every checkout; the "
+             "staged skill, the trial's own tree and the named harness files are reopened",
+    "outbound": "`network*` denied but one loopback port, where a filtering CONNECT proxy "
+                "started OUTSIDE the wall allows only the setup's own model and sign-in "
+                "hosts and logs every request and refusal",
+    "prevented": ["a write-kind tool call outside the roots",
+                  "a shell redirection to a path outside the roots",
+                  "a read of another trial's record, by any route",
+                  "an outbound call by ANY route: tool, shell, interpreter or verifier",
+                  "an outbound call an interpreter makes in process"],
+    "detected_only": [],
+    "not_applied_to": "a launch that runs a fake launcher, and every launch of a synthetic "
+                      "campaign: there is no harness there to confine, and the record says "
+                      "`wall: {sealed: false}` with the reason",
+}
+
+
 def fence_mechanism(setup):
-    """What THIS setup's harness can refuse natively, and what it can only detect (E11-45 S1)."""
-    return FENCE_MECHANISM.get(getattr(setup, "harness", None) or "", {
+    """What THIS setup's harness can refuse natively, what it only detects, and what the wall
+    refuses whatever the harness does (E11-45 S1, A2)."""
+    row = dict(FENCE_MECHANISM.get(getattr(setup, "harness", None) or "", {
         "writes": "unknown harness: no native fence is claimed",
         "outbound": "unknown harness: no native fence is claimed",
-        "prevented": [], "detected_only": ["everything"]})
+        "prevented": [], "detected_only": ["everything"]}))
+    row["wall"] = WALL_MECHANISM
+    return row
 
 
 def writable_roots_record(setup, condition, workspace, run_dir, scratch, extra_writable):
@@ -12219,7 +15185,92 @@ def named_writable_roots(run_dir):
     return [os.path.dirname(run_dir)]
 
 
-def launch_is_fake(setup, launcher):
+def require_wall(campaign, setup, launcher, what, condition=None):
+    """A sealed campaign refuses to launch a real session unless the wall is available (A4).
+
+    The check is made BEFORE the launch, at the one place every launch site already passes
+    through, so a sealed campaign cannot produce a trial that silently ran outside the wall.
+    A fake launcher is exempt: there is no harness to confine.
+    """
+    if not campaign_is_sealed(campaign):
+        return {"required": False, "why": "not a sealed campaign"}
+    if launch_is_fake(setup, launcher, campaign):
+        # A genuine fake, which now means: a launcher that is not the staged one AND a
+        # campaign the fake-session mechanism marked synthetic. There is no harness to
+        # confine. SB-12, N2 narrowed what counts as a fake; the exemption itself is A4's.
+        return {"required": False,
+                "why": "this launch runs a fake launcher on a campaign the fake-session "
+                       "mechanism marked synthetic"}
+    if campaign.synthetic():
+        raise Usage(
+            "refusing to launch %s: the plan says `sealed: true` and the campaign is marked "
+            "synthetic. A synthetic campaign bypasses the wall, so the two cannot both be "
+            "true of one launch (A4)." % what)
+    # SB-12, N2: on a sealed REAL campaign the launcher must be the setup's own staged
+    # `launch.sh`. A stand-in here used to be waved through as "a fake launcher, nothing to
+    # confine", which is exactly the hole her probe walked: any other pathname disabled the
+    # wall. There is no fake launcher on a sealed real campaign - `--fake-launcher` marks the
+    # campaign synthetic, which the line above refuses - so an unrecognised launcher is an
+    # error with its own name, never a silent bypass.
+    if launcher and not runs_the_setups_own_launcher(setup, launcher):
+        raise Usage(
+            "refusing to launch %s: the plan says `sealed: true` and the launcher %s is not "
+            "this setup's own staged launch.sh (%s). A different pathname is not proof of a "
+            "fake launcher and never drops the wall; run a stand-in only on a campaign the "
+            "fake-session mechanism marked synthetic (SB-12, N2)."
+            % (what, launcher, own_launcher(setup) or "the stage has none"))
+    if not os.path.isfile(SANDBOX_EXEC):
+        raise Usage("refusing to launch %s: the plan says `sealed: true` and this machine has "
+                    "no %s, so no launch of this campaign can run behind the wall (A4)."
+                    % (what, SANDBOX_EXEC))
+    writer = wall_writer(campaign.stage)
+    if not os.path.isfile(writer):
+        raise Usage("refusing to launch %s: the plan says `sealed: true` and the profile "
+                    "writer is not staged (%s). Re-run `stage` (A4)." % (what, writer))
+    # Send-back 6: and the home this launch will use must have PROVED it can run the core
+    # offline. A sealed bench closes the network, so a home whose warmed uv cache does not
+    # satisfy `uv run` produces a trial in which every phase command exits 3 with `missing
+    # dependency` — three minutes of model time for a record that measures the apparatus.
+    uv = latest_uv_offline(campaign, setup.name, condition) if condition else None
+    if condition and (uv is None or not uv["ok"]):
+        raise Usage(
+            "refusing to launch %s: the plan says `sealed: true` and %s. The wall closes the "
+            "network, so this home's `uv run` must work from the cache `install` warmed. Run "
+            "`runner.py install --campaign %s --setup %s --home %s` with the network up, then "
+            "`runner.py verify --campaign %s --setup %s --home %s` (send-back 6)."
+            % (what,
+               ("no verify record of this campaign carries an offline uv check for %s/%s"
+                % (setup.name, condition)) if uv is None else
+               ("the offline uv check for %s/%s recorded at %s did not pass: %s"
+                % (setup.name, condition, uv["record"],
+                   uv.get("problem") or "uv_offline.ok is not true")),
+               campaign.root, setup.name, condition, campaign.root, setup.name, condition))
+    return {"required": True, "sandbox_exec": SANDBOX_EXEC, "writer": writer,
+            "uv_offline": uv}
+
+
+def own_launcher(setup):
+    """The setup's own staged `launch.sh`, resolved, or None when the stage has none."""
+    try:
+        return os.path.realpath(setup.script("launch.sh"))
+    except Missing:
+        return None
+
+
+def runs_the_setups_own_launcher(setup, launcher):
+    """Is `launcher` the setup's own staged `launch.sh`, however it is spelled?
+
+    SB-12, N2. By REALPATH, so a symlink to it, a `./` spelling, or any other alias of the
+    same file is the same executable. The old test compared `os.path.abspath`, which made a
+    second name for one file look like a different program.
+    """
+    own = own_launcher(setup)
+    if not launcher or not own:
+        return False
+    return os.path.realpath(launcher) == own
+
+
+def launch_is_fake(setup, launcher, campaign=None):
     """Does THIS launch run a stand-in rather than the harness's own executable?
 
     E11-28 fix 6, NEW MAJOR D-F. Enforcement was keyed to `args.fake_launcher`, the flag of
@@ -12227,14 +15278,25 @@ def launch_is_fake(setup, launcher):
     real harness binary whatever the first half ran: Astra reached the process boundary with
     `enforced: false` and an argv naming the real `opencode run ... --session ...`. The
     question is not what a flag said; it is which executable THIS launch selects.
+
+    SB-12, N2, two changes and no more. (1) The comparison is by REALPATH: an alias of the
+    staged launcher is the staged launcher, and her probe's symlink was classified fake and
+    launched bare because `abspath` said two names were two programs. (2) A DIFFERENT
+    pathname is not proof of a fake either. A stand-in runs only where the test harness said
+    so through the one explicit fake-session mechanism this bench has - `--fake-launcher`,
+    which marks the campaign SYNTHETIC before any launch site asks this question. Where the
+    campaign is known and is not synthetic, an unrecognised launcher is not called fake: it
+    is walled like any other launch, and on a sealed campaign `require_wall` refuses it by
+    name. `campaign=None` is the caller that has no campaign to ask, and keeps the old
+    answer.
     """
     if not launcher:
         return False
-    try:
-        own = setup.script("launch.sh")
-    except Missing:
-        own = None
-    return os.path.abspath(launcher) != os.path.abspath(own or os.devnull)
+    if runs_the_setups_own_launcher(setup, launcher):
+        return False
+    if campaign is not None and not campaign.synthetic():
+        return False
+    return True
 
 
 def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch, what,
@@ -12252,8 +15314,10 @@ def guarded_launch_roots(campaign, setup, condition, workspace, run_dir, scratch
     argv from the harness's own binary.
     """
     roots = named_writable_roots(run_dir)
+    # A4: a sealed campaign refuses a real launch it cannot wall, at the same one place.
+    require_wall(campaign, setup, launcher, what, condition=condition)
     require_writable_run_dir(campaign, setup, condition, workspace, run_dir, scratch, roots,
-                             what, enforced=not launch_is_fake(setup, launcher),
+                             what, enforced=not launch_is_fake(setup, launcher, campaign),
                              trial=trial, attempt=attempt, half=half)
     return roots
 
@@ -12419,6 +15483,9 @@ def do_preflight(args):
     """The read-boundary preflight of E11-7 item 2, run before a campaign starts."""
     campaign = Campaign(args.campaign)
     plan = campaign.plan()
+    if plan.get("sealed") and (getattr(args, "accept_unseparated", False)
+                               or getattr(args, "ruling", None)):
+        raise Usage(SEALED_ACCEPTANCE_REFUSAL % "this preflight")
     document = read_boundary_probe(campaign, plan,
                                    setups=getattr(args, "setup", None))
     document["allow_rules"] = allow_rule_check(campaign, plan,
@@ -12438,27 +15505,38 @@ def do_preflight(args):
         "--accept-unseparated accepts the READ-BOUNDARY state of this bench and nothing "
         "else: it never covers a failed or unchecked allow rule, and every launch is refused "
         "while one stands (E11 second fix, item C)")
+    # Send-back 3: the record goes to STDOUT on the failure path too. A7a's rule is one JSON
+    # document on stdout per subcommand, and a preflight that refuses is the run whose record
+    # a reader most needs: on the failing live proof `preflight-native.json` was 0 bytes and
+    # everything that had been measured existed only in stderr. `FAIL_EXIT_KEY` is the
+    # mechanism E10-68 defect 3 already built for exactly this — the document prints, the
+    # reason goes to stderr, and the exit status is non-zero.
+    problems = []
     if not document["allow_rules"]["ok"]:
-        write_json(os.path.join(campaign.records("read-boundary"),
-                                "preflight-%s.json" % now_iso().replace(":", "")), document)
-        raise Failure(
+        problems.append(
             "the allow-rule preflight failed: %s carries the allow rule of another campaign, "
             "so every write to this campaign's run directory is auto-rejected. Run `install` "
             "for each of them from this campaign first (E11-7 item 2). %s"
             % (", ".join("%s/%s" % (r["setup"], r["home"])
                          for r in document["allow_rules"]["homes_written_for_another_campaign"]),
                document["what_the_acceptance_covers"]))
-    if not document["separated"] and not document["accepted_unseparated"]:
-        write_json(os.path.join(campaign.records("read-boundary"),
-                                "preflight-%s.json" % now_iso().replace(":", "")), document)
-        raise Failure(
+    elif not document["separated"] and not document["accepted_unseparated"]:
+        problems.append(
             "the read-boundary preflight failed on %s: a trial can reach another trial's "
             "records or another condition's install, so this bench does not supply a "
             "controlled absent comparison (E11-7 item 2). Separate the stores, or start with "
             "--accept-unseparated and the campaign records that its comparison evidence is "
-            "uncontrolled." % ", ".join(document["not_separated"]))
-    write_json(os.path.join(campaign.records("read-boundary"),
-                            "preflight-%s.json" % now_iso().replace(":", "")), document)
+            "uncontrolled.%s" % (
+                ", ".join(document["not_separated"]),
+                (" This plan is sealed, so the reading above is what the WALL allowed a plain "
+                 "child, not what the filesystem allows: a failure here is a defect in the "
+                 "profile (send-back 3)." if plan.get("sealed") else "")))
+    record = os.path.join(campaign.records("read-boundary"),
+                          "preflight-%s.json" % now_iso().replace(":", ""))
+    write_json(record, document)
+    document["record"] = record
+    if problems:
+        document[FAIL_EXIT_KEY] = "; ".join(problems)
     return document
 
 
@@ -12546,77 +15624,461 @@ CONSUMER_PROMPT_TEMPLATE = (
     "{run_dir}/checkpoint.schema.json and {run_dir}/receipt.schema.json: the records and the "
     "chat block the output must carry.\n"
     "\n"
-    "Then write {answer}, one JSON document saying what the caller's own records carry:\n"
-    "{{\"items\": [{{\"location\": \"<file:line>\", \"claim\": \"<the claim>\", \"disposition\": "
-    "\"fixed | not_fixed\", \"reason\": \"<the reason or null>\", \"evidence\": [{{\"kind\": "
-    "\"<kind>\", \"detail\": \"<the detail, whole>\", \"artifact\": \"<the artifact or null>\"}}]}}],\n"
-    " \"cards\": [{{\"slice\": \"<name>\", \"before\": \"<value>\", \"after\": \"<value>\"}}],\n"
-    " \"source_identity\": {{\"commit\": \"<the commit those records name>\"}},\n"
-    " \"continuation\": <the whole continuation state those records carry, or null>}}\n"
+    "Then write {answer}, one JSON document saying what the caller's own records carry. Its "
+    "shape is {answer_schema}, in the run directory; that file is the whole statement of the "
+    "shape, and the grade reads the same one.\n"
     "\n"
     "Take every value from those records, whole. Add nothing they do not carry, and shorten "
     "nothing.\n"
 )
+# Astra's gap 6: the prompt used to INLINE a shape, and it was not the published one — it
+# named the evidence reference `artifact` (a field `consumer-answer.schema.json` forbids and a
+# valid result never carries), carried no `status` or `stop_reason` for a producer that
+# stopped, and described the continuation state in words with no `item_rows`. The grader read
+# the published names. A consumer that followed the prompt exactly could therefore be failed
+# for its shape, and there was no document it could be held against. The schema is copied into
+# the pair's run directory and the prompt cites it by path; nothing about the shape is stated
+# twice.
+CONSUMER_ANSWER_SCHEMA = "consumer-answer.schema.json"
 
 CONSUMER_SENTINEL = "consumer-isolation-sentinel.txt"
 
 
-def consumer_trial_id(producer, consumer, rep=1):
-    return "consumer-%s-to-%s-r%d" % (producer, consumer, rep)
+# ------------------------------------------------------------------- the caller's own facts
+#
+# Astra's gap 6: "Supply model/harness/date facts". Six of the retained consumer sessions
+# ended in a VALID TERMINAL ENVELOPE rather than doing the work, because the input the pair
+# handed over carried no `invocation.model`: the core's `floor_check` (contract section 14,
+# E8-18) stops such a run as `verifier_unavailable (unknown_capability)` before scope. The
+# runner IS the station caller here (`invocation.caller: consumer-test`), so it states the
+# facts it holds — the pin the plan named for the consuming setup — and the session's own
+# adapter still reports what was actually in force in the result's `run` block.
+#
+# The classes are ruling E9-3's, per harness, copied from the three installed adapters'
+# own maps (`adapters/claude-code/_common.py` FLOOR_CLASSES, `adapters/codex/invocation.py`
+# FLOOR_MAP, `adapters/opencode/invocation.py` FLOOR_MAP) plus the launcher aliases a plan
+# may name. A model no map lists gets class `unknown` and `floor_met: null`, which is the
+# adapters' own answer and which the core reads as `unknown_capability` — a stop the record
+# then explains, rather than a silent one.
+CALLER_CLASS_RANK = {"haiku": 1, "sonnet": 2, "opus": 3}
+CALLER_FLOOR_EXACT = {
+    # `setups/claude-code/launch.sh` is handed the plan's `model` verbatim, and E10-62 pins
+    # it to Claude Code's own alias rather than a full id.
+    "claude-code": {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"},
+    "codex": {"gpt-6-astra": "opus", "gpt-5.6-sol": "opus"},
+    "opencode": {"qwen/qwen3.8-flash": "opus", "deepseek/deepseek-v4.1-flash": "opus"},
+}
+CALLER_FLOOR_PREFIXES = {
+    "claude-code": (("claude-opus-", "opus"), ("claude-fable-", "opus"),
+                    ("claude-mythos-", "opus"), ("claude-sonnet-", "sonnet"),
+                    ("claude-haiku-", "haiku")),
+}
+# How each setup's `install.sh` puts the skill in front of its harness, in the vocabulary
+# `input.schema.json` names for `invocation.harness.entry`.
+CALLER_ENTRY = {"claude-code": "plugin", "codex": "plugin", "opencode": "host skill"}
+
+
+def caller_model_class(harness, model_id, floor="opus"):
+    """Ruling E9-3's map for one harness: `(floor_class, floor_met)`."""
+    if not model_id:
+        return "unknown", None
+    lowered = str(model_id).lower()
+    bare = lowered.split("/", 1)[1] if lowered.startswith("openrouter/") else lowered
+    klass = (CALLER_FLOOR_EXACT.get(harness) or {}).get(bare)
+    if klass is None:
+        for prefix, mapped in CALLER_FLOOR_PREFIXES.get(harness, ()):
+            if lowered.startswith(prefix):
+                klass = mapped
+                break
+    if klass is None:
+        return "unknown", None
+    wanted = CALLER_CLASS_RANK.get(floor)
+    if wanted is None:
+        return klass, None
+    return klass, CALLER_CLASS_RANK[klass] >= wanted
+
+
+def caller_invocation_facts(setup, plan):
+    """`invocation.harness` and `invocation.model` for the session this input is handed to.
+
+    The shape is `references/input.schema.json`'s, field for field, and every value is a fact
+    the runner holds before the launch: the harness the setup names, how its `install.sh` put
+    the skill in front of it, whether the campaign is sealed behind the wall, and the model and
+    effort the plan pinned. A field the runner cannot measure is `unknown` — the core's own
+    spelling for an adapter report it did not get (`recheck_core/result.py` UNKNOWN_HARNESS) —
+    never a guess. `version` is one of those: no record of this campaign holds a harness
+    version, and reading one would mean running the harness binary.
+    """
+    model_id = setup.resolved_model()
+    floor = (plan.get("policy") or {}).get("model_floor", "opus")
+    klass, met = caller_model_class(setup.harness, model_id, floor)
+    model = {"id": model_id or "unknown", "floor_class": klass, "floor_met": met}
+    if setup.effort:
+        model["effort"] = setup.effort
+    harness = {
+        "name": setup.harness,
+        "version": "unknown",
+        "entry": CALLER_ENTRY.get(setup.harness, "explicit path"),
+        "sandbox": ("sandbox-exec, the bench's own profile (A1)" if plan.get("sealed")
+                    else "the harness's own default"),
+    }
+    return {"harness": harness, "model": model,
+            "why": {
+                "harness.version": "no record of this campaign holds one, and reading it "
+                                   "would mean running the harness binary",
+                "model": "the pin the plan's setup entry names (E10-62), classed by ruling "
+                         "E9-3's map for %s against policy.model_floor %r; the session's own "
+                         "adapter reports what was in force in the result's run block"
+                         % (setup.harness, floor)}}
+
+
+# ------------------------------------------------------- the pair's artifact path normalizer
+#
+# Astra's gap 6: "map original artifact paths through the recorded producer run directory".
+# The producer's evidence names its artifacts by the ABSOLUTE path it wrote them to — under
+# its own run directory, which `references/result.schema.json` requires and V3 enforces. The
+# consumer never sees that directory: it sees the pair's copies. So the producer's recorded
+# form and the relocated form the consumer opened are two spellings of one file, and every
+# comparison goes through one normalizer that knows both.
+#
+# The roots come from the producer's own `command.json` — its `run_dir` and its `workspace` —
+# and from the record itself, for a reference a producer wrote relative to its record. The
+# SOURCE root is the durable copy inside the record (`<record>/run`, the fixture's workspace
+# copy), not the live tree, so a regrade long after the campaign still resolves.
+PAIR_MAP_ROOTS = ("run_dir", "workspace", "record")
+
+
+def pair_path_map(pair, producer_command, record=None):
+    """The producer's roots, the pair's copies of them, and where the bytes are read from."""
+    record = record or pair.get("from")
+    producer_dir = pair.get("producer_dir") or ""
+    rows = []
+    run_dir = (producer_command or {}).get("run_dir")
+    if run_dir:
+        rows.append({"which": "run_dir", "producer_root": run_dir,
+                     "pair_root": os.path.join(producer_dir, "run"),
+                     "source_root": os.path.join(record, "run") if record else None})
+    workspace = (producer_command or {}).get("workspace")
+    if workspace:
+        rows.append({"which": "workspace", "producer_root": workspace,
+                     "pair_root": pair.get("workspace"),
+                     "source_root": pair.get("source_workspace") or workspace})
+    if record:
+        rows.append({"which": "record", "producer_root": record,
+                     "pair_root": producer_dir, "source_root": record})
+    return rows
+
+
+def normalize_artifact_path(value, mapping, pair=None):
+    """One artifact path in BOTH forms: as the producer recorded it, and inside the pair.
+
+    Returns `None` for no path at all. Otherwise a row carrying `named` (what was written),
+    `as_producer`, `in_the_pair`, `root` and `key`. `key` is what two references are compared
+    on: the producer's own form when the path resolves through a mapped root, and the plain
+    normalized text when it does not — so the recorded path and the relocated path compare
+    equal, and any other path compares as itself and fails.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    row = {"named": raw, "as_producer": None, "in_the_pair": None, "root": None,
+           "source": None}
+    candidates = [raw]
+    if not os.path.isabs(raw):
+        # a relative reference is read against the pair's own producer directory, which is
+        # where a consumer that walked the pair would have found it
+        if pair and pair.get("producer_dir"):
+            candidates.append(os.path.join(pair["producer_dir"], raw))
+        for entry in mapping or ():
+            for root in ([entry.get("producer_root")]
+                         + list(entry.get("producer_root_aliases") or [])):
+                if root:
+                    candidates.append(os.path.join(root, raw))
+    for candidate in candidates:
+        normalized = os.path.normpath(candidate)
+        for entry in mapping or ():
+            producer_root, pair_root = entry.get("producer_root"), entry.get("pair_root")
+            # SB-12, N5(b): a root is matched under EVERY spelling the map holds for it -
+            # the one it resolves to now, and any alias `retained_pair_view` kept when the
+            # pair moved into the record. An alias is the same directory under its old name.
+            producer_forms = [producer_root] + list(entry.get("producer_root_aliases") or [])
+            pair_forms = [pair_root] + list(entry.get("pair_root_aliases") or [])
+            matched = next((root for root in producer_forms
+                            if root and path_contains(root, normalized)), None)
+            if matched:
+                relative = os.path.relpath(normalized, matched)
+                row["as_producer"] = (os.path.join(producer_root, relative)
+                                      if producer_root else normalized)
+                row["in_the_pair"] = (os.path.join(pair_root, relative) if pair_root
+                                      else None)
+                row["root"] = entry["which"]
+                row["relative"] = relative
+                row["matched_root"] = matched
+                row["source"] = (os.path.join(entry["source_root"], relative)
+                                 if entry.get("source_root") else None)
+                row["key"] = row["as_producer"]
+                return row
+            matched = next((root for root in pair_forms
+                            if root and path_contains(root, normalized)), None)
+            if matched:
+                relative = os.path.relpath(normalized, matched)
+                row["as_producer"] = (os.path.join(producer_root, relative) if producer_root
+                                      else None)
+                row["in_the_pair"] = (os.path.join(pair_root, relative) if pair_root
+                                      else normalized)
+                row["root"] = entry["which"]
+                row["relative"] = relative
+                row["matched_root"] = matched
+                row["source"] = (os.path.join(entry["source_root"], relative)
+                                 if entry.get("source_root") else None)
+                row["key"] = row["as_producer"] or row["in_the_pair"]
+                return row
+    row["key"] = os.path.normpath(raw)
+    row["why"] = ("the path is under neither the producer's recorded run directory or "
+                  "workspace nor the pair's copy of either")
+    return row
+
+
+def artifact_key(value, mapping, pair=None):
+    """The one value two evidence references are compared on, or None."""
+    row = normalize_artifact_path(value, mapping, pair)
+    return row["key"] if row else None
+
+
+# Astra's gap 6 (section 5 of the contract): "the plan gains a producer selection rule, so
+# each directed pair is read on several producers". A producer KIND is `continuation:handoff`,
+# `continuation:compaction`, or `comparison:<case>` for a case the plan runs. The trial id
+# carries the kind as its own token so the ids stay unique and readable:
+#
+#     consumer-<producer>-to-<consumer>[-<kind token>]-r<n>
+#
+# The token is the continuation kind or the case id. WITHOUT a token the id is exactly what it
+# always was, which is what a plan that names no `consumer` block still mints.
+CONTINUATION_KINDS = ("handoff", "compaction")
+
+
+def consumer_kind_token(kind):
+    """The id token for a producer kind, or None for `any producer` (the old default)."""
+    if not kind:
+        return None
+    head, _, rest = str(kind).partition(":")
+    if head == "continuation" and rest in CONTINUATION_KINDS:
+        return rest
+    if head == "comparison" and rest:
+        return rest
+    raise Usage("%r is not a producer kind (continuation:handoff, continuation:compaction, "
+                "or comparison:<case>)" % (kind,))
+
+
+def consumer_trial_id(producer, consumer, rep=1, kind=None):
+    token = consumer_kind_token(kind)
+    return "consumer-%s-to-%s%s-r%d" % (producer, consumer,
+                                        "-" + token if token else "", rep)
+
+
+def consumer_kind_of_token(plan, token):
+    """The producer kind a trial id's token names, or None when it carries none."""
+    if not token:
+        return None
+    if token in CONTINUATION_KINDS:
+        return "continuation:%s" % token
+    if token in (plan.get("cases") or ()):
+        return "comparison:%s" % token
+    raise Usage("%r is neither a continuation kind (%s) nor a case this plan runs (%s)"
+                % (token, ", ".join(CONTINUATION_KINDS),
+                   ", ".join(plan.get("cases") or ())))
 
 
 def parse_consumer_id(plan, tid):
     match = re.match(r"^consumer-(?P<rest>.+)-r(?P<rep>\d+)$", tid)
     if not match:
-        raise Usage("%r is not a consumer trial id (consumer-<producer>-to-<consumer>-r<n>)"
-                    % tid)
+        raise Usage("%r is not a consumer trial id "
+                    "(consumer-<producer>-to-<consumer>[-<kind>]-r<n>)" % tid)
     rest = match.group("rest")
     names = sorted((s["name"] for s in plan["setups"]), key=len, reverse=True)
     for producer in names:
         head = producer + "-to-"
-        if rest.startswith(head):
-            consumer = rest[len(head):]
-            if consumer in names:
-                return {"trial": tid, "producer": producer, "consumer": consumer,
-                        "rep": int(match.group("rep"))}
+        if not rest.startswith(head):
+            continue
+        tail = rest[len(head):]
+        for consumer in names:
+            if tail == consumer:
+                token = None
+            elif tail.startswith(consumer + "-"):
+                token = tail[len(consumer) + 1:]
+            else:
+                continue
+            return {"trial": tid, "producer": producer, "consumer": consumer,
+                    "rep": int(match.group("rep")), "token": token,
+                    "kind": consumer_kind_of_token(plan, token)}
     raise Usage("%r names no producer/consumer pair in the plan (%s)" % (tid, ", ".join(names)))
 
 
+def consumer_producer_kinds(plan):
+    """Which producer kinds each directed pair is read on, or None for the old single pair.
+
+    A plan with no `consumer` object keeps the old shape exactly: one trial per ordered pair,
+    on whatever completed record the producer has. A plan that names the object gets one
+    consumer per selected kind; naming no `producers` list selects them all — both
+    continuation kinds and one with-skill comparison record per case the plan runs.
+    """
+    block = plan.get("consumer")
+    if not isinstance(block, dict):
+        return None
+    named = block.get("producers")
+    if named is None:
+        # every kind this plan can actually supply: the continuation kinds only when the plan
+        # runs a continuation set, and one with-skill comparison record per case it runs.
+        kinds = []
+        if plan.get("continuation"):
+            kinds += ["continuation:%s" % k for k in CONTINUATION_KINDS]
+        return kinds + ["comparison:%s" % case for case in (plan.get("cases") or ())]
+    return list(named)
+
+
+def consumer_repetitions(plan):
+    block = plan.get("consumer")
+    if not isinstance(block, dict):
+        return 1
+    return int(block.get("repetitions_per_pair", 1))
+
+
 def consumer_order(plan):
-    """Every ordered pair of distinct setups, one trial each, by the consumer's lane."""
+    """Every ordered pair of distinct setups, by the consumer's lane.
+
+    One trial per pair when the plan names no `consumer` object; otherwise one trial per pair
+    per selected producer kind per repetition.
+    """
     names = [spec["name"] for spec in plan["setups"]]
+    kinds = consumer_producer_kinds(plan)
+    reps = consumer_repetitions(plan)
     lanes = {}
     for consumer in names:
         for producer in names:
             if producer == consumer:
                 continue
-            lanes.setdefault(consumer, []).append(
-                consumer_trial_id(producer, consumer, 1))
+            if kinds is None:
+                lanes.setdefault(consumer, []).append(
+                    consumer_trial_id(producer, consumer, 1))
+                continue
+            for rep in range(1, reps + 1):
+                for kind in kinds:
+                    lanes.setdefault(consumer, []).append(
+                        consumer_trial_id(producer, consumer, rep, kind))
     return {lane: rows for lane, rows in sorted(lanes.items())}
 
 
-def producer_record_for(campaign, plan, producer):
-    """The producer's own completed comparison or continuation record, and why it was chosen."""
-    best = None
-    for tid, attempt, record in graded_attempts(campaign):
+def _trial_repetition(tid):
+    """The `-r<n>` a trial id ends with, or None."""
+    match = re.search(r"-r(\d+)$", tid or "")
+    return int(match.group(1)) if match else None
+
+
+def _producer_is_usable(record, command):
+    """The old rule, stated: no consumer uses a FAILED or EMPTY producer attempt.
+
+    Failed is the attempt's own recorded status — anything but `complete`, which covers
+    `no_result`, `timed_out`, `launch_failed` and the runner's own error record. Empty is a
+    record with no `result.json`, or one whose result carries neither items nor a status, so
+    there is nothing for a consumer to recover.
+    """
+    status = command.get("status")
+    if status is not None and status != "complete":
+        return False, "the producer's own attempt ended %r" % status
+    result_path = os.path.join(record, "result.json")
+    if not os.path.isfile(result_path):
+        return False, "the producer's record holds no result.json"
+    try:
+        result = read_json(result_path)
+    except (Missing, Failure):
+        return False, "the producer's result.json does not parse"
+    if not isinstance(result, dict) or (not result.get("items") and not result.get("status")):
+        return False, "the producer's result carries neither items nor a status"
+    return True, None
+
+
+def _record_matches_kind(command, kind):
+    """Does this record's own `command.json` answer the wanted producer kind?"""
+    recorded = command.get("kind") or "comparison"
+    if kind is None:
+        return True
+    head, _, rest = str(kind).partition(":")
+    if head == "continuation":
+        return recorded == "continuation:%s" % rest
+    if head == "comparison":
+        return recorded == "comparison" and command.get("case") == rest
+    return False
+
+
+def producer_record_for(campaign, plan, producer, kind=None):
+    """The producer's own usable with-skill record of the wanted kind, and why it was chosen.
+
+    Astra's gap 6: a directed pair is read on SEVERAL producers, so the caller names the kind
+    it wants. Selection, in order: repetition 1 first, then the latest attempt of that
+    repetition. A failed or empty attempt is refused and the next repetition is tried; every
+    refusal is recorded beside the choice, so the record says which producers were passed over
+    and why.
+    """
+    candidates, refused = [], []
+    # B3(1): the probe folders are skipped here too, but the JOURNAL rule is not applied: this
+    # asks which record can be consumed, not which attempt a grade must cover.
+    #
+    # SB-12, N5(c). Usability used to be tested BEFORE the latest attempt was chosen, so a
+    # repetition whose latest attempt failed fell back to its own earlier attempt - a
+    # SUPERSEDED record, the one a rerun exists to replace. Her probe gave repetition 1 a
+    # complete attempt 0 and a failed attempt 1, and selection returned `x-r1#0`. The rule is
+    # per repetition: take its LATEST attempt, test THAT one, and move to the next repetition
+    # when it is unusable. An earlier attempt of the same repetition is never selected, and
+    # the refusal says which repetition was passed over and why.
+    latest = {}
+    for tid, attempt, record in graded_attempts(campaign, require_journal=False):
         command_path = os.path.join(record, "command.json")
         if not os.path.isfile(command_path):
             continue
         command = read_json(command_path)
         if command.get("setup") != producer or command.get("condition") != "available":
             continue
-        if not os.path.isfile(os.path.join(record, "result.json")):
+        if not _record_matches_kind(command, kind):
             continue
-        rank = (0 if (command.get("kind") or "").startswith("continuation") else 1, tid, attempt)
-        if best is None or rank < best[0]:
-            best = (rank, tid, attempt, record, command)
-    if best is None:
-        raise Missing("no completed available-condition record of %s to consume; run the "
-                      "producer's own trial first" % producer)
-    _rank, tid, attempt, record, command = best
+        if tid not in latest or attempt > latest[tid][0]:
+            latest[tid] = (attempt, record, command)
+    for tid in sorted(latest):
+        attempt, record, command = latest[tid]
+        usable, why = _producer_is_usable(record, command)
+        if not usable:
+            refused.append({"trial": tid, "attempt": attempt, "why": why,
+                            "rule": "the repetition's LATEST attempt is the one tested; an "
+                                    "earlier attempt of it is superseded and is never "
+                                    "selected (SB-12, N5(c))"})
+            continue
+        candidates.append((tid, attempt, record, command))
+    if not candidates:
+        raise Missing("no usable available-condition record of %s%s to consume; run the "
+                      "producer's own trial first%s"
+                      % (producer, " of kind %s" % kind if kind else "",
+                         " (%d attempt(s) were refused: %s)"
+                         % (len(refused), "; ".join("%s#%d %s" % (r["trial"], r["attempt"],
+                                                                  r["why"])
+                                                    for r in refused[:6]))
+                         if refused else ""))
+    if kind is None:
+        # the old order, kept for a plan that names no `consumer` object: a continuation
+        # record first, because it carries a continuation state to recover.
+        candidates.sort(key=lambda row: (0 if (row[3].get("kind") or "").startswith(
+            "continuation") else 1, row[0], row[1]))
+        why = ("the producer's own completed available-condition record, continuation "
+               "trials first (they carry a continuation state to recover)")
+    else:
+        # repetition 1 first, then the latest attempt of it
+        candidates.sort(key=lambda row: (_trial_repetition(row[0]) or 0, -row[1], row[0]))
+        why = ("the producer's own usable %s record, earliest repetition first, latest "
+               "attempt of it" % kind)
+    tid, attempt, record, command = candidates[0]
     return {"trial": tid, "attempt": attempt, "record": record, "command": command,
-            "why": "the producer's own completed available-condition record, continuation "
-                   "trials first (they carry a continuation state to recover)"}
+            "kind": kind, "recorded_kind": command.get("kind") or "comparison",
+            "why": why,
+            "considered": [{"trial": row[0], "attempt": row[1]} for row in candidates],
+            "refused": refused}
 
 
 # The result schema (references/result.schema.json) names the evidence reference
@@ -12657,7 +16119,7 @@ CONSUMER_COPIED = ("result.json", "reply.md", "chat.md")
 CONSUMER_RUN_COPIED = ("checkpoint.json", "checkpoint.log", "receipt.json", "receipt.log")
 
 
-def stage_consumer_pair(campaign, producer_row, pair_dir):
+def stage_consumer_pair(campaign, producer_row, pair_dir, setup=None, plan=None):
     """The producer's bound evidence, copied into the pair directory, and nothing else.
 
     E11-7 item 6: "with unrelated records unavailable". Only the named files of ONE producer
@@ -12699,32 +16161,6 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
                 if not os.path.isfile(destination):
                     shutil.copy2(full, destination)
                     copied.append(relative)
-    artifacts = []
-    for named in _evidence_artifacts(record):
-        relative = named
-        if os.path.isabs(named):
-            if not path_contains(record, named):
-                artifacts.append({"artifact_path": named, "relative": None, "staged": None,
-                                  "copied": False, "sha256": None,
-                                  "why": "the reference names a path outside the producer's "
-                                         "own record; nothing outside it is copied"})
-                continue
-            relative = os.path.relpath(named, record)
-        source = os.path.join(record, relative)
-        destination = os.path.join(producer_dir, relative)
-        row = {"artifact_path": named, "relative": relative, "staged": destination,
-               "copied": False, "sha256": None}
-        if os.path.isfile(source):
-            ensure_dir(os.path.dirname(destination))
-            if not os.path.isfile(destination):
-                shutil.copy2(source, destination)
-                copied.append(relative)
-            row["copied"] = True
-            # the hash of the PRODUCER's own file, so the pair's copy can be proved identical
-            row["sha256"] = file_sha256(source)
-        else:
-            row["why"] = "the producer's evidence names a file its record does not hold"
-        artifacts.append(row)
     # the workspace as the producer left it: its records are what the consumer reads
     workspace = os.path.join(pair_dir, "workspace")
     source_workspace = producer_row["command"].get("workspace")
@@ -12739,11 +16175,60 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
     else:
         raise Missing("the producer %s left no readable workspace to copy"
                       % producer_row["trial"])
+    # Astra's gap 6: the artifacts the producer's evidence names are resolved through the
+    # NORMALIZER, so a reference under the producer's own run directory or workspace — where
+    # `result.schema.json` puts them, and V3 checks containment against — reaches the pair's
+    # copy of that root. Before this, anything outside `<record>/...` was refused as "outside
+    # the producer's own record" and the pair carried no copy of it, so the consumer could
+    # not open a file its own evidence had to name.
+    mapping = pair_path_map({"producer_dir": producer_dir, "workspace": workspace,
+                             "source_workspace": source_workspace, "from": record},
+                            producer_row["command"], record=record)
+    artifacts = []
+    for named in _evidence_artifacts(record):
+        resolved = normalize_artifact_path(named, mapping,
+                                           pair={"producer_dir": producer_dir})
+        row = {"artifact_path": named, "relative": (resolved or {}).get("relative"),
+               "staged": (resolved or {}).get("in_the_pair"),
+               "root": (resolved or {}).get("root"),
+               "as_producer": (resolved or {}).get("as_producer"),
+               "key": (resolved or {}).get("key"),
+               "copied": False, "sha256": None}
+        source = (resolved or {}).get("source")
+        destination = row["staged"]
+        if not destination or not source:
+            row["why"] = (resolved or {}).get("why") or (
+                "the reference names no path the pair's roots reach; nothing outside the "
+                "producer's own run directory, workspace or record is copied")
+            artifacts.append(row)
+            continue
+        if os.path.isfile(source):
+            ensure_dir(os.path.dirname(destination))
+            if not os.path.isfile(destination):
+                shutil.copy2(source, destination)
+                # `copied` names a path under the producer directory the way the walk above
+                # does; an artifact that maps into the pair's WORKSPACE is outside it, so
+                # that one is named from the pair root instead.
+                copied.append(os.path.relpath(destination, producer_dir)
+                              if path_contains(producer_dir, destination)
+                              else os.path.relpath(destination, pair_dir))
+            row["copied"] = True
+            # the hash of the PRODUCER's own file, so the pair's copy can be proved identical
+            row["sha256"] = file_sha256(source)
+            row["source"] = source
+        else:
+            row["why"] = "the producer's evidence names a file its record does not hold"
+        artifacts.append(row)
     # Item 6(b): the pair's own run directory, with the same neutral contract every trial
     # gets, and the input document the caller hands over — the declared input route.
     run_dir = prepare_run_dir(os.path.join(pair_dir, "run"))
+    # Astra's gap 6: the consumer answer's shape is PUBLISHED beside the three schemas every
+    # trial already gets, and the prompt cites this copy by path.
+    shutil.copy2(os.path.join(SKILL_DIR, "references", CONSUMER_ANSWER_SCHEMA),
+                 os.path.join(run_dir, CONSUMER_ANSWER_SCHEMA))
     run_id = "%s-run" % os.path.basename(pair_dir)
-    document = consumer_input(producer_row, workspace, run_dir, run_id)
+    document = consumer_input(producer_row, workspace, run_dir, run_id,
+                              setup=setup, plan=plan)
     input_path = os.path.join(pair_dir, "input.json")
     write_json(input_path, document)
     # Item 6(d): the producer's copied files, hashed before the consumer runs.
@@ -12752,8 +16237,10 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
         for name in sorted(files):
             full = os.path.join(base, name)
             producer_hashes[os.path.relpath(full, producer_dir)] = file_sha256(full)
-    return {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
+    pair = {"pair_dir": pair_dir, "producer_dir": producer_dir, "workspace": workspace,
+            "source_workspace": source_workspace,
             "run_dir": run_dir, "run_id": run_id, "input": input_path,
+            "answer_schema": os.path.join(run_dir, CONSUMER_ANSWER_SCHEMA),
             "copied": copied,
             "artifacts": artifacts,
             "producer_hashes_before": producer_hashes,
@@ -12761,16 +16248,27 @@ def stage_consumer_pair(campaign, producer_row, pair_dir):
                 name for name in sorted(os.listdir(producer_dir))
                 if name not in CONSUMER_COPIED and name != "run"],
             "from": producer_row["record"], "producer_trial": producer_row["trial"]}
+    pair["path_map"] = pair_path_map(pair, producer_row["command"], record=record)
+    return pair
 
 
-def consumer_input(producer_row, workspace, run_dir, run_id):
+def consumer_input(producer_row, workspace, run_dir, run_id, setup=None, plan=None):
     """The producer's findings as an explicit `items` payload (contract section 2).
 
     Item 6(b): this IS the declared input route for a caller that holds a verdict — "a caller
     that holds a chat verdict passes its findings as explicit items" — so the consumer runs
     the job on records it did not produce, which is what the criterion asks.
+
+    Astra's gap 6: and it carries the CALLER FACTS a station caller owes the core —
+    `invocation.harness`, `invocation.model`, `invocation.run_date` and
+    `invocation.session_wrote_fix`. Without the model object `floor_check` stops the run as
+    `verifier_unavailable (unknown_capability)` before scope, which is how six retained
+    consumer sessions ended in a valid terminal envelope instead of doing the work.
+    `session_wrote_fix` is false by statement: the consumer is a fresh session handed another
+    tool's records, and it authored none of the fixes under review (contract section 7).
     """
     result = read_json(os.path.join(producer_row["record"], "result.json"))
+    run_date = (plan or {}).get("run_date") or now_iso()[:10]
     items = []
     for item in result.get("items") or []:
         location = item.get("location") or {}
@@ -12779,13 +16277,31 @@ def consumer_input(producer_row, workspace, run_dir, run_id):
             "location": {"file": location.get("file"), "line": location.get("line")},
             "claim": item.get("claim"),
             "failure_scenario": item.get("failure_scenario"),
+            # Astra's gap 6, found while making the input sufficient: this default did not
+            # VALIDATE. `record_provenance` needs a heading of at least one character and a
+            # `YYYY-MM-DD` date, and the default supplied two empty strings, so every
+            # consumer input built from a result whose items carry no `record` — which is
+            # every result, since `result.schema.json`'s `item_result` has no such field —
+            # failed the input schema and the run came back `missing_input`. The heading is
+            # the contract's own word for a caller that holds a verdict rather than a
+            # document (section 2, and `record_provenance.heading`'s own example), and the
+            # date is the run's.
             "record": item.get("record") or {"document": "docs/punch-list.md",
-                                             "heading": "", "date": ""},
+                                             "heading": "chat verdict",
+                                             "date": run_date},
             "slice": item.get("slice") or "none"})
+    invocation = {"mode": "headless", "caller": "consumer-test",
+                  "run_id": run_id, "run_dir": run_dir, "resume": False,
+                  "session_wrote_fix": False}
+    if plan and plan.get("run_date"):
+        invocation["run_date"] = plan["run_date"]
+    if setup is not None:
+        facts = caller_invocation_facts(setup, plan or {})
+        invocation["harness"] = facts["harness"]
+        invocation["model"] = facts["model"]
     return {
         "protocol_version": 1,
-        "invocation": {"mode": "headless", "caller": "consumer-test",
-                       "run_id": run_id, "run_dir": run_dir, "resume": False},
+        "invocation": invocation,
         "workspace": workspace,
         "target": {"items": items},
     }
@@ -12847,32 +16363,45 @@ def _consumer_expected(producer_row):
                                   or "").startswith("continuation")}
 
 
-def _same_evidence(theirs, ours):
+def _same_evidence(theirs, ours, mapping=None, pair=None):
     """Item 6(a): one evidence reference against another, every field, whole.
 
     Astra's verification of 31329cd: the grader compared the first forty characters of the
     detail, so an observation changed after that prefix still passed.
+
+    Astra's gap 6: the artifact path is compared on the NORMALIZER's key, so the path as the
+    producer recorded it and the relocated path the consumer actually opened compare equal.
+    Any other path keys as itself and fails, which is the whole point of the mapping.
     """
     if not isinstance(theirs, list):
         return False, "the consumer recorded no evidence list"
     wanted = [{"kind": e.get("kind"), "detail": e.get("detail"),
-               "artifact_path": e.get("artifact_path")} for e in ours]
+               "artifact_key": artifact_key(e.get("artifact_path"), mapping, pair)}
+              for e in ours]
     got = []
     for entry in theirs:
         if isinstance(entry, dict):
             named, _field = _evidence_artifact(entry)
             got.append({"kind": entry.get("kind"), "detail": entry.get("detail"),
-                        "artifact_path": named})
+                        "artifact_key": artifact_key(named, mapping, pair)})
         else:
-            got.append({"kind": None, "detail": entry, "artifact_path": None})
+            got.append({"kind": None, "detail": entry, "artifact_key": None})
     for reference in wanted:
         if reference not in got:
             # a reference whose detail alone matches is named, so a truncation is legible
             near = [g for g in got
                     if str(g.get("detail") or "")[:40] == str(reference.get("detail") or "")[:40]]
-            return False, ("the reference %r is not among the consumer's, whole%s"
-                           % (str(reference.get("detail"))[:60],
-                              "; one matches only its first forty characters" if near else ""))
+            same_detail = [g for g in near if g.get("kind") == reference.get("kind")
+                           and g.get("detail") == reference.get("detail")]
+            why = ("the reference %r is not among the consumer's, whole%s"
+                   % (str(reference.get("detail"))[:60],
+                      "; one matches only its first forty characters" if near else ""))
+            if same_detail:
+                why += ("; one carries the same kind and detail and a different artifact "
+                        "path (%r against %r)"
+                        % (same_detail[0].get("artifact_key"),
+                           reference.get("artifact_key")))
+            return False, why
     return True, "every reference of the producer's appears whole"
 
 
@@ -12897,18 +16426,23 @@ def _states_by_index(state):
             for key, values in out.items()}
 
 
-def _artifact_rows(pair, ours, theirs):
+def _artifact_rows(pair, ours, theirs, mapping=None):
     """Every artifact the producer's evidence names, resolved inside the pair and hashed.
 
     The consumer reaches the producer's files only through the pair, so the reference it
     gives is resolved against the staged copy and that copy's content is compared, by hash,
     with the producer's own file as it was when the pair was staged.
+
+    Astra's gap 6: the pairing is on the NORMALIZER's key, not on the literal string, so the
+    producer's recorded path and the pair path the consumer opened are one artifact. Each row
+    records BOTH forms of each side.
     """
     staged = {}
     for row in pair.get("artifacts") or []:
-        for key in (row.get("artifact_path"), row.get("relative")):
+        for key in (row.get("key"), row.get("artifact_path"), row.get("as_producer"),
+                    row.get("staged"), row.get("relative")):
             if key:
-                staged[key] = row
+                staged.setdefault(key, row)
     # E11-15 send-back (B2): the consumer's references were taken by LIST POSITION while
     # `_same_evidence` accepts them in any order, so two correct references given in the other
     # order failed here with both files unchanged. Each producer reference is paired with the
@@ -12920,31 +16454,38 @@ def _artifact_rows(pair, ours, theirs):
         if isinstance(entry, dict):
             their_named, _field = _evidence_artifact(entry)
             if their_named:
-                unspent.setdefault(their_named, []).append(their_named)
+                resolved = normalize_artifact_path(their_named, mapping, pair)
+                unspent.setdefault(resolved["key"], []).append(resolved)
     rows = []
     for reference in ours:
         named = reference.get("artifact_path")
         if not named:
             continue
-        their_named = None
-        if unspent.get(named):
-            their_named = unspent[named].pop(0)
-        row = {"producer_named": named, "consumer_named": their_named,
+        ours_at = normalize_artifact_path(named, mapping, pair) or {}
+        key = ours_at.get("key")
+        theirs_at = unspent[key].pop(0) if unspent.get(key) else None
+        row = {"producer_named": named,
+               "producer_as_recorded": ours_at.get("as_producer") or named,
+               "producer_in_the_pair": ours_at.get("in_the_pair"),
+               "key": key, "root": ours_at.get("root"),
+               "consumer_named": theirs_at.get("named") if theirs_at else None,
+               "consumer_in_the_pair": theirs_at.get("in_the_pair") if theirs_at else None,
+               "consumer_as_recorded": theirs_at.get("as_producer") if theirs_at else None,
                "in_the_pair": False, "producer_sha256": None, "consumer_sha256": None}
-        source = staged.get(named)
+        source = staged.get(key) or staged.get(named)
         if source:
             row["in_the_pair"] = bool(source.get("copied"))
             row["producer_sha256"] = source.get("sha256")
             row["staged"] = source.get("staged")
         resolved = None
-        if their_named:
-            candidate = staged.get(their_named)
+        if theirs_at:
+            candidate = staged.get(theirs_at["key"])
             if candidate and candidate.get("staged"):
                 resolved = candidate["staged"]
             else:
-                direct = their_named if os.path.isabs(their_named) else os.path.join(
-                    pair.get("producer_dir") or "", their_named)
-                resolved = direct
+                resolved = theirs_at.get("in_the_pair") or (
+                    theirs_at["named"] if os.path.isabs(theirs_at["named"])
+                    else os.path.join(pair.get("producer_dir") or "", theirs_at["named"]))
         if resolved and os.path.isfile(resolved):
             row["consumer_sha256"] = file_sha256(resolved)
             row["consumer_resolved"] = resolved
@@ -12971,10 +16512,35 @@ CONSUMER_CHECKS = frozenset((
     "result_present", "result_validates", "reply_delivered",
     "reply_carries_the_output_block", "source_identity_matches_the_producer",
     "producer_history_preserved", "unrelated_records_unavailable",
+    # Astra's gap 6: "Treat an intended completed outcome separately from a valid terminal
+    # envelope."
+    "consumption_completed",
 ))
 
 # Checks that only apply in one shape of trial; absent is correct, not skipped.
 CONSUMER_CHECKS_CONDITIONAL = frozenset(("producer_stop_recovered", "continuation_state"))
+
+
+def stamp_consumer_witness(grade, campaign, record, command, tid, attempt):
+    """B3(5): a consumer grade carries the same cross-trial witness a comparison grade does.
+
+    `cross_trial_reads` reports every read of another trial's records BY NAME (E11-50), and it
+    read `records_reached` off the grade rows it was handed. A consumer grade carried neither
+    that witness nor the `(trial, attempt, setup)` identity the report joins on, so a consumer
+    session that opened another trial's record was invisible to the one place that names them.
+    The witness is the same `trace_witnesses` call, over the consumer's own capture.
+    """
+    witnesses = trace_witnesses(campaign, record, command)
+    grade["trial"] = tid
+    grade["attempt"] = attempt
+    grade["setup"] = command.get("setup")
+    grade["condition"] = command.get("condition")
+    grade["kind"] = "consumer"
+    grade["record"] = record
+    grade["trace_witnesses"] = witnesses
+    grade["records_reached"] = witnesses["records_reached"]
+    grade["skill_file_reached"] = witnesses["skill_file_reached"]
+    return grade
 
 
 def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path=None,
@@ -12985,8 +16551,15 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     contract, not the presence of an answer file.
     """
     expected = _consumer_expected(producer_row)
+    # Astra's gap 6: ONE normalizer, built from the producer's own recorded `command.json`,
+    # used by both `_same_evidence` and `_artifact_rows`. A grade that cannot read the
+    # producer's command still grades; the mapping is then empty and every path keys as
+    # itself, which is the pre-gap-6 behaviour and is recorded as such.
+    mapping = pair.get("path_map") or pair_path_map(pair, producer_row.get("command") or {},
+                                                    record=producer_row.get("record"))
     grade = {"producer_trial": producer_row["trial"], "answer": answer_path,
-             "expected_item_count": len(expected["items"])}
+             "expected_item_count": len(expected["items"]),
+             "artifact_path_map": mapping}
     checks = {}
     # ---- the recovery answer
     answer = None
@@ -13012,8 +16585,8 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
                                 == str(item["claim"] or "").strip()),
             "disposition_recovered": got.get("disposition") == item["disposition"],
             "reason_recovered": (got.get("reason") or None) == (item["reason"] or None)})
-        same, why = _same_evidence(got.get("evidence"), item["evidence"])
-        artifacts = _artifact_rows(pair, item["evidence"], got.get("evidence"))
+        same, why = _same_evidence(got.get("evidence"), item["evidence"], mapping, pair)
+        artifacts = _artifact_rows(pair, item["evidence"], got.get("evidence"), mapping)
         evidence_rows.append({"location": item["location"], "references_the_record": same,
                               "why": why,
                               "producer_evidence_entries": len(item["evidence"]),
@@ -13046,8 +16619,25 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
             r["claim_recovered"] and r["disposition_recovered"] and r["reason_recovered"]
             for r in identity_rows)
     # Item 6(a): every reference, whole, and bound to the producer's own artifacts.
-    checks["evidence_references"] = bool(evidence_rows) and all(
-        r["references_the_record"] for r in evidence_rows)
+    #
+    # SB-12, N5(a). A producer that STOPPED carries no items, so it carries no evidence, so
+    # `bool(evidence_rows)` was False and this check was PERMANENTLY false for every stopped
+    # pair - a consumer that recovered the stop exactly as asked still failed its grade on
+    # references to evidence that never existed. E11-46 R3 already made that argument for
+    # `item_identity`; it was not carried through to here. The check is now vacuously true in
+    # that one case, and the note says so rather than leaving a reader to infer it.
+    check_notes = {}
+    if expected["producer_stopped"] and not evidence_rows \
+            and checks.get("producer_stop_recovered") is True:
+        checks["evidence_references"] = True
+        check_notes["evidence_references"] = (
+            "vacuously satisfied: the producer's run ended %r and carries no items and no "
+            "evidence, and the consumer recovered that stop. There are no references to "
+            "make, and a check with nothing to check is not a failure (SB-12, N5(a))."
+            % expected["producer_status"])
+    else:
+        checks["evidence_references"] = bool(evidence_rows) and all(
+            r["references_the_record"] for r in evidence_rows)
     # Item B: every artifact the producer's evidence names is IN the pair, and the file the
     # consumer's reference names is byte-identical to the producer's own. Vacuously true when
     # the producer's evidence names no artifact.
@@ -13147,8 +16737,60 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     # ---- Item 6(f): isolation is read access, not folder contents
     isolation = isolation or {}
     checks["unrelated_records_unavailable"] = isolation.get("separated") is True
+    # Astra's gap 7 and batch A: the check above is READ ACCESS, measured by a probe under
+    # the consumer's own wall. The pair-scoped fact — that no unrelated record was STAGED
+    # into the pair in the first place — is a different statement, and it is recorded as its
+    # own field rather than folded into the check. Both are needed: a pair holding only one
+    # producer's records proves nothing about what the session could reach, and a separated
+    # session proves nothing about what was handed to it.
+    unrelated = pair.get("unrelated_records_present")
+    grade["pair_scope"] = {
+        "unrelated_records_staged": list(unrelated or []),
+        "no_unrelated_record_was_staged": not (unrelated or []),
+        "producer_trial": pair.get("producer_trial"),
+        "producer_record": pair.get("from"),
+        "measured": "the names under the pair's producer directory that are neither one of "
+                    "the copied records nor the run directory",
+        "why_not_a_check": "item 6(f) is read ACCESS; this is what the pair held. "
+                           "`unrelated_records_unavailable` stays the required check.",
+    }
+    # ---- Astra's gap 6: the intended outcome, apart from a valid terminal envelope.
+    #
+    # A consumer that answers `missing_input` or `verifier_unavailable` has produced a
+    # CORRECT document: it validates, it carries the output block, and `result_validates`
+    # passes on it. It has not consumed the hand-off. The two are separated here.
+    #
+    # THE RULE FOR A PRODUCER THAT STOPPED: when the producer's own run ended in a terminal
+    # status, the intended outcome of the consumer is the recovery of that stop, not a set of
+    # items the producer never had (E11-46 R3). So this check reads
+    # `producer_stop_recovered` in place of "every producer item is present". The consumer's
+    # OWN run must still have completed either way: recovering a stop is work, and a session
+    # that stopped did not do it.
+    consumer_status = (result or {}).get("status") if isinstance(result, dict) else None
+    if expected["producer_stopped"]:
+        intended = ("the producer's run ended %r, so the intended outcome is that stop, "
+                    "recovered" % expected["producer_status"])
+        recovered = checks.get("producer_stop_recovered") is True
+    else:
+        intended = "every item the producer's record carries, present in the answer"
+        recovered = checks.get("original_scope") is True
+    grade["consumption"] = {
+        "consumer_status": consumer_status,
+        "status_is_completed": consumer_status == "completed",
+        "reply_carries_the_output_block": checks.get("reply_carries_the_output_block") is True,
+        "intended_outcome": intended,
+        "intended_outcome_reached": recovered,
+        "a_valid_terminal_envelope_still_fails_this":
+            "a result whose status is not `completed` is a valid answer and not a "
+            "consumption; `result_validates` can pass on it and this check cannot",
+    }
+    checks["consumption_completed"] = bool(
+        grade["consumption"]["status_is_completed"]
+        and grade["consumption"]["reply_carries_the_output_block"]
+        and recovered)
     grade.update({
         "checks": checks,
+        "check_notes": check_notes,
         "items": identity_rows,
         "evidence": evidence_rows,
         "evidence_artifacts": artifact_rows,
@@ -13173,20 +16815,242 @@ def consumer_grade(pair, producer_row, answer_path, result_path=None, reply_path
     return grade
 
 
-def consumer_records(campaign):
-    """Every recorded consumer trial of this campaign, with its attempt and record."""
+def consumer_records(campaign, skipped=None, require_journal=True):
+    """Every recorded consumer trial of this campaign, with its attempt and record.
+
+    SB-12, N6: "consumer enumeration included". Membership is by `(trial, attempt)` in the
+    campaign's own journal, exactly as `graded_attempts` requires it. A `consumer-*` folder
+    with a `command.json` and no journal row is named and skipped, never graded: it is a
+    directory nobody's campaign created, and a grade written from one lands in a denominator
+    it does not belong to.
+    """
     rows = []
+    skipped = [] if skipped is None else skipped
+    journalled = journalled_attempts(campaign)
+
+    def keep(tid, attempt, path):
+        if not require_journal or (tid, attempt) in journalled:
+            return True
+        skipped.append({"trial": tid, "attempt": attempt, "record": path,
+                        "why": "no journal row creates (%s, %d); an unjournalled consumer "
+                               "attempt is not graded (SB-12, N6)" % (tid, attempt)})
+        return False
+
     for path in sorted(glob.glob(os.path.join(campaign.trials, "consumer-*"))):
         if not os.path.isdir(path):
             continue
         tid = os.path.basename(path)
-        if os.path.isfile(os.path.join(path, "command.json")):
+        if os.path.isfile(os.path.join(path, "command.json")) and keep(tid, 0, path):
             rows.append((tid, 0, path))
         for attempt_path in sorted(glob.glob(os.path.join(path, "attempts", "*"))):
             name = os.path.basename(attempt_path)
-            if name.isdigit() and os.path.isfile(os.path.join(attempt_path, "command.json")):
+            if name.isdigit() and os.path.isfile(os.path.join(attempt_path, "command.json")) \
+                    and keep(tid, int(name), attempt_path):
                 rows.append((tid, int(name), attempt_path))
     return rows
+
+
+CONSUMER_GRADE_NAME = "consumer-grade.json"
+RETAINED_PAIR = "pair"
+PAIR_MANIFEST = "pair-manifest.json"
+
+
+def retained_pair_view(record, pair):
+    """The pair's paths, rebased onto the record's retained copy when the original is gone.
+
+    Astra's gap 6 asks for the whole pair to be retained. The point of retaining it is that a
+    grade run long after the campaign — when `<campaign>/tmp/` has been cleared — still reads
+    the tree the consumer actually ran on. Every path under the original `pair_dir` is
+    rewritten onto `<record>/pair/`; a path outside it is left alone. The original is
+    preferred whenever it is still on disk, so nothing changes during a live campaign.
+    """
+    original = (pair or {}).get("pair_dir")
+    retained = os.path.join(record, RETAINED_PAIR)
+    if not original or os.path.isdir(original) or not os.path.isdir(retained):
+        return pair, {"rebased": False,
+                      "why": ("the pair is still where the consumer ran it"
+                              if original and os.path.isdir(original)
+                              else "the record retained no pair copy to fall back to")}
+
+    def rebase(value):
+        if isinstance(value, str) and path_contains(original, value):
+            return os.path.join(retained, os.path.relpath(value, original))
+        if isinstance(value, list):
+            return [rebase(v) for v in value]
+        if isinstance(value, dict):
+            return {k: rebase(v) for k, v in value.items()}
+        return value
+
+    view = {key: rebase(value) for key, value in pair.items()}
+    # SB-12, N5(b). Rebasing moved every `pair_root` of the path map onto the record's
+    # retained copy, and the consumer's answer names the pair path AS IT RAN - which the
+    # rebased map no longer recognised, so a correct answer stopped matching the moment the
+    # scratch tree was cleared. The map keeps BOTH spellings: the retained root it resolves
+    # to now, and the original root the answer may name. Nothing is widened by it - an alias
+    # is the same directory under its old name, and a path under neither still keys as
+    # itself and still fails.
+    aliases = []
+    for before, after in zip(pair.get("path_map") or [], view.get("path_map") or []):
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            continue
+        for field in ("pair_root", "producer_root"):
+            was, now = before.get(field), after.get(field)
+            if was and now and was != now:
+                after.setdefault(field + "_aliases", [])
+                if was not in after[field + "_aliases"]:
+                    after[field + "_aliases"].append(was)
+                    aliases.append({"which": after.get("which"), "field": field,
+                                    "alias": was, "resolves_to": now})
+    view["rebased_from"] = original
+    view["path_map_aliases"] = aliases
+    return view, {"rebased": True, "from": original, "onto": retained,
+                  "aliases_kept": aliases,
+                  "why": "the pair directory the consumer ran on is gone; the record's own "
+                         "retained copy is read instead"}
+
+
+def grade_consumer_records(campaign, targets, revision=None, backfill=True):
+    """Grade retained consumer pairs, read-only. Launches nothing.
+
+    `revision=None` writes the FIRST grade, `consumer-grade.json`, and refuses a record that
+    already has one — the same rule a bare `grade` follows (batch B, B3(3)). A revision writes
+    `consumer-grade.<revision>.json` BESIDE the original, which is never touched.
+
+    Astra's gap 7: no consumer is graded while any consumer session is live. The campaign-wide
+    barrier runs first, with batch B's N1 rule (an unknown owner counts as ALIVE).
+    """
+    if revision:
+        check_identifier("the revision", revision)
+    refuse_while_alive(campaign, targets)
+    rows, errors = [], []
+    for tid, attempt, record in targets:
+        try:
+            command = read_json(os.path.join(record, "command.json"))
+            pair = command.get("pair")
+            if not isinstance(pair, dict) or not pair.get("pair_dir"):
+                raise Missing("%s#%d retained no staging record to grade" % (tid, attempt))
+            path = os.path.join(record, "consumer-grade.%s.json" % revision if revision
+                                else CONSUMER_GRADE_NAME)
+            if revision is None and os.path.isfile(path):
+                raise Usage("%s#%d already has %s: a first grade is never replaced. Pass "
+                            "--revision <name> to write a derived grade beside it (E10-48)"
+                            % (tid, attempt, CONSUMER_GRADE_NAME))
+            pair, rebase = retained_pair_view(record, pair)
+            producer = {"record": command.get("producer_record"),
+                        "trial": command.get("producer_trial"),
+                        "kind": command.get("producer_kind"),
+                        "command": read_json(os.path.join(command["producer_record"],
+                                                          "command.json"))}
+            answer = os.path.join(pair["pair_dir"], CONSUMER_ANSWER)
+            # the hashes `do_consumer` took the moment the session ended are the measurement;
+            # walking the tree again here would read whatever has happened to it since.
+            after = command.get("producer_hashes_after")
+            if not isinstance(after, dict):
+                after = {}
+                producer_dir = pair.get("producer_dir")
+                if producer_dir and os.path.isdir(producer_dir):
+                    for base, _dirs, files in os.walk(producer_dir):
+                        for name in sorted(files):
+                            full = os.path.join(base, name)
+                            after[os.path.relpath(full, producer_dir)] = file_sha256(full)
+            grade = consumer_grade(pair, producer, answer,
+                                   result_path=os.path.join(pair.get("run_dir") or "",
+                                                            "result.json"),
+                                   reply_path=os.path.join(record, "reply.md"),
+                                   validator=command.get("validator"),
+                                   isolation=command.get("isolation"),
+                                   producer_hashes_after=after)
+            grade["revision"] = revision
+            grade["graded_from"] = record
+            grade["regraded_from"] = record
+            grade["pair_read_from"] = rebase
+            grade["graded_after_every_consumer_session_ended"] = True
+            # B3(5): the regrade carries the same witness the live grade does.
+            stamp_consumer_witness(grade, campaign, record, command, tid, attempt)
+            write_json(path, grade)
+            if revision is None and backfill:
+                _backfill_graded_ok(campaign, tid, attempt, record, grade)
+            rows.append({"trial": tid, "attempt": attempt, "grade_path": path,
+                         "ok": grade.get("ok"),
+                         "why": grade.get("why")})
+        except Exception as exc:                        # noqa: BLE001 - reported, not hidden
+            errors.append({"trial": tid, "attempt": attempt, "record": record,
+                           "exception": type(exc).__name__, "message": str(exc)[:400]})
+    return rows, errors
+
+
+def _backfill_graded_ok(campaign, tid, attempt, record, grade):
+    """Astra's gap 7: the ledger row's `graded_ok`, written once the grade exists.
+
+    `do_consumer` no longer grades inline, so the row it appends carries `graded_ok: null`
+    and `grade_pending: true`. The ledger is APPEND-ONLY — raw history is never edited
+    (E10-48) — so the back-fill is a second row for the same `(id, attempt)` carrying the
+    grade. Every reader of the ledger collapses on that key and takes the last row
+    (`ledger_rows`), so the attempt is still one attempt.
+    """
+    campaign.append_jsonl(campaign.trials_jsonl, {
+        "id": tid, "attempt": attempt, "kind": "consumer",
+        "graded_ok": grade.get("ok"), "grade_pending": False,
+        "backfill": "the consumer's grade, written after every consumer session ended "
+                    "(Astra's gap 7); the earlier row for this attempt is unchanged",
+        "record": record})
+
+
+def retain_pair(record, pair, producer_row, producer_hashes_after=None):
+    """Astra's gap 6: the whole pair tree, COPIED into the consumer's record, with a manifest.
+
+    Before this the record kept the pair's staging document — paths, the copied list, the
+    producer's hashes — and nothing of the tree itself. Everything the consumer actually read
+    lived under `<campaign>/tmp/`, outside the record, where a cleared scratch takes it and
+    where nothing binds it to the record. The copy lands at `<record>/pair/` and
+    `<record>/pair-manifest.json` names every path in it with its size and sha256, beside the
+    producer record's own path and the hash set the pair was staged from.
+
+    Copy, never move: the tree the consumer ran on stays exactly where it ran.
+    """
+    destination = os.path.join(record, RETAINED_PAIR)
+    manifest_path = os.path.join(record, PAIR_MANIFEST)
+    source = pair.get("pair_dir")
+    if os.path.exists(destination):
+        raise Usage("%s already exists: a retained pair is never overwritten (E9-34)"
+                    % destination)
+    if not source or not os.path.isdir(source):
+        manifest = {"copied": False, "pair_dir": source,
+                    "why": "the pair directory is not on disk; nothing was copied"}
+        write_json(manifest_path, manifest)
+        return manifest
+    shutil.copytree(source, destination, symlinks=True)
+    files, total = [], 0
+    for base, _dirs, names in os.walk(destination):
+        for name in sorted(names):
+            full = os.path.join(base, name)
+            if os.path.islink(full) or not os.path.isfile(full):
+                files.append({"path": os.path.relpath(full, destination), "bytes": None,
+                              "sha256": None, "why": "not a regular file"})
+                continue
+            size = os.path.getsize(full)
+            total += size
+            files.append({"path": os.path.relpath(full, destination), "bytes": size,
+                          "sha256": file_sha256(full)})
+    manifest = {
+        "copied": True,
+        "pair_dir": source,
+        "copied_to": destination,
+        "copied_at": now_iso(),
+        "files": sorted(files, key=lambda row: row["path"]),
+        "file_count": len(files),
+        "total_bytes": total,
+        "producer_record": producer_row.get("record"),
+        "producer_trial": producer_row.get("trial"),
+        "producer_kind": producer_row.get("kind"),
+        "producer_hashes_before": pair.get("producer_hashes_before"),
+        "producer_hashes_after": producer_hashes_after,
+        "rule": "Astra's gap 6: the pair is COPIED into the record, never moved, and every "
+                "path in the copy carries its size and its sha256 so the retained tree can "
+                "be proved to be the tree the consumer ran on.",
+    }
+    write_json(manifest_path, manifest)
+    return manifest
 
 
 def do_consumer_regrade(args):
@@ -13197,62 +17061,38 @@ def do_consumer_regrade(args):
     session. This launches nothing. It reloads each trial's retained staging record and its
     answer, regrades, and writes `consumer-grade.<revision>.json` BESIDE the original, which is
     never touched.
+
+    Astra's gap 7: `--revision` is required once a first grade exists, and only then. A record
+    left ungraded by a lone `consumer` run — every one of them, since `do_consumer` stopped
+    grading inline — takes its FIRST grade here with no revision, exactly as the campaign's
+    third phase writes it.
     """
     campaign = Campaign(args.campaign)
     revision = getattr(args, "revision", None)
-    if not revision:
-        raise Usage("--regrade needs --revision <name>: a derived grade never overwrites the "
-                    "original (E10-48)")
-    check_identifier("the revision", revision)
-    targets = consumer_records(campaign)
+    not_journalled = []
+    targets = consumer_records(campaign, skipped=not_journalled)
     if not getattr(args, "all", False):
         targets = [row for row in targets if row[0] == args.trial]
         if not targets:
             raise Missing("no recorded consumer trial %s" % args.trial)
+    already = sorted("%s#%d" % (tid, attempt) for tid, attempt, record in targets
+                     if os.path.isfile(os.path.join(record, CONSUMER_GRADE_NAME)))
+    if not revision and already:
+        raise Usage("%d of the %d records named already hold %s (%s); a first grade is never "
+                    "replaced, so --regrade needs --revision <name> here (E10-48)"
+                    % (len(already), len(targets), CONSUMER_GRADE_NAME,
+                       ", ".join(already[:6])))
     # E11-46 R3: grading happens only after every consumer session has ENDED. This command
     # launches nothing, but a record whose session is still running is a record still being
     # written: grading it reads a half-finished answer and calls the result a measurement. The
     # same campaign-wide barrier `grade` uses, over the consumer records being graded.
-    refuse_while_alive(campaign, targets)
-    rows, errors = [], []
-    for tid, attempt, record in targets:
-        try:
-            command = read_json(os.path.join(record, "command.json"))
-            pair = command.get("pair")
-            if not isinstance(pair, dict) or not pair.get("pair_dir"):
-                raise Missing("%s#%d retained no staging record to regrade" % (tid, attempt))
-            producer = {"record": command.get("producer_record"),
-                        "trial": command.get("producer_trial"),
-                        "command": read_json(os.path.join(command["producer_record"],
-                                                          "command.json"))}
-            answer = os.path.join(pair["pair_dir"], "consumer.json")
-            after = {}
-            producer_dir = pair.get("producer_dir")
-            if producer_dir and os.path.isdir(producer_dir):
-                for base, _dirs, files in os.walk(producer_dir):
-                    for name in sorted(files):
-                        full = os.path.join(base, name)
-                        after[os.path.relpath(full, producer_dir)] = file_sha256(full)
-            grade = consumer_grade(pair, producer, answer,
-                                   result_path=os.path.join(pair.get("run_dir") or "",
-                                                            "result.json"),
-                                   reply_path=os.path.join(record, "reply.md"),
-                                   validator=command.get("validator"),
-                                   isolation=command.get("isolation"),
-                                   producer_hashes_after=after)
-            grade["revision"] = revision
-            grade["regraded_from"] = record
-            path = os.path.join(record, "consumer-grade.%s.json" % revision)
-            write_json(path, grade)
-            rows.append({"trial": tid, "attempt": attempt, "grade_path": path,
-                         "ok": grade.get("ok"),
-                         "why": grade.get("why")})
-        except Exception as exc:                        # noqa: BLE001 - reported, not hidden
-            errors.append({"trial": tid, "attempt": attempt, "record": record,
-                           "exception": type(exc).__name__, "message": str(exc)[:400]})
+    rows, errors = grade_consumer_records(campaign, targets, revision=revision)
     document = {"campaign": campaign.root, "revision": revision, "regraded": len(rows),
                 "grades": rows, "regrade_errors": errors,
-                "originals_untouched": "consumer-grade.json is never written by --regrade"}
+                "not_journalled": not_journalled,
+                "first_grades": revision is None,
+                "originals_untouched": ("consumer-grade.json is never written by --regrade "
+                                        "once one exists")}
     if errors:
         document[FAIL_EXIT_KEY] = ("%d consumer record(s) could not be regraded: %s"
                                    % (len(errors), ", ".join("%s#%d (%s)"
@@ -13281,15 +17121,17 @@ def do_consumer(args, record=None, attempt=0):
         ensure_dir(record)
         campaign.journal_attempt(args.trial, attempt, record, "consumer")
     started = time.time()
-    producer_row = producer_record_for(campaign, plan, parts["producer"])
+    producer_row = producer_record_for(campaign, plan, parts["producer"],
+                                       kind=parts.get("kind"))
     tree = campaign.opaque_tree(args.trial, attempt)
     pair_dir = os.path.join(tree, "pair")
-    pair = stage_consumer_pair(campaign, producer_row, pair_dir)
+    pair = stage_consumer_pair(campaign, producer_row, pair_dir, setup=setup, plan=plan)
     answer_path = os.path.join(pair_dir, CONSUMER_ANSWER)
     prompt = CONSUMER_PROMPT_TEMPLATE.format(
         producer=pair["producer_dir"], workspace=pair["workspace"],
         input=pair["input"], run_dir=pair["run_dir"], run_id=pair["run_id"],
-        run_date=plan["run_date"], answer=answer_path)
+        run_date=plan["run_date"], answer=answer_path,
+        answer_schema=pair["answer_schema"])
     prompt_path = os.path.join(record, "prompt.txt")
     write_text(prompt_path, prompt)
     harness_dir = os.path.join(record, "harness")
@@ -13302,7 +17144,8 @@ def do_consumer(args, record=None, attempt=0):
     close_key(campaign, "the %s launch" % args.trial)
     # Item 6(f): a sentinel OUTSIDE the pair, inside the campaign. Isolation is read access.
     sentinel = os.path.join(campaign.trials, CONSUMER_SENTINEL)
-    write_text(sentinel, READ_BOUNDARY_SENTINEL)
+    # SB-12, N3: planted and CONFIRMED from outside the wall before the probe reads it.
+    planted_sentinel = plant_read_sentinel(sentinel)
     consumer_scratch = trial_scratch(campaign, args.trial, attempt)
     consumer_writable = guarded_launch_roots(
         campaign, setup, "available", pair["workspace"], pair["run_dir"], consumer_scratch,
@@ -13315,20 +17158,45 @@ def do_consumer(args, record=None, attempt=0):
                         scratch=consumer_scratch)
     # the same measurement the read-boundary preflight makes, in the consumer's own launch
     # environment: can a child of this launch read a record outside its pair?
-    probe = run_cmd([sys.executable, "-c",
-                     "import sys;print('READ' if open(sys.argv[1]).read().strip() else 'EMPTY')",
-                     sentinel],
+    #
+    # A4: and under the consumer's OWN PROFILE. Until now this probe ran with the launch's
+    # environment but none of its confinement, so `separated` said what the filesystem allows
+    # rather than what the session's wall allowed — the same gap E11-46 R4 found between a
+    # bare child and a harness. The profile the launch actually ran under is retained in the
+    # record, so the probe runs behind exactly that one and nothing is inferred.
+    wall_block = wall_record_of(step)
+    probe_argv = [sys.executable, "-c", CONSUMER_ISOLATION_SOURCE, sentinel]
+    under_the_wall = bool(wall_block.get("sealed")) and \
+        os.path.isfile(wall_block.get("profile") or "")
+    if under_the_wall:
+        probe_argv = [SANDBOX_EXEC, "-f", wall_block["profile"]] + probe_argv
+    probe = run_cmd(probe_argv,
                     env=campaign.env(extra=setup.launch_env("available"),
                                      scratch=trial_scratch(campaign, args.trial, attempt),
                                      require_binaries=False),
                     cwd=pair["workspace"], label="consumer isolation probe")
+    # SB-12, N3: a TYPED outcome, not the negation of "it read it". `not (exit == 0 and
+    # "READ" in stdout)` called exit 71 (no child ran), exit 1 (no such file) and a readable
+    # EMPTY file `separated`, which is the same error-path-reads-as-a-pass defect the
+    # read-boundary probe had.
+    isolation_outcome = _isolation_outcome(probe, planted_sentinel)
     isolation = {
         "sentinel": sentinel,
-        "child_read_it": probe["exit"] == 0 and "READ" in (probe["stdout"] or ""),
+        "planted": planted_sentinel,
+        "outcome": isolation_outcome["outcome"],
+        "why": isolation_outcome["why"],
+        "child_read_it": isolation_outcome["outcome"] == "read",
         "exit": probe["exit"],
-        "separated": not (probe["exit"] == 0 and "READ" in (probe["stdout"] or "")),
-        "measured": "a child in this consumer's own launch environment, item 6(f); the flag "
-                    "is read ACCESS, never the pair folder's contents",
+        "separated": isolation_outcome["separated"],
+        "under_the_wall": under_the_wall,
+        "profile": wall_block.get("profile") if under_the_wall else None,
+        "profile_sha256": wall_block.get("profile_sha256") if under_the_wall else None,
+        "measured": ("a child under this consumer's OWN sandbox profile, item 6(f) and A4; "
+                     "the flag is read ACCESS, never the pair folder's contents"
+                     if under_the_wall else
+                     "a child in this consumer's own launch environment with no wall (a fake "
+                     "launcher or a synthetic campaign): the flag says what the FILESYSTEM "
+                     "allows, not what a walled session could reach"),
     }
     # Item 6(b): the consumer's own result, validated the way every other result is.
     result_path = os.path.join(pair["run_dir"], "result.json")
@@ -13350,9 +17218,22 @@ def do_consumer(args, record=None, attempt=0):
         for name in sorted(files):
             full = os.path.join(base, name)
             after_hashes[os.path.relpath(full, pair["producer_dir"])] = file_sha256(full)
-    grade = consumer_grade(pair, producer_row, answer_path, result_path=result_path,
-                           reply_path=os.path.join(record, "reply.md"), validator=validator,
-                           isolation=isolation, producer_hashes_after=after_hashes)
+    # Astra's gap 7: THE GRADE DOES NOT HAPPEN HERE. Grading a consumer while other consumer
+    # sessions of the same campaign are still running opens the key directories and writes a
+    # grade document that a later consumer can read — C→D's grade reads in the round-2 root
+    # are the measured consequence. Everything the grade needs is persisted instead, and the
+    # campaign's THIRD PHASE grades every consumer after the last session has ended.
+    grading = {
+        "deferred": True,
+        "graded_here": False,
+        "why": "no consumer is graded while any consumer session of this campaign may still "
+               "be alive (Astra's gap 7); the campaign's third phase grades them all after "
+               "the last one ends",
+        "how": "runner.py campaign start runs it; a lone `consumer --trial <id>` leaves the "
+               "attempt ungraded, and `consumer --regrade --all` (no --revision) writes the "
+               "first grades",
+        "grade_file": CONSUMER_GRADE_NAME,
+    }
     model = setup.model_record(harness_dir)
     cost = setup.cost_record(harness_dir)
     write_json(os.path.join(record, "model.json"), model)
@@ -13368,7 +17249,10 @@ def do_consumer(args, record=None, attempt=0):
         "setup": setup.name, "harness": setup.harness, "condition": "available",
         "producer": parts["producer"], "consumer": parts["consumer"],
         "producer_record": producer_row["record"], "producer_trial": producer_row["trial"],
+        "producer_kind": producer_row.get("kind"),
+        "producer_recorded_kind": producer_row.get("recorded_kind"),
         "producer_chosen_because": producer_row["why"],
+        "producer_attempts_refused": producer_row.get("refused"),
         "pair": pair, "prompt": prompt_path, "workspace": pair["workspace"],
         "opaque_tree": tree, "run_dir": None,
         "argv": step["argv"], "exit": step["exit"], "status": status,
@@ -13376,15 +17260,23 @@ def do_consumer(args, record=None, attempt=0):
         "timeout_verdict": timeout_verdict(step),
         "reply_source": reply_source,
         "staged_commit": campaign.staged()["commit"],
-        "consumer_grade": grade,
+        # everything the deferred grade needs, persisted at the moment the session ended
+        "validator": validator,
+        "isolation": isolation,
+        "producer_hashes_after": after_hashes,
+        "grading": grading,
     }
     write_json(os.path.join(record, "command.json"), command)
-    write_json(os.path.join(record, "consumer-grade.json"), grade)
+    # Astra's gap 6: the WHOLE pair, copied into the record with a manifest of hashes. Copy,
+    # never move: the tree the consumer ran on stays where it ran.
+    retention = retain_pair(record, pair, producer_row, after_hashes)
+    command["pair_retained"] = retention
+    write_json(os.path.join(record, "command.json"), command)
     campaign.append_jsonl(campaign.trials_jsonl, {
         "id": args.trial, "attempt": attempt, "kind": "consumer", "status": status,
         "exit": step["exit"], "wall": command["wall_seconds"],
         "cost": cost.get("total_cost_usd"), "model": model.get("id"),
-        "graded_ok": grade.get("ok"), "record": record})
+        "graded_ok": None, "grade_pending": True, "record": record})
     # E11-46 R5: the SAME failure interruption every other kind emits. `collect_trial` writes
     # one for a comparison and a continuation that did not complete; the consumer wrote its
     # ledger line and nothing else, so a consumer that timed out or produced no answer left no
@@ -13395,9 +17287,11 @@ def do_consumer(args, record=None, attempt=0):
                               % (status, step["exit"], bool(step.get("timed_out")),
                                  os.path.isfile(answer_path)),
                               "kept the attempt and counted it", attempt=attempt)
-    campaign.note("consumer %s -> ok=%s" % (args.trial, grade.get("ok")))
+    campaign.note("consumer %s -> status=%s, ungraded (the third phase grades it)"
+                  % (args.trial, status))
     return {"trial": args.trial, "attempt": attempt, "record": record, "status": status,
-            "exit": step["exit"], "consumer_grade": grade, "pair": pair}
+            "exit": step["exit"], "consumer_grade": None, "graded": False,
+            "grading": grading, "pair_retained": retention, "pair": pair}
 
 
 # --------------------------------------------------------------------------- key-state, measure
@@ -13546,6 +17440,9 @@ def build_parser():
     one.add_argument("--synthetic", action="store_true",
                      help="mark the campaign synthetic, so an E10-21 key stand-in is honoured "
                           "(tests and `check` only)")
+    one.add_argument("--sealed", action="store_true",
+                     help="every launch of this campaign runs behind the wall; "
+                          "--accept-unseparated and a ruling override are refused (A4)")
     one.set_defaults(func=do_plan)
 
     one = subs.add_parser("run", help="one comparison trial end to end")
@@ -13685,6 +17582,10 @@ def build_parser():
 
     one = subs.add_parser("report", help="table.md, table.json and a report.md skeleton")
     campaign_arg(one)
+    one.add_argument("--revision", default=None,
+                     help="read grade.<revision>.json and consumer-grade.<revision>.json, "
+                          "falling back PER RECORD to the original grade.json; table.json "
+                          "names the file that fed every row (B3(2))")
     one.set_defaults(func=do_report)
 
     one = subs.add_parser("check", help="the runner's own tests, a dry trial, the negative "

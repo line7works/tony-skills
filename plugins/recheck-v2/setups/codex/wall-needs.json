@@ -1,0 +1,135 @@
+{
+  "setup": "codex",
+  "note": "What a Codex launch needs from outside its own trial tree. The wall is the sandbox for this lane (SB-2): `codex exec` runs with `--sandbox danger-full-access` inside it, because macOS refuses a second seatbelt inside the first. Nothing under `~/.codex` is reachable; the condition's own CODEX_HOME is the only harness home in the profile.",
+  "binaries": [
+    {
+      "name": "codex",
+      "why": "the harness itself; the resolved install location is a read root. Send-back 7: on a machine where the PATH entry is a plain shell wrapper (a regular file, not a symlink, whose only command is `exec <absolute path> \"$@\"`), the runner FOLLOWS that wrapper instead of stopping at it, keeps the wrapper's own directory as a read root, and adds the directory of any symlink the wrapper execs, because resolving that symlink reads its ancestors. The install itself is an npm package, so the read root is the whole `@openai/codex` PACKAGE root - the nearest ancestor under `node_modules` holding `package.json` - not its `bin` directory: the js entry point reads its own `package.json` and spawns the platform binary, `rg`, `zsh` and the code-mode host out of the `node_modules` tree beside it. The runner derives every one of those paths at launch time from `which`; none of them is written here. Before the fix the walled launch exited 126 in one second with `exec: ... Operation not permitted` and the read-boundary check read `unclear` six times on an empty reply (record native-read-boundary/codex/harness-20260919T235910Z). PROVED 2026-09-19 at wall-proof-codex-20260920T005305Z: on the fresh root the walled launch found and ran `codex` through the wrapper chain, `preflight --native` read separated true, and both F1 trials started a real session.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-codex-20260920T005305Z"
+    }
+  ],
+  "read": [
+    {
+      "path": "~/.local/bin",
+      "why": "PATH resolution and `command -v` for the launcher's own checks.",
+      "proven": true
+    },
+    {
+      "path": "~/.gitconfig",
+      "why": "git aborts on EPERM for the global config rather than treating it as absent (measured 2026-09-19).",
+      "optional": true,
+      "proven": true
+    },
+    {
+      "path": "~/.config/git",
+      "why": "git reads `$XDG_CONFIG_HOME/git/ignore` as the default `core.excludesFile` and `$XDG_CONFIG_HOME/git/config` as a second global config. On EPERM it prints `warning: unable to access '~/.config/git/ignore': Operation not permitted` and continues, so it does not break a trial - but the warning lands in the SESSION's own view, and it appeared in one condition's traces and not the other's, which is exactly the kind of difference a with/without comparison must not carry. Measured 2026-09-19: `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` does NOT silence it, because the excludesFile default is applied independently of any config file, so the environment route does not fix the symptom; allowing the directory does. Read only, two small files, no credential - the same reasoning and the same optional flag as `~/.gitconfig`, and it applies identically to both conditions and both setups.",
+      "optional": true,
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T162738Z"
+    },
+    {
+      "path": "~/.local/share/uv/python",
+      "why": "uv's managed interpreters. `uv run` picks the managed cpython (3.12.13 on this Mac) for the core and both validators, not /usr/bin/python3 3.9; with this directory refused it fails at `failed to read directory .../uv/python: Operation not permitted` whatever the warmed cache holds. Measured 2026-09-19. The alternative, `UV_PYTHON_PREFERENCE=only-system`, also works and was rejected: it pins every walled trial's core to 3.9, so the apparatus would run on a different Python inside the wall than outside it and the 3.12 half of the core's own two-interpreter matrix would never be exercised by a trial. An interpreter install: no user data, no credential, read only. Identical for both setups and both conditions.",
+      "optional": true,
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T171050Z"
+    }
+  ],
+  "read_write": [],
+  "credential_store": {
+    "files": [
+      "auth.json",
+      "child/auth.json"
+    ],
+    "why": "This setup keeps ONE credential file and links to it, so the credential is never copied into two places: `install.sh` writes `codex/home/auth.json` and then replaces every derived home's `auth.json` and `child/auth.json` with a symlink to that store (lines 47 to 57 and 94 to 108; runner `_link_auth`). `codex/home` IS the `available` condition's home, so for `absent` and `routing` the link resolves under 'another condition's home for this setup', which the profile refuses. Measured 2026-09-19 at wall-proof-codex-20260920T005305Z: the walled `absent` trial ended `launch_failed`, exit 1, `turn.failed` with `401 Unauthorized: Missing bearer or basic authentication in header` - Codex found no credential and fell back to an unauthenticated call, while `available` worked because its store is inside its own home. The runner resolves these two home-relative names per condition at launch time and, when a name is a symlink whose realpath a refused root closed, names that ONE resolved file back as a LITERAL (never a subpath) after the deny, read AND write. Write because Codex rewrites the store on a token refresh, and a store readable in one condition and writable in the other would be a with/without difference the comparison must not carry. Nothing else under the other home opens: its `native-read-boundary-sentinel.txt`, `skills/`, `plugins/`, `sessions/` and `config.toml` stay refused, which `evals/runner/tests/test_sb_sendback_8.py` proves with a real `sandbox-exec` child.",
+    "proven": false
+  },
+  "refused_even_though_the_harness_would_use_them": [
+    {
+      "path": "~/.codex",
+      "why": "the machine's own Codex home. E9-25 keeps the pilot home separate and the wall enforces it."
+    }
+  ],
+  "network": [
+    {
+      "host": "chatgpt.com",
+      "why": "the model endpoint for a ChatGPT sign-in. PROVED 2026-09-19 at wall-proof-codex-20260920T005305Z: allowed 53 times across the three walled sessions and sufficient on its own for a signed-in session - the `available` trial and the `preflight --native` session reached the model through it alone and answered, with `api.openai.com` never used by either.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-codex-20260920T005305Z"
+    },
+    {
+      "host": "api.openai.com",
+      "why": "the model endpoint for an API sign-in. NOT proved: the only 13 CONNECTs to it in the three walled sessions came from the `absent` trial's UNSIGNED fallback, the one send-back 8 defect 1 fixes, and every one of them answered `401 Unauthorized: Missing bearer or basic authentication in header`. It stays on the allowlist for an API-key sign-in and stays `proven: false` until a signed-in session actually uses it.",
+      "proven": false,
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-codex-20260920T005305Z"
+    },
+    {
+      "host": "auth.openai.com",
+      "why": "sign-in. Never reached in the three walled sessions, which were already signed in.",
+      "proven": false
+    }
+  ],
+  "network_observed_through_a_subdomain": [
+    {
+      "host": "ab.chatgpt.com",
+      "why": "the vendor's own flag service. Allowed twice at wall-proof-codex-20260920T005305Z, not because it is listed but because `wall_proxy.allowed` matches a listed host's subdomains (`host.endswith('.' + entry_host)`), so the `chatgpt.com` entry covers it. Recorded rather than hidden: it is the Codex equivalent of `statsig.anthropic.com`, which the Claude Code list allows outright. No decision is taken here; the control room says whether the subdomain rule stays as it is.",
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-codex-20260920T005305Z"
+    }
+  ],
+  "network_refused_on_purpose": [
+    {
+      "host": "sdmntprwestus.oaiusercontent.com",
+      "why": "vendor content storage. Refused twice at wall-proof-codex-20260920T005305Z (the `available` trial and the `preflight --native` session) and the session answered anyway. It STAYS refused: it is not a need, and the refusal is recorded in <record>/harness/proxy.jsonl rather than hidden.",
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-codex-20260920T005305Z"
+    },
+    {
+      "host": "github.com",
+      "why": "refused once at wall-proof-codex-20260920T005305Z in the `absent` trial and the session answered anyway. No trial needs it; the fixture is a local tree.",
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-codex-20260920T005305Z"
+    },
+    {
+      "host": "api.github.com",
+      "why": "refused once at wall-proof-codex-20260920T005305Z in the `absent` trial and the session answered anyway.",
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-codex-20260920T005305Z"
+    },
+    {
+      "host": "files.openai.com",
+      "why": "refused once at wall-proof-codex-20260920T005305Z in the `absent` trial and the session answered anyway.",
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-codex-20260920T005305Z"
+    }
+  ],
+  "proof_roots": [
+    {
+      "root": "wall-proof-codex-20260920T005305Z",
+      "date": "2026-09-19",
+      "what": "the control room's first walled Codex proof: `preflight --native` on codex read separated true with six of six reads refused by the OS on both routes, then the two F1 comparison trials ran. Both are sealed and both found a defect: the `absent` trial launched UNSIGNED (send-back 8 defect 1, the single-store credential link into a refused home) and the `available` trial graded nothing because `adapters/codex/turns.py` refused its own writable executor rollout under the wall (send-back 8 defect 2, E9-37 behind SB-2). Send-back 7's binary resolution is proved by the same root: the launch found `codex` through its plain `exec` wrapper and read the node package root."
+    }
+  ],
+  "confinement_proved_by_a_live_session": [
+    {
+      "what": "the native read-boundary check under the wall",
+      "measured": "separated: true, six of six reads REFUSED, every one an OS EPERM: the other condition's home, another trial's record and a planted grading record, by the session's own shell and again by its sub-agent route, each in its own rollout.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-codex-20260920T005305Z"
+    },
+    {
+      "what": "the harness's own sub-agent route inherits the wall",
+      "measured": "the three sub-agent reads produced EPERMs of their own, so a seatbelt applied to the launcher is inherited by the tool shells and sub-agents Codex starts for itself, not only by its first process.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-codex-20260920T005305Z"
+    }
+  ]
+}

@@ -16,10 +16,22 @@ import sys
 OUTBOUND = ("Bash(curl:*)", "Bash(wget:*)", "Bash(nc:*)", "Bash(ncat:*)", "Bash(telnet:*)",
             "Bash(ssh:*)", "Bash(scp:*)", "Bash(sftp:*)")
 WRITE_TOOLS = ("Write", "Edit", "NotebookEdit")
-# E11-46 R4: the READ side of the same fence. E11-40 makes the rerun conditional on a native
-# isolation check, and a boundary that stops writes says nothing about reads. These are the
-# read-kind tools Claude Code can scope to a path.
-READ_TOOLS = ("Read", "Glob", "Grep", "NotebookRead")
+# The READ side is GONE, and this is the whole of Astra's gap 1.
+#
+# E11-46 R4 added `Read`, `Glob`, `Grep` and `NotebookRead` denials for the same roots as the
+# write denials. `denied_roots` names the pilot HOMES, and a Claude Code session's own
+# installed skill lives inside its home (`<home>/config/plugins/cache/.../recheck-v2/`), so
+# the read fence denied the skill its own `references/`, `scripts/`, `adapters/` and schemas
+# in all twelve with-skill sessions of the round-2 rerun: the condition under test could not
+# read the thing under test.
+#
+# On the sealed bench the read boundary is the WALL — an OS-level `sandbox-exec` profile that
+# refuses every other trial's tree, every other condition's home and the rest of the user
+# area, and that cannot be argued with by a tool name. A read denial at the harness's
+# permission layer is not needed for it and was never sufficient for it. The write denials
+# and the outbound-command denials stay exactly as they were, as a second layer inside the
+# wall (E11-45 S1, E11-41 R6).
+READ_TOOLS = ()
 
 
 def fence(document, deny_dirs):

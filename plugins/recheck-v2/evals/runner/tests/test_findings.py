@@ -113,9 +113,22 @@ class EnvironmentBoundaryTest(RunnerCase):
             runner.run_cmd([sys.executable, "-c", "pass"], env=env)
         self.assertIn("FOO_TOKEN", str(caught.exception))
 
-    def test_the_only_declared_banned_names_are_the_two_the_contract_names(self):
+    def test_every_declared_banned_name_is_one_the_contract_names(self):
+        """The list is CLOSED and each entry carries the measurement that put it there.
+
+        Two came from E10-7 and E10-20. The third is send-back 2 (2026-09-19, proof root
+        `wall-proof-20260919T155236Z`): `CLAUDE_CODE_TMPDIR` moves Claude Code's own scratch
+        out of `/tmp/claude-<uid>`, a folder shared by every Claude session on this Mac, and
+        therefore one that can never be a root of one trial's sandbox profile. Without it the
+        walled session signed in, reached the model, and died on
+        `mkdir '/tmp/claude-501'`. It is a path the runner chose and carries no credential.
+        """
         self.assertEqual(sorted(runner.DECLARED_ENV),
-                         ["CODEX_HOME", "OPENROUTER_API_KEY"])
+                         ["CLAUDE_CODE_TMPDIR", "CODEX_HOME", "OPENROUTER_API_KEY"])
+        for name, reason in runner.DECLARED_ENV.items():
+            self.assertTrue(runner.BANNED_ENV_RE.match(name),
+                            "%s is not a banned shape and needs no declaration" % name)
+            self.assertTrue(len(reason) > 30, "%s carries no measurement" % name)
 
     def test_no_function_in_the_runner_calls_os_environ_copy(self):
         """Finding 3: the generator listing, the held-out lookup and the detached campaign
@@ -363,7 +376,10 @@ class AttemptsAndGradingTest(RunnerCase):
                            "workspace": "/nowhere", "status": "no_result", "wall_seconds": 1.0})
         environment = self.child_env({"RECHECK_RUNNER_TEST": "1",
                                       "RECHECK_RUNNER_KEY_DIR": directory})
-        for extra in ([], ["--summary"]):
+        # B3(3): the FIRST grade of an ungraded attempt still writes `grade.json`; a second
+        # bare `grade` over the same record is refused and names `--revision`, so the
+        # `--summary` pass takes a revision name.
+        for extra in ([], ["--summary", "--revision", "second"]):
             graded = cli(["grade", "--campaign", self.campaign, tid] + extra, env=environment)
             self.assertEqual(graded.returncode, 0, graded.stderr)
             self.assertTrue(parse_stdout(graded)["grades"][0]["grade_path"])

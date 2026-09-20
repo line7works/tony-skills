@@ -10,9 +10,9 @@ by the executor and nothing is guessed; a value that cannot be read is reported
 as missing, never filled in.
 """
 
-import glob
 import json
 import os
+import re
 import subprocess
 
 HARNESS = "claude-code"
@@ -48,6 +48,83 @@ def config_dir(explicit=None):
 
 TEST_FLAG = "RECHECK_ADAPTER_TEST"
 SESSION_ID_VAR = "CLAUDE_CODE_SESSION_ID"
+
+
+def project_slug(path):
+    """The folder name Claude Code gives a session's cwd under ``<config>/projects/``.
+
+    Every character that is not a letter or a digit becomes ``-``. This is the SAME rule
+    ``setups/claude-code/launch.sh`` uses to copy a session's transcript back, and the two are
+    tested against each other; if one is wrong they are wrong together and the test says so.
+    """
+    return re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(path))
+
+
+def transcript_hits(root, session_id, workspace=None):
+    """``(hits, searched, refused)`` for one session id under ``<root>/projects``.
+
+    The NAMED slug folders first, then the scan. Behind the sealed bench's wall a session may
+    read only its own slug folder under ``~/.claude/projects``; LISTING the parent is refused,
+    and `glob` swallows that refusal and returns nothing, so the helper reported "no
+    transcript" for a file that was sitting there readable. Measured 2026-09-19 (live proof 5,
+    root ``wall-proof-20260919T171050Z``): ``invocation.py`` exited 3 with
+    ``CLAUDE_CODE_SESSION_ID is <id> but no transcript named <id>.jsonl exists under
+    ~/.claude/projects`` and the whole trial stopped on it.
+
+    Ruling E9-28 is untouched. Every route here is keyed on the session id the HARNESS set, so
+    no named folder and no scan can reach another session's record; what changed is that the
+    helper looks where the file actually is before it tries to list a directory it may not be
+    allowed to list, and that a refused directory is RECORDED rather than read as absence.
+    """
+    projects = os.path.join(root, "projects")
+    hits, searched, refused = [], [], []
+    for source, base in (("the helper's own working directory", os.getcwd()),
+                         ("the workspace it was given", workspace)):
+        if not base:
+            continue
+        try:
+            named = os.path.join(projects, project_slug(base), "%s.jsonl" % session_id)
+        except OSError:
+            continue
+        row = {"slug_from": source, "path": named}
+        try:
+            row["found"] = os.path.isfile(named)
+        except OSError as exc:
+            row["found"] = False
+            row["error"] = "%s: %s" % (type(exc).__name__, exc)
+        searched.append(row)
+        if row["found"] and named not in hits:
+            hits.append(named)
+    if hits:
+        return hits, searched, refused
+
+    try:
+        names = sorted(os.listdir(projects))
+    except OSError as exc:
+        refused.append({"path": projects, "error": "%s: %s" % (type(exc).__name__, exc)})
+        return hits, searched, refused
+    for name in names:
+        candidate = os.path.join(projects, name, "%s.jsonl" % session_id)
+        try:
+            if os.path.isfile(candidate):
+                hits.append(candidate)
+        except OSError as exc:
+            refused.append({"path": os.path.dirname(candidate),
+                            "error": "%s: %s" % (type(exc).__name__, exc)})
+    return sorted(hits), searched, refused
+
+
+def _not_found(session_id, root, searched, refused, prefix):
+    """The refusal, saying where it looked and what refused it."""
+    where = "; ".join("%s -> %s%s" % (r["slug_from"], r["path"],
+                                      "" if r.get("found") else " (absent)")
+                      for r in searched) or "no named slug folder could be derived"
+    denied = ("; ".join("%s (%s)" % (r["path"], r["error"]) for r in refused)
+              or "nothing was refused")
+    return HelperError(
+        "%s no transcript named %s.jsonl exists under %s/projects. Named folders tried: %s. "
+        "Directories that refused to be read: %s."
+        % (prefix, session_id, root, where, denied), 3)
 
 
 def test_mode():
@@ -176,11 +253,10 @@ def find_transcript(explicit=None, session_id=None, cfg=None, workspace=None):
         )
         discovery = "fixture interface: --transcript under %s=1" % TEST_FLAG
     elif session_id:
-        hits = sorted(glob.glob(os.path.join(root, "projects", "*", "%s.jsonl" % session_id)))
+        hits, searched, refused = transcript_hits(root, session_id, workspace)
         if not hits:
-            raise HelperError(
-                "no transcript for session %s under %s/projects" % (session_id, root), 3
-            )
+            raise _not_found(session_id, root, searched, refused,
+                             "no transcript for session %s:" % session_id)
         path, sid = hits[0], session_id
         discovery = "fixture interface: --session-id under %s=1" % TEST_FLAG
     else:
@@ -192,13 +268,10 @@ def find_transcript(explicit=None, session_id=None, cfg=None, workspace=None):
                 "other workspace's transcript)" % SESSION_ID_VAR,
                 3,
             )
-        hits = sorted(glob.glob(os.path.join(root, "projects", "*", "%s.jsonl" % env_sid)))
+        hits, searched, refused = transcript_hits(root, env_sid, workspace)
         if not hits:
-            raise HelperError(
-                "%s is %s but no transcript named %s.jsonl exists under %s/projects"
-                % (SESSION_ID_VAR, env_sid, env_sid, root),
-                3,
-            )
+            raise _not_found(env_sid, root, searched, refused,
+                             "%s is %s but" % (SESSION_ID_VAR, env_sid))
         if len(hits) > 1:
             raise HelperError(
                 "%s is %s and %d transcripts under %s/projects are named for it (%s); the "
@@ -207,7 +280,11 @@ def find_transcript(explicit=None, session_id=None, cfg=None, workspace=None):
                 3,
             )
         path, sid = hits[0], env_sid
-        discovery = "the harness's own %s, bound to this session's records" % SESSION_ID_VAR
+        discovery = ("the harness's own %s, bound to this session's records, found in %s"
+                     % (SESSION_ID_VAR,
+                        "the session's own named slug folder"
+                        if any(r.get("found") for r in searched)
+                        else "a scan of %s/projects" % root))
 
     turns = _bind_session(path, sid)
     if not turns:

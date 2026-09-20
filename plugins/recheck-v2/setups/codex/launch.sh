@@ -27,11 +27,25 @@ import json, os, shutil, subprocess, sys
 from pathlib import Path
 prompt,ws,out=map(lambda x:Path(x).resolve(),sys.argv[1:4])
 writable=[Path(x).resolve() for x in sys.argv[4:]]
-if out.exists():raise SystemExit('out-dir exists; refusing to overwrite a live session')
-out.mkdir(parents=True)
+# E9-34: a SPENT output directory is refused, never overwritten - but the directory
+# itself is no longer proof of one. The sealed bench writes this launch's own
+# sandbox profile, its spec and the proxy's log into <record>/harness/ BEFORE the
+# launcher runs, so `out.exists()` was true on every walled launch and every Codex
+# trial would have exited 1 before reaching the model. The refusal now names the
+# records a spent directory holds, exactly as setups/claude-code/launch.sh does.
+spent=[n for n in ['events.jsonl','launch.json','final.md','rollout.jsonl','stderr.log'] if (out/n).exists()]
+if spent:raise SystemExit('out-dir already holds '+', '.join(spent)+'; refusing to overwrite a live session')
+out.mkdir(parents=True,exist_ok=True)
 cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',str(Path(os.environ['CODEX_HOME'])/'child')]  # E9-25: only the child home is writable; executor sessions and installed core stay outside.
 for extra in writable:cmd+=['--add-dir',str(extra)]  # E11-26: the roots the runner named, this trial's only
-cmd+=['-c','sandbox_workspace_write.network_access=true','-']
+# SB-2 (the sealed bench, A3): the WALL is this lane's sandbox. macOS refuses a second
+# seatbelt inside the first (sandbox_apply: Operation not permitted, exit 71, E9-21), and
+# Codex's own seatbelt allows every read, so it cannot give the separation the bench needs.
+# `codex exec` therefore runs with its own sandbox off and approvals never, INSIDE
+# `sandbox-exec -f <record>/harness/launch.sb`, which supplies the read boundary, the write
+# boundary and the network policy. `sandbox_workspace_write.network_access=true` is gone with
+# the workspace-write sandbox it configured; the loopback proxy is the only route out.
+cmd+=['--sandbox','danger-full-access','-c','approval_policy=never','-']
 (out/'command.json').write_text(json.dumps(cmd))
 with prompt.open('rb') as inp,(out/'events.jsonl').open('wb') as events,(out/'stderr.log').open('wb') as err:
  code=subprocess.run(cmd,stdin=inp,stdout=events,stderr=err).returncode

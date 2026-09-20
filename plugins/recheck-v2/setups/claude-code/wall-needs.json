@@ -1,0 +1,183 @@
+{
+  "setup": "claude-code",
+  "note": "What a Claude Code launch needs from outside its own trial tree, as data, with a reason per entry. The runner reads this file, resolves the binaries and the `~` forms, and hands the result to setups/_wall/write-sandbox-profile.py. Nothing here is prose for a model; it is the profile's input. An entry marked `proven: false` has NOT been measured against a live session yet - the control room's walled proof either keeps it or takes it out.",
+  "binaries": [
+    {
+      "name": "claude",
+      "why": "the harness itself; the resolved install directory is a read root because the executable reads its own files. Execution alone needs no read rule (measured 2026-09-19: process-exec is not file-read*), the bundle's own reads do.",
+      "proven": true
+    },
+    {
+      "name": "node",
+      "why": "the runtime the harness may re-exec; resolved only when it is on PATH.",
+      "proven": true
+    }
+  ],
+  "read": [
+    {
+      "path": "~/.local/bin",
+      "why": "`command -v claude` in launch.sh stats the PATH entry, and the runner's PATH names this directory. A directory of symlinks, no content.",
+      "proven": true
+    },
+    {
+      "path": "~/Library/Keychains",
+      "why": "the sign-in item `Claude Code-credentials` (class genp) lives in the login keychain; E10-7's USER measurement shows the harness answers only when it can reach it. PROVED 2026-09-19: the walled session signed in and answered, at a non-zero cost.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T155236Z"
+    },
+    {
+      "path": "~/.gitconfig",
+      "why": "git aborts with `fatal: unable to access '~/.gitconfig': Operation not permitted` on EPERM rather than treating the file as absent, so `git --version` and every `git -C` inside a trial fail without it. Measured 2026-09-19.",
+      "optional": true,
+      "proven": true
+    },
+    {
+      "path": "~/.config/git",
+      "why": "git reads `$XDG_CONFIG_HOME/git/ignore` as the default `core.excludesFile` and `$XDG_CONFIG_HOME/git/config` as a second global config. On EPERM it prints `warning: unable to access '~/.config/git/ignore': Operation not permitted` and continues, so it does not break a trial - but the warning lands in the SESSION's own view, and it appeared in one condition's traces and not the other's, which is exactly the kind of difference a with/without comparison must not carry. Measured 2026-09-19: `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` does NOT silence it, because the excludesFile default is applied independently of any config file, so the environment route does not fix the symptom; allowing the directory does. Read only, two small files, no credential - the same reasoning and the same optional flag as `~/.gitconfig`, and it applies identically to both conditions and both setups.",
+      "optional": true,
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T162738Z"
+    },
+    {
+      "path": "~/.local/share/uv/python",
+      "why": "uv's managed interpreters. `uv run` picks the managed cpython (3.12.13 on this Mac) for the core and both validators, not /usr/bin/python3 3.9; with this directory refused it fails at `failed to read directory .../uv/python: Operation not permitted` whatever the warmed cache holds. Measured 2026-09-19. The alternative, `UV_PYTHON_PREFERENCE=only-system`, also works and was rejected: it pins every walled trial's core to 3.9, so the apparatus would run on a different Python inside the wall than outside it and the 3.12 half of the core's own two-interpreter matrix would never be exercised by a trial. An interpreter install: no user data, no credential, read only. Identical for both setups and both conditions.",
+      "optional": true,
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T171050Z"
+    }
+  ],
+  "read_write": [
+    {
+      "path": "~/.claude.json",
+      "why": "the harness rewrites its own top-level state file on every session; a read-only copy makes the session fail to start. PROVED 2026-09-19: the walled session started and answered with it writable.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T155236Z"
+    },
+    {
+      "path": "~/.claude/.credentials.json",
+      "why": "the sign-in store when the Keychain item is not used. Absent on this Mac at the time of writing; named optional so the profile skips it when it is not there.",
+      "optional": true,
+      "proven": false
+    }
+  ],
+  "session_transcript": {
+    "root": "~/.claude/projects",
+    "slug_rule": "every character of the session's cwd that is not a letter or a digit becomes `-` (so `/private/tmp/x` is `-private-tmp-x`). ONLY the session's own slug folder is allowed; the siblings are refused with the rest of `~/.claude`.",
+    "why": "launch.sh copies the session's transcript back from this folder after the session ends. PROVED 2026-09-19 at wall-proof-20260919T161537Z: launch.json reported ok and the transcript was copied back from the named slug folder, so the slug rule holds and the glob fallback was not needed (report item 4).",
+    "proven": true,
+    "proven_on": "2026-09-19",
+    "proven_by": "wall-proof-20260919T161537Z"
+  },
+  "maybe_needed_ask_the_proof": [
+    {
+      "path": "~/.claude/settings.json",
+      "why": "the launch passes --setting-sources local, so the machine's user settings should not be read. Left OUT; the control room's walled proof says whether the session starts without it. SETTLED 2026-09-19 at wall-proof-20260919T155236Z: the walled session started, signed in and answered with this file NOT in the profile. It stays out.",
+      "settled": "stays out",
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T155236Z"
+    },
+    {
+      "path": "~/.claude/shell-snapshots",
+      "why": "left out until a proof shows a headless session writes one."
+    },
+    {
+      "path": "~/.claude/todos",
+      "why": "left out until a proof shows a headless session writes one."
+    },
+    {
+      "path": "~/.claude/statsig",
+      "why": "left out until a proof shows a headless session writes one."
+    }
+  ],
+  "network": [
+    {
+      "host": "api.anthropic.com",
+      "why": "the model endpoint PROVED 2026-09-19: allowed 8 times through the proxy in one headless print session, and no other allowed host was needed.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T155236Z"
+    },
+    {
+      "host": "console.anthropic.com",
+      "why": "sign-in and account state",
+      "proven": false
+    },
+    {
+      "host": "claude.ai",
+      "why": "sign-in",
+      "proven": false
+    },
+    {
+      "host": "statsig.anthropic.com",
+      "why": "the harness's own feature-flag service; refusing it is recorded, not hidden",
+      "proven": false
+    },
+    {
+      "host": "platform.claude.com",
+      "why": "account and entitlement reads",
+      "proven": false
+    }
+  ],
+  "declared_environment": [
+    {
+      "name": "CLAUDE_CODE_TMPDIR",
+      "value": "<the launch's own TMPDIR>/cc-tmp, created by the runner before the launch",
+      "why": "Claude Code otherwise makes its scratch at /tmp/claude-<uid>, one folder shared by EVERY Claude session on this Mac, so it can never be a root of one trial's profile. Without this name the walled session signed in, reached the model, and then died with `EPERM: operation not permitted, mkdir '/tmp/claude-501'`.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T155236Z"
+    }
+  ],
+  "network_refused_on_purpose": [
+    {
+      "host": "http-intake.logs.us5.datadoghq.com",
+      "why": "telemetry. Measured once at wall-proof-20260919T155236Z, refused by the proxy, and the session answered anyway. It STAYS refused: it is not a need, and the refusal is recorded in <record>/harness/proxy.jsonl rather than hidden. Refused twice more at wall-proof-20260919T161537Z; the session answered anyway both times.",
+      "observed_on": "2026-09-19",
+      "observed_by": "wall-proof-20260919T155236Z"
+    }
+  ],
+  "proof_roots": [
+    {
+      "root": "wall-proof-20260919T155236Z",
+      "date": "2026-09-19",
+      "what": "the control room's second live proof: a walled Claude Code session started, signed in through the machine's Keychain and ~/.claude.json, reached api.anthropic.com through the loopback proxy (so HTTPS_PROXY is honoured), ran `pwd` in its workspace, exited 0 at a non-zero cost, and made cc-tmp/claude-<uid> inside the trial's own scratch."
+    },
+    {
+      "root": "wall-proof-20260919T161537Z",
+      "date": "2026-09-19",
+      "what": "the control room's third live proof: `preflight --native` on claude-code behind the wall. separated: true, six of six refused by OS EPERM on both routes; launch.json ok; the transcript copied back from the named slug folder; api.anthropic.com allowed 9 times through the proxy and the telemetry host refused twice."
+    },
+    {
+      "root": "wall-proof-20260919T162738Z",
+      "date": "2026-09-19",
+      "what": "the control room's fourth live proof: the full `preflight --native` exited 0, then two walled comparison trials ran about three minutes each, activated the skill and read its references with no EPERM, and then both ended `launch_failed` on `API Error: Connection dropped (ECONNRESET)` - the proxy's relay dropping a stream under back-pressure, fixed in send-back 4."
+    }
+  ],
+  "confinement_proved_by_a_live_session": [
+    {
+      "what": "the native read-boundary check under the wall",
+      "measured": "separated: true, six of six reads REFUSED, every one an OS EPERM: the other condition's home, another trial's record and a planted grading record, by the Read tool and again by the Agent-tool verifier route (report item 13).",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T161537Z"
+    },
+    {
+      "what": "the harness's own sub-agent route inherits the wall",
+      "measured": "the Agent-tool verifier route produced three EPERMs of its own in the session's trace, so a seatbelt applied to the launcher is inherited by the tool shells and sub-agents the harness starts for itself, not only by its first process (report item 10).",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T161537Z"
+    },
+    {
+      "what": "the skill reads its own references behind the wall (Astra's gap 1)",
+      "measured": "two walled comparison trials, F1 with and without the skill. The with-skill session activated the skill and read its references with ZERO EPERM lines. The read fence that denied them in all twelve with-skill sessions of the round-2 rerun is gone and the wall does not put it back.",
+      "proven": true,
+      "proven_on": "2026-09-19",
+      "proven_by": "wall-proof-20260919T162738Z"
+    }
+  ]
+}

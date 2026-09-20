@@ -416,6 +416,16 @@ BLOCK_NEGATION_CARRIERS = ("the", "a", "an", "any", "such", "actual", "real", "t
 BLOCK_NEGATION_WINDOW = 4          # carrier words a negation may reach across
 _SENTENCE_BREAK = ".;:!?\n\r"
 
+# E11-45 S3/N2 (batch B): the reports are MARKDOWN, and the block vocabulary is what a careful
+# report quotes when it says the case is NOT one. Two of the eight round-2 F4 reports wrote
+# "so this is not `verification_blocked`" and "This is not `verification_blocked` - nothing in
+# the sandbox stopped an execution": the backtick before the phrase was left on the preceding
+# word by the old strip set, so the scan met a word that was neither a negation nor a carrier
+# and stopped one word short of the "not" that was right there. Markdown emphasis (`*`, `_`,
+# `~`) is stripped for the same reason. A punctuation-only token strips to nothing and is
+# dropped by the `if w` filter, so the walk continues past it rather than ending on it.
+_WORD_TRIM = "\"'(),[]{}`*_~"
+
 
 def _negated_before(text_lower, at):
     """Does a negation before `at`, in the same sentence, negate the phrase AT `at`?"""
@@ -424,7 +434,7 @@ def _negated_before(text_lower, at):
         if text_lower[index] in _SENTENCE_BREAK:
             start = index + 1
             break
-    words = [w.strip("\"'(),[]{}") for w in text_lower[start:at].split()]
+    words = [w.strip(_WORD_TRIM) for w in text_lower[start:at].split()]
     carried = 0
     for word in reversed([w for w in words if w]):
         if word in BLOCK_NEGATIONS or word.endswith("n't"):
@@ -505,8 +515,9 @@ def blocked_history(run_dir, checkpoint_doc, index):
 #      whatever the report says;
 #   2. a policy refusal or an unreachable service in the RETAINED output of the item's own
 #      command evidence, or in the report's own `blocked` text;
+#   2(c). an absent required input that the command's own retained output reported (batch B);
 #   3. whether the item's method was `executed` and a command-kind evidence entry exists;
-#   4. an absent required input.
+#   4. an absent required input, where no command ran at all.
 # Anything else is UNRESOLVED: recorded, never defaulted.
 #
 # The derivation reads execution facts and the report's FACTUAL fields (method, evidence kinds,
@@ -547,6 +558,19 @@ ABSENT_INPUT_OBSERVATIONS = (
     "is not present",
     "was not provided",
     "not found",
+)
+
+# E11-45 N2 (batch B): the same observation as it reaches the RETAINED OUTPUT of a command that
+# actually ran. An interpreter names an absent input in its own words - `FileNotFoundError`,
+# `ENOENT`, `[Errno 2]` - and those are the words the six defaulted round-2 F4 reports carried
+# (one of them, `codex` r1, carried only "exited 1 with FileNotFoundError" and none of the
+# prose forms above). The list is closed and every entry is an operating-system or interpreter
+# report of an absent path, never prose about one.
+ABSENT_INPUT_IN_OUTPUT = ABSENT_INPUT_OBSERVATIONS + (
+    "filenotfounderror",
+    "no such file",
+    "enoent",
+    "errno 2",
 )
 
 UNRESOLVED = "unresolved"
@@ -616,6 +640,26 @@ def derive_reason(item, run_dir, call_status=None, report_text=None):
     if phrase:
         return {"reason": "verification_blocked", "observed": "the service was unreachable",
                 "how": "the retained output carries %r: %s" % (phrase, quote)}
+    # 2(c). E11-45 N2 (batch B): an ABSENT REQUIRED INPUT that the command's own retained output
+    #       reported. This is an observation of the same rank as a policy refusal or an
+    #       unreachable service - all three read the run's retained OUTPUT - so it is settled
+    #       here, above the report's prose and above the reproduction default of step 3.
+    #
+    #       The defect it closes (S3 and N2): step 3 returned `reproduces` for ANY executed
+    #       command, and step 4 asked for `not commands`, so a command that RAN AND HIT THE
+    #       ABSENT INPUT could never reach the absent-input rule. All eight round-2 with-skill
+    #       F4 trials had a correct `missing_evidence` from the verifier replaced - six by this
+    #       default, two through `declared_block` reading a backticked negation as a
+    #       declaration. A command that ran and hit the absent input is `missing_evidence`; a
+    #       command that ran and showed the defect is `reproduces`, which is step 3, unchanged.
+    #
+    #       A policy refusal and an unreachable service still win: they are tested first, so an
+    #       F5 block whose output also mentions a missing path stays `verification_blocked`.
+    phrase, quote = _observed_in(texts, ABSENT_INPUT_IN_OUTPUT)
+    if phrase and commands:
+        return {"reason": "missing_evidence", "observed": "a required input is absent",
+                "how": "a command ran and its retained output carries %r: %s"
+                       % (phrase, quote)}
     if report_text:
         declared, said = declared_block(report_text)
         if declared:

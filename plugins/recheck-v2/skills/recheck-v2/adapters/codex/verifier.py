@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from turns import Missing, parser, read_records, run
+from turns import WALL_MARKER, Missing, parser, read_records, run, wall_refuses, wall_witness
 
 
 def status(code, raw, timed_out=False):
@@ -52,6 +52,18 @@ def metadata(events):
     return model,sorted(set(injected))
 
 
+# SB-2 / A3 of the sealed bench: the second accepted witness for "this session is confined".
+# `WALL_MARKER` and `wall_refuses` now live in `turns.py` and are imported above, so the launch
+# gate here and the executor-rollout gate in `locate` read the same code rather than two copies
+# of it (SB-8). The behaviour of this gate is unchanged: E9-26(a) accepts `CODEX_SANDBOX=
+# seatbelt`, Codex's own marker; on the sealed bench Codex's own sandbox is OFF (macOS refuses a
+# second seatbelt inside the first, E9-21) and the confinement is the launcher's `sandbox-exec`
+# wall. A launcher's word is not a witness, so the marker is accepted only when a read the wall
+# must refuse actually IS refused: the launcher plants `RECHECK_WALL_PROBE` outside every root
+# the profile allows, and this attempts it. A read that SUCCEEDS means there is no wall, and
+# nothing launches, exactly as before.
+
+
 def child_records(events, home):
     """CLI JSON identifies the child; actual model and injected state live in its rollout."""
     threads={e['thread_id'] for e in events if e.get('type')=='thread.started' and e.get('thread_id')}
@@ -64,6 +76,30 @@ def child_records(events, home):
     metas=[r.get('payload',{}) for r in records if r.get('type')=='session_meta']
     if len(metas)!=1 or metas[0].get('id')!=thread:raise ValueError('child rollout thread mismatch')
     return records
+
+
+def confinement_gate():
+    """Refuse to launch unless THIS process is confined (E9-26(a), SB-2, SB-12 N4).
+
+    Lifted out of `main` so the gate can be exercised without starting anything: the tests
+    call it directly, and a test that has to spawn `codex exec` to find out whether the gate
+    holds is a test that defeats its own point.
+
+    The legacy branch is LEFT AS IT WAS. E9-26(a) accepts Codex's own `CODEX_SANDBOX=seatbelt`
+    marker, and under Codex's own seatbelt the applied-policy test would also pass - but that
+    could not be measured here without launching Codex, which this round may not do (SB-12
+    item 4: "if unsure, leave the legacy branch and say so"). It is said in the fix-round
+    report.
+    """
+    if os.environ.get('CODEX_SANDBOX')=='seatbelt':
+        return 'CODEX_SANDBOX=seatbelt, Codex\'s own marker (E9-26(a)); the applied-policy test is not applied to this branch (SB-12, item 4)'
+    accepted,why=wall_witness()
+    if not accepted:
+        raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a), or '
+                      'RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' with an APPLIED sandbox policy '
+                      'and a refused RECHECK_WALL_PROBE read (SB-2, SB-12 N4): '+why+
+                      '; nothing launched')
+    return why
 
 
 def main():
@@ -85,7 +121,7 @@ def main():
     if not canned:
         home=os.environ.get('CODEX_HOME')
         if not home or not Path(home).is_dir():raise Missing('CODEX_HOME is not set or not a directory; inherited isolated child home required (E9-25); nothing launched')
-        if os.environ.get('CODEX_SANDBOX')!='seatbelt':raise Missing('CODEX_SANDBOX=seatbelt required by E9-26(a); nothing launched')
+        confinement_gate()
     scratch.mkdir(parents=True,exist_ok=True);raw.parent.mkdir(parents=True,exist_ok=True)
     events=scratch/(a.call_id+'.events.jsonl');err=scratch/(a.call_id+'.stderr.log')
     if events.exists():raise ValueError('call capture already exists')

@@ -91,7 +91,10 @@ class LaunchedChildEnvironmentTest(RunnerCase):
         planted = sorted(n for n in names if n in PLANTED)
         self.assertEqual(planted, [], "planted names reached the child: %s" % planted)
         banned = sorted(n for n in names if runner.BANNED_ENV_RE.match(n))
-        self.assertEqual(banned, [], "banned shapes reached the child: %s" % banned)
+        # every banned-shaped name a child may carry is on DECLARED_ENV, with its reason
+        self.assertEqual([n for n in banned if n not in runner.DECLARED_ENV], [],
+                         "undeclared banned shapes reached the child: %s" % banned)
+        self.assertEqual(banned, ["CLAUDE_CODE_TMPDIR"], banned)
         # Measured on this machine (macOS 25.6, Darwin 25.6.0), and recorded because it is
         # what E10-7 can and cannot reach: `env -i` plus the allowlist is exactly what the
         # runner hands its child, and the names below are added BELOW that boundary, by the
@@ -106,9 +109,16 @@ class LaunchedChildEnvironmentTest(RunnerCase):
         downstream = ("__CF_USER_TEXT_ENCODING", "PWD", "SHLVL", "SDKROOT", "CPATH",
                       "LIBRARY_PATH", "MANPATH")
         injected = sorted(n for n in names if n in downstream)
+        # send-back 2: plus `CLAUDE_CODE_TMPDIR`, the one DECLARED name this harness's launches
+        # carry. Claude Code otherwise makes its scratch at `/tmp/claude-<uid>`, one folder
+        # shared by every Claude session on this Mac; behind the wall the live session died on
+        # `mkdir '/tmp/claude-501'` after it had signed in and reached the model. The name is a
+        # path the runner chose and carries no credential, which is why `DECLARED_ENV` names it
+        # with that measurement beside it.
         self.assertEqual(sorted(n for n in names if n not in downstream),
-                         sorted(list(runner.ALLOWED_ENV) + ["SKILLS_V2_PILOT_HOME"]),
-                         "the child's environment is not the allowlist plus the one pointer "
+                         sorted(list(runner.ALLOWED_ENV)
+                                + ["SKILLS_V2_PILOT_HOME", "CLAUDE_CODE_TMPDIR"]),
+                         "the child's environment is not the allowlist plus its pointers "
                          "(added below the boundary: %s)" % injected)
         for name in injected:
             self.assertIsNone(runner.BANNED_ENV_RE.match(name), name)
@@ -232,3 +242,103 @@ class InstallCredentialTest(RunnerCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WalledLaunchEnvironmentTest(RunnerCase):
+    """A2: the proxy names, and the wall's two declarations, on a WALLED launch only.
+
+    The allowlist itself does not grow. `allowlist_env` starts from nothing and adds the names
+    it is given; the wall gives a walled launch four proxy names in both cases plus
+    `RECHECK_HARNESS_SANDBOX` and `RECHECK_WALL_PROBE`, and gives an unwalled one none of
+    them, which is why the fake-launcher test above still sees the allowlist plus one pointer.
+    """
+
+    def test_the_proxy_names_are_declared_in_both_cases(self):
+        self.assertEqual(sorted(runner.PROXY_ENV),
+                         sorted(["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+                                 "https_proxy", "http_proxy", "all_proxy", "no_proxy"]))
+
+    def test_no_declared_wall_name_matches_a_banned_shape(self):
+        for name in runner.PROXY_ENV + ("RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE"):
+            self.assertIsNone(runner.BANNED_ENV_RE.match(name), name)
+
+    def test_an_unwalled_launch_carries_none_of_them(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        with setup.walled("available", os.path.join(self.scratch, "harness"),
+                          launcher=self.fake_launcher("claude-code")) as wall:
+            self.assertEqual(wall.env, {})
+        # send-back 5: the uv names ride with the wall too, so an unwalled launch keeps the
+        # machine's own uv setup and the fake harness's real-core runs are unaffected.
+        self.assertNotIn("UV_CACHE_DIR", setup.launch_env("available"))
+        self.assertNotIn("UV_OFFLINE", setup.launch_env("available"))
+
+    def test_a_walled_launch_carries_the_proxy_url_and_the_wall_declarations(self):
+        """No harness and no model: the wall is built directly, around nothing."""
+        campaign = runner.Campaign(self.campaign)
+        # `walled` bypasses for a synthetic campaign, which every test campaign is, so the
+        # pieces are exercised directly rather than through a campaign that would skip them.
+        log = os.path.join(self.scratch, "proxy.jsonl")
+        proxy = runner.wall_proxy.WallProxy(["api.anthropic.com"], log)
+        proxy.start()
+        self.addCleanup(proxy.stop)
+        probe = runner.wall_probe_path(campaign)
+        wall = runner._Wall("/dev/null", "/dev/null", {}, proxy, {"sealed": True},
+                            probe=probe)
+        self.assertEqual(wall.env["HTTPS_PROXY"], "http://127.0.0.1:%d" % proxy.port)
+        self.assertEqual(wall.env["https_proxy"], wall.env["HTTPS_PROXY"])
+        self.assertEqual(wall.env["NO_PROXY"], runner.PROXY_BYPASS)
+        self.assertEqual(wall.env["no_proxy"], runner.PROXY_BYPASS)
+        self.assertEqual(wall.env["RECHECK_HARNESS_SANDBOX"], runner.WALL_MARKER)
+        self.assertEqual(wall.env["RECHECK_WALL_PROBE"], probe)
+        self.assertTrue(os.path.isfile(probe))
+        built = campaign.env(extra=wall.env, require_binaries=False)
+        self.assertEqual(sorted(n for n in runner.banned_names(built)), [])
+        self.assertEqual(wall.prefix(["sh", "launch.sh"]),
+                         ["/usr/bin/sandbox-exec", "-f", "/dev/null", "sh", "launch.sh"])
+
+    def test_the_wall_probe_sits_outside_every_root_a_launch_profile_allows(self):
+        campaign = runner.Campaign(self.campaign)
+        setup = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        probe = runner.wall_probe_path(campaign)
+        spec = runner.wall_spec(campaign, setup, "available",
+                                os.path.join(campaign.trials, "a-trial", "harness"),
+                                workspace=os.path.join(self.scratch, "ws"),
+                                scratch=os.path.join(self.scratch, "tree", "scratch"))
+        for row in spec["read_roots"] + spec["write_roots"]:
+            self.assertFalse(runner.path_contains(row["path"], probe),
+                             "%s allows the probe file" % row["path"])
+
+
+class ClaudeCodeTmpdirIsDeclaredTest(RunnerCase):
+    """Send-back 2: the one banned-shaped name a Claude Code launch carries on purpose."""
+
+    def test_it_is_on_DECLARED_ENV_with_the_measurement_beside_it(self):
+        self.assertIn("CLAUDE_CODE_TMPDIR", runner.DECLARED_ENV)
+        reason = runner.DECLARED_ENV["CLAUDE_CODE_TMPDIR"]
+        self.assertIn("shared", reason)
+        self.assertIn("TMPDIR", reason)
+
+    def test_run_cmd_lets_a_declared_name_through_and_still_refuses_an_undeclared_one(self):
+        campaign = runner.Campaign(self.campaign)
+        good = campaign.env(extra={"CLAUDE_CODE_TMPDIR": os.path.join(self.scratch, "cc")},
+                            require_binaries=False)
+        step = runner.run_cmd(["/usr/bin/true"], env=good, label="a declared name")
+        self.assertEqual(step["exit"], 0)
+        bad = dict(good, CLAUDE_CODE_SOMETHING_ELSE="planted")
+        with self.assertRaises(runner.Failure) as caught:
+            runner.run_cmd(["/usr/bin/true"], env=bad, label="an undeclared name")
+        self.assertIn("CLAUDE_CODE_SOMETHING_ELSE", str(caught.exception))
+        self.assertNotIn("CLAUDE_CODE_TMPDIR", str(caught.exception))
+
+    def test_only_claude_code_launches_carry_it(self):
+        campaign = runner.Campaign(self.campaign)
+        tmpdir = os.path.join(self.scratch, "tmpdir")
+        runner.ensure_dir(tmpdir)
+        self.assertEqual(
+            sorted(runner.ClaudeCodeSetup(campaign, stage=self.stage).scratch_env(tmpdir)),
+            ["CLAUDE_CODE_TMPDIR"])
+        self.assertEqual(runner.CodexSetup(campaign, stage=self.stage).scratch_env(tmpdir), {})
+        self.assertEqual(
+            runner.OpenCodeSetup(campaign, stage=self.stage, name="opencode")
+            .scratch_env(tmpdir), {})
