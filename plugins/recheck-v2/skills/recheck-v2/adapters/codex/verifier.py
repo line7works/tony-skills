@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from turns import Missing, parser, read_records, run
+from turns import WALL_MARKER, Missing, parser, read_records, run, wall_refuses
 
 
 def status(code, raw, timed_out=False):
@@ -53,23 +53,15 @@ def metadata(events):
 
 
 # SB-2 / A3 of the sealed bench: the second accepted witness for "this session is confined".
-# E9-26(a) accepts `CODEX_SANDBOX=seatbelt`, Codex's own marker. On the sealed bench Codex's
-# own sandbox is OFF (macOS refuses a second seatbelt inside the first, E9-21) and the
-# confinement is the launcher's `sandbox-exec` wall. A launcher's word is not a witness, so the
-# marker is accepted only when a read the wall must refuse actually IS refused: the launcher
-# plants `RECHECK_WALL_PROBE` outside every root the profile allows, and this attempts it. A
-# read that SUCCEEDS means there is no wall, and nothing launches, exactly as before.
-WALL_MARKER='sandbox-exec'
-
-
-def wall_refuses(path):
-    """True only when reading `path` raises PermissionError: the wall is there and refusing."""
-    if not path:return False,'RECHECK_WALL_PROBE names no path'
-    try:
-        with open(path,'rb') as handle:handle.read(1)
-    except PermissionError as exc:return True,'the probe read was refused: '+str(exc)
-    except OSError as exc:return False,'the probe read failed for another reason: '+str(exc)
-    return False,'the probe read SUCCEEDED, so no wall refused it'
+# `WALL_MARKER` and `wall_refuses` now live in `turns.py` and are imported above, so the launch
+# gate here and the executor-rollout gate in `locate` read the same code rather than two copies
+# of it (SB-8). The behaviour of this gate is unchanged: E9-26(a) accepts `CODEX_SANDBOX=
+# seatbelt`, Codex's own marker; on the sealed bench Codex's own sandbox is OFF (macOS refuses a
+# second seatbelt inside the first, E9-21) and the confinement is the launcher's `sandbox-exec`
+# wall. A launcher's word is not a witness, so the marker is accepted only when a read the wall
+# must refuse actually IS refused: the launcher plants `RECHECK_WALL_PROBE` outside every root
+# the profile allows, and this attempts it. A read that SUCCEEDS means there is no wall, and
+# nothing launches, exactly as before.
 
 
 def child_records(events, home):

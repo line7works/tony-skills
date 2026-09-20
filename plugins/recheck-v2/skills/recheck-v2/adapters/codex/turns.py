@@ -30,6 +30,43 @@ def read_records(path):
         raise Missing('absent harness record: '+str(path))
 
 
+# SB-2 / A3 of the sealed bench: the witness for "this session is confined", shared by every
+# helper in this folder rather than copied into each. `verifier.py` imports it from here.
+# E9-26(a) accepts `CODEX_SANDBOX=seatbelt`, Codex's own marker. On the sealed bench Codex's own
+# sandbox is OFF (macOS refuses a second seatbelt inside the first, E9-21) and the confinement is
+# the launcher's `sandbox-exec` wall. A launcher's word is not a witness, so the marker is
+# accepted only when a read the wall must refuse actually IS refused: the launcher plants
+# `RECHECK_WALL_PROBE` outside every root the profile allows, and this attempts it. A read that
+# SUCCEEDS, or fails for any other reason, is not a wall.
+WALL_MARKER='sandbox-exec'
+
+
+def wall_refuses(path):
+    """True only when reading `path` raises PermissionError: the wall is there and refusing."""
+    if not path:return False,'RECHECK_WALL_PROBE names no path'
+    try:
+        with open(path,'rb') as handle:handle.read(1)
+    except PermissionError as exc:return True,'the probe read was refused: '+str(exc)
+    except OSError as exc:return False,'the probe read failed for another reason: '+str(exc)
+    return False,'the probe read SUCCEEDED, so no wall refused it'
+
+
+def wall_witness():
+    """Both halves of SB-2: the launcher's declaration AND a read the wall actually refuses."""
+    if os.environ.get('RECHECK_HARNESS_SANDBOX')!=WALL_MARKER:
+        return False,'RECHECK_HARNESS_SANDBOX does not declare '+WALL_MARKER
+    refused,why=wall_refuses(os.environ.get('RECHECK_WALL_PROBE'))
+    if not refused:return False,'RECHECK_HARNESS_SANDBOX='+WALL_MARKER+' is declared but the wall does not refuse: '+why
+    return True,why
+
+
+# What `invocation.py` appends to `harness.sandbox` when a WRITABLE executor rollout was
+# accepted, so the exception is declared in the record rather than passing silently (SB-8).
+WALL_SANDBOX_NOTE=('confined by the launcher\'s '+WALL_MARKER+' wall (SB-2), which is the '
+                   'sandbox here because Codex\'s own is off; the executor rollout is writable '
+                   'by the session under it')
+
+
 def installed_home():
     """E9-40: the resolved helper path, never environment, selects the home."""
     helper=Path(__file__).resolve()
@@ -45,11 +82,33 @@ def installed_home():
 
 
 def locate(workspace):
+    """The executor's own rollout. `locate_with_note` carries what had to be declared."""
+    return locate_with_note(workspace)[0]
+
+
+def locate_with_note(workspace):
+    """The executor rollout, and the note the record must carry when one was accepted writable.
+
+    E9-37 requires the executor's rollout to be UNWRITABLE by the session: under Codex's own
+    workspace-write sandbox the tool shells could not write the home, and a rollout this process
+    can append to is a record it could also rewrite. SB-8: behind the sealed bench's wall that
+    can never hold. Codex's own sandbox is off there and the confinement is ONE `sandbox-exec`
+    seatbelt around the whole process tree, so Codex itself writes that rollout and every shell
+    it starts inherits the same rights. Measured 2026-09-19 (root
+    `wall-proof-codex-20260920T005305Z`): every walled with-skill trial stopped at
+    `verifier_unavailable` before it graded anything.
+
+    So a writable rollout is accepted in exactly one case, on the precedent batch A set in
+    `verifier.py`: the SB-2 witness holds - `RECHECK_HARNESS_SANDBOX=sandbox-exec` declared AND a
+    read of `RECHECK_WALL_PROBE` refused with PermissionError. Otherwise E9-37 stands, with the
+    same message it has always had. The acceptance is never silent: the note goes into
+    `harness.sandbox`.
+    """
     home_root=installed_home()
     if home_root is None:
         override=os.environ.get('RECHECK_ADAPTER_RECORD')
         if os.environ.get('RECHECK_ADAPTER_TEST')=='1' and override:
-            return Path(override).resolve()
+            return Path(override).resolve(),None
         raise Missing('absent harness record: helper outside an installed location: '+str(Path(__file__).resolve())+' (E9-40)')
     root=home_root/'sessions'
     # Installed helpers ignore both test overrides entirely (E9-40).
@@ -64,7 +123,7 @@ def locate(workspace):
             raise Missing('refused executor rollout path under CODEX_HOME: '+str(resolved)+' (E9-36)')
         return resolved
     root=outside_home(root)
-    found=set()
+    found=set();accepted_writable=set()
     if root.is_dir():
         for path in root.rglob('rollout-*'+thread+'.jsonl'):
             resolved=outside_home(path)
@@ -75,8 +134,13 @@ def locate(workspace):
             except OSError as error:
                 raise Missing('executor rollout append check failed: '+str(resolved)+': '+str(error)+' (E9-37)')
             else:
-                raise Missing('writable executor rollout refused: '+str(resolved)+' (E9-37)')
-    if len(found)==1:return next(iter(found))
+                # The ONE exception, and only with the witness in hand; no witness, no pass.
+                witness,why=wall_witness()
+                if not witness:raise Missing('writable executor rollout refused: '+str(resolved)+' (E9-37)')
+                found.add(resolved);accepted_writable.add(resolved)
+    if len(found)==1:
+        one=next(iter(found))
+        return one,(WALL_SANDBOX_NOTE if one in accepted_writable else None)
     if len(found)>1:raise Missing('ambiguous executor rollout for thread '+thread+' under '+str(root))
     raise Missing('absent harness record: no rollout named by CODEX_THREAD_ID '+thread+' under '+str(root)+'; paths under CODEX_HOME '+str(resolved_home)+' are refused (E9-31/E9-36)')
 

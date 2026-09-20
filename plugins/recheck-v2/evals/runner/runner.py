@@ -1835,6 +1835,60 @@ def wall_refused_roots(campaign, setup, condition, allowed):
     return out
 
 
+def _credential_store_files(needs, home, refused):
+    """The ONE resolved credential file a condition reaches through a link into a refused root.
+
+    Send-back 8, defect 1. The Codex install keeps ONE credential store and links to it:
+    `setups/codex/install.sh` writes `codex/home/auth.json` and then replaces every derived
+    home's `auth.json` and `child/auth.json` with a symlink to it (lines 47 to 57 and 94 to
+    108), so the credential is never copied into two places. `codex/home` IS the `available`
+    condition's home, so for `absent` and `routing` the link's target sits under "another
+    condition's home for this setup", which the profile refuses: the walled `absent` trial of
+    2026-09-19 found no credential and fell back to an unauthenticated call (`401 Unauthorized:
+    Missing bearer or basic authentication in header`, root
+    `wall-proof-codex-20260920T005305Z`).
+
+    So the ONE resolved file is named back, as a LITERAL rather than a subpath, and read AND
+    write: Codex rewrites the store on a token refresh, and a store readable in one condition
+    and writable in the other would be a with/without difference the comparison must not carry.
+    Nothing else under the other home opens - not the native check's sentinel, not its
+    `skills/`, `plugins/`, `sessions/` or `config.toml`.
+
+    Driven by data, not by a hardcoded name: the setup's own `wall-needs.json` declares
+    `credential_store` with the home-relative files and the reason, and this resolves them per
+    condition at launch time. A file that is not a link, a link with nothing behind it, a store
+    inside the launch's OWN home, and a store nothing refuses each produce no row: the rule
+    reopens only what a refusal actually closed.
+    """
+    block = needs.get("credential_store")
+    if not isinstance(block, dict):
+        return []
+    declared = block.get("why") or "the setup's declared credential store"
+    home_real = os.path.realpath(home)
+    rows, seen = [], set()
+    for relative in block.get("files") or []:
+        link = os.path.join(home, relative)
+        if not os.path.islink(link):
+            continue
+        real = os.path.realpath(link)
+        if not os.path.isfile(real):
+            continue
+        if real == home_real or path_contains(home_real, real):
+            # the store is inside this condition's own home, which is already a write root
+            continue
+        root = next((r for r in refused if r == real or path_contains(r, real)), None)
+        if root is None:
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        rows.append({"path": real,
+                     "why": "the ONE credential store %s links to, reopened as a literal after "
+                            "the deny of %s, read AND write (send-back 8). %s"
+                            % (link, root, declared)})
+    return rows
+
+
 def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None, scratch=None,
               roots=(), proxy_port=None, opaque_tree=None, label=None):
     """The JSON spec `write-sandbox-profile.py` turns into one launch's profile."""
@@ -1895,12 +1949,17 @@ def wall_spec(campaign, setup, condition, out_dir, workspace=None, run_dir=None,
     if transcript:
         write_roots.append(transcript)
     allowed = [r["path"] for r in read_roots + write_roots]
+    refused_roots = wall_refused_roots(campaign, setup, condition, allowed)
+    # send-back 8: computed AFTER the refusals, because the rule is "a link whose target a
+    # refused root closed". Nothing here can widen a refusal: a literal reopens one file.
+    write_files = _credential_store_files(needs, home, [r["path"] for r in refused_roots])
     spec = {
         "label": label or "%s %s" % (setup.name, condition),
         "read_roots": read_roots,
         "read_files": [],
         "write_roots": write_roots,
-        "refused_roots": wall_refused_roots(campaign, setup, condition, allowed),
+        "write_files": write_files,
+        "refused_roots": refused_roots,
         "proxy_port": proxy_port,
         "proxy_host": "localhost",
         # Send-back 1, fault 1: THE CWD IS NAMED, never inherited. A launcher used to start in

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import re
 import sys
-from turns import Missing, attribution, facts, locate, parser, read_records, run
+from turns import Missing, attribution, facts, locate_with_note, parser, read_records, run
 
 
 # Ruling E9-3, settled for this lane by E10-62: each id Tony pinned is class `opus` with
@@ -42,7 +42,7 @@ def main():
     if not re.fullmatch('[A-Za-z0-9_-]+',a.target_token):p.error('invalid target token')
     if any([a.caller,a.run_id,a.run_dir]) and not all([a.caller,a.run_id,a.run_dir]):p.error('caller, run-id and run-dir are required together')
     if a.run_id is not None and not re.fullmatch(r'[A-Za-z0-9._-]+',a.run_id):p.error('invalid run-id')
-    ws=Path(a.workspace).resolve();records=read_records(locate(ws));meta,ctx=facts(records)
+    ws=Path(a.workspace).resolve();record,wall_note=locate_with_note(ws);records=read_records(record);meta,ctx=facts(records)
     if Path(meta.get('cwd','')).resolve()!=ws:raise ValueError('rollout cwd differs from workspace')
     originator=meta.get('originator')
     mode={'codex_exec':'headless','codex_cli_rs':'interactive'}.get(originator)
@@ -59,6 +59,10 @@ def main():
     if sandbox=='workspace-write' and any(home==r or r in home.parents for r in roots):
         sandbox='workspace-write plus the isolated home'
     if ctx.get('sandbox_policy',{}).get('network_access') is True:sandbox+=', network on'
+    # SB-8: an executor rollout accepted WRITABLE is an E9-37 exception, and an exception the
+    # record must carry. Behind the wall `sandbox_policy.type` reads `danger-full-access`
+    # because Codex's own sandbox is off; the string says what is confining the session instead.
+    if wall_note:sandbox+='; '+wall_note
     # The installed helper location is the installation surface, not a model-supplied flag.
     entry='plugin' if '/plugins/cache/' in str(Path(__file__).resolve()) else 'host skill' if '/skills/recheck-v2/' in str(Path(__file__).resolve()) and str(home/'skills')+'/' in str(Path(__file__).resolve()) else 'explicit path'
     return dict(mode=mode,caller=a.caller or 'direct',resume=False,run_id=rid,run_dir=str(rd),harness=dict(name='codex-cli',version=meta['cli_version'],entry=entry,sandbox=sandbox),model=model_facts(meta,ctx,records),run_date=a.run_date,session_wrote_fix=a.session_wrote_fix,turn_attribution=mapping)

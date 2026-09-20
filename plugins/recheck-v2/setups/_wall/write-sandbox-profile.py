@@ -29,6 +29,11 @@ Measured on this Mac (macOS 26.6.2, 2026-09-19) and the reason the shape is what
 - A path is emitted in BOTH its given and its resolved form (`/tmp` is `/private/tmp`, `/var`
   is `/private/var`), because a profile matches the path the kernel resolves and a caller
   names the path a person typed.
+- One FILE can be reopened inside a denied subtree without reopening its siblings: `(literal
+  "<path>")` matches that path alone, where `(subpath "<dir>")` matches a whole tree. Emitted
+  after the deny, it is what lets the two conditions of one setup share a single credential
+  store while the rest of the other condition's home stays refused (send-back 8). `write_files`
+  is that allow, read and write; `read_files` is its read-only twin.
 - A second `sandbox-exec` inside the first fails (`sandbox_apply: Operation not permitted`,
   exit 71), so nothing under the wall may try to sandbox itself again.
 """
@@ -168,10 +173,18 @@ def build_rules(spec):
     read_roots = entries(spec, "read_roots")
     read_files = entries(spec, "read_files")
     write_roots = entries(spec, "write_roots")
+    # send-back 8: ONE named file, readable AND writable, and nothing else in the directory it
+    # sits in. The Codex install keeps one credential store and links every derived home's
+    # `auth.json` to it, so the `absent` condition reaches its credential through a link into a
+    # root this profile refuses. A subpath allow would reopen the whole of that other home; a
+    # literal reopens exactly the one file, after the deny, where last-match-wins gives it to
+    # the launch. Writable because Codex rewrites the store on a token refresh, and a store
+    # readable in one condition and writable in the other would be a with/without difference.
+    write_files = entries(spec, "write_files")
     refused = entries(spec, "refused_roots")
     devices = spec.get("device_nodes")
     devices = list(DEFAULT_DEVICE_NODES) if devices is None else list(devices)
-    allowed_paths = [r["path"] for r in read_roots + read_files + write_roots]
+    allowed_paths = [r["path"] for r in read_roots + read_files + write_roots + write_files]
 
     for row in refused:
         for allowed in allowed_paths:
@@ -220,6 +233,10 @@ def build_rules(spec):
     if write_roots:
         rules.append(rule("allow", list(READ_OPS) + list(WRITE_OPS),
                           [("subpath", r["path"]) for r in write_roots], "write roots"))
+    if write_files:
+        rules.append(rule("allow", list(READ_OPS) + list(WRITE_OPS),
+                          [("literal", r["path"]) for r in write_files],
+                          "write files: one named file each, never the directory it sits in"))
     if devices:
         rules.append(rule("allow", list(READ_OPS) + list(WRITE_OPS),
                           [("literal", p) for p in devices], "the device nodes a process needs"))
@@ -228,7 +245,8 @@ def build_rules(spec):
                           [("subpath", r["path"]) for r in post],
                           "refused roots, denied after every allow"))
     return {"rules": rules, "read_roots": read_roots, "read_files": read_files,
-            "write_roots": write_roots, "refused_roots": refused, "devices": devices,
+            "write_roots": write_roots, "write_files": write_files,
+            "refused_roots": refused, "devices": devices,
             "refused_before_the_allows": [r["path"] for r in pre],
             "refused_after_the_allows": [r["path"] for r in post],
             "metadata_ancestors": metadata}
@@ -241,9 +259,16 @@ def check_profile(built):
     chain of an allowed root has to stay stat-able or path resolution fails before it reaches
     the root. Metadata is not a listing (that is `file-read-data` on the directory) and not a
     read of any file, and the exception is recorded here rather than assumed.
+
+    Send-back 8: the contents check runs on EVERY refused root, the ones that contain an
+    allowed root included. `<root>/a-file-under-the-refused-root` is never a path any spec
+    names, so it is a fair stand-in for the sibling of a reopened literal - the file the Codex
+    credential fix must leave refused. It used to be skipped whenever the root contained
+    anything allowed, which is exactly the case a one-file allow creates.
     """
     rules = built["rules"]
-    allowed = built["read_roots"] + built["read_files"] + built["write_roots"]
+    allowed = (built["read_roots"] + built["read_files"] + built["write_roots"]
+               + built["write_files"])
     problems = []
     for row in built["refused_roots"]:
         contains_an_allowed_root = any(under(a["path"], row["path"]) for a in allowed)
@@ -253,15 +278,16 @@ def check_profile(built):
             if evaluate(rules, row["path"], operation) != "deny":
                 problems.append("%s is not refused for %s" % (row["path"], operation))
         inside = os.path.join(row["path"], "a-file-under-the-refused-root")
-        if not contains_an_allowed_root and \
-                evaluate(rules, inside, "file-read-data") != "deny":
-            problems.append("%s is refused but its contents are not" % row["path"])
+        for operation in CHECKED_READ + CHECKED_WRITE:
+            if evaluate(rules, inside, operation) != "deny":
+                problems.append("%s is refused but its contents are not (%s)"
+                                % (row["path"], operation))
     for row in built["read_roots"] + built["read_files"]:
         for operation in CHECKED_READ:
             if evaluate(rules, row["path"], operation) != "allow":
                 problems.append("%s is named as readable and is not (%s)"
                                 % (row["path"], operation))
-    for row in built["write_roots"]:
+    for row in built["write_roots"] + built["write_files"]:
         for operation in CHECKED_READ + CHECKED_WRITE:
             if evaluate(rules, row["path"], operation) != "allow":
                 problems.append("%s is named as writable and is not (%s)"
@@ -310,6 +336,7 @@ def build(spec):
         "read_roots": built["read_roots"],
         "read_files": built["read_files"],
         "write_roots": built["write_roots"],
+        "write_files": built["write_files"],
         "refused_roots": built["refused_roots"],
         "refused_before_the_allows": built["refused_before_the_allows"],
         "refused_after_the_allows": built["refused_after_the_allows"],
