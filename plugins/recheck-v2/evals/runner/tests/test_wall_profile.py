@@ -943,7 +943,14 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
         return campaign, setup
 
     def kinds(self, campaign, setup):
-        """`(name, workspace, run_dir, scratch, roots, out_dir)` per launch kind."""
+        """`(name, workspace, run_dir, scratch, roots, out_dir, prompt)` per launch kind.
+
+        SB-12 send-back 4: the PROMPT is part of the row now. Every launch kind writes one and
+        hands its path to the launcher, and until that send-back nothing checked that the path
+        was inside the profile - `probe-env`'s was not, and on the first sealed clean run all
+        nine probe sessions died before they started, one on `no prompt file` and one on
+        `Operation not permitted`.
+        """
         rows = []
 
         def trial_shaped(name, tid, kind_attempt=0):
@@ -952,9 +959,11 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
             workspace = os.path.join(case, "workspace")
             run_dir = os.path.join(case, "run")
             scratch = runner.trial_scratch(campaign, tid, kind_attempt)
+            record = os.path.join(campaign.trials, tid)
             return (name, workspace, run_dir, scratch,
                     runner.named_writable_roots(run_dir),
-                    os.path.join(campaign.trials, tid, "harness"))
+                    os.path.join(record, "harness"),
+                    os.path.join(record, "prompt.txt"))
 
         # 1. comparison, and 2. its rerun (the same path, another attempt)
         rows.append(trial_shaped("comparison", "claude-code-F1-01-fixed-clean-available-r1"))
@@ -965,7 +974,8 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
         rows.append(("routing", os.path.join(tree, "workspace"),
                      os.path.join(tree, "run"), runner.trial_scratch(campaign, tid, 0),
                      runner.named_writable_roots(os.path.join(tree, "run")),
-                     os.path.join(campaign.trials, tid, "harness")))
+                     os.path.join(campaign.trials, tid, "harness"),
+                     os.path.join(campaign.trials, tid, "prompt.txt")))
         # 4. and 5. both continuation halves
         rows.append(trial_shaped("continuation-first", "cont-claude-code-F3-02-handoff-r1"))
         rows.append(trial_shaped("continuation-second", "cont-claude-code-F3-02-handoff-r1"))
@@ -978,26 +988,32 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
         rows.append(("consumer", os.path.join(pair, "workspace"),
                      os.path.join(pair, "run"), runner.trial_scratch(campaign, tid, 0),
                      runner.named_writable_roots(os.path.join(pair, "run")),
-                     os.path.join(campaign.trials, tid, "harness")))
-        # 8. probe-env
+                     os.path.join(campaign.trials, tid, "harness"),
+                     os.path.join(campaign.trials, tid, "prompt.txt")))
+        # 8. probe-env. SB-12 send-back 4: trial-shaped, per setup AND condition, with its
+        # own prompt and workspace inside its own tree. The record stays under `probes/`.
         base = runner.probe_dir(campaign, setup.name, "available")
-        rows.append(("probe-env", os.path.join(campaign.root, "probes", "workspace"),
-                     os.path.join(campaign.root, "probes", "workspace"),
-                     runner.probe_scratch(base), [],
-                     os.path.join(base, "20260919T000000Z")))
+        tree = os.path.join(campaign.tmp, "probe-env", "%s-available" % setup.name)
+        rows.append(("probe-env", os.path.join(tree, "workspace"),
+                     os.path.join(tree, "run"), runner.probe_scratch(tree),
+                     runner.named_writable_roots(os.path.join(tree, "run")),
+                     os.path.join(base, "20260919T000000Z"),
+                     os.path.join(tree, "env-probe.txt")))
         # 9. the write-fence proof's live mode
         base = os.path.join(campaign.tmp, "write-fence", setup.name)
         rows.append(("write-fence", os.path.join(base, "workspace"),
                      os.path.join(base, "run"), runner.probe_scratch(base),
                      runner.named_writable_roots(os.path.join(base, "run")),
-                     os.path.join(campaign.trials, "fence-%s-x" % setup.name, "harness")))
+                     os.path.join(campaign.trials, "fence-%s-x" % setup.name, "harness"),
+                     os.path.join(base, "denied-outside-write.txt")))
         # 10. the native read-boundary probe
         base = os.path.join(campaign.tmp, "native-read-boundary", setup.name)
         rows.append(("native-read-boundary", os.path.join(base, "workspace"),
                      os.path.join(base, "run"), runner.probe_scratch(base),
                      runner.named_writable_roots(os.path.join(base, "run")),
                      os.path.join(campaign.records("native-read-boundary"), setup.name,
-                                  "harness-20260919T000000Z")))
+                                  "harness-20260919T000000Z"),
+                     os.path.join(base, "prompt.txt")))
         return rows
 
     def inside(self, rows, path):
@@ -1023,8 +1039,8 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
     def test_every_launch_kind(self):
         for name in ("claude-code", "codex", "opencode"):
             campaign, setup = self.campaign_and_setup(name)
-            for kind, workspace, run_dir, scratch, roots, out_dir in self.kinds(campaign,
-                                                                                setup):
+            for (kind, workspace, run_dir, scratch, roots, out_dir,
+                 prompt) in self.kinds(campaign, setup):
                 spec = runner.wall_spec(campaign, setup, "available", out_dir,
                                         workspace=workspace, run_dir=run_dir,
                                         scratch=scratch, roots=roots, proxy_port=1)
@@ -1048,6 +1064,14 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
                 self.assertTrue(self.inside(reads, spec["cwd"]),
                                 "%s: the named cwd %s is in no read root"
                                 % (label, spec["cwd"]))
+                # SB-12 send-back 4: THE PROMPT. Every launch kind hands one to its launcher,
+                # and a prompt the profile does not name is a session that cannot start.
+                self.assertTrue(self.inside(reads, prompt),
+                                "%s: the prompt %s is in no read root" % (label, prompt))
+                # ...and the out_dir the launcher writes its capture into
+                self.assertTrue(self.inside(writes, out_dir),
+                                "%s: the capture directory %s is in no write root"
+                                % (label, out_dir))
                 self.assertEqual(spec["cwd"], os.path.realpath(workspace))
                 # send-back 5: the offline uv cache, on every kind of every setup.
                 uv = spec["uv"]
@@ -1095,7 +1119,8 @@ class EveryLaunchKindsTmpdirIsInsideAWriteRootTest(RunnerCase):
         """The fault itself: `<campaign>/tmp` is a REFUSED root, so a launch handed it as
         TMPDIR cannot make `${TMPDIR}/runs`."""
         campaign, setup = self.campaign_and_setup()
-        for _kind, workspace, run_dir, scratch, roots, out_dir in self.kinds(campaign, setup):
+        for (_kind, workspace, run_dir, scratch, roots, out_dir,
+             _prompt) in self.kinds(campaign, setup):
             self.assertNotEqual(os.path.realpath(scratch), os.path.realpath(campaign.tmp))
         spec = runner.wall_spec(campaign, setup, "available",
                                 os.path.join(campaign.trials, "t", "harness"),

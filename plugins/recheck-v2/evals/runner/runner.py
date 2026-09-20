@@ -4928,14 +4928,37 @@ def do_probe_env(args):
             if glob.glob(os.path.join(base, "probe-*.json")) and not args.refresh:
                 raise Usage("%s already holds a probe record; pass --refresh to run another "
                             "beside it (a record is never replaced)" % base)
-            workspace = os.path.join(campaign.root, "probes", "workspace")
+            # SB-12 send-back 4. A probe launch is TRIAL-SHAPED, the way the native check's
+            # is. Until tonight its prompt was `<campaign>/probes/env-probe.txt` and its
+            # workspace `<campaign>/probes/workspace`, ONE pair shared by every setup and
+            # every home - and in no root of the walled launch's profile. probe-env had never
+            # run behind the wall, and on the first sealed clean run every one of the nine
+            # sessions died before it started: claude-code with
+            # `launch.sh: no prompt file: <campaign>/probes/env-probe.txt`, exit 2, and codex
+            # with `PermissionError: [Errno 1] Operation not permitted` on the same path,
+            # exit 1. `campaign start` requires a current passing probe per setup and home,
+            # so the run could not begin.
+            #
+            # The layout is `native_read_boundary_probe`'s, per setup and condition:
+            # `<campaign>/tmp/probe-env/<setup>-<condition>/{env-probe.txt, workspace, run,
+            # scratch}`, prepared OUTSIDE the wall, named to the launch through
+            # `guarded_launch_roots`, which is also the gate every other launch site passes.
+            # The RECORD does not move: it stays immutable and by name under
+            # `<campaign>/probes/<setup>-<condition>/<stamp>/`, with `probe-<stamp>.json`
+            # beside it, and `out_dir`'s own parent is a write root exactly as a trial's
+            # record root is.
+            tree = os.path.join(campaign.tmp, "probe-env",
+                                "%s-%s" % (setup.name, condition))
+            workspace = os.path.join(tree, "workspace")
             _empty_git_workspace(campaign, workspace)
-            prompt = os.path.join(campaign.root, "probes", "env-probe.txt")
+            run_dir = os.path.join(tree, "run")
+            ensure_dir(run_dir)
+            prompt = os.path.join(tree, "env-probe.txt")
             write_text(prompt, PROBE_PROMPT)
+            probe_tmp = probe_scratch(tree)
             # send-back 2: `passed` is what the LAUNCH will carry, built the same way, or
             # the gate below compares the session's environment against a shorter list than
             # the one it was given and calls a name the runner passed "unexplained".
-            probe_tmp = probe_scratch(base)
             launcher_env = dict(setup.launch_env(condition))
             launcher_env.update(setup.scratch_env(probe_tmp))
             # send-back 5: a probe launch is walled, so the wall's own names are part of what
@@ -4945,8 +4968,21 @@ def do_probe_env(args):
             registry = ProcessRegistry(campaign, "probe-%s-%s" % (setup.name, condition), 0,
                                        "probe")
             close_key(campaign, "the environment probe")
+            roots = guarded_launch_roots(
+                campaign, setup, condition, workspace, run_dir, probe_tmp,
+                "the environment probe %s/%s" % (setup.name, condition),
+                trial="probe-%s-%s" % (setup.name, condition), attempt=0, half="probe-env")
             step = setup.launch(condition, prompt, workspace, out_dir, timeout=args.timeout,
-                                registry=registry, scratch=probe_tmp)
+                                extra={"writable": roots}, registry=registry,
+                                scratch=probe_tmp)
+            # SB-12 send-back 4: and what the launch ACTUALLY carried includes the wall's own
+            # declared names, which `walled` records rather than the runner guessing them.
+            # None of them matches a banned shape (measured: the four proxy pairs,
+            # RECHECK_HARNESS_SANDBOX, RECHECK_WALL_PROBE, UV_CACHE_DIR and UV_OFFLINE are all
+            # ordinary names), so this cannot change `banned_the_runner_passed`; it makes the
+            # record say what the session was given instead of a shorter list.
+            wall_block = wall_record_of(step)
+            passed = sorted(set(passed) | set(wall_block.get("declared_env_names") or []))
             printed, printed_source = harness_reply(setup, out_dir)
             names = _probe_names(printed)
             names_in_the_record = _names_in_the_record(out_dir)
@@ -5028,6 +5064,10 @@ def do_probe_env(args):
                     n for n in names if n in PLATFORM_ADDED_ENV),
                 "staged_commit": stage.get("commit"),
                 "plugin_tree_sha256": stage.get("plugin_tree_sha256"),
+                # SB-12 send-back 4: this probe's own tree and the wall it ran behind.
+                "tree": tree, "prompt": prompt, "workspace": workspace,
+                "writable_roots": roots,
+                "wall": wall_block,
                 "ok": not reasons,
                 "why_not": reasons,
                 "model": setup.model_record(out_dir), "cost": setup.cost_record(out_dir),

@@ -10,9 +10,11 @@ Standard library only, Python 3.9, runs from any working directory. No test open
 model: every model-facing route is driven with canned records.
 """
 import copy
+import glob
 import json
 import os
 import shutil
+import types
 import unittest
 from unittest.mock import patch
 
@@ -1198,6 +1200,218 @@ class StopRecoveryAndPairs(_load_pair_fixture()):
                                               ("x-r1", 1, "launch_failed"),
                                               ("x-r2", 0, "launch_failed")])
         self.assertIn("refused", str(caught.exception))
+
+
+class ProbeEnvBehindTheWall(RunnerCase):
+    """SB-12 send-back 4: `probe-env` is trial-shaped, so its prompt survives the wall.
+
+    On the first sealed clean run every one of the nine probe sessions died before it
+    started: claude-code with `launch.sh: no prompt file: <campaign>/probes/env-probe.txt`,
+    exit 2, and codex with `PermissionError: [Errno 1] Operation not permitted` on the same
+    path, exit 1. The prompt and the workspace were ONE pair under `<campaign>/probes/`,
+    shared by every setup and home, and in no root of the walled launch's profile.
+    `campaign start` requires a current passing probe per setup and home, so the run could
+    not begin. probe-env had never run behind the wall before.
+
+    These tests run a real `sandbox-exec` child under the emitted profile. The launcher is a
+    stand-in staged as the setup's OWN `launch.sh` - which is what `launch_is_fake` and
+    `require_wall` require on a sealed real campaign - and it does two things: `cat` its
+    prompt file, and print `env | cut -d= -f1 | sort`. No model anywhere.
+    """
+
+    setups = ("claude-code", "codex")
+
+    # A stand-in `launch.sh`. `set -eu` means a prompt it cannot read is a NONZERO EXIT, which
+    # is exactly what the live failure was.
+    LAUNCHER = "\n".join([
+        "#!/bin/sh",
+        "set -eu",
+        'PROMPT="$1"; WS="$2"; OUT="$3"; shift 3',
+        'mkdir -p "$OUT"',
+        'cat "$PROMPT" > "$OUT/prompt-read.txt"',
+        'printf \'%s\\n\' "$*" > "$OUT/args.txt"',
+        'pwd > "$OUT/cwd.txt"',
+        'ls -d "$WS/.git" > "$OUT/workspace.txt"',
+        'env | cut -d= -f1 | sort > "$OUT/result.txt"',
+        "",
+    ])
+
+    def sealed(self, name="probe-wall"):
+        """A sealed, NON-synthetic campaign with its own stage and the stand-in launcher."""
+        campaign = runner.Campaign(os.path.join(self.scratch, name))
+        campaign.ensure()
+        document = dict(self.plan_document)
+        document["sealed"] = True
+        document["synthetic"] = False
+        runner.write_json(campaign.campaign_json, document)
+        runner.write_json(campaign.stage_json, {
+            "campaign": campaign.root, "stage": campaign.stage,
+            "commit": "test-commit", "plugin_tree_sha256": "test-tree"})
+        for harness in ("claude-code", "codex", "opencode"):
+            directory = os.path.join(campaign.stage, "plugins", "recheck-v2", "setups",
+                                     harness)
+            runner.ensure_dir(directory)
+            path = os.path.join(directory, "launch.sh")
+            runner.write_text(path, self.LAUNCHER)
+            os.chmod(path, 0o755)
+        # send-back 6's offline-uv verdict, which a real bench records before any launch.
+        runner.write_json(os.path.join(campaign.records("."), "verify-test.json"), {
+            "campaign": campaign.root,
+            "rows": [{"setup": setup_name, "condition": condition, "uv_offline_ok": True,
+                      "uv_offline": {"ok": True, "why": "recorded by the test bench"}}
+                     for setup_name in ("claude-code", "codex", "opencode")
+                     for condition in runner.HOMES]})
+        return campaign
+
+    def probe(self, campaign, setup_name="codex", home="available", refresh=False):
+        setup = runner.setup_for(campaign, campaign.plan(), setup_name)
+        runner.ensure_dir(setup.home(home))
+        args = types.SimpleNamespace(campaign=campaign.root, setup=[setup_name], home=home,
+                                     timeout=120, refresh=refresh)
+        with patch.object(runner, "_selected_setups", return_value=[setup]):
+            return runner.do_probe_env(args), setup
+
+    # ---- end to end, walled ---------------------------------------------------------------
+
+    def test_a_sealed_probe_env_run_passes_end_to_end(self):
+        for setup_name in ("codex", "claude-code"):
+            campaign = self.sealed("probe-%s" % setup_name)
+            document, setup = self.probe(campaign, setup_name)
+            self.assertTrue(document["ok"], json.dumps(document["probes"]))
+            row = document["probes_full"][0]
+            self.assertTrue(row["ok"], row["why_not"])
+            self.assertEqual(row["why_not_rules"], [])
+            for name in ("PATH", "HOME", "TMPDIR"):
+                self.assertIn(name, row["names_seen"], setup_name)
+            # it really ran behind the wall
+            self.assertTrue(row["wall"]["sealed"], row["wall"])
+            self.assertTrue(os.path.isfile(row["wall"]["profile"]))
+            # ...and the PROMPT was readable from inside it
+            read_back = runner.read_text(os.path.join(row["out_dir"], "prompt-read.txt"), "")
+            self.assertEqual(read_back, runner.PROBE_PROMPT)
+            # the workspace is a repository the session could see
+            self.assertIn(".git",
+                          runner.read_text(os.path.join(row["out_dir"], "workspace.txt"), ""))
+
+    def test_the_prompt_and_workspace_are_per_setup_AND_condition(self):
+        campaign = self.sealed("per-home")
+        seen = []
+        for setup_name in ("codex", "claude-code"):
+            for home in runner.HOMES:
+                document, _setup = self.probe(campaign, setup_name, home)
+                row = document["probes_full"][0]
+                seen.append((row["prompt"], row["workspace"], row["tree"]))
+                self.assertIn("%s-%s" % (setup_name, home), row["tree"])
+                self.assertTrue(runner.path_contains(row["tree"], row["prompt"]))
+                self.assertTrue(runner.path_contains(row["tree"], row["workspace"]))
+                # the record still lives where it always has
+                self.assertTrue(runner.path_contains(
+                    runner.probe_dir(campaign, setup_name, home), row["out_dir"]))
+        self.assertEqual(len(seen), len(set(seen)), "a path is shared across setups or homes")
+        self.assertEqual(len({p for p, _w, _t in seen}), 6)
+
+    def test_the_prompt_is_inside_a_root_the_profile_names(self):
+        campaign = self.sealed("prompt-root")
+        document, setup = self.probe(campaign, "codex")
+        row = document["probes_full"][0]
+        spec = runner.read_json(os.path.join(os.path.dirname(row["wall"]["profile"]),
+                                             "launch-wall.json"))
+        roots = [entry["path"] for entry in spec["read_roots"] + spec["write_roots"]]
+        self.assertTrue(any(runner.path_contains(root, row["prompt"]) for root in roots),
+                        roots)
+        self.assertIn(row["tree"], row["writable_roots"] + [
+            os.path.dirname(row["prompt"])])
+
+    def test_an_unreadable_prompt_fails_the_probe_and_never_passes(self):
+        """The measured failure itself, reproduced: the launcher cannot read its prompt."""
+        campaign = self.sealed("no-prompt")
+        original = runner.write_text
+
+        def skip_the_prompt(path, text):
+            if os.path.basename(path) == "env-probe.txt":
+                return path                        # the prompt is never written
+            return original(path, text)
+
+        with patch.object(runner, "write_text", side_effect=skip_the_prompt):
+            with self.assertRaises(runner.Failure) as caught:
+                self.probe(campaign, "codex")
+        self.assertIn("exited", str(caught.exception))
+        record = sorted(glob.glob(os.path.join(
+            runner.probe_dir(campaign, "codex", "available"), "probe-*.json")))
+        self.assertTrue(record, "the failed probe still leaves its own record")
+        row = runner.read_json(record[0])
+        self.assertFalse(row["ok"])
+        self.assertIn("nonzero_exit", row["why_not_rules"])
+        self.assertTrue(any("exited" in why for why in row["why_not"]), row["why_not"])
+
+    # ---- the environment gate --------------------------------------------------------------
+
+    def test_the_walls_own_declared_names_are_passed_not_unexplained(self):
+        campaign = self.sealed("declared")
+        document, _setup = self.probe(campaign, "codex")
+        row = document["probes_full"][0]
+        for name in list(runner.PROXY_ENV) + ["RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE",
+                                              "UV_CACHE_DIR", "UV_OFFLINE"]:
+            self.assertIn(name, row["names_the_runner_passed"], name)
+        self.assertEqual(row["banned_names_nobody_measured"], [])
+        self.assertEqual(row["banned_the_runner_passed"], [])
+
+    def test_no_wall_name_matches_a_banned_shape(self):
+        """Why the names above cannot reach the gate at all, measured rather than asserted."""
+        for name in list(runner.PROXY_ENV) + ["RECHECK_HARNESS_SANDBOX", "RECHECK_WALL_PROBE",
+                                              "UV_CACHE_DIR", "UV_OFFLINE",
+                                              "RECHECK_CODEX_HOME", "SKILLS_V2_PILOT_HOME"]:
+            self.assertIsNone(runner.BANNED_ENV_RE.match(name), name)
+
+    def test_the_two_banned_shaped_launch_names_are_explained_on_both_lanes(self):
+        """`CLAUDE_CODE_TMPDIR` the runner passes and declares; `CODEX_HOME` the launcher
+        sets for itself and the measured harness list carries. Neither is `unexplained`."""
+        self.assertIn("CLAUDE_CODE_TMPDIR", runner.DECLARED_ENV)
+        self.assertIsNotNone(runner.BANNED_ENV_RE.match("CLAUDE_CODE_TMPDIR"))
+        campaign = runner.Campaign(self.campaign)
+        claude = runner.ClaudeCodeSetup(campaign, stage=self.stage)
+        self.assertIn("CLAUDE_CODE_TMPDIR", claude.scratch_env("/tmp/x"))
+        self.assertIn("CODEX_HOME", runner.DECLARED_ENV)
+        self.assertIsNotNone(runner.BANNED_ENV_RE.match("CODEX_HOME"))
+        self.assertIn("CODEX_HOME", runner.HARNESS_CREATED_ENV["codex"])
+        codex = runner.CodexSetup(campaign, stage=self.stage)
+        self.assertNotIn("CODEX_HOME", codex.launch_env("available"))
+
+    # ---- the gate `campaign start` reads ----------------------------------------------------
+
+    def test_the_gate_requires_all_three_homes_even_with_no_routing_in_the_plan(self):
+        """`current_probes` walks `HOMES`, not the plan's trials: a plan that launches no
+        routing trial still needs a passing ROUTING probe, which is why `steps.sh preflight`
+        runs all three."""
+        campaign = self.sealed("gate")
+        document = dict(campaign.plan())
+        document.pop("routing", None)
+        runner.write_json(campaign.campaign_json, document)
+        required = runner.current_probes(campaign, campaign.plan())["required"]
+        for setup_name in ("claude-code", "codex"):
+            for home in runner.HOMES:
+                self.assertIn("%s/%s" % (setup_name, home), required)
+
+    def test_a_routing_home_probe_passes_walled(self):
+        campaign = self.sealed("routing-home")
+        document, _setup = self.probe(campaign, "codex", "routing")
+        self.assertTrue(document["ok"], json.dumps(document["probes"]))
+        row = document["probes_full"][0]
+        self.assertTrue(row["wall"]["sealed"])
+        self.assertEqual(runner.read_text(os.path.join(row["out_dir"], "prompt-read.txt"), ""),
+                         runner.PROBE_PROMPT)
+
+    def test_a_current_passing_probe_satisfies_the_gate_it_is_bound_to(self):
+        campaign = self.sealed("bound")
+        for setup_name in ("claude-code", "codex"):
+            for home in runner.HOMES:
+                self.probe(campaign, setup_name, home)
+        plan = dict(campaign.plan())
+        plan["setups"] = [spec for spec in plan["setups"]
+                          if spec["name"] in ("claude-code", "codex")]
+        gate = runner.current_probes(campaign, plan)
+        self.assertTrue(gate["ok"], gate["missing"])
+        self.assertEqual(gate["bound_to"]["commit"], "test-commit")
 
 
 class TheRig(RunnerCase):
