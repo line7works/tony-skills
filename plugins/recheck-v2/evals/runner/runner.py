@@ -1560,28 +1560,180 @@ def _needs_rows(needs, key):
     return rows
 
 
+# send-back 7: how far a wrapper chain is followed, and how much of a candidate is read
+# looking for the one `exec` line. Four hops is well past anything an installer writes; the
+# bound and the visited set together make a loop impossible.
+WRAPPER_HOPS = 4
+WRAPPER_MAX_BYTES = 8192
+# The one command a wrapper may carry: `exec <absolute path> "$@"`, quoted or bare. A
+# relative target is NOT this shape — the directory it resolves against is the caller's cwd,
+# which the wall names for itself, so following one would guess at a path the launch may not
+# even have.
+_WRAPPER_EXEC = re.compile(r"""^exec\s+(?:"(/[^"]*)"|'(/[^']*)'|(/\S*))\s+"\$@"$""")
+
+
+def _shell_wrapper_target(path):
+    """The absolute path a plain `exec` shell wrapper hands off to, or None.
+
+    send-back 7. `which codex` on this Mac is not a symlink: it is a small `sh` file whose
+    only command is `exec <absolute path> "$@"`, written by hand to pick one of two installs.
+    `os.path.realpath` of a plain file is itself, so the resolver stopped at the wrapper and
+    the wall denied everything the wrapper actually runs.
+
+    Deliberately narrow, because this decides what a profile ALLOWS: the candidate must be a
+    regular file, not a symlink (a symlink already resolves, and `realpath` is the rule for
+    it), small, text, and carry exactly one command after the shebang and the comments. A
+    wrapper that does anything else — a second command, a relative target, an argument of its
+    own — is not followed, and the old rule applies to it unchanged.
+    """
+    if os.path.islink(path) or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "rb") as handle:
+            blob = handle.read(WRAPPER_MAX_BYTES + 1)
+    except OSError:
+        return None
+    if len(blob) > WRAPPER_MAX_BYTES or b"\0" in blob:
+        return None
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    commands = [line.strip() for line in text.splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+    if len(commands) != 1:
+        return None
+    match = _WRAPPER_EXEC.match(commands[0])
+    if not match:
+        return None
+    return next(group for group in match.groups() if group)
+
+
+def _binary_chain(name):
+    """Every hop from the PATH entry for `name` to the file that is finally exec'd.
+
+    The list begins with what `which` found and appends each plain `exec` wrapper target, at
+    most `WRAPPER_HOPS` of them, never revisiting a path. Symlinks are NOT hops: the last
+    entry is realpathed by the caller, which is what resolves them.
+    """
+    found = which(name)
+    if not found:
+        return []
+    chain = [os.path.abspath(found)]
+    seen = {chain[0]}
+    for _ in range(WRAPPER_HOPS):
+        target = _shell_wrapper_target(chain[-1])
+        if not target:
+            break
+        target = os.path.abspath(target)
+        if target in seen:
+            break
+        seen.add(target)
+        chain.append(target)
+    return chain
+
+
+def _node_package_root(real):
+    """The package root of an executable installed inside a `node_modules` tree, or None.
+
+    send-back 7. `~/.npm-global/bin/codex` resolves to `<prefix>/lib/node_modules/@openai/
+    codex/bin/codex.js`, a node ESM script that realpaths its own package root, reads
+    `package.json` beside it, and then spawns the platform binary from
+    `node_modules/@openai/codex-darwin-arm64/vendor/<triple>/bin/` (with `rg`, `zsh` and the
+    code-mode host beside it). "The directory of the real file" gives `bin/`, which allows
+    none of that. The PACKAGE is the unit that has to be readable.
+
+    The root is the nearest ancestor holding a `package.json` whose own parent is
+    `node_modules` or an `@scope` directory under `node_modules` — the shape npm itself
+    guarantees. An executable outside any `node_modules` tree has no package root and keeps
+    the directory rule.
+    """
+    parts = os.path.abspath(real).split(os.sep)
+    if "node_modules" not in parts:
+        return None
+    current = os.path.dirname(os.path.abspath(real))
+    while True:
+        parent = os.path.dirname(current)
+        if parent == current or os.path.basename(current) == "node_modules":
+            return None
+        if os.path.isfile(os.path.join(current, "package.json")):
+            grandparent = os.path.basename(os.path.dirname(parent))
+            if os.path.basename(parent) == "node_modules" or (
+                    os.path.basename(parent).startswith("@") and grandparent == "node_modules"):
+                return current
+        current = parent
+
+
 def _binary_read_roots(needs):
     """The real install location of each binary the setup names.
 
     Measured 2026-09-19: `(deny file-read* (subpath "/Users"))` does not stop a binary under
     `/Users` from being EXECUTED — exec is `process-exec*` — but it does stop the bundle from
     reading its own files, which a harness written in JavaScript does on every start. So the
-    resolved location is a read root and the symlink's directory is not.
+    resolved location is a read root.
+
+    send-back 7 widened what "the resolved location" means, after a walled Codex launch
+    exited 126 in one second on `exec: ... Operation not permitted`. Three rules, in the order
+    the chain is walked:
+
+    1. a PATH entry that is a plain `exec <absolute path> "$@"` shell wrapper is followed
+       (`_shell_wrapper_target`, bounded and loop-safe), and the wrapper's own directory stays
+       a read root, because the launch stats and execs it there;
+    2. a hop that lands on a SYMLINK contributes its own directory, because exec'ing a
+       symlink resolves it, and resolving it needs metadata reads of its ancestors — that is
+       the read the kernel refused;
+    3. the root of a node-package executable is its PACKAGE root (`_node_package_root`), not
+       the `bin` directory it sits in. Outside a `node_modules` tree the old rule stands: the
+       directory of the real file, which for a directory is itself.
+
+    A binary that resolves through neither a wrapper nor a `node_modules` tree — Claude Code's
+    `<share>/claude/versions/<v>`, `/usr/local/bin/node` — produces exactly the rows it
+    produced before, which `test_sb_sendback_7.py` asserts against a fake layout.
     """
     rows = []
     for entry in needs.get("binaries") or []:
         name = entry.get("name") if isinstance(entry, dict) else entry
-        found = which(name)
-        if not found:
+        chain = _binary_chain(name)
+        if not chain:
             continue
-        real = os.path.realpath(found)
-        root = real if os.path.isdir(real) else os.path.dirname(real)
-        rows.append({"path": root,
-                     "why": (entry.get("why") if isinstance(entry, dict) else None)
-                     or "the resolved install location of %s" % name})
+        real = os.path.realpath(chain[-1])
+        # rule 1 and rule 2: what the chain passed through on the way, in order. Only a
+        # FOLLOWED wrapper contributes; a chain of one hop adds nothing and reads as it did.
+        for index, hop in enumerate(chain[:-1]):
+            rows.append({"path": os.path.dirname(hop),
+                         "why": "the directory of the plain `exec` wrapper %s, which the "
+                                "launch stats and execs (send-back 7)" % hop})
+            following = chain[index + 1]
+            if os.path.islink(following):
+                rows.append({"path": os.path.dirname(following),
+                             "why": "the directory of the symlink %s that wrapper execs; "
+                                    "resolving it reads its ancestors, and that read is what "
+                                    "a denied subtree refuses (send-back 7)" % following})
+        # rule 3
+        package_root = _node_package_root(real)
+        if package_root:
+            root = package_root
+            rule = ("the node package root of %s: the executable reads its own `package.json` "
+                    "and spawns the platform binary from the `node_modules` tree beside it, "
+                    "so the PACKAGE is the read root, not its `bin` directory (send-back 7)"
+                    % name)
+        else:
+            root = real if os.path.isdir(real) else os.path.dirname(real)
+            rule = "the resolved install location of %s" % name
+        why = (entry.get("why") if isinstance(entry, dict) else None) or rule
+        if len(chain) > 1:
+            why = "%s Resolved through: %s." % (
+                why, " -> ".join(chain + ([real] if real != chain[-1] else [])))
+        rows.append({"path": root, "why": why})
         if real != root:
             rows.append({"path": real, "why": "the %s executable itself" % name})
-    return rows
+    out, seen = [], set()
+    for row in rows:
+        if row["path"] in seen:
+            continue
+        seen.add(row["path"])
+        out.append(row)
+    return out
 
 
 def claude_project_slug(path):

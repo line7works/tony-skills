@@ -4,8 +4,8 @@
   "binaries": [
     {
       "name": "codex",
-      "why": "the harness itself; the resolved install location is a read root.",
-      "proven": true
+      "why": "the harness itself; the resolved install location is a read root. Send-back 7: on a machine where the PATH entry is a plain shell wrapper (a regular file, not a symlink, whose only command is `exec <absolute path> \"$@\"`), the runner FOLLOWS that wrapper instead of stopping at it, keeps the wrapper's own directory as a read root, and adds the directory of any symlink the wrapper execs, because resolving that symlink reads its ancestors. The install itself is an npm package, so the read root is the whole `@openai/codex` PACKAGE root - the nearest ancestor under `node_modules` holding `package.json` - not its `bin` directory: the js entry point reads its own `package.json` and spawns the platform binary, `rg`, `zsh` and the code-mode host out of the `node_modules` tree beside it. The runner derives every one of those paths at launch time from `which`; none of them is written here. Before the fix the walled launch exited 126 in one second with `exec: ... Operation not permitted` and the read-boundary check read `unclear` six times on an empty reply (record native-read-boundary/codex/harness-20260919T235910Z).",
+      "proven": false
     }
   ],
   "read": [
