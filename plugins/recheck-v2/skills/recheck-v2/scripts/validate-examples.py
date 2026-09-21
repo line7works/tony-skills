@@ -398,6 +398,13 @@ class Suite:
             ("receipt: a value on a punch-list step", rc, rcv, lambda d: set_path(d, ["plan", 0, "value"], "signed off")),
             ("receipt: a value on a verdict-doc copy step", rc, rcv, lambda d: set_path(d, ["plan", 1, "value"], "signed off")),
             ("receipt: content on a status-line step", rc, rcv, lambda d: set_path(d, ["plan", 2, "content"], "\nStatus: signed off\n")),
+            # E13 slice 1: the append block the transaction records before any document step
+            ("receipt: an append block with no log", rc, rcv, lambda d: del_path(d, ["append", "log"])),
+            ("receipt: an append block with no expected head", rc, rcv, lambda d: del_path(d, ["append", "expected_head"])),
+            ("receipt: an append head that is not a digest", rc, rcv, lambda d: set_path(d, ["append", "head"], "not-a-digest")),
+            ("receipt: an append seq that is not a whole number", rc, rcv, lambda d: set_path(d, ["append", "seqs", 0], -1)),
+            ("receipt: an append block carrying an unknown key", rc, rcv, lambda d: set_path(d, ["append", "why"], "because")),
+            ("receipt: recovered as a string", rc, rcv, lambda d: set_path(d, ["append", "recovered"], "yes")),
             # the fix round after Astra's review: E8-A34 (finding 16)
             ("stopped result carrying items (E8-A34)", stopped, res, lambda d: d.__setitem__("items", [])),
             ("stopped result carrying still_open (E8-A34)", stopped, res, lambda d: d.__setitem__("still_open", [])),

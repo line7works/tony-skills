@@ -52,6 +52,20 @@ class CommandLine(unittest.TestCase):
     def run_cli(self, *args, **kw):
         return testlib.run_script("validate-result.py", args, cwd=kw.get("cwd", self.dir), python=kw.get("python"), env=kw.get("env"))
 
+    def test_the_records_component_is_needed_only_when_a_workspace_is_supplied(self):
+        """E13 slice 1, send-back 1: V6 and V17 read the records through the component, so the CLI
+        resolves one when a workspace is given and stops with the driver's exit 3 when it cannot.
+        Without a workspace neither check can run, so no component is needed."""
+        example_path = os.path.join(testlib.EX, "result-completed.json")
+        off = dict(os.environ, RECHECK_TEST="1", RECHECK_TEST_NO_RECORDS="1")
+        code, out, err = self.run_cli(example_path, env=off)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out)["ok"], True)
+        code, out, err = self.run_cli(example_path, "--workspace", self.dir, env=off)
+        self.assertEqual(code, 3)
+        self.assertEqual(out, "")
+        self.assertIn("missing dependency: records component", err)
+
     def test_every_example_result_passes(self):
         for name in sorted(os.listdir(testlib.EX)):
             if not name.startswith("result-"):
@@ -236,7 +250,14 @@ class SemanticChecks(unittest.TestCase):
         self.assertEqual(self.skips(violated(self.completed))["V12"], "skipped: needs run directory")
         self.assertNotIn("V3", reasons, "V3 runs from the result's own run.run_dir")
         self.assertNotIn("V4", reasons, "V4 runs from the result's own run.run_dir")
-        reasons = self.skips(self.completed, run_dir=self.dir, workspace=self.dir, input_doc=self.caller)
+        # E13 slice 1: V6 and V17 read the records through the component, so a workspace alone no
+        # longer runs them; without a client they say which dependency is missing rather than
+        # falling back to the document
+        no_client = self.skips(self.completed, run_dir=self.dir, workspace=self.dir, input_doc=self.caller)
+        self.assertEqual(no_client.get("V6"), "skipped: needs the records component")
+        self.assertEqual(no_client.get("V17"), "skipped: needs the records component")
+        reasons = self.skips(self.completed, run_dir=self.dir, workspace=self.dir, input_doc=self.caller,
+                             records=testlib.records_client())
         self.assertTrue(all("not implemented" not in r for r in reasons.values()), reasons)
         for cid in RUN_DIR_CHECKS + WORKSPACE_CHECKS:
             self.assertNotIn(cid, reasons, "%s runs once its inputs are supplied (%r)" % (cid, reasons.get(cid)))

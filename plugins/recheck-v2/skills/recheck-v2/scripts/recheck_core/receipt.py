@@ -25,7 +25,7 @@ after step n's intent entry and before its target lands.
 import json
 import os
 
-from . import canon, checkpoint as cpmod, identity, ledger, validate
+from . import canon, checkpoint as cpmod, identity, ledger, records_write, validate
 
 FILE = "receipt.json"
 LOG = "receipt.log"
@@ -118,12 +118,18 @@ def sha(text):
 
 # ---- the plan (section 9) ------------------------------------------------------------------
 
-def plan_transaction(workspace, document, run_date, checklist, item_results, new_defects, waivers, reopenings, cards_before):
-    """Compute every step in order with content, before and after hashes, over in-memory states.
+def plan_document_steps(workspace, document, rendered, checklist, cards_before, open_after):
+    """Every DOCUMENT step of the transaction, in order, from the text the component rendered.
 
-    checklist: the checkpoint's scope.checklist; item_results: the done results in index order;
-    waivers / reopenings: the accepted grants ({"grant": g, "slice": s}); cards_before:
-    {slice: card}. Returns (plan, states, cards_after) where states maps target -> final text.
+    E13 3.3: the plan is computed from `records.py render --run-id <run_id>` AFTER the append, so
+    the bytes the pilot places are a rendering of the events it wrote. The placement is the pilot's,
+    unchanged: reopening lines at the ledger home's tail first, then the block, then the waiver
+    lines, then the verdict-doc copy where the glob matched exactly one, then one status line per
+    slice the mapping moves (section 9, writes 2 to 6).
+
+    `open_after` is the post-append open set the component derives; the mapping over it is the
+    pilot's own `card_after`, which is a DECISION and therefore does not move (ruling E13-1).
+    Returns (plan, states, cards_after, verdict_docs).
     """
     states = {}
 
@@ -149,23 +155,20 @@ def plan_transaction(workspace, document, run_date, checklist, item_results, new
         states[target] = after
         plan.append(step)
 
-    for g in sorted(reopenings, key=lambda x: (x["grant"]["date"], x["index"])):
-        it = g["grant"]["item"]
-        add("reopened_line", document, ledger.render_reopen(g["grant"]["date"], it["location"]["file"], it["location"]["line"], it["claim"], g["grant"]["quoted_words"]))
+    reopen_lines, waiver_lines = records_write.split_grant_lines(rendered.get("grants"))
+    block = rendered.get("block") or ""
+    heading = None
+    for line in block.split("\n"):
+        if line.startswith("### "):
+            heading = line
+            break
+    for line in reopen_lines:
+        add("reopened_line", document, line)
+    if block:
+        add("punch_list_block", document, block, heading=heading)
+    for line in waiver_lines:
+        add("waived_line", document, line)
     slices = ledger.sort_slices(it["slice"] for it in checklist)
-    lines = []
-    for it, res in zip(checklist, item_results):
-        disp = "fixed" if res["disposition"] == "fixed" else "not fixed"
-        lines.append(ledger.render_recheck_line(it["severity"], it["location"]["file"], it["location"]["line"], it["claim"], disp, ledger.render_how(res["verification"])))
-    for d in new_defects:
-        lines.append(ledger.render_defect_line(d["severity"], d["location"]["file"], d["location"]["line"], d["claim"], d["failure_scenario"],
-                                               ledger.defect_slice_field(slices, d["charged_to_slice"])))
-    heading = ledger.render_heading(run_date, slices)
-    block = ledger.render_block(run_date, slices, lines)
-    add("punch_list_block", document, block, heading=heading)
-    for g in sorted(waivers, key=lambda x: (x["grant"]["date"], x["index"])):
-        it = g["grant"]["item"]
-        add("waived_line", document, ledger.render_waiver(g["grant"]["date"], g["grant"]["severity"], it["location"]["file"], it["location"]["line"], it["claim"], g["grant"]["quoted_words"]))
     verdict_docs = {}
     for s in slices:
         if s == "none":
@@ -175,14 +178,11 @@ def plan_transaction(workspace, document, run_date, checklist, item_results, new
         if len(matches) == 1:
             add("verdict_doc_copy", matches[0], block, heading=heading)
     cards_after = {}
-    parsed_after = ledger.parse_document(states[document], document)
-    opened = ledger.open_set(parsed_after)
     for s in slices:
         if s == "none":
             continue
         before = cards_before.get(s, "none")
-        open_here = [e for e in opened["entries"] if e["slice"] == s and e["state"] == "open"]
-        after = ledger.card_after(before, open_here)
+        after = ledger.card_after(before, [e for e in open_after if e["slice"] == s])
         cards_after[s] = after
         if after != before:
             add("status_line", document, value=after, slice_name=s)
@@ -190,6 +190,12 @@ def plan_transaction(workspace, document, run_date, checklist, item_results, new
 
 
 # ---- the receipt file --------------------------------------------------------------------
+
+def stored_plan(plan):
+    """The plan as the receipt stores it: the fields the schema names, nothing the run adds."""
+    keep = ("step", "kind", "target", "before_sha256", "after_sha256", "content", "value", "heading", "cancelled")
+    return [{k: v for k, v in s.items() if k in keep} for s in plan]
+
 
 class Receipt:
     def __init__(self, run_dir, doc, schemas):
@@ -204,15 +210,34 @@ class Receipt:
         return os.path.join(self.run_dir, LOG)
 
     @classmethod
-    def new(cls, run_dir, run_id, plan, schemas):
-        stored = []
-        for s in plan:
-            step = {k: v for k, v in s.items() if k in ("step", "kind", "target", "before_sha256", "after_sha256", "content", "value", "heading", "cancelled")}
-            stored.append(step)
-        doc = {"run_id": run_id, "phase": "recording", "plan": stored, "entries": [], "integrity": {"seq": 0, "prev": None, "self": "0" * 64}}
+    def new(cls, run_dir, run_id, plan, schemas, append=None):
+        """E13 3.3: the receipt is created with the APPEND's intent, before the append runs, and
+        gains its plan once the rendered text exists. `append` is
+        `{"log", "expected_head"}` at that point; `record_append` completes it with the resulting
+        head and the seqs, before any document step."""
+        doc = {"run_id": run_id, "phase": "recording", "plan": stored_plan(plan), "entries": [],
+               "integrity": {"seq": 0, "prev": None, "self": "0" * 64}}
+        if append is not None:
+            doc["append"] = dict(append)
         rc = cls(run_dir, doc, schemas)
         rc._write(0, None)
         return rc
+
+    def set_plan(self, plan):
+        """Store the document steps once the render exists; the plan never changes afterwards,
+        except a status-line step the boundary check cancels (section 9)."""
+        self.doc["plan"] = stored_plan(plan)
+        self.save()
+
+    def record_append(self, log, expected_head, head, seqs, key="append"):
+        """The append this transaction made: expected head, resulting head, the seqs. Written
+        BEFORE any document step (E13 3.3)."""
+        self.doc[key] = {"log": log, "expected_head": expected_head, "head": head, "seqs": list(seqs)}
+        self.save()
+
+    def append_intent(self, log, expected_head, key="append"):
+        self.doc[key] = {"log": log, "expected_head": expected_head}
+        self.save()
 
     def save(self):
         integ = self.doc["integrity"]

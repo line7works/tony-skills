@@ -632,26 +632,15 @@ class ThePluginManifest(unittest.TestCase):
         self.assertEqual(body["name"], "records")
 
 
-class ThePilotIsFrozen(unittest.TestCase):
-    """Ruling E12-2: at close, `git diff --stat main -- plugins/recheck-v2` prints nothing."""
+class ThePilotAndThisComponent(unittest.TestCase):
+    """E13 amendment A2, item 2: `test_nothing_under_plugins_recheck_v2_has_moved` lived here.
 
-    def test_nothing_under_plugins_recheck_v2_has_moved(self):
-        repo = testlib.REPO
-        # a linked worktree's `.git` is a file, not a directory, so ask git rather than the tree
-        inside = subprocess.run(["git", "-C", repo, "rev-parse", "--git-dir"],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if inside.returncode != 0:
-            self.skipTest("not a git checkout: %s" % repo)
-        known = subprocess.run(["git", "-C", repo, "rev-parse", "--verify", "--quiet", "main"],
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if known.returncode != 0:
-            self.skipTest("this checkout has no `main` to diff against")
-        proc = subprocess.run(["git", "-C", repo, "diff", "--stat", "main", "--",
-                               "plugins/recheck-v2"],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
-        self.assertEqual(proc.stdout.decode("utf-8", "replace"), "",
-                         "the qualified pilot is not byte-identical to main (ruling E12-2)")
+    It asserted ruling E12-2's freeze — `git diff --stat main -- plugins/recheck-v2` prints
+    nothing — which held only while E12 was the current step. E13 slice 1 is the task that moves
+    the pilot onto this component, so the assertion became false by design the moment that work
+    began. The owner removed it on 2026-09-21. What it was really protecting, that this component
+    never writes into the pilot, is the sibling below and that one stays.
+    """
 
     def test_this_component_writes_nowhere_near_it(self):
         """Nothing shipped here names a path inside the pilot as a write target."""

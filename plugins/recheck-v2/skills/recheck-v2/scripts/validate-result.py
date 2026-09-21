@@ -11,9 +11,13 @@ Schema validation against references/result.schema.json comes first; the semanti
 lane contract section 8 (V1 to V18) follow, each running when the supplied inputs allow it
 (the input for cardinality, slices, grants, and the run-block rule; the run directory for the
 receipt, the checkpoint, the retained report, and artifact containment; the workspace for the
-document's slices, the cards, and the ledger round trip) and reporting itself as skipped
-otherwise. The workspace is taken from --workspace, else from the --input document's
-`workspace` field when that directory exists.
+document's slices, and the workspace plus the records component for the cards (V6) and the record
+round trip (V17)) and reporting itself as skipped otherwise. The workspace is taken from
+--workspace, else from the --input document's `workspace` field when that directory exists. When a
+workspace is supplied the records component is resolved the way the driver resolves it
+(--records-root, RECORDS_ROOT, beside this plugin, the installed shape below it) and confirmed at
+interface version 1; a component that cannot be found or speaks another version is exit 3 with one
+line on stderr, the shape a missing `jsonschema` already had.
 
 stdout: one JSON object {"ok": bool, "schema": [{path, message}], "semantic": [{id, path,
 message}], "skipped": [{id, reason}]} and nothing else. stderr: diagnostics.
@@ -22,8 +26,8 @@ when any check was skipped). A result file that exists but is not JSON is invali
 4, with the parse error as the one entry inside schema[] (amendment E8-A4). A result file that
 does not exist is a usage error: exit 2 with nothing on stdout; so is an --input that does not
 exist or is not JSON, a --run-dir that is not a directory, a --skill-root that is not a
-directory, or a bad argument. Exit 3 missing dependency (jsonschema); 1 anything else (a schema
-under the skill root missing or unreadable).
+directory, or a bad argument. Exit 3 missing dependency (`jsonschema`, or the records component when a workspace is supplied);
+1 anything else (a schema under the skill root missing or unreadable).
 Side effects: none. Reads only the files named and the schemas under the skill root.
 """
 import argparse
@@ -33,7 +37,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from recheck_core import validate  # noqa: E402
+from recheck_core import records_client as rcl, validate  # noqa: E402
 
 EXAMPLE = """example:
   uv run %(prog)s /tmp/recheck-a-20260920-7f3c/result.json \\
@@ -43,7 +47,8 @@ EXAMPLE = """example:
 exit status: 0 ok; 4 the result fails the schema or a semantic check (with --strict, also when any
   check was skipped), including a result file that exists but is not JSON (the parse error is the
   one entry inside schema[]); 2 usage (a result file that does not exist, an --input that does not
-  exist or is not JSON, a --run-dir or --skill-root that is not a directory, a bad argument); 3 jsonschema missing;
+  exist or is not JSON, a --run-dir or --skill-root that is not a directory, a bad argument);
+  3 a missing dependency (jsonschema, or the records component when a workspace is supplied);
   1 anything else (a schema under the skill root missing or unreadable).
 side effects: none (read-only). Reruns are safe."""
 
@@ -72,6 +77,9 @@ def build_parser():
                    help="treat every skipped check as a failure (exit 4), so a caller can require the full validator")
     p.add_argument("--skill-root", metavar="DIR", default=None,
                    help="test only: load references from DIR instead of the script's own skill root")
+    p.add_argument("--records-root", metavar="DIR", default=None,
+                   help="the records component's root, which V6 and V17 read the records through when a "
+                        "workspace is supplied (default: the four lookups of the interface)")
     return p
 
 
@@ -130,7 +138,17 @@ def main(argv=None):
         out["skipped"] = [{"id": cid, "reason": "skipped: schema failed"} for cid in validate.CHECK_IDS]
         sys.stderr.write("schema: %d error(s); semantic checks skipped\n" % len(out["schema"]))
         return emit(out, False)
-    sem = validate.run_semantic(result, input_doc=input_doc, run_dir=args.run_dir, workspace=workspace, schemas=schemas)
+    records = None
+    if workspace is not None:
+        # E13 slice 1: V6 and V17 read the records through the component; without it they would
+        # fall back to nothing, so the same exit 3 the driver gives applies here
+        try:
+            records = rcl.open_client(records_root=args.records_root)
+        except rcl.ComponentUnavailable as refusal:
+            sys.stderr.write("%s\n" % refusal)
+            sys.exit(3)
+    sem = validate.run_semantic(result, input_doc=input_doc, run_dir=args.run_dir, workspace=workspace, schemas=schemas,
+                                records=records)
     out["semantic"], out["skipped"] = sem["semantic"], sem["skipped"]
     ok = not out["semantic"] and (not args.strict or not out["skipped"])
     sys.stderr.write("schema ok; semantic: %d finding(s), %d check(s) skipped%s\n"

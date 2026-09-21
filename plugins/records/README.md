@@ -16,10 +16,11 @@ is internal.
 ## Status
 
 Interface version 1, component version 0.1.0. Built in E12 of the skills v2 rebuild, in three
-slices, under the lane contract the control room holds. Nothing consumes it yet: moving the
-qualified `recheck-v2` pilot onto it is the first task of E13, and `plugins/recheck-v2/` is
-byte-identical through E12 on purpose. Running the importer over real repositories is a separate
-job, one repository at a time, after E12 closes.
+slices, under the lane contract the control room holds. Its first consumer is the `recheck-v2`
+pilot, which moved onto it in E13 slice 1; the E12 freeze that kept `plugins/recheck-v2/`
+byte-identical ended with that step. One rule has moved since: E13 amendment A2, in the build
+record below. Running the importer over real repositories is a separate job, one repository at a
+time.
 
 ## Build record
 
@@ -38,6 +39,7 @@ Facts about how this component was built, in order. Review results are not recor
 | Third fix round | the items once listed for E13, fixed here on the owner's word (A11): two refusals published, examples regenerated, every required list pinned, the lock a response carries published | 591 |
 | Recheck | the same reviewer, once more, on the second and third fix rounds and regressions | |
 | Fourth fix round | what the recheck found: lock ownership at commit time is inode and bytes; a guard on the liveness judgement | 593 |
+| E13 amendment A2 | the owner's ruling of 2026-09-21 on the recheck lane's finding 1: `append` admits a `waived` whose finding is `fixed` at the current head, which is the pair a station writes when one run clears an item the user also waived. A `waived` over a `waived`, and a `disposition: "fixed"` over anything but `open`, are refused as before, and the `known` and `identity` conditions did not move; `interface_version` stays 1 because `state` already decided the pair by its later-wins rule. The E12-2 freeze test over `plugins/recheck-v2` went with the same ruling; its sibling, that this component writes nowhere near the pilot, stays | 601 |
 
 Every count is the full suite under `/usr/bin/python3`, and the same count through `uv run`.
 Rulings and amendments A1 to A11 and the builders' standing readings are in section 16 of the lane contract, `docs/plans/2026-09-20-records-e12.md`.

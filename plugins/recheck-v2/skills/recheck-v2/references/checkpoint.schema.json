@@ -198,6 +198,14 @@
       },
       "description": "the fix-introduced defects found so far (section 4)"
     },
+    "new_defect_causes": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "description": "E13 slice 1: the checklist index whose fix introduced each defect, one per entry of `new_defects` and in the same order, kept so the `defect_raised` event can name the causing FINDING (`caused_by`). The defect objects themselves stay verbatim copies of result.schema.json's, which a drift test holds. A checkpoint written before E13 carries no such list and the event's `caused_by` is then null."
+    },
     "verifier_calls": {
       "type": "array",
       "items": {

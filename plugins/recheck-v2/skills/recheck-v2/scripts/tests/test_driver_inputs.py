@@ -12,6 +12,7 @@ import testlib
 testlib.add_scripts_to_path()
 
 SKILL_ROOT = testlib.SKILL
+records_client = testlib.records_client  # E13 slice 1: resolve_scope reads through the component
 
 
 class Driver(unittest.TestCase):
@@ -300,7 +301,7 @@ class Driver(unittest.TestCase):
             self.assertEqual(doc["document"]["run"]["run_id"], cid + "-run", cid)
             self.assertFalse(os.path.exists(os.path.join(cdir, "workspace", ".recheck-run")), cid)
             self.assertEqual(os.listdir(os.path.join(cdir, "run")), [], "%s: no run directory is created" % cid)
-            self.assertEqual(testlib.git(os.path.join(cdir, "workspace"), "status", "--porcelain"), "", cid)
+            self.assertEqual(testlib.project_status(os.path.join(cdir, "workspace")), "", cid)
 
     def test_i4_05_duplicate_items(self):
         """I2I4 CASES.md, I4-05 / I4-09: two byte-identical items; a semantic fault after validation: the run block,
@@ -332,7 +333,7 @@ class Driver(unittest.TestCase):
         self.assertEqual(res["missing_input"]["fields"], ["target.items[0].slice"])
         self.assertIn("Z", res["missing_input"]["ambiguity"][0]); self.assertIn("question", res["missing_input"])
         self.assertEqual(sorted(os.listdir(os.path.join(cdir, "run"))), ["chat.md", "input.json", "result.json"])
-        self.assertEqual(testlib.git(os.path.join(cdir, "workspace"), "status", "--porcelain"), "", "nothing written to the project")
+        self.assertEqual(testlib.project_status(os.path.join(cdir, "workspace")), "", "nothing written to the project")
         self.assertTrue(self.validate(cdir, doc["result"])["ok"])
         # slice none needs no heading; slice A has one: the run proceeds to the brief
         cdir = self.case("F1-fixed-defect", "F1-01-fixed-clean", mutate=lambda d: d.__setitem__("target", {"items": [dict(item, slice="A")]}))
@@ -359,7 +360,7 @@ class Driver(unittest.TestCase):
         res = testlib.load_json(doc["result"])
         self.assertEqual(res["status"], "stopped"); self.assertEqual(res["stop_reason"], "unsupported: submodules: theme")
         self.assertNotIn("source_identity", res)
-        self.assertEqual(testlib.git(os.path.join(cdir, "workspace"), "status", "--porcelain"), "")
+        self.assertEqual(testlib.project_status(os.path.join(cdir, "workspace")), "")
         self.assertTrue(self.validate(cdir, doc["result"])["ok"])
 
     # ---- VXUM: V1, U1, M1 ----
@@ -534,7 +535,7 @@ class Driver(unittest.TestCase):
         cdir = self.case("S2-waivers-reopening", "S2-03-reopened", mutate=lambda d: d["target"].pop("slice"))
         doc = testlib.load_json(os.path.join(cdir, "input.json"))
         grants = inputs.collect_grants(doc)
-        scope = inputs.resolve_scope(doc, os.path.join(cdir, "workspace"), grants["reopenings"])
+        scope = inputs.resolve_scope(doc, os.path.join(cdir, "workspace"), grants["reopenings"], records_client())
         self.assertEqual(scope["status"], "ok", scope)
         self.assertEqual(len(scope["checklist"]), 1); self.assertEqual(scope["source"], "named_items"); self.assertEqual(scope["slice"], "A")
         code, started, err = self.start(cdir)
@@ -578,7 +579,7 @@ class Driver(unittest.TestCase):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines))
         doc = testlib.load_json(os.path.join(cdir, "input.json"))
-        scope = inputs.resolve_scope(doc, ws, [])
+        scope = inputs.resolve_scope(doc, ws, [], records_client())
         self.assertEqual(scope["status"], "missing_input")
         self.assertEqual(scope["fields"], ["target.build_doc"])
         self.assertEqual(scope["ambiguity"], ["the record at %s:%d has no failure scenario; supply or confirm it" % (rel, idx + 1)])

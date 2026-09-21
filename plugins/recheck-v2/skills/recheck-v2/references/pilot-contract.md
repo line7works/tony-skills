@@ -972,3 +972,89 @@ Revision 5, E9 seam 2026-09-14 (ruling E9-1 in the E9 lane contract
 naming no turn of the session (section 8); E8-24's reading that a missing map leaves the field
 rules alone in force is unchanged. The core's `grant_channel_ok` and one test implement it; no
 fixture outcome changes (every IA trial map lists every reference its grants cite).
+
+Revision 6, 2026-09-21, step E13 slice 1 (the stations E13 lane contract, rulings E13-1 to E13-5):
+**the records move into the records component; nothing this skill decides moves with them.** The
+meaning of open, fixed, waived and reopened, the card mapping, the severity bar, the independence
+rule and every stop rule are unchanged (ruling E13-1). What changes is where the records are kept
+and how the Markdown is produced.
+
+- **Reaching the component.** The core resolves the records component through the resolver snippet
+  of that component's `references/interface.md` (a `--records-root` argument, `RECORDS_ROOT`, the
+  component beside this plugin, the installed shape below it), confirms `interface_version` 1 with
+  `component-identity`, and reaches it through `scripts/records.py` as a subprocess only: it never
+  opens a log file, never imports the component's library, and never copies its code beyond that
+  one snippet. A component that cannot be found, or that speaks another interface version, is exit
+  3 with one line on stderr and nothing on stdout, the shape a missing `jsonschema` already had;
+  `--help` and argument checking still work without it. Every caller value is bound as an argv
+  item, never as shell text.
+
+- **Section 6, the exclusion.** The six-field identity is computed with one fixed prefix excluded
+  from the dirty check, the tracked diff and the untracked list: `docs/records/`, the component's
+  own history. The component excludes exactly that list, and `append` refuses a clear (exit 6)
+  unless `verified_source` equals the identity the component computes, so the two must agree field
+  for field. The section 9 boundary check uses the same exclusion, so the log this run writes is
+  never a boundary violation and never makes the run `stale_source`. A workspace with no
+  `docs/records/` hashes to the bytes it always did.
+
+- **Section 9, the log as an authorized write.** A seventh authorized write joins the list: the
+  document's log under `docs/records/`, written through the component's CLI and never directly. A
+  command of this skill that writes nothing today still writes nothing: it uses
+  `import-legacy --dry-run`, which takes no lock, and reports what the log lacks instead of adding
+  it.
+
+- **Section 9, the append inside the transaction.** v1 signoff still writes findings into the
+  Markdown by hand, so a document can be ahead of its log. At the start of every phase that reads
+  the document's records, the core runs `import-legacy` for that document, whether or not a log
+  exists; the importer is idempotent and a pass that finds no news appends nothing. An ambiguous
+  document (component exit 5) or a record changed above the imported tail (exit 7) stops the run
+  with the importer's own explanation and writes nothing to the document.
+
+  The recording transaction then runs in this order: the pre-transaction checks of section 9
+  unchanged; `receipt.json` created carrying the APPEND's intent (the log and the head read at plan
+  time) and an empty plan; one `append` with `--expect-head <that head>`, all events or none
+  (`reopened` per reopening grant, `disposition` per checklist item, `defect_raised` per new
+  defect, `waived` per waiver grant, in that order); the receipt's record of the append (expected
+  head, resulting head, the seqs) BEFORE any document step; `render --run-id <run_id>`; the plan of
+  the document steps computed from that rendered text and stored in the receipt; then the document
+  steps exactly as before. A `card_set` is a SECOND, later append under the same receipt pattern
+  (`card_append`), made only for a status-line step that actually landed, so a status step the
+  boundary check cancelled leaves no card event behind. Every event carries `actor` with the run's
+  `run_id` and `recheck-v2` as the station; a clear (`disposition`, `waived`) carries the full
+  six-field `verified_source` with `known: true`. The Markdown the core places — the block, the
+  waiver and reopening lines, the verdict-doc copy — is the `block`, `grants` and `text` of
+  `render`, placed where this skill has always placed them. The heading's date is the run date,
+  which is why every event of a run carries that date in its `at`.
+
+- **Section 9 and 10, the refusals.** Each refusal of `append` is the matching stop with NOTHING
+  written to the document: component exit 4 (`invalid`) and exit 7 (`conflict`, a moved head or a
+  live lock) are `recording_failed`, exit 5 (`ambiguous_identity`) is `missing_input`, exit 6
+  (`stale_source`) is `stale_source`. Exit 7 is never retried and never merged.
+
+- **Section 11, resume and the crash window.** A failure after the append and before the document
+  steps finish is recoverable, and the append is never made twice. The receipt's `append` block
+  carries the head it expected as soon as the transaction begins and the resulting head only once
+  the append was recorded, so an intent with no head is the crash window itself. A resume asks the
+  log for this run's events by `run_id`: they are there, so only the receipt's record was missing
+  and the block is completed from the log and marked `recovered`; or there are none, so the append
+  never landed and is made now. Either way the result names the half that was missing under
+  `resumed_half`, and the document steps are then classified against the virtual state exactly as
+  before.
+
+- **`recheck_core/ledger.py` is byte-frozen by the records component, not by this skill.** That
+  component keeps a byte-for-byte copy of the whole module in `records_core/legacy.py` (records
+  E12-2), and its own suite compares the two. Two helpers in it, `find_entries` and
+  `entry_claim_field`, no longer serve any decision of this skill — the join moved to
+  `records_view.match_entries` and `records_view.claim_field`, over the entries the component
+  derives — and they are kept solely so that copy still matches. Nothing in this skill may call
+  them: `tests/test_validator_records.py::TheRestoredHelpersAreNeverOnTheDecisionPath` reads every
+  shipped file for a call and runs the decision path with both replaced by traps. The same
+  invariant means no comment or edit of any kind can be made inside `ledger.py` without the
+  records component's copy moving with it, which is a change to that component and the owner's.
+
+- **Appendix A, the block is a rendering of events.** The record grammar is unchanged and stays the
+  authority for what a line means. What changes is who writes the line: the core supplies the facts
+  as events and the component renders them, byte for byte as the core's own renderers did. A parity
+  suite holds the two together over every built case of every E7 lane, which is how this skill's
+  qualification is re-earned for the move (owner pick P1: re-verified by parity on 2026-09, not
+  re-trialled).

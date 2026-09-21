@@ -695,7 +695,14 @@ events to a log, all or none, and is the one writing command a station calls.
   lock whose holder is alive is exit 7. There is no waiting and no retry loop.
 - A `disposition` with `disposition: "fixed"`, and a `waived`, are refused (exit 6) unless the
   event carries `verified_source` with `known: true`, that identity equals the one computed in
-  the workspace field for field, and the finding it names is open at the log's current head.
+  the workspace field for field, and the finding it names stands at a status the clear admits. A
+  `disposition: "fixed"` admits `open` alone. A `waived` admits `open` or `fixed`, because
+  Appendix A orders records by file position and the later one wins: a user's waiver written after
+  a clearance is what decides the finding, `state`'s deciding-event rule already reads the pair
+  that way, and a station records exactly it when one run clears an item the user also waived
+  (**E13 amendment A2**, 2026-09-21, the owner's ruling on the recheck lane's finding 1). A
+  `waived` over a finding already `waived` is still refused, and so is any clear over a finding
+  the log never raised. The `known` and `identity` conditions did not move.
 - Native events only. An event carrying `origin.kind: "legacy"`, or the importer's station
   `records-import`, is refused (exit 4) before anything else about it is judged. A legacy record
   enters a log only through `import-legacy`, which reads it from the document itself.
@@ -725,7 +732,7 @@ events to a log, all or none, and is the one writing command a station calls.
 | `candidates[]` | one history address. |
 | `candidates[].log` | the log's path. |
 | `candidates[].seq` | the `seq` of the event that holds it. |
-| `condition` | which of section 8.3's three conditions failed: `known`, `identity`, or `open`. |
+| `condition` | which of section 8.3's three conditions failed: `known`, `identity`, or `open`. The third keeps the name `open` under amendment A2, where what it admits is `open` for a `disposition: "fixed"` and `open` or `fixed` for a `waived`; `status` says what the finding actually stands at. |
 | `differing_fields` | which of the six identity fields differ. |
 | `differing_fields[]` | one field name. |
 | `expected` | the identity the event was decided against. |
@@ -1156,6 +1163,9 @@ below.
 - **A clear cannot be written against another revision.** That is what exit 6 is for, and the
   importer is the one writer exempt from it, only for a legacy record, only through
   `import-legacy`, and the exemption has no flag on this CLI.
+- **A waiver may follow a clearance.** `append` admits a `waived` whose finding is `fixed`, which
+  is the one status pair amendment A2 opened; `state` decides it by the same later-wins rule it
+  always used, so no reader's behaviour changes and `interface_version` stays 1.
 - **The chain is the conflict detector.** A git merge that joined two tails leaves the second
   tail's first `prev` naming a line that is no longer its predecessor, and `verify` names that
   line.
