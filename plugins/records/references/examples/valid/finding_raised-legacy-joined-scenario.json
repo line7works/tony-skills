@@ -1,0 +1,41 @@
+{
+  "actor": {
+    "harness": null,
+    "run_id": "import-docs__plans__2026-04-01-widget-20260401T090000Z",
+    "station": "records-import"
+  },
+  "at": "2026-04-01",
+  "claim": "the retry loop never ends",
+  "finding": "f1:c717ee83a8ab2571efc7",
+  "kind": "finding_raised",
+  "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "location": {
+    "file": "src/widget.py",
+    "line": 88,
+    "line_end": null,
+    "more": [],
+    "raw": "src/widget.py:88",
+    "resolved": true,
+    "tag": null
+  },
+  "origin": {
+    "commit_named": null,
+    "doc": "docs/plans/2026-04-01-widget.md",
+    "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
+    "heading_line": 40,
+    "kind": "legacy",
+    "line": 77,
+    "raw": "- MAJOR · src/widget.py:88 · the retry loop never ends · it spins forever · the gauge test reproduces it · Slice A review",
+    "recorded_commit": null
+  },
+  "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "raised_by": "Slice A review",
+  "scenario": "it spins forever · the gauge test reproduces it",
+  "seq": 7,
+  "severity": "BLOCKER",
+  "slice": "A",
+  "source": {
+    "known": false
+  },
+  "v": 1
+}

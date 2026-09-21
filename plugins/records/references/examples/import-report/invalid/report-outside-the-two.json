@@ -1,0 +1,121 @@
+{
+  "document": {
+    "ambiguities": [],
+    "ambiguous": 0,
+    "appended": [
+      {
+        "finding": null,
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 0
+        },
+        "kind": "log_opened",
+        "seq": 0
+      },
+      {
+        "finding": null,
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 1
+        },
+        "kind": "import_started",
+        "seq": 1
+      },
+      {
+        "finding": null,
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 2
+        },
+        "kind": "card_observed",
+        "seq": 2
+      },
+      {
+        "finding": "f1:f695809e1fd21b242a2d",
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 3
+        },
+        "kind": "finding_raised",
+        "seq": 3
+      },
+      {
+        "finding": "f1:b4348de22bee99713070",
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 4
+        },
+        "kind": "finding_raised",
+        "seq": 4
+      },
+      {
+        "finding": "f1:b4348de22bee99713070",
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 5
+        },
+        "kind": "disposition",
+        "seq": 5
+      },
+      {
+        "finding": "f1:f695809e1fd21b242a2d",
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 6
+        },
+        "kind": "waived",
+        "seq": 6
+      },
+      {
+        "finding": "f1:b4348de22bee99713070",
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 7
+        },
+        "kind": "reopened",
+        "seq": 7
+      },
+      {
+        "finding": null,
+        "history": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 8
+        },
+        "kind": "import_finished",
+        "seq": 8
+      }
+    ],
+    "blocks": 3,
+    "component_version": "0.1.0",
+    "counts": {
+      "card_observed": 1,
+      "disposition": 1,
+      "finding_raised": 2,
+      "reopened": 1,
+      "waived": 1
+    },
+    "doc": "docs/plans/2026-05-05-grants.md",
+    "doc_sha256": "c43ae7331fdd461a80d642c7620f2f55955cdf603cd4d4d14ac69af09e091758",
+    "dry_run": false,
+    "events": 9,
+    "head": "f93aa38a940ac46e3678e6a14b40ff9171cb1f7c714c9e6de9143b43e89a84d0",
+    "imported": 9,
+    "interface_version": 1,
+    "lines_classified": 6,
+    "lines_read": 23,
+    "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+    "ok": true,
+    "opened_log": true,
+    "previously_imported": 0,
+    "rejected_resolutions": [],
+    "report": "import-legacy",
+    "run_id": "import-docs__plans__2026-05-05-grants-20260520T120000Z",
+    "slices": 1,
+    "spec": {
+      "doc": "docs/plans/2026-05-05-grants.md",
+      "slice": null
+    },
+    "would_import": null
+  },
+  "reason": "`report` tells the two shapes apart and is `import` or `survey`"
+}

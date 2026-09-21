@@ -1,0 +1,33 @@
+{
+  "ambiguities": [],
+  "ambiguous": 0,
+  "blocks": 2,
+  "component_version": "0.1.0",
+  "counts": {
+    "card_observed": 1,
+    "disposition": 1,
+    "finding_raised": 2
+  },
+  "doc": "docs/plans/2026-05-03-join-exact.md",
+  "doc_sha256": "0b2d19d1833039b5cfd01d8f93878b951b7015cced5c59923572f03cfccb1f16",
+  "dry_run": true,
+  "events": 0,
+  "head": "0000000000000000000000000000000000000000000000000000000000000000",
+  "imported": 0,
+  "interface_version": 1,
+  "lines_classified": 4,
+  "lines_read": 17,
+  "log": "docs/records/docs__plans__2026-05-03-join-exact.events.jsonl",
+  "ok": true,
+  "opened_log": true,
+  "previously_imported": 0,
+  "rejected_resolutions": [],
+  "report": "import",
+  "run_id": "import-docs__plans__2026-05-03-join-exact-20260520T120000Z",
+  "slices": 1,
+  "spec": {
+    "doc": "docs/plans/2026-05-03-join-exact.md",
+    "slice": null
+  },
+  "would_import": 7
+}

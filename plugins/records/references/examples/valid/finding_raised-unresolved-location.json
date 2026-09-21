@@ -1,0 +1,41 @@
+{
+  "actor": {
+    "harness": "claude-code",
+    "run_id": "import-1",
+    "station": "records-import"
+  },
+  "at": "2026-03-02",
+  "claim": null,
+  "finding": "f1:eb1d7cab7a67ca87d572",
+  "kind": "finding_raised",
+  "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "location": {
+    "file": null,
+    "line": null,
+    "line_end": null,
+    "more": [],
+    "raw": "the migration notes for the widget table",
+    "resolved": false,
+    "tag": null
+  },
+  "origin": {
+    "commit_named": null,
+    "doc": "docs/plans/2026-04-01-widget.md",
+    "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
+    "heading_line": 40,
+    "kind": "legacy",
+    "line": 51,
+    "raw": "- MAJOR . the migration notes for the widget table . the table is created twice on a fresh install",
+    "recorded_commit": null
+  },
+  "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "raised_by": null,
+  "scenario": "the table is created twice on a fresh install",
+  "seq": 7,
+  "severity": "MAJOR",
+  "slice": "B",
+  "source": {
+    "known": false
+  },
+  "v": 1
+}

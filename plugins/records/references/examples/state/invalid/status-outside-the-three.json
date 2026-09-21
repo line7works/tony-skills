@@ -1,0 +1,118 @@
+{
+  "document": {
+    "at_source": null,
+    "component_version": "0.1.0",
+    "counts": {
+      "cleared_unbound": 1,
+      "findings": 2,
+      "fixed": 0,
+      "open": 1,
+      "waived": 1
+    },
+    "events": 9,
+    "exists": true,
+    "filters": {
+      "slice": null
+    },
+    "findings": [
+      {
+        "caused_by": null,
+        "claim": "the night shift runs without a second packer",
+        "cleared_unbound": true,
+        "decided": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 6
+        },
+        "events": [
+          3,
+          6
+        ],
+        "id": "f1:f695809e1fd21b242a2d",
+        "join_basis": "location_only",
+        "location": {
+          "file": "src/night.py",
+          "line": 4,
+          "line_end": null,
+          "more": [],
+          "raw": "src/night.py:4",
+          "resolved": true,
+          "tag": null
+        },
+        "raised": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 3
+        },
+        "raised_by": "Slice A review",
+        "scenario": "one packer lifts alone",
+        "severity": "BLOCKER",
+        "slice": "A",
+        "status": "cleared",
+        "verified_source": null
+      },
+      {
+        "caused_by": null,
+        "claim": "the shift log is written at dawn",
+        "cleared_unbound": false,
+        "decided": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 7
+        },
+        "events": [
+          4,
+          5,
+          7
+        ],
+        "id": "f1:b4348de22bee99713070",
+        "join_basis": "exact",
+        "location": {
+          "file": "src/night.py",
+          "line": 26,
+          "line_end": null,
+          "more": [],
+          "raw": "src/night.py:26",
+          "resolved": true,
+          "tag": null
+        },
+        "raised": {
+          "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+          "seq": 4
+        },
+        "raised_by": "Slice A review",
+        "scenario": "an incident is recorded hours late",
+        "severity": "MAJOR",
+        "slice": "A",
+        "status": "open",
+        "verified_source": null
+      }
+    ],
+    "head": "f93aa38a940ac46e3678e6a14b40ff9171cb1f7c714c9e6de9143b43e89a84d0",
+    "interface_version": 1,
+    "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+    "ok": true,
+    "open": {
+      "BLOCKER": 0,
+      "MAJOR": 1,
+      "MINOR": 0
+    },
+    "slices": [
+      {
+        "card_derived": "signed off with conditions",
+        "card_drift": false,
+        "card_observed": "signed off with conditions",
+        "card_observed_text": "signed off with conditions",
+        "name": "A",
+        "open": {
+          "BLOCKER": 0,
+          "MAJOR": 1,
+          "MINOR": 0
+        },
+        "open_total": 1
+      }
+    ],
+    "spec": {
+      "doc": "docs/plans/2026-05-05-grants.md",
+      "slice": null
+    }
+  },
+  "reason": "a finding is open, fixed, or waived; nothing else (section 9.2)"
+}

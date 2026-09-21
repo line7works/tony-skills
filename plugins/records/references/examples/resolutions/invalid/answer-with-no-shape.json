@@ -1,0 +1,13 @@
+{
+  "document": {
+    "answered_by": "the owner",
+    "answered_on": "2026-05-21",
+    "answers": [
+      {
+        "line": 16,
+        "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite"
+      }
+    ]
+  },
+  "reason": "an answer that names a line and decides nothing answers nothing"
+}

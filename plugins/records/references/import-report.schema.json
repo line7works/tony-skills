@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/records/import-report.schema.json",
+  "title": "records import report",
+  "description": "What `records.py import-legacy` and `records.py survey` print on stdout (records E12 contract sections 11 and 12.2). Five shapes, told apart by `report` and `ok`: an import report that landed or would land (report `import`, ok true); the refusal an ambiguous document or a rejected resolutions file produces (report `import`, ok false, exit 5 or 4, nothing written); the earlier refusal two answers for one line produce (report `import`, ok false, exit 4), raised before a plan exists and so carrying none of the plan's fields; the earlier refusal a `--resolutions` file that fails its own schema or answers another document produces (report `import`, ok false, exit 4), raised before the importer reads a single answer and so carrying none of the plan's fields either; and a survey (report `survey`, ok true), which is read-only per document and never writes. Every response carries the envelope every command carries. A response claims this schema when it carries `report`: that is the discriminator, and every branch pins it with a `const`.",
+  "type": "object",
+  "required": ["interface_version", "component_version", "ok", "report"],
+  "properties": {
+    "report": {"enum": ["import", "survey"]}
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/import_ok"},
+    {"$ref": "#/$defs/import_refused"},
+    {"$ref": "#/$defs/duplicate_answers_refused"},
+    {"$ref": "#/$defs/resolutions_file_refused"},
+    {"$ref": "#/$defs/survey"}
+  ],
+  "$defs": {
+    "resolutions_file_refused": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_version", "component_version", "ok", "report", "error", "reason",
+                   "doc", "log"],
+      "properties": {
+        "interface_version": {"type": "integer", "minimum": 1},
+        "component_version": {"type": "string", "minLength": 1},
+        "ok": {"const": false},
+        "report": {"const": "import"},
+        "error": {"const": "invalid"},
+        "reason": {"type": "string", "minLength": 1},
+        "doc": {"type": "string", "minLength": 1, "description": "the document --doc named"},
+        "log": {"type": "string", "minLength": 1},
+        "errors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "message"],
+            "properties": {
+              "path": {"type": "string", "description": "a JSON pointer into the resolutions file"},
+              "message": {"type": "string", "minLength": 1}
+            }
+          },
+          "description": "what `resolutions.schema.json` said, in path order; absent when the file parsed and validated but answers another document"
+        }
+      },
+      "description": "section 11.5: the `--resolutions` file is read and held to `resolutions.schema.json`, and its `doc` is checked against `--doc`, before the importer reads a single answer. Either refusal is exit 4 and writes nothing, and neither carries `head`, `events`, `dry_run`, `counts`, `ambiguities` or `rejected_resolutions`, because no plan exists yet."
+    },
+    "duplicate_answers_refused": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_version", "component_version", "ok", "report", "error", "reason",
+                   "doc", "log", "line", "answers"],
+      "properties": {
+        "interface_version": {"type": "integer", "minimum": 1},
+        "component_version": {"type": "string", "minLength": 1},
+        "ok": {"const": false},
+        "report": {"const": "import"},
+        "error": {"const": "invalid"},
+        "reason": {"type": "string", "minLength": 1},
+        "doc": {"type": "string", "minLength": 1},
+        "log": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "description": "the line answered twice, as the answers wrote it"},
+        "answers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/rejection/properties/answer"},
+          "description": "the answer already held for that line and the duplicate that arrived after it"
+        }
+      },
+      "description": "section 11.5: one ambiguous line takes one answer. Two answers for one line, identical ones included, are refused before the pass plans anything, so this response carries no `head`, `events`, `dry_run`, `counts` or `ambiguities`."
+    },
+    "envelope": {
+      "interface_version": {"type": "integer", "minimum": 1},
+      "component_version": {"type": "string", "minLength": 1}
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doc", "slice"],
+      "properties": {"doc": {"type": "string", "minLength": 1}, "slice": {"type": ["string", "null"]}}
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["log", "seq"],
+      "properties": {"log": {"type": "string", "minLength": 1}, "seq": {"type": "integer", "minimum": 0}}
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0},
+      "description": "events by kind for this pass; the keys are the event kinds of section 6.2"
+    },
+    "ambiguity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "raw", "reason", "candidates"],
+      "properties": {
+        "line": {"type": "integer", "minimum": 1},
+        "raw": {"type": "string"},
+        "reason": {"type": "string", "minLength": 1},
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["finding", "line", "slice"],
+            "properties": {
+              "finding": {"type": "string", "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"},
+              "line": {"type": "integer", "minimum": 0},
+              "slice": {"type": ["string", "null"]}
+            }
+          }
+        }
+      },
+      "description": "one line the import stopped on: everything a resolutions answer needs (section 11.5)"
+    },
+    "rejection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "why", "reason", "answer"],
+      "properties": {
+        "line": {"type": ["integer", "null"]},
+        "why": {"enum": ["line_not_asked", "raw_changed", "unknown_finding", "answer_does_not_fit"]},
+        "reason": {"type": "string", "minLength": 1},
+        "answer": {"type": "object"}
+      }
+    },
+    "import_body": {
+      "log": {"type": "string", "minLength": 1},
+      "doc": {"type": "string", "minLength": 1},
+      "doc_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+      "dry_run": {"type": "boolean"},
+      "run_id": {"type": "string", "minLength": 1},
+      "lines_read": {"type": "integer", "minimum": 0},
+      "lines_classified": {"type": "integer", "minimum": 0},
+      "previously_imported": {"type": "integer", "minimum": 0},
+      "blocks": {"type": "integer", "minimum": 0},
+      "slices": {"type": "integer", "minimum": 0},
+      "counts": {"$ref": "#/$defs/counts"},
+      "ambiguous": {"type": "integer", "minimum": 0},
+      "ambiguities": {"type": "array", "items": {"$ref": "#/$defs/ambiguity"}},
+      "rejected_resolutions": {"type": "array", "items": {"$ref": "#/$defs/rejection"}},
+      "spec": {"$ref": "#/$defs/spec"}
+    },
+    "import_ok": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_version", "component_version", "ok", "report", "log", "doc",
+                   "doc_sha256", "dry_run", "run_id", "lines_read", "lines_classified",
+                   "previously_imported", "blocks", "slices", "counts", "imported",
+                   "would_import", "ambiguous", "ambiguities", "rejected_resolutions", "spec",
+                   "opened_log", "head", "events"],
+      "properties": {
+        "interface_version": {"type": "integer", "minimum": 1},
+        "component_version": {"type": "string", "minLength": 1},
+        "ok": {"const": true},
+        "report": {"const": "import"},
+        "log": {"type": "string", "minLength": 1},
+        "doc": {"type": "string", "minLength": 1},
+        "doc_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "dry_run": {"type": "boolean"},
+        "run_id": {"type": "string", "minLength": 1},
+        "lines_read": {"type": "integer", "minimum": 0},
+        "lines_classified": {"type": "integer", "minimum": 0},
+        "previously_imported": {"type": "integer", "minimum": 0},
+        "blocks": {"type": "integer", "minimum": 0},
+        "slices": {"type": "integer", "minimum": 0},
+        "counts": {"$ref": "#/$defs/counts"},
+        "ambiguous": {"type": "integer", "minimum": 0},
+        "ambiguities": {"type": "array", "items": {"$ref": "#/$defs/ambiguity"}},
+        "rejected_resolutions": {"type": "array", "items": {"$ref": "#/$defs/rejection"}},
+        "spec": {"$ref": "#/$defs/spec"},
+        "opened_log": {"type": "boolean", "description": "true when this pass wrote the log's first line"},
+        "imported": {"type": "integer", "minimum": 0, "description": "events appended; 0 on a dry run and on a document that has not grown"},
+        "would_import": {"type": ["integer", "null"], "minimum": 0, "description": "events a dry run would append; null on a real import"},
+        "head": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "events": {"type": "integer", "minimum": 0},
+        "appended": {"type": "array", "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["seq", "kind", "finding", "history"],
+          "properties": {
+            "seq": {"type": "integer", "minimum": 0},
+            "kind": {"type": "string", "minLength": 1},
+            "finding": {"type": ["string", "null"]},
+            "history": {"$ref": "#/$defs/history"}
+          }
+        }},
+        "broke_lock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pid", "pid_start"],
+          "properties": {
+            "pid": {"type": ["integer", "null"], "description": "the pid the stale lock recorded; null when the lock file could not be read"},
+            "pid_start": {"type": ["string", "null"], "description": "that process's start time as the lock recorded it; null when the lock could not be read, and null in an environment that denies `ps`"},
+            "command": {"type": "string", "minLength": 1, "description": "the command that took it: `append` or `import-legacy`"},
+            "unreadable": {"type": "string", "minLength": 1, "description": "why the lock file could not be read, when it could not; `pid` and `pid_start` are then both null and no `command` is known"}
+          },
+          "description": "the stale lock this run removed, when --break-lock did something: the contents of the lock file as it stood. A lock this component wrote is {pid, pid_start, command}; a lock file that could not be read is reported as {pid: null, pid_start: null, unreadable}."
+        },
+        "orphan_temporaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "with --break-lock: every `.<log file name>.*.tmp` file found beside the log, as workspace-relative paths. An interrupted write can leave one; nothing deletes it."
+        }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["dry_run"], "properties": {"dry_run": {"const": true}}},
+          "then": {"properties": {"imported": {"const": 0}, "would_import": {"type": "integer"}},
+                   "not": {"required": ["appended"]}},
+          "else": {"required": ["appended"], "properties": {"would_import": {"type": "null"}}}
+        }
+      ]
+    },
+    "import_refused": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_version", "component_version", "ok", "report", "error", "reason",
+                   "log", "doc", "head", "events", "dry_run", "counts", "lines_read",
+                   "lines_classified", "spec", "ambiguities"],
+      "properties": {
+        "interface_version": {"type": "integer", "minimum": 1},
+        "component_version": {"type": "string", "minLength": 1},
+        "ok": {"const": false},
+        "report": {"const": "import"},
+        "error": {"enum": ["ambiguous_identity", "invalid"]},
+        "reason": {"type": "string", "minLength": 1},
+        "log": {"type": "string", "minLength": 1},
+        "doc": {"type": "string", "minLength": 1},
+        "head": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "events": {"type": "integer", "minimum": 0},
+        "dry_run": {"type": "boolean"},
+        "counts": {"$ref": "#/$defs/counts"},
+        "lines_read": {"type": "integer", "minimum": 0},
+        "lines_classified": {"type": "integer", "minimum": 0},
+        "spec": {"$ref": "#/$defs/spec"},
+        "ambiguities": {"type": "array", "items": {"$ref": "#/$defs/ambiguity"}},
+        "rejected_resolutions": {"type": "array", "items": {"$ref": "#/$defs/rejection"}}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["error"], "properties": {"error": {"const": "invalid"}}},
+          "then": {"required": ["rejected_resolutions"],
+                   "properties": {"rejected_resolutions": {"minItems": 1}}},
+          "else": {"properties": {"ambiguities": {"minItems": 1}}}
+        }
+      ]
+    },
+    "survey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_version", "component_version", "ok", "report", "workspace",
+                   "documents", "counts", "total", "returned", "offset", "truncated"],
+      "properties": {
+        "interface_version": {"type": "integer", "minimum": 1},
+        "component_version": {"type": "string", "minLength": 1},
+        "ok": {"const": true},
+        "report": {"const": "survey"},
+        "workspace": {"type": "string", "minLength": 1},
+        "documents": {"type": "array", "items": {"$ref": "#/$defs/survey_document"},
+                      "description": "one page of the documents, in path order (amendment A9)"},
+        "total": {"type": "integer", "minimum": 0, "description": "how many documents carry a record in the whole workspace"},
+        "returned": {"type": "integer", "minimum": 0, "description": "how many this page holds; equals the length of `documents`"},
+        "offset": {"type": "integer", "minimum": 0, "description": "how many documents this page skipped"},
+        "truncated": {"type": "boolean", "description": "true when the page left documents out"},
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["documents", "ledger_documents", "mirrors", "blocks", "records", "stops",
+                       "documents_that_would_stop"],
+          "properties": {
+            "documents": {"type": "integer", "minimum": 0},
+            "ledger_documents": {"type": "integer", "minimum": 0},
+            "mirrors": {"type": "integer", "minimum": 0},
+            "blocks": {"type": "integer", "minimum": 0},
+            "records": {"type": "integer", "minimum": 0},
+            "stops": {"type": "integer", "minimum": 0},
+            "documents_that_would_stop": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "survey_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doc", "role", "doc_sha256", "lines", "blocks", "slices", "records",
+                   "join_basis", "stops", "ambiguous"],
+      "properties": {
+        "doc": {"type": "string", "minLength": 1},
+        "role": {"enum": ["ledger", "mirror"]},
+        "doc_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "lines": {"type": "integer", "minimum": 0},
+        "blocks": {"type": "integer", "minimum": 0},
+        "slices": {"type": "integer", "minimum": 0},
+        "records": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0},
+          "description": "counts by record kind: finding, recheck, defect, waiver, reopening, unparsed"
+        },
+        "join_basis": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0},
+          "description": "counts by join basis (section 11.4); `resolved` counts the clears a person answered"
+        },
+        "stops": {"type": "array", "items": {"$ref": "#/$defs/ambiguity"},
+                  "description": "the lines that would stop an import of this document"},
+        "ambiguous": {"type": ["integer", "null"], "minimum": 0, "description": "null for a mirror, which is never imported"},
+        "events": {"type": "integer", "minimum": 0},
+        "event_counts": {"$ref": "#/$defs/counts"}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["role"], "properties": {"role": {"const": "mirror"}}},
+          "then": {"properties": {"ambiguous": {"type": "null"}, "stops": {"maxItems": 0}},
+                   "not": {"required": ["events"]}},
+          "else": {"required": ["events", "event_counts"], "properties": {"ambiguous": {"type": "integer"}}}
+        }
+      ]
+    }
+  }
+}

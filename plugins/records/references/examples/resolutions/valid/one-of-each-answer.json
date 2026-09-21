@@ -1,0 +1,24 @@
+{
+  "answered_by": "the owner",
+  "answered_on": "2026-05-21",
+  "answers": [
+    {
+      "finding": "f1:0123456789abcdef0123",
+      "line": 16,
+      "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite"
+    },
+    {
+      "line": 14,
+      "new_finding": true,
+      "raw": "- MINOR · src/floor.py:90 · (the floor mat curls at the edge) · fixed · executed: the mat is taped down"
+    },
+    {
+      "line": 14,
+      "raw": "- MAJOR · src/cold.py:5 · the store temperature is never logged · a second reviewer found the same thing · Slice A review",
+      "skip": true,
+      "why": "the same finding, written twice by two reviewers in one block"
+    }
+  ],
+  "doc": "docs/plans/2026-05-03-join-ambiguous-shared.md",
+  "note": "the three answer shapes of section 11.5, one of each"
+}

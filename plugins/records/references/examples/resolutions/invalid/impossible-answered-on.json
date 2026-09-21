@@ -1,0 +1,14 @@
+{
+  "document": {
+    "answered_by": "the owner",
+    "answered_on": "2026-02-30",
+    "answers": [
+      {
+        "line": 16,
+        "new_finding": true,
+        "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite"
+      }
+    ]
+  },
+  "reason": "answered_on is a real calendar date (E8-A34)"
+}

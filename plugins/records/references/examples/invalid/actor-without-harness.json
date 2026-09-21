@@ -1,0 +1,44 @@
+{
+  "event": {
+    "actor": {
+      "run_id": "r",
+      "station": "signoff"
+    },
+    "at": "2026-04-01T09:00:01Z",
+    "claim": "the retry loop never ends",
+    "finding": "f1:c717ee83a8ab2571efc7",
+    "kind": "finding_raised",
+    "ledger_doc": "docs/plans/2026-04-01-widget.md",
+    "location": {
+      "file": "src/widget.py",
+      "line": 88,
+      "line_end": null,
+      "more": [],
+      "raw": "src/widget.py:88",
+      "resolved": true,
+      "tag": null
+    },
+    "origin": {
+      "kind": "native"
+    },
+    "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "raised_by": "A",
+    "scenario": "a failed call spins until the process is killed",
+    "seq": 7,
+    "severity": "BLOCKER",
+    "slice": "A",
+    "source": {
+      "identity": {
+        "commit": "1f0c9b7a4d2e6f80315c8ab4d9e2071c6b35a8f4",
+        "dirty": false,
+        "submodules": [],
+        "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked": [],
+        "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "known": true
+    },
+    "v": 1
+  },
+  "reason": "an actor names its station, run, and harness, null where there is none"
+}

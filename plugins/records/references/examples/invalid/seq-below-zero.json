@@ -1,0 +1,33 @@
+{
+  "event": {
+    "actor": {
+      "harness": "claude-code",
+      "run_id": "2026-04-01-widget-a",
+      "station": "signoff"
+    },
+    "after": "signed off with conditions",
+    "at": "2026-04-01T11:40:00Z",
+    "before": "rejected",
+    "kind": "card_set",
+    "ledger_doc": "docs/plans/2026-04-01-widget.md",
+    "origin": {
+      "kind": "native"
+    },
+    "prev": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "seq": -1,
+    "slice": "A",
+    "source": {
+      "identity": {
+        "commit": "1f0c9b7a4d2e6f80315c8ab4d9e2071c6b35a8f4",
+        "dirty": false,
+        "submodules": [],
+        "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked": [],
+        "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "known": true
+    },
+    "v": 1
+  },
+  "reason": "seq is the 0-based line index (section 6.2)"
+}

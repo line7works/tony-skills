@@ -1,0 +1,27 @@
+{
+  "actor": {
+    "harness": "claude-code",
+    "run_id": "import-1",
+    "station": "records-import"
+  },
+  "at": "2026-03-02",
+  "kind": "legacy_unparsed",
+  "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "origin": {
+    "commit_named": null,
+    "doc": "docs/plans/2026-04-01-widget.md",
+    "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
+    "heading_line": 40,
+    "kind": "legacy",
+    "line": 63,
+    "raw": "- QUESTION . src/widget.py:9 . is this path still reachable?",
+    "recorded_commit": null
+  },
+  "prev": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "reason": "the first field is not a severity (family S1)",
+  "seq": 7,
+  "source": {
+    "known": false
+  },
+  "v": 1
+}

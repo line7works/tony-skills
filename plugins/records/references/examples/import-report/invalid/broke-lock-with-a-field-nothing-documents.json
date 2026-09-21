@@ -1,0 +1,39 @@
+{
+  "document": {
+    "ambiguities": [],
+    "ambiguous": 0,
+    "appended": [],
+    "blocks": 3,
+    "broke_lock": {
+      "command": "import-legacy",
+      "pid": 999999,
+      "pid_started": "Wed Apr  1 09:00:00 2026"
+    },
+    "component_version": "0.1.0",
+    "counts": {},
+    "doc": "docs/plans/2026-05-05-grants.md",
+    "doc_sha256": "c43ae7331fdd461a80d642c7620f2f55955cdf603cd4d4d14ac69af09e091758",
+    "dry_run": false,
+    "events": 9,
+    "head": "5f88916e662d3cf7a8b60be15da7a1c4814b00c0cbaf090657525ed92ce891b9",
+    "imported": 0,
+    "interface_version": 1,
+    "lines_classified": 1,
+    "lines_read": 23,
+    "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+    "ok": true,
+    "opened_log": false,
+    "orphan_temporaries": [],
+    "previously_imported": 5,
+    "rejected_resolutions": [],
+    "report": "import",
+    "run_id": "import-docs__plans__2026-05-05-grants-20260921T144022Z",
+    "slices": 1,
+    "spec": {
+      "doc": "docs/plans/2026-05-05-grants.md",
+      "slice": null
+    },
+    "would_import": null
+  },
+  "reason": "a `broke_lock` is the lock file's contents and carries only the fields `interface.md` names; `pid_started` is not one of them, and the object is closed"
+}

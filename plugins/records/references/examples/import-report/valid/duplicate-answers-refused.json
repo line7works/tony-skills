@@ -1,0 +1,23 @@
+{
+  "answers": [
+    {
+      "finding": "f1:57e93ec126b994f73888",
+      "line": 16,
+      "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite"
+    },
+    {
+      "finding": "f1:5586405b2bbe49fecba3",
+      "line": 16,
+      "raw": "- MAJOR · src/seal.py:30 · (the seal is not verified) · fixed · executed the seal suite"
+    }
+  ],
+  "component_version": "0.1.0",
+  "doc": "docs/plans/2026-05-03-join-ambiguous-shared.md",
+  "error": "invalid",
+  "interface_version": 1,
+  "line": 16,
+  "log": "docs/records/docs__plans__2026-05-03-join-ambiguous-shared.events.jsonl",
+  "ok": false,
+  "reason": "the resolutions file holds more than one answer for line 16; one ambiguous line takes one answer (section 11.5). Nothing was written.",
+  "report": "import"
+}
