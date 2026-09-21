@@ -26,8 +26,9 @@ uv run ../../scripts/validate-examples.py
   other three schemas of contract section 1, with an invalid example wrapped as
   `{"reason": "<the rule>", "document": {…}}`. The `state/` and `import-report/` examples are
   real responses: they were produced by running `state`, `import-legacy` (a dry run, a landed
-  import, and a refusal) and `survey` against the fixture workspace `fixtures/build.py` builds,
-  with the survey's absolute workspace path replaced by `/workspace`. The `resolutions/`
+  import, a pass that recovered a stale lock, and each of its four refusals) and `survey`
+  against the fixture workspace `fixtures/build.py` builds, with the survey's absolute workspace
+  path replaced by `/workspace`. The `resolutions/`
   examples are the input file of section 11.5, written by hand.
 
 ## What the checker proves
@@ -38,6 +39,11 @@ uv run ../../scripts/validate-examples.py
    list that stops being enforced is caught here rather than in production.
 4. `example.events.jsonl` walks clean under the chain rules of section 10.
 5. The same three passes for the other three schemas. Where a schema is a `oneOf` over branches
-   (an import report is one of three shapes), the dropped-field pass reads the required list of
-   the branch the example matches as well as the top level's, so a branch that quietly stopped
+   (an import report is one of five shapes), the dropped-field pass uses the required list of the
+   branch the example matches as well as the top level's, so a branch that quietly stopped
    requiring a field is caught.
+6. Every `required` list of all four schemas — `event.schema.json` included — matches the list
+   pinned in `validate-examples.py`, the lists reached through an array inside `$defs` included.
+   The pins are literals written from the contract and `references/interface.md`, never read from
+   the schema under test: a required field removed from any of those lists is a failure here, not
+   a silently weaker check, and a `required` list that nothing pins is a failure too.

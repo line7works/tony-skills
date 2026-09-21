@@ -22,14 +22,20 @@ Checks:
   equals the line index, and every `prev` equals the hash of the line before (section 10);
 - the same three checks for the other three schemas of section 1, whose examples live under
   `references/examples/<state | import-report | resolutions>/valid` and `/invalid`. An invalid
-  example there is `{"reason": ..., "document": ...}`. The dropped-field pass reads the required
-  list from the schema's top level and, where the schema is a `oneOf` over branches in `$defs`,
-  from the one branch the example matches, so a branch that quietly stopped requiring a field is
-  caught too.
+  example there is `{"reason": ..., "document": ...}`. The dropped-field pass takes the required
+  list from the PIN below for the schema's top level and, where the schema is a `oneOf` over
+  branches in `$defs`, for the one branch the example matches, so a branch that quietly stopped
+  requiring a field is caught too;
+- every `required` list of ALL FOUR schemas equals the list pinned in `SCHEMA_REQUIRED`, and
+  each schema's `oneOf` branches are the ones pinned in `SCHEMA_BRANCHES`. The pins are literals
+  written from the contract and `references/interface.md`; nothing here reads an obligation out
+  of the schema it is checking, and a `required` list that nothing pins is itself a failure
+  (carry item 3, amendment A11; send-back 1).
 
 stdout: one JSON object {"ok", "valid": {"files", "failing"}, "invalid": {"total", "rejected"},
 "mutations": {"total", "rejected"}, "log": {"lines", "ok"}, "documents": {<schema>: {...}},
-"failures": [strings]} and nothing else. stderr: diagnostics; with --verbose one line per check.
+"pins": {"schemas", "lists"}, "failures": [strings]} and nothing else. stderr: diagnostics; with
+--verbose one line per check.
 
 Exit status: 0 every check passed; 4 a check failed (the failures list names each, an example
 that does not load included); 2 usage (an unknown argument, a --component-root that is not a
@@ -99,24 +105,254 @@ DOCUMENT_SCHEMAS = {"state": "state", "import-report": "import_report",
                     "resolutions": "resolutions"}
 
 
-def branch_required(schema, doc):
+# ---- the pinned `required` lists of all four schemas (carry item 3; send-back 1, item 1) ------
+#
+# Contract sections 6 to 9, 11.5 and 12 and `references/interface.md`, written down here rather
+# than read out of the schema under test. An obligation a checker reads from the thing it checks
+# is no obligation: a `required` field removed from such a list removed the obligation to test
+# it, and every mutation still passed.
+#
+# The first fix round pinned the event schema's top-level and per-kind lists (review finding 13,
+# `CONTRACT_COMMON` and `CONTRACT_KIND_FIELDS` below). Carry item 3 (amendment A11) pinned the
+# `state`, `import-report` and `resolutions` schemas, where 38 of 44 lists were blind. Send-back
+# 1 pins what was left: every other `required` list of `event.schema.json` — `$defs/actor`,
+# `$defs/origin`'s two branches, `$defs/identity`, `$defs/location` and its `more` items,
+# `$defs/source`'s two branches, `$defs/resolution_answer`'s three, and the `if` clause of every
+# `allOf` rule. No `required` list of any of the four schemas is read from the schema under test
+# any more, and `check_pins` fails on one that is not pinned here.
+#
+# The key is a JSON pointer into the schema file: "" is the top level. Changing a list here is a
+# change to the interface, not to a test.
+SCHEMA_REQUIRED = {
+    "event": {
+        "": ("v", "seq", "prev", "kind", "at", "ledger_doc", "actor", "origin", "source"),
+        "/$defs/actor": ("station", "run_id", "harness"),
+        "/$defs/identity": (
+            "commit", "dirty", "tracked_diff_sha256", "untracked", "untracked_sha256",
+            "submodules",
+        ),
+        "/$defs/location": ("raw", "file", "line", "line_end", "tag", "more", "resolved"),
+        "/$defs/location/allOf/0/if": ("resolved",),
+        "/$defs/location/allOf/1/if": ("resolved",),
+        "/$defs/location/allOf/1/then": ("file", "line"),
+        "/$defs/location/properties/more/items": ("file", "line", "line_end", "tag"),
+        "/$defs/origin/oneOf/0": ("kind",),
+        "/$defs/origin/oneOf/1": (
+            "kind", "doc", "doc_sha256", "line", "raw", "heading_line", "recorded_commit",
+            "commit_named",
+        ),
+        "/$defs/resolution_answer/oneOf/0": ("finding",),
+        "/$defs/resolution_answer/oneOf/1": ("new_finding",),
+        "/$defs/resolution_answer/oneOf/2": ("skip", "why"),
+        "/$defs/source/oneOf/0": ("known", "identity"),
+        "/$defs/source/oneOf/1": ("known",),
+        "/allOf/0/if": ("origin",),
+        "/allOf/0/if/properties/origin": ("kind",),
+        "/allOf/1/if": ("kind",),
+        "/allOf/1/then": ("interface_version", "component_version"),
+        "/allOf/10/if": ("kind",),
+        "/allOf/10/then": ("doc_sha256", "lines_read", "counts"),
+        "/allOf/11/if": ("kind",),
+        "/allOf/11/then": ("doc_sha256", "lines_read", "counts"),
+        "/allOf/12/if": ("kind",),
+        "/allOf/12/then": ("line", "answer", "answered_by", "answered_on"),
+        "/allOf/13/if": ("kind",),
+        "/allOf/14/if": ("seq",),
+        "/allOf/15/if": ("origin",),
+        "/allOf/15/if/properties/origin": ("kind",),
+        "/allOf/16/if": ("origin",),
+        "/allOf/16/if/properties/origin": ("kind",),
+        "/allOf/2/if": ("kind",),
+        "/allOf/2/then": (
+            "finding", "slice", "severity", "location", "claim", "scenario", "raised_by",
+        ),
+        "/allOf/3/if": ("kind",),
+        "/allOf/3/then": (
+            "finding", "slice", "severity", "location", "claim", "scenario", "raised_by",
+            "caused_by",
+        ),
+        "/allOf/4/if": ("kind",),
+        "/allOf/4/then": ("finding", "disposition", "how", "verified_source", "join_basis"),
+        "/allOf/5/if": ("kind",),
+        "/allOf/5/then": ("finding", "severity", "words", "grant_date", "verified_source"),
+        "/allOf/6/if": ("kind",),
+        "/allOf/6/then": ("finding", "words", "grant_date"),
+        "/allOf/7/if": ("kind",),
+        "/allOf/7/then": ("slice", "value", "card"),
+        "/allOf/8/if": ("kind",),
+        "/allOf/8/then": ("slice", "before", "after"),
+        "/allOf/9/if": ("kind",),
+        "/allOf/9/then": ("reason",),
+    },
+    "state": {
+        "": (
+            "interface_version", "component_version", "ok", "log", "head", "events", "exists",
+            "spec", "findings", "slices", "open", "counts", "at_source", "filters",
+        ),
+        "/$defs/finding": (
+            "id", "slice", "severity", "location", "claim", "scenario", "status",
+            "cleared_unbound", "verified_source", "join_basis", "raised", "decided", "events",
+            "raised_by", "caused_by",
+        ),
+        "/$defs/finding/allOf/0/if": ("status",),
+        "/$defs/history": ("log", "seq"),
+        "/$defs/identity": (
+            "commit", "dirty", "tracked_diff_sha256", "untracked", "untracked_sha256",
+            "submodules",
+        ),
+        "/$defs/location": ("raw", "file", "line", "line_end", "tag", "more", "resolved"),
+        "/$defs/location/allOf/0/if": ("resolved",),
+        "/$defs/location/allOf/1/if": ("resolved",),
+        "/$defs/location/allOf/1/then": ("file", "line"),
+        "/$defs/location/properties/more/items": ("file", "line", "line_end", "tag"),
+        "/$defs/severity_counts": ("BLOCKER", "MAJOR", "MINOR"),
+        "/$defs/slice": (
+            "name", "open", "open_total", "card_derived", "card_observed", "card_observed_text",
+            "card_drift",
+        ),
+        "/$defs/source/oneOf/0": ("known", "identity"),
+        "/$defs/source/oneOf/1": ("known",),
+        "/$defs/spec": ("doc", "slice"),
+        "/properties/at_source/oneOf/0": ("commit",),
+        "/properties/counts": ("findings", "open", "fixed", "waived", "cleared_unbound"),
+        "/properties/filters": ("slice",),
+    },
+    "import_report": {
+        "": ("interface_version", "component_version", "ok", "report"),
+        "/$defs/ambiguity": ("line", "raw", "reason", "candidates"),
+        "/$defs/ambiguity/properties/candidates/items": ("finding", "line", "slice"),
+        "/$defs/duplicate_answers_refused": (
+            "interface_version", "component_version", "ok", "report", "error", "reason", "doc",
+            "log", "line", "answers",
+        ),
+        "/$defs/history": ("log", "seq"),
+        "/$defs/import_ok": (
+            "interface_version", "component_version", "ok", "report", "log", "doc", "doc_sha256",
+            "dry_run", "run_id", "lines_read", "lines_classified", "previously_imported",
+            "blocks", "slices", "counts", "imported", "would_import", "ambiguous", "ambiguities",
+            "rejected_resolutions", "spec", "opened_log", "head", "events",
+        ),
+        "/$defs/import_ok/allOf/0/else": ("appended",),
+        "/$defs/import_ok/allOf/0/if": ("dry_run",),
+        "/$defs/import_ok/allOf/0/then/not": ("appended",),
+        "/$defs/import_ok/properties/appended/items": ("seq", "kind", "finding", "history"),
+        "/$defs/import_ok/properties/broke_lock": ("pid", "pid_start"),
+        "/$defs/import_refused": (
+            "interface_version", "component_version", "ok", "report", "error", "reason", "log",
+            "doc", "head", "events", "dry_run", "counts", "lines_read", "lines_classified",
+            "spec", "ambiguities",
+        ),
+        "/$defs/import_refused/allOf/0/if": ("error",),
+        "/$defs/import_refused/allOf/0/then": ("rejected_resolutions",),
+        "/$defs/rejection": ("line", "why", "reason", "answer"),
+        "/$defs/resolutions_file_refused": (
+            "interface_version", "component_version", "ok", "report", "error", "reason", "doc",
+            "log",
+        ),
+        "/$defs/resolutions_file_refused/properties/errors/items": ("path", "message"),
+        "/$defs/spec": ("doc", "slice"),
+        "/$defs/survey": (
+            "interface_version", "component_version", "ok", "report", "workspace", "documents",
+            "counts", "total", "returned", "offset", "truncated",
+        ),
+        "/$defs/survey/properties/counts": (
+            "documents", "ledger_documents", "mirrors", "blocks", "records", "stops",
+            "documents_that_would_stop",
+        ),
+        "/$defs/survey_document": (
+            "doc", "role", "doc_sha256", "lines", "blocks", "slices", "records", "join_basis",
+            "stops", "ambiguous",
+        ),
+        "/$defs/survey_document/allOf/0/else": ("events", "event_counts"),
+        "/$defs/survey_document/allOf/0/if": ("role",),
+        "/$defs/survey_document/allOf/0/then/not": ("events",),
+    },
+    "resolutions": {
+        "": ("answered_by", "answered_on", "answers"),
+        "/$defs/answer": ("line", "raw"),
+        "/$defs/answer/oneOf/0": ("finding",),
+        "/$defs/answer/oneOf/1": ("new_finding",),
+        "/$defs/answer/oneOf/2": ("skip", "why"),
+    },
+}
+
+# Which branch of a `oneOf` a document is held to, by the field values that tell the shapes
+# apart (`import-report.schema.json` is the one schema with branches). Pinned for the same
+# reason the lists are: a branch discriminator read out of the schema proves nothing about it.
+SCHEMA_BRANCHES = {
+    "import_report": (
+        ("/$defs/import_ok", (("report", "import"), ("ok", True))),
+        ("/$defs/import_refused", (("report", "import"), ("ok", False))),
+        ("/$defs/duplicate_answers_refused",
+         (("report", "import"), ("ok", False), ("error", "invalid"))),
+        ("/$defs/resolutions_file_refused",
+         (("report", "import"), ("ok", False), ("error", "invalid"))),
+        ("/$defs/survey", (("report", "survey"), ("ok", True))),
+    ),
+}
+
+
+def required_lists(schema):
+    """Every `required` list in a schema, by JSON pointer, arrays inside `$defs` included."""
+    found = {}
+
+    def walk(node, pointer):
+        if isinstance(node, dict):
+            if isinstance(node.get("required"), list):
+                found[pointer] = list(node["required"])
+            for key, value in node.items():
+                walk(value, pointer + "/" + key.replace("~", "~0").replace("/", "~1"))
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, pointer + "/" + str(index))
+
+    walk(schema, "")
+    return found
+
+
+def check_pins(schemas, verbose):
+    """Hold each schema's `required` lists and `oneOf` branches to the pins above."""
+    failures = []
+    counted = 0
+    for key in sorted(SCHEMA_REQUIRED):
+        name = validate.SCHEMA_FILES[key]
+        live = required_lists(schemas.docs[key])
+        pinned = SCHEMA_REQUIRED[key]
+        counted += len(pinned)
+        for pointer in sorted(set(live) | set(pinned)):
+            where = "%s at %s" % (name, pointer or "the top level")
+            if pointer not in pinned:
+                failures.append("%s: a `required` list nothing pins" % where)
+            elif pointer not in live:
+                failures.append("%s: the pinned `required` list is gone" % where)
+            elif list(pinned[pointer]) != live[pointer]:
+                failures.append("%s: reads %s; the contract pins %s"
+                                % (where, live[pointer], list(pinned[pointer])))
+            else:
+                log(verbose, "PINNED   %s" % where)
+        branches = [entry.get("$ref") for entry in schemas.docs[key].get("oneOf", [])]
+        expected = ["#/$defs/" + pointer[len("/$defs/"):]
+                    for pointer, _ in SCHEMA_BRANCHES.get(key, ())]
+        if sorted(b for b in branches if b) != sorted(expected):
+            failures.append("%s: its oneOf branches are %s; the pins name %s"
+                            % (name, branches, expected))
+    return counted, failures
+
+
+
+def branch_required(key, doc):
     """The required lists this document is held to: the top level's, plus its matched branch's.
 
-    A schema whose top level is a `oneOf` over `$defs` branches (import-report.schema.json) says
-    nothing useful at the top about a document's own shape; the branch does. The branch is found
-    by its `const` properties, which is what tells the shapes apart.
+    Both come from `SCHEMA_REQUIRED`, never from the schema being checked. A schema whose top
+    level is a `oneOf` over `$defs` branches (import-report.schema.json) says nothing useful at
+    the top about a document's own shape; the branch does, and `SCHEMA_BRANCHES` pins which
+    field values pick which branch.
     """
-    out = set(schema.get("required", []))
-    defs = schema.get("$defs", {})
-    for entry in schema.get("oneOf", []):
-        ref = entry.get("$ref", "")
-        if not ref.startswith("#/$defs/"):
-            continue
-        branch = defs.get(ref[len("#/$defs/"):], {})
-        consts = [(name, rule["const"]) for name, rule in (branch.get("properties") or {}).items()
-                  if isinstance(rule, dict) and "const" in rule]
-        if consts and all(doc.get(name) == value for name, value in consts):
-            out.update(branch.get("required", []))
+    pins = SCHEMA_REQUIRED[key]
+    out = set(pins.get("", ()))
+    for pointer, discriminators in SCHEMA_BRANCHES.get(key, ()):
+        if all(doc.get(name) == value for name, value in discriminators):
+            out.update(pins.get(pointer, ()))
     return sorted(out)
 
 
@@ -126,7 +362,6 @@ def check_documents(key, folder, root, schemas, verbose):
     failures = []
     valid_files = files_in(os.path.join(base, "valid"))
     failing = mutations = rejected_mutations = 0
-    schema = schemas.docs[key]
     for path in valid_files:
         name = os.path.relpath(path, os.path.join(root, "references", "examples"))
         try:
@@ -142,7 +377,7 @@ def check_documents(key, folder, root, schemas, verbose):
             log(verbose, "FAIL     %s" % name)
         else:
             log(verbose, "PASS     %s" % name)
-        for field in branch_required(schema, doc):
+        for field in branch_required(key, doc):
             if not isinstance(doc, dict) or field not in doc:
                 continue
             mutated = copy.deepcopy(doc)
@@ -289,6 +524,9 @@ def main(argv=None):
             failures.append("example.events.jsonl: %s" % exc.document.get("reason"))
             log(args.verbose, "CHAIN (BUG) example.events.jsonl")
 
+    pinned_lists, pin_failures = check_pins(schemas, args.verbose)
+    failures.extend(pin_failures)
+
     documents = {}
     for folder, key in sorted(DOCUMENT_SCHEMAS.items()):
         summary, more = check_documents(key, folder, root, schemas, args.verbose)
@@ -298,6 +536,7 @@ def main(argv=None):
     out = {
         "ok": not failures,
         "documents": documents,
+        "pins": {"schemas": len(SCHEMA_REQUIRED), "lists": pinned_lists},
         "valid": {"files": len(valid_files), "failing": failing},
         "invalid": {"total": len(invalid_files), "rejected": rejected},
         "mutations": {"total": mutations, "rejected": rejected_mutations},

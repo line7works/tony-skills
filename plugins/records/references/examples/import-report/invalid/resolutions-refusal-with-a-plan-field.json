@@ -1,0 +1,14 @@
+{
+  "document": {
+    "component_version": "0.1.0",
+    "doc": "docs/plans/2026-05-03-join-ambiguous-shared.md",
+    "error": "invalid",
+    "head": "0000000000000000000000000000000000000000000000000000000000000000",
+    "interface_version": 1,
+    "log": "docs/records/docs__plans__2026-05-03-join-ambiguous-shared.events.jsonl",
+    "ok": false,
+    "reason": "the resolutions file answers 'docs/plans/2026-05-01-l1-backticks.md'; --doc names 'docs/plans/2026-05-03-join-ambiguous-shared.md'",
+    "report": "import"
+  },
+  "reason": "a refusal raised before the importer read an answer carries none of the plan's fields; with `head` it fits no branch of this schema"
+}

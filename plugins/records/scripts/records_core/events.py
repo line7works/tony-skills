@@ -287,6 +287,62 @@ def read_lock(path):
     return info
 
 
+LOCK_FIELDS = ("pid", "pid_start", "command", "unreadable")
+FOREIGN_LOCK = "the lock file holds fields this component does not write"
+
+
+def published_lock(info):
+    """The documented lock object, built from whatever the lock file held.
+
+    Send-back 2: `read_lock` returns the file's contents, and a lock file another tool wrote
+    was published verbatim, so a SUCCESS response could carry a `broke_lock` its own schema
+    refuses (`{"owner": "...", "pid": "999999"}` was the control room's probe). The component
+    PUBLISHES a lock; it does not pass one through. `interface.md` already documents the four
+    fields, so this is an implementation correction and not a new shape:
+
+    - `pid` is a JSON integer or null; anything else, a bool included, is null;
+    - `pid_start` is a string or null;
+    - `command` is kept only when it is a non-empty string;
+    - `unreadable` is kept when `read_lock` set it, and is otherwise `FOREIGN_LOCK` when any key
+      was dropped or any value nulled on a lock that WAS readable JSON, so a reader can tell a
+      foreign lock from one of ours;
+    - every other key is dropped.
+
+    For every lock this component writes this returns the same object it was given, byte for
+    byte in the response. The liveness judgement never comes through here: `holder_alive` reads
+    the RAW contents, so no lock that is refused today is broken tomorrow, or the reverse.
+    """
+    if not isinstance(info, dict):
+        return {"pid": None, "pid_start": None,
+                "unreadable": "the lock file holds a JSON %s, not an object"
+                              % type(info).__name__}
+    out = {"pid": None, "pid_start": None}
+    dropped = bool(set(info) - set(LOCK_FIELDS))
+    pid = info.get("pid")
+    if isinstance(pid, int) and not isinstance(pid, bool):
+        out["pid"] = pid
+    elif info.get("pid") is not None:
+        dropped = True
+    start = info.get("pid_start")
+    if isinstance(start, str):
+        out["pid_start"] = start
+    elif start is not None:
+        dropped = True
+    command = info.get("command")
+    if isinstance(command, str) and command:
+        out["command"] = command
+    elif command is not None:
+        dropped = True
+    unreadable = info.get("unreadable")
+    if isinstance(unreadable, str) and unreadable:
+        out["unreadable"] = unreadable
+    elif unreadable is not None:
+        dropped = True
+    if dropped and "unreadable" not in out:
+        out["unreadable"] = FOREIGN_LOCK
+    return out
+
+
 def read_lock_bytes(fd):
     """Every byte behind an open lock descriptor, or None when it cannot be read.
 
@@ -354,7 +410,7 @@ class Lock:
                 raise
             _fail(7, "conflict", "the log's lock is held: another process owns its inode, whatever "
                                  "the pid inside it says (%s)" % self.path,
-                  lock=info if info is not None else read_lock(self.path),
+                  lock=published_lock(info if info is not None else read_lock(self.path)),
                   lock_path=self.path, holder_alive=True)
 
     def assert_owned(self):
@@ -397,25 +453,28 @@ class Lock:
         except OSError as exc:
             _fail(7, "conflict", "the log's lock exists and cannot be opened to be read (%s): %s"
                   % (self.path, exc), lock_path=self.path,
-                  lock={"pid": None, "pid_start": None, "unreadable": str(exc)}, holder_alive=True)
+                  lock=published_lock({"pid": None, "pid_start": None,
+                                       "unreadable": str(exc)}), holder_alive=True)
         try:
             observed = read_lock_bytes(existing)
             info = read_lock(self.path)
             if not break_lock:
-                _fail(7, "conflict", "the log's lock is held: %s" % self.path, lock=info,
-                      lock_path=self.path, holder_alive=holder_alive(info))
+                # `holder_alive` reads the RAW contents; only the response is published.
+                _fail(7, "conflict", "the log's lock is held: %s" % self.path,
+                      lock=published_lock(info), lock_path=self.path,
+                      holder_alive=holder_alive(info))
             if holder_alive(info):
                 _fail(7, "conflict", "the log's lock is held by a live process; --break-lock removes a "
                                      "lock only when its pid is not alive",
-                      lock=info, lock_path=self.path, holder_alive=True)
+                      lock=published_lock(info), lock_path=self.path, holder_alive=True)
             # The recorded holder is gone. Its INODE must be free too: every holder of this
             # component takes the advisory lock before it publishes itself into the file, so an
             # inode another process still holds belongs to a writer that took this lock over.
             self._take_inode_lock(existing, info)
             if not self._same_inode(existing):
                 _fail(7, "conflict", "the log's lock was replaced while this one was being read: %s"
-                      % self.path, lock=read_lock(self.path), lock_path=self.path,
-                      holder_alive=holder_alive(read_lock(self.path)))
+                      % self.path, lock=published_lock(read_lock(self.path)),
+                      lock_path=self.path, holder_alive=holder_alive(read_lock(self.path)))
             # The inode is unchanged, but its CONTENTS may not be: a writer that took this file
             # over wrote itself into it while the recorded holder was being judged dead. The
             # lock this process is about to remove must still be the lock it read.
@@ -423,10 +482,10 @@ class Lock:
             if observed is None or current is None or current != observed:
                 _fail(7, "conflict", "the lock's contents changed while this one was deciding it "
                                      "was stale; nothing was removed: %s" % self.path,
-                      lock=read_lock(self.path), lock_path=self.path,
+                      lock=published_lock(read_lock(self.path)), lock_path=self.path,
                       holder_alive=holder_alive(read_lock(self.path)))
             os.unlink(self.path)
-            self.broke = info
+            self.broke = published_lock(info)
         finally:
             os.close(existing)
         try:
@@ -439,8 +498,8 @@ class Lock:
             broke, self.broke = self.broke, None
             _fail(7, "conflict", "the log's lock was taken by another process while this one was "
                                  "breaking the stale lock: %s" % self.path,
-                  lock=read_lock(self.path), lock_path=self.path, broke_lock=broke,
-                  holder_alive=holder_alive(read_lock(self.path)))
+                  lock=published_lock(read_lock(self.path)), lock_path=self.path,
+                  broke_lock=broke, holder_alive=holder_alive(read_lock(self.path)))
 
     def release(self):
         if self.fd is None:

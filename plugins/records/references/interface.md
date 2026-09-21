@@ -556,6 +556,17 @@ itself into it without replacing the file: `--break-lock` compares the bytes it 
 the bytes present when it is about to remove the lock, and refuses with exit 7 (removing nothing)
 when they differ, and a holder releases only a lock still holding the bytes it wrote itself.
 
+Both `lock` and `broke_lock` are PUBLISHED, never passed through: whatever the lock file held,
+the response carries `pid` (a JSON integer or null; anything else, a boolean included, is null),
+`pid_start` (a string or null), `command` when it is a non-empty string, and `unreadable`, with
+every other key dropped. A lock file that parsed but was not one of this component's — a foreign
+key, a pid that is not an integer — is reported with
+`unreadable: "the lock file holds fields this component does not write"`, so a reader can tell it
+from one of ours; a lock file that could not be read at all keeps its own reason. For every lock
+this component writes the published object is the object it wrote. The liveness judgement reads
+the lock file's RAW contents, so which locks are broken and which are refused does not depend on
+any of this.
+
 A killed process leaves up to two things behind, and neither is removed for you.
 The first is `<log>.lock`. The second, when the kill lands inside the atomic replacement, is a
 sibling temporary file named `.<log file name>.<random>.tmp` holding the log the writer was
@@ -576,13 +587,14 @@ a stale one and `orphan_temporaries` (the empty list included) on every `--break
 | `lock.pid` | its pid. |
 | `lock.pid_start` | its holder's start time, as recorded when it was taken. |
 | `lock.command` | the command that took it. |
-| `lock.unreadable` | why the lock file could not be read, when it could not. |
+| `lock.unreadable` | why the lock file could not be read, when it could not, or `the lock file holds fields this component does not write` when it parsed but was not one of this component's. |
 | `lock_path` | the lock file's absolute path. |
 | `holder_alive` | is the process that took the lock still running: the pid AND its recorded start time, because a recycled pid is not the holder. |
 | `broke_lock` | the stale lock this run removed, when `--break-lock` did something. |
 | `broke_lock.pid` | the pid it recorded. |
 | `broke_lock.pid_start` | that process's start time as recorded. |
-| `broke_lock.command` | the command that took it. |
+| `broke_lock.command` | the command that took it. Absent when the lock file could not be read. |
+| `broke_lock.unreadable` | why the lock file could not be read, when it could not; `pid` and `pid_start` are then both null, the way `lock.unreadable` reports the same thing on a refusal. It reads `the lock file holds fields this component does not write` when the lock file parsed but was not one of this component's. |
 | `orphan_temporaries` | with `--break-lock`, every `.<log file name>.*.tmp` file found beside the log, as workspace-relative paths. An interrupted write can leave one; nothing here deletes it. |
 
 ## The commands
@@ -890,6 +902,19 @@ carries no `head`, `events`, `dry_run`, `counts`, `ambiguities` or `rejected_res
 `duplicate_answers_refused` branch of `import-report.schema.json` is that shape, and
 `references/examples/import-report/valid/duplicate-answers-refused.json` is one.
 
+Two refusals come earlier still, before the importer reads a single answer, because the file is
+read and checked as a whole first: a `--resolutions` file that fails `resolutions.schema.json`,
+and one whose `doc` names a document other than `--doc`. Both are exit 4, both write nothing, and
+both carry `report: "import"`, `error: "invalid"`, `reason`, `doc` (the document `--doc` named)
+and `log`, plus the envelope every response carries. The first also carries `errors`, the
+schema's findings in path order, each `{path, message}`; the second carries none, because the
+file itself is valid. Neither carries `head`, `events`, `dry_run`, `counts`, `ambiguities` or
+`rejected_resolutions`: there is no plan yet. The `resolutions_file_refused` branch of
+`import-report.schema.json` is that shape, and
+`references/examples/import-report/valid/resolutions-file-refused.json` and
+`references/examples/import-report/valid/resolutions-answers-another-document.json` are the two
+of them.
+
 Two further lines stop a document, both from amendment A9, and a resolutions answer settles each:
 
 - **A claim the field separator cut in half** (`(alpha · beta)`). Appendix A forbids the
@@ -1083,7 +1108,7 @@ number (0 or more) is exit 2.
 |---|---|
 | `event.schema.json` | one event line of a log. Which fields each kind requires and forbids. |
 | `state.schema.json` | what `state` returns. |
-| `import-report.schema.json` | what `import-legacy` and `survey` return, in three shapes told apart by `report` and `dry_run`. |
+| `import-report.schema.json` | what `import-legacy` and `survey` return, in five shapes told apart by `report`, `ok` and the fields each carries. A response claims this schema when it carries `report`. |
 | `resolutions.schema.json` | the answers to ambiguous legacy records: an INPUT, checked before the importer reads a single answer. |
 
 `references/examples/` holds a valid and an invalid example for every shape, and

@@ -82,7 +82,15 @@ def _fail(code, error, reason, **extra):
 
 
 def utc_now():
-    return datetime.datetime.utcnow().replace(microsecond=0)
+    """This instant in UTC, whole seconds, as an AWARE datetime (carry item 5, amendment A11).
+
+    The old `utcnow` call returned a naive datetime that only claimed to be UTC, and is
+    deprecated from Python 3.12; `datetime.now(timezone.utc)` says so in the object. Every
+    reader of this value formats it with `strftime` (`stamp`, `run_id_for`, a card's date),
+    and `%Y`, `%m`, `%d`, `%H`, `%M` and `%S` read the same fields from either kind, with the
+    `Z` a literal in the format string. The bytes this component writes are unchanged.
+    """
+    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
 
 
 def stamp(moment):

@@ -132,9 +132,19 @@ def native_cases(scratch, cases):
                                         "command": "append"}) + "\n")
         after_break = testlib.raised(claim="after the break", identity=identity,
                                      at="2026-04-01T09:00:03Z")
-        _run(cases, "append-breaking-a-stale-lock", "append",
-             ["append"] + ws + ["--events", _batch(batches, [after_break], "broke.json"),
-                                "--expect-head", head, "--break-lock"], 0)
+        broke = _run(cases, "append-breaking-a-stale-lock", "append",
+                     ["append"] + ws + ["--events", _batch(batches, [after_break], "broke.json"),
+                                        "--expect-head", head, "--break-lock"], 0)
+        # Send-back 1: a lock file nobody can read is broken the same way, and `broke_lock` then
+        # carries `unreadable` with a null pid and no command. Without this case the corpus never
+        # returns `broke_lock.unreadable`, and interface.md would name a field no run produces.
+        testlib.write(lock, "this lock file is not JSON either\n")
+        after_unreadable = testlib.raised(claim="after the unreadable lock", identity=identity,
+                                          at="2026-04-01T09:00:04Z")
+        _run(cases, "append-breaking-a-lock-nobody-can-read", "append",
+             ["append"] + ws + ["--events",
+                                _batch(batches, [after_unreadable], "broke-unreadable.json"),
+                                "--expect-head", broke["head"], "--break-lock"], 0)
     finally:
         if os.path.isfile(lock):
             os.unlink(lock)
