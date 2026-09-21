@@ -45,7 +45,10 @@
       "scenario": "one packer lifts alone",
       "severity": "BLOCKER",
       "slice": "A",
-      "status": "waived"
+      "status": "waived",
+      "verified_source": {
+        "known": false
+      }
     },
     {
       "caused_by": null,
@@ -79,7 +82,8 @@
       "scenario": "an incident is recorded hours late",
       "severity": "MAJOR",
       "slice": "A",
-      "status": "open"
+      "status": "open",
+      "verified_source": null
     }
   ],
   "head": "f93aa38a940ac46e3678e6a14b40ff9171cb1f7c714c9e6de9143b43e89a84d0",

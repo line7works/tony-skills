@@ -939,6 +939,13 @@ def tolerant_document(text, document=None):
         stripped = line.rstrip()
         body = stripped[2:] if stripped.startswith("- ") else stripped
         if SEP not in body:
+            # Review finding 14: a bullet under a record heading that carries no field separator
+            # fits no shape, so it is `legacy_unparsed` with its raw text (section 11.3) rather
+            # than a line the reader drops on the floor. A bullet outside a record heading is
+            # ordinary prose and is not a record at all.
+            if heading is not None and stripped.startswith("- "):
+                items.append(_unparsed(i + 1, stripped, heading,
+                                       "a record bullet with no field separator"))
             continue
         fields = body.split(SEP)
         if fields[0] in GRANT_KEYWORDS:

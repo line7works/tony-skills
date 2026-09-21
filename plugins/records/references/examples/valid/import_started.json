@@ -5,9 +5,15 @@
     "station": "signoff"
   },
   "at": "2026-04-04T07:00:00Z",
+  "counts": {
+    "disposition": 6,
+    "finding_raised": 9,
+    "legacy_unparsed": 1
+  },
   "doc_sha256": "7b1d9e5c3a08f46b2d71c0e8a95f34b6d2c7801e5f9a3b4c6d8e0f1a2b3c4d5e",
   "kind": "import_started",
   "ledger_doc": "docs/plans/2026-04-01-widget.md",
+  "lines_read": 214,
   "origin": {
     "kind": "native"
   },

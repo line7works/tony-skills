@@ -51,14 +51,19 @@ only inside the workspace given.
 
 Partial effects: a process killed between taking the lock and releasing it leaves `<log>.lock`
 behind; the next `append` reports it (exit 7) with its contents, and `--break-lock` removes it
-once its pid is not alive. The log itself is never left half-written: the rename is atomic.
+once its pid is not alive. A kill inside the atomic replacement can also leave a sibling
+`.<log file name>.<random>.tmp` file holding the log that was about to be published; readers
+ignore it, `--break-lock` names every one it finds in `orphan_temporaries` and removes none, and
+a person decides once no writer is running. The log itself is never left half-written: the
+rename is atomic, so it is wholly its old bytes or wholly its new ones.
 
-Test hooks (honored only with RECORDS_TEST=1): RECORDS_TEST_NO_JSONSCHEMA=1 behaves as if
-jsonschema were not importable (exit 3). The test-only flag `--component-root DIR` reads this
-component's references and computes its identity from DIR instead of from this script's own
-location; it is NOT section 12.1's `--records-root`, which is the argument a STATION takes to
-find this component (`references/interface.md`, "Reaching the component"). records.py is the
-component: it never performs that lookup, and it reads no `RECORDS_ROOT`.
+The one test hook is the test-only flag `--component-root DIR`, which reads this component's
+references and computes its identity from DIR instead of from this script's own location; it is
+NOT section 12.1's `--records-root`, which is the argument a STATION takes to find this component
+(`references/interface.md`, "Reaching the component"). records.py is the component: it never
+performs that lookup, and it reads no `RECORDS_ROOT`. No environment variable changes what this
+script does; a missing dependency is tested with a `PYTHONPATH` package named `jsonschema` whose
+initializer raises ImportError.
 """
 import argparse
 import json
@@ -219,8 +224,20 @@ class Refusal(Exception):
         self.document = document
 
 
+def not_a_ledger(rel, reason):
+    """Amendment A8: a path that is not a ledger address at all, exit 4 (`invalid`)."""
+    return Refusal(4, {"ok": False, "error": "invalid", "doc": rel,
+                       "reason": "--doc is not a ledger address: %s" % reason})
+
+
 def resolve_doc(workspace, given):
-    """A ledger document's workspace-relative path: inside the workspace, normalized, `.md`."""
+    """A ledger document's workspace-relative path: inside the workspace, normalized, `.md`.
+
+    Amendment A8 adds three refusals, all exit 4 because the path is not an address of the kind
+    section 6.1 defines rather than a mistyped argument: a document under `docs/records/` (that
+    directory is history, never specification), a verdict doc (section 11.6: a mirror is never a
+    ledger), and a path that reaches its document through a symbolic link.
+    """
     raw = given.replace("\\", "/")
     if raw.startswith("/") or raw.startswith("~"):
         raise Usage("--doc is a workspace-relative path, not an absolute one: %s" % given)
@@ -229,6 +246,18 @@ def resolve_doc(workspace, given):
         raise Usage("--doc resolves outside the workspace: %s" % given)
     if not rel.endswith(".md"):
         raise Usage("--doc names a Markdown ledger document (a build doc or docs/punch-list.md): %s" % given)
+    if rel == events_mod.RECORDS_DIR or rel.startswith(events_mod.RECORDS_DIR + "/"):
+        raise not_a_ledger(rel, "%s holds this component's history, never specification "
+                                "(section 6.1, amendment A8)" % events_mod.RECORDS_DIR)
+    if importer_mod.is_mirror(rel):
+        raise not_a_ledger(rel, "a verdict doc is a mirror of a ledger, never a ledger "
+                                "(section 11.6, amendment A8)")
+    cursor = workspace
+    for part in rel.split("/"):
+        cursor = os.path.join(cursor, part)
+        if os.path.islink(cursor):
+            raise not_a_ledger(rel, "the path reaches it through the symbolic link %s "
+                                    "(amendment A8)" % cursor)
     full = os.path.realpath(os.path.join(workspace, *rel.split("/")))
     root = os.path.realpath(workspace)
     if full != root and not full.startswith(root + os.sep):
@@ -266,7 +295,7 @@ def cmd_verify(args, root, schemas):
     workspace = resolve_workspace(args.workspace)
     doc = resolve_doc(workspace, args.doc)
     path = events_mod.log_path(workspace, doc)
-    walked = events_mod.walk(path, schemas)
+    walked = events_mod.walk(path, schemas, doc=doc)
     body = {"exists": walked["exists"], "log": events_mod.log_relpath(doc),
             "head": walked["head"], "events": len(walked["events"]),
             "spec": events_mod.spec_address(doc)}
@@ -277,7 +306,7 @@ def cmd_events(args, root, schemas):
     workspace = resolve_workspace(args.workspace)
     doc = resolve_doc(workspace, args.doc)
     path = events_mod.log_path(workspace, doc)
-    walked = events_mod.walk(path, schemas)
+    walked = events_mod.walk(path, schemas, doc=doc)
     rows = []
     for event in walked["events"]:
         if args.finding is not None and event.get("finding") != args.finding:
@@ -336,10 +365,13 @@ def cmd_state(args, root, schemas):
     if args.at_source is not None:
         given = read_json_file(args.at_source, "--at-source")
         at_source = given.get("identity") if isinstance(given, dict) and "identity" in given else given
-        if not isinstance(at_source, dict) or not isinstance(at_source.get("commit"), str):
+        # Review finding 12: `{"commit": "garbage"}` used to pass this check and produce a
+        # state object that fails `state.schema.json`. The identity is held to the definition
+        # the schemas publish, so what the CLI takes and what the schema describes are one rule.
+        if validate.validate_identity(at_source, schemas):
             raise Usage("--at-source names a JSON file holding a six-field identity, or a response "
                         "carrying one under `identity`: %s" % args.at_source)
-    walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas)
+    walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas, doc=doc)
     body = state_mod.state_of(doc, walked["events"], at_source=at_source, slice_name=args.slice)
     body.update({"log": events_mod.log_relpath(doc), "head": walked["head"],
                  "events": len(walked["events"]), "exists": walked["exists"]})
@@ -349,7 +381,7 @@ def cmd_state(args, root, schemas):
 def cmd_render(args, root, schemas):
     workspace = resolve_workspace(args.workspace)
     doc = resolve_doc(workspace, args.doc)
-    walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas)
+    walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas, doc=doc)
     try:
         body = render_mod.render_run(doc, walked["events"], args.run_id)
     except render_mod.RenderError as exc:
@@ -397,7 +429,8 @@ def cmd_mirrors(args, root, schemas):
 
 def cmd_survey(args, root, schemas):
     workspace = resolve_workspace(args.workspace)
-    return emit(envelope(root, importer_mod.survey(workspace)), 0)
+    body = importer_mod.survey(workspace, limit=args.limit, offset=args.offset)
+    return emit(envelope(root, body), 0)
 
 
 COMMANDS = {"verify": cmd_verify, "events": cmd_events, "identity": cmd_identity,
@@ -409,6 +442,14 @@ NEEDS_SCHEMAS = ("verify", "events", "append", "state", "render", "import-legacy
 
 # ---- argparse --------------------------------------------------------------------------------
 
+def whole_number(given):
+    """A non-negative integer argument; anything else is a usage error (exit 2)."""
+    text = str(given).strip()
+    if not text.isdigit():
+        raise argparse.ArgumentTypeError("%r is not a whole number (0 or more)" % given)
+    return int(text)
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         self.print_usage(sys.stderr)
@@ -416,12 +457,32 @@ class Parser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+COMMAND_EXAMPLES = {
+    "verify": "verify --workspace . --doc docs/punch-list.md",
+    "events": "events --workspace . --doc docs/punch-list.md --kind disposition --from 0",
+    "identity": "identity --workspace .",
+    "append": "append --workspace . --doc docs/punch-list.md --events batch.json --expect-head "
+              + "0" * 64,
+    "state": "state --workspace . --doc docs/punch-list.md --slice A",
+    "render": "render --workspace . --doc docs/punch-list.md --run-id recheck-2026-09-20-a",
+    "import-legacy": "import-legacy --workspace . --doc docs/punch-list.md --dry-run",
+    "mirrors": "mirrors --workspace . --doc docs/plans/2026-09-06-readers.md",
+    "survey": "survey --workspace . --limit 50 --offset 0",
+    "component-identity": "component-identity",
+}
+"""One runnable example per command, printed in its own `--help` (section 12.2)."""
+
+
+class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+    """Defaults printed beside each argument, and the epilog kept as written."""
+
+
 def build_parser():
     p = Parser(prog="records.py",
                description="The shared records component's CLI: the append-only event log of a ledger "
                            "document, its chain, its identities, and its addresses (records E12 contract "
                            "section 12). JSON on stdout and nothing else.",
-               epilog=EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
+               epilog=EXAMPLES, formatter_class=HelpFormatter)
     p.add_argument("--component-root", metavar="DIR", default=None,
                    help="test only: read this component's references and compute its identity from DIR "
                         "instead of from this script's own location. Not section 12.1's --records-root, "
@@ -432,17 +493,21 @@ def build_parser():
 
     def add(name, help_text, description, side_effects):
         return sub.add_parser(name, help=help_text, description=description,
-                              formatter_class=argparse.RawDescriptionHelpFormatter,
-                              epilog="side effects: %s\nexit: 0 success; 1 anything else; 2 usage; "
+                              formatter_class=HelpFormatter,
+                              epilog="example: uv run records.py %s\nside effects: %s\n"
+                                     "exit: 0 success; 1 anything else; 2 usage; "
                                      "3 jsonschema missing; 4 validation; 5 ambiguous identity; "
-                                     "6 stale_source; 7 conflict" % side_effects)
+                                     "6 stale_source; 7 conflict"
+                                     % (COMMAND_EXAMPLES[name], side_effects))
 
     def workspace_doc(sp):
         sp.add_argument("--workspace", metavar="W", required=True,
                         help="the workspace root (a directory; absolute or resolved from the current directory)")
         sp.add_argument("--doc", metavar="D", required=True,
                         help="the ledger document, workspace-relative (a build doc, or docs/punch-list.md); "
-                             "its log is docs/records/<D with .md removed and / replaced by __>.events.jsonl")
+                             "its log is docs/records/<the slug of D>.events.jsonl. Never a document under "
+                             "docs/records/ or docs/reviews/, and never one reached through a symbolic "
+                             "link: those are exit 4 (amendment A8)")
 
     sp = add("verify", "walk the log's chain and schema",
              "Walk the log of one ledger document: every line parses and validates, seq equals the line "
@@ -552,6 +617,12 @@ def build_parser():
              "Nothing is imported and nothing is written.",
              "none (read-only); reruns are safe")
     sp.add_argument("--workspace", metavar="W", required=True, help="the workspace root (a directory)")
+    sp.add_argument("--limit", metavar="N", type=whole_number, default=importer_mod.SURVEY_LIMIT,
+                    help="how many documents to return, in path order; the workspace-wide counts "
+                         "still cover every document, and `truncated` says whether this page left "
+                         "any out")
+    sp.add_argument("--offset", metavar="K", type=whole_number, default=0,
+                    help="how many documents to skip before this page, in path order")
 
     add("component-identity", "{name, version, commit, content_sha256} of the component root",
         "Print the component's own identity: its plugin name and version, the commit of the repository it "
@@ -562,7 +633,12 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    validate.require_jsonschema()
+    if args.command != "component-identity":
+        # `component-identity` validates nothing, so it answers under a plain interpreter: that
+        # is what lets a station confirm the root it picked before it can run anything else
+        # (section 12.1, amendment A6). Review finding 12: this call used to be unconditional,
+        # which made the documented confirm step exit 3 wherever jsonschema was not installed.
+        validate.require_jsonschema()
     try:
         root = validate.component_root(args.component_root)
         schemas = validate.load_schemas(root) if args.command in NEEDS_SCHEMAS else None
@@ -570,6 +646,10 @@ def main(argv=None):
     except (Usage, validate.ComponentRootMissing) as exc:
         parser.error(str(exc))
     except events_mod.RecordsError as exc:
+        if exc.code == 2:
+            # Review finding 12: a missing ledger document is a usage error, and the interface
+            # promises those on stderr with an empty stdout, the way the parser reports its own.
+            parser.error(exc.document["reason"])
         return emit(envelope(validate.component_root(args.component_root), exc.document), exc.code)
     except Refusal as exc:
         return emit(envelope(validate.component_root(args.component_root), exc.document), exc.code)

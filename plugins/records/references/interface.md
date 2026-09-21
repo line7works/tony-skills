@@ -120,6 +120,9 @@ import os
 import subprocess
 import sys
 
+def refusal_line(value):
+    return "".join("\\u%04x" % ord(ch) if ord(ch) < 32 or ord(ch) == 127 else ch for ch in str(value))
+
 COMPONENT = "records"                                    # the component's plugin name
 MANIFEST = os.path.join(".claude-plugin", "plugin.json")
 DIGITS = "0123456789"
@@ -152,15 +155,18 @@ def installed_versions(base):
         return accepted, rejected
     for name in names:
         folder = os.path.join(base, name)
-        if name.startswith(".") or not os.path.isdir(folder):
-            continue  # a hidden name is not a version; the shell snippet's glob skips it too
+        if not os.path.isdir(folder):
+            continue
         manifest = os.path.join(folder, MANIFEST)
         if not os.path.isfile(manifest):
             rejected.append((folder, "no plugin.json"))
             continue
         try:
             with open(manifest, encoding="utf-8") as fh:
-                version = json.load(fh).get("version")
+                manifest_body = json.load(fh)
+                if not isinstance(manifest_body, dict):
+                    raise ValueError("plugin.json is not an object")
+                version = manifest_body.get("version")
         except (ValueError, OSError):
             rejected.append((folder, "plugin.json unreadable"))
             continue
@@ -214,7 +220,7 @@ def confirm_interface(root, known_versions, python=None):
             version = json.loads(proc.stdout.decode("utf-8"))["interface_version"]
         except (ValueError, KeyError, TypeError, UnicodeDecodeError):
             version = None
-    if version is None:
+    if type(version) is not int:
         raise LookupError("missing dependency: records component at %s did not report an "
                           "interface version" % root)
     if version not in known_versions:
@@ -231,7 +237,7 @@ if __name__ == "__main__":
         root = records_root(given.get("--records-root"), given.get("--station-plugin-root"))
         confirm_interface(root, known)
     except LookupError as refusal:
-        sys.stderr.write("%s\n" % refusal)
+        sys.stderr.write("%s\n" % refusal_line(refusal))
         sys.exit(3)
     sys.stdout.write(root + "\n")
 ```
@@ -239,150 +245,152 @@ if __name__ == "__main__":
 <!-- resolver: sh -->
 
 ```sh
-# POSIX sh. There is no jq on the floor, so `version` is read out of plugin.json by
-# /usr/bin/python3 -c, never by sed. Modification time is never read.
-# RECORDS_PYTHON overrides the interpreter these helpers spawn.
+# POSIX sh. RECORDS_PYTHON names an interpreter with the component's pinned dependency.
+# The embedded resolver is the same implementation as the Python snippet above.
+records_resolver() {
+  "${RECORDS_PYTHON:-/usr/bin/python3}" - "$@" <<'RECORDS_RESOLVER_PY'
+#!/usr/bin/env python3
+"""Resolve the records component root (records E12 contract section 12.1, amendment A6).
 
-records_version_key() {
-  # $1: a folder name. Prints a sortable key for a dotted-integer version, else returns 1.
-  # Each component is left-padded to 18 digits, so a byte sort is an integer sort. A component
-  # with a leading zero (01, 1.00) is not a dotted integer: it would give two differently named
-  # folders one key, and then the highest version would not be one folder.
-  key=""
-  saved_ifs=$IFS
-  IFS=.
-  for part in $1; do
-    case "$part" in
-      ''|*[!0-9]*|0?*) IFS=$saved_ifs; return 1 ;;
-    esac
-    padded="000000000000000000$part"
-    while [ ${#padded} -gt 18 ]; do padded=${padded#?}; done
-    key="$key$padded."
-  done
-  IFS=$saved_ifs
-  [ -n "$key" ] || return 1
-  printf '%s' "$key"
-}
+    python3 records_root.py [--records-root DIR] [--station-plugin-root DIR]
+                            [--known-interface-versions "1"]
 
-records_scan_installed() {
-  # $1: route 3b's directory. Prints one line per folder, in name order:
-  #   ok<TAB><sort key><TAB><folder>      accepted
-  #   no<TAB><folder> (<why>)             rejected
-  LC_ALL=C
-  export LC_ALL
-  for candidate in "$1"/*; do
-    [ -d "$candidate" ] || continue
-    name=${candidate##*/}
-    manifest="$candidate/.claude-plugin/plugin.json"
-    if [ ! -f "$manifest" ]; then
-      printf 'no\t%s (no plugin.json)\n' "$candidate"
-      continue
-    fi
-    if version=$("${RECORDS_PYTHON:-/usr/bin/python3}" -c 'import json, sys
-with open(sys.argv[1], encoding="utf-8") as fh:
-    version = json.load(fh).get("version")
-sys.stdout.write(version if isinstance(version, str) else "")
-' "$manifest" 2>/dev/null); then
-      :
-    else
-      printf 'no\t%s (plugin.json unreadable)\n' "$candidate"
-      continue
-    fi
-    if [ -z "$version" ]; then
-      printf 'no\t%s (no version)\n' "$candidate"
-      continue
-    fi
-    if [ "$version" != "$name" ]; then
-      printf 'no\t%s (name differs from version %s)\n' "$candidate" "$version"
-      continue
-    fi
-    if key=$(records_version_key "$name"); then
-      :
-    else
-      printf 'no\t%s (version not dotted integers)\n' "$candidate"
-      continue
-    fi
-    if [ ! -f "$candidate/scripts/records.py" ]; then
-      printf 'no\t%s (no scripts/records.py)\n' "$candidate"
-      continue
-    fi
-    printf 'ok\t%s\t%s\n' "$key" "$candidate"
-  done
+Prints the root on stdout, or one refusal line on stderr and exits 3. Modification time is
+never read: route 3b matches a folder's name against the `version` inside it.
+"""
+import json
+import os
+import subprocess
+import sys
+
+def refusal_line(value):
+    return "".join("\\u%04x" % ord(ch) if ord(ch) < 32 or ord(ch) == 127 else ch for ch in str(value))
+
+COMPONENT = "records"                                    # the component's plugin name
+MANIFEST = os.path.join(".claude-plugin", "plugin.json")
+DIGITS = "0123456789"
+
+
+def version_key(name):
+    """(int, ...) for a dotted-integer name, else None. Text is never compared as text.
+
+    A component with a leading zero (`01`, `1.00`) is not a dotted integer: it would give two
+    differently named folders one key, and then the highest version would not be one folder.
+    """
+    parts = name.split(".")
+    for part in parts:
+        if not part or [ch for ch in part if ch not in DIGITS]:
+            return None
+        if len(part) > 1 and part[0] == "0":
+            return None
+    return tuple(int(part) for part in parts)
+
+
+def installed_versions(base):
+    """Route 3b: (accepted, rejected) under `base`, one folder per version.
+
+    accepted is [(version key, folder)]; rejected is [(folder, why)], both in name order.
+    """
+    accepted, rejected = [], []
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return accepted, rejected
+    for name in names:
+        folder = os.path.join(base, name)
+        if not os.path.isdir(folder):
+            continue
+        manifest = os.path.join(folder, MANIFEST)
+        if not os.path.isfile(manifest):
+            rejected.append((folder, "no plugin.json"))
+            continue
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                manifest_body = json.load(fh)
+                if not isinstance(manifest_body, dict):
+                    raise ValueError("plugin.json is not an object")
+                version = manifest_body.get("version")
+        except (ValueError, OSError):
+            rejected.append((folder, "plugin.json unreadable"))
+            continue
+        if not isinstance(version, str) or not version:
+            rejected.append((folder, "no version"))
+        elif version != name:
+            rejected.append((folder, "name differs from version %s" % version))
+        elif version_key(name) is None:
+            rejected.append((folder, "version not dotted integers"))
+        elif not os.path.isfile(os.path.join(folder, "scripts", "records.py")):
+            rejected.append((folder, "no scripts/records.py"))
+        else:
+            accepted.append((version_key(name), folder))
+    return accepted, rejected
+
+
+def records_root(argument=None, station_plugin_root=None, environ=None):
+    """Routes 1, 2, 3a, 3b, in that order. Raises LookupError naming every candidate."""
+    environ = os.environ if environ is None else environ
+    looked = []
+    for candidate in (argument, environ.get("RECORDS_ROOT")):
+        if not candidate:
+            continue
+        looked.append(candidate)
+        if os.path.isfile(os.path.join(candidate, "scripts", "records.py")):
+            return candidate
+    if station_plugin_root:
+        beside = os.path.join(station_plugin_root, os.pardir, COMPONENT)          # route 3a
+        looked.append(beside)
+        if os.path.isfile(os.path.join(beside, "scripts", "records.py")):
+            return beside
+        base = os.path.join(station_plugin_root, os.pardir, os.pardir, COMPONENT)  # route 3b
+        looked.append(base if os.path.isdir(base) else "%s (no such directory)" % base)
+        accepted, rejected = installed_versions(base)
+        for folder, why in rejected:
+            looked.append("%s (%s)" % (folder, why))
+        if accepted:
+            return max(accepted, key=lambda pair: pair[0])[1]
+    raise LookupError("missing dependency: records component (looked in: %s)"
+                      % (", ".join(looked) or "nothing given"))
+
+
+def confirm_interface(root, known_versions, python=None):
+    """The picked root must report an interface version the caller knows. Returns it."""
+    command = [python or sys.executable, os.path.join(root, "scripts", "records.py"),
+               "component-identity"]
+    proc = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    version = None
+    if proc.returncode == 0:
+        try:
+            version = json.loads(proc.stdout.decode("utf-8"))["interface_version"]
+        except (ValueError, KeyError, TypeError, UnicodeDecodeError):
+            version = None
+    if type(version) is not int:
+        raise LookupError("missing dependency: records component at %s did not report an "
+                          "interface version" % root)
+    if version not in known_versions:
+        raise LookupError("missing dependency: records component at %s speaks interface version "
+                          "%s, not %s" % (root, version,
+                                          ", ".join(str(known) for known in known_versions)))
+    return version
+
+
+try:
+    if sys.argv[1] == "root":
+        result = records_root(sys.argv[2] or None, sys.argv[3] or None)
+    else:
+        result = confirm_interface(sys.argv[2], [int(v) for v in sys.argv[3].split()])
+    sys.stdout.write(str(result) + "\n")
+except LookupError as refusal:
+    sys.stderr.write(refusal_line(refusal) + "\n")
+    sys.exit(3)
+RECORDS_RESOLVER_PY
 }
 
 records_root() {
-  # $1: the station's --records-root value, or empty. $2: the station's plugin root, or empty.
-  # Prints the root, or the missing-dependency line on stderr and returns 3.
-  looked=""
-  for candidate in "$1" "${RECORDS_ROOT-}"; do
-    [ -n "$candidate" ] || continue
-    looked="${looked:+$looked, }$candidate"
-    if [ -f "$candidate/scripts/records.py" ]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-  if [ -n "$2" ]; then
-    beside="$2/../records"                                                      # route 3a
-    looked="${looked:+$looked, }$beside"
-    if [ -f "$beside/scripts/records.py" ]; then
-      printf '%s\n' "$beside"
-      return 0
-    fi
-    base="$2/../../records"                                                     # route 3b
-    if [ -d "$base" ]; then
-      looked="${looked:+$looked, }$base"
-      scanned=$(records_scan_installed "$base")
-    else
-      looked="${looked:+$looked, }$base (no such directory)"
-      scanned=""
-    fi
-    accepted=""
-    tab=$(printf '\t')
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      case "$line" in
-        ok*) accepted="$accepted${line#ok$tab}
-" ;;
-        *) looked="$looked, ${line#no$tab}" ;;
-      esac
-    done <<SCANNED
-$scanned
-SCANNED
-    if [ -n "$accepted" ]; then
-      best=$(printf '%s' "$accepted" | LC_ALL=C sort | tail -n 1)
-      printf '%s\n' "${best#*$tab}"
-      return 0
-    fi
-  fi
-  printf 'missing dependency: records component (looked in: %s)\n' "${looked:-nothing given}" >&2
-  return 3
+  records_resolver root "$1" "$2"
 }
 
 records_confirm() {
-  # $1: the picked root. $2: the interface versions this station knows, space separated, in the
-  # order to print. Prints the version, or one refusal line on stderr and returns 3.
-  if identity=$("${RECORDS_PYTHON:-/usr/bin/python3}" "$1/scripts/records.py" \
-                component-identity 2>/dev/null); then
-    version=$(printf '%s' "$identity" | "${RECORDS_PYTHON:-/usr/bin/python3}" -c 'import json, sys
-sys.stdout.write(str(json.load(sys.stdin)["interface_version"]))
-' 2>/dev/null)
-  else
-    version=""
-  fi
-  if [ -z "$version" ]; then
-    printf 'missing dependency: records component at %s did not report an interface version\n' \
-      "$1" >&2
-    return 3
-  fi
-  for known in $2; do
-    [ "$known" = "$version" ] || continue
-    printf '%s\n' "$version"
-    return 0
-  done
-  printf 'missing dependency: records component at %s speaks interface version %s, not %s\n' \
-    "$1" "$version" "$(printf '%s' "$2" | sed 's/  */, /g')" >&2
-  return 3
+  records_resolver confirm "$1" "$2"
 }
 ```
 
@@ -450,8 +458,13 @@ commit (anything else is exit 2). `--doc D` is workspace-relative, normalized, i
 workspace, and ends in `.md` (a build doc, or `docs/punch-list.md`); anything else is exit 2.
 The document itself need not exist for the commands that only read a log.
 
-Two environment variables are honoured, both test hooks and both ignored unless `RECORDS_TEST=1`
-is also set: `RECORDS_TEST_NO_JSONSCHEMA=1` behaves as if `jsonschema` were not importable.
+`--component-root` is the only hook this component has, and no environment variable changes
+what it does. A missing dependency is tested with a `PYTHONPATH` package named `jsonschema`
+whose initializer raises `ImportError`, which is the real failure rather than a simulation of it.
+
+`--at-source` takes a JSON file holding the six-field identity, or a response carrying one under
+`identity`. It is held to the same `identity` definition the schemas publish, so a file that is
+not one is exit 2 and no state is printed.
 
 ## Exit codes
 
@@ -461,10 +474,10 @@ is also set: `RECORDS_TEST_NO_JSONSCHEMA=1` behaves as if `jsonschema` were not 
 | 1 | anything else | an unsupported workspace (a submodule), a git failure, a file system refusal, a defect of the script. A submodule refusal carries a JSON body; a git or file system failure reports on stderr and prints nothing. |
 | 2 | usage | a missing or malformed argument, a file that is not there, a `--doc` outside the workspace. Reported by the argument parser on stderr; stdout is empty. |
 | 3 | missing dependency | `jsonschema` did not import. One line on stderr, nothing on stdout. |
-| 4 | validation | an input, an event, or a log line failed validation. `error: "invalid"`. |
+| 4 | validation | an input, an event, or a log line failed validation, or `--doc` is not a ledger address (amendment A8: `docs/records/`, a verdict doc, or a path through a symbolic link). `error: "invalid"`. |
 | 5 | ambiguous identity | section 7's identity cases, and section 11.5's ambiguous legacy lines. `error: "ambiguous_identity"`. The response explains every case. |
 | 6 | stale source | a clear against a source that is not the workspace, or against a finding that is not open. `error: "stale_source"`. |
-| 7 | conflict | a chain break, a head mismatch, a held lock, or a legacy document whose imported record lines changed or moved. `error: "conflict"`. |
+| 7 | conflict | a chain break, a head mismatch, a held lock, a log holding an event that names another document, or a legacy document whose imported record lines changed or moved. `error: "conflict"`. |
 
 0 to 4 are the A7a meanings; 5, 6 and 7 are this component's. Every non-zero exit that carries a
 body carries `ok: false`, `error`, and `reason`, and writes nothing.
@@ -478,10 +491,20 @@ Specification and operational history are separately addressable, and neither re
 - `history` is `{"log": "<log path>", "seq": n}` — one event.
 
 For a ledger document at workspace-relative path `D`, the log is
-`docs/records/<slug>.events.jsonl`, where `<slug>` is `D` with its `.md` removed and every `/`
-replaced by `__`: `docs/plans/2026-09-06-readers.md` gives
-`docs/records/docs__plans__2026-09-06-readers.events.jsonl`. Every response reports `log` as that
-workspace-relative path, so an address is portable between machines.
+`docs/records/<slug>.events.jsonl`, where `<slug>` is `D` with its `.md` removed, each literal
+`%` written `%25`, each literal `_` written `%5F`, and then every `/` replaced by `__`:
+`docs/plans/2026-09-06-readers.md` gives
+`docs/records/docs__plans__2026-09-06-readers.events.jsonl`. The two escapes make the slug
+one-to-one (amendment A8), so `docs/a/b.md` and `docs/a__b.md` no longer name one log. Every
+response reports `log` as that workspace-relative path, so an address is portable between
+machines.
+
+Three paths are not ledger addresses at all, and every command refuses them with exit 4
+(amendment A8): a document under `docs/records/`, which is this component's history and never
+specification; a verdict doc under `docs/reviews/`, which mirrors a ledger and is never one
+(section 11.6); and any path that reaches its document, its log, its lock, or `docs/records/`
+itself through a symbolic link. Every command that walks a log also checks that each event in it
+names the document the log belongs to, and answers exit 7 (`conflict`) when one does not.
 
 The log is UTF-8, one canonical JSON object per line (sorted keys, no insignificant whitespace,
 `ensure_ascii` false), LF endings, one trailing newline. It is a tracked file.
@@ -498,8 +521,10 @@ The log is UTF-8, one canonical JSON object per line (sorted keys, no insignific
 
 `verify`, `events`, `append`, `state`, `render` and `import-legacy` read the log before they do
 anything else, so each of them can answer with the walk's own refusals: exit 4 when a line does
-not parse, carries an unknown `v`, or fails the event schema, and exit 7 when `seq` is not the
-line index or `prev` is not the hash of the line before.
+not parse, carries an unknown `v`, fails the event schema, or is not canonical JSON (section
+6.1: sorted keys, no insignificant whitespace), and exit 7 when `seq` is not the line index, when
+`prev` is not the hash of the line before, or when a line names a document other than the one
+this log belongs to (amendment A8).
 
 | Field | Meaning |
 |---|---|
@@ -508,6 +533,10 @@ line index or `prev` is not the hash of the line before.
 | `line` | the 1-based line of the log, or of the legacy document, the refusal is about. |
 | `seq` | the `seq` the offending line carries. |
 | `expected_seq` | the `seq` its position requires. |
+| `prev` | the predecessor hash the offending line carries. |
+| `expected_prev` | the hash of the line before it, as read from disk. |
+| `ledger_doc` | the document an offending line names, when that is what is wrong with it. |
+| `expected_ledger_doc` | the document this log belongs to. |
 | `errors` | the validation findings, in path order. |
 | `errors[]` | one finding. |
 | `errors[].path` | a JSON pointer into the event or the input. |
@@ -518,9 +547,19 @@ line index or `prev` is not the hash of the line before.
 `append` and `import-legacy` are the two commands that write, and each holds `<log>.lock` while
 it does. The lock file is created with exclusive creation and holds the pid, that process's start
 time, and the command; a lock that exists is exit 7 with its contents, and `--break-lock` removes
-one only when its pid is not alive. There is no waiting and no retry loop. A process killed
-between taking the lock and releasing it leaves the lock behind, which is the one partial effect
-either command has; `import-legacy --dry-run` takes no lock at all.
+one only when its pid is not alive. There is no waiting and no retry loop. The lock is held as
+an INODE, not as a pathname: the file is kept open with an advisory lock on it for the lock's
+whole life, so a writer never removes a lock that another writer created in its place, and a
+write whose lock was replaced under it is refused (exit 7) rather than landed.
+
+A killed process leaves up to two things behind, and neither is removed for you.
+The first is `<log>.lock`. The second, when the kill lands inside the atomic replacement, is a
+sibling temporary file named `.<log file name>.<random>.tmp` holding the log the writer was
+about to publish. The log itself is never half-written: it is wholly its old bytes or wholly its
+new ones, because the last step is a rename. Readers ignore a temporary file, and `--break-lock`
+removes only the lock; it reports every temporary file it finds beside the log in
+`orphan_temporaries`, and a person decides what to do with them once no writer is running.
+`import-legacy --dry-run` takes no lock at all.
 
 | Field | Meaning |
 |---|---|
@@ -535,6 +574,7 @@ either command has; `import-legacy --dry-run` takes no lock at all.
 | `broke_lock.pid` | the pid it recorded. |
 | `broke_lock.pid_start` | that process's start time as recorded. |
 | `broke_lock.command` | the command that took it. |
+| `orphan_temporaries` | with `--break-lock`, every `.<log file name>.*.tmp` file found beside the log, as workspace-relative paths. An interrupted write can leave one; nothing here deletes it. |
 
 ## The commands
 
@@ -603,8 +643,8 @@ no HEAD commit, is exit 2.
 | `workspace` | the absolute path the identity was computed in. |
 | `identity` | the six fields. |
 | `identity.commit` | the 40-hex commit at HEAD. |
-| `identity.dirty` | is the tracked tree different from that commit. |
-| `identity.tracked_diff_sha256` | SHA-256 of the tracked diff, or 64 zeros when it is empty. |
+| `identity.dirty` | does `git status --porcelain --untracked-files=all` report anything, after `docs/records/` is excluded: a changed tracked file, or an untracked file git does not ignore. |
+| `identity.tracked_diff_sha256` | SHA-256 of the tracked diff. An empty diff hashes to `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, the hash of no bytes, never to 64 zeros. |
 | `identity.untracked` | the untracked paths, sorted. |
 | `identity.untracked_sha256` | SHA-256 over those paths and their contents. |
 | `identity.submodules` | the initialized submodules; a workspace with any is refused. |
@@ -725,6 +765,15 @@ when the clear was bound and names that commit.
 | `findings[].scenario` | the failure scenario, or null. |
 | `findings[].status` | `open`, `fixed` or `waived`. |
 | `findings[].cleared_unbound` | true when the deciding clear carried no known source (owner ruling O4). |
+| `findings[].verified_source` | section 8.4: the source the deciding clear was decided against, exactly as that event carried it. `{"known": true, "identity": {...}}` for a bound clear, `{"known": false}` for an imported one, null while the finding is open. |
+| `findings[].verified_source.known` | did that clear name a source identity at all. |
+| `findings[].verified_source.identity` | the six fields, when it did. |
+| `findings[].verified_source.identity.commit` | the 40-hex commit it was cleared against. |
+| `findings[].verified_source.identity.dirty` | what `dirty` said then. |
+| `findings[].verified_source.identity.tracked_diff_sha256` | the tracked diff's hash then. |
+| `findings[].verified_source.identity.untracked` | the untracked paths then. |
+| `findings[].verified_source.identity.untracked_sha256` | their hash then. |
+| `findings[].verified_source.identity.submodules` | the initialized submodules then (always empty: a workspace with one is refused). |
 | `findings[].join_basis` | the deciding event's join basis, or null. |
 | `findings[].raised` | the history address of the raise. |
 | `findings[].raised.log` | the log's path. |
@@ -924,16 +973,27 @@ blocks an import: a verdict doc holds copies of blocks and is never a second sou
 
 ### `survey`
 
-`survey --workspace W` walks the workspace's Markdown documents, keeps the ones carrying a
-record, and reports for each the counts by record kind, the counts by join basis, and every line
-that would stop an import. It imports nothing and writes nothing. A document under a
-`docs/reviews/` directory is a mirror and is reported as one, never surveyed as a ledger
-document; `docs/records/`, `.git`, `node_modules`, `__pycache__` and `.venv` are skipped.
+`survey --workspace W [--limit N] [--offset K]` walks the workspace's Markdown documents, keeps
+the ones carrying a record, and reports for each the counts by record kind, the counts by join
+basis, and every line that would stop an import. It imports nothing and writes nothing. A
+document under a `docs/reviews/` directory is a mirror and is reported as one, never surveyed as
+a ledger document; `docs/records/`, `.git`, `node_modules`, `__pycache__` and `.venv` are
+skipped.
+
+Its output is bounded, as interface version 1 promises: `--limit N` returns at most `N`
+documents, in path order, and defaults to 50; `--offset K` skips the first `K` of them. The
+`counts` still describe the WHOLE workspace whatever page is asked for, and `total`, `returned`,
+`offset` and `truncated` say what this page is. A `--limit` or `--offset` that is not a whole
+number (0 or more) is exit 2.
 
 | Field | Meaning |
 |---|---|
 | `report` | `survey`, the discriminator of `import-report.schema.json`. |
 | `workspace` | the absolute path that was walked. |
+| `total` | how many documents carry a record in the whole workspace. |
+| `returned` | how many this page holds. |
+| `offset` | how many documents this page skipped. |
+| `truncated` | true when the page left documents out. |
 | `counts` | the workspace's totals. |
 | `counts.documents` | documents carrying a record. |
 | `counts.ledger_documents` | of those, the ones that are ledger documents. |
@@ -1042,6 +1102,6 @@ below.
   inside one interface version.
 - `scripts/validate-examples.py`. A check over this component's own examples, not a command a
   station calls; it is not in the table above on purpose.
-- `--component-root`, `RECORDS_TEST` and `RECORDS_TEST_NO_JSONSCHEMA`. Test hooks.
+- `--component-root`. The only test hook there is.
 - The exact wording of any `reason`. It is written for a person; branch on the exit code, on
   `error`, and on the named fields.

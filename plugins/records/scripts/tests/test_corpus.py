@@ -16,6 +16,7 @@ counts are printed into the slice 2 report by the builder, from `survey`, not fr
 into this repository, which is a separate job on the owner's word (section 11.8).
 """
 import os
+import re
 import subprocess
 import unittest
 
@@ -108,23 +109,46 @@ class TheCorpus(unittest.TestCase):
             self.assertTrue(body["dry_run"], doc)
 
     def test_every_line_under_a_record_heading_is_classified(self):
-        for doc, (code, body, err) in sorted(self.runs.items()):
+        """Every record bullet of every document comes out as an event or as a stop.
+
+        The outside review's finding 13: the expectation used to be `tolerant_document`'s own
+        item list, which is the reader this checks, so a reader that dropped every unparseable
+        line passed. The lines to account for are now read out of the documents here, by a scan
+        that knows only Appendix A's shapes: a `- ` bullet under a `review:` or `recheck:`
+        heading, and a `WAIVED`/`REOPENED (per user)` grant line with or without its bullet
+        (amendment A3). Fenced blocks are skipped, as the fence rule E8-20 requires.
+        """
+        for doc in sorted(self.documents):
             with open(os.path.join(REPO, *doc.split("/")), encoding="utf-8") as fh:
-                parsed = legacy.tolerant_document(fh.read(), doc)
-            # a record heading with only prose under it is a real shape; what must not happen
-            # is a line the reader classified and the importer then dropped on the floor
-            under_a_heading = set(item["line_no"] for item in parsed["items"])
+                lines = fh.read().split("\n")
+            expected = set()
+            fence, under_a_record_heading = None, False
+            for number, line in enumerate(lines, 1):
+                marker = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+                if marker:
+                    if fence is None:
+                        fence = marker.group(1)[0]
+                    elif fence == marker.group(1)[0]:
+                        fence = None
+                    continue
+                if fence is not None:
+                    continue
+                if line.startswith("#"):
+                    under_a_record_heading = bool(
+                        re.match(r"^###\s+\d{4}-\d{2}-\d{2}\s+[\u2014\u2013-]\s+(review|recheck):", line))
+                    continue
+                if under_a_record_heading and line.startswith("- "):
+                    expected.add(number)
+                if re.match(r"^(?:- )?(?:WAIVED|REOPENED) \(per user\) \u00b7 ", line):
+                    expected.add(number)
             plan = testlib.plan_for(REPO, doc)
-            accounted = set()
-            for event in plan["events"]:
-                line = event["origin"].get("line")
-                if isinstance(line, int):
-                    accounted.add(line)
+            accounted = set(event["origin"]["line"] for event in plan["events"]
+                            if event["kind"] != "card_observed")
             accounted.update(stop["line"] for stop in plan["ambiguities"])
-            missing = sorted(under_a_heading - accounted)
+            missing = sorted(expected - accounted)
             self.assertEqual(missing, [],
-                             "%s: %d line(s) under a record heading were classified as nothing"
-                             % (doc, len(missing)))
+                             "%s: %d record line(s) came out as nothing at all: %r"
+                             % (doc, len(missing), [lines[n - 1] for n in missing[:3]]))
 
     def test_a_stopped_document_still_says_what_it_read(self):
         stopped = [(doc, body) for doc, (code, body, _) in self.runs.items() if code == 5]

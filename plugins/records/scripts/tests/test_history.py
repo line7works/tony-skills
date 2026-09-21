@@ -86,16 +86,30 @@ class BulletOneTheDocumentIsNeverWritten(HistoryCase):
         self.assertEqual(testlib.porcelain(self.workspace), before)
 
     def test_the_importer_never_writes_outside_the_records_directory(self):
-        code, _, _ = self.run_import(HISTORY)
-        self.assertEqual(code, 0)
-        written = []
-        for dirpath, dirnames, filenames in os.walk(self.workspace):
-            dirnames[:] = [d for d in dirnames if d != ".git"]
-            for name in filenames:
-                rel = os.path.relpath(os.path.join(dirpath, name), self.workspace)
-                written.append(rel.replace(os.sep, "/"))
-        new = [w for w in written if w.startswith("docs/records/")]
-        self.assertEqual(new, ["docs/records/" + events_mod.slug_of(HISTORY) + ".events.jsonl"])
+        """Every byte of the workspace, before and after: the log is the only thing that moved.
+
+        The outside review's finding 13: this used to filter the files it had just walked down
+        to `docs/records/` and then check THOSE, so an importer that wrote `workspace/leaked.txt`
+        passed it. The comparison is now over the whole tree, contents included.
+        """
+        def snapshot():
+            out = {}
+            for dirpath, dirnames, filenames in os.walk(self.workspace):
+                dirnames[:] = [d for d in dirnames if d != ".git"]
+                for name in filenames:
+                    path = os.path.join(dirpath, name)
+                    rel = os.path.relpath(path, self.workspace).replace(os.sep, "/")
+                    with open(path, "rb") as fh:
+                        out[rel] = fh.read()
+            return out
+
+        before = snapshot()
+        code, body, err = self.run_import(HISTORY)
+        self.assertEqual(code, 0, (body, err))
+        after = snapshot()
+        changed = set(p for p in set(before) | set(after) if before.get(p) != after.get(p))
+        self.assertEqual(changed, {events_mod.log_relpath(HISTORY)},
+                         "the import touched something other than this document's log")
 
 
 class BulletTwoASecondImportOfAnUnchangedDocument(HistoryCase):

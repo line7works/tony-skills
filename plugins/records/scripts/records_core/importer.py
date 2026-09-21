@@ -67,6 +67,13 @@ ITEM_KINDS = {"finding": "finding_raised", "defect": "defect_raised", "recheck":
               "waiver": "waived", "reopening": "reopened", "unparsed": "legacy_unparsed"}
 CLEAR_ITEMS = ("recheck", "waiver", "reopening")
 RAISE_ITEMS = ("finding", "defect")
+GRANT_ITEMS = ("waiver", "reopening")  # section 11.7: these carry the grant's own date
+CUT_CLAIM_REASON = ("the field separator cut a parenthesized claim in half: this line's claim "
+                    "field reads %r and its closing parenthesis is in a later field, so where "
+                    "the claim ends is not written down (amendment A9)")
+CUT_CLAIM_WHY = ("A claim carrying the field separator cannot be read from the line (Appendix A "
+                 "forbids it there). Take the line as the reader split it, name the finding it "
+                 "belongs to, or skip it.")
 
 
 def _fail(code, error, reason, **extra):
@@ -151,8 +158,10 @@ def units_of(parsed, doc):
         units.append(Unit(s["status_line"] + 1, parsed["lines"][s["status_line"]].rstrip(),
                           "card", slice_name=s["name"], heading=s))
     for item in parsed["items"]:
-        units.append(Unit(item["line_no"], item["text"], item["kind"], item=item,
-                          heading=item.get("heading")))
+        # Review finding 14: the line's own bytes, not the reader's rstripped copy, so that
+        # section 11.7's comparison sees a changed line as changed.
+        units.append(Unit(item["line_no"], parsed["lines"][item["line_no"] - 1], item["kind"],
+                          item=item, heading=item.get("heading")))
     units.sort(key=lambda u: u.line_no)
     return units
 
@@ -206,7 +215,7 @@ def check_only_grown(seen, lines, doc, log_rel):
     """
     for line in sorted(seen):
         raw = seen[line]
-        current = lines[line - 1].rstrip() if 0 < line <= len(lines) else None
+        current = lines[line - 1] if 0 < line <= len(lines) else None
         if current == raw:
             continue
         _fail(7, "conflict",
@@ -282,10 +291,14 @@ def findings_from_log(events, doc):
             continue
         origin = event.get("origin")
         line_no = origin.get("line") if isinstance(origin, dict) else None
+        # Amendment A9 (2): the join key is the CLAIM key. A finding with no claim has an
+        # empty one, so a recheck line whose claim happens to repeat that finding's scenario
+        # text no longer joins to it as `exact`; section 7 still builds the ID from the
+        # scenario, and that ID is read from the event, never recomputed here.
         out.append(Finding(event.get("finding"), event.get("slice"),
                            line_no if isinstance(line_no, int) else 0,
                            ids.location_key(event.get("location")),
-                           ids.claim_key(event.get("claim"), event.get("scenario"))))
+                           ids.claim_key(event.get("claim"))))
     return out
 
 
@@ -324,9 +337,21 @@ def join_reason(item, same_location):
 # ---- resolutions (section 11.5) ---------------------------------------------------------------
 
 def answers_by_line(resolutions):
+    """{line: the one answer for that line}, or exit 4 when two answers name one line.
+
+    Review finding 5: `setdefault` kept the first of two contradictory answers and dropped the
+    second without a word, while the later check counted both as used because it compares only
+    line numbers. One line takes one answer.
+    """
     out = {}
     for answer in (resolutions or {}).get("answers") or []:
-        out.setdefault(answer.get("line"), answer)
+        line = answer.get("line")
+        if line in out:
+            _fail(4, "invalid",
+                  "the resolutions file holds more than one answer for line %r; one ambiguous "
+                  "line takes one answer (section 11.5). Nothing was written." % (line,),
+                  line=line, answers=[out[line], answer])
+        out[line] = answer
     return out
 
 
@@ -359,7 +384,13 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     blame = blame_commits(workspace, doc)
     units = [u for u in units_of(parsed, doc) if u.line_no not in seen]
     check_only_grew_at_the_tail(units, high_water_line(existing_events, doc), doc, log_rel)
-    answers = answers_by_line(resolutions)
+    try:
+        answers = answers_by_line(resolutions)
+    except events_mod.RecordsError as exc:
+        exc.document.setdefault("report", "import")
+        exc.document.setdefault("doc", doc)
+        exc.document.setdefault("log", log_rel)
+        raise
     used_lines = set()
     rejected = []
     ambiguities = []
@@ -388,6 +419,11 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
             return moment.strftime("%Y-%m-%d")
         item = unit.item or {}
         heading = item.get("heading")
+        # Section 11.7: an imported event's `at` is the block heading's date, OR THE GRANT'S DATE
+        # on a waiver or reopening line. Review finding 9: the grant's own date used to lose to
+        # the heading it happened to sit under, which dated a June waiver in May.
+        if item.get("kind") in GRANT_ITEMS and item.get("date"):
+            return item["date"]
         if isinstance(heading, dict) and heading.get("date"):
             return heading["date"]
         if item.get("date"):
@@ -423,7 +459,7 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
 
     def register(finding, slice_name, item, unit):
         record = Finding(finding, slice_name, unit.line_no, ids.location_key(item["location"]),
-                         ids.claim_key(item.get("claim"), item.get("scenario")))
+                         ids.claim_key(item.get("claim")))  # amendment A9 (2), as above
         candidates.append(record)
         by_id[finding] = record
 
@@ -499,6 +535,34 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
         item = unit.item
         if item["kind"] == "unparsed":
             out.append(event_of(unit, "legacy_unparsed", reason=item["reason"]))
+            continue
+        if ids.claim_is_cut(item.get("claim")):
+            # Amendment A9 (1): the field separator cut a parenthesized claim in half, so this
+            # line does not say where its claim ends. It is never imported with the claim cut;
+            # it stops the document until a person answers for it.
+            raising = item["kind"] in RAISE_ITEMS
+            shapes = (("new_finding", "skip") if raising
+                      else ("finding", "skip") if item["kind"] == "reopening"
+                      else ("finding", "new_finding", "skip"))
+            answer = take_answer(unit, shapes, why=CUT_CLAIM_WHY)
+            if answer is None:
+                note_ambiguity(unit, CUT_CLAIM_REASON % ids.collapse(item.get("claim")), [])
+                continue
+            out.append(resolution_event(unit, answer))
+            shape = _answer_shape(answer)
+            if shape == "skip":
+                out.append(event_of(unit, "legacy_unparsed", reason=answer["why"]))
+                continue
+            if shape == "new_finding":
+                new_id, slice_name, raised = raise_event(
+                    unit, item, ITEM_KINDS[item["kind"]] if raising else "finding_raised",
+                    raising and item["kind"] == "defect")
+                out.append(raised)
+                register(new_id, slice_name, item, unit)
+                if not raising:
+                    out.append(clear_event(unit, item, new_id, None))
+                continue
+            out.append(clear_event(unit, item, answer["finding"], None))
             continue
         if item["kind"] in RAISE_ITEMS:
             slice_name = legacy.item_slice(item, doc)
@@ -588,7 +652,9 @@ def batch_of(doc, plan, log_exists, component_version, interface_version):
     batch = []
     if not log_exists:
         batch.append(opening_event(doc, plan, component_version, interface_version))
-    batch.append(bracket_events(doc, plan, "import_started"))
+    # Section 6.2 gives BOTH brackets `doc_sha256`, `lines_read` and counts (review finding 7).
+    batch.append(bracket_events(doc, plan, "import_started", lines_read=plan["lines_read"],
+                                counts=dict(plan["counts"])))
     batch.extend(plan["events"])
     batch.append(bracket_events(doc, plan, "import_finished", lines_read=plan["lines_read"],
                                 counts=dict(plan["counts"])))
@@ -637,17 +703,22 @@ def import_legacy(workspace, doc, schemas, resolutions=None, dry_run=False, now=
     path = events_mod.log_path(workspace, doc)
     log_rel = events_mod.log_relpath(doc)
     if dry_run:
-        walked = events_mod.walk(path, schemas)
+        walked = events_mod.walk(path, schemas, doc=doc)
         plan = plan_import(workspace, doc, resolutions=resolutions, now=now,
                            existing_events=walked["events"])
         _stop_on(plan, doc, log_rel, walked["head"], len(walked["events"]), dry_run=True)
         batch = batch_of(doc, plan, walked["exists"], component_version, interface_version)
+        # Review finding 10: a preview that never assembled the batch could promise one the
+        # writer refuses. `prepare_batch` writes nothing, so the preview stays read-only.
+        if batch:
+            events_mod.prepare_batch(workspace, doc, batch, walked, schemas, importer=True)
         body = report(doc, plan, batch, True, head=walked["head"],
                       total=len(walked["events"]), log_exists=walked["exists"])
         return body
     directory = os.path.dirname(path)
     if not os.path.isdir(directory):
         os.makedirs(directory)
+    orphans = events_mod.orphan_temporaries(path) if break_lock else None
     lock = events_mod.Lock(path, "import-legacy")
     try:
         lock.acquire(break_lock=break_lock)
@@ -655,7 +726,7 @@ def import_legacy(workspace, doc, schemas, resolutions=None, dry_run=False, now=
         exc.document.setdefault("log", log_rel)
         raise
     try:
-        walked = events_mod.walk(path, schemas)
+        walked = events_mod.walk(path, schemas, doc=doc)
         plan = plan_import(workspace, doc, resolutions=resolutions, now=now,
                            existing_events=walked["events"])
         _stop_on(plan, doc, log_rel, walked["head"], len(walked["events"]), dry_run=False)
@@ -664,11 +735,7 @@ def import_legacy(workspace, doc, schemas, resolutions=None, dry_run=False, now=
             return report(doc, plan, batch, False, appended=[], head=walked["head"],
                           total=len(walked["events"]), log_exists=walked["exists"])
         prepared = events_mod.prepare_batch(workspace, doc, batch, walked, schemas, importer=True)
-        old = b""
-        if walked["exists"]:
-            with open(path, "rb") as fh:
-                old = fh.read()
-        canon.atomic_write(path, old + b"".join(raw + b"\n" for _, raw in prepared))
+        events_mod.commit_batch(path, workspace, doc, walked, prepared, lock=lock, importer=True)
         head = events_mod.line_hash(prepared[-1][1])
         appended = [{"seq": event["seq"], "kind": event["kind"], "finding": event.get("finding"),
                      "history": events_mod.history_address(doc, event["seq"])}
@@ -677,6 +744,8 @@ def import_legacy(workspace, doc, schemas, resolutions=None, dry_run=False, now=
                       total=len(walked["events"]) + len(prepared), log_exists=walked["exists"])
         if lock.broke is not None:
             body["broke_lock"] = lock.broke
+        if break_lock:
+            body["orphan_temporaries"] = orphans
         return body
     finally:
         lock.release()
@@ -848,12 +917,26 @@ def ledger_documents(workspace):
     return sorted(out)
 
 
-def survey(workspace, now=None):
+SURVEY_LIMIT = 50
+"""Amendment A9 (3): how many documents `survey` returns when the caller names no limit.
+
+Interface version 1 promises bounded output, as the house guide requires. The workspace-wide
+counts still cover every document: the limit is a page of the `documents` list, never a smaller
+survey.
+"""
+
+
+def survey(workspace, now=None, limit=SURVEY_LIMIT, offset=0):
     """Section 11.8's read-only survey: per document, the counts and the lines that would stop.
 
     It reads every Markdown document of the workspace, keeps the ones that carry a record, and
     reports for each the counts by record kind, the counts by join basis, and every line that
     would stop an import. It writes nothing and appends nothing.
+
+    `limit` and `offset` page the `documents` list, in path order (amendment A9). Every document
+    is still read and still counted: `counts` describes the workspace, `total` says how many
+    documents there are, `returned` how many this page holds, and `truncated` whether anything
+    was left out of it.
     """
     moment = now or utc_now()
     rows = []
@@ -884,10 +967,15 @@ def survey(workspace, now=None):
             row["event_counts"] = dict(plan["counts"])
         rows.append(row)
     ledgers = [r for r in rows if r["role"] == "ledger"]
+    page = rows[offset:offset + limit] if limit else []
     return {
         "report": "survey",
         "workspace": workspace,
-        "documents": rows,
+        "documents": page,
+        "total": len(rows),
+        "returned": len(page),
+        "offset": offset,
+        "truncated": len(page) < len(rows),
         "counts": {
             "documents": len(rows),
             "ledger_documents": len(ledgers),

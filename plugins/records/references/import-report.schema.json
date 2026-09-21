@@ -131,7 +131,12 @@
             "history": {"$ref": "#/$defs/history"}
           }
         }},
-        "broke_lock": {"type": "object"}
+        "broke_lock": {"type": "object"},
+        "orphan_temporaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "with --break-lock: every `.<log file name>.*.tmp` file found beside the log, as workspace-relative paths. An interrupted write can leave one; nothing deletes it."
+        }
       },
       "allOf": [
         {
@@ -180,14 +185,19 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["interface_version", "component_version", "ok", "report", "workspace",
-                   "documents", "counts"],
+                   "documents", "counts", "total", "returned", "offset", "truncated"],
       "properties": {
         "interface_version": {"type": "integer", "minimum": 1},
         "component_version": {"type": "string", "minLength": 1},
         "ok": {"const": true},
         "report": {"const": "survey"},
         "workspace": {"type": "string", "minLength": 1},
-        "documents": {"type": "array", "items": {"$ref": "#/$defs/survey_document"}},
+        "documents": {"type": "array", "items": {"$ref": "#/$defs/survey_document"},
+                      "description": "one page of the documents, in path order (amendment A9)"},
+        "total": {"type": "integer", "minimum": 0, "description": "how many documents carry a record in the whole workspace"},
+        "returned": {"type": "integer", "minimum": 0, "description": "how many this page holds; equals the length of `documents`"},
+        "offset": {"type": "integer", "minimum": 0, "description": "how many documents this page skipped"},
+        "truncated": {"type": "boolean", "description": "true when the page left documents out"},
         "counts": {
           "type": "object",
           "additionalProperties": false,

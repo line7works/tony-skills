@@ -689,7 +689,11 @@
     }
   ],
   "interface_version": 1,
+  "offset": 0,
   "ok": true,
   "report": "survey",
+  "returned": 25,
+  "total": 25,
+  "truncated": false,
   "workspace": "/workspace"
 }

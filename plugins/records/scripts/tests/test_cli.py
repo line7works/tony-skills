@@ -26,13 +26,46 @@ class Help(unittest.TestCase):
             self.assertIn(name, out, name)
 
     def test_each_command_documents_arguments_defaults_an_example_and_side_effects(self):
+        """All four of them, per command: the outside review's finding 13 found this test
+        checking only the last two while its name promised the lot."""
         for name in COMMANDS:
             code, out, err = testlib.run_cli([name, "--help"])
             self.assertEqual(code, 0, "%s: %s" % (name, err))
+            self.assertIn("example: uv run records.py " + name, out, name)
             self.assertIn("side effects:", out, name)
             self.assertIn("exit:", out, name)
+            body = out.split("optional arguments:")[-1].split("options:")[-1]
+            for option in self.options_of(name):
+                self.assertIn(option, body, "%s: %s is not in its own help" % (name, option))
+                if option in ("--workspace", "--doc", "--events", "--expect-head", "--run-id"):
+                    continue
+                line = self.help_of(body, option)
+                self.assertTrue("default:" in line or "(default" in line,
+                                "%s: %s prints no default" % (name, option))
         code, out, _ = testlib.run_cli(["--help"])
         self.assertIn("uv run records.py append", out, "the top-level help carries the examples")
+
+    @staticmethod
+    def options_of(name):
+        """The optional arguments that command takes, read from the parser itself."""
+        testlib.add_scripts_to_path()
+        import records
+        parser = records.build_parser()
+        action = [a for a in parser._actions if getattr(a, "choices", None)][0]
+        return sorted(o for o in sum((list(a.option_strings)
+                                      for a in action.choices[name]._actions), [])
+                      if o.startswith("--") and o != "--help")
+
+    @staticmethod
+    def help_of(body, option):
+        """The help text argparse printed for one option, however it wrapped it."""
+        after = body.split(option, 1)[1]
+        rows = []
+        for row in after.split("\n")[:10]:
+            if row.strip().startswith("--"):
+                break
+            rows.append(row)
+        return " ".join(rows)
 
     def test_the_slice_2_commands_are_here_and_are_not_stubs(self):
         """Each answers from a real fixture workspace, with the fields section 12.2 names."""
@@ -142,7 +175,7 @@ class MissingDependency(unittest.TestCase):
                 "verify": ["verify", "--workspace", workspace, "--doc", DOC],
                 "events": ["events", "--workspace", workspace, "--doc", DOC],
                 "identity": ["identity", "--workspace", workspace],
-                "component-identity": ["component-identity"],
+                "survey": ["survey", "--workspace", workspace],
             }
             for name, args in calls.items():
                 code, out, err = testlib.run_cli(args, env={"PYTHONPATH": stub})
@@ -152,15 +185,23 @@ class MissingDependency(unittest.TestCase):
         finally:
             testlib.rmtree(scratch)
 
-    def test_the_test_hook_reaches_the_same_exit(self):
-        code, out, err = testlib.run_cli(["component-identity"],
-                                         env={"RECORDS_TEST": "1", "RECORDS_TEST_NO_JSONSCHEMA": "1"})
-        self.assertEqual(code, 3)
-        self.assertEqual(err.strip(), testlib.MISSING_DEPENDENCY)
+    def test_component_identity_is_the_one_command_that_needs_no_dependency(self):
+        """The confirm step of section 12.1 runs under a plain interpreter (review finding 12)."""
+        scratch = testlib.make_scratch("records-dep-")
+        try:
+            stub = testlib.stub_without_jsonschema(scratch)
+            code, out, err = testlib.run_cli(["component-identity"], env={"PYTHONPATH": stub})
+            self.assertEqual(code, 0, err)
+            self.assertEqual(err, "")
+            self.assertEqual(json.loads(out)["name"], "records")
+        finally:
+            testlib.rmtree(scratch)
 
-    def test_the_hook_is_ignored_without_its_gate(self):
-        code, out, err = testlib.run_cli(["component-identity"], env={"RECORDS_TEST_NO_JSONSCHEMA": "1"})
-        self.assertEqual(code, 0, err)
+    def test_no_environment_variable_is_a_hook(self):
+        for env in ({"RECORDS_TEST": "1", "RECORDS_TEST_NO_JSONSCHEMA": "1"},
+                    {"RECORDS_TEST_NO_JSONSCHEMA": "1"}):
+            code, out, err = testlib.run_cli(["component-identity"], env=env)
+            self.assertEqual(code, 0, err)
 
 
 class ComponentIdentity(unittest.TestCase):

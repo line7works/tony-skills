@@ -41,14 +41,19 @@ class LocationKey(unittest.TestCase):
         self.assertEqual(ids.finding_id(DOC, "A", loc("src/a.py:10-20 (wave 2)"), "c"),
                          ids.finding_id(DOC, "A", loc("src/a.py:10-20"), "c"))
 
-    def test_a_field_naming_several_locations_keeps_its_text_whole(self):
-        """The tag rule is for a field that is one location; nothing says which location a
-        trailing parenthetical belongs to when the field names three."""
+    def test_a_field_naming_several_locations_drops_a_tag_from_each_of_them(self):
+        """Amendment A8 (the outside review's finding 6): section 7 removes a glued tag without
+        narrowing the rule to a field that names one location, so slice 1's exception is gone.
+        The separators and the location spellings stay in the key; the tags do not."""
         for raw in ("src/widget.py:12, :40 and src/gauge.py:7",
                     "src/widget.py:12, :40 and src/gauge.py:7 (wave 2)",
                     "src/widget.py:12; src/gauge.py:7 (wave 2)",
                     "src/widget.py:12 + src/gauge.py:7 (wave 2)"):
-            self.assertEqual(ids.location_key(loc(raw)), raw, raw)
+            self.assertEqual(ids.location_key(loc(raw)), raw.replace(" (wave 2)", ""), raw)
+
+    def test_a_tag_on_each_location_of_one_field_comes_off_both(self):
+        self.assertEqual(ids.location_key(loc("src/a.py:1 (first), src/b.py:2 (second)")),
+                         "src/a.py:1, src/b.py:2")
 
     def test_a_range_without_a_tag_is_untouched(self):
         self.assertEqual(ids.location_key(loc("src/a.py:10-20")), "src/a.py:10-20")

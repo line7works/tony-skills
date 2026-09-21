@@ -501,12 +501,26 @@ class EveryFileArgumentThatIsNotThere(unittest.TestCase):
 
 
 class EveryCommandWithoutJsonschema(unittest.TestCase):
-    def test_every_command_exits_three_with_one_line_on_stderr(self):
+    """`component-identity` answers without the dependency; every other command exits 3.
+
+    The outside review's finding 12: the resolver in `interface.md` tells a station to confirm
+    the root it picked by running `component-identity`, and said that command needs no
+    dependency, while the code required it of all ten.
+    """
+
+    NO_DEPENDENCY = "component-identity"
+
+    def test_every_command_that_validates_exits_three_with_one_line_on_stderr(self):
         seen = set()
         for case in cases():
             if not case["case"].startswith("without-jsonschema-"):
                 continue
             seen.add(case["command"])
+            if case["command"] == self.NO_DEPENDENCY:
+                self.assertEqual(case["exit"], 0, case["case"])
+                self.assertEqual(case["body"]["name"], "records", case["case"])
+                self.assertEqual(case["stderr"], "", case["case"])
+                continue
             self.assertEqual(case["exit"], 3, case["case"])
             self.assertIsNone(case["body"], case["case"])
             self.assertEqual(case["stderr"].strip(), testlib.MISSING_DEPENDENCY, case["case"])

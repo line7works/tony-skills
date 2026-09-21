@@ -179,20 +179,35 @@ def check_documents(key, folder, root, schemas, verbose):
     }, failures
 
 
-def required_fields(event, schemas):
-    """The fields the schema requires of this event: the common list plus its kind's own.
+# Contract section 6.2, written down here rather than read out of the schema under test. The
+# outside review's finding 13: this list used to be derived from `event.schema.json`, so
+# removing a field from that schema's `required` list removed the obligation to test it and all
+# 227 mutations still passed. An obligation a test reads from the thing it tests is no
+# obligation. Changing either of these lists is a change to the interface, not to a test.
+CONTRACT_COMMON = ("v", "seq", "prev", "kind", "at", "ledger_doc", "actor", "origin", "source")
+CONTRACT_KIND_FIELDS = {
+    "log_opened": ("interface_version", "component_version"),
+    "finding_raised": ("finding", "slice", "severity", "location", "claim", "scenario", "raised_by"),
+    "defect_raised": ("finding", "slice", "severity", "location", "claim", "scenario",
+                      "raised_by", "caused_by"),
+    "disposition": ("finding", "disposition", "how", "verified_source", "join_basis"),
+    "waived": ("finding", "severity", "words", "grant_date", "verified_source"),
+    "reopened": ("finding", "words", "grant_date"),
+    "card_observed": ("slice", "value", "card"),
+    "card_set": ("slice", "before", "after"),
+    "legacy_unparsed": ("reason",),
+    "import_started": ("doc_sha256", "lines_read", "counts"),
+    "import_finished": ("doc_sha256", "lines_read", "counts"),
+    "resolution_applied": ("line", "answer", "answered_by", "answered_on"),
+}
 
-    Read from the schema rather than from what the example happens to carry, so a field the
-    schema leaves optional (a `join_basis` on a waiver) is not asserted to be required.
-    """
-    doc = schemas.docs["event"]
-    out = set(doc.get("required", []))
+
+def required_fields(event, schemas):
+    """The fields section 6.2 requires of this event: the common list plus its kind's own."""
     kind = event.get("kind")
-    for entry in doc.get("allOf", []):
-        condition = entry.get("if", {}).get("properties", {}).get("kind", {})
-        if condition.get("const") == kind:
-            out.update(entry.get("then", {}).get("required", []))
-    return sorted(out)
+    if kind not in CONTRACT_KIND_FIELDS:
+        raise KeyError("no contract field list for event kind %r" % (kind,))
+    return sorted(set(CONTRACT_COMMON) | set(CONTRACT_KIND_FIELDS[kind]))
 
 
 def main(argv=None):

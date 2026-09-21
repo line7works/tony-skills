@@ -276,7 +276,15 @@ class Locks(AppendCase):
         self.assertFalse(os.path.isfile(self.lock_path()), "the lock is released at the end")
 
     def test_a_recycled_pid_is_not_the_holder(self):
-        """A pid is not an identity: the same pid under another start time is a stale lock."""
+        """A pid is not an identity: the same pid under another start time is a stale lock.
+
+        This is the one rule in the component that needs `ps`. A sandbox that denies it cannot
+        tell a recycled pid from a live one, and `holder_alive` then trusts the live pid, which
+        is the safe answer; the test says so rather than failing for the sandbox.
+        """
+        if events_mod.process_start(os.getpid()) is None:
+            self.skipTest("this environment does not allow `ps`, so a recycled pid cannot be "
+                          "told from a live one")
         head = self.open_log()
         testlib.write(self.lock_path(), json.dumps({"pid": os.getpid(),
                                                     "pid_start": "Wed Jan  1 00:00:00 2020",

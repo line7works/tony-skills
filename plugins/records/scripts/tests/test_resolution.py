@@ -500,6 +500,50 @@ class TheTwoSnippetsAgree(ResolverCase):
         self.assert_agree(argument=self.stub_component("speaks-2", interface_version=2), known="1")
         self.assert_agree(argument=self.stub_component("mute", body="pass\n"), known="1")
 
+    # ---- the outside review's finding 11: every row of the table where they disagreed ------
+
+    def test_they_agree_that_a_version_with_an_empty_part_is_not_a_version(self):
+        """`1.` matched its manifest, and shell field splitting dropped the empty component."""
+        self.installed("1.", version="1.")
+        result = self.assert_agree(station=self.station)
+        self.assertEqual(result[0], 3, result[1])
+
+    def test_they_agree_on_versions_wider_than_eighteen_digits(self):
+        """Padding to a fixed width made the shell compare the truncated head of a number."""
+        self.installed("999999999999999999", version="999999999999999999")
+        winner = self.installed("1000000000000000000", version="1000000000000000000")
+        result = self.assert_agree(station=self.station)
+        self.assertEqual(result[0], 0, result[2])
+        self.assertEqual(os.path.realpath(result[1].strip()), os.path.realpath(winner))
+
+    def test_they_agree_that_a_manifest_of_the_wrong_shape_is_unreadable(self):
+        folder = os.path.join(self.installed_base, "1.0.0")
+        os.makedirs(os.path.join(folder, ".claude-plugin"))
+        testlib.write(os.path.join(folder, ".claude-plugin", "plugin.json"), "[]\n")
+        testlib.write(os.path.join(folder, "scripts", "records.py"), STUB % (1, '"records"'))
+        result = self.assert_agree(station=self.station)
+        self.assertEqual(result[0], 3, result[1])
+        self.assertIn("plugin.json unreadable", result[2])
+
+    def test_they_agree_on_a_folder_name_holding_a_newline(self):
+        self.installed("1.0\n0", version="9.9.9")
+        result = self.assert_agree(station=self.station)
+        self.assertEqual(result[0], 3, result[1])
+        self.assertEqual(len(result[2].strip().split("\n")), 1,
+                         "the refusal is one line whatever a folder is called: %r" % result[2])
+
+    def test_they_agree_on_what_an_interface_version_may_be(self):
+        """One typed rule: a JSON integer, never a bool, a float or a string."""
+        for literal, accepted in (("1", True), ("true", False), ("1.0", False),
+                                  ('"1"', False), ("null", False)):
+            body = ("import json, sys\n"
+                    "sys.stdout.write(json.dumps({\"ok\": True, \"name\": \"records\",\n"
+                    "                             \"version\": \"1.0.0\"})"
+                    ".replace('}', ', \"interface_version\": %s}'))\n" % literal)
+            root = self.stub_component("says-" + literal.strip('"'), body=body)
+            result = self.assert_agree(argument=root, known="1")
+            self.assertEqual(result[0], 0 if accepted else 3, (literal, result))
+
 
 class TheDocumentCarriesBothSnippets(unittest.TestCase):
     def test_the_python_snippet_is_there_and_is_python(self):
@@ -523,14 +567,27 @@ class TheDocumentCarriesBothSnippets(unittest.TestCase):
             testlib.rmtree(os.path.dirname(path))
 
     def test_both_name_the_four_routes_in_the_ruled_order(self):
-        """1, then 2, then 3a, then 3b, and nothing after 3b."""
-        for text, opener, argument_token in ((snippet(PYTHON_MARKER), "def records_root(",
-                                              "argument"),
-                                             (snippet(SH_MARKER), "records_root() {", '"$1"')):
-            body = text.split(opener, 1)[1]
-            self.assertLess(body.index(argument_token), body.index("RECORDS_ROOT"), text)
+        """1, then 2, then 3a, then 3b, and nothing after 3b.
+
+        Since the outside review's finding 11 the shell snippet wraps the same implementation
+        the Python snippet is, so the order is read out of that one body in both: two spellings
+        of one rule were exactly what let the two disagree.
+        """
+        for text in (snippet(PYTHON_MARKER), snippet(SH_MARKER)):
+            body = text.split("def records_root(", 1)[1]
+            self.assertLess(body.index("argument"), body.index("RECORDS_ROOT"), text)
             self.assertLess(body.index("RECORDS_ROOT"), body.index("# route 3a"), text)
             self.assertLess(body.index("# route 3a"), body.index("# route 3b"), text)
+
+    def test_the_shell_snippet_runs_the_python_snippets_own_rule(self):
+        """Finding 11: one numeric rule and one typed rule, in one implementation."""
+        shell, python = snippet(SH_MARKER), snippet(PYTHON_MARKER)
+        for function in ("def version_key(", "def installed_versions(", "def records_root(",
+                         "def confirm_interface("):
+            self.assertIn(function, shell, "the shell snippet does not carry %s" % function)
+            self.assertIn(function, python)
+        for name in ("records_root()", "records_confirm()"):
+            self.assertIn(name, shell)
 
     def test_neither_snippet_reads_a_clock_or_a_home(self):
         """A6: modification time is never used, and no fifth lookup goes near a home."""

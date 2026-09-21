@@ -6,8 +6,10 @@ workspace, the ledger document, or the clock.
 
 Per finding (9.2): `id`, `slice`, `severity`, `location`, `claim`, `scenario`, `status`
 (`open` | `fixed` | `waived`), `cleared_unbound` (true when the deciding clear has
-`known: false`), `join_basis` of the deciding event, `raised` and `decided` as history
-addresses, and `events` (every `seq` that names it). The deciding event is the last event in
+`known: false`), `verified_source` (section 8.4: the source the deciding clear was decided
+against, exactly as that event carried it, and null while the finding is open), `join_basis` of
+the deciding event, `raised` and `decided` as history addresses, and `events` (every `seq` that
+names it). The deciding event is the last event in
 `seq` order that names the finding among `disposition`, `waived`, `reopened`; none means open.
 This is Appendix A's open filter with the finding ID as the join key, so "later in the file
 wins" becomes "later in `seq` wins" (E12-4).
@@ -64,6 +66,7 @@ def _finding_rows(doc, events):
                 "scenario": event.get("scenario"),
                 "status": "open",
                 "cleared_unbound": False,
+                "verified_source": None,
                 "join_basis": None,
                 "raised": events_mod.history_address(doc, event["seq"]),
                 "decided": None,
@@ -85,7 +88,11 @@ def _finding_rows(doc, events):
         cleared = row["status"] in ("fixed", "waived")
         row["cleared_unbound"] = bool(
             cleared and not (isinstance(source, dict) and source.get("known") is True))
-        row["_deciding_source"] = source if cleared else None
+        # Section 8.4: "derived state reports, for every cleared finding, the source it was
+        # cleared against". Review finding 8: the deciding source was computed and then dropped
+        # on the way out, and nothing replaced it, so `--at-source` was the only way to learn
+        # anything about it.
+        row["verified_source"] = source if cleared else None
     return order, rows
 
 
@@ -159,7 +166,7 @@ def state_of(doc, events, at_source=None, slice_name=None):
     findings = []
     for finding in order:
         row = dict(rows[finding])
-        source = row.pop("_deciding_source", None)
+        source = row["verified_source"]
         if at_source is not None:
             row["cleared_at_this_source"] = bool(
                 isinstance(source, dict) and source.get("known") is True

@@ -400,5 +400,44 @@ class RenderMatchesThePilotsWriters(unittest.TestCase):
         self.assertTrue(with_words.startswith(without.rstrip("\n")))
 
 
+class TheCopiedCanonAndIdentityAreTheSame(unittest.TestCase):
+    """`canon.py` and `identity.py` are copies of the pilot's, and nothing compared them.
+
+    The outside review's finding 13: mutating `canon.sha256_hex` to return 64 zeros and
+    `identity.identity_of` to return a zero commit left all 22 parity tests passing, because
+    the suite exercised only the copied READER. These two hold the other two copies to the
+    pilot's bytes, over the same documents and the same git fixtures the rest of the suite uses.
+    """
+
+    def test_canon_matches_the_pilot_on_every_document_and_on_a_real_file(self):
+        from records_core import canon as copied
+        from recheck_core import canon as original
+        for lane, case, rel, text in every_document():
+            self.assertEqual(copied.canonical_json({"text": text}),
+                             original.canonical_json({"text": text}), (lane, case, rel))
+            self.assertEqual(copied.sha256_hex(text.encode("utf-8")),
+                             original.sha256_hex(text.encode("utf-8")), (lane, case, rel))
+        path = os.path.join(_SCRATCH[0], "canon-probe")
+        copied.atomic_write(path, b"first\n")
+        self.assertEqual(copied.sha256_file(path), original.sha256_file(path))
+        original.atomic_write(path, b"second\n")
+        self.assertEqual(copied.sha256_file(path), original.sha256_file(path))
+        self.assertNotEqual(copied.sha256_hex(b""), "0" * 64)
+
+    def test_identity_matches_the_pilot_on_every_git_fixture(self):
+        from records_core import identity as copied
+        from recheck_core import identity as original
+        compared = 0
+        for lane in sorted(_LANES):
+            for case_dir in _LANES[lane]:
+                workspace = os.path.join(case_dir, "workspace")
+                if not original.is_work_tree_root(workspace)[0]:
+                    continue
+                self.assertEqual(copied.identity_of(workspace), original.identity_of(workspace),
+                                 (lane, os.path.basename(case_dir)))
+                compared += 1
+        self.assertGreater(compared, 0, "no E7 lane built a git workspace to compare")
+
+
 if __name__ == "__main__":
     unittest.main()

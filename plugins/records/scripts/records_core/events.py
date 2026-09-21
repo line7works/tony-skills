@@ -18,6 +18,7 @@ that from the log alone with section 9.2's deciding-event rule; since slice 2 th
 lives in `state.py`, which owns the whole of section 9, and this module calls it.
 """
 import errno
+import fcntl
 import json
 import os
 import subprocess
@@ -52,11 +53,17 @@ def _fail(code, error, reason, **extra):
 # ---- addresses (section 6.1) ------------------------------------------------------------------
 
 def slug_of(doc):
-    """`docs/plans/2026-09-06-readers.md` -> `docs__plans__2026-09-06-readers`."""
+    """`docs/plans/2026-09-06-readers.md` -> `docs__plans__2026-09-06-readers`.
+
+    Amendment A8: the slug is one-to-one. A literal `%` is written `%25` and a literal `_` is
+    written `%5F` BEFORE every `/` becomes `__`, so `docs/a/b.md` and `docs/a__b.md` no longer
+    share one log (`docs__a__b` against `docs__a%5F%5Fb`). The escape order matters: `%` first,
+    or `%5F` in a name would decode as an underscore.
+    """
     rel = doc.replace("\\", "/").strip("/")
     if rel.endswith(".md"):
         rel = rel[:-3]
-    return rel.replace("/", "__")
+    return rel.replace("%", "%25").replace("_", "%5F").replace("/", "__")
 
 
 def log_relpath(doc):
@@ -64,11 +71,49 @@ def log_relpath(doc):
 
 
 def log_path(workspace, doc):
-    return os.path.join(workspace, *log_relpath(doc).split("/"))
+    """The log's absolute path, refused (exit 4) when any step of it is a symbolic link.
+
+    Amendment A8: a log, a lock, or the `docs/records/` directory reached through a symbolic
+    link is refused, so a write cannot leave the workspace and a read cannot be pointed at a
+    specification file. The whole chain below the workspace root is checked, and the resolved
+    path must still sit inside the root.
+    """
+    path = os.path.join(workspace, *log_relpath(doc).split("/"))
+    root = os.path.realpath(workspace)
+    for target in (path, lock_path(path)):
+        cursor = workspace
+        for part in os.path.relpath(target, workspace).split(os.sep):
+            cursor = os.path.join(cursor, part)
+            if os.path.islink(cursor):
+                _fail(4, "invalid", "a records path cannot traverse a symbolic link: %s" % cursor,
+                      path=cursor)
+        resolved = os.path.realpath(target)
+        if resolved != root and not resolved.startswith(root + os.sep):
+            _fail(4, "invalid", "a records path resolves outside the workspace: %s" % target,
+                  path=target)
+    return path
 
 
 def lock_path(log):
     return log + LOCK_SUFFIX
+
+
+def orphan_temporaries(log):
+    """The sibling temporary files a killed write can leave beside `log`, as relative paths.
+
+    Review finding 15: `canon.atomic_write` writes through `.<log name>.<random>.tmp` in the
+    same directory and renames it over the log, so a process killed between the two leaves that
+    file behind as well as its lock. Nothing removes it silently: `--break-lock` reports what it
+    finds and a person decides.
+    """
+    directory = os.path.dirname(log) or "."
+    prefix = "." + os.path.basename(log) + "."
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    return ["%s/%s" % (RECORDS_DIR, name) for name in names
+            if name.startswith(prefix) and name.endswith(".tmp")]
 
 
 def history_address(doc, seq):
@@ -109,12 +154,16 @@ def split_log(data):
     return parts
 
 
-def walk(path, schemas):
+def walk(path, schemas, doc=None):
     """Read and check a log. Returns {"exists", "raw", "events", "head"}; raises on the first bad line.
 
     The order is the contract's: every line parses and validates (exit 4, the line named; an
     unknown `v` is refused here, never skipped, E12-7), then `seq` equals the line index and
     `prev` equals the hash of the line before (exit 7, `conflict`, the first bad line named).
+
+    With `doc` given, every reader also checks that each event names the document this log
+    belongs to (amendment A8): a log holding another document's event was joined or edited from
+    outside, which is exit 7 (`conflict`) the way a joined tail is.
     """
     if not os.path.isfile(path):
         return {"exists": False, "raw": [], "events": [], "head": ZERO_HEAD}
@@ -134,6 +183,12 @@ def walk(path, schemas):
             _fail(4, "invalid", "line %d fails the event schema at %s: %s"
                   % (number, errors[0]["path"] or "/", errors[0]["message"]),
                   line=number, errors=errors)
+        if raw != canon.canonical_json(event):
+            # Section 6.1: one CANONICAL JSON object per line. A line that parses and validates
+            # but is not canonical hashes differently from the same event written by this
+            # component, so every `prev` after it would be unreproducible (review finding 7).
+            _fail(4, "invalid", "line %d is not canonical JSON (section 6.1: sorted keys, no "
+                                "insignificant whitespace)" % number, line=number)
         if event["seq"] != i:
             _fail(7, "conflict", "line %d carries seq %d; the line index is %d (E12-4)"
                   % (number, event["seq"], i), line=number, seq=event["seq"], expected_seq=i)
@@ -141,6 +196,10 @@ def walk(path, schemas):
             _fail(7, "conflict", "line %d carries prev %s; the line before hashes to %s"
                   % (number, event["prev"], expected_prev),
                   line=number, prev=event["prev"], expected_prev=expected_prev)
+        if doc is not None and event.get("ledger_doc") != doc:
+            _fail(7, "conflict", "line %d names ledger_doc %r; this log belongs to %r (amendment A8)"
+                  % (number, event.get("ledger_doc"), doc), line=number,
+                  ledger_doc=event.get("ledger_doc"), expected_ledger_doc=doc)
         events.append(event)
         expected_prev = line_hash(raw)
     return {"exists": True, "raw": raw_lines, "events": events, "head": head_of(raw_lines)}
@@ -197,6 +256,8 @@ def pid_alive(pid):
 
 def holder_alive(info):
     """Is the process that took this lock still running? pid plus its recorded start time."""
+    if not isinstance(info, dict):
+        return False  # a lock file of the wrong shape names no holder (review finding 4)
     pid = info.get("pid")
     if not isinstance(pid, int) or not pid_alive(pid):
         return False
@@ -208,11 +269,22 @@ def holder_alive(info):
 
 
 def read_lock(path):
+    """The lock's contents as an object, or a `{pid, pid_start, unreadable}` stand-in.
+
+    Review finding 4: a lock file that is valid JSON of the WRONG SHAPE (`[]`, a string, a
+    number) used to reach `holder_alive` as a list and end the command in a traceback. It is now
+    reported the same way an unparseable lock is: a documented refusal, exit 7, with the reason
+    in `lock.unreadable`.
+    """
     try:
         with open(path, "rb") as fh:
-            return json.loads(fh.read().decode("utf-8"))
+            info = json.loads(fh.read().decode("utf-8"))
     except (OSError, ValueError) as exc:
         return {"pid": None, "pid_start": None, "unreadable": str(exc)}
+    if not isinstance(info, dict):
+        return {"pid": None, "pid_start": None,
+                "unreadable": "the lock file holds a JSON %s, not an object" % type(info).__name__}
+    return info
 
 
 class Lock:
@@ -220,6 +292,16 @@ class Lock:
 
     A lock that exists is exit 7 with its contents; `--break-lock` removes one only when its pid
     is not alive and says so in the response. No waiting, no retry loop (section 10).
+
+    Review finding 4: the lock is an INODE, not a pathname. The file descriptor stays open for
+    the lock's whole life and carries an advisory `flock` (stdlib `fcntl`, macOS and Linux), so:
+
+    - a breaker cannot take a lock whose inode another writer is holding, however dead the pid
+      recorded inside it looks (that writer took the file over and published itself into it);
+    - `release` unlinks only while the file at the path is still the inode this process created,
+      so a holder never deletes its replacement's lock;
+    - `assert_owned`, called immediately before the log is replaced, stops a write whose lock was
+      removed and re-created under it.
     """
 
     def __init__(self, log, command):
@@ -227,16 +309,73 @@ class Lock:
         self.command = command
         self.broke = None
         self.held = False
+        self.fd = None
 
     def _contents(self):
         return {"pid": os.getpid(), "pid_start": process_start(os.getpid()), "command": self.command}
 
-    def acquire(self, break_lock=False):
+    def _same_inode(self, fd):
+        """Is the file at the path still the open file this descriptor names?"""
         try:
-            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            if os.path.islink(self.path):
+                return False
+            named, held = os.lstat(self.path), os.fstat(fd)
+        except OSError:
+            return False
+        return (named.st_dev, named.st_ino) == (held.st_dev, held.st_ino)
+
+    def _take_inode_lock(self, fd, info=None):
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                raise
+            _fail(7, "conflict", "the log's lock is held: another process owns its inode, whatever "
+                                 "the pid inside it says (%s)" % self.path,
+                  lock=info if info is not None else read_lock(self.path),
+                  lock_path=self.path, holder_alive=True)
+
+    def assert_owned(self):
+        """The lock at the path is still the one this process took, or exit 7 and no write."""
+        if self.fd is None or not self._same_inode(self.fd):
+            _fail(7, "conflict", "the log's lock was removed or replaced while this process held "
+                                 "it; nothing was written (%s)" % self.path, lock_path=self.path)
+
+    def acquire(self, break_lock=False):
+        flags = os.O_RDWR | os.O_NOFOLLOW
+        try:
+            fd = os.open(self.path, flags | os.O_CREAT | os.O_EXCL, 0o644)
         except OSError as exc:
             if exc.errno != errno.EEXIST:
                 raise
+            fd = self._recover(break_lock)
+        try:
+            self._take_inode_lock(fd)
+            if not self._same_inode(fd):
+                _fail(7, "conflict", "the log's lock was replaced while this process was taking it: "
+                                     "%s" % self.path, lock_path=self.path)
+            os.write(fd, canon.canonical_json(self._contents()) + b"\n")
+        except BaseException:
+            if self._same_inode(fd):
+                try:
+                    os.unlink(self.path)
+                except OSError:
+                    pass
+            os.close(fd)
+            raise
+        self.fd = fd
+        self.held = True
+        return self
+
+    def _recover(self, break_lock):
+        """A lock file already exists: refuse it, or remove a stale one and take its place."""
+        try:
+            existing = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError as exc:
+            _fail(7, "conflict", "the log's lock exists and cannot be opened to be read (%s): %s"
+                  % (self.path, exc), lock_path=self.path,
+                  lock={"pid": None, "pid_start": None, "unreadable": str(exc)}, holder_alive=True)
+        try:
             info = read_lock(self.path)
             if not break_lock:
                 _fail(7, "conflict", "the log's lock is held: %s" % self.path, lock=info,
@@ -245,33 +384,45 @@ class Lock:
                 _fail(7, "conflict", "the log's lock is held by a live process; --break-lock removes a "
                                      "lock only when its pid is not alive",
                       lock=info, lock_path=self.path, holder_alive=True)
+            # The recorded holder is gone. Its INODE must be free too: every holder of this
+            # component takes the advisory lock before it publishes itself into the file, so an
+            # inode another process still holds belongs to a writer that took this lock over.
+            self._take_inode_lock(existing, info)
+            if not self._same_inode(existing):
+                _fail(7, "conflict", "the log's lock was replaced while this one was being read: %s"
+                      % self.path, lock=read_lock(self.path), lock_path=self.path,
+                      holder_alive=holder_alive(read_lock(self.path)))
             os.unlink(self.path)
             self.broke = info
-            try:
-                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-            except OSError as again:
-                if again.errno != errno.EEXIST:
-                    raise
-                # another breaker took the lock between the unlink and this open: still a held
-                # lock, so it is the same refusal, never an unhandled error
-                self.broke = None
-                _fail(7, "conflict", "the log's lock was taken by another process while this one was "
-                                     "breaking the stale lock: %s" % self.path,
-                      lock=read_lock(self.path), lock_path=self.path, broke_lock=info,
-                      holder_alive=holder_alive(read_lock(self.path)))
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(canon.canonical_json(self._contents()) + b"\n")
-        self.held = True
-        return self
+        finally:
+            os.close(existing)
+        try:
+            return os.open(self.path, os.O_RDWR | os.O_NOFOLLOW | os.O_CREAT | os.O_EXCL, 0o644)
+        except OSError as again:
+            if again.errno != errno.EEXIST:
+                raise
+            # another breaker took the lock between the unlink and this open: still a held
+            # lock, so it is the same refusal, never an unhandled error
+            broke, self.broke = self.broke, None
+            _fail(7, "conflict", "the log's lock was taken by another process while this one was "
+                                 "breaking the stale lock: %s" % self.path,
+                  lock=read_lock(self.path), lock_path=self.path, broke_lock=broke,
+                  holder_alive=holder_alive(read_lock(self.path)))
 
     def release(self):
-        if not self.held:
+        if self.fd is None:
+            self.held = False
             return
         try:
-            os.unlink(self.path)
-        except OSError:
-            pass
-        self.held = False
+            if self._same_inode(self.fd):
+                try:
+                    os.unlink(self.path)
+                except OSError:
+                    pass
+        finally:
+            os.close(self.fd)
+            self.fd = None
+            self.held = False
 
     def __enter__(self):
         return self
@@ -446,6 +597,55 @@ def _check_clear(event, position, events, doc, actual_identity, importer=False):
               status=status, expected=expected, actual=actual)
 
 
+def commit_batch(path, workspace, doc, existing, prepared, lock=None, importer=False,
+                 identity_of=None):
+    """Write the batch, from the bytes that were validated and only if nothing moved under it.
+
+    Review finding 3. The writer used to re-read the file it had already walked and append to
+    whatever it found; a log truncated, or a tracked source file changed, between the walk and
+    the write therefore landed a batch that was never checked against what it was written onto.
+    The old bytes are now rebuilt from `existing["raw"]`, the lines the walk validated, and:
+
+    - the file on disk must still be exactly those bytes (exit 7, `conflict`);
+    - the workspace identity must still equal the one every bound clear in the batch names
+      (exit 6, `stale_source`), which is section 8.3 re-asked at the moment of the write;
+    - this process must still own the lock inode it took (exit 7, review finding 4).
+
+    Nothing is written when any of the three fails.
+    """
+    if identity_of is None:
+        identity_of = identity_mod.source_identity
+    old = b"".join(raw + b"\n" for raw in existing["raw"])
+    try:
+        with open(path, "rb") as fh:
+            current = fh.read()
+        exists = True
+    except (IOError, OSError):
+        current, exists = b"", False
+    if exists != existing["exists"] or current != old:
+        _fail(7, "conflict", "the log changed between the walk that validated it and this write; "
+                             "nothing was written. Re-read the log and decide (section 10)",
+              log=log_relpath(doc), head=existing["head"], events=len(existing["events"]))
+    actual = None
+    for position, (event, _) in enumerate(prepared, 1):
+        if not _is_clear(event) or (importer and _is_legacy_import(event)):
+            continue
+        if actual is None:
+            actual = identity_of(workspace)
+        expected = (event.get("verified_source") or {}).get("identity")
+        differing = identity_mod.differing_fields(expected, actual)
+        if differing:
+            _fail(6, "stale_source", "the workspace changed between the check and this write: %s "
+                                     "differ from what event %d clears against (section 8.3). "
+                                     "Nothing was written." % (", ".join(differing), position),
+                  event_index=position, finding=event.get("finding"), condition="identity",
+                  differing_fields=differing, expected=expected, actual=actual,
+                  log=log_relpath(doc), head=existing["head"], events=len(existing["events"]))
+    if lock is not None:
+        lock.assert_owned()
+    canon.atomic_write(path, old + b"".join(raw + b"\n" for _, raw in prepared))
+
+
 def append(workspace, doc, incoming, expect_head, schemas, break_lock=False, identity_of=None,
            importer=False):
     """Sections 7, 8.3 and 10's append. Returns the response body; raises RecordsError on refusal.
@@ -470,8 +670,9 @@ def append(workspace, doc, incoming, expect_head, schemas, break_lock=False, ide
     except RecordsError as exc:
         exc.document.setdefault("log", log_relpath(doc))
         raise
+    orphans = orphan_temporaries(path) if break_lock else None
     try:
-        existing = walk(path, schemas)
+        existing = walk(path, schemas, doc=doc)
         if expect_head != existing["head"]:
             _fail(7, "conflict", "the log's head is %s; the caller expected %s. Re-read the log and decide "
                                  "(section 10)" % (existing["head"], expect_head),
@@ -488,11 +689,8 @@ def append(workspace, doc, incoming, expect_head, schemas, break_lock=False, ide
             raise
         if not prepared:
             _fail(2, "usage", "the events file holds no event")
-        old = b""
-        if existing["exists"]:
-            with open(path, "rb") as fh:
-                old = fh.read()
-        canon.atomic_write(path, old + b"".join(raw + b"\n" for _, raw in prepared))
+        commit_batch(path, workspace, doc, existing, prepared, lock=lock, importer=importer,
+                     identity_of=identity_of)
         head = line_hash(prepared[-1][1])
         body = {
             "log": log_relpath(doc),
@@ -505,6 +703,8 @@ def append(workspace, doc, incoming, expect_head, schemas, break_lock=False, ide
         }
         if lock.broke is not None:
             body["broke_lock"] = lock.broke
+        if break_lock:
+            body["orphan_temporaries"] = orphans
         return body
     finally:
         lock.release()

@@ -22,7 +22,7 @@ import testlib
 
 testlib.add_scripts_to_path()
 
-from records_core import events as events_mod, identity as identity_mod  # noqa: E402
+from records_core import canon, events as events_mod, identity as identity_mod  # noqa: E402
 
 DOC = testlib.DOC
 FIXTURE_DOC = "docs/plans/2026-05-12-history.md"
@@ -124,7 +124,11 @@ def native_cases(scratch, cases):
         testlib.write(lock, "this lock file is not JSON\n")
         _run(cases, "append-while-a-lock-nobody-can-read-is-there", "append",
              ["append"] + ws + ["--events", first, "--expect-head", head], 7)
-        testlib.write(lock, json.dumps({"pid": os.getpid(), "pid_start": "not this process",
+        # A pid that is not running, rather than this one under another start time: telling a
+        # recycled pid from a live one needs `ps`, and a sandbox that denies `ps` would then
+        # turn this response corpus into a module setup error rather than one skipped test.
+        # `test_append.Locks` covers the recycled-pid rule itself, and skips when `ps` is denied.
+        testlib.write(lock, json.dumps({"pid": 999999, "pid_start": "Wed Apr  1 09:00:00 2026",
                                         "command": "append"}) + "\n")
         after_break = testlib.raised(claim="after the break", identity=identity,
                                      at="2026-04-01T09:00:03Z")
@@ -163,6 +167,23 @@ def native_cases(scratch, cases):
                           lambda lines: lines[:1] + [b"{not json"] + lines[2:])
     _run(cases, "verify-a-line-that-does-not-parse", "verify",
          ["verify", "--workspace", unparsable, "--doc", DOC], 4)
+
+    def _rewrite(index, **fields):
+        def change(lines):
+            event = json.loads(lines[index].decode("utf-8"))
+            event.update(fields)
+            return lines[:index] + [canon.canonical_json(event)] + lines[index + 1:]
+        return change
+
+    # a chain break at `prev` rather than at `seq`, and a line naming another document
+    # (amendment A8), so that every field those two refusals carry is exercised
+    bad_prev = _corrupt(scratch, workspace, "prev", _rewrite(1, prev="f" * 64))
+    _run(cases, "verify-a-line-whose-prev-is-wrong", "verify",
+         ["verify", "--workspace", bad_prev, "--doc", DOC], 7)
+    foreign = _corrupt(scratch, workspace, "ledger-doc",
+                       _rewrite(1, ledger_doc="docs/plans/another.md"))
+    _run(cases, "verify-a-line-naming-another-document", "verify",
+         ["verify", "--workspace", foreign, "--doc", DOC], 7)
 
     # usage errors: no JSON body at all, one line on stderr
     _run(cases, "a-doc-outside-the-workspace", "verify",
@@ -291,7 +312,9 @@ def legacy_cases(scratch, cases):
 
 
 def dependency_cases(scratch, cases):
-    """Exit 3: every command, with jsonschema unimportable. No JSON body, one line on stderr."""
+    """With jsonschema unimportable: exit 3 and one line on stderr for every command that
+    validates something, and a normal answer from `component-identity`, which validates nothing
+    and is what a station runs to confirm the root it picked (section 12.1, amendment A6)."""
     stub = testlib.stub_without_jsonschema(os.path.join(scratch, "nodep"))
     workspace = testlib.make_workspace(os.path.join(scratch, "nodep-ws"), doc=DOC)
     argv = {

@@ -72,13 +72,19 @@ uv run scripts/records.py survey --workspace .
 ```
 
 `jsonschema==4.25.1` is the one dependency, declared in `records.py`'s PEP 723 block and
-supplied by `uv run`. Started without it, every command exits 3 with one line on stderr and
-nothing on stdout; `--help` still works. The runtime floor is Python 3.9 and git 2.50.1. The
+supplied by `uv run`. Started without it, every command that validates something exits 3 with
+one line on stderr and nothing on stdout; `--help` still works, and so does
+`component-identity`, which validates nothing and is what a station runs to confirm the root it
+picked. The runtime floor is Python 3.9 and git 2.50.1. The
 component runs git read-only, and only inside the workspace it is pointed at.
 
 Only `append` and `import-legacy` write, and only two files, both under `docs/records/` inside
 the workspace: the log and its lock. Everything else is read-only, including
-`import-legacy --dry-run`.
+`import-legacy --dry-run`. A process killed inside a write can leave the lock behind and, if the
+kill lands inside the atomic replacement, a sibling `.<log file name>.*.tmp` file; `--break-lock`
+removes the lock, names any temporary file it finds in `orphan_temporaries`, and deletes none of
+them. Output is bounded: `survey` returns 50 documents unless `--limit` and `--offset` say
+otherwise, and its counts still cover the whole workspace.
 
 ## Tests
 

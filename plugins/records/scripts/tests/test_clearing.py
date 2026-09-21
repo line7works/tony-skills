@@ -179,11 +179,21 @@ class TheImporterException(ClearingCase):
         self.assertEqual(body["appended"][0]["kind"], "disposition")
 
     def test_a_legacy_clear_from_another_station_is_refused(self):
+        """Owner ruling O4's exemption belongs to the importer's station and to nothing else.
+
+        Since the outside review's finding 7 the EVENT SCHEMA says so too: a legacy origin
+        carries the station `records-import`, so a clear like this one is refused a step earlier,
+        as a malformed event (exit 4) rather than as an unbound clear (exit 6). Either way it
+        does not land, and it does not reach the exemption.
+        """
         other = {"station": "signoff", "run_id": "r", "harness": "claude-code"}
+        before = testlib.read_log(self.workspace)
         with self.assertRaises(events_mod.RecordsError) as caught:
             self.as_importer([self.legacy_clear(actor=other)])
-        self.assertEqual(caught.exception.code, 6)
-        self.assertEqual(caught.exception.document["condition"], "known")
+        self.assertEqual(caught.exception.code, 4)
+        self.assertEqual([e["path"] for e in caught.exception.document["errors"]],
+                         ["/actor/station"])
+        self.assertEqual(testlib.read_log(self.workspace), before)
 
     def test_the_importer_cannot_write_an_unbound_native_clear(self):
         event = self.legacy_clear(origin={"kind": "native"})

@@ -9,8 +9,8 @@
   "properties": {
     "v": {
       "type": "integer",
-      "minimum": 1,
-      "description": "event schema version; 1 today (E12-7)"
+      "const": 1,
+      "description": "event schema version; this schema describes version 1 alone, so a reader holding it refuses a v it does not know rather than skipping the line (E12-7)"
     },
     "seq": {
       "type": "integer",
@@ -45,7 +45,8 @@
     "ledger_doc": {
       "type": "string",
       "minLength": 1,
-      "description": "D, the ledger document's workspace-relative path"
+      "pattern": "^(?!/)(?!docs/(?:records|reviews)/)(?!.*(?:^|/)\\.\\.?/).+\\.md$",
+      "description": "D, the ledger document's workspace-relative path: a Markdown document inside the workspace, never one under docs/records/ (this component's history) or docs/reviews/ (a mirror), amendment A8"
     },
     "actor": {
       "$ref": "#/$defs/actor"
@@ -82,14 +83,24 @@
     },
     "claim": {
       "type": ["string", "null"],
-      "description": "a single line; the separator ` · ` never appears in it (Appendix A)"
+      "description": "a single line; the separator ` · ` never appears in it (Appendix A)",
+      "allOf": [
+        {"not": {"pattern": "[\\r\\n]", "type": "string"}},
+        {"not": {"pattern": " · ", "type": "string"}}
+      ]
     },
     "scenario": {
-      "type": ["string", "null"]
+      "type": ["string", "null"],
+      "description": "a single line. A LEGACY event may carry the separator in it, because section 11.3 joins an F2 finding's middle fields with the separator kept (amendment A5); a native one may not, which the conditional below says.",
+      "allOf": [{"not": {"pattern": "[\\r\\n]", "type": "string"}}]
     },
     "raised_by": {
       "type": ["string", "null"],
-      "description": "which slice's review found it; null when the record carries no such field"
+      "description": "which slice's review found it; null when the record carries no such field",
+      "allOf": [
+        {"not": {"pattern": "[\\r\\n]", "type": "string"}},
+        {"not": {"pattern": " · ", "type": "string"}}
+      ]
     },
     "caused_by": {
       "oneOf": [{"$ref": "#/$defs/finding_id"}, {"type": "null"}],
@@ -100,7 +111,11 @@
     },
     "how": {
       "type": "string",
-      "description": "how it was verified; a single line, no separator"
+      "description": "how it was verified; a single line, no separator",
+      "allOf": [
+        {"not": {"pattern": "[\\r\\n]", "type": "string"}},
+        {"not": {"pattern": " · ", "type": "string"}}
+      ]
     },
     "verified_source": {
       "$ref": "#/$defs/source",
@@ -115,7 +130,11 @@
     },
     "words": {
       "type": ["string", "null"],
-      "description": "the user's quoted words; null on a legacy grant line that carries none"
+      "description": "the user's quoted words; null on a legacy grant line that carries none",
+      "allOf": [
+        {"not": {"pattern": "[\\r\\n]", "type": "string"}},
+        {"not": {"pattern": " · ", "type": "string"}}
+      ]
     },
     "grant_date": {
       "$ref": "#/$defs/calendar_date",
@@ -303,7 +322,7 @@
     {
       "if": {"required": ["kind"], "properties": {"kind": {"const": "import_started"}}},
       "then": {
-        "required": ["doc_sha256"],
+        "required": ["doc_sha256", "lines_read", "counts"],
         "properties": {
           "finding": false, "slice": false, "severity": false, "location": false, "claim": false,
           "scenario": false, "raised_by": false, "caused_by": false, "disposition": false,
@@ -352,6 +371,21 @@
       "if": {"required": ["seq"], "properties": {"seq": {"const": 0}}},
       "then": {"properties": {"prev": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}},
       "else": {"properties": {"prev": {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}}}
+    },
+    {
+      "if": {"required": ["origin"], "properties": {"origin": {"required": ["kind"], "properties": {"kind": {"const": "native"}}}}},
+      "then": {"properties": {"scenario": {"not": {"pattern": " · ", "type": "string"}}}}
+    },
+    {
+      "if": {"required": ["origin"], "properties": {"origin": {"required": ["kind"], "properties": {"kind": {"const": "legacy"}}}}},
+      "then": {
+        "properties": {
+          "actor": {"properties": {"station": {"const": "records-import"}}},
+          "source": {"properties": {"known": {"const": false}}},
+          "verified_source": {"properties": {"known": {"const": false}}}
+        }
+      },
+      "description": "a legacy record enters a log only through the importer, which is station `records-import`, and carries no known source (section 11.7, owner ruling O4)"
     }
   ],
   "$defs": {

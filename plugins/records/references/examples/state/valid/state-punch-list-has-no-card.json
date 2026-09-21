@@ -45,7 +45,10 @@
       "scenario": "a driver parks in the wrong lane",
       "severity": "MAJOR",
       "slice": "none",
-      "status": "fixed"
+      "status": "fixed",
+      "verified_source": {
+        "known": false
+      }
     }
   ],
   "head": "11a4b80ea3a9f962a8c87e77187efb9e713f5d4afa49c1615da6b78f569ca2a0",

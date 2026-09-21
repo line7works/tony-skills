@@ -6,9 +6,9 @@ component root) unless a root is given explicitly. Never from a repo checkout or
 
 jsonschema is the one declared dependency (jsonschema==4.25.1 through `uv run`, the pin in force
 in the pilot's `recheck.py` PEP 723 block). It is imported lazily: `require_jsonschema()` exits 3
-with the pilot's message on stderr and nothing on stdout when it cannot be imported. The test
-hook RECORDS_TEST_NO_JSONSCHEMA=1, honored only together with RECORDS_TEST=1, makes it behave as
-if the import had failed.
+with the pilot's message on stderr and nothing on stdout when it cannot be imported, and
+`component-identity`, which validates nothing, never calls it. There is no environment hook: the
+exit-3 tests supply a `jsonschema` package that raises ImportError on PYTHONPATH.
 
 `validate_event` returns `[{"path", "message"}]`: the schema's findings plus the two checks a
 Draft 2020-12 schema cannot make on its own, both of them section 6 rules - a native event's `at`
@@ -77,9 +77,15 @@ class ComponentRootMissing(ValueError):
 
 
 def jsonschema_unavailable():
-    """True when jsonschema did not import, or the gated test hook says to act as if it had not."""
-    hooked = os.environ.get("RECORDS_TEST") == "1" and os.environ.get("RECORDS_TEST_NO_JSONSCHEMA") == "1"
-    return _Validator is None or hooked
+    """True when jsonschema did not import.
+
+    Review finding 12: there used to be an environment hook here that made this answer True on
+    demand. A hook the interface does not name is a second interface, and this one was not
+    needed: the exit-3 tests put a `jsonschema` package that raises ImportError first on
+    PYTHONPATH (`testlib.stub_without_jsonschema`), which is the real failure rather than a
+    simulation of it.
+    """
+    return _Validator is None
 
 
 def require_jsonschema():
@@ -238,6 +244,20 @@ def validate_event(event, schemas):
     if not known_version(event):
         return [unknown_version_error(event)]
     return _errors(schemas.event, event) + _semantic_errors(event)
+
+
+def validate_identity(identity, schemas):
+    """`[{"path", "message"}]` for one six-field source identity (section 8.1).
+
+    The definition is the schemas' own (`event.schema.json`'s `$defs/identity`, which
+    `state.schema.json` carries the same copy of), so an identity a caller hands the CLI is held
+    to exactly what the interface publishes. Review finding 12: `--at-source` used to check only
+    that `commit` was a string, and `{"commit": "garbage"}` then produced a state object that
+    failed `state.schema.json`.
+    """
+    V = require_jsonschema()
+    schema = {"$defs": schemas.docs["event"]["$defs"], "$ref": "#/$defs/identity"}
+    return _errors(V(schema, format_checker=format_checker()), identity)
 
 
 def validate_document(key, doc, schemas):
