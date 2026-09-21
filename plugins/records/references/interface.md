@@ -970,6 +970,8 @@ Two further lines stop a document, both from amendment A9, and a resolutions ans
 | `rejected_resolutions[].answer` | the answer as it was given. |
 | `rejected_resolutions[].answer.line` | its line. |
 | `rejected_resolutions[].answer.raw` | the text it recorded for that line. |
+| `rejected_resolutions[].answer.finding` | present when the answer named a finding: the ID it gave, which is exactly what it wrote and need not be a finding this document raises — an ID it does not raise is the `unknown_finding` rejection. |
+| `rejected_resolutions[].answer.new_finding` | present when the answer asked for a new finding: `true`. A question that cannot take one (a cut claim, a reopening line) is the `answer_does_not_fit` rejection. |
 | `rejected_resolutions[].answer.skip` | present when the answer was a skip. |
 | `rejected_resolutions[].answer.why` | the reason a skip gave. |
 | `appended` | one row per event written, the same shape `append` returns. |

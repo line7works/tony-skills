@@ -29,6 +29,16 @@ FIXTURE_DOC = "docs/plans/2026-05-12-history.md"
 AMBIGUOUS_DOC = "docs/plans/2026-05-03-join-ambiguous-shared.md"
 MIRRORS_DOC = "docs/plans/2026-05-14-mirrors.md"
 OTHER_COMMIT = "1f0c9b7a4d2e6f80315c8ab4d9e2071c6b35a8f4"
+# Well formed for the resolutions schema (`f<n>:<20 hex>`) and raised by no document here, so an
+# answer naming it is rejected as `unknown_finding` rather than refused by the file's own schema.
+NO_SUCH_FINDING = "f1:0123456789abcdef0123"
+CUT_DOC = "docs/plans/2026-05-21-cut-claim.md"
+# Amendment A9 (1): the field separator cut this claim in half, so the line does not say where
+# its claim ends. Amendment A10: a cut RAISING line can only be skipped, so an answer asking for
+# a new finding does not fit the question.
+CUT_DOCUMENT = ("# Cut\n\n## Slice A\nStatus: built\n\n"
+                "### 2026-05-01 - review: Slice A\n"
+                "- MAJOR · src/a.py:1 · (alpha · beta) · scenario · A\n")
 CHANGED_FROM = "the loading list is not sorted · a heavy crate"
 CHANGED_TO = "the loading list is not sorted at all · a heavy crate"
 
@@ -294,6 +304,17 @@ def legacy_cases(scratch, cases):
     _run(cases, "import-legacy-with-two-answers-for-one-line", "import-legacy",
          ["import-legacy"] + ambiguous + ["--resolutions", twice], 4)
 
+    # Send-back 1: `rejected_resolutions[].answer` is the answer AS GIVEN, so it carries
+    # whichever of `finding`, `new_finding` or `skip` the file wrote. Only the skip shape had a
+    # run here, so `answer.finding` and `answer.new_finding` were fields no case returned and
+    # the coverage rule could hold `interface.md` to neither. This is the `finding` shape: a
+    # well-formed ID this document does not raise, rejected as `unknown_finding`.
+    unknown = testlib.write_json(os.path.join(scratch, "unknown-finding.json"), {
+        "answered_by": "the owner", "answered_on": "2026-05-20", "doc": AMBIGUOUS_DOC,
+        "answers": [{"line": stop["line"], "raw": stop["raw"], "finding": NO_SUCH_FINDING}]})
+    _run(cases, "import-legacy-with-an-answer-naming-a-finding-this-document-does-not-raise",
+         "import-legacy", ["import-legacy"] + ambiguous + ["--resolutions", unknown], 4)
+
     # a document whose imported lines changed, and one that grew above its imported tail:
     # section 11.7's two exit-7 refusals
     path = os.path.join(workspace, *FIXTURE_DOC.split("/"))
@@ -332,6 +353,27 @@ def legacy_cases(scratch, cases):
     return workspace
 
 
+def cut_claim_cases(scratch, cases):
+    """The other answer shape a rejection can carry: an answer asking for a new finding.
+
+    Send-back 1, with amendments A9 (1) and A10. A cut raising line takes a skip and nothing
+    else, so `new_finding: true` is rejected as `answer_does_not_fit` and the refusal publishes
+    the answer that asked for it. Its own workspace, so the fixture workspace above keeps the
+    documents and the identity the cases before this one observed.
+    """
+    workspace = testlib.make_workspace(scratch, doc=DOC)
+    testlib.write(os.path.join(workspace, *CUT_DOC.split("/")), CUT_DOCUMENT)
+    ws = ["--workspace", workspace, "--doc", CUT_DOC]
+    stop = _run(cases, "import-legacy-stopped-by-a-cut-claim", "import-legacy",
+                ["import-legacy"] + ws + ["--dry-run"], 5)["ambiguities"][0]
+    asks_for_a_new_finding = testlib.write_json(os.path.join(scratch, "new-finding.json"), {
+        "answered_by": "the owner", "answered_on": "2026-05-20", "doc": CUT_DOC,
+        "answers": [{"line": stop["line"], "raw": stop["raw"], "new_finding": True}]})
+    _run(cases, "import-legacy-with-a-new-finding-answer-a-cut-claim-cannot-take", "import-legacy",
+         ["import-legacy"] + ws + ["--resolutions", asks_for_a_new_finding], 4)
+    return workspace
+
+
 def dependency_cases(scratch, cases):
     """With jsonschema unimportable: exit 3 and one line on stderr for every command that
     validates something, and a normal answer from `component-identity`, which validates nothing
@@ -365,6 +407,7 @@ def every_case(scratch):
     cases = []
     native_cases(os.path.join(scratch, "native"), cases)
     legacy_cases(os.path.join(scratch, "legacy"), cases)
+    cut_claim_cases(os.path.join(scratch, "cut"), cases)
     dependency_cases(os.path.join(scratch, "dep"), cases)
     return cases
 
