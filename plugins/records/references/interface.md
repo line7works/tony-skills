@@ -554,7 +554,10 @@ write whose lock was replaced under it is refused (exit 7) rather than landed. A
 CONTENTS as well as its inode, because a writer that takes an abandoned lock file over publishes
 itself into it without replacing the file: `--break-lock` compares the bytes it judged stale with
 the bytes present when it is about to remove the lock, and refuses with exit 7 (removing nothing)
-when they differ, and a holder releases only a lock still holding the bytes it wrote itself.
+when they differ; the check made immediately before the log is replaced compares the same bytes,
+so a write whose lock was rewritten IN PLACE — same file, new contents — is refused with exit 7,
+writes nothing, and leaves the replacement's contents where they are; and a holder releases only
+a lock still holding the bytes it wrote itself.
 
 Both `lock` and `broke_lock` are PUBLISHED, never passed through: whatever the lock file held,
 the response carries `pid` (a JSON integer or null; anything else, a boolean included, is null),

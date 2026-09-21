@@ -917,6 +917,53 @@ class AForeignLockIsPublishedNotPassedThrough(unittest.TestCase):
             text = fh.read()
         self.assertIn(events_mod.FOREIGN_LOCK, text)
 
+    def test_normalizing_a_lock_never_changes_the_break_decision(self):
+        """Recheck of R5: the guard above never supplied a lock normalization would re-judge.
+
+        `holder_alive` reads the lock file's RAW contents on purpose, and `published_lock` is
+        only the response shape. The two disagree in both directions, so moving the judgement
+        behind the publisher (`holder_alive(published_lock(info))`) reverses real decisions:
+
+        - `{"pid": true, "pid_start": null}`: a JSON `true` is an `int` to Python, so the raw
+          reading is a live holder and the lock is refused; publishing nulls the pid, which
+          reads as no holder at all and would break a live process's lock.
+        - `{"pid": 42, "pid_start": 17}`: the recorded start time does not match the pid's, so
+          the raw reading is a dead holder and the lock is broken; publishing drops the
+          non-string start time, which reads as "no start time recorded, the live pid is all
+          there is" and would refuse a stale lock forever.
+
+        Both process probes are pinned, so the judgement here comes from the lock's contents and
+        never from whatever this machine's process table happens to say.
+        """
+        cases = (
+            ({"pid": True, "pid_start": None}, True),
+            ({"pid": 42, "pid_start": 17}, False),
+        )
+        for raw, alive in cases:
+            with self.subTest(raw=raw):
+                lock_path = events_mod.lock_path(self.log)
+                contents = json.dumps(raw)
+                testlib.write(lock_path, contents)
+                lock = events_mod.Lock(self.log, "import-legacy")
+                with mock.patch.object(events_mod, "pid_alive", return_value=True), \
+                        mock.patch.object(events_mod, "process_start", return_value="actual"):
+                    try:
+                        self.assertEqual(events_mod.holder_alive(raw), alive)
+                        if alive:
+                            with self.assertRaises(events_mod.RecordsError) as caught:
+                                lock.acquire(break_lock=True)
+                            self.assertEqual(caught.exception.code, 7)
+                            with open(lock_path, encoding="utf-8") as fh:
+                                self.assertEqual(fh.read(), contents)
+                        else:
+                            lock.acquire(break_lock=True)
+                            self.assertTrue(lock.held)
+                            self.assertEqual(lock.broke, events_mod.published_lock(raw))
+                    finally:
+                        lock.release()
+                if os.path.exists(lock_path):
+                    os.unlink(lock_path)
+
 
 if __name__ == "__main__":
     unittest.main()

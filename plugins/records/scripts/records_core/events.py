@@ -375,10 +375,11 @@ class Lock:
 
     Verification item 4: the inode is not the whole of the lock's identity. A writer that takes
     an abandoned lock file over publishes itself INTO it, keeping the inode, so the inode checks
-    above see nothing. Both sides therefore compare bytes as well: recovery compares the bytes it
-    judged stale against the bytes present when it is about to unlink, and release compares the
-    bytes it wrote. A lock rewritten in place is refused (exit 7) on recovery and left alone on
-    release.
+    above see nothing. Every side therefore compares bytes as well: recovery compares the bytes
+    it judged stale against the bytes present when it is about to unlink, `assert_owned` compares
+    the bytes this process wrote against the bytes in its own lock at the moment of the write
+    (the recheck of item 4), and release compares the bytes it wrote. A lock rewritten in place
+    is refused (exit 7) on recovery and at the commit, and left alone on release.
     """
 
     def __init__(self, log, command):
@@ -414,9 +415,20 @@ class Lock:
                   lock_path=self.path, holder_alive=True)
 
     def assert_owned(self):
-        """The lock at the path is still the one this process took, or exit 7 and no write."""
-        if self.fd is None or not self._same_inode(self.fd):
-            _fail(7, "conflict", "the log's lock was removed or replaced while this process held "
+        """The lock at the path is still the one this process took, or exit 7 and no write.
+
+        Recheck of item 4: the inode alone was not ownership here either. Recovery and release
+        already compared bytes; this gate, the last one before the log is replaced, did not, so a
+        writer that rewrote the held lock's CONTENTS in place (keeping the inode) let both
+        `append` and `import-legacy` commit onto a log it no longer held. Ownership at commit
+        time is the inode AND the bytes this process wrote. Nothing is written, and the
+        replacement's contents are left exactly as they are: `release` compares bytes too, so the
+        refusal never deletes the other writer's lock.
+        """
+        if (self.fd is None or self.owned_bytes is None
+                or not self._same_inode(self.fd)
+                or read_lock_bytes(self.fd) != self.owned_bytes):
+            _fail(7, "conflict", "the log's lock inode or contents changed while this process held "
                                  "it; nothing was written (%s)" % self.path, lock_path=self.path)
 
     def acquire(self, break_lock=False):
@@ -704,7 +716,8 @@ def commit_batch(path, workspace, doc, existing, prepared, lock=None, importer=F
     - the file on disk must still be exactly those bytes (exit 7, `conflict`);
     - the workspace identity must still equal the one every bound clear in the batch names
       (exit 6, `stale_source`), which is section 8.3 re-asked at the moment of the write;
-    - this process must still own the lock inode it took (exit 7, review finding 4).
+    - this process must still own the lock it took, inode AND bytes (exit 7, review finding 4
+      and its recheck).
 
     Nothing is written when any of the three fails.
     """

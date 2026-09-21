@@ -1039,6 +1039,48 @@ class ALockIsItsContentsToo(ReviewCase):
             lock.release()
         self.assertFalse(os.path.isfile(self.lock_file))
 
+    def test_a_write_refuses_an_in_place_lock_takeover(self):
+        """Recheck of item 4: the COMMIT-time check read the inode and nothing else.
+
+        Recovery and release already compared bytes; `assert_owned`, the last gate before the
+        log is replaced, did not. A writer that rewrites the held lock's contents in place
+        keeps the inode, so both `append` and `import-legacy` committed anyway.
+        """
+        for operation in ("append", "import"):
+            with self.subTest(operation=operation):
+                doc = "docs/plans/takeover-%s.md" % operation
+                self.write_doc(doc, document([FINDING_LINE]))
+                initial = testlib.import_doc(self.workspace, doc)
+                path = events_mod.log_path(self.workspace, doc)
+                lock_path = events_mod.lock_path(path)
+                with open(path, "rb") as fh:
+                    before = fh.read()
+                replacement = json.dumps(self.live_contents()).encode("utf-8")
+                prepare = events_mod.prepare_batch
+
+                def takeover(*args, **kwargs):
+                    prepared = prepare(*args, **kwargs)
+                    with open(lock_path, "wb") as fh:
+                        fh.write(replacement)
+                    return prepared
+
+                with mock.patch.object(events_mod, "prepare_batch", takeover):
+                    with self.assertRaises(events_mod.RecordsError) as caught:
+                        if operation == "append":
+                            events_mod.append(self.workspace, doc,
+                                              [testlib.raised(doc=doc, claim="new")],
+                                              initial["head"], testlib.schemas())
+                        else:
+                            self.write_doc(doc, document([
+                                FINDING_LINE, FINDING_LINE.replace("alpha", "beta")]))
+                            testlib.import_doc(self.workspace, doc)
+                self.assertEqual(caught.exception.code, 7)
+                with open(path, "rb") as fh:
+                    self.assertEqual(fh.read(), before, "nothing was written")
+                with open(lock_path, "rb") as fh:
+                    self.assertEqual(fh.read(), replacement,
+                                     "the replacement's contents are left alone")
+
 
 # ---- item 15: an import with nothing to add reports its recovery too --------------------------
 
