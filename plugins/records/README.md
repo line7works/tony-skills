@@ -35,10 +35,12 @@ Facts about how this component was built, in order. Review results are not recor
 | Fix round | the review's fifteen findings and the owner's ruling on its three questions (A9), each test first | 515 |
 | Verification | the same reviewer, once, on the closed list | |
 | Second fix round | the four items verification left (A10), closed on the control room's own check | 536 |
+| Third fix round | the items once listed for E13, fixed here on the owner's word (A11): two refusals published, examples regenerated, every required list pinned, the lock a response carries published | 591 |
+| Recheck | the same reviewer, once more, on the second and third fix rounds and regressions | |
+| Fourth fix round | what the recheck found: lock ownership at commit time is inode and bytes; a guard on the liveness judgement | 593 |
 
 Every count is the full suite under `/usr/bin/python3`, and the same count through `uv run`.
-Rulings and amendments A1 to A10, the builders' standing readings, and the items carried to E13
-are in section 16 of the lane contract, `docs/plans/2026-09-20-records-e12.md`.
+Rulings and amendments A1 to A11 and the builders' standing readings are in section 16 of the lane contract, `docs/plans/2026-09-20-records-e12.md`.
 
 ## Layout
 
