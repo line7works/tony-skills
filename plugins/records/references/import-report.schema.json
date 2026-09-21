@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/records/import-report.schema.json",
   "title": "records import report",
-  "description": "What `records.py import-legacy` and `records.py survey` print on stdout (records E12 contract sections 11 and 12.2). Three shapes, told apart by `report` and `ok`: an import report that landed or would land (report `import`, ok true); the refusal an ambiguous document or a rejected resolutions file produces (report `import`, ok false, exit 5 or 4, nothing written); and a survey (report `survey`, ok true), which is read-only per document and never writes. Every response carries the envelope every command carries.",
+  "description": "What `records.py import-legacy` and `records.py survey` print on stdout (records E12 contract sections 11 and 12.2). Four shapes, told apart by `report` and `ok`: an import report that landed or would land (report `import`, ok true); the refusal an ambiguous document or a rejected resolutions file produces (report `import`, ok false, exit 5 or 4, nothing written); the earlier refusal two answers for one line produce (report `import`, ok false, exit 4), raised before a plan exists and so carrying none of the plan's fields; and a survey (report `survey`, ok true), which is read-only per document and never writes. Every response carries the envelope every command carries.",
   "type": "object",
   "required": ["interface_version", "component_version", "ok", "report"],
   "properties": {
@@ -11,9 +11,35 @@
   "oneOf": [
     {"$ref": "#/$defs/import_ok"},
     {"$ref": "#/$defs/import_refused"},
+    {"$ref": "#/$defs/duplicate_answers_refused"},
     {"$ref": "#/$defs/survey"}
   ],
   "$defs": {
+    "duplicate_answers_refused": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_version", "component_version", "ok", "report", "error", "reason",
+                   "doc", "log", "line", "answers"],
+      "properties": {
+        "interface_version": {"type": "integer", "minimum": 1},
+        "component_version": {"type": "string", "minLength": 1},
+        "ok": {"const": false},
+        "report": {"const": "import"},
+        "error": {"const": "invalid"},
+        "reason": {"type": "string", "minLength": 1},
+        "doc": {"type": "string", "minLength": 1},
+        "log": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "description": "the line answered twice, as the answers wrote it"},
+        "answers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/rejection/properties/answer"},
+          "description": "the answer already held for that line and the duplicate that arrived after it"
+        }
+      },
+      "description": "section 11.5: one ambiguous line takes one answer. Two answers for one line, identical ones included, are refused before the pass plans anything, so this response carries no `head`, `events`, `dry_run`, `counts` or `ambiguities`."
+    },
     "envelope": {
       "interface_version": {"type": "integer", "minimum": 1},
       "component_version": {"type": "string", "minLength": 1}

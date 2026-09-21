@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import unittest
+from unittest import mock
 
 import testlib
 
@@ -804,7 +805,7 @@ class AClaimTheSeparatorCutIsAmbiguous(ReviewCase):
         with self.assertRaises(events_mod.RecordsError) as caught:
             testlib.import_doc(self.workspace, DOC)
         self.assertEqual(caught.exception.code, 5)
-        self.assertNotIn("(alpha", json.dumps(caught.exception.document.get("ambiguities"))[:0] or "")
+        self.assertEqual(testlib.read_log(self.workspace), b"")
         plan = testlib.plan_for(self.workspace, DOC)
         claims = [e.get("claim") for e in plan["events"] if e["kind"] == "finding_raised"]
         self.assertNotIn("(alpha", claims)
@@ -955,6 +956,330 @@ class SurveyIsBounded(ReviewCase):
         self.assertIn("--limit", out)
         self.assertIn("--offset", out)
 
+
+# ==== the verification round (amendment A10) ==================================================
+# Four items the outside reviewer's verification left open. Each class is one of them, and each
+# test is her surviving attack turned into an assertion.
+
+
+# ---- item 4: a lock whose contents were rewritten inside its own inode ------------------------
+
+class ALockIsItsContentsToo(ReviewCase):
+    """Verification item 4: the inode check alone still let a rewritten lock be stolen.
+
+    Her `lock-stolen` probe rewrites the stale lock IN PLACE, keeping the inode, while recovery
+    is deciding the recorded holder is dead; her `release-deletes-replacement` probe rewrites a
+    held lock in place and watches the holder delete someone else's contents. Recovery now
+    compares the bytes it judged stale with the bytes present when it takes the lock, and release
+    compares the bytes it wrote.
+    """
+
+    def setUp(self):
+        ReviewCase.setUp(self)
+        self.log = events_mod.log_path(self.workspace, DOC)
+        os.makedirs(os.path.dirname(self.log), exist_ok=True)
+        self.lock_file = events_mod.lock_path(self.log)
+
+    def live_contents(self):
+        return {"pid": os.getpid(), "pid_start": events_mod.process_start(os.getpid()),
+                "command": "other-writer"}
+
+    def rewrite_in_place(self, contents):
+        """Replace the lock's bytes without replacing its inode, the way a live writer does."""
+        with open(self.lock_file, "r+", encoding="utf-8") as fh:
+            fh.write(json.dumps(contents, sort_keys=True))
+            fh.truncate()
+
+    def test_recovery_refuses_a_stale_lock_whose_contents_changed_under_it(self):
+        testlib.write(self.lock_file, json.dumps({"pid": 999999, "pid_start": "old"}))
+        live = self.live_contents()
+        breaker = events_mod.Lock(self.log, "append")
+
+        def publishes_a_live_holder(info):
+            self.rewrite_in_place(live)
+            return False
+
+        with mock.patch.object(events_mod, "holder_alive", publishes_a_live_holder):
+            with self.assertRaises(events_mod.RecordsError) as caught:
+                breaker.acquire(break_lock=True)
+        self.assertEqual(caught.exception.code, 7)
+        self.assertEqual(caught.exception.document["error"], "conflict")
+        self.assertFalse(breaker.held)
+        self.assertIsNone(breaker.broke)
+        self.assertTrue(os.path.isfile(self.lock_file), "nothing was removed")
+        with open(self.lock_file, encoding="utf-8") as fh:
+            self.assertEqual(json.loads(fh.read()), live)
+
+    def test_releasing_leaves_a_lock_whose_contents_were_replaced_alone(self):
+        lock = events_mod.Lock(self.log, "append").acquire()
+        live = self.live_contents()
+        self.rewrite_in_place(live)
+        lock.release()
+        self.assertTrue(os.path.isfile(self.lock_file),
+                        "a holder must not delete a lock it no longer wrote")
+        with open(self.lock_file, encoding="utf-8") as fh:
+            self.assertEqual(json.loads(fh.read()), live)
+        os.unlink(self.lock_file)
+
+    def test_an_ordinary_holder_still_removes_its_own_lock(self):
+        lock = events_mod.Lock(self.log, "append").acquire()
+        self.assertTrue(os.path.isfile(self.lock_file))
+        lock.release()
+        self.assertFalse(os.path.isfile(self.lock_file))
+
+    def test_ordinary_recovery_of_an_untouched_stale_lock_still_works(self):
+        stale = {"pid": 999999, "pid_start": "old", "command": "append"}
+        testlib.write(self.lock_file, json.dumps(stale, sort_keys=True))
+        with mock.patch.object(events_mod, "holder_alive", lambda info: False):
+            lock = events_mod.Lock(self.log, "append").acquire(break_lock=True)
+        try:
+            self.assertTrue(lock.held)
+            self.assertEqual(lock.broke["pid"], 999999)
+        finally:
+            lock.release()
+        self.assertFalse(os.path.isfile(self.lock_file))
+
+
+# ---- item 15: an import with nothing to add reports its recovery too --------------------------
+
+class RecoveryIsReportedWithNothingToAdd(ReviewCase):
+    """Verification item 15: the no-batch early return bypassed the recovery fields.
+
+    Her variation imports an unchanged document under `--break-lock` with a dead lock and an
+    orphan temporary beside the log: the lock was removed and neither fact was reported.
+    """
+
+    def stale_lock(self, path):
+        testlib.write(events_mod.lock_path(path),
+                      json.dumps({"pid": 999999, "pid_start": "dead", "command": "import-legacy"}))
+
+    def orphan(self, path):
+        name = "." + os.path.basename(path) + ".ci4o2fs.tmp"
+        testlib.write(os.path.join(os.path.dirname(path), name), "unpublished\n")
+        return name
+
+    def test_an_unchanged_import_under_break_lock_reports_the_lock_and_the_orphan(self):
+        self.write_doc(DOC, document([FINDING_LINE]))
+        testlib.import_doc(self.workspace, DOC)
+        path = events_mod.log_path(self.workspace, DOC)
+        name = self.orphan(path)
+        self.stale_lock(path)
+        body = testlib.import_doc(self.workspace, DOC, break_lock=True)
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(body["appended"], [])
+        self.assertEqual(body["broke_lock"]["pid"], 999999)
+        self.assertEqual(body["orphan_temporaries"], [events_mod.RECORDS_DIR + "/" + name])
+        self.assertTrue(os.path.isfile(os.path.join(os.path.dirname(path), name)),
+                        "an orphan is reported, never deleted")
+        self.assertFalse(os.path.isfile(events_mod.lock_path(path)))
+
+    def test_an_unchanged_import_without_break_lock_reports_neither(self):
+        self.write_doc(DOC, document([FINDING_LINE]))
+        testlib.import_doc(self.workspace, DOC)
+        body = testlib.import_doc(self.workspace, DOC)
+        self.assertEqual(body["imported"], 0)
+        self.assertNotIn("broke_lock", body)
+        self.assertNotIn("orphan_temporaries", body)
+
+    def test_an_unchanged_import_with_nothing_to_recover_still_says_so(self):
+        self.write_doc(DOC, document([FINDING_LINE]))
+        testlib.import_doc(self.workspace, DOC)
+        body = testlib.import_doc(self.workspace, DOC, break_lock=True)
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(body["orphan_temporaries"], [])
+        self.assertNotIn("broke_lock", body, "no lock was broken, so none is reported")
+
+    def test_that_report_is_still_a_valid_import_report(self):
+        self.write_doc(DOC, document([FINDING_LINE]))
+        code, body, err = self.cli("import-legacy", "--workspace", self.workspace, "--doc", DOC)
+        self.assertEqual(code, 0, (body, err))
+        path = events_mod.log_path(self.workspace, DOC)
+        self.orphan(path)
+        self.stale_lock(path)
+        code, body, err = self.cli("import-legacy", "--workspace", self.workspace, "--doc", DOC,
+                                   "--break-lock")
+        self.assertEqual(code, 0, (body, err))
+        self.assertEqual(body["imported"], 0)
+        self.assertIn("broke_lock", body)
+        self.assertEqual(validate.validate_document("import_report", body, testlib.schemas()), [])
+
+    def test_the_interface_says_both_brackets_of_a_recovery_are_reported(self):
+        with open(os.path.join(testlib.REFERENCES, "interface.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("nothing to add", text)
+
+
+# ---- item 16 (amendments A9 and A10): no answer supplies a cut claim --------------------------
+
+CUT_RAISE = "- MAJOR · src/a.py:1 · (alpha · beta) · scenario · A"
+# A clearing line whose claim the separator cut. A recheck line cannot carry one and still
+# parse (the shifted fields stop being a disposition), so the clearing shape here is a waiver,
+# which reads the cut claim as `(alpha` and its tail as the grant's words.
+CUT_CLEAR = "- WAIVED (per user) · 2026-05-02 · MAJOR · src/a.py:1 · (alpha · beta)"
+
+
+class NoAnswerSuppliesACutClaim(ReviewCase):
+    """Verification item 16, amendment A10: `new_finding` imported the truncated claim.
+
+    Her attack answered the A9 stop with `new_finding: true` and got exit 0 and a finding whose
+    claim is `(alpha`. A cut raising line can only be skipped; a cut clearing line can name an
+    existing finding or be skipped; neither creates a finding from cut text.
+    """
+
+    def question_for(self, text):
+        self.write_doc(DOC, text)
+        code, body, err = self.cli("import-legacy", "--workspace", self.workspace,
+                                   "--doc", DOC, "--dry-run")
+        self.assertEqual(code, 5, (body, err))
+        return body["ambiguities"][0]
+
+    def answer_with(self, question, **body):
+        answers = {"answered_by": "the owner", "answered_on": "2026-05-03", "doc": DOC,
+                   "answers": [dict({"line": question["line"], "raw": question["raw"]}, **body)]}
+        path = testlib.write_json(os.path.join(self.scratch, "answers.json"), answers)
+        return self.cli("import-legacy", "--workspace", self.workspace, "--doc", DOC,
+                        "--resolutions", path)
+
+    def claims_in_state(self):
+        code, state, err = self.cli("state", "--workspace", self.workspace, "--doc", DOC)
+        self.assertEqual(code, 0, (state, err))
+        return [finding.get("claim") for finding in state["findings"]]
+
+    def existing_finding(self):
+        """Import the plain finding line first, so a clear has something to be pointed at."""
+        self.write_doc(DOC, document([FINDING_LINE]))
+        testlib.import_doc(self.workspace, DOC)
+        raised = [e for e in testlib.events_of(self.workspace, DOC)
+                  if e["kind"] == "finding_raised"]
+        self.assertEqual(len(raised), 1, raised)
+        return raised[0]["finding"]
+
+    def test_new_finding_cannot_answer_a_cut_raising_line(self):
+        question = self.question_for(document([CUT_RAISE]))
+        code, body, err = self.answer_with(question, new_finding=True)
+        self.assertEqual(code, 4, (body, err))
+        self.assertEqual(body["error"], "invalid")
+        self.assertEqual(body["rejected_resolutions"][0]["why"], "answer_does_not_fit")
+        self.assertIn("cannot supply", body["reason"])
+        self.assertEqual(testlib.read_log(self.workspace), b"")
+
+    def test_new_finding_cannot_answer_a_cut_clearing_line(self):
+        self.existing_finding()
+        question = self.question_for(document([FINDING_LINE]) + CUT_CLEAR + "\n")
+        code, body, err = self.answer_with(question, new_finding=True)
+        self.assertEqual(code, 4, (body, err))
+        self.assertEqual(body["rejected_resolutions"][0]["why"], "answer_does_not_fit")
+        self.assertIn("cannot supply", body["reason"])
+        self.assertNotIn("(alpha", json.dumps(self.claims_in_state()))
+
+    def test_a_cut_raising_line_can_be_skipped(self):
+        question = self.question_for(document([CUT_RAISE]))
+        code, body, err = self.answer_with(question, skip=True, why="the claim is not readable")
+        self.assertEqual(code, 0, (body, err))
+        kinds = [e["kind"] for e in testlib.events_of(self.workspace, DOC)]
+        self.assertIn("resolution_applied", kinds)
+        self.assertIn("legacy_unparsed", kinds)
+        self.assertNotIn("finding_raised", kinds)
+
+    def test_a_cut_clearing_line_can_name_an_existing_finding(self):
+        finding = self.existing_finding()
+        question = self.question_for(document([FINDING_LINE]) + CUT_CLEAR + "\n")
+        code, body, err = self.answer_with(question, finding=finding)
+        self.assertEqual(code, 0, (body, err))
+        clears = [e for e in testlib.events_of(self.workspace, DOC) if e["kind"] == "waived"]
+        self.assertEqual([e["finding"] for e in clears], [finding])
+        self.assertNotIn("(alpha", json.dumps(self.claims_in_state()))
+
+    def test_a_cut_clearing_line_can_be_skipped(self):
+        self.existing_finding()
+        question = self.question_for(document([FINDING_LINE]) + CUT_CLEAR + "\n")
+        code, body, err = self.answer_with(question, skip=True, why="nobody knows which finding")
+        self.assertEqual(code, 0, (body, err))
+        kinds = [e["kind"] for e in testlib.events_of(self.workspace, DOC)]
+        self.assertIn("legacy_unparsed", kinds)
+        self.assertNotIn("waived", kinds)
+
+    def test_the_question_says_what_it_takes(self):
+        question = self.question_for(document([CUT_RAISE]))
+        code, body, err = self.answer_with(question, new_finding=True)
+        self.assertEqual(code, 4, (body, err))
+        self.assertIn("skip", body["reason"])
+
+
+# ---- N1: the duplicate-answer refusal is a published shape -----------------------------------
+
+class TheDuplicateAnswerRefusalIsPublished(ReviewCase):
+    """Verification N1: the exit-4 refusal finding 5 added validated against no schema branch.
+
+    It declares `report: "import"` and so claims `import-report.schema.json`, but it is raised
+    before a plan exists, so it carries none of the `import_refused` branch's fields and adds
+    `answers`, which nothing documented.
+    """
+
+    def setUp(self):
+        ReviewCase.setUp(self)
+        self.write_doc(DOC, TWO_FINDINGS + AMBIGUOUS_CLEAR)
+        code, body, err = self.cli("import-legacy", "--workspace", self.workspace,
+                                   "--doc", DOC, "--dry-run")
+        self.assertEqual(code, 5, (body, err))
+        self.question = body["ambiguities"][0]
+        self.assertEqual(len(self.question["candidates"]), 2)
+
+    def refusal(self, *findings):
+        answers = {"answered_by": "the review", "answered_on": "2026-05-03", "doc": DOC,
+                   "answers": [{"line": self.question["line"], "raw": self.question["raw"],
+                                "finding": finding} for finding in findings]}
+        path = testlib.write_json(os.path.join(self.scratch, "answers.json"), answers)
+        code, body, err = self.cli("import-legacy", "--workspace", self.workspace, "--doc", DOC,
+                                   "--resolutions", path)
+        self.assertEqual(code, 4, (body, err))
+        return body
+
+    def test_the_contradictory_duplicate_refusal_validates_against_the_schema(self):
+        first, second = (c["finding"] for c in self.question["candidates"])
+        body = self.refusal(first, second)
+        self.assertEqual(validate.validate_document("import_report", body, testlib.schemas()), [])
+
+    def test_the_identical_duplicate_refusal_validates_against_the_schema(self):
+        first = self.question["candidates"][0]["finding"]
+        body = self.refusal(first, first)
+        self.assertEqual(validate.validate_document("import_report", body, testlib.schemas()), [])
+
+    def test_the_refusal_names_the_line_and_both_answers(self):
+        first, second = (c["finding"] for c in self.question["candidates"])
+        body = self.refusal(first, second)
+        self.assertEqual(body["line"], self.question["line"])
+        self.assertEqual([a["finding"] for a in body["answers"]], [first, second])
+        self.assertEqual(body["doc"], DOC)
+        self.assertEqual(body["log"], events_mod.log_relpath(DOC))
+
+    def test_dropping_answers_or_line_makes_it_fail_the_schema(self):
+        first, second = (c["finding"] for c in self.question["candidates"])
+        body = self.refusal(first, second)
+        for field in ("answers", "line", "doc", "log", "reason", "error"):
+            mutated = copy.deepcopy(body)
+            mutated.pop(field)
+            self.assertTrue(validate.validate_document("import_report", mutated, testlib.schemas()),
+                            "a refusal without /%s is still accepted" % field)
+
+    def test_the_shipped_examples_cover_the_refusal(self):
+        base = os.path.join(testlib.REFERENCES, "examples", "import-report")
+        with open(os.path.join(base, "valid", "duplicate-answers-refused.json"),
+                  encoding="utf-8") as fh:
+            good = json.load(fh)
+        self.assertEqual(validate.validate_document("import_report", good, testlib.schemas()), [])
+        with open(os.path.join(base, "invalid", "duplicate-without-answers.json"),
+                  encoding="utf-8") as fh:
+            bad = json.load(fh)
+        self.assertTrue(validate.validate_document("import_report", bad["document"],
+                                                   testlib.schemas()))
+
+    def test_the_interface_documents_the_refusal_and_the_two_a9_stops(self):
+        with open(os.path.join(testlib.REFERENCES, "interface.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        for phrase in ("`answers`", "duplicate_answers_refused",
+                       "cut", "scenario text"):
+            self.assertIn(phrase, text, phrase)
 
 if __name__ == "__main__":
     unittest.main()

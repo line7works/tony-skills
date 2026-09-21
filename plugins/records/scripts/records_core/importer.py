@@ -72,8 +72,9 @@ CUT_CLAIM_REASON = ("the field separator cut a parenthesized claim in half: this
                     "field reads %r and its closing parenthesis is in a later field, so where "
                     "the claim ends is not written down (amendment A9)")
 CUT_CLAIM_WHY = ("A claim carrying the field separator cannot be read from the line (Appendix A "
-                 "forbids it there). Take the line as the reader split it, name the finding it "
-                 "belongs to, or skip it.")
+                 "forbids it there), and an answer cannot supply the claim the line does not "
+                 "write down (amendment A10). Skip a raising line; for a clearing line, name an "
+                 "existing finding or skip it.")
 
 
 def _fail(code, error, reason, **extra):
@@ -540,27 +541,19 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
             # Amendment A9 (1): the field separator cut a parenthesized claim in half, so this
             # line does not say where its claim ends. It is never imported with the claim cut;
             # it stops the document until a person answers for it.
+            # Amendment A10: no answer supplies the missing claim, so `new_finding` is refused
+            # on both shapes. A cut RAISING line can only be skipped, because a finding raised
+            # from `(alpha` would carry the truncated text as its identity for good; a cut
+            # CLEARING line can name a finding this document already raises, or be skipped.
             raising = item["kind"] in RAISE_ITEMS
-            shapes = (("new_finding", "skip") if raising
-                      else ("finding", "skip") if item["kind"] == "reopening"
-                      else ("finding", "new_finding", "skip"))
+            shapes = ("skip",) if raising else ("finding", "skip")
             answer = take_answer(unit, shapes, why=CUT_CLAIM_WHY)
             if answer is None:
                 note_ambiguity(unit, CUT_CLAIM_REASON % ids.collapse(item.get("claim")), [])
                 continue
             out.append(resolution_event(unit, answer))
-            shape = _answer_shape(answer)
-            if shape == "skip":
+            if _answer_shape(answer) == "skip":
                 out.append(event_of(unit, "legacy_unparsed", reason=answer["why"]))
-                continue
-            if shape == "new_finding":
-                new_id, slice_name, raised = raise_event(
-                    unit, item, ITEM_KINDS[item["kind"]] if raising else "finding_raised",
-                    raising and item["kind"] == "defect")
-                out.append(raised)
-                register(new_id, slice_name, item, unit)
-                if not raising:
-                    out.append(clear_event(unit, item, new_id, None))
                 continue
             out.append(clear_event(unit, item, answer["finding"], None))
             continue
@@ -732,8 +725,13 @@ def import_legacy(workspace, doc, schemas, resolutions=None, dry_run=False, now=
         _stop_on(plan, doc, log_rel, walked["head"], len(walked["events"]), dry_run=False)
         batch = batch_of(doc, plan, walked["exists"], component_version, interface_version)
         if not batch:
-            return report(doc, plan, batch, False, appended=[], head=walked["head"],
+            # Verification item 15: a pass with nothing to append still TOOK the lock, so it
+            # still broke a stale one and still looked for orphan temporaries. This early
+            # return used to skip both fields, which made `--break-lock` silent about a
+            # recovery exactly when nothing else in the report explained it.
+            body = report(doc, plan, batch, False, appended=[], head=walked["head"],
                           total=len(walked["events"]), log_exists=walked["exists"])
+            return _with_recovery(body, lock, break_lock, orphans)
         prepared = events_mod.prepare_batch(workspace, doc, batch, walked, schemas, importer=True)
         events_mod.commit_batch(path, workspace, doc, walked, prepared, lock=lock, importer=True)
         head = events_mod.line_hash(prepared[-1][1])
@@ -742,13 +740,22 @@ def import_legacy(workspace, doc, schemas, resolutions=None, dry_run=False, now=
                     for event, _ in prepared]
         body = report(doc, plan, batch, False, appended=appended, head=head,
                       total=len(walked["events"]) + len(prepared), log_exists=walked["exists"])
-        if lock.broke is not None:
-            body["broke_lock"] = lock.broke
-        if break_lock:
-            body["orphan_temporaries"] = orphans
-        return body
+        return _with_recovery(body, lock, break_lock, orphans)
     finally:
         lock.release()
+
+
+def _with_recovery(body, lock, break_lock, orphans):
+    """What this pass recovered before it ran, on every import that took the lock.
+
+    `broke_lock` when a stale lock was removed, and `orphan_temporaries` on every
+    `--break-lock` pass, empty list included: "I looked and found none" is an answer.
+    """
+    if lock.broke is not None:
+        body["broke_lock"] = lock.broke
+    if break_lock:
+        body["orphan_temporaries"] = orphans
+    return body
 
 
 def _stop_on(plan, doc, log_rel, head, total, dry_run):

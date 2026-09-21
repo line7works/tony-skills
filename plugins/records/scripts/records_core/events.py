@@ -287,6 +287,20 @@ def read_lock(path):
     return info
 
 
+def read_lock_bytes(fd):
+    """Every byte behind an open lock descriptor, or None when it cannot be read.
+
+    Verification item 4: ownership of a lock is its CONTENTS as well as its inode. The file is
+    tiny and written in one `os.write`, so one read from the start is the whole of it; a read
+    that fails is reported as "not the bytes I am looking for" rather than as a traceback.
+    """
+    try:
+        os.lseek(fd, 0, os.SEEK_SET)
+        return os.read(fd, os.fstat(fd).st_size + 1)
+    except OSError:
+        return None
+
+
 class Lock:
     """`<log>.lock`, created with O_CREAT | O_EXCL, holding the pid and its start time.
 
@@ -302,6 +316,13 @@ class Lock:
       so a holder never deletes its replacement's lock;
     - `assert_owned`, called immediately before the log is replaced, stops a write whose lock was
       removed and re-created under it.
+
+    Verification item 4: the inode is not the whole of the lock's identity. A writer that takes
+    an abandoned lock file over publishes itself INTO it, keeping the inode, so the inode checks
+    above see nothing. Both sides therefore compare bytes as well: recovery compares the bytes it
+    judged stale against the bytes present when it is about to unlink, and release compares the
+    bytes it wrote. A lock rewritten in place is refused (exit 7) on recovery and left alone on
+    release.
     """
 
     def __init__(self, log, command):
@@ -310,6 +331,7 @@ class Lock:
         self.broke = None
         self.held = False
         self.fd = None
+        self.owned_bytes = None  # exactly what this process wrote into its own lock
 
     def _contents(self):
         return {"pid": os.getpid(), "pid_start": process_start(os.getpid()), "command": self.command}
@@ -354,7 +376,8 @@ class Lock:
             if not self._same_inode(fd):
                 _fail(7, "conflict", "the log's lock was replaced while this process was taking it: "
                                      "%s" % self.path, lock_path=self.path)
-            os.write(fd, canon.canonical_json(self._contents()) + b"\n")
+            self.owned_bytes = canon.canonical_json(self._contents()) + b"\n"
+            os.write(fd, self.owned_bytes)
         except BaseException:
             if self._same_inode(fd):
                 try:
@@ -376,6 +399,7 @@ class Lock:
                   % (self.path, exc), lock_path=self.path,
                   lock={"pid": None, "pid_start": None, "unreadable": str(exc)}, holder_alive=True)
         try:
+            observed = read_lock_bytes(existing)
             info = read_lock(self.path)
             if not break_lock:
                 _fail(7, "conflict", "the log's lock is held: %s" % self.path, lock=info,
@@ -391,6 +415,15 @@ class Lock:
             if not self._same_inode(existing):
                 _fail(7, "conflict", "the log's lock was replaced while this one was being read: %s"
                       % self.path, lock=read_lock(self.path), lock_path=self.path,
+                      holder_alive=holder_alive(read_lock(self.path)))
+            # The inode is unchanged, but its CONTENTS may not be: a writer that took this file
+            # over wrote itself into it while the recorded holder was being judged dead. The
+            # lock this process is about to remove must still be the lock it read.
+            current = read_lock_bytes(existing)
+            if observed is None or current is None or current != observed:
+                _fail(7, "conflict", "the lock's contents changed while this one was deciding it "
+                                     "was stale; nothing was removed: %s" % self.path,
+                      lock=read_lock(self.path), lock_path=self.path,
                       holder_alive=holder_alive(read_lock(self.path)))
             os.unlink(self.path)
             self.broke = info
@@ -414,7 +447,10 @@ class Lock:
             self.held = False
             return
         try:
-            if self._same_inode(self.fd):
+            # Its own inode AND its own bytes: a lock whose contents another writer replaced in
+            # place is that writer's, however much the file this descriptor names looks like it.
+            if (self.owned_bytes is not None and self._same_inode(self.fd)
+                    and read_lock_bytes(self.fd) == self.owned_bytes):
                 try:
                     os.unlink(self.path)
                 except OSError:

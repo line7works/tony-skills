@@ -550,7 +550,11 @@ time, and the command; a lock that exists is exit 7 with its contents, and `--br
 one only when its pid is not alive. There is no waiting and no retry loop. The lock is held as
 an INODE, not as a pathname: the file is kept open with an advisory lock on it for the lock's
 whole life, so a writer never removes a lock that another writer created in its place, and a
-write whose lock was replaced under it is refused (exit 7) rather than landed.
+write whose lock was replaced under it is refused (exit 7) rather than landed. A lock is its
+CONTENTS as well as its inode, because a writer that takes an abandoned lock file over publishes
+itself into it without replacing the file: `--break-lock` compares the bytes it judged stale with
+the bytes present when it is about to remove the lock, and refuses with exit 7 (removing nothing)
+when they differ, and a holder releases only a lock still holding the bytes it wrote itself.
 
 A killed process leaves up to two things behind, and neither is removed for you.
 The first is `<log>.lock`. The second, when the kill lands inside the atomic replacement, is a
@@ -560,6 +564,11 @@ new ones, because the last step is a rename. Readers ignore a temporary file, an
 removes only the lock; it reports every temporary file it finds beside the log in
 `orphan_temporaries`, and a person decides what to do with them once no writer is running.
 `import-legacy --dry-run` takes no lock at all.
+
+What a run recovered is reported whether or not the run went on to write anything: an import
+that finds nothing to add still took the lock, so it still carries `broke_lock` when it removed
+a stale one and `orphan_temporaries` (the empty list included) on every `--break-lock` pass.
+`references/examples/import-report/valid/import-recovered.json` is such a pass.
 
 | Field | Meaning |
 |---|---|
@@ -872,6 +881,28 @@ findings. `--resolutions` supplies the answers, in the shape of
 a line whose raw text has changed, a finding the document does not raise, or an answer the
 question cannot take is rejected: exit 4, nothing written.
 
+Two answers for one line, identical ones included, are refused earlier than that: one ambiguous
+line takes one answer (section 11.5), and the file is read before the pass plans anything. That
+refusal carries `report: "import"`, `error: "invalid"`, `reason`, `doc`, `log`, `line` (the line
+answered twice) and `answers` (the answer already held for it and the duplicate that arrived
+after it), plus the envelope every response carries, and nothing else: it has no plan, so it
+carries no `head`, `events`, `dry_run`, `counts`, `ambiguities` or `rejected_resolutions`. The
+`duplicate_answers_refused` branch of `import-report.schema.json` is that shape, and
+`references/examples/import-report/valid/duplicate-answers-refused.json` is one.
+
+Two further lines stop a document, both from amendment A9, and a resolutions answer settles each:
+
+- **A claim the field separator cut in half** (`(alpha · beta)`). Appendix A forbids the
+  separator inside a claim, so the line does not write down where its claim ends, and it is
+  never imported with the claim cut at `(alpha`. An answer cannot supply the missing text
+  either (amendment A10): a RAISING line can only be answered `skip`, a CLEARING line can name
+  an existing `finding` or be answered `skip`, and `new_finding` on either is rejected
+  `answer_does_not_fit` (exit 4). No finding is ever created from cut text.
+- **A clearing record joined through scenario text.** Scenario text stands in for a missing
+  claim only when a finding ID is built (section 7). It never joins a clear: a claim-less
+  finding at a location it shares with another finding is ambiguous, and no join made that way
+  is labelled `exact`.
+
 | Field | Meaning |
 |---|---|
 | `report` | `import`, the discriminator of `import-report.schema.json`. |
@@ -924,7 +955,10 @@ question cannot take is rejected: exit 4, nothing written.
 | `spec` | the specification address. |
 | `spec.doc` | the ledger document. |
 | `spec.slice` | null at this level. |
-| `line` | on a conflict, the document line that changed, moved, or appeared above the imported tail. |
+| `line` | on a conflict, the document line that changed, moved, or appeared above the imported tail; on a duplicate-answer refusal, the line answered twice. |
+| `answers` | only on a duplicate-answer refusal: the answer already held for that line and the duplicate that arrived after it. |
+| `answers[]` | one of the two. |
+| `answers[].*` | one answer exactly as the resolutions file wrote it; `references/resolutions.schema.json` is its description, and this document does not repeat it. |
 | `imported_raw` | what an earlier pass recorded for that line. |
 | `current_raw` | what it reads now. |
 | `last_imported_line` | the highest line an earlier pass imported, when a new record appeared above it. |

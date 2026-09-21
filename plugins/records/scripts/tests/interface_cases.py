@@ -273,6 +273,17 @@ def legacy_cases(scratch, cases):
     _run(cases, "import-legacy-with-a-resolutions-file-the-schema-refuses", "import-legacy",
          ["import-legacy"] + ambiguous + ["--resolutions", malformed], 4)
 
+    # section 11.5: one ambiguous line takes one answer. Two answers for it are refused before
+    # the pass plans anything, so this is its own response shape (verification item N1).
+    stop = _run(cases, "import-legacy-stopped-again-for-its-question", "import-legacy",
+                ["import-legacy"] + ambiguous + ["--dry-run"], 5)["ambiguities"][0]
+    twice = testlib.write_json(os.path.join(scratch, "twice.json"), {
+        "answered_by": "the owner", "answered_on": "2026-05-20", "doc": AMBIGUOUS_DOC,
+        "answers": [{"line": stop["line"], "raw": stop["raw"], "finding": candidate["finding"]}
+                    for candidate in stop["candidates"][:2]]})
+    _run(cases, "import-legacy-with-two-answers-for-one-line", "import-legacy",
+         ["import-legacy"] + ambiguous + ["--resolutions", twice], 4)
+
     # a document whose imported lines changed, and one that grew above its imported tail:
     # section 11.7's two exit-7 refusals
     path = os.path.join(workspace, *FIXTURE_DOC.split("/"))

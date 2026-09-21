@@ -1,0 +1,14 @@
+{
+  "document": {
+    "component_version": "0.1.0",
+    "doc": "docs/plans/2026-05-03-join-ambiguous-shared.md",
+    "error": "invalid",
+    "interface_version": 1,
+    "line": 16,
+    "log": "docs/records/docs__plans__2026-05-03-join-ambiguous-shared.events.jsonl",
+    "ok": false,
+    "reason": "the resolutions file holds more than one answer for line 16; one ambiguous line takes one answer (section 11.5). Nothing was written.",
+    "report": "import"
+  },
+  "reason": "a duplicate-answer refusal names both answers it is refusing; without `answers` the response fits no branch of this schema"
+}
