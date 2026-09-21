@@ -46,17 +46,23 @@ fixtures/
 ## Reaching it from a station
 
 A station resolves the component root and runs `<root>/scripts/records.py`. The resolution
-order, the snippet to copy, and the message a station prints when it finds nothing are in
+order, the snippets to copy, and the message a station prints when it finds nothing are in
 `references/interface.md` under "Reaching the component". The short form: a `--records-root`
-argument, then a `RECORDS_ROOT` environment variable, then the plugin installed beside the
-station; the first that holds `scripts/records.py` wins, and nothing found is exit 3.
+argument, then a `RECORDS_ROOT` environment variable, then the component beside the station; the
+first that holds `scripts/records.py` wins, and nothing found is exit 3.
 
-One measurement is open with the control room. On Claude Code 2.1.278 and Codex 0.154.0, an
-installed plugin's root is `<config>/plugins/cache/<marketplace>/<plugin>/<version>/`, so two
-plugins from one marketplace are siblings by NAME but each sits one directory below that, under
-its own version. The third route as the contract writes it therefore finds nothing on either
-harness. `references/interface.md` records the measurement; how the third route should read is
-the control room's to rule, and no fourth lookup was invented.
+"Beside the station" is two lookups, which is what the owner ruled on 2026-09-20 (contract
+amendment A6) after the install probes. On Claude Code 2.1.278 and Codex 0.154.0 an installed
+plugin's root is `<config>/plugins/cache/<marketplace>/<plugin>/<version>/`, so two plugins from
+one marketplace are siblings by NAME but each sits one directory below that, under its own
+version. Route 3a is `<station plugin root>/../records`, the checkout shape, unchanged. Route 3b
+is `<station plugin root>/../../records/<V>/`, the installed shape: a folder counts only when its
+name equals the `version` in its own `.claude-plugin/plugin.json` and it holds
+`scripts/records.py`, and among those the highest version wins, compared as dotted integers.
+Modification time is never read — the live Claude Code cache keeps several folders per plugin,
+most named like commit hashes, and one stale folder is newer than the live one. After any route
+picks a root, the station reads `interface_version` from `component-identity` and stops with
+exit 3 on a version it does not know.
 
 ## Running it
 

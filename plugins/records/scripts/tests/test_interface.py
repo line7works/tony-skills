@@ -254,6 +254,73 @@ class InterfaceMdNamesEveryExitCode(unittest.TestCase):
             self.assertIn("`%s`" % body["error"], text, case["case"])
 
 
+# ---- one run's moment, in every spelling a response can carry it --------------------------------
+#
+# `import-legacy` stamps its report with the wall clock: `run_id` is
+# `import-<slug>-<YYYYMMDDTHHMMSSZ>` (`records_core/importer.py`, `run_id_for`), and the same
+# instant is spelled again as `at` (`2026-09-20T23:58:50Z`) and `date` (`2026-09-20`), including
+# inside any nested actor that carries the run id. Two runs of the same command therefore differ
+# in those and in nothing else whenever they straddle a second. `blind_to_the_clock` makes exactly
+# those strings equal and touches nothing else: the moment is taken FROM each response's own run
+# id, so a value that does not spell that moment survives untouched, and a difference anywhere
+# else still shows. `test_the_clock_normalizer_is_not_a_blindfold` holds it to that.
+
+RUN_STAMP = re.compile(r"\d{8}T\d{6}Z")
+
+
+def run_ids_in(node):
+    """Every value under a `run_id` key, anywhere in a response."""
+    found = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "run_id" and isinstance(value, str):
+                found.add(value)
+            else:
+                found |= run_ids_in(value)
+    elif isinstance(node, list):
+        for item in node:
+            found |= run_ids_in(item)
+    return found
+
+
+def spellings_of(run_id):
+    """({whole-string spellings of this run's moment}, {spellings that can sit inside a string})."""
+    stamp = RUN_STAMP.search(run_id)
+    if stamp is None:
+        return {}, {run_id: "<run-id>"}
+    day, clock = stamp.group(0)[:8], stamp.group(0)[9:15]
+    at = "%s-%s-%sT%s:%s:%sZ" % (day[:4], day[4:6], day[6:], clock[:2], clock[2:4], clock[4:])
+    date = "%s-%s-%s" % (day[:4], day[4:6], day[6:])
+    return {at: "<at>", date: "<date>"}, {run_id: "<run-id>", stamp.group(0): "<stamp>"}
+
+
+def replace_the_moment(node, exact, embedded):
+    """A copy of `node` with `exact` swapped for whole strings and `embedded` swapped inside them."""
+    if isinstance(node, dict):
+        return dict((key, replace_the_moment(value, exact, embedded))
+                    for key, value in node.items())
+    if isinstance(node, list):
+        return [replace_the_moment(item, exact, embedded) for item in node]
+    if isinstance(node, str):
+        if node in exact:
+            return exact[node]
+        for spelling in sorted(embedded, key=len, reverse=True):
+            node = node.replace(spelling, embedded[spelling])
+        return node
+    return node
+
+
+def blind_to_the_clock(text):
+    """One response as canonical JSON with its own run's moment replaced by fixed tokens."""
+    body = json.loads(text)
+    exact, embedded = {}, {}
+    for run_id in run_ids_in(body):
+        whole, inside = spellings_of(run_id)
+        exact.update(whole)
+        embedded.update(inside)
+    return json.dumps(replace_the_moment(body, exact, embedded), sort_keys=True)
+
+
 # ---- the A7a tests ------------------------------------------------------------------------------
 
 class EveryCommandFromAnotherWorkingDirectory(unittest.TestCase):
@@ -298,8 +365,60 @@ class EveryCommandFromAnotherWorkingDirectory(unittest.TestCase):
             first = testlib.run_cli(argv, cwd=here)
             second = testlib.run_cli(argv, cwd=elsewhere)
             self.assertEqual(first[0], second[0], command)
+            if command == "import-legacy":
+                # the one command whose report carries the wall clock; see the note above
+                # `blind_to_the_clock`. Only this run's moment is made equal, on both sides.
+                self.assertEqual(blind_to_the_clock(first[1]), blind_to_the_clock(second[1]),
+                                 "import-legacy answers differently depending on the working "
+                                 "directory, in something the clock does not explain")
+                continue
             self.assertEqual(first[1], second[1],
                              "%s answers differently depending on the working directory" % command)
+
+    def test_the_clock_normalizer_is_not_a_blindfold(self):
+        """It equalizes this run's moment and nothing else: a real difference still shows.
+
+        Everything here is built from one real `import-legacy --dry-run` response, so the shapes
+        are the command's own and not invented.
+        """
+        text = testlib.run_cli(self.calls()["import-legacy"], cwd=testlib.ROOT)[1]
+        body = json.loads(text)
+        moved = json.loads(text)
+        moved["run_id"] = RUN_STAMP.sub("20260101T000000Z", body["run_id"])
+        self.assertNotEqual(body["run_id"], moved["run_id"], "the fixture did not move the clock")
+        self.assertEqual(blind_to_the_clock(json.dumps(body)),
+                         blind_to_the_clock(json.dumps(moved)),
+                         "two responses that differ only in the moment do not normalize equal")
+
+        for key, value in (("lines_read", body["lines_read"] + 1),
+                           ("doc_sha256", "0" * 64),
+                           ("would_import", 99),
+                           ("log", "docs/records/somewhere-else.events.jsonl")):
+            changed = json.loads(json.dumps(moved))
+            changed[key] = value
+            self.assertNotEqual(blind_to_the_clock(json.dumps(body)),
+                                blind_to_the_clock(json.dumps(changed)),
+                                "the normalizer hides a difference in %s" % key)
+
+        nested = json.loads(json.dumps(moved))
+        nested["spec"]["slice"] = "A"
+        self.assertNotEqual(blind_to_the_clock(json.dumps(body)),
+                            blind_to_the_clock(json.dumps(nested)),
+                            "the normalizer hides a difference nested under spec")
+
+        # the run id embedded in a nested actor is equalized too, and its neighbours are not
+        here, there = json.loads(json.dumps(body)), json.loads(json.dumps(moved))
+        for side, source in ((here, body), (there, moved)):
+            side["planned"] = [{"actor": {"station": "records-import",
+                                          "run_id": source["run_id"],
+                                          "harness": None},
+                                "trace": "written by %s" % source["run_id"]}]
+        self.assertEqual(blind_to_the_clock(json.dumps(here)), blind_to_the_clock(json.dumps(there)),
+                         "an embedded run id is not equalized")
+        there["planned"][0]["actor"]["station"] = "another-station"
+        self.assertNotEqual(blind_to_the_clock(json.dumps(here)),
+                            blind_to_the_clock(json.dumps(there)),
+                            "the normalizer hides a difference beside an embedded run id")
 
     def test_every_read_only_command_succeeds_from_another_directory(self):
         for command, argv in sorted(self.calls().items()):

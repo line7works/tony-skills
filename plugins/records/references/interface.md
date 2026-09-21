@@ -29,71 +29,292 @@ run.
 ## Reaching the component
 
 A station resolves the component root and then runs `<root>/scripts/records.py`. The order, from
-the contract's section 12.1: the `--records-root` argument the station itself takes, then the
-`RECORDS_ROOT` environment variable, then the plugin installed beside the station
-(`<station plugin root>/../records`). The first that holds `scripts/records.py` wins. Nothing
-found is exit 3 with
+the contract's section 12.1 as amendment A6 rules it, is four lookups; the first that holds
+`scripts/records.py` wins:
+
+1. the `--records-root` argument the station itself takes;
+2. the `RECORDS_ROOT` environment variable;
+3. **3a**, `<station plugin root>/../records` — the checkout shape, where the component is the
+   station's sibling under `plugins/`;
+4. **3b**, `<station plugin root>/../../records/<V>/` — the installed shape, where a harness has
+   put each plugin's root one directory further down, under its own version.
+
+Route 3b lists the folders directly under `<station plugin root>/../../records/` and accepts one
+only when its NAME equals the `version` in that folder's own `.claude-plugin/plugin.json` AND the
+folder holds `scripts/records.py`. Among the accepted folders the highest version wins, compared
+as dotted integers, so `0.10.0` beats `0.9.0`; a version that is not dotted integers is rejected
+rather than compared as text. A folder with no `plugin.json`, no `version`, or a name that differs
+from its `version` is never a candidate, however plausible the folder looks.
+
+A component with a leading zero is not a dotted integer for this rule: `01.0`, `1.00` and `1.02.3`
+are rejected with the same reason as `1.2.x`, while `0.10.0` and a bare `0` stay valid. Without
+that, `1.0` and `01.0` would be two differently named folders with one integer key, "the highest
+version" would name two folders, and the tie would be broken by whatever the reading code happened
+to do. With it, equal keys mean equal names, and two folders in one directory cannot share a name.
+
+Modification time is never used, by any route. The live Claude Code cache keeps several folders
+per plugin, most of them named like commit hashes rather than versions, and one of those stale
+folders is newer by modification time than the live one — a rule that read the clock would pick
+the stale folder. Matching a folder's name against the `version` written inside it is what makes
+the pick the installed version rather than the most recently written directory.
+
+Nothing found is exit 3 with
 
 ```text
 missing dependency: records component (looked in: <the candidates, in order>)
 ```
 
+on one line, naming every candidate in order: routes 1, 2 and 3a by path, then route 3b's
+directory and every folder under it that was rejected, each with its reason in a few words —
+`no plugin.json`, `plugin.json unreadable`, `no version`, `name differs from version 1.2.0`,
+`version not dotted integers`, or `no scripts/records.py`. Route 3b's directory itself carries
+`(no such directory)` when it is not there.
+
 `--records-root` and `RECORDS_ROOT` are the STATION's, not this CLI's: `records.py` is the
 component and never performs this lookup. It reads no `RECORDS_ROOT`, and its own
 `--component-root` flag is a test hook (see "Arguments every command takes").
 
-Copy one of these. They are the same three lookups in the same order, and
-`scripts/tests/test_resolution.py` extracts both from this file and exercises each route and the
-not-found message on a real checkout.
+### Confirming the pick
+
+After a root is picked by ANY route, the station runs
+
+```sh
+<root>/scripts/records.py component-identity
+```
+
+reads `interface_version` out of the JSON, and stops with exit 3 when it is not a version the
+station knows. `component-identity` is the one command that needs no `jsonschema`, so the confirm
+step runs under plain `/usr/bin/python3` and costs one process. Two refusals, both one line on
+stderr and both exit 3:
+
+```text
+missing dependency: records component at <root> did not report an interface version
+missing dependency: records component at <root> speaks interface version 2, not 1
+```
+
+The first covers a `records.py` that fails, prints nothing, or prints something that is not JSON
+carrying `interface_version`. The second covers a component whose interface this station was not
+written against; the station names the versions it knows, in the order it gives them.
+
+### The two snippets
+
+Copy one of these. They are the same four lookups in the same order, with the confirm step as its
+own small function beside the lookup, and they agree on every message they print.
+`scripts/tests/test_resolution.py` extracts both from this file and runs each of them against a
+real checkout and against a fake installed cache built in a temporary directory.
 
 <!-- resolver: python -->
 
 ```python
 #!/usr/bin/env python3
-"""Resolve the records component root (records E12 contract section 12.1).
+"""Resolve the records component root (records E12 contract section 12.1, amendment A6).
 
     python3 records_root.py [--records-root DIR] [--station-plugin-root DIR]
+                            [--known-interface-versions "1"]
 
-Prints the root on stdout, or the missing-dependency line on stderr and exits 3.
+Prints the root on stdout, or one refusal line on stderr and exits 3. Modification time is
+never read: route 3b matches a folder's name against the `version` inside it.
 """
+import json
 import os
+import subprocess
 import sys
+
+COMPONENT = "records"                                    # the component's plugin name
+MANIFEST = os.path.join(".claude-plugin", "plugin.json")
+DIGITS = "0123456789"
+
+
+def version_key(name):
+    """(int, ...) for a dotted-integer name, else None. Text is never compared as text.
+
+    A component with a leading zero (`01`, `1.00`) is not a dotted integer: it would give two
+    differently named folders one key, and then the highest version would not be one folder.
+    """
+    parts = name.split(".")
+    for part in parts:
+        if not part or [ch for ch in part if ch not in DIGITS]:
+            return None
+        if len(part) > 1 and part[0] == "0":
+            return None
+    return tuple(int(part) for part in parts)
+
+
+def installed_versions(base):
+    """Route 3b: (accepted, rejected) under `base`, one folder per version.
+
+    accepted is [(version key, folder)]; rejected is [(folder, why)], both in name order.
+    """
+    accepted, rejected = [], []
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return accepted, rejected
+    for name in names:
+        folder = os.path.join(base, name)
+        if name.startswith(".") or not os.path.isdir(folder):
+            continue  # a hidden name is not a version; the shell snippet's glob skips it too
+        manifest = os.path.join(folder, MANIFEST)
+        if not os.path.isfile(manifest):
+            rejected.append((folder, "no plugin.json"))
+            continue
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                version = json.load(fh).get("version")
+        except (ValueError, OSError):
+            rejected.append((folder, "plugin.json unreadable"))
+            continue
+        if not isinstance(version, str) or not version:
+            rejected.append((folder, "no version"))
+        elif version != name:
+            rejected.append((folder, "name differs from version %s" % version))
+        elif version_key(name) is None:
+            rejected.append((folder, "version not dotted integers"))
+        elif not os.path.isfile(os.path.join(folder, "scripts", "records.py")):
+            rejected.append((folder, "no scripts/records.py"))
+        else:
+            accepted.append((version_key(name), folder))
+    return accepted, rejected
 
 
 def records_root(argument=None, station_plugin_root=None, environ=None):
+    """Routes 1, 2, 3a, 3b, in that order. Raises LookupError naming every candidate."""
     environ = os.environ if environ is None else environ
-    candidates = [argument, environ.get("RECORDS_ROOT")]
-    if station_plugin_root:
-        candidates.append(os.path.join(station_plugin_root, os.pardir, "records"))
     looked = []
-    for candidate in candidates:
+    for candidate in (argument, environ.get("RECORDS_ROOT")):
         if not candidate:
             continue
         looked.append(candidate)
         if os.path.isfile(os.path.join(candidate, "scripts", "records.py")):
             return candidate
+    if station_plugin_root:
+        beside = os.path.join(station_plugin_root, os.pardir, COMPONENT)          # route 3a
+        looked.append(beside)
+        if os.path.isfile(os.path.join(beside, "scripts", "records.py")):
+            return beside
+        base = os.path.join(station_plugin_root, os.pardir, os.pardir, COMPONENT)  # route 3b
+        looked.append(base if os.path.isdir(base) else "%s (no such directory)" % base)
+        accepted, rejected = installed_versions(base)
+        for folder, why in rejected:
+            looked.append("%s (%s)" % (folder, why))
+        if accepted:
+            return max(accepted, key=lambda pair: pair[0])[1]
     raise LookupError("missing dependency: records component (looked in: %s)"
                       % (", ".join(looked) or "nothing given"))
 
 
+def confirm_interface(root, known_versions, python=None):
+    """The picked root must report an interface version the caller knows. Returns it."""
+    command = [python or sys.executable, os.path.join(root, "scripts", "records.py"),
+               "component-identity"]
+    proc = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    version = None
+    if proc.returncode == 0:
+        try:
+            version = json.loads(proc.stdout.decode("utf-8"))["interface_version"]
+        except (ValueError, KeyError, TypeError, UnicodeDecodeError):
+            version = None
+    if version is None:
+        raise LookupError("missing dependency: records component at %s did not report an "
+                          "interface version" % root)
+    if version not in known_versions:
+        raise LookupError("missing dependency: records component at %s speaks interface version "
+                          "%s, not %s" % (root, version,
+                                          ", ".join(str(known) for known in known_versions)))
+    return version
+
+
 if __name__ == "__main__":
     given = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+    known = [int(part) for part in given.get("--known-interface-versions", "1").split()]
     try:
-        sys.stdout.write(records_root(given.get("--records-root"),
-                                      given.get("--station-plugin-root")) + "\n")
-    except LookupError as missing:
-        sys.stderr.write("%s\n" % missing)
+        root = records_root(given.get("--records-root"), given.get("--station-plugin-root"))
+        confirm_interface(root, known)
+    except LookupError as refusal:
+        sys.stderr.write("%s\n" % refusal)
         sys.exit(3)
+    sys.stdout.write(root + "\n")
 ```
 
 <!-- resolver: sh -->
 
 ```sh
-# $1: the station's --records-root value, or empty. $2: the station's plugin root, or empty.
-# Prints the root, or the missing-dependency line on stderr and returns 3.
+# POSIX sh. There is no jq on the floor, so `version` is read out of plugin.json by
+# /usr/bin/python3 -c, never by sed. Modification time is never read.
+# RECORDS_PYTHON overrides the interpreter these helpers spawn.
+
+records_version_key() {
+  # $1: a folder name. Prints a sortable key for a dotted-integer version, else returns 1.
+  # Each component is left-padded to 18 digits, so a byte sort is an integer sort. A component
+  # with a leading zero (01, 1.00) is not a dotted integer: it would give two differently named
+  # folders one key, and then the highest version would not be one folder.
+  key=""
+  saved_ifs=$IFS
+  IFS=.
+  for part in $1; do
+    case "$part" in
+      ''|*[!0-9]*|0?*) IFS=$saved_ifs; return 1 ;;
+    esac
+    padded="000000000000000000$part"
+    while [ ${#padded} -gt 18 ]; do padded=${padded#?}; done
+    key="$key$padded."
+  done
+  IFS=$saved_ifs
+  [ -n "$key" ] || return 1
+  printf '%s' "$key"
+}
+
+records_scan_installed() {
+  # $1: route 3b's directory. Prints one line per folder, in name order:
+  #   ok<TAB><sort key><TAB><folder>      accepted
+  #   no<TAB><folder> (<why>)             rejected
+  LC_ALL=C
+  export LC_ALL
+  for candidate in "$1"/*; do
+    [ -d "$candidate" ] || continue
+    name=${candidate##*/}
+    manifest="$candidate/.claude-plugin/plugin.json"
+    if [ ! -f "$manifest" ]; then
+      printf 'no\t%s (no plugin.json)\n' "$candidate"
+      continue
+    fi
+    if version=$("${RECORDS_PYTHON:-/usr/bin/python3}" -c 'import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    version = json.load(fh).get("version")
+sys.stdout.write(version if isinstance(version, str) else "")
+' "$manifest" 2>/dev/null); then
+      :
+    else
+      printf 'no\t%s (plugin.json unreadable)\n' "$candidate"
+      continue
+    fi
+    if [ -z "$version" ]; then
+      printf 'no\t%s (no version)\n' "$candidate"
+      continue
+    fi
+    if [ "$version" != "$name" ]; then
+      printf 'no\t%s (name differs from version %s)\n' "$candidate" "$version"
+      continue
+    fi
+    if key=$(records_version_key "$name"); then
+      :
+    else
+      printf 'no\t%s (version not dotted integers)\n' "$candidate"
+      continue
+    fi
+    if [ ! -f "$candidate/scripts/records.py" ]; then
+      printf 'no\t%s (no scripts/records.py)\n' "$candidate"
+      continue
+    fi
+    printf 'ok\t%s\t%s\n' "$key" "$candidate"
+  done
+}
+
 records_root() {
+  # $1: the station's --records-root value, or empty. $2: the station's plugin root, or empty.
+  # Prints the root, or the missing-dependency line on stderr and returns 3.
   looked=""
-  for candidate in "$1" "${RECORDS_ROOT-}" "${2:+$2/../records}"; do
+  for candidate in "$1" "${RECORDS_ROOT-}"; do
     [ -n "$candidate" ] || continue
     looked="${looked:+$looked, }$candidate"
     if [ -f "$candidate/scripts/records.py" ]; then
@@ -101,12 +322,71 @@ records_root() {
       return 0
     fi
   done
+  if [ -n "$2" ]; then
+    beside="$2/../records"                                                      # route 3a
+    looked="${looked:+$looked, }$beside"
+    if [ -f "$beside/scripts/records.py" ]; then
+      printf '%s\n' "$beside"
+      return 0
+    fi
+    base="$2/../../records"                                                     # route 3b
+    if [ -d "$base" ]; then
+      looked="${looked:+$looked, }$base"
+      scanned=$(records_scan_installed "$base")
+    else
+      looked="${looked:+$looked, }$base (no such directory)"
+      scanned=""
+    fi
+    accepted=""
+    tab=$(printf '\t')
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      case "$line" in
+        ok*) accepted="$accepted${line#ok$tab}
+" ;;
+        *) looked="$looked, ${line#no$tab}" ;;
+      esac
+    done <<SCANNED
+$scanned
+SCANNED
+    if [ -n "$accepted" ]; then
+      best=$(printf '%s' "$accepted" | LC_ALL=C sort | tail -n 1)
+      printf '%s\n' "${best#*$tab}"
+      return 0
+    fi
+  fi
   printf 'missing dependency: records component (looked in: %s)\n' "${looked:-nothing given}" >&2
+  return 3
+}
+
+records_confirm() {
+  # $1: the picked root. $2: the interface versions this station knows, space separated, in the
+  # order to print. Prints the version, or one refusal line on stderr and returns 3.
+  if identity=$("${RECORDS_PYTHON:-/usr/bin/python3}" "$1/scripts/records.py" \
+                component-identity 2>/dev/null); then
+    version=$(printf '%s' "$identity" | "${RECORDS_PYTHON:-/usr/bin/python3}" -c 'import json, sys
+sys.stdout.write(str(json.load(sys.stdin)["interface_version"]))
+' 2>/dev/null)
+  else
+    version=""
+  fi
+  if [ -z "$version" ]; then
+    printf 'missing dependency: records component at %s did not report an interface version\n' \
+      "$1" >&2
+    return 3
+  fi
+  for known in $2; do
+    [ "$known" = "$version" ] || continue
+    printf '%s\n' "$version"
+    return 0
+  done
+  printf 'missing dependency: records component at %s speaks interface version %s, not %s\n' \
+    "$1" "$version" "$(printf '%s' "$2" | sed 's/  */, /g')" >&2
   return 3
 }
 ```
 
-### What the third route measures, on the two harnesses E12 covers
+### What routes 3a and 3b measure, on the two harnesses E12 covers
 
 Measured on 2026-09-20 by installing this component and a minimal station plugin from one local
 marketplace into an isolated home under a temporary directory (never a live home, no login, no
@@ -120,13 +400,21 @@ network):
 Both harnesses keep plugins from one marketplace beside each other BY NAME, and then put each
 plugin's root one directory further down, under its own version, with several versions of one
 plugin able to sit there at once. `<station plugin root>/../records` is therefore
-`…/<marketplace>/<station>/records`, which exists on neither harness. The third route as the
-contract writes it finds nothing on an installed plugin; it resolves correctly on a checkout,
-where `plugins/<station>/../records` is `plugins/records`.
+`…/<marketplace>/<station>/records`, which exists on neither harness. Route 3a resolves on a
+checkout, where `plugins/<station>/../records` is `plugins/records`, and on neither harness;
+route 3b is `…/<marketplace>/records/<V>/`, which is the installed shape on both.
 
-How the third route should read on an installed plugin is open with the control room. No fourth
-lookup was invented for it. Until it is ruled, a station reaches an installed component through
-the first or second route.
+Two further facts about the live Claude Code cache, and they are why the rule matches labels and
+never reads the clock: the cache keeps several folders per plugin, most of them named like commit
+hashes rather than versions, and one of those folders was newer by modification time than the
+live one.
+
+The owner ruled, on 2026-09-20, "look in both places": the contract's third route becomes routes
+3a and 3b in that order, 3a unchanged and 3b as this section's snippets build it, with the
+confirm step on whatever root any route returns. Amendment A6 carries the ruling.
+
+Not measured: whether Codex leaves stale folders. The rule does not depend on it — it names no
+harness, reads no modification time, and accepts a folder only on its own label.
 
 ## Running a command
 
