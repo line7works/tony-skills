@@ -21,6 +21,25 @@ qualified `recheck-v2` pilot onto it is the first task of E13, and `plugins/rech
 byte-identical through E12 on purpose. Running the importer over real repositories is a separate
 job, one repository at a time, after E12 closes.
 
+## Build record
+
+Facts about how this component was built, in order. Review results are not recorded here.
+
+| Step | What it was | Tests after it |
+|---|---|---|
+| Slice 1 | the event log core: schemas, the chain, the lock, finding IDs, source identity, the clearing rule | 131 |
+| Slice 2 | derived state, render parity with the pilot, the tolerant reader, the legacy importer, mirrors, survey | 318 |
+| Slice 3 | `interface.md`, the manifest, the CLI's final shape, install probes in isolated homes | 376 |
+| Amendment A6 | the installed-shape lookup in both resolver snippets | 430 |
+| Outside review | one reviewer on another model family, in a copy with no `.git`, no answer key, no held-out requests | |
+| Fix round | the review's fifteen findings and the owner's ruling on its three questions (A9), each test first | 515 |
+| Verification | the same reviewer, once, on the closed list | |
+| Second fix round | the four items verification left (A10), closed on the control room's own check | 536 |
+
+Every count is the full suite under `/usr/bin/python3`, and the same count through `uv run`.
+Rulings and amendments A1 to A10, the builders' standing readings, and the items carried to E13
+are in section 16 of the lane contract, `docs/plans/2026-09-20-records-e12.md`.
+
 ## Layout
 
 ```text

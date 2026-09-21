@@ -203,6 +203,15 @@
       ]
     },
     {
+      "name": "records",
+      "source": "./plugins/records",
+      "description": "The loop's records component: an append-only event log per ledger document, versioned finding IDs, source identifiers and the clearing rule, derived state, conflicting-write detection, and a tolerant importer for legacy punch-list records. No skill and no model trigger: stations reach it through one CLI (scripts/records.py) and write against references/interface.md, version 1.",
+      "tags": [
+        "build-loop",
+        "records"
+      ]
+    },
+    {
       "name": "recheck-v2",
       "source": "./plugins/recheck-v2",
       "description": "Pilot of the skills v2 core: closed-checklist recheck of a build doc's punch list, one portable body plus a small adapter per harness (Claude Code, Codex, OpenCode). The -v2 suffix stays while v1 recheck is installed; both are renamed at cutover.",
