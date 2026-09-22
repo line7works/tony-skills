@@ -270,11 +270,29 @@ The comparison is taken before the levelling precisely so CR-1's own import even
 it flags. A run that already opened its transaction settles instead, because its own append is
 what moved the head.
 
-**The two halves disagreeing.** A `card_set` for the slice that sits after every `card_observed`
-for it, whose `after` differs from the document's `Status:` line, is a split state: the event
-landed and the line did not. The next `preflight` reports it as a STOP (`card_drift`) naming both
-values, and repairs neither. A `Status:` line moved AFTER the last `card_set` is a legitimate hand
-edit, the importer absorbs it as a `card_observed` at a higher seq, and it is not drift.
+**The two halves disagreeing.** Drift is a comparison of facts, not of import timing:
+
+    drift  iff  the last `card_set` for the slice has `after` != the document's card
+                AND the document's card == that same event's `before`
+
+That is exactly the state a run leaves when its event landed and its document write did not: the
+line still reads what it read before the move. The next `preflight` reports it as a STOP
+(`card_drift`) naming both values, and repairs neither. A `Status:` line holding any OTHER value
+is a hand edit, which the importer absorbs as an observation and this core reports as the card
+where it stands. A hand edit BACK to the value the move started from is indistinguishable by
+content from a write that never landed, and is reported as drift for that reason: the document
+contradicts the last recorded move, so a person decides.
+
+This was an ordering test until E13 amendment A4 (see section 18), and A4 broke it. The rule is
+stated above in terms the component's import policy cannot move.
+
+**What the component recognises as already recorded** (amendment A4). A `Status:` line whose text
+equals the last card a native event holds for its slice, and every record line `render` produced,
+are recognised by their bytes: the levelling pass counts them under `records.levelled.
+native_rendered` and imports nothing for them. So a second run on one document levels with
+`would_import` 0, and a review block signoff rendered into the document is not re-imported. The
+field is null when the component does not publish it, which is how one from before A4 reads;
+absent is not the same as zero and this core reports which it saw.
 
 ## 11. Authorized writes
 
@@ -428,5 +446,16 @@ it for this lane on 2026-09-22:
   from the source set; the control room ruled in the first check round that it stays IN the set
   and is sanctioned for the scope comparison instead, so what changed is visible and the loop's
   own write is acknowledged rather than hidden. Recorded as question 3 of the builder's report.
+- **The card-drift rule was coupled to the component's import policy, and A4 exposed it.** Until
+  amendment A4 this core read drift as an ordering — the last `card_set` sitting after every
+  `card_observed` for the slice — which was true only because the pre-A4 importer compared a
+  `Status:` line with the last `card_observed` and so appended nothing in the split state. A4 made
+  it compare with the last CARD the log holds, so it appends an observation there, and the
+  ordering read the document as the newer truth and passed a split state that had been caught
+  before. The rule was rewritten as the content comparison of section 10 and the regression is in
+  `scripts/tests/test_a4_second_run.py::DriftDetectionStillWorks`. Worth recording as a shape:
+  a check that reads WHEN another component writes, rather than WHAT the two sides say, is a check
+  that component's next improvement can silently switch off.
+
 - **`adapters/` and `setups/` are slice 3's.** The seam is left open: nothing in `SKILL.md` or in
   the scripts is harness-specific, and no adapter is named.

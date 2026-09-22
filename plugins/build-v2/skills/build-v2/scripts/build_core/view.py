@@ -20,17 +20,29 @@ importer signal: a `legacy_unparsed` above zero in the dry run, exit 5 (ambiguou
 refusal. A line the importer silently drops is the known open point.
 
 **The card, both directions.** A `card_set` this station appended and a `Status:` line the
-document carries can disagree, and the disagreement is reported, never repaired. The test is an
-ordering one, because the importer records every hand edit of a `Status:` line as a
-`card_observed`:
+document carries can disagree, and the disagreement is reported, never repaired. The test is a
+comparison of FACTS, not of import timing:
 
-    the last card_set for the slice sits AFTER every card_observed for it, and its `after`
-    differs from the document's current `Status:` text
+    drift  iff  the last `card_set` for the slice has `after` != the document's card
+                AND the document's card == that same event's `before`
 
-That is the state a run leaves when its card event landed and its document write did not. The
-other direction — a `Status:` line moved after the last `card_set` — is a legitimate hand edit
-(a v1 station, or a person), the importer absorbs it as a `card_observed` at a higher seq, and
-it is not drift.
+That is exactly the state a run leaves when its card event landed and its document write did
+not: the line still reads what it read before the move. A `Status:` line holding any OTHER value
+is a hand edit — a person, or a v1 station — and the importer absorbs it as an observation; this
+core reports the card where it stands and does not stop.
+
+**Why it is not an ordering test.** It was one until E13 amendment A4, and A4 broke it. The rule
+read "the last `card_set` sits after every `card_observed` for the slice", which held only
+because the pre-A4 importer compared a `Status:` line with the last `card_observed` and so
+appended nothing in the split state. A4 made the importer compare with the last CARD the log
+holds — the `card_set` — so it now appends a `card_observed` ABOVE the event, and the ordering
+read the document as the newer truth and passed the split. The lesson is this core's to learn:
+the rule was coupled to WHEN the component appends an observation rather than to what the two
+halves actually say. The comparison above needs no import to have happened at all, so it cannot
+be moved by a change in that policy.
+
+A run whose halves both landed is recognised by the component itself: A4 counts the `Status:`
+line it wrote under `native_rendered` and imports nothing for it.
 """
 from . import records_link as link
 from .records_client import RecordsRefusal
@@ -68,6 +80,16 @@ def _unparsed(report):
     return int((report.get("counts") or {}).get("legacy_unparsed") or 0)
 
 
+def _native_rendered(report):
+    """How many lines the component recognised as ones the log already records natively (A4).
+
+    None when the component does not publish the field, which is how a pre-A4 component reads:
+    absent is not the same as zero, and this core says which it saw.
+    """
+    value = report.get("native_rendered")
+    return None if value is None else int(value)
+
+
 def level(client, workspace, document, dry_run):
     """Level the log with the document, and stop on any importer signal.
 
@@ -93,14 +115,16 @@ def level(client, workspace, document, dry_run):
                     "lines_read": preview.get("lines_read")})
     if dry_run:
         return {"ran": True, "dry_run": True, "would_import": preview.get("would_import"),
-                "imported": 0, "unparsed": unparsed}
+                "imported": 0, "unparsed": unparsed,
+                "native_rendered": _native_rendered(preview)}
     try:
         report = client.import_legacy(workspace, document, dry_run=False)
     except RecordsRefusal as refusal:
         raise stop_for(refusal, "the log could not be levelled with %s before its records were read"
                        % document)
     return {"ran": True, "dry_run": False, "would_import": preview.get("would_import"),
-            "imported": report.get("imported"), "unparsed": _unparsed(report)}
+            "imported": report.get("imported"), "unparsed": _unparsed(report),
+            "native_rendered": _native_rendered(report)}
 
 
 # ---- the reads ---------------------------------------------------------------------------------
@@ -205,21 +229,23 @@ def card_drift(rows, slice_name, document_text_card):
     last `card_set` would compare a value with itself and could never find the split state this
     check exists for.
     """
-    last_set, last_observed = last_card_events(rows, slice_name)
+    last_set, _last_observed = last_card_events(rows, slice_name)
     if last_set is None:
         return None
-    if last_observed is not None and last_observed["seq"] > last_set["seq"]:
-        return None
-    recorded = last_set["event"].get("after")
+    event = last_set["event"]
+    recorded, before = event.get("after"), event.get("before")
     if recorded == document_text_card:
-        return None
+        return None                      # both halves landed
+    if document_text_card != before:
+        return None                      # a hand edit to some other value: an observation, not drift
     return {"log": recorded, "document": document_text_card, "seq": last_set["seq"],
-            "run_id": (last_set["event"].get("actor") or {}).get("run_id")}
+            "run_id": (event.get("actor") or {}).get("run_id")}
 
 
 def drift_sentence(slice_name, document, drift):
-    return ("the log of %s records the card of slice %s at %r (event seq %d, written by run %r) "
-            "and the document's `Status:` line reads %r. One of the two halves of a card move did "
-            "not land. This core reports the disagreement and repairs neither: read both, decide "
-            "which is right, and run again."
+    return ("the log of %s records the card of slice %s moving to %r (event seq %d, written by "
+            "run %r) and the document's `Status:` line still reads %r, which is the value that "
+            "move started from. The event landed and the document write did not, so one of the "
+            "two halves of a card move is missing. This core reports the disagreement and repairs "
+            "neither: read both, decide which is right, and run again."
             % (document, slice_name, drift["log"], drift["seq"], drift["run_id"], drift["document"]))

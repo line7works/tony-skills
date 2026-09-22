@@ -21,7 +21,7 @@
       "exit_code": 1,
       "name": "unit",
       "named_by_slice": true,
-      "output": "FAIL: test_spin (test_widget.SpinTest)\nAssertionError: 0 != 1\n\nRan 1 test\n\nFAILED (failures=1)",
+      "output": "FAIL: test_spin\nAssertionError: 0 != 1\n\nRan 1 test\n\nFAILED (failures=1)",
       "recorded_result": null,
       "rerun_refused": null,
       "result": "failing",
@@ -63,11 +63,12 @@
   "receipt": null,
   "records": {
     "appended": [],
-    "head_after": "ed0adf6e1a59d94f28e7ea938696202150a733ab32bdbecf538c7b4f638dbd89",
-    "head_before": "ed0adf6e1a59d94f28e7ea938696202150a733ab32bdbecf538c7b4f638dbd89",
+    "head_after": "559d882be882a8dd9fcbeb644b8a20cab37e6a8eb598673cd06e8c9a6ea88647",
+    "head_before": "559d882be882a8dd9fcbeb644b8a20cab37e6a8eb598673cd06e8c9a6ea88647",
     "levelled": {
       "dry_run": false,
       "imported": 0,
+      "native_rendered": 0,
       "ran": true,
       "unparsed": 0,
       "would_import": 0
@@ -78,7 +79,7 @@
       "MAJOR": 0,
       "MINOR": 0
     },
-    "pinned_head": "ed0adf6e1a59d94f28e7ea938696202150a733ab32bdbecf538c7b4f638dbd89",
+    "pinned_head": "559d882be882a8dd9fcbeb644b8a20cab37e6a8eb598673cd06e8c9a6ea88647",
     "refused": null,
     "wrote": true
   },
@@ -117,7 +118,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "e0f8abc739ba90b1f2cbbc10e9da829be1a32c341382d28f66452d39556eb747"
+      "sha256_after": "ac8dfb689f257fa08717a123de8c27da6ebb13babc5dbbcdedd73cd9a08c1041"
     },
     {
       "kind": "run_artifact",
@@ -132,7 +133,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/answer.json",
-      "sha256_after": "91d309afc691ad628b91eed6db9a6733c4deb0f72a1f632c7c9912a4459a4412"
+      "sha256_after": "89efe496ea5a67f259319b6c65da2bf782e63d154be32c0a1d13327721a70475"
     },
     {
       "kind": "run_artifact",

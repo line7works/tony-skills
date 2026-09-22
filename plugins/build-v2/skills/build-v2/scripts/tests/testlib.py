@@ -333,3 +333,34 @@ ANSWER = {
 def uv_python():
     """The argv that runs a script with the pinned dependency, when uv is on PATH."""
     return ["uv", "run", "--quiet", "--python", "/usr/bin/python3", "--with", "jsonschema==4.25.1"]
+
+
+PRE_A4_COMMIT = "a80cdd04432c5f4662ed415d6a72d54f9b8208c1"
+
+
+def pre_a4_component(parent):
+    """The records component as it stood BEFORE E13 amendment A4, extracted read-only.
+
+    `git archive` writes nothing to the repository and touches no index, so this is a read of
+    history, not a checkout. It exists so the A4 tests can be run RED against the component that
+    did not have the fix: before A4 a second build run on one document re-imported the `Status:`
+    line this station had written as a fresh `card_observed`, and `native_rendered` did not
+    exist at all. Returns the component root, or None when the history is not reachable.
+    """
+    root = os.path.join(parent, "records-pre-a4")
+    if os.path.isdir(root):
+        return root
+    os.makedirs(root, exist_ok=True)
+    try:
+        archive = subprocess.run(["git", "archive", PRE_A4_COMMIT, "plugins/records"],
+                                 cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if archive.returncode != 0:
+            return None
+        extract = subprocess.run(["tar", "-x", "-C", root], input=archive.stdout,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if extract.returncode != 0:
+            return None
+    except OSError:
+        return None
+    inner = os.path.join(root, "plugins", "records")
+    return inner if os.path.isfile(os.path.join(inner, "scripts", "records.py")) else None

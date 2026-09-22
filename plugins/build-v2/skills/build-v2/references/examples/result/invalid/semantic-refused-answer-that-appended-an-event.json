@@ -70,11 +70,12 @@
         "seq": 4
       }
     ],
-    "head_after": "ad94f212e8d6dacde070486cb7b7ebd5ff9fe4d355ed5b3430dcd73d02cd2e7d",
-    "head_before": "ad94f212e8d6dacde070486cb7b7ebd5ff9fe4d355ed5b3430dcd73d02cd2e7d",
+    "head_after": "579a1bd70fb4e1d9f1b3cf481fdfdcbb9c1da8f509574ea3d1d1f90997f239e2",
+    "head_before": "579a1bd70fb4e1d9f1b3cf481fdfdcbb9c1da8f509574ea3d1d1f90997f239e2",
     "levelled": {
       "dry_run": false,
       "imported": 0,
+      "native_rendered": 0,
       "ran": true,
       "unparsed": 0,
       "would_import": 0
@@ -85,7 +86,7 @@
       "MAJOR": 0,
       "MINOR": 0
     },
-    "pinned_head": "ad94f212e8d6dacde070486cb7b7ebd5ff9fe4d355ed5b3430dcd73d02cd2e7d",
+    "pinned_head": "579a1bd70fb4e1d9f1b3cf481fdfdcbb9c1da8f509574ea3d1d1f90997f239e2",
     "refused": null,
     "wrote": true
   },
@@ -124,7 +125,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "d8a7f021909f64aeb4492eaebbb68b3223ab983c43e30d562867e474cbed7e6f"
+      "sha256_after": "ec488a8221c09e6373deef5c3be59d5fd17e8f99197bfa4e82d32105573b0815"
     },
     {
       "kind": "run_artifact",

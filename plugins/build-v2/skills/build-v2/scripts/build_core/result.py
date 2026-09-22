@@ -53,7 +53,8 @@ where it was, so neither ever reaches a result. `scripts/tests/test_schemas.py` 
 and the result schema's published list to each other in both directions."""
 
 EMPTY_RECORDS = {"log": None, "levelled": {"ran": False, "dry_run": False, "would_import": None,
-                                           "imported": None, "unparsed": None},
+                                           "imported": None, "unparsed": None,
+                                           "native_rendered": None},
                  "head_before": None, "head_after": None, "appended": [], "wrote": False,
                  "refused": None}
 

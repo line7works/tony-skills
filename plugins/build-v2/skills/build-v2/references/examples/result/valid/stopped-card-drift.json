@@ -39,18 +39,19 @@
   "next": "done",
   "out_of_scope": [],
   "plugin_version": "0.1.0",
-  "reason": "the log of docs/plans/2026-09-20-widget.md records the card of slice A at 'built' (event seq 4, written by run 'run-1') and the document's `Status:` line reads 'not started'. One of the two halves of a card move did not land. This core reports the disagreement and repairs neither: read both, decide which is right, and run again.",
+  "reason": "the log of docs/plans/2026-09-20-widget.md records the card of slice A moving to 'built' (event seq 4, written by run 'run-1') and the document's `Status:` line still reads 'not started', which is the value that move started from. The event landed and the document write did not, so one of the two halves of a card move is missing. This core reports the disagreement and repairs neither: read both, decide which is right, and run again.",
   "receipt": null,
   "records": {
     "appended": [],
-    "head_after": "85efef9df39837656f0d7184c84199f424056a08f7a3392638b9193d990dff96",
-    "head_before": "85efef9df39837656f0d7184c84199f424056a08f7a3392638b9193d990dff96",
+    "head_after": "544df167098ee9fa875ce362cd432fec14f9f25678c53bef640ea1fbeab8c473",
+    "head_before": "544df167098ee9fa875ce362cd432fec14f9f25678c53bef640ea1fbeab8c473",
     "levelled": {
       "dry_run": false,
-      "imported": 0,
+      "imported": 3,
+      "native_rendered": 0,
       "ran": true,
       "unparsed": 0,
-      "would_import": 0
+      "would_import": 3
     },
     "log": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
     "open": {
@@ -58,9 +59,9 @@
       "MAJOR": 0,
       "MINOR": 0
     },
-    "pinned_head": "85efef9df39837656f0d7184c84199f424056a08f7a3392638b9193d990dff96",
+    "pinned_head": "544df167098ee9fa875ce362cd432fec14f9f25678c53bef640ea1fbeab8c473",
     "refused": null,
-    "wrote": false
+    "wrote": true
   },
   "refusal_reason": null,
   "report_only": false,
@@ -87,7 +88,7 @@
     "untracked": []
   },
   "status": "stopped",
-  "stop_reason": "the log of docs/plans/2026-09-20-widget.md records the card of slice A at 'built' (event seq 4, written by run 'run-1') and the document's `Status:` line reads 'not started'. One of the two halves of a card move did not land. This core reports the disagreement and repairs neither: read both, decide which is right, and run again.",
+  "stop_reason": "the log of docs/plans/2026-09-20-widget.md records the card of slice A moving to 'built' (event seq 4, written by run 'run-1') and the document's `Status:` line still reads 'not started', which is the value that move started from. The event landed and the document write did not, so one of the two halves of a card move is missing. This core reports the disagreement and repairs neither: read both, decide which is right, and run again.",
   "stop_tag": "card_drift",
   "terminal_status": "stop",
   "workspace": "/home/builder/work/signpost",
@@ -95,7 +96,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "6f04cb39dd2a8193d13b6d942e81bcb04cbede2f57f50d960efd563d5d50dc7a"
+      "sha256_after": "856f1065803c37e6cbf35dab8e347edbff6f24ebec4f3e017471aabb6f3404fd"
     },
     {
       "kind": "run_artifact",
@@ -103,10 +104,15 @@
       "sha256_after": "4225d46a028ba86dacc4fd31063f708ab0fa8a0dd8d3eb394f6f75ef982a46e2"
     },
     {
+      "kind": "records_log",
+      "path": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+      "sha256_after": null
+    },
+    {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/result.json",
       "sha256_after": null
     }
   ],
-  "wrote_nothing": true
+  "wrote_nothing": false
 }

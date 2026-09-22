@@ -116,12 +116,31 @@ and additionally reads every shipped file to fail when a comparison against a ca
 
 ## Known open points
 
+- **The importer recognises this station's own lines** (E13 amendment A4). A `Status:` line this
+  core wrote, and every record line `render` produced, are recognised by their bytes as lines the
+  log already records natively: the component counts them under `native_rendered` and imports
+  nothing for them. So a second build run on one document levels with `would_import` 0, reads the
+  card where the first run left it, and no phantom `card_observed` is appended for the line the
+  first run wrote. `scripts/tests/test_a4_second_run.py` measures that against the real component
+  and, for the same scenario, RED against the component as it stood before A4 (extracted read-only
+  from history), so "A4 is what makes this pass" is a measurement rather than a claim.
+
+  A4 also moved a seam of this core, and the move is worth knowing about: the card-drift rule used
+  to be an ORDERING test (the last `card_set` sitting after every `card_observed` for the slice),
+  which held only because the pre-A4 importer appended nothing in the split state. A4 made it
+  append an observation there, and the ordering read the document as the newer truth and passed a
+  split. The rule is now a comparison of facts — drift iff the last `card_set`'s `after` differs
+  from the document's card AND the document's card is that event's `before` — which needs no
+  import to have happened and cannot be moved by a change in that policy.
+
 - **The importer reads a hand-written record more loosely than this core does** (E13 amendment A3
   item 3; the slice 1 builder's Findings 2 and 3, which the owner left open). This core stops on
   ANY importer signal — a `legacy_unparsed` above zero in the dry run, exit 5, or any refusal —
   rather than trusting the importer's silence, and it neither carries a second record grammar nor
-  changes `plugins/records/`. **A line the importer silently drops is a known open point**: this
-  core cannot see it, and the full review of the step weighs it.
+  changes `plugins/records/`. **A line the importer silently drops is still a known open point**:
+  A4 narrowed what reaches the importer as news, but it did not close Finding 2 — a hand-written
+  line the importer drops in silence is still invisible to this core, and the full review of the
+  step weighs it.
 - **The ledger document is sanctioned, not excluded.** It stays in the source set, so a reader
   sees that the build doc changed, and the scope comparison passes over it because the loop writes
   into it by design; `source_set.sanctioned` publishes it with its reason.

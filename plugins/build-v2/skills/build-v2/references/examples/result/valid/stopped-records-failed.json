@@ -63,11 +63,12 @@
   "receipt": "/tmp/build-c-20260922-7f3c/receipt.json",
   "records": {
     "appended": [],
-    "head_after": "c14cd76d3dc3a28dc09b5bc6d3c3066d6c0ca6e19e0fdd3098c1ba3392e7db48",
-    "head_before": "c14cd76d3dc3a28dc09b5bc6d3c3066d6c0ca6e19e0fdd3098c1ba3392e7db48",
+    "head_after": "72c4766d3e39f8fdb414194d73541bd38b23f3dc8ffc7a005eedb9425444dcb4",
+    "head_before": "72c4766d3e39f8fdb414194d73541bd38b23f3dc8ffc7a005eedb9425444dcb4",
     "levelled": {
       "dry_run": false,
       "imported": 0,
+      "native_rendered": 0,
       "ran": true,
       "unparsed": 0,
       "would_import": 0
@@ -78,7 +79,7 @@
       "MAJOR": 0,
       "MINOR": 0
     },
-    "pinned_head": "c14cd76d3dc3a28dc09b5bc6d3c3066d6c0ca6e19e0fdd3098c1ba3392e7db48",
+    "pinned_head": "72c4766d3e39f8fdb414194d73541bd38b23f3dc8ffc7a005eedb9425444dcb4",
     "refused": {
       "error": "unsupported",
       "exit_code": 1,
@@ -121,7 +122,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "609cb90ea00605590871015e113cd2adc7b1b837b81e4c32d85d007524749a48"
+      "sha256_after": "7a8219bc8f944a719d2da62dd532bffd949aa571d26d69e4cc1ff34a451b4dfd"
     },
     {
       "kind": "run_artifact",

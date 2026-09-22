@@ -41,6 +41,7 @@
     "levelled": {
       "dry_run": false,
       "imported": null,
+      "native_rendered": null,
       "ran": false,
       "unparsed": null,
       "would_import": null
@@ -65,7 +66,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "10035a69fce7b818caee243087383c73937ec9a0b4dde62cb3d83ad1372619cc"
+      "sha256_after": "7d92b846441ecf9bb25f4243e5036629415be4739d956514641ada154813c5d6"
     },
     {
       "kind": "run_artifact",

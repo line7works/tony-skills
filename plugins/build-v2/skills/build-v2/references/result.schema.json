@@ -498,6 +498,13 @@
                 "null"
               ],
               "description": "`legacy_unparsed` events the pass produced; above zero is a stop (amendment A3 item 3)"
+            },
+            "native_rendered": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "how many lines of the document the component recognised as ones the log already records natively and imported nothing for (E13 amendment A4): the record lines `render` wrote, and a `Status:` line whose text equals the last card a native event holds for its slice. Null when the component does not publish the field, which is how one from before A4 reads; absent is not the same as zero and this core reports which it saw."
             }
           }
         },

@@ -68,11 +68,12 @@
         "seq": 4
       }
     ],
-    "head_after": "43f42e127a8bef323c31b7b45bf9007d8d75c02037fbfca7a81c18ff94914a5d",
-    "head_before": "626f9884edea63bcf5ebf6ec9d5c855a15aa270d50b1127b1dadd19fc96c46bc",
+    "head_after": "3bf1cfeb806f3e9b7f348fbb41badf2ccc17ff78480548323a2e977695bc94a4",
+    "head_before": "0f5ef18fcf4c28c1cdda500929e49554c245db3b96422195a2d50cc74bb473ea",
     "levelled": {
       "dry_run": false,
       "imported": 0,
+      "native_rendered": 0,
       "ran": true,
       "unparsed": 0,
       "would_import": 0
@@ -83,7 +84,7 @@
       "MAJOR": 0,
       "MINOR": 0
     },
-    "pinned_head": "626f9884edea63bcf5ebf6ec9d5c855a15aa270d50b1127b1dadd19fc96c46bc",
+    "pinned_head": "0f5ef18fcf4c28c1cdda500929e49554c245db3b96422195a2d50cc74bb473ea",
     "refused": null,
     "wrote": true
   },
@@ -122,7 +123,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "f750a1c59249de2953c011a9a13cde2edbe655bab6e9e92739f4f1d2d889388c"
+      "sha256_after": "a7cdfda8cc412264d9c2969eec1584beadd970ca91c5eee62c6bdeaada51d792"
     },
     {
       "kind": "run_artifact",

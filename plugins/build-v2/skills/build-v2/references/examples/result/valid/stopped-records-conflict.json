@@ -63,11 +63,12 @@
   "receipt": "/tmp/build-c-20260922-7f3c/receipt.json",
   "records": {
     "appended": [],
-    "head_after": "cddf4f75f3ded917e4824021f31ecd481758c3b036f00661db3b1d800578de8f",
-    "head_before": "cddf4f75f3ded917e4824021f31ecd481758c3b036f00661db3b1d800578de8f",
+    "head_after": "17f6c63368a0e21e4ced117529537ea91b70bb090bc5f3fc6d170fdd132f48b9",
+    "head_before": "17f6c63368a0e21e4ced117529537ea91b70bb090bc5f3fc6d170fdd132f48b9",
     "levelled": {
       "dry_run": false,
       "imported": 0,
+      "native_rendered": 0,
       "ran": true,
       "unparsed": 0,
       "would_import": 0
@@ -78,7 +79,7 @@
       "MAJOR": 0,
       "MINOR": 0
     },
-    "pinned_head": "cddf4f75f3ded917e4824021f31ecd481758c3b036f00661db3b1d800578de8f",
+    "pinned_head": "17f6c63368a0e21e4ced117529537ea91b70bb090bc5f3fc6d170fdd132f48b9",
     "refused": {
       "error": "conflict",
       "exit_code": 7,
@@ -121,7 +122,7 @@
     {
       "kind": "run_artifact",
       "path": "/tmp/build-c-20260922-7f3c/input.json",
-      "sha256_after": "96554e57164955f2df062b1c6b7204d6dc0056b7c4fd08c4d237598e1a147943"
+      "sha256_after": "30e86d3ccf14366cc103c47abfeb424fb6167b7189d54f40a110d97613481d53"
     },
     {
       "kind": "run_artifact",
