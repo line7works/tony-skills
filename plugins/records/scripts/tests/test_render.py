@@ -52,8 +52,11 @@ class RenderFromAnImportedLog(unittest.TestCase):
         self.assertEqual(len(body["grants"]), 2)
         self.assertTrue(body["grants"][0].startswith("- " + legacy.WAIVED))
         self.assertTrue(body["grants"][1].startswith("- " + legacy.REOPENED))
-        self.assertEqual(body["text"], body["block"] + "".join(body["grants"]))
-        self.assertEqual(body["rendered"], 3)
+        # E13 amendment A4: the review block this run's `finding_raised` events produce comes
+        # first, then the recheck block, then the grants.
+        self.assertEqual(body["text"],
+                         body["review"] + body["block"] + "".join(body["grants"]))
+        self.assertEqual(body["rendered"], 3 + len(body["review_lines"]))
 
     def test_a_waiver_without_words_keeps_the_legacy_grant_shape(self):
         waiver = self.render()["grants"][0]
@@ -67,8 +70,9 @@ class RenderFromAnImportedLog(unittest.TestCase):
     def test_every_event_the_run_wrote_that_carries_no_line_is_named_as_skipped(self):
         body = self.render()
         kinds = sorted(set(row["kind"] for row in body["skipped"]))
-        self.assertEqual(kinds, ["card_observed", "finding_raised", "import_finished",
-                                 "import_started", "log_opened"])
+        # `finding_raised` left this list in E13 amendment A4: it renders a review block now.
+        self.assertEqual(kinds, ["card_observed", "import_finished", "import_started",
+                                 "log_opened"])
 
     def test_a_run_nobody_wrote_renders_nothing_rather_than_failing(self):
         body = self.render("a-run-that-never-happened")

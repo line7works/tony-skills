@@ -21,6 +21,7 @@
     "lines_classified": 1,
     "lines_read": 23,
     "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
+    "native_rendered": 0,
     "ok": true,
     "opened_log": false,
     "orphan_temporaries": [],
