@@ -1107,3 +1107,25 @@ what moves is when the transaction is over, what the baseline is, and which refu
 - **Section 10, a landed append is never reported as a bare validation stop.** Once the
   transaction's append has landed, a result that fails validation is `recording_failed` with the
   half named and the receipt path beside it, not `stopped` with a bare validation message.
+
+Revision 8, 2026-09-22, E13 CR-F3 (a finding a station raised natively). Nothing recheck decides
+moves (ruling E13-1): the same findings are open, the same checklist is selected, the same card
+moves, and no stop rule is added. What moves is how the record provenance of a natively raised
+finding is addressed.
+
+- **Section 3 and Appendix A, the address of a native raise.** A `finding_raised` or `defect_raised`
+  the log holds as a native event (a station's own `append`: signoff after records amendment A4, or
+  this skill's fix-introduced defect of an earlier run) carries no document line of its own. Its
+  address is where the records component's rendering of that event sits in the document. The core
+  asks the component, through the CLI and nothing else, `render --run-id <the event's
+  actor.run_id>` once per run for each reading of the records, and takes from it the exact line the
+  event renders to and the heading its block carries (`### <date> — review: Slice X` for a review
+  finding, the recheck heading for a defect line). It then finds that line, byte for byte, among the
+  document's own record lines — the first one no other event already answers for — and addresses
+  the finding at that line, under the heading it actually sits under: the document's heading wins.
+  A raise whose line the document does not carry (the station's append landed and its document
+  write did not, or the line sits outside any record heading or inside a fence) keeps the heading
+  the component's render carries and no line; no existing rule stops on that, so the checklist item
+  validates and the run proceeds, and the block the run places does not depend on where the raise
+  sits. Before this revision such a finding was addressed with no heading, and a `start` on it
+  refused its own checkpoint (`scope.checklist[i].record.heading '' should be non-empty`).
