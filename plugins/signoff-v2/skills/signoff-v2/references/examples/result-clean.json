@@ -1,0 +1,259 @@
+{
+  "answer_refused": false,
+  "card": {
+    "after": "signed off",
+    "before": "built",
+    "moved": true,
+    "slice": "E"
+  },
+  "checks_executed": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 0,
+      "name": "field-widths",
+      "output": "field-widths: name field is 12 characters"
+    },
+    {
+      "command": "PYTHONPATH=src /usr/bin/python3 -m signpost.render 'Fork|Ridge' 4",
+      "exit_code": 0,
+      "name": "render a name holding the separator",
+      "output": "Fork\\|Ridge  |4\ncolumns=2"
+    },
+    {
+      "command": "PYTHONPATH=src /usr/bin/python3 -c 'from signpost.render import WIDTH,row; n=row(\"Fork Ridge\",4).split(\"|\")[0]; print(len(n), WIDTH)'",
+      "exit_code": 0,
+      "name": "measure the rendered name field",
+      "output": "12 12"
+    }
+  ],
+  "clean_review_checks_listed": true,
+  "findings": [],
+  "interface_version": 1,
+  "notes": [],
+  "packet": {
+    "base_commit": "4da03a31bae133b3718b490fb8124c29e6428869",
+    "base_ref": "base",
+    "counts": {
+      "delivered": 4,
+      "files": 4,
+      "withheld": 0
+    },
+    "files": [
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/columns.py",
+        "sha256": "16fad26b0d331e6c7ed1f89196bf5f9278523c5963d38501b3cccfa8dcbf7fc1",
+        "size": 625,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/pad.py",
+        "sha256": "dcfff14c63b7c78c6b1536bccc85a43ba93bb823f986a05d8f9c0df1f0f030d5",
+        "size": 162,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/render.py",
+        "sha256": "d50b326da961b7bac0d9e42fe5a9c8f2f236eab53ae956b8bac01059f6172228",
+        "size": 539,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "tests/test_columns.py",
+        "sha256": "2c335dede2b4b51dfdf8eb8b2cee71d399e9ac55c066a8d9e22210d228b3baaf",
+        "size": 599,
+        "withheld_reason": null
+      }
+    ],
+    "head": "3007e1dc932c718174b538e72b59aa7303e00621",
+    "ledger_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "material_path": "/tmp/signoff-e-20260921-clean/packet/material.md",
+    "material_sha256": "ada07fdec3a97e5534edb8e556895f94f7cabb81124d066d58718a39da67b990",
+    "slice": "E",
+    "withheld": [
+      {
+        "reason": "a card is the builder's account of its own work, never evidence that a criterion passed",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Status:"
+      },
+      {
+        "reason": "a section of the ledger document that is the builder's or the inspector's working record, never spec and never evidence",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Punch list"
+      }
+    ]
+  },
+  "plugin_version": "0.1.0",
+  "problems": [],
+  "protocol_version": 1,
+  "receipt": "/tmp/signoff-e-20260921-clean/receipt.json",
+  "records": {
+    "appended": [
+      {
+        "kinds": [
+          "card_set"
+        ],
+        "name": "card",
+        "recovered": false,
+        "seqs": [
+          4
+        ]
+      }
+    ],
+    "head_after": "1be16648231a69291b0f4a8150d4a049bda7f9fb7630d15918bcf564dafb0088",
+    "head_before": "0000000000000000000000000000000000000000000000000000000000000000",
+    "log": "docs/records/docs__plans__2026-09-18-signpost-rows.events.jsonl",
+    "mirrors": {
+      "component_version": "0.1.0",
+      "counts": {
+        "absent": 1,
+        "differs": 0,
+        "only_in_mirror": 0,
+        "same": 0
+      },
+      "doc": "docs/plans/2026-09-18-signpost-rows.md",
+      "interface_version": 1,
+      "mirrors": [
+        {
+          "blocks": [],
+          "doc_sha256": "c3fe52986a049032191b08d621838370d3b2ec41d6b6570531d85aeb180f21ae",
+          "only_in_mirror": [],
+          "slice": "E",
+          "state": "absent",
+          "verdict_doc": "docs/reviews/2026-09-21-signoff-signpost-rows-e.md"
+        }
+      ],
+      "ok": true,
+      "slices": [
+        "E"
+      ],
+      "spec": {
+        "doc": "docs/plans/2026-09-18-signpost-rows.md",
+        "slice": null
+      }
+    },
+    "records_error": null,
+    "records_exit": null
+  },
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-e-20260921-clean/receipt.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-e-20260921-clean/receipt.log"
+    },
+    {
+      "kind": "verdict_doc",
+      "path": "/workspace/signpost/docs/reviews/2026-09-21-signoff-signpost-rows-e.md"
+    },
+    {
+      "kind": "card",
+      "path": "/workspace/signpost/docs/plans/2026-09-18-signpost-rows.md"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-e-20260921-clean/result.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-e-20260921-clean/chat.md"
+    }
+  ],
+  "recovered": [],
+  "refusal_reason": null,
+  "report_only": false,
+  "review_sheet": {
+    "bar": [],
+    "is_sheet": false,
+    "path": "REVIEW.md",
+    "repo_checks": [],
+    "skip_reasons": {},
+    "skipped": [],
+    "state": "absent",
+    "unknown_passes": []
+  },
+  "reviewer": {
+    "independent": true,
+    "model": null,
+    "route": "readers:claude-session",
+    "session_id": "sess-review-1"
+  },
+  "run": {
+    "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "caller": "direct",
+    "depth": "LEAN",
+    "harness": "claude-code",
+    "lenses": [
+      "spec",
+      "correctness",
+      "seams",
+      "accessibility",
+      "data-safety"
+    ],
+    "route": "readers:claude-session",
+    "run_date": "2026-09-21",
+    "run_dir": "/tmp/signoff-e-20260921-clean",
+    "run_id": "signoff-e-20260921-clean",
+    "slice": "E",
+    "workspace": "/workspace/signpost"
+  },
+  "source_identity": {
+    "commit": "3007e1dc932c718174b538e72b59aa7303e00621",
+    "dirty": false,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [],
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_set": {
+    "base_commit": "4da03a31bae133b3718b490fb8124c29e6428869",
+    "base_ref": "base",
+    "changed": [],
+    "committed": [
+      "src/signpost/columns.py",
+      "src/signpost/pad.py",
+      "src/signpost/render.py",
+      "tests/test_columns.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "3007e1dc932c718174b538e72b59aa7303e00621",
+    "untracked": []
+  },
+  "status": "completed",
+  "stop_reason": null,
+  "stop_reason_code": null,
+  "terminal_status": "completion",
+  "verdict": "signed off",
+  "verdict_doc": "docs/reviews/2026-09-21-signoff-signpost-rows-e.md",
+  "verdict_matches_mapping": true,
+  "verdict_recorded": true,
+  "verdict_stated": "signed off",
+  "writes_none": false
+}

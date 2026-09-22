@@ -1,0 +1,191 @@
+{
+  "answer_refused": true,
+  "card": null,
+  "checks_executed": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 0,
+      "name": "field-widths",
+      "output": "field-widths: name field is 12 characters"
+    },
+    {
+      "command": "PYTHONPATH=src /usr/bin/python3 -m signpost.render 'Fork|Ridge' 4",
+      "exit_code": 0,
+      "name": "render a name holding the separator",
+      "output": "Fork\\|Ridge  |4\ncolumns=2"
+    },
+    {
+      "command": "PYTHONPATH=src /usr/bin/python3 -c 'from signpost.columns import count,join; print(count(join([\"Fork\\\\\\\\\", 4])))'",
+      "exit_code": 0,
+      "name": "join a field holding the escape character",
+      "output": "2"
+    }
+  ],
+  "clean_review_checks_listed": true,
+  "findings": [],
+  "interface_version": 1,
+  "notes": [],
+  "packet": {
+    "base_commit": "9fc2221d499e1d8b0bce55aa5ab6b3ebbb745555",
+    "base_ref": "base",
+    "counts": {
+      "delivered": 3,
+      "files": 3,
+      "withheld": 0
+    },
+    "files": [
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/columns.py",
+        "sha256": "16fad26b0d331e6c7ed1f89196bf5f9278523c5963d38501b3cccfa8dcbf7fc1",
+        "size": 625,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/render.py",
+        "sha256": "316a35cebbe516fe93fdea7d6ba153683a08b1e2a5716c4f8557ac1908a49f78",
+        "size": 511,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "tests/test_columns.py",
+        "sha256": "2c335dede2b4b51dfdf8eb8b2cee71d399e9ac55c066a8d9e22210d228b3baaf",
+        "size": 599,
+        "withheld_reason": null
+      }
+    ],
+    "head": "7cf41166adf72af1abb9c7d335fca3816fe66313",
+    "ledger_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "material_path": "/tmp/signoff-f-20260921-indep/packet/material.md",
+    "material_sha256": "9e3456396f34b9d2b5cc196342e720f200784f15abbe592f85cd78843ecd2b50",
+    "slice": "F",
+    "withheld": [
+      {
+        "reason": "a card is the builder's account of its own work, never evidence that a criterion passed",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Status:"
+      },
+      {
+        "reason": "a section of the ledger document that is the builder's or the inspector's working record, never spec and never evidence",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Punch list"
+      }
+    ]
+  },
+  "plugin_version": "0.1.0",
+  "problems": [
+    {
+      "why": "the reviewing session is the session that built the slice (sess-build-1); the context that wrote the code never grades it"
+    }
+  ],
+  "protocol_version": 1,
+  "receipt": null,
+  "records": null,
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-f-20260921-indep/answer.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-f-20260921-indep/state.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-f-20260921-indep/result.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-f-20260921-indep/chat.md"
+    }
+  ],
+  "recovered": [],
+  "refusal_reason": "independence",
+  "report_only": false,
+  "review_sheet": {
+    "bar": [],
+    "is_sheet": false,
+    "path": "REVIEW.md",
+    "repo_checks": [],
+    "skip_reasons": {},
+    "skipped": [],
+    "state": "absent",
+    "unknown_passes": []
+  },
+  "reviewer": {
+    "independent": false,
+    "model": null,
+    "route": "readers:claude-session",
+    "session_id": "sess-build-1"
+  },
+  "run": {
+    "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "caller": "direct",
+    "depth": "LEAN",
+    "harness": "claude-code",
+    "lenses": [
+      "spec",
+      "correctness",
+      "seams",
+      "accessibility",
+      "data-safety"
+    ],
+    "route": "readers:claude-session",
+    "run_date": "2026-09-21",
+    "run_dir": "/tmp/signoff-f-20260921-indep",
+    "run_id": "signoff-f-20260921-indep",
+    "slice": "F",
+    "workspace": "/workspace/signpost"
+  },
+  "source_identity": {
+    "commit": "7cf41166adf72af1abb9c7d335fca3816fe66313",
+    "dirty": false,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [],
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_set": {
+    "base_commit": "9fc2221d499e1d8b0bce55aa5ab6b3ebbb745555",
+    "base_ref": "base",
+    "changed": [],
+    "committed": [
+      "src/signpost/columns.py",
+      "src/signpost/render.py",
+      "tests/test_columns.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "7cf41166adf72af1abb9c7d335fca3816fe66313",
+    "untracked": []
+  },
+  "status": "stopped",
+  "stop_reason": "the reviewing session is the session that built the slice (sess-build-1); the context that wrote the code never grades it",
+  "stop_reason_code": "independence",
+  "terminal_status": "stop",
+  "verdict": null,
+  "verdict_doc": null,
+  "verdict_matches_mapping": null,
+  "verdict_recorded": false,
+  "verdict_stated": "signed off",
+  "writes_none": true
+}

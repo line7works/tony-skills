@@ -1,0 +1,310 @@
+# Signoff v2 core: behavioral contract
+
+What this station does, what it may write, what stops it, and the words it uses for a state.
+Written for E13 slice 2 of the skills v2 rebuild, against the stations E13 lane contract
+(section 10) and its amendment A3. Where this document and that contract differ, the contract is
+the authority and this document is the defect.
+
+Nothing this station DECIDES is new (ruling E13-1, owner pick P5): v1 signoff's steps, its
+severity-to-verdict mapping, its independence rule, its stop rules and its `REVIEW.md` sheet are
+carried over. What is new is that the deterministic half is a script rather than prose, and that
+the findings are kept in the records component instead of in Markdown alone.
+
+Contents: 1 Job · 2 Inputs · 3 The source set · 4 The review packet · 5 Independence ·
+6 Evidence · 7 Severity to verdict · 8 Authorized writes and the recording transaction ·
+9 Failure handling · 10 Report-only · 11 Status vocabulary · 12 What is out of scope.
+
+## 1. Job
+
+A slice has been built. Before it counts as done, an engineer **who did not write it** inspects
+it against its spec and either signs the card or writes a punch list.
+
+The reviewer judges the code. This station never does (ruling E13-4): it validates the input,
+computes the source set and the identities, builds the review packet, withholds what the
+reviewer must not see, talks to the records component, applies the severity mapping, validates
+the result and renders. What the reviewer concluded is recorded with who concluded it.
+
+**The anti-rubber-stamp rule, kept from v1.** A review that returns no findings must state what
+it tried to break and failed to break. Here that is mechanical: a result with no raised findings
+carries a non-empty list of the checks the reviewer executed, each with its output, and an empty
+list is a validation failure of the result rather than a clean verdict.
+
+**The model floor, kept from v1.** Reviewers run at Opus-class or better. The floor is passed to
+`readers` as `floor: opus` with this session's own model id as `session_model`; it is never
+assumed and never silently upgraded. A floor this run cannot establish is a stop, not a default.
+
+## 2. Inputs: one validated structure
+
+One input per run, `references/input.schema.json`, every object closed. Accepted and rejected
+examples sit in `references/examples/`, and `scripts/validate-examples.py` checks both sets and
+drops each required field of every accepted example in turn.
+
+Caller values are bound as data — argv items and files — and never pasted into shell text.
+
+Three checks a schema cannot make are path rules, and each is a named stop rather than a schema
+error: the run directory is outside the workspace; the workspace exists; the build doc stays
+inside the workspace after symbolic links are resolved.
+
+The phases, in order, each one CLI command:
+
+| Phase | Does | Writes |
+|---|---|---|
+| `check-input` | schema, path rules, the component's reachability | the run directory, `input.json`, `state.json` |
+| `scope` | the source set, the identity, the packet; levels the log as a dry run | `packet/` |
+| `request` | the `readers` request and the reviewer's mandate | `request.json`, `readers/mandate.md` |
+| `record-answer` | the evidence rules, raised against note, the severity mapping | `answer.json` |
+| `record` | the recording transaction | `receipt.json`, then the project's records |
+
+`identity` and `skill-identity` return their objects and write nothing.
+
+## 3. The source set
+
+The set a review covers is computed from git, never guessed, and it is three lists plus the base
+(lane contract section 8):
+
+- **committed**: `git diff --name-only <base>..HEAD`
+- **changed**: `git diff HEAD --name-only`, staged and unstaged alike
+- **untracked**: `git ls-files --others --exclude-standard`
+
+The base arrives in the input as a ref. A set that cannot be computed — no git work tree root, a
+base that does not resolve — is a stop with a reason, never an empty set.
+
+`docs/records/` is excluded from all three (CR-3), exactly as the records component excludes it
+from the identity: the component's log describes the source and is never part of it. Ignored
+files are in no list.
+
+A defect can hide in any of the three. A file committed since the base but clean in the work
+tree appears in no `git diff` against HEAD; an untracked file appears in no diff at all. Both are
+in the set, and both are in the packet.
+
+## 4. The review packet
+
+Built by script under the run directory. Two things come out of it, and the difference between
+them is the independence rule.
+
+**The file list** carries every path of the source set, once, with the list or lists it came
+from, its size and its hash. A path in the set and absent from the list is a stop
+(`packet_incomplete`): the run never reviews less than the set and never quietly says it did.
+Nothing leaves the list by being called notes.
+
+**The delivered material** is the bytes the reviewer reads: the source under review and the
+slice's specification, and nothing from the builder's conversation. What is withheld is still
+NAMED in the material, so the reviewer knows a file exists and was kept back rather than
+believing it was never there.
+
+## 5. Independence
+
+The session that wrote the code cannot review it. It knows what the code MEANT to do and will
+read intent into what is on disk.
+
+- The request the reviewer receives carries the packet and the mandate and nothing from the
+  builder's conversation: no reasoning, no justification, no account of what was built and why.
+- When the input marks the reviewing session as the building session, no reviewer is summoned —
+  no mandate and no request file are written — and the answer is REFUSED
+  (`refusal_reason: independence`). No verdict is recorded.
+- The run records which route ran and the model it observed, never one it assumed.
+
+**What counts as the builder's conversation**, three rules, all declarations rather than guesses
+about prose:
+
+1. any path the input's `review.builder_conversation` list names;
+2. any path whose file name declares itself the builder's notes — the name, lower-cased with
+   separators and the extension removed, holding `buildernotes` or `buildnotes` — or whose first
+   Markdown heading says so;
+3. inside the ledger document, the sections v1 Step 2 names as the builder's and the inspector's
+   working records (`## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`,
+   `## Punch list`) and every `Status:` line.
+
+An untracked builder-notes file is IN the source set and IN the packet's file list, and its
+CONTENT is withheld — both, in that order (amendment A3 item 2). Builder claims planted in the
+ledger document's own sections are the same: listed, withheld, never evidence. A finding or a
+verdict that quotes withheld text is refused (`refusal_reason: independence`).
+
+Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
+
+**Until v2 signoff is itself qualified**, the plan's words hold: initial inspection in this
+program still comes from the independent temporary reviewer.
+
+## 6. Evidence
+
+A finding is recorded only with all four of a location inside the source set, a claim, a
+scenario, and an evidence kind (`executed`, `read`, `reasoned`).
+
+- One missing REFUSES THE WHOLE ANSWER (`refusal_reason: answer_invalid`): nothing is raised, no
+  verdict is recorded, and the answer is neither acted on nor repaired into shape.
+- A finding whose location is outside the source set is kept as a NOTE, not raised, and so is
+  anything the reviewer itself kept in `notes_kept`. A note never moves the verdict.
+- A plausible defect that the reviewer's own execution disproved stays where the reviewer put
+  it. This station records what the reviewer concluded; it does not re-judge the code.
+
+## 7. Severity to verdict
+
+v1's table, unchanged (pick P5), over the RAISED findings:
+
+| Severity | Meaning | Effect |
+|---|---|---|
+| BLOCKER | spec requirement unmet, or a defect that loses data, corrupts state, or breaks a shipped feature | cannot sign |
+| MAJOR | real defect with a concrete failure path, contained and fixable in place | conditional |
+| MINOR | rough edge, missing guard, thin test | punch list only |
+
+- **signed off** — no BLOCKER and no MAJOR.
+- **signed off with conditions** — no BLOCKER; the named MAJORs are fixed before the next slice.
+- **rejected** — one or more BLOCKERs.
+
+The mapping is arithmetic over severities, not a judgement about code, so the core computes it.
+What the reviewer stated is recorded beside it and a disagreement is reported, never silently
+resolved. A refused run records no verdict at all.
+
+The card carries the same three words into the slice's `Status:` line.
+
+## 8. Authorized writes and the recording transaction
+
+The complete list. Anything else is a boundary violation the result must report.
+
+1. The run's own artifacts under the run directory: `input.json`, `state.json`, `packet/`,
+   `readers/mandate.md`, `request.json`, `answer.json`, `receipt.json`, `receipt.log`,
+   `result.json`, `chat.md`.
+2. The document's log under `docs/records/`, through the component's CLI and never directly.
+3. One review block at the ledger home's tail in the build doc (Appendix A), never editing an
+   earlier entry.
+4. A copy of that block in the slice's verdict doc under `docs/reviews/`.
+5. The slice's `Status:` line.
+
+**Signoff never clears a finding.** No `disposition`, no `waived`, no `reopened`. Recheck does.
+
+The order, and what each step promises:
+
+- **Level the log (CR-1).** v1 signoff writes findings into the Markdown by hand, so a document
+  can be ahead of its log. Every phase that reads the document's records runs `import-legacy`
+  first — a dry run for a read-only command, the real thing before a write. The importer reads
+  hand-written records more loosely than the pilot's stop rule and refuses an orphan clearing
+  line, so this station stops on ANY signal it gives: `legacy_unparsed` above zero in a dry run,
+  exit 5, or any refusal (amendment A3 item 3). It does not build a second record grammar.
+- **Pin the head.** The head the run read its state against is pinned at `scope`. At `record`,
+  BEFORE this run's own levelling, the log must still be at that head; an event another writer
+  appended between the two phases is a named conflict before any append. The comparison is taken
+  before the levelling precisely so CR-1's own import events are never the ones it flags.
+- **Append the findings**, one batch, `--expect-head` the pinned head, all or none: one
+  `finding_raised` per raised finding, carrying the slice, the location, the claim, the
+  scenario, `raised_by`, and `actor` with this station's name and the run id.
+
+  **`raised_by` carries the slice and nothing else.** It is interface version 1's field and
+  Appendix A's fifth one — "which slice's review found it" — and neither moves in this step
+  (E13-1). WHO reviewed is recorded elsewhere and joined to the event by the run id:
+  `actor.run_id` names this run, and this run's result (`reviewer`: the session, the route, the
+  model observed, whether it was independent) and its verdict doc name the reviewer. That is
+  ruling E13-4's "recorded with who concluded it" without the record line carrying a field it
+  was never meant to carry.
+- **Render, place, mirror.** The block is the COMPONENT's rendering (ruling E13-3): since
+  amendment A4, `render --run-id R` returns `review`, one block per slice this run's
+  `finding_raised` events name, each a heading `### <date> — review: <slice>` and one line
+  `- <severity> · <file:line> · (<claim>) · <scenario> · <whose review found it>` per finding.
+  The station places those bytes at the ledger home's tail and post-processes nothing — the
+  claim's parentheses are the component's reading of Appendix A, and the form its own reader
+  round-trips. Signoff clears nothing, so the run can produce no recheck block and no grant; a
+  render that carries one is a stop (`unexpected_rendering`), because placing `review` alone
+  would silently drop it. A copy goes to the verdict doc, and `mirrors` checks the copy. A
+  difference is reported, never repaired.
+
+  **The document levels again afterwards.** `import-legacy` recognises a line byte-equal to what
+  `render` produced for a native event the log already holds, counts it under `native_rendered`,
+  and never re-imports it — a `Status:` line matching the last card included. So a second
+  signoff on one document, and a `/recheck` after one, level the log without a stop.
+- **The card**: the `Status:` line, then a `card_set` append under the same receipt pattern, made
+  only for a status step that actually landed.
+
+**The receipt.** Each append records its INTENT (the log, the head read at plan time) before the
+call and its OUTCOME after. A refusal the component RETURNED is persisted as `refused` — the
+exit code, the error, the component's own sentence — before the named stop is delivered, and no
+later pass retries it. An unknown outcome (a crash with no answer) is settled against the head
+the receipt already names, never against a head read afresh: a head that moved since is a
+conflict, not permission. A read that failed is a stop, never an empty set.
+
+**The transaction guard** pins each target's hash beside the source identity before the first
+append, so an edit that reaches a target before the document plan exists cannot become that
+plan's baseline. Document steps are classified against the VIRTUAL state of each target, so two
+steps writing one file do not collide; a hash matching neither the planned state nor the virtual
+one is an outside edit and stops the run.
+
+**Rerunning `record`** settles the run rather than repeating it: completed steps are never
+redone, the append is never made twice, and a committed receipt reports the same completion.
+
+## 9. Failure handling
+
+| Condition | Status | Reason code |
+|---|---|---|
+| The input fails its schema | — (exit 4 before a run exists) | — |
+| A path rule fails | `stopped` | `path_rules` |
+| The base does not resolve, or the workspace is not a git work tree root | `stopped` | `base_unresolvable`, `not_a_git_work_tree` |
+| The workspace has an initialized submodule | `stopped` | `submodules` |
+| A path of the source set does not reach the packet | `stopped` | `packet_incomplete` |
+| The reviewing session is the building session | `stopped` | `independence` |
+| A finding or verdict quotes withheld builder conversation | `stopped` | `independence` |
+| A finding is missing one of its four required parts | `stopped` | `answer_invalid` |
+| A clean review lists no executed check | `stopped` | `answer_invalid` |
+| The importer reports an unparsed record line | `stopped` | `legacy_unparsed` |
+| The importer refuses an ambiguous document (component exit 5) | `missing_input` | `importer_ambiguous` |
+| Another writer moved the log between two phases | `recording_failed` | `log_moved_between_phases` |
+| An append the component refused (exit 4 or 7) | `recording_failed` | `append_refused` |
+| An append the component refused (exit 6) | `stale_source` | `append_refused` |
+| A target changed outside this run | `recording_failed` | `outside_edit` |
+| A records call this station could not read | `recording_failed` | `log_unreadable`, `history_unreadable` |
+| A required reference cannot be loaded | `stopped` | `reference_unavailable` |
+
+Every stop is a terminal status with a reason, written to the run directory, and writes nothing
+to the project's records. A refused records call carries the component's own sentence, its exit
+code and its error.
+
+## 10. Report-only
+
+`report_only` is a field of the input. In that mode the run writes nothing to the workspace and
+nothing to the log, and its result says so: `report_only` true, `writes_none` true,
+`verdict_recorded` false, and every listed write inside the run directory.
+
+It is not a dry run that skips the work. The source set is computed, the packet is built, the
+answer is adjudicated, and the findings the reviewer raised are named as raised in the result.
+Only the recording is withheld.
+
+## 11. Status vocabulary
+
+`completed` · `stopped` · `recording_failed` · `missing_input` · `stale_source`. Every result
+carries one, and `terminal_status` reduces it to the neutral pair `completion` or `stop`.
+
+A verdict is recorded only by a `completed` run that is not report-only.
+
+## 12. What is out of scope
+
+- **Fixing.** This station is report-only in the v1 sense: it inspects and records, and the user
+  decides what to repair after seeing the verdict. The two files it writes are records, not
+  repairs.
+- **Clearing a finding.** That is `/recheck`'s.
+- **The adapters and the installs.** Slice 3 builds `adapters/` and `setups/`; the seam is left
+  open here.
+- **Writing `REVIEW.md`.** The core READS the sheet (section 13) and never writes it. v1 writes
+  it on exactly two occasions — the first-run render on the user's word, and the second-failure
+  append with its `verified:` stamp — and both need a judgement this core does not hold: the
+  user's word in the first case, a comparison across earlier verdict docs in the second.
+  `SKILL.md` carries both as the executor's steps, so the policy is unchanged and the writes
+  stay where a person can authorize them.
+
+## 13. The repo's inspection sheet
+
+v1 Step 1's sheet test is mechanical, so the core does it. A file named `REVIEW.md` is the sheet
+only when it carries the template's three headings (`## Passes`, `## Severity bar`,
+`## Repo-specific checks`) AND every `## Passes` line reads `- <name>: on` or `- <name>: off`
+with an optional parenthetical. Anything else under that name — a human review guide, a sheet
+missing a heading, a pass with no on/off — is NOT the sheet: the run uses this skill's defaults
+and reports `present but not the kit sheet`. The file is the repo's and is never overwritten.
+
+- A pass name outside the four the template carries (`correctness`, `security`, `accessibility`,
+  `data-safety`) is reported as unknown and ignored.
+- A pass marked `off` never runs, even at DEEP, and the result names the skip with its reason.
+- `spec` and `seams` are the loop's own and are not passes: nothing in the sheet turns them off.
+- The sheet's bar is this repo's Meaning column for DEFECTS. Two things stand under any bar: a
+  spec requirement unmet is a BLOCKER, and the three verdicts do not change.
+- The sheet's passes, bar and repo-specific checks are the REPO's standing sheet, not the
+  author's rationale, so unlike the builder's conversation they travel to the reviewer in the
+  mandate.
+
+The result carries what the sheet said under `review_sheet`, and the chat block prints v1's
+`REVIEW.md:` line from it.

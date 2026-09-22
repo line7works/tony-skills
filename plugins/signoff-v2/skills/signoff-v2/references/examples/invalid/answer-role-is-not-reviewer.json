@@ -1,0 +1,37 @@
+{
+  "case": "S1-02-untracked-defect",
+  "checks_executed": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 1,
+      "name": "field-widths",
+      "output": "field-widths: name field is 11 characters, not 12"
+    },
+    {
+      "command": "sed -n '1,6p' src/signpost/pad.py",
+      "exit_code": 0,
+      "name": "read src/signpost/pad.py",
+      "output": "def pad(text, width):\n    return text.ljust(width - 1)"
+    }
+  ],
+  "findings": [
+    {
+      "claim": "pad() returns width - 1 characters, so the rendered name field is one character short",
+      "evidence_kind": "executed",
+      "location": "src/signpost/pad.py:6",
+      "scenario": "run sh checks/field-widths.sh from the workspace root; it prints `field-widths: name field is 11 characters, not 12` and exits 1",
+      "severity": "MAJOR"
+    }
+  ],
+  "notes": "The field-widths check was run from the workspace root and the padder was read.",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "sess-review-1",
+  "verdict": "signed off with conditions"
+}

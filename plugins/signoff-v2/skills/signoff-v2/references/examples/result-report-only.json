@@ -1,0 +1,171 @@
+{
+  "answer_refused": false,
+  "card": null,
+  "checks_executed": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 1,
+      "name": "field-widths",
+      "output": "field-widths: name field is 11 characters, not 12"
+    },
+    {
+      "command": "sed -n '1,6p' src/signpost/pad.py",
+      "exit_code": 0,
+      "name": "read src/signpost/pad.py",
+      "output": "def pad(text, width):\n    return text.ljust(width - 1)"
+    }
+  ],
+  "clean_review_checks_listed": true,
+  "findings": [
+    {
+      "claim": "pad() returns width - 1 characters, so the rendered name field is one character short",
+      "evidence_kind": "executed",
+      "file": "src/signpost/pad.py",
+      "line": 6,
+      "location": "src/signpost/pad.py:6",
+      "scenario": "run sh checks/field-widths.sh from the workspace root; it prints `field-widths: name field is 11 characters, not 12` and exits 1",
+      "severity": "MAJOR"
+    }
+  ],
+  "interface_version": 1,
+  "notes": [],
+  "packet": {
+    "base_commit": "9e6c21d87d7405649b8181de811200e50a9f3c39",
+    "base_ref": "base",
+    "counts": {
+      "delivered": 2,
+      "files": 2,
+      "withheld": 0
+    },
+    "files": [
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/pad.py",
+        "sha256": "f8cae0fe1a3cb0f66fd718a391938d065ac6927de6f503798971ee490bedc9cb",
+        "size": 171,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/render.py",
+        "sha256": "d50b326da961b7bac0d9e42fe5a9c8f2f236eab53ae956b8bac01059f6172228",
+        "size": 539,
+        "withheld_reason": null
+      }
+    ],
+    "head": "21701497e01c8e097652bac2ec400185600eb5d3",
+    "ledger_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "material_path": "/tmp/signoff-d-20260921-report/packet/material.md",
+    "material_sha256": "84fe58684bddbbded4b4d487ad81ace27922e0067d05ee120487793b293744d9",
+    "slice": "D",
+    "withheld": [
+      {
+        "reason": "a card is the builder's account of its own work, never evidence that a criterion passed",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Status:"
+      },
+      {
+        "reason": "a section of the ledger document that is the builder's or the inspector's working record, never spec and never evidence",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Punch list"
+      }
+    ]
+  },
+  "plugin_version": "0.1.0",
+  "problems": [],
+  "protocol_version": 1,
+  "receipt": null,
+  "records": null,
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-d-20260921-report/result.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-d-20260921-report/chat.md"
+    }
+  ],
+  "recovered": [],
+  "refusal_reason": null,
+  "report_only": true,
+  "review_sheet": {
+    "bar": [],
+    "is_sheet": false,
+    "path": "REVIEW.md",
+    "repo_checks": [],
+    "skip_reasons": {},
+    "skipped": [],
+    "state": "absent",
+    "unknown_passes": []
+  },
+  "reviewer": {
+    "independent": true,
+    "model": null,
+    "route": "readers:claude-session",
+    "session_id": "sess-review-1"
+  },
+  "run": {
+    "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "caller": "direct",
+    "depth": "LEAN",
+    "harness": "claude-code",
+    "lenses": [
+      "spec",
+      "correctness",
+      "seams",
+      "accessibility",
+      "data-safety"
+    ],
+    "route": "readers:claude-session",
+    "run_date": "2026-09-21",
+    "run_dir": "/tmp/signoff-d-20260921-report",
+    "run_id": "signoff-d-20260921-report",
+    "slice": "D",
+    "workspace": "/workspace/signpost"
+  },
+  "source_identity": {
+    "commit": "21701497e01c8e097652bac2ec400185600eb5d3",
+    "dirty": false,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [],
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_set": {
+    "base_commit": "9e6c21d87d7405649b8181de811200e50a9f3c39",
+    "base_ref": "base",
+    "changed": [],
+    "committed": [
+      "src/signpost/pad.py",
+      "src/signpost/render.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "21701497e01c8e097652bac2ec400185600eb5d3",
+    "untracked": []
+  },
+  "status": "completed",
+  "stop_reason": null,
+  "stop_reason_code": null,
+  "terminal_status": "completion",
+  "verdict": null,
+  "verdict_doc": null,
+  "verdict_matches_mapping": true,
+  "verdict_recorded": false,
+  "verdict_stated": "signed off with conditions",
+  "writes_none": true
+}

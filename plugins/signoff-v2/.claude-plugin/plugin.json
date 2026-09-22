@@ -1,0 +1,11 @@
+{
+  "name": "signoff-v2",
+  "description": "Independent adversarial review of freshly built work, ending in a signed verdict. A senior engineer who did not write the code inspects a slice against its spec: the review packet is built by script from the committed, changed and untracked source set, the reviewer is summoned through readers with the packet and the mandate and nothing from the builder's conversation, evidence-backed findings are raised into the records component, and the verdict is mirrored under docs/reviews/. Portable core of the skills v2 rebuild; the -v2 suffix stays while v1 signoff is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}
