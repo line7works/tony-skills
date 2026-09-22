@@ -1,0 +1,39 @@
+{
+  "invocation": {
+    "caller": "direct",
+    "harness": "claude-code",
+    "mode": "headless",
+    "model": {
+      "floor_class": "opus",
+      "floor_met": true,
+      "id": "claude-opus-5"
+    },
+    "run_date": "2026-09-21",
+    "run_dir": "/tmp/signoff-d-20260921-report",
+    "run_id": "signoff-d-20260921-report",
+    "sessions": {
+      "building": "sess-build-1",
+      "reviewing": "sess-review-1"
+    }
+  },
+  "protocol_version": 1,
+  "report_only": true,
+  "review": {
+    "builder_conversation": [],
+    "depth": "LEAN",
+    "lenses": [
+      "spec",
+      "correctness",
+      "seams",
+      "accessibility",
+      "data-safety"
+    ],
+    "route": "readers:claude-session"
+  },
+  "target": {
+    "base": "base",
+    "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "slice": "D"
+  },
+  "workspace": "/workspace/signpost"
+}

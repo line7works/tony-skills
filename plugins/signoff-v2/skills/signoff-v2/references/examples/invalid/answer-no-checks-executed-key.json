@@ -1,0 +1,17 @@
+{
+  "case": "S1-02-untracked-defect",
+  "findings": [
+    {
+      "claim": "pad() returns width - 1 characters, so the rendered name field is one character short",
+      "evidence_kind": "executed",
+      "location": "src/signpost/pad.py:6",
+      "scenario": "run sh checks/field-widths.sh from the workspace root; it prints `field-widths: name field is 11 characters, not 12` and exits 1",
+      "severity": "MAJOR"
+    }
+  ],
+  "notes": "The field-widths check was run from the workspace root and the padder was read.",
+  "role": "reviewer",
+  "seeded_answer": 1,
+  "session_id": "sess-review-1",
+  "verdict": "signed off with conditions"
+}
