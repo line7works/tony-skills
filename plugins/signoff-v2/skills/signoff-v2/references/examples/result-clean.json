@@ -123,7 +123,7 @@
         ]
       }
     ],
-    "head_after": "59d7e89f2957b1924008d5d587cf21e952692f69ecdcc88941f2d0250e61ab04",
+    "head_after": "1be16648231a69291b0f4a8150d4a049bda7f9fb7630d15918bcf564dafb0088",
     "head_before": "0000000000000000000000000000000000000000000000000000000000000000",
     "log": "docs/records/docs__plans__2026-09-18-signpost-rows.events.jsonl",
     "mirrors": {
@@ -139,7 +139,7 @@
       "mirrors": [
         {
           "blocks": [],
-          "doc_sha256": "ddc38ef5c9ad004e300f37c54acf25ea9aada7c39077569225226171d2396114",
+          "doc_sha256": "c3fe52986a049032191b08d621838370d3b2ec41d6b6570531d85aeb180f21ae",
           "only_in_mirror": [],
           "slice": "E",
           "state": "absent",

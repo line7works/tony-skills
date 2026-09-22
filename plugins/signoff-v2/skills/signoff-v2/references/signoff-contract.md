@@ -195,8 +195,21 @@ The order, and what each step promises:
   model observed, whether it was independent) and its verdict doc name the reviewer. That is
   ruling E13-4's "recorded with who concluded it" without the record line carrying a field it
   was never meant to carry.
-- **Render, place, mirror.** The block goes at the ledger home's tail, a copy goes to the verdict
-  doc, and `mirrors` checks the copy. A difference is reported, never repaired.
+- **Render, place, mirror.** The block is the COMPONENT's rendering (ruling E13-3): since
+  amendment A4, `render --run-id R` returns `review`, one block per slice this run's
+  `finding_raised` events name, each a heading `### <date> — review: <slice>` and one line
+  `- <severity> · <file:line> · (<claim>) · <scenario> · <whose review found it>` per finding.
+  The station places those bytes at the ledger home's tail and post-processes nothing — the
+  claim's parentheses are the component's reading of Appendix A, and the form its own reader
+  round-trips. Signoff clears nothing, so the run can produce no recheck block and no grant; a
+  render that carries one is a stop (`unexpected_rendering`), because placing `review` alone
+  would silently drop it. A copy goes to the verdict doc, and `mirrors` checks the copy. A
+  difference is reported, never repaired.
+
+  **The document levels again afterwards.** `import-legacy` recognises a line byte-equal to what
+  `render` produced for a native event the log already holds, counts it under `native_rendered`,
+  and never re-imports it — a `Status:` line matching the last card included. So a second
+  signoff on one document, and a `/recheck` after one, level the log without a stop.
 - **The card**: the `Status:` line, then a `card_set` append under the same receipt pattern, made
   only for a status step that actually landed.
 

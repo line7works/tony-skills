@@ -75,44 +75,41 @@ reads either, and a test holds that line.
 | the recording transaction and its kill windows | `tests/test_records_transaction.py` |
 | the A7a interface | `tests/test_cli.py` |
 | the repo's inspection sheet | `tests/test_sheet.py` |
-| the block's bytes, and the component's reader over them | `tests/test_block_form.py` |
+| the block is the component's rendering, and the document levels again | `tests/test_block_form.py` |
+| a second signoff on one document, and a `/recheck` after one | `tests/test_after_signoff.py` |
 | every seeded case, at contract level | `tests/test_seeded_cases.py` |
 
 ## Known open points
 
-Three things are open, none of them hidden by the code. All three sit on the records component's
-boundary, which is frozen for this step (ruling E13-2), so this plugin reports them and changes
-nothing there.
+Two, both reported rather than hidden, both on a boundary this plugin may not write.
 
-1. **The review block is rendered here, not by the component.** At records interface version 1,
-   `records.py render` renders a block only when the run holds a `disposition` or a
-   `defect_raised`; a `finding_raised` comes back under `skipped`, and the only block heading it
-   writes is Appendix A's RECHECK heading. Measured: one valid `finding_raised` appended, then
-   `render --run-id` returns `{"block": "", "rendered": 0, "skipped": [{"kind":
-   "finding_raised", "seq": 0}]}`. So `signoff_core/blocks.py` renders the review block from
-   this run's events as the component stored them, in Appendix A's grammar. It is marked
-   PROVISIONAL and is one function wide. Two tests hold it: the line form against Appendix A,
-   and a round trip proving the component's own importer reads the written block back as the
-   same facts, with the same computed finding identity.
-
-2. **A document this station wrote cannot be levelled again.** After a run appends a native
-   `finding_raised` AND writes its Appendix A line into the build doc, the next `import-legacy`
-   over that document stops with exit 5: *"this line and line 0 compute the same finding id
-   ... (section 7: two raises in one document)"*. The importer's idempotence is keyed on the
-   `origin` records of lines IT imported — a second pass over an unchanged document reports
-   `previously_imported: N, imported: 0, ok: true` — and not on the finding identities the log
-   already holds natively. A line this station wrote was never imported, so the tracking never
-   covers it. The behaviour is loud and writes nothing, and
-   `tests/test_block_form.py` pins the observed exit 5 by name so the day the seam is fixed the
-   test says so.
-
-3. **The importer does not name an unparsed line** (the slice 1 builder's Finding 2, left open
+1. **The importer does not name an unparsed line** (the slice 1 builder's Finding 2, left open
    by the owner). Amendment A3 item 3 has this station stop on any importer signal, naming the
    line. Interface version 1 publishes `counts.legacy_unparsed` as a COUNT with no line number
    in any field, and the lines exist only as `legacy_unparsed` EVENTS, which requires a real
    import — a write, the opposite of a read-only stop. So the stop names the document and the
    count, says that interface version 1 does not name the lines, and points at `records.py
    survey`. A line the importer silently drops remains a known open point for the full review.
+
+2. **A `/recheck` cannot yet start on a finding this station raised.** The records half of the
+   handover holds: after a signoff run the component's derived state carries the finding open,
+   at the location the reviewer named, charged to the slice, and the document levels again
+   (below). The pilot half does not. `recheck.py start` with a `{build_doc, slice}` target READS
+   the finding — it assembles `scope.checklist[0]` from it — and then refuses its own checkpoint
+   because that item's `record.heading` is empty. The cause is exact:
+   `recheck_core/records_view.py:_address` returns no heading for a NATIVE event ("a native
+   event carries no document line"), while the checkpoint schema requires a non-empty one.
+   Before amendment A4 no station raised findings natively into a log the pilot reads, so this
+   could not surface; signoff-v2 is the first. The heading exists — the rendered line sits under
+   `### <date> — review: <slice>` in the document — it is simply not on the event.
+   `tests/test_after_signoff.py` pins the observed refusal by name, so the day the seam is
+   closed the test fails and says so. `plugins/recheck-v2/` is not this lane's to write.
+
+**Closed by amendment A4**, and kept here because the README used to carry them: the review
+block is now the component's rendering (`render` returns `review`), and a document this station
+wrote levels again — `import-legacy` recognises a line byte-equal to what `render` produced for
+a native event the log already holds, and reports it under `native_rendered` instead of reading
+it as a second raise.
 
 ## Provenance
 

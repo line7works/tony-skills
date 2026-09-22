@@ -139,7 +139,8 @@ class ACleanRecordWritesAllFourThings(TransactionCase):
         self.assertEqual(raised[0]["actor"]["run_id"], "signoff-test-run")
 
         build_doc = testlib.read_text(os.path.join(self.workspace, DOC))
-        self.assertIn("### 2026-09-21 — review: D", build_doc)
+        self.assertIn("### 2026-09-21 — review: Slice D", build_doc,
+                      "the heading is the component's, which writes the slice as `Slice D`")
         self.assertIn("src/signpost/pad.py:6", build_doc)
 
         verdict_doc = doc["verdict_doc"]

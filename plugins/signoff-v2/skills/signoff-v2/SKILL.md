@@ -96,7 +96,9 @@ The script computes the verdict from the raised severities — BLOCKER gives rej
 uv run --python /usr/bin/python3 --with jsonschema==4.25.1 scripts/signoff.py record --run-dir <run dir>
 ```
 
-This levels the log, pins the head against what `scope` read, appends the findings as one batch through the records component, places the block at the ledger home's tail, copies it to the verdict doc under `docs/reviews/`, checks the copy with `mirrors`, and moves the slice's card. Every step is receipted; rerunning `record` settles a killed run rather than repeating it.
+This levels the log, pins the head against what `scope` read, appends the findings as one batch through the records component, places the component's own rendered block at the ledger home's tail, copies it to the verdict doc under `docs/reviews/`, checks the copy with `mirrors`, and moves the slice's card. Every step is receipted; rerunning `record` settles a killed run rather than repeating it.
+
+The block is the component's bytes, not this skill's: `render` returns it, the line writes the claim in parentheses, and nothing post-processes it. The component recognises those lines on a later levelling, so the document can be signed off again and `/recheck` can read the findings out of the records afterwards.
 
 **Signoff never clears a finding.** No `disposition`, no `waived`, no `reopened`. That is `/recheck`'s.
 

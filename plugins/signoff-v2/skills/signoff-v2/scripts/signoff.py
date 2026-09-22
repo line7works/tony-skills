@@ -67,7 +67,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from signoff_core import answer as ansmod, blocks, sheet as sheetmod  # noqa: E402
+from signoff_core import answer as ansmod, sheet as sheetmod  # noqa: E402
 from signoff_core import canon, identity as idmod, inputs, ledger, packet as packetmod  # noqa: E402
 from signoff_core import receipt as rcptmod, records_write as rw, result as resultmod  # noqa: E402
 from signoff_core import records_client as rcl, validate, verdict as vdmod  # noqa: E402
@@ -699,22 +699,23 @@ def do_record(run, resolved, state, adjudication, client, args):
     else:
         block = None
 
-    # 4. Render from THIS RUN'S EVENTS as the component stored them. `records.py render` is
-    #    called first and its answer kept, so the component's own grants and skipped list are on
-    #    the record; at interface version 1 it renders no `finding_raised` line, which is why
-    #    `blocks.review_block` renders the review block from the events read back out of the log
-    #    (see blocks.py: PROVISIONAL, with the control room).
+    # 4. Render. The Markdown is the component's bytes, not this script's prose (E13-3): since
+    #    amendment A4 `render` returns `review`, one block per slice this run's `finding_raised`
+    #    events name, and the importer recognises those lines as the rendering of native events
+    #    the log already holds. Nothing here post-processes them — the line writes the claim as
+    #    `(<claim>)` because that is the form the component's own reader round-trips.
     try:
-        component_rendered = client.render(workspace, doc, run_id)
-        mine = rw.run_events(client, workspace, doc, run_id, "finding_raised")
+        rendered = client.render(workspace, doc, run_id)
     except rcl.RecordsRefusal as refusal:
         raise rw._refusal_stop("recording_failed", "render_refused", refusal)
-    rendered = blocks.review_block(mine, run_date, [slice_name])
-    rendered["component"] = {"rendered": component_rendered["rendered"],
-                             "skipped": component_rendered["skipped"],
-                             "grants": component_rendered["grants"]}
-    if component_rendered["grants"]:
-        rendered["text"] = rendered["text"] + "".join(component_rendered["grants"])
+    # Signoff writes no `disposition`, `defect_raised`, `waived` or `reopened`, so the run can
+    # produce no recheck block and no grant. If one ever appears, placing `review` alone would
+    # silently drop it, so the run stops instead.
+    if rendered["block"].strip() or rendered["grants"]:
+        raise rw.Stop("recording_failed", "unexpected_rendering",
+                      "the component rendered a recheck block or a grant for run %s; signoff "
+                      "clears nothing, so something else wrote under this run id" % run_id,
+                      {"block": rendered["block"], "grants": rendered["grants"]})
 
     # 5. Place the block, copy it to the verdict doc, check the copy.
     verdict = adjudication["verdict"]
@@ -746,7 +747,7 @@ def do_record(run, resolved, state, adjudication, client, args):
                           "the transaction guard no longer holds: %s. The baseline is never "
                           "regenerated from edited bytes." % "; ".join(breaks),
                           {"breaks": breaks})
-        block_text = rendered["text"] or rendered["block"]
+        block_text = rendered["review"]
         if adjudication["raised"] and not block_text.strip():
             # Findings were raised and nothing came back to place: the block would be lost.
             # A CLEAN review legitimately renders no block — there is no finding to write down —
@@ -805,8 +806,9 @@ def do_record(run, resolved, state, adjudication, client, args):
                     "records_exit": None, "records_error": None},
         "recovered": recovered,
         "receipt": receipt.path,
-        "rendered": {"text": rendered["text"], "block": rendered["block"],
-                     "rendered": rendered["rendered"]},
+        "rendered": {"text": rendered["review"], "review_lines": rendered["review_lines"],
+                     "review_slices": rendered["review_slices"],
+                     "rendered": rendered["rendered"], "skipped": rendered["skipped"]},
     }
 
 

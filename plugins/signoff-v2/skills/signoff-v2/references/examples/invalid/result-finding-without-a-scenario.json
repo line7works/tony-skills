@@ -114,7 +114,7 @@
         ]
       }
     ],
-    "head_after": "4fa30dad644a5a042693787639250222e36937e77ba82ac142e2aed956461ea8",
+    "head_after": "67c23caf8f9dba74acffb618581047c4453b561063035f80b3eb04180a6e3480",
     "head_before": "0000000000000000000000000000000000000000000000000000000000000000",
     "log": "docs/records/docs__plans__2026-09-18-signpost-rows.events.jsonl",
     "mirrors": {
@@ -131,15 +131,15 @@
         {
           "blocks": [
             {
-              "heading": "### 2026-09-21 — review: D",
+              "heading": "### 2026-09-21 — review: Slice D",
               "ledger_line": 26,
               "ledger_lines": 1,
-              "line": 15,
+              "line": 18,
               "lines": 1,
               "state": "same"
             }
           ],
-          "doc_sha256": "c20e255e0899df5af766e1fdb92aa0c2bb840569a932c98e3ddb11dd1bb59c44",
+          "doc_sha256": "0f95a0223c022c0c328eab26f1bfc6153f35e574b149d5c4f499266839a804b5",
           "only_in_mirror": [],
           "slice": "D",
           "state": "same",
