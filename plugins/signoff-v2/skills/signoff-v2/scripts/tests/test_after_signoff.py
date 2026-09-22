@@ -16,12 +16,11 @@ through the real CLIs and the real records component — no stubs, no fixture lo
    of the handover holds: the component's derived state carries one open MAJOR at the location
    the reviewer named, charged to the slice.
 
-   The pilot half does NOT yet hold, and this suite says so rather than hiding it. The pilot
-   reads the finding — it assembles `scope.checklist[0]` from it — and then refuses its own
-   checkpoint because that item's `record.heading` is empty, because
-   `recheck_core/records_view.py:_address` returns no heading for a NATIVE event. That is a
-   different defect from the one A4 repaired, it lives in the pilot, which this lane may not
-   write, and the test pins the observed refusal by name so the day it is closed it fails.
+   The pilot half holds too, since the pilot's Revision 8 (E13 CR-F3). A natively raised finding
+   carries no document line of its own; the pilot now addresses it where the component's
+   rendering of it sits in the document, under the heading it actually sits under. `start`
+   checkpoints the finding as its one checklist item and hands the run to `verify`. Before
+   Revision 8 it refused its own checkpoint on an empty `record.heading`.
 """
 import json
 import os
@@ -199,44 +198,43 @@ class ARecheckAfterASignoff(ASignoffHasRun):
             "workspace": self.workspace,
             "target": {"build_doc": self.seeded["build_doc"], "slice": self.seeded["slice"]},
         })
+        raised_before = self.raised_ids()
         code, body, err = self.recheck(["start", supplied])
-        self.assertIn(code, (0, 10), "recheck start failed: %s" % (err or json.dumps(body)))
+        self.assertEqual(code, 0, "recheck start failed: %s" % (err or json.dumps(body)))
         self.assertIsInstance(body, dict, err)
+        self.assertEqual(body["phase"], "verifying", json.dumps(body))
+        self.assertEqual(body["next"], "verify", json.dumps(body))
 
-        if body.get("checklist"):
-            # The seam works: the day the pilot accepts a natively raised finding, this branch
-            # runs and the assertions below are the real ones.
-            checklist = body["checklist"]
-            flat = json.dumps([row.get("location") for row in checklist])
-            self.assertIn("src/signpost/pad.py", flat, flat)
-            self.assertEqual(len(checklist), 1,
-                             "recheck saw %d items where the signoff raised 1: %s"
-                             % (len(checklist), flat))
-            return
+        checklist = body["checklist"]
+        self.assertEqual(len(checklist), 1,
+                         "recheck saw %d items where the signoff raised 1: %s"
+                         % (len(checklist), json.dumps(checklist)))
+        item = checklist[0]
+        raised = testlib.load_json(os.path.join(self.case, "answer.json"))["findings"][0]
+        self.assertEqual(item["location"], {"file": "src/signpost/pad.py", "line": 6})
+        self.assertEqual(item["severity"], "MAJOR")
+        self.assertEqual(item["slice"], self.seeded["slice"])
+        self.assertEqual(item["claim"], raised["claim"])
 
-        # KNOWN OPEN POINT, measured, not designed — and NOT what amendment A4 repaired.
-        #
-        # The pilot DOES read the signoff's finding out of the records: it assembles
-        # `scope.checklist[0]` from it. It then refuses its own checkpoint because that item's
-        # `record.heading` is empty. The cause is exact and is in the pilot, which this lane
-        # may not write: `recheck_core/records_view.py:_address` returns no heading for any
-        # NATIVE event — its own docstring says "a native event carries no document line" — and
-        # the checkpoint schema requires a non-empty heading.
-        #
-        # Before A4 no station raised findings natively into a log the pilot reads, so this
-        # could not surface; signoff-v2 is the first. The records half of the handover holds
-        # (the test above), and a rendered line under a real heading sits in the document, so
-        # the heading exists — it is simply not on the event.
-        #
-        # This test pins the observed refusal by name, the way the exit-5 pin did, so the day
-        # the seam is closed it fails and says so.
-        self.assertEqual(body.get("status"), "missing_input", json.dumps(body))
-        chat = testlib.read_text(body["chat"])
-        self.assertIn("scope.checklist[0].record.heading", chat,
-                      "the refusal moved; re-read it before trusting this pin: %s" % chat)
-        self.assertNotIn("scope.checklist[1]", chat,
-                         "one finding was raised, so only item 0 can be named")
-        self.assertIn("should be non-empty", chat)
+        # The address of a native raise (pilot Revision 8): the heading the rendered line
+        # actually sits under in the document, which is the first run's review heading.
+        heading = "### 2026-09-21 — review: Slice %s" % self.seeded["slice"]
+        self.assertEqual(item["record"]["document"], DOC)
+        self.assertEqual(item["record"]["date"], "2026-09-21")
+        self.assertEqual(item["record"]["heading"], heading)
+        lines = testlib.read_text(os.path.join(self.workspace, DOC)).split("\n")
+        self.assertIn(heading, lines, "the heading the pilot names is not a line of the document")
+        block = []
+        for line in lines[lines.index(heading) + 1:]:
+            if line.startswith("#"):
+                break
+            block.append(line)
+        self.assertTrue(any("src/signpost/pad.py:6" in line for line in block),
+                        "the finding's rendered line does not sit under that heading: %r" % block)
+
+        # The run is checkpointed and waiting on the verifier; start raised nothing.
+        self.assertTrue(os.path.isfile(os.path.join(run_dir, "checkpoint.json")))
+        self.assertEqual(self.raised_ids(), raised_before)
 
     def test_the_handover_imported_nothing_twice(self):
         raised = self.raised_ids()

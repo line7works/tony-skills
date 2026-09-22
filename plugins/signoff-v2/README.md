@@ -79,37 +79,32 @@ reads either, and a test holds that line.
 | a second signoff on one document, and a `/recheck` after one | `tests/test_after_signoff.py` |
 | every seeded case, at contract level | `tests/test_seeded_cases.py` |
 
-## Known open points
+## Known open point
 
-Two, both reported rather than hidden, both on a boundary this plugin may not write.
+One, reported rather than hidden, on a boundary this plugin may not write.
 
-1. **The importer does not name an unparsed line** (the slice 1 builder's Finding 2, left open
-   by the owner). Amendment A3 item 3 has this station stop on any importer signal, naming the
-   line. Interface version 1 publishes `counts.legacy_unparsed` as a COUNT with no line number
-   in any field, and the lines exist only as `legacy_unparsed` EVENTS, which requires a real
-   import — a write, the opposite of a read-only stop. So the stop names the document and the
-   count, says that interface version 1 does not name the lines, and points at `records.py
-   survey`. A line the importer silently drops remains a known open point for the full review.
+**The importer does not name an unparsed line** (the slice 1 builder's Finding 2, left open by
+the owner). Amendment A3 item 3 has this station stop on any importer signal, naming the line.
+Interface version 1 publishes `counts.legacy_unparsed` as a COUNT with no line number in any
+field, and the lines exist only as `legacy_unparsed` EVENTS, which requires a real import, a
+write, the opposite of a read-only stop. So the stop names the document and the count, says that
+interface version 1 does not name the lines, and points at `records.py survey`. A line the
+importer silently drops remains a known open point for the full review.
 
-2. **A `/recheck` cannot yet start on a finding this station raised.** The records half of the
-   handover holds: after a signoff run the component's derived state carries the finding open,
-   at the location the reviewer named, charged to the slice, and the document levels again
-   (below). The pilot half does not. `recheck.py start` with a `{build_doc, slice}` target READS
-   the finding — it assembles `scope.checklist[0]` from it — and then refuses its own checkpoint
-   because that item's `record.heading` is empty. The cause is exact:
-   `recheck_core/records_view.py:_address` returns no heading for a NATIVE event ("a native
-   event carries no document line"), while the checkpoint schema requires a non-empty one.
-   Before amendment A4 no station raised findings natively into a log the pilot reads, so this
-   could not surface; signoff-v2 is the first. The heading exists — the rendered line sits under
-   `### <date> — review: <slice>` in the document — it is simply not on the event.
-   `tests/test_after_signoff.py` pins the observed refusal by name, so the day the seam is
-   closed the test fails and says so. `plugins/recheck-v2/` is not this lane's to write.
+## Closed since round 1
 
-**Closed by amendment A4**, and kept here because the README used to carry them: the review
-block is now the component's rendering (`render` returns `review`), and a document this station
-wrote levels again — `import-legacy` recognises a line byte-equal to what `render` produced for
-a native event the log already holds, and reports it under `native_rendered` instead of reading
-it as a second raise.
+Kept here because the README used to carry them as open.
+
+- **The review block is the component's rendering** (records amendment A4): `render` returns
+  `review`, and a document this station wrote levels again. `import-legacy` recognises a line
+  byte-equal to what `render` produced for a native event the log already holds, and reports it
+  under `native_rendered` instead of reading it as a second raise.
+- **A `/recheck` starts on a finding this station raised** (pilot contract Revision 8, E13
+  CR-F3). A natively raised finding carries no document line of its own; the pilot now addresses
+  it where the component's rendering of it sits in the document, under the heading it actually
+  sits under. `tests/test_after_signoff.py` drives `recheck.py start` after a signoff and asserts
+  the accepting path outright: one checklist item, the reviewer's location and claim, the
+  document's `### <date> — review: Slice <X>` heading, and the run handed to `verify`.
 
 ## Provenance
 
