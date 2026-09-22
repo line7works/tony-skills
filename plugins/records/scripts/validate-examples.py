@@ -229,7 +229,8 @@ SCHEMA_REQUIRED = {
         "/$defs/import_ok": (
             "interface_version", "component_version", "ok", "report", "log", "doc", "doc_sha256",
             "dry_run", "run_id", "lines_read", "lines_classified", "previously_imported",
-            "blocks", "slices", "counts", "imported", "would_import", "ambiguous", "ambiguities",
+            "native_rendered", "blocks", "slices", "counts", "imported", "would_import",
+            "ambiguous", "ambiguities",
             "rejected_resolutions", "spec", "opened_log", "head", "events",
         ),
         "/$defs/import_ok/allOf/0/else": ("appended",),
@@ -240,7 +241,7 @@ SCHEMA_REQUIRED = {
         "/$defs/import_refused": (
             "interface_version", "component_version", "ok", "report", "error", "reason", "log",
             "doc", "head", "events", "dry_run", "counts", "lines_read", "lines_classified",
-            "spec", "ambiguities",
+            "native_rendered", "spec", "ambiguities",
         ),
         "/$defs/import_refused/allOf/0/if": ("error",),
         "/$defs/import_refused/allOf/0/then": ("rejected_resolutions",),

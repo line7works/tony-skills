@@ -21,6 +21,7 @@
     "lines_classified": 4,
     "lines_read": 17,
     "log": "docs/records/docs__plans__2026-05-03-join-ambiguous-shared.events.jsonl",
+    "native_rendered": 0,
     "ok": false,
     "reason": "1 line(s) of docs/plans/2026-05-03-join-ambiguous-shared.md are ambiguous; the import of this document wrote nothing. Answer each in a resolutions file (section 11.5): every field an answer needs is in the `ambiguities` list below.",
     "report": "import",

@@ -18,9 +18,9 @@ is internal.
 Interface version 1, component version 0.1.0. Built in E12 of the skills v2 rebuild, in three
 slices, under the lane contract the control room holds. Its first consumer is the `recheck-v2`
 pilot, which moved onto it in E13 slice 1; the E12 freeze that kept `plugins/recheck-v2/`
-byte-identical ended with that step. One rule has moved since: E13 amendment A2, in the build
-record below. Running the importer over real repositories is a separate job, one repository at a
-time.
+byte-identical ended with that step. Two rules have moved since, E13 amendments A2 and A4, both
+in the build record below. Running the importer over real repositories is a separate job, one
+repository at a time.
 
 ## Build record
 
@@ -40,6 +40,7 @@ Facts about how this component was built, in order. Review results are not recor
 | Recheck | the same reviewer, once more, on the second and third fix rounds and regressions | |
 | Fourth fix round | what the recheck found: lock ownership at commit time is inode and bytes; a guard on the liveness judgement | 593 |
 | E13 amendment A2 | the owner's ruling of 2026-09-21 on the recheck lane's finding 1: `append` admits a `waived` whose finding is `fixed` at the current head, which is the pair a station writes when one run clears an item the user also waived. A `waived` over a `waived`, and a `disposition: "fixed"` over anything but `open`, are refused as before, and the `known` and `identity` conditions did not move; `interface_version` stays 1 because `state` already decided the pair by its later-wins rule. The E12-2 freeze test over `plugins/recheck-v2` went with the same ruling; its sibling, that this component writes nowhere near the pilot, stays | 601 |
+| E13 amendment A4 | the owner's ruling of 2026-09-22 ("Option A") on one defect with two halves, found by lane S and by the control room (CR-F2). `render` gains Appendix A's review block, one per slice, for a run's `finding_raised` events, so the component owns that grammar as it owns the recheck block's; the recheck block's bytes did not move. `import-legacy` recognises a record line that is byte-equal to what `render` produces for a NATIVE event the log already holds, and a `Status:` line matching the last card a native `card_set` or `card_observed` carries for its slice: it counts them under the new report field `native_rendered`, skips them, and never imports or questions them. Before this, a completed recheck run's own rendered lines were read back as news on the next levelling: a second `disposition` with `known: false` that `state` reported as `cleared_unbound`, and a review line that stopped the document exit 5 as a second raise of one finding. `interface_version` stays 1: every change is additive, and no reader of a version-1 response loses a field. The component version stays `0.1.0`: amendment A2 changed `append`'s clearing rule in this same step without moving it, and the version is written into every `log_opened` event, so moving it rewrites the chain hash of every shipped example and buries this fix's own diff. Whoever closes E13 can move it in one regeneration pass | 615 |
 
 Every count is the full suite under `/usr/bin/python3`, and the same count through `uv run`.
 Rulings and amendments A1 to A11 and the builders' standing readings are in section 16 of the lane contract, `docs/plans/2026-09-20-records-e12.md`.
