@@ -1,0 +1,824 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/build-v2/result.schema.json",
+  "title": "build-v2 result",
+  "description": "The one result of a build-v2 run, written to `<run_dir>/result.json` (E13 lane contract section 8, \"the same result discipline\"). Every run ends in one, including every stop. Two status fields, on purpose: `terminal_status` says which KIND of end this was, a `completion` (the run did its job and reports what it found) or a `stop` (the tool could not proceed); `status` is this core's named vocabulary inside that kind. Amendment A3 item 1 is why they are separate: a run whose named checks failed or could not run is a COMPLETION with a named result (`checks_not_passed`), not a stop, and the card simply does not move. Every response of the CLI carries `interface_version` and `plugin_version`; this document carries them too so a result read on its own says what wrote it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_version",
+    "interface_version",
+    "plugin_version",
+    "run_id",
+    "status",
+    "terminal_status",
+    "reason",
+    "report_only",
+    "workspace",
+    "build_doc",
+    "slice",
+    "writes",
+    "next",
+    "run_dir"
+  ],
+  "properties": {
+    "result_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "interface_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this core's CLI interface"
+    },
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the build, from .claude-plugin/plugin.json"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "checks_not_passed",
+        "not_complete",
+        "answer_refused",
+        "stopped"
+      ],
+      "description": "completed: the answer claimed complete, every named check passed, every out-of-scope path carried a reason, and the card moved to `built` (unless report-only). checks_not_passed: at least one named check is failing or was not run; reported with its output, card not moved; a COMPLETION, per amendment A3 item 1. not_complete: the answer claims `partial` or `stopped` and no named check failed; card not moved. answer_refused: the recorded answer is not recordable; neither acted on nor repaired; a STOP, because a run that may record nothing did not proceed. stopped: the tool could not proceed."
+    },
+    "terminal_status": {
+      "type": "string",
+      "enum": [
+        "completion",
+        "stop"
+      ],
+      "description": "the kind of end. `stopped` and `answer_refused` are `stop`; every other status is a `completion`. Amendment A3 item 1's named completion covers failing checks and nothing else."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "one sentence naming what happened and what the caller can do"
+    },
+    "stop_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "on a stop, what the tool could not do; null on a completion"
+    },
+    "stop_tag": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "a short tag for a stop, one of: `no_doc`, `no_slice`, `no_git`, `no_base`, `legacy_unplaced`, `card_drift`, `open_blocker`, `scope_unexplained`, `outside_edit`, `records_invalid`, `records_ambiguous`, `records_stale_source`, `records_conflict`, `records_failed`. An input that fails its schema and an unreadable answer file are not among them: neither ends a run, so neither reaches a result."
+    },
+    "refusal_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "on `answer_refused`, the seeded vocabulary's tag for why: `answer_invalid`"
+    },
+    "report_only": {
+      "type": "boolean",
+      "description": "was this a report-only run"
+    },
+    "wrote_nothing": {
+      "type": "boolean",
+      "description": "true when the run wrote nothing to the workspace and nothing to the log"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "build_doc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slice": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "base_commit",
+        "head",
+        "committed",
+        "changed",
+        "untracked",
+        "excluded",
+        "sanctioned"
+      ],
+      "description": "the three lists and the base (lane contract section 8), computed from git; `docs/records/` is excluded from each (CR-3)",
+      "properties": {
+        "base": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the ref the input named"
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "the commit it resolved to"
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "committed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "changed since the base and committed, sorted"
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "different from HEAD in the working tree, staged or not, sorted"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "untracked and not ignored, sorted"
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the prefixes left out of all three"
+        },
+        "sanctioned": {
+          "type": "array",
+          "description": "paths of the source set the scope comparison passes over, each with the reason. Today: the ledger document this run is executing, which the loop writes into by design. A sanctioned path is IN the set — section 8 is the truth of what changed — and never in `out_of_scope`.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "reason"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "named_paths",
+        "requirements",
+        "checks",
+        "not_in_slice",
+        "path"
+      ],
+      "description": "what the slice says, transcribed from the build doc before any edit was recorded",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the run artifact this was written to"
+        },
+        "named_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the slice's Footprint: the scope the source set is judged against"
+        },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "command"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "command": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "not_in_slice": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "description": "every source-set path the slice does not name, each with the executor's stated reason. A path with no reason is a stop, never a silent pass.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "lists",
+          "reason",
+          "reason_given"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "committed",
+                "changed",
+                "untracked"
+              ]
+            }
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the recorded answer's `edits[].reason` for this path"
+          },
+          "reason_given": {
+            "type": "boolean"
+          },
+          "named_in_not_in_slice": {
+            "type": "boolean",
+            "description": "the slice states this path as a boundary"
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "one row per check the slice names, in document order, plus any check the answer reports that the slice does not name (marked `named_by_slice` false, so an unnamed check is visible and never gates the card)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "command",
+          "result",
+          "exit_code",
+          "output",
+          "source",
+          "named_by_slice"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failing",
+              "not_run"
+            ]
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "output": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "recorded",
+              "rerun"
+            ],
+            "description": "where this row's result came from: the recorded answer, or this core running the command"
+          },
+          "named_by_slice": {
+            "type": "boolean"
+          },
+          "rerun_refused": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "why a requested rerun did not happen, when it did not"
+          },
+          "recorded_result": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "passed",
+              "failing",
+              "not_run",
+              null
+            ],
+            "description": "when this core reran the check and observed a different result than the answer recorded, what the answer recorded. Null otherwise: a disagreement is reported, never quietly overwritten."
+          }
+        }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "claimed_status",
+        "claimed_card",
+        "accepted"
+      ],
+      "description": "what the executor concluded and whether this core accepted it as recordable. Never repaired.",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claimed_status": {
+          "type": "string"
+        },
+        "claimed_card": {
+          "type": "string"
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "refusals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "each contents rule the answer broke, in one sentence"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the run artifact the answer was stored at"
+        }
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "before",
+        "after",
+        "moved",
+        "reason"
+      ],
+      "description": "the slice's card. It moves to `built` only when the answer claimed complete, every named check passed, and no path is out of scope without a reason.",
+      "properties": {
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        },
+        "moved": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "why it moved, or why it did not"
+        },
+        "document_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "the `Status:` line this run wrote, when it wrote one"
+        }
+      }
+    },
+    "records": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "log",
+        "levelled",
+        "head_before",
+        "head_after",
+        "appended",
+        "wrote"
+      ],
+      "description": "everything this run asked the records component for and everything it wrote through it. Build raises nothing and clears nothing: the one event it ever writes is the card move it made.",
+      "properties": {
+        "log": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the log's workspace-relative path, as the component reports it"
+        },
+        "levelled": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ran",
+            "dry_run",
+            "would_import",
+            "imported"
+          ],
+          "description": "CR-1: the document and its log levelled with `import-legacy` before the records were read",
+          "properties": {
+            "ran": {
+              "type": "boolean"
+            },
+            "dry_run": {
+              "type": "boolean"
+            },
+            "would_import": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "imported": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "unparsed": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "`legacy_unparsed` events the pass produced; above zero is a stop (amendment A3 item 3)"
+            },
+            "native_rendered": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "how many lines of the document the component recognised as ones the log already records natively and imported nothing for (E13 amendment A4): the record lines `render` wrote, and a `Status:` line whose text equals the last card a native event holds for its slice. Null when the component does not publish the field, which is how one from before A4 reads; absent is not the same as zero and this core reports which it saw."
+            }
+          }
+        },
+        "head_before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "head_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pinned_head": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the head the run's state was read against, compared again before the append"
+        },
+        "open": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ],
+          "description": "what the slice has open, from `records.py state`",
+          "properties": {
+            "BLOCKER": {
+              "type": "integer"
+            },
+            "MAJOR": {
+              "type": "integer"
+            },
+            "MINOR": {
+              "type": "integer"
+            }
+          }
+        },
+        "appended": {
+          "type": "array",
+          "description": "the events this run appended; at most one, a `card_set`",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "seq"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "recovered": {
+                "type": "boolean",
+                "description": "the append had landed and only its record in the receipt was missing"
+              }
+            }
+          }
+        },
+        "wrote": {
+          "type": "boolean",
+          "description": "did this run write anything to the log"
+        },
+        "refused": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "exit_code",
+            "error",
+            "reason"
+          ],
+          "description": "a refusal the component RETURNED. It is definitive, persisted in the receipt, and never retried.",
+          "properties": {
+            "exit_code": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "dirty",
+        "tracked_diff_sha256",
+        "untracked",
+        "untracked_sha256",
+        "submodules"
+      ],
+      "description": "the six-field source identity as `records.py identity` computes it, with `docs/records/` excluded; the card event carries it",
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "tracked_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "submodules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "writes": {
+      "type": "array",
+      "description": "every file this run wrote, in write order, each once. A run artifact under the run directory, the build doc's one `Status:` line, and the log through the component; nothing else is authorized.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "run_artifact",
+              "status_line",
+              "records_log"
+            ]
+          },
+          "sha256_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "resumed_half": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "on a settle, which half of the card transaction was missing"
+    },
+    "receipt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the receipt path, when the transaction opened one"
+    },
+    "next": {
+      "type": "string",
+      "const": "done"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the run directory every artifact of this run was written to, so a result read on its own says where its run lived and a checker can hold every run_artifact write to it"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "stopped",
+              "answer_refused"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "stop_reason"
+        ],
+        "properties": {
+          "terminal_status": {
+            "const": "stop"
+          },
+          "stop_reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "terminal_status": {
+            "const": "completion"
+          },
+          "stop_reason": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "const": "stopped"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "stop_tag"
+        ],
+        "properties": {
+          "stop_tag": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "const": "answer_refused"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "refusal_reason"
+        ],
+        "properties": {
+          "refusal_reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "report_only"
+        ],
+        "properties": {
+          "report_only": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "wrote_nothing"
+        ],
+        "properties": {
+          "wrote_nothing": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
+}

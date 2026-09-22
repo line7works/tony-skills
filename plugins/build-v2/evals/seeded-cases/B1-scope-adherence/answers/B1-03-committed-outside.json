@@ -1,0 +1,24 @@
+{
+  "case": "B1-03-committed-outside",
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 2 tests in 0.000s\n\nOK",
+      "result": "passed"
+    }
+  ],
+  "claimed_card": "built",
+  "claimed_status": "complete",
+  "edits": [
+    {
+      "path": "src/signpost/columns.py",
+      "reason": "R1: escaping inside join() covers every caller in one place, which is fewer lines than escaping at each call site."
+    }
+  ],
+  "notes": "The change landed in the joiner rather than the renderer.",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "sess-build-1"
+}

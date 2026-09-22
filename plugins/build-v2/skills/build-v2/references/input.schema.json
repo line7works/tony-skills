@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/build-v2/input.schema.json",
+  "title": "build-v2 input",
+  "description": "The one validated input structure of a build-v2 run (E13 lane contract section 8, \"the same input discipline as the pilot\"). One document per run, supplied as a file to `build.py check-input` and read from the run directory by every later phase. Every object here is closed: an unknown key is refused rather than ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code and listed in references/build-contract.md under \"Path rules\": the workspace is an absolute git work tree root with a HEAD commit; the run directory is absolute and OUTSIDE the workspace, because a run's own artifacts are never part of the source it judges; the build doc is workspace-relative, normalized, inside the workspace, ends in `.md`, and is not under docs/records/ (the records component's history) or docs/reviews/ (a mirror).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input_version",
+    "run_id",
+    "workspace",
+    "run_dir",
+    "build_doc",
+    "slice",
+    "base",
+    "invocation"
+  ],
+  "properties": {
+    "input_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this input shape; a reader that does not know it refuses the input rather than reading it loosely"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "this run's own id, single-use: it names the run directory's contents, the receipt, and the card event's `actor.run_id`. The executor's session id is a separate thing and arrives with the recorded answer."
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/",
+      "description": "absolute path of the git work tree the slice was built in"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/",
+      "description": "absolute path of this run's directory, outside the workspace; every artifact this core writes lands here"
+    },
+    "build_doc": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!docs/(?:records|reviews)/)(?!.*(?:^|/)\\.\\.?/).+\\.md$",
+      "description": "the build doc, workspace-relative: the ledger document whose slice this run builds"
+    },
+    "slice": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S+$",
+      "description": "the slice name as the document's `## Slice <name> —` heading writes it"
+    },
+    "base": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the git ref naming the slice's base. The source set is computed against the commit it resolves to; a ref that does not resolve is a stop, never a guess."
+    },
+    "case": {
+      "type": "string",
+      "minLength": 1,
+      "description": "optional: the seeded case this run is for. When it is given, a recorded answer whose own `case` names another one is refused, so an answer cannot be replayed against the wrong workspace."
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "when true the run writes nothing to the workspace and nothing to the log, and its result says so; it still reports the source set, the out-of-scope list and the checks"
+    },
+    "allow_open_blocker": {
+      "type": "boolean",
+      "default": false,
+      "description": "when true, preflight does not refuse a slice that carries an open BLOCKER. The default refuses it (v1 build, step 2: no framing on a failed foundation without the user's word)."
+    },
+    "rerun_checks": {
+      "type": "boolean",
+      "default": false,
+      "description": "when true, this core runs each check command the slice names, in the workspace, and reports the result it observed instead of the recorded one. The result says per check which it did (`source`: `recorded` or `rerun`). This core never reruns a model."
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "description": "facts about the session this run happens in, filled by the adapter (slice 3), never guessed by the executor",
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the harness this run is driven from; it is carried onto the card event's actor"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1,
+          "description": "who asked for the run: `user` on a direct request, or the station that called this one"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "station"
+          ],
+          "description": "`direct` when a person asked, `station` when another station drove it"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "build_doc": "docs/plans/2026-09-20-widget.md",
+  "card": {
+    "after": "not started",
+    "before": "not started",
+    "document_line": null,
+    "moved": false,
+    "reason": "the run stopped before the card was decided, so it stays at 'not started'"
+  },
+  "checks": [],
+  "contract": {
+    "checks": [
+      {
+        "command": "sh checks/unit.sh",
+        "name": "unit"
+      }
+    ],
+    "named_paths": [
+      "src/widget.py"
+    ],
+    "not_in_slice": [
+      "src/other.py",
+      "checks/"
+    ],
+    "path": "/tmp/build-c-20260922-7f3c/contract.json",
+    "requirements": [
+      "R1. `spin()` returns the number of turns."
+    ]
+  },
+  "identity": null,
+  "interface_version": 1,
+  "next": "done",
+  "out_of_scope": [],
+  "plugin_version": "0.1.0",
+  "reason": "the base ref 'no-such-tag' does not resolve to a commit in /home/builder/work/signpost, so the source set cannot be computed",
+  "receipt": null,
+  "records": {
+    "appended": [],
+    "head_after": null,
+    "head_before": null,
+    "levelled": {
+      "dry_run": false,
+      "imported": null,
+      "native_rendered": null,
+      "ran": false,
+      "unparsed": null,
+      "would_import": null
+    },
+    "log": null,
+    "refused": null,
+    "wrote": false
+  },
+  "refusal_reason": null,
+  "report_only": false,
+  "result_version": 1,
+  "resumed_half": null,
+  "run_dir": "/tmp/build-c-20260922-7f3c",
+  "run_id": "run-1",
+  "slice": "A",
+  "status": "stopped",
+  "stop_reason": "the base ref 'no-such-tag' does not resolve to a commit in /home/builder/work/signpost, so the source set cannot be computed",
+  "terminal_status": "stop",
+  "workspace": "/home/builder/work/signpost",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/input.json",
+      "sha256_after": "7d92b846441ecf9bb25f4243e5036629415be4739d956514641ada154813c5d6"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/contract.json",
+      "sha256_after": "a491da91eaef35468d7060b590d4e5d568b4cf957e1db4830649ad4e3cd2bdf4"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/result.json",
+      "sha256_after": null
+    }
+  ],
+  "wrote_nothing": true
+}

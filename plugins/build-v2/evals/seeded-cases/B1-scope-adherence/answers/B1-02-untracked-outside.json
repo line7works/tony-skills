@@ -1,0 +1,28 @@
+{
+  "case": "B1-02-untracked-outside",
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 2 tests in 0.000s\n\nOK",
+      "result": "passed"
+    }
+  ],
+  "claimed_card": "built",
+  "claimed_status": "complete",
+  "edits": [
+    {
+      "path": "src/signpost/render.py",
+      "reason": "R1: row() escapes the separator inside the name before it reaches join()."
+    },
+    {
+      "path": "src/signpost/escapes.py",
+      "reason": "A one-function helper so the escape rule is written once; it is a new module, not a change to the joiner."
+    }
+  ],
+  "notes": "A new module was added beside the joiner. It is in the work tree and not committed.",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "sess-build-1"
+}

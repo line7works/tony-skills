@@ -1,0 +1,165 @@
+{
+  "answer": {
+    "accepted": true,
+    "claimed_card": "built",
+    "claimed_status": "complete",
+    "path": "/tmp/build-c-20260922-7f3c/answer.json",
+    "refusals": [],
+    "session_id": "sess-test-1"
+  },
+  "build_doc": "docs/plans/2026-09-20-widget.md",
+  "card": {
+    "after": "built",
+    "before": "not started",
+    "document_line": 4,
+    "moved": true,
+    "reason": "the answer claimed `complete`, every named check passed, and no path is out of scope without a reason"
+  },
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "named_by_slice": true,
+      "output": "ok",
+      "recorded_result": null,
+      "rerun_refused": null,
+      "result": "passed",
+      "source": "recorded"
+    }
+  ],
+  "contract": {
+    "checks": [
+      {
+        "command": "sh checks/unit.sh",
+        "name": "unit"
+      }
+    ],
+    "named_paths": [
+      "src/widget.py"
+    ],
+    "not_in_slice": [
+      "src/other.py",
+      "checks/"
+    ],
+    "path": "/tmp/build-c-20260922-7f3c/contract.json",
+    "requirements": [
+      "R1. `spin()` returns the number of turns."
+    ]
+  },
+  "identity": {
+    "commit": "218381e628f7ae3ac596ce47f7ba624c7b929b41",
+    "dirty": false,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [],
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "interface_version": 1,
+  "next": "done",
+  "out_of_scope": [],
+  "plugin_version": "0.1.0",
+  "reason": "the slice is complete, every named check passed, and every out-of-scope path carries a reason: the card event was recorded at seq 4 and the slice's `Status:` line was set to 'built'.",
+  "receipt": "/tmp/build-c-20260922-7f3c/receipt.json",
+  "records": {
+    "appended": [
+      {
+        "kind": "card_set",
+        "seq": 4
+      }
+    ],
+    "head_after": "89da58b61c1a7cb249a4fe4c27b0448bed921815b78b937755dbd25089e7900b",
+    "head_before": "b3a64ecb4a565aa6cd3b96856e851404bc162c711a30e6f33f239a1de1792fec",
+    "levelled": {
+      "dry_run": false,
+      "imported": 0,
+      "native_rendered": 0,
+      "ran": true,
+      "unparsed": 0,
+      "would_import": 0
+    },
+    "log": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+    "open": {
+      "BLOCKER": 0,
+      "MAJOR": 0,
+      "MINOR": 0
+    },
+    "pinned_head": "b3a64ecb4a565aa6cd3b96856e851404bc162c711a30e6f33f239a1de1792fec",
+    "refused": null,
+    "wrote": true
+  },
+  "refusal_reason": null,
+  "report_only": false,
+  "result_version": 1,
+  "resumed_half": null,
+  "run_dir": "/tmp/build-c-20260922-7f3c",
+  "run_id": "run-1",
+  "slice": "A",
+  "source_set": {
+    "base": "base",
+    "base_commit": "575802f0c16dd4bc45c8df740afec375dc8a6645",
+    "changed": [],
+    "committed": [
+      "src/widget.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "218381e628f7ae3ac596ce47f7ba624c7b929b41",
+    "sanctioned": [
+      {
+        "path": "docs/plans/2026-09-20-widget.md",
+        "reason": "the ledger document this run is executing: the loop writes into it by design, and this core writes the slice's `Status:` line there, so a change to it is never out of scope"
+      }
+    ],
+    "untracked": []
+  },
+  "status": "completed",
+  "stop_reason": null,
+  "stop_tag": null,
+  "terminal_status": "completion",
+  "workspace": "/home/builder/work/signpost",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/input.json",
+      "sha256_after": "3ba5d6e857a12fc3ce2b2d2636456edf7aeb61e51f22d69a9d5735d27295e499"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/contract.json",
+      "sha256_after": "a491da91eaef35468d7060b590d4e5d568b4cf957e1db4830649ad4e3cd2bdf4"
+    },
+    {
+      "kind": "records_log",
+      "path": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+      "sha256_after": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/answer.json",
+      "sha256_after": "d1c04618511801dcc1ef58e4f496417c4107e26c637bc941908a030019eeeb79"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/receipt.json",
+      "sha256_after": null
+    },
+    {
+      "kind": "status_line",
+      "path": "docs/plans/2026-09-20-widget.md",
+      "sha256_after": "e6db1b70a717efb3c276bd92fecdaa983c07c0d72b5cf1d69633419e6e7ebef0"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/result.json",
+      "sha256_after": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/etc/passwd",
+      "sha256_after": null
+    }
+  ],
+  "wrote_nothing": false
+}
