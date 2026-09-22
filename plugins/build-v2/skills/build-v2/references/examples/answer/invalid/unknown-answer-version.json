@@ -1,0 +1,35 @@
+{
+  "case": "B2-01-clean",
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK",
+      "result": "passed"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 0,
+      "name": "field-widths",
+      "output": "field-widths: name field is 12 characters",
+      "result": "passed"
+    }
+  ],
+  "claimed_card": "built",
+  "claimed_status": "complete",
+  "edits": [
+    {
+      "path": "src/signpost/columns.py",
+      "reason": "R1 and R2: join() escapes each field before it is joined, and count() walks the escape character."
+    },
+    {
+      "path": "tests/test_columns.py",
+      "reason": "R1 and R2 each get a unittest case over count(join(...))."
+    }
+  ],
+  "notes": "Both named checks were run from the workspace root and both returned 0.",
+  "role": "executor",
+  "seeded_answer": 2,
+  "session_id": "sess-build-1"
+}

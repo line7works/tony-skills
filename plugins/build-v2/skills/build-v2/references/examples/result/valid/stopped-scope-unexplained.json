@@ -1,0 +1,158 @@
+{
+  "answer": {
+    "accepted": true,
+    "claimed_card": "built",
+    "claimed_status": "complete",
+    "path": "/tmp/build-c-20260922-7f3c/answer.json",
+    "refusals": [],
+    "session_id": "sess-test-1"
+  },
+  "build_doc": "docs/plans/2026-09-20-widget.md",
+  "card": {
+    "after": "not started",
+    "before": "not started",
+    "document_line": null,
+    "moved": false,
+    "reason": "the run stopped before the card was decided, so it stays at 'not started'"
+  },
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "named_by_slice": true,
+      "output": "ok",
+      "recorded_result": null,
+      "rerun_refused": null,
+      "result": "passed",
+      "source": "recorded"
+    }
+  ],
+  "contract": {
+    "checks": [
+      {
+        "command": "sh checks/unit.sh",
+        "name": "unit"
+      }
+    ],
+    "named_paths": [
+      "src/widget.py"
+    ],
+    "not_in_slice": [
+      "src/other.py",
+      "checks/"
+    ],
+    "path": "/tmp/build-c-20260922-7f3c/contract.json",
+    "requirements": [
+      "R1. `spin()` returns the number of turns."
+    ]
+  },
+  "identity": {
+    "commit": "218381e628f7ae3ac596ce47f7ba624c7b929b41",
+    "dirty": true,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [
+      "src/stray.py"
+    ],
+    "untracked_sha256": "db393dcb5546cd00b7688b2ff3f389e3e2d66c49af83de6799b3dbf70bdb76bd"
+  },
+  "interface_version": 1,
+  "next": "done",
+  "out_of_scope": [
+    {
+      "lists": [
+        "untracked"
+      ],
+      "named_in_not_in_slice": false,
+      "path": "src/stray.py",
+      "reason": null,
+      "reason_given": false
+    }
+  ],
+  "plugin_version": "0.1.0",
+  "reason": "1 path(s) of the source set are outside the paths the slice names and the recorded answer gives no reason for them: src/stray.py. A path outside the slice's scope is reported with the executor's stated reason or the run stops; it is never passed over in silence.",
+  "receipt": null,
+  "records": {
+    "appended": [],
+    "head_after": "335d8d627442c6c85da9f0a9e69a00cce7312522e366b22ea775e30f580cae86",
+    "head_before": "335d8d627442c6c85da9f0a9e69a00cce7312522e366b22ea775e30f580cae86",
+    "levelled": {
+      "dry_run": false,
+      "imported": 0,
+      "ran": true,
+      "unparsed": 0,
+      "would_import": 0
+    },
+    "log": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+    "open": {
+      "BLOCKER": 0,
+      "MAJOR": 0,
+      "MINOR": 0
+    },
+    "pinned_head": "335d8d627442c6c85da9f0a9e69a00cce7312522e366b22ea775e30f580cae86",
+    "refused": null,
+    "wrote": true
+  },
+  "refusal_reason": null,
+  "report_only": false,
+  "result_version": 1,
+  "resumed_half": null,
+  "run_dir": "/tmp/build-c-20260922-7f3c",
+  "run_id": "run-1",
+  "slice": "A",
+  "source_set": {
+    "base": "base",
+    "base_commit": "575802f0c16dd4bc45c8df740afec375dc8a6645",
+    "changed": [],
+    "committed": [
+      "src/widget.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "218381e628f7ae3ac596ce47f7ba624c7b929b41",
+    "sanctioned": [
+      {
+        "path": "docs/plans/2026-09-20-widget.md",
+        "reason": "the ledger document this run is executing: the loop writes into it by design, and this core writes the slice's `Status:` line there, so a change to it is never out of scope"
+      }
+    ],
+    "untracked": [
+      "src/stray.py"
+    ]
+  },
+  "status": "stopped",
+  "stop_reason": "1 path(s) of the source set are outside the paths the slice names and the recorded answer gives no reason for them: src/stray.py. A path outside the slice's scope is reported with the executor's stated reason or the run stops; it is never passed over in silence.",
+  "stop_tag": "scope_unexplained",
+  "terminal_status": "stop",
+  "workspace": "/home/builder/work/signpost",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/input.json",
+      "sha256_after": "debafbde82e3ee90c3374f8858172cdd7353e377a9147e02514c765192c37f79"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/contract.json",
+      "sha256_after": "a491da91eaef35468d7060b590d4e5d568b4cf957e1db4830649ad4e3cd2bdf4"
+    },
+    {
+      "kind": "records_log",
+      "path": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+      "sha256_after": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/answer.json",
+      "sha256_after": "d1c04618511801dcc1ef58e4f496417c4107e26c637bc941908a030019eeeb79"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/result.json",
+      "sha256_after": null
+    }
+  ],
+  "wrote_nothing": false
+}

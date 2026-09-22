@@ -1,0 +1,11 @@
+{
+  "name": "build-v2",
+  "description": "Execute one slice of a build document inside strict boundaries: the spec is the only source of requirements, the source set is computed from git, a path outside the slice's named paths is reported or the run stops, a failing or skipped check is reported with its output and the card does not move. The portable build core of the skills v2 rebuild; the -v2 suffix stays while v1 build is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

@@ -1,0 +1,19 @@
+{
+  "allow_open_blocker": false,
+  "base": "base",
+  "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+  "case": "B2-01-clean",
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct"
+  },
+  "report_only": false,
+  "reprot_only": true,
+  "rerun_checks": true,
+  "run_dir": "/tmp/build-c-20260922-7f3c",
+  "run_id": "build-c-20260922-7f3c",
+  "slice": "C",
+  "workspace": "/home/builder/work/signpost"
+}

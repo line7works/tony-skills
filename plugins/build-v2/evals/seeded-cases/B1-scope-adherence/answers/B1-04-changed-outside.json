@@ -1,0 +1,28 @@
+{
+  "case": "B1-04-changed-outside",
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 2 tests in 0.000s\n\nOK",
+      "result": "passed"
+    }
+  ],
+  "claimed_card": "built",
+  "claimed_status": "complete",
+  "edits": [
+    {
+      "path": "src/signpost/render.py",
+      "reason": "R1: row() escapes the separator inside the name before it reaches join()."
+    },
+    {
+      "path": "src/signpost/pad.py",
+      "reason": "The padder was adjusted while reading it; the edit is in the work tree."
+    }
+  ],
+  "notes": "Two files carry work: one committed, one still uncommitted.",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "sess-build-1"
+}
