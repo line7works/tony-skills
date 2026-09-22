@@ -418,9 +418,13 @@ class OwnerAmendmentA4AStatusLineIsAnObservation(HistoryCase):
 
     It is outside BOTH of section 11.7's checks, so a card a station flips in place, or that
     moves because lines were written above it, never stops a later import. Each pass appends a
-    `card_observed` for a slice only when the current text differs from the `value` of that
-    slice's last `card_observed` in the log, matched by slice name and never by line number.
-    RECORD lines keep section 11.7 exactly as it was built.
+    `card_observed` for a slice only when the current text differs from the last card that
+    slice holds in the log, matched by slice name and never by line number. RECORD lines keep
+    section 11.7 exactly as it was built.
+
+    E13 amendment A4 widened "the last card that slice holds" from `card_observed` alone to
+    `card_observed` or `card_set`, and made a line matching a NATIVE card already recorded rather
+    than merely unchanged; the last test of this class holds that reading.
     """
 
     CARDS_ONLY = "docs/plans/2026-05-20-cards-only.md"
@@ -529,16 +533,30 @@ class OwnerAmendmentA4AStatusLineIsAnObservation(HistoryCase):
         self.assertEqual(body["error"], "conflict")
         self.assertEqual(self.log_bytes(HISTORY), before, "nothing is written")
 
-    def test_a_card_set_is_not_an_observation_of_the_documents_text(self):
-        """A native card move does not tell the importer what the `Status:` line says (A4)."""
+    def test_the_last_card_of_a_slice_is_read_from_both_card_events(self):
+        """E13 amendment A4 replaces E12's amendment A4 reading on one point.
+
+        E12's A4 said a `card_set` is a native card move, not an observation of the document's
+        text, and `last_card_values` read only `card_observed`. The control room's CR-F2 measured
+        what that costs: a station moves a card, writes the text on the `Status:` line, and the
+        next levelling reads the line back as a fresh observation. E13's A4 rules that the last
+        card the log holds for a slice comes from either event, and that `after` is the text a
+        `card_set` wrote on the line, which is the pair `state._card_events` already reads. The
+        second half of each value says whether that card came from a NATIVE event, which is what
+        makes the line already recorded rather than merely unchanged.
+        """
         from records_core import importer as importer_mod
-        events = [{"kind": "card_set", "ledger_doc": HISTORY, "slice": "A",
-                   "before": "built", "after": "signed off"},
-                  {"kind": "card_observed", "ledger_doc": HISTORY, "slice": "A",
-                   "value": "built"},
+        native = {"kind": "native"}
+        events = [{"kind": "card_observed", "ledger_doc": HISTORY, "slice": "A",
+                   "value": "built", "origin": {"kind": "legacy"}},
+                  {"kind": "card_set", "ledger_doc": HISTORY, "slice": "A",
+                   "before": "built", "after": "signed off", "origin": native},
+                  {"kind": "card_observed", "ledger_doc": HISTORY, "slice": "B",
+                   "value": "rejected", "origin": {"kind": "legacy"}},
                   {"kind": "card_observed", "ledger_doc": "docs/other.md", "slice": "A",
-                   "value": "rejected"}]
-        self.assertEqual(importer_mod.last_card_values(events, HISTORY), {"A": "built"})
+                   "value": "rejected", "origin": {"kind": "legacy"}}]
+        self.assertEqual(importer_mod.last_card_values(events, HISTORY),
+                         {"A": ("signed off", True), "B": ("rejected", False)})
 
 
 if __name__ == "__main__":

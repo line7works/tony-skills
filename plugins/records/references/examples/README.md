@@ -22,14 +22,20 @@ uv run ../../scripts/validate-examples.py
   to see what the case is about.
 - `example.events.jsonl` — a nine-line log whose chain is real: every `prev` is the SHA-256 of
   the line before, and `seq` equals the line index. It is what `records.py verify` walks.
+- `rendered-review-block.md` — the review block `render` produces for a run that raised two
+  findings (E13 amendment A4), as the command returned it. Its companion is
+  `import-report/valid/import-nothing-new-native.json`, the report `import-legacy --dry-run`
+  prints over the document holding that block and the `Status:` line the same run moved: nothing
+  new, and `native_rendered: 3`.
 - `state/`, `import-report/`, `resolutions/` — the same `valid/` and `invalid/` pair for the
   other three schemas of contract section 1, with an invalid example wrapped as
   `{"reason": "<the rule>", "document": {…}}`. The `state/` and `import-report/` examples are
   real responses: they were produced by running `state`, `import-legacy` (a dry run, a landed
-  import, a pass that recovered a stale lock, and each of its four refusals) and `survey`
-  against the fixture workspace `fixtures/build.py` builds, with the survey's absolute workspace
-  path replaced by `/workspace`. The `resolutions/`
-  examples are the input file of section 11.5, written by hand.
+  import, a pass that recovered a stale lock, a pass over a document whose lines the log already
+  records natively, and each of its four refusals) and `survey` against the fixture workspace
+  `fixtures/build.py` builds, or, for the native-rendering pass, against a workspace of the shape
+  `scripts/tests/testlib.py` builds, with the survey's absolute workspace path replaced by
+  `/workspace`. The `resolutions/` examples are the input file of section 11.5, written by hand.
 
 ## The A2 clears the examples cover
 

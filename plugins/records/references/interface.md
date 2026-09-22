@@ -833,9 +833,32 @@ when the clear was bound and names that commit.
 ### `render`
 
 `render --workspace W --doc D --run-id R` prints the Appendix A text one run's events produce and
-writes nothing. A run is named by `actor.run_id`. Its events render in `seq` order as one block
-(when the run holds any `disposition` or `defect_raised`), then its waiver and reopening lines,
-one standalone line each. Nothing in E12 writes that text into a document.
+writes nothing. A run is named by `actor.run_id`. Its events render in `seq` order as, in this
+order:
+
+1. one **review block per slice** the run's `finding_raised` events name, the slices in ascending
+   order: a blank line, the heading `### <YYYY-MM-DD> — review: <slice>`, then one review finding
+   line per event, `- <severity> · <file:line> · (<claim>) · <failure scenario> · <whose review
+   found it>`. Appendix A's review heading names ONE slice, and the reader charges every line of
+   a block to the heading's FIRST slice, so a heading naming two slices would not read back to
+   the findings it was written from; one block per slice is the shape that round-trips. A
+   finding with no claim writes `()`, and so does one with no `raised_by`, because a line ending
+   in an empty field loses it to the reader's trailing whitespace trim;
+2. one **recheck block**, when the run holds any `disposition` or `defect_raised`: a blank line,
+   the heading `### <YYYY-MM-DD> — recheck: <slices, ascending>`, then one line per event;
+3. the run's **waiver and reopening lines**, one standalone line each.
+
+`text` is all three, in that order, which is what a station appends. Nothing in this component
+writes that text into a document.
+
+A rendered review block read back by `import-legacy` into a log that does not hold the run
+raises the same findings, with the same finding IDs, for every location a station writes
+(`raw` is `file:line`) and every legacy location whose extras are backticks or a glued tag,
+which section 7's key drops. One location grammar serves every rendered line, so a location
+whose `raw` says more than `file:line` (a range, several locations in one field) renders as its
+first `file:line` and reads back as a finding of its own; the recheck line has always rendered
+one that way. A document whose log DOES hold the run is not affected: `import-legacy` recognises
+a line it rendered itself by its bytes and never re-imports it (`native_rendered`, below).
 
 An event of the run that names a finding the log never raised is exit 4: a log that an `append`
 wrote cannot hold one, but a git merge that joined two tails can, and the component says so
@@ -849,17 +872,22 @@ rather than guessing.
 | `exists` | is there a log file at all. |
 | `spec` | the specification address. |
 | `spec.doc` | the ledger document. |
-| `spec.slice` | the one slice the block names, or null when it names several or none. |
+| `spec.slice` | the one slice the run's blocks name, or null when they name several or none. |
 | `run_id` | the run that was rendered. |
-| `date` | the date the block heading carries, or null when the run rendered nothing. |
-| `slices` | the heading's slices, in the pilot's order. |
+| `date` | the date the recheck block's heading carries; the first review block's date when the run raised findings and cleared nothing; the first grant's date when it only granted; null when the run rendered nothing. |
+| `slices` | the recheck heading's slices, in the pilot's order. |
 | `slices[]` | one slice name. |
-| `block` | the block text: a blank line, the heading, then one line per event. Empty when the run wrote no block line. |
-| `lines` | the block's lines, without the heading. |
+| `review` | the review block text: one block per slice, each a blank line, its heading, then its finding lines. Empty when the run raised no finding. |
+| `review_lines` | every review finding line, without the headings, the slices in the order `review_slices` gives and the findings of each in `seq` order. |
+| `review_lines[]` | one review finding line. |
+| `review_slices` | the slices the review blocks name, ascending; one block each. |
+| `review_slices[]` | one slice name. |
+| `block` | the recheck block text: a blank line, the heading, then one line per event. Empty when the run wrote no block line. |
+| `lines` | the recheck block's lines, without the heading. |
 | `lines[]` | one recheck or defect line. |
 | `grants` | the standalone waiver and reopening lines, each with its newline. |
-| `text` | what a station would append: the block, then the grants. |
-| `rendered` | how many lines were produced. |
+| `text` | what a station would append: the review blocks, the recheck block, then the grants. |
+| `rendered` | how many lines were produced, review lines included. |
 | `skipped` | every event of the run that carries no Appendix A line, so "nothing to render" is not confused with "I dropped something". |
 | `skipped[]` | one skipped event. |
 | `skipped[].seq` | its `seq`. |
@@ -889,6 +917,25 @@ an answer from a resolutions file                    -> resolution_applied, then
 
 bracketed by `import_started` and `import_finished`, and preceded by `log_opened` when the log
 does not exist yet. A pass that finds no news appends nothing at all, not even a bracket.
+
+**Lines the log already records natively.** A record line that is byte-equal to what `render`
+produces for a NATIVE event this log already holds is already recorded: the pass counts it under
+`native_rendered`, skips it, never imports it, never calls it `legacy_unparsed`, and never calls
+it ambiguous. This component owns both grammars, so byte equality is the whole rule; nothing is
+normalized away and no join is attempted, and a hand-written line that merely resembles a
+rendered one is read as the news it is. It covers every line `render` writes: a review finding
+line (`finding_raised`), a recheck line (`disposition`), a fix-introduced defect line
+(`defect_raised`), and a waiver or reopening line (`waived`, `reopened`). It also covers a
+`Status:` line whose text equals the last card this log holds for that slice from a native
+`card_set` or `card_observed` — a card a station moved and wrote onto the line, which before
+E13 amendment A4 was read back as a fresh observation.
+
+One native event answers for one line: a second copy of the same line below it is news, and a
+second raise of one finding stops the document under section 7 as it always did. A run whose
+events came FROM a document (an earlier import pass) recognises nothing; what the document
+already gave the log is what `previously_imported` answers for. Recognised lines are outside
+`lines_classified`, the way previously imported lines are, and outside section 11.7's tail rule,
+because a line the log already records cannot be news arriving above the tail.
 
 Every imported clear keeps its effect and carries `{"known": false}`, so history is not changed;
 derived state marks the finding `cleared_unbound` (owner ruling O4). An imported event's `at` is
@@ -949,8 +996,9 @@ Two further lines stop a document, both from amendment A9, and a resolutions ans
 | `dry_run` | was this a preview. |
 | `run_id` | the run id this pass stamped on every event it wrote. |
 | `lines_read` | how many lines the document holds. |
-| `lines_classified` | how many of them this pass classified (record lines an earlier pass already imported are not among them; `Status:` lines always are). |
+| `lines_classified` | how many of them this pass classified. A record line an earlier pass already imported is not among them, and neither is any line the log already records natively (`native_rendered`), a `Status:` line included; every other `Status:` line is. |
 | `previously_imported` | how many RECORD lines an earlier pass of this document already recorded. |
+| `native_rendered` | how many lines the log already records as native events, recognised by their bytes and skipped: record lines `render` wrote, and a `Status:` line matching the last card a native `card_set` or `card_observed` holds for its slice. |
 | `blocks` | how many record blocks the document holds. |
 | `slices` | how many slices it names. |
 | `counts` | how many events of each kind this pass would write. |

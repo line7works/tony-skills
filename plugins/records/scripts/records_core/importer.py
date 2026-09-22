@@ -8,6 +8,7 @@ that changes state; `git blame` is read-only and is the only one it runs.
 What it produces, per line of the document, in file order:
 
     a `Status:` line whose text is new for its slice  -> card_observed (amendment A4)
+    (a line the log already records as a native event -> nothing: E13 amendment A4, below)
     a review finding line                            -> finding_raised
     a fix-introduced defect line                     -> defect_raised
     a recheck line                                   -> disposition
@@ -45,6 +46,15 @@ Readings this module takes where the contract left a choice; each is in the slic
   line is gone appends nothing, and a pass whose only news is one flipped card appends
   `import_started`, that `card_observed`, and `import_finished`. RECORD lines keep section 11.7
   exactly as written.
+- E13 amendment A4: a record line that is byte-equal to what `render` produces for a NATIVE event
+  this log already holds, and a `Status:` line whose text equals the last card a native `card_set`
+  or `card_observed` holds for that slice, are ALREADY RECORDED. The pass counts them under
+  `native_rendered`, skips them, and never imports them, calls them `legacy_unparsed`, or calls
+  them ambiguous; they are outside `lines_classified` and outside section 11.7's tail rule. This
+  component owns both grammars, so byte equality is the whole rule: nothing is normalized away and
+  no join is attempted, and a hand-written line that only resembles a rendered one is still news.
+  One native event answers for one line (`rendered_native_lines` is a multiset), and a run holding
+  any legacy record is an import pass, not a station's run, and recognises nothing.
 - A resolutions file carries `answered_by`, `answered_on`, and one answer per line, each with
   the `raw` text of the line as the answer was given, which is what makes section 11.5's
   "a resolution that names a line whose raw text has changed ... is rejected" checkable. The
@@ -54,7 +64,8 @@ import datetime
 import os
 import re
 
-from . import canon, events as events_mod, identity as identity_mod, ids, legacy
+from . import (canon, events as events_mod, identity as identity_mod, ids, legacy,
+               render as render_mod)
 
 STATION = "records-import"
 UNKNOWN_SOURCE = {"known": False}
@@ -200,20 +211,111 @@ def previously_imported(existing_events, doc):
 
 
 def last_card_values(existing_events, doc):
-    """{slice name: the `value` of that slice's LAST `card_observed` in the log} (amendment A4).
+    """{slice name: (the text of that slice's LAST card in the log, was it written natively)}.
 
     Matched by slice name, never by line number, so a `Status:` line that moved is still the same
-    slice's card. A `card_set` is a native card move, not an observation of the document's text,
-    and does not count here.
+    slice's card. Both card events count, which is the pair `state._card_events` already reads
+    (E13 amendment A4): a `card_observed` records what a `Status:` line SAID when an import read
+    it, and a `card_set` records the card a station MOVED, whose `after` is the text that station
+    wrote on the line. Reading only the first is the `card_observed: 1` of the control room's
+    CR-F2: a card the pilot had just moved was read back as news on the next pass.
+
+    The second half of each pair says whether that last card came from a NATIVE event. A
+    `Status:` line matching a native card is the rendering of an event the log already holds, and
+    the pass counts it under `native_rendered`; a line matching a card an earlier IMPORT observed
+    is simply unchanged, and is skipped as it always was, counted under nothing.
     """
     out = {}
     for event in existing_events:
-        if event.get("kind") != "card_observed" or event.get("ledger_doc") != doc:
+        kind = event.get("kind")
+        if kind not in ("card_observed", "card_set") or event.get("ledger_doc") != doc:
             continue
         name = event.get("slice")
-        if isinstance(name, str):
-            out[name] = event.get("value")
+        if not isinstance(name, str):
+            continue
+        origin = event.get("origin")
+        native = not (isinstance(origin, dict) and origin.get("kind") == "legacy")
+        out[name] = (event.get("value") if kind == "card_observed" else event.get("after"), native)
     return out
+
+
+def native_run_ids(existing_events):
+    """The run ids of this log whose events are all native, in first-seen order.
+
+    A run holding any legacy record is an import pass, not a station's run: its lines came FROM
+    the document and rendering them back would say the document already records them, which is
+    what `previously_imported` answers for instead.
+    """
+    seen, legacy_runs = [], set()
+    for event in existing_events:
+        actor = event.get("actor")
+        run_id = actor.get("run_id") if isinstance(actor, dict) else None
+        if not isinstance(run_id, str):
+            continue
+        origin = event.get("origin")
+        if isinstance(origin, dict) and origin.get("kind") == "legacy":
+            legacy_runs.add(run_id)
+            continue
+        if run_id not in seen:
+            seen.append(run_id)
+    return [run_id for run_id in seen if run_id not in legacy_runs]
+
+
+def rendered_native_lines(doc, existing_events):
+    """{line text: how many native events of this log render to exactly that line}.
+
+    E13 amendment A4, the safe rule: this component owns both grammars, so a record line "is the
+    rendering of a native event" exactly when it is byte-equal to what `render` produces for one.
+    Nothing is normalized away and no join is attempted, so a hand-written line that merely
+    resembles a rendered one is still read as the news it is.
+
+    The count is a multiset, and `plan_import` consumes one entry per document line it matches:
+    one native event answers for one line, and a second copy of the same line below it is news
+    (and, being a second raise of one finding, stops the document the way section 7 says).
+    """
+    counts = {}
+    for run_id in native_run_ids(existing_events):
+        try:
+            rendered = render_mod.render_run(doc, existing_events, run_id)
+        except render_mod.RenderError:
+            continue  # a run this component cannot render recognises nothing
+        written = (list(rendered["review_lines"]) + list(rendered["lines"])
+                   + list(rendered["grants"]))
+        for line in written:
+            text = line.rstrip("\n")
+            counts[text] = counts.get(text, 0) + 1
+    return counts
+
+
+def card_text(unit):
+    """The text after `Status: ` on a card unit's line."""
+    raw = unit.raw
+    return raw[len("Status:"):].strip() if raw.startswith("Status:") else raw
+
+
+def split_already_recorded(units, rendered, cards_seen):
+    """(the units this pass still has to classify, how many it recognised) (amendment A4).
+
+    A line the log already holds as a NATIVE event is already recorded: it is counted, skipped,
+    never imported, never `legacy_unparsed`, and never ambiguous. It leaves `lines_classified`
+    the way a previously imported line does, and it is outside section 11.7's tail rule, because
+    a line the log already records cannot be news arriving above the tail.
+    """
+    kept, recognised = [], 0
+    for unit in units:
+        if unit.kind == "card":
+            row = cards_seen.get(unit.slice_name)
+            if row is not None and row[1] and row[0] == card_text(unit):
+                recognised += 1
+                continue
+        else:
+            text = unit.item["text"]
+            if rendered.get(text):
+                rendered[text] -= 1
+                recognised += 1
+                continue
+        kept.append(unit)
+    return kept, recognised
 
 
 def check_only_grown(seen, lines, doc, log_rel):
@@ -391,7 +493,10 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     seen = previously_imported(existing_events, doc)
     check_only_grown(seen, lines, doc, log_rel)
     blame = blame_commits(workspace, doc)
+    cards_seen = last_card_values(existing_events, doc)
     units = [u for u in units_of(parsed, doc) if u.line_no not in seen]
+    units, native_rendered = split_already_recorded(
+        units, rendered_native_lines(doc, existing_events), cards_seen)
     check_only_grew_at_the_tail(units, high_water_line(existing_events, doc), doc, log_rel)
     try:
         answers = answers_by_line(resolutions)
@@ -407,7 +512,6 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     counts = {}
     candidates = findings_from_log(existing_events, doc)
     by_id = dict((f.id, f) for f in candidates)
-    cards_seen = last_card_values(existing_events, doc)
     run_id = run_id_for(doc, moment)
     actor = {"station": STATION, "run_id": run_id, "harness": None}
 
@@ -531,15 +635,18 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
 
     for unit in units:
         if unit.kind == "card":
-            value = unit.raw[len("Status:"):].strip() if unit.raw.startswith("Status:") else unit.raw
-            # Amendment A4: one observation per change. The comparison is against the last value
-            # observed for this SLICE, whatever line the `Status:` line sits on now; an unchanged
+            value = card_text(unit)
+            # Amendment A4: one observation per change. The comparison is against the last card
+            # held for this SLICE, whatever line the `Status:` line sits on now; an unchanged
             # card appends nothing, so a second import of an unchanged document is still empty.
-            if unit.slice_name in cards_seen and cards_seen[unit.slice_name] == value:
+            # A line matching a card a NATIVE event wrote never reaches here: it was recognised
+            # in `split_already_recorded` and counted under `native_rendered` (E13 amendment A4).
+            row = cards_seen.get(unit.slice_name)
+            if row is not None and row[0] == value:
                 continue
             card = value if value in legacy.CARD_VALUES else "none"
             out.append(event_of(unit, "card_observed", slice=unit.slice_name, value=value, card=card))
-            cards_seen[unit.slice_name] = value
+            cards_seen[unit.slice_name] = (value, False)
             continue
         item = unit.item
         if item["kind"] == "unparsed":
@@ -628,7 +735,7 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
             "doc_sha256": doc_sha, "lines_read": len(lines), "units": len(units),
             "run_id": run_id, "at": stamp(moment), "date": moment.strftime("%Y-%m-%d"),
             "log": log_rel, "previously_imported": len(seen), "slices": len(parsed["slices"]),
-            "blocks": len(parsed["blocks"])}
+            "blocks": len(parsed["blocks"]), "native_rendered": native_rendered}
 
 
 def bracket_events(doc, plan, kind, **fields):
@@ -673,6 +780,7 @@ def report(doc, plan, batch, dry_run, appended=None, head=None, total=None, log_
         "lines_read": plan["lines_read"],
         "lines_classified": plan["units"],
         "previously_imported": plan["previously_imported"],
+        "native_rendered": plan["native_rendered"],
         "blocks": plan["blocks"],
         "slices": plan["slices"],
         "counts": dict(plan["counts"]),
@@ -771,6 +879,7 @@ def _stop_on(plan, doc, log_rel, head, total, dry_run):
     common = {"report": "import", "log": log_rel, "doc": doc, "head": head, "events": total,
               "dry_run": bool(dry_run), "counts": dict(plan["counts"]),
               "lines_read": plan["lines_read"], "lines_classified": plan["units"],
+              "native_rendered": plan["native_rendered"],
               "spec": events_mod.spec_address(doc)}
     if plan["rejected"]:
         first = plan["rejected"][0]

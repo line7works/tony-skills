@@ -137,6 +137,7 @@
       "lines_read": {"type": "integer", "minimum": 0},
       "lines_classified": {"type": "integer", "minimum": 0},
       "previously_imported": {"type": "integer", "minimum": 0},
+      "native_rendered": {"type": "integer", "minimum": 0, "description": "record lines and `Status:` lines this pass recognised as the rendering of a native event the log already holds, and therefore skipped (E13 amendment A4); they are outside `lines_classified`"},
       "blocks": {"type": "integer", "minimum": 0},
       "slices": {"type": "integer", "minimum": 0},
       "counts": {"$ref": "#/$defs/counts"},
@@ -150,7 +151,7 @@
       "additionalProperties": false,
       "required": ["interface_version", "component_version", "ok", "report", "log", "doc",
                    "doc_sha256", "dry_run", "run_id", "lines_read", "lines_classified",
-                   "previously_imported", "blocks", "slices", "counts", "imported",
+                   "previously_imported", "native_rendered", "blocks", "slices", "counts", "imported",
                    "would_import", "ambiguous", "ambiguities", "rejected_resolutions", "spec",
                    "opened_log", "head", "events"],
       "properties": {
@@ -166,6 +167,7 @@
         "lines_read": {"type": "integer", "minimum": 0},
         "lines_classified": {"type": "integer", "minimum": 0},
         "previously_imported": {"type": "integer", "minimum": 0},
+      "native_rendered": {"type": "integer", "minimum": 0, "description": "record lines and `Status:` lines this pass recognised as the rendering of a native event the log already holds, and therefore skipped (E13 amendment A4); they are outside `lines_classified`"},
         "blocks": {"type": "integer", "minimum": 0},
         "slices": {"type": "integer", "minimum": 0},
         "counts": {"$ref": "#/$defs/counts"},
@@ -221,7 +223,7 @@
       "additionalProperties": false,
       "required": ["interface_version", "component_version", "ok", "report", "error", "reason",
                    "log", "doc", "head", "events", "dry_run", "counts", "lines_read",
-                   "lines_classified", "spec", "ambiguities"],
+                   "lines_classified", "native_rendered", "spec", "ambiguities"],
       "properties": {
         "interface_version": {"type": "integer", "minimum": 1},
         "component_version": {"type": "string", "minLength": 1},
@@ -237,6 +239,7 @@
         "counts": {"$ref": "#/$defs/counts"},
         "lines_read": {"type": "integer", "minimum": 0},
         "lines_classified": {"type": "integer", "minimum": 0},
+        "native_rendered": {"type": "integer", "minimum": 0, "description": "record lines and `Status:` lines this pass recognised as the rendering of a native event the log already holds, and therefore skipped (E13 amendment A4); they are outside `lines_classified`"},
         "spec": {"$ref": "#/$defs/spec"},
         "ambiguities": {"type": "array", "items": {"$ref": "#/$defs/ambiguity"}},
         "rejected_resolutions": {"type": "array", "items": {"$ref": "#/$defs/rejection"}}
