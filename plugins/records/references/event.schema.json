@@ -119,7 +119,7 @@
     },
     "verified_source": {
       "$ref": "#/$defs/source",
-      "description": "the source identity the disposition or waiver was decided against (section 8.3)"
+      "description": "The source identity the disposition or waiver was decided against. A native clear requires known: true and an identity equal to the workspace. A fixed disposition requires an open finding; a waiver admits an open or fixed finding. A waiver over a waived finding remains refused. These contextual conditions are enforced by append, not by this single-event schema (section 8.3; E13 A2)."
     },
     "join_basis": {
       "oneOf": [

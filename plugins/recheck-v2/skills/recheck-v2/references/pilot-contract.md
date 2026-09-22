@@ -1058,3 +1058,52 @@ and how the Markdown is produced.
   suite holds the two together over every built case of every E7 lane, which is how this skill's
   qualification is re-earned for the move (owner pick P1: re-verified by parity on 2026-09, not
   re-trialled).
+
+Revision 7, 2026-09-21, the E13 slice 1 fix round (the outside reviewer's four MAJORs and one
+MINOR, plus the control room's conflicts finding). Nothing recheck decides moves (ruling E13-1);
+what moves is when the transaction is over, what the baseline is, and which refusals are final.
+
+- **Section 9, the commit point covers both appends.** Completing the document steps does not
+  complete the recording transaction. Every pass — a first `record`, a resume inside the
+  transaction, and a resume holding a COMMITTED document receipt alike — reconciles the landed,
+  non-cancelled status steps with this run's `card_set` events through the CLI before it reports
+  anything. `completed` is reported only when the document steps AND the card-event receipts are
+  complete. A status step the boundary check cancelled still produces no `card_set`. A definitive
+  refusal of the card append is a named stop (`recording_failed`, the section 10 row for a write
+  that failed inside the transaction, carrying the component's own sentence), never an escaped
+  exception and never exit 1; the receipt's `card_append` block names what was missing.
+
+- **Section 9, the transaction guard pins the targets' bytes.** The guard stores each transaction
+  target's SHA-256 beside the pre-transaction identity and the non-target diff. The guard's
+  tracked diff excludes the targets — that is what lets the transaction write them — so without
+  the hashes an edit that reaches a target before the document plan exists is invisible to every
+  check and becomes the plan's `before` state. The hashes, and the remaining source checks, are
+  required to match before a document plan is created and before any write of an empty-plan
+  resume; a mismatch is an outside-edit stop (`recording_failed`) with no further document,
+  event, checkpoint or receipt write. The baseline is never regenerated from edited bytes. Once a
+  plan exists, section 11's receipted-state classification decides, unchanged.
+
+- **Section 9 and 11, a refusal the component gave is definitive.** An unknown append outcome (a
+  crash with no answer) and a refusal the component returned are different states. A received
+  refusal is persisted in the receipt's append block as `refused` — the exit code, the error and
+  the component's own sentence — before the named stop is returned, and no resume retries it. An
+  unknown outcome is settled against the head the receipt already names (`expected_head`), never
+  against a head read afresh: a head that changed since is a conflict the component refuses, not
+  permission to append against the new one.
+
+- **Section 9, a failed history read is not an empty history.** A `card_set` history query that
+  failed keeps its exit and explanation, delivers the matching named pilot stop, and returns
+  before any append. Only cards a SUCCESSFUL read proved absent are ever appended.
+
+- **Section 11, the head the open set was read against is pinned at `start`.** The checkpoint
+  carries `records_pin` (the document, its log, and the head the view was read against). At
+  `record`, BEFORE this run's own sync, the log must still be at that head; an event another
+  writer appended between the two phases is a named conflict stop before any append, telling the
+  user to re-read the log and decide (section 10). The comparison is taken before the sync
+  precisely so CR-1's import events — which legitimately move the head inside a phase — are never
+  the ones it flags, and the pin advances to the head that sync produced. CR-1 owns the window
+  inside a phase; this check owns the window between two phases.
+
+- **Section 10, a landed append is never reported as a bare validation stop.** Once the
+  transaction's append has landed, a result that fails validation is `recording_failed` with the
+  half named and the receipt path beside it, not `stopped` with a bare validation message.

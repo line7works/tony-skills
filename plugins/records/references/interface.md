@@ -476,7 +476,7 @@ not one is exit 2 and no state is printed.
 | 3 | missing dependency | `jsonschema` did not import. One line on stderr, nothing on stdout. |
 | 4 | validation | an input, an event, or a log line failed validation, or `--doc` is not a ledger address (amendment A8: `docs/records/`, a verdict doc, or a path through a symbolic link). `error: "invalid"`. |
 | 5 | ambiguous identity | section 7's identity cases, and section 11.5's ambiguous legacy lines. `error: "ambiguous_identity"`. The response explains every case. |
-| 6 | stale source | a clear against a source that is not the workspace, or against a finding that is not open. `error: "stale_source"`. |
+| 6 | stale source | a clear without a known matching workspace identity, or a fixed disposition over a raised finding not open, or a waiver over a raised finding neither open nor fixed (amendment A2). `error: "stale_source"`. |
 | 7 | conflict | a chain break, a head mismatch, a held lock, a log holding an event that names another document, or a legacy document whose imported record lines changed or moved. `error: "conflict"`. |
 
 0 to 4 are the A7a meanings; 5, 6 and 7 are this component's. Every non-zero exit that carries a

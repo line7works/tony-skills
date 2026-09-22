@@ -64,6 +64,32 @@
         "recovered": {
           "type": "boolean",
           "description": "true when a resume found the append's events in the log and completed this block rather than appending again (section 11)"
+        },
+        "refused": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "exit_code",
+            "reason"
+          ],
+          "properties": {
+            "exit_code": {
+              "type": "integer",
+              "description": "the component's exit code, as it answered"
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "the component's `error` value, when it gave one"
+            },
+            "reason": {
+              "type": "string",
+              "description": "the component's own explanation, kept verbatim"
+            }
+          },
+          "description": "E13 fix round M3: the component ANSWERED this append with a refusal. The outcome is definitive, not unknown, so no resume retries it: the receipt carries the exit code, the error and the component's own sentence, and every later pass returns the named stop instead of appending."
         }
       }
     },
@@ -99,6 +125,32 @@
         "recovered": {
           "type": "boolean",
           "description": "true when a resume found the append's events in the log and completed this block rather than appending again (section 11)"
+        },
+        "refused": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "exit_code",
+            "reason"
+          ],
+          "properties": {
+            "exit_code": {
+              "type": "integer",
+              "description": "the component's exit code, as it answered"
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "the component's `error` value, when it gave one"
+            },
+            "reason": {
+              "type": "string",
+              "description": "the component's own explanation, kept verbatim"
+            }
+          },
+          "description": "E13 fix round M3: the component ANSWERED this append with a refusal. The outcome is definitive, not unknown, so no resume retries it: the receipt carries the exit code, the error and the component's own sentence, and every later pass returns the named stop instead of appending."
         }
       },
       "description": "the second append, the card_set events of the status steps that landed (E13 3.3)"

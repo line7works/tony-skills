@@ -201,6 +201,10 @@ class Run:
         self.states = {}
         self.resumed_half = None   # E13 3.5: which half of the transaction a resume had to finish
         self.legacy_receipt = False  # a receipt written before the records moved into the component
+        # CR-F1(b): set once the transaction's append has LANDED. A result that then fails
+        # validation is not `stopped` with a bare validation message: the append is in the log and
+        # the named half cannot be settled, which is `recording_failed`.
+        self.recording_half = None
 
     def harness_name(self):
         """`actor.harness` on every event this run writes: what the adapter reported, or None."""
@@ -305,9 +309,17 @@ class Run:
 
     def stop_builder(self, arts):
         def build(reason, extra):
-            out = {"protocol_version": 1, "run": self.run_block(), "status": "stopped", "stop_reason": reason}
+            status = "stopped"
+            # CR-F1(b): a run whose append landed and whose document steps can never validate is
+            # `recording_failed` with the half named, never `stopped` with a bare validation message.
+            if self.recording_half:
+                status = "recording_failed"
+                reason = "%s; the transaction's append landed and %s cannot be settled from it; the receipt names what landed" % (reason, self.recording_half)
+            out = {"protocol_version": 1, "run": self.run_block(), "status": status, "stop_reason": reason}
             if self.identity is not None and not reason.startswith("unsupported: submodules:"):
                 out["source_identity"] = self.source_identity()
+            if status == "recording_failed":
+                out["receipt_path"] = self.path("receipt.json")
             out["records_written"] = rmod.artifact_writes(self.artifact_inventory(list(arts) + list(extra)) + [self.path("result.json"), self.path("chat.md")])
             return out
         return build
@@ -658,6 +670,12 @@ def cmd_start(args):
                         "review_sheet": sheet["verdict"], "session_wrote_fix": run.session_wrote_fix},
               "items": [{"state": "pending", "retries": 0} for _ in checklist], "new_defects": [], "verifier_calls": [],
               "continuations": 0, "artifacts": list(run.artifacts) + [run.path("checkpoint.json"), run.path("checkpoint.log")]}
+    # CR-F1(a): the head the run's open set was read against. `record` compares the log against it
+    # BEFORE its own sync, so an event another writer appended between the two phases is a named
+    # conflict rather than something the run silently records over.
+    pin = records_pin(scope)
+    if pin is not None:
+        cp_doc["records_pin"] = pin
     try:
         run.cp = cpmod.Checkpoint.new(run.run_dir, cp_doc, schemas)
     except cpmod.CheckpointError as exc:
@@ -1355,6 +1373,12 @@ def record_boundary(run, violations, before_step):
 def assemble_and_deliver(run, rc, outcome, at_transaction, pre_cards, keep_existing=False):
     """Result assembly after the commit point (or after a recording failure)."""
     cp = run.cp.doc
+    # CR-F1(b): once the transaction's append has landed, a result that cannot validate is not a
+    # bare `stopped`: the events are in the log, the document holds the other half, and the run is
+    # `recording_failed` with the half named (Run.stop_builder reads this).
+    append_block = (rc.doc.get("append") or {}) if rc is not None else {}
+    if outcome["status"] == "completed" and append_block.get("head"):
+        run.recording_half = "its document steps cannot be validated against it"
     checklist = cp["scope"]["checklist"]
     items = [dict(it["result"]) for it in cp["items"] if it["state"] == "done"]
     rmod.apply_markers(items, cp["scope"]["grants"]["waivers"], cp["scope"]["grants"]["reopenings"])
@@ -1488,6 +1512,80 @@ def reprove_retained_reports(run):
             run.terminal("stopped", "evidence changed: %s" % path, checklist_count=len(cp["items"]), verifier=verifier_block(run))
 
 
+def records_pin(scope):
+    """CR-F1(a): `{doc, log, head}` for the view the run's open set was read from, or None when the
+    scope was resolved without one (a seeded checkpoint, or a stop before the view existed)."""
+    view = scope.get("view") if isinstance(scope, dict) else None
+    if view is None:
+        return None
+    try:
+        return {"doc": scope["document"], "log": view.state["log"], "head": view.head}
+    except (KeyError, TypeError):
+        return None
+
+
+def head_now(run, document):
+    """The log's head as the component reports it, or None when it cannot be read (no log yet)."""
+    try:
+        return records().verify(run.workspace, document)["head"]
+    except (rcl.RecordsRefusal, rcl.ComponentUnavailable):
+        return None
+
+
+def rival_since_pin(run, cp, document):
+    """CR-F1(a): a named conflict when the log moved between `start` and `record`.
+
+    The head the open set was read against is pinned in the checkpoint at `start`. At `record` the
+    log must still be at it BEFORE this run's own sync: every event past it was appended by
+    someone else while this run was grading, and nothing the run decided accounts for it.
+
+    How this sits with CR-1 (which runs `import-legacy` at the start of every phase that reads
+    records, and whose import events legitimately move the head): the comparison is taken BEFORE
+    the run's own sync, so the sync's events are never the ones it flags, and the pin is advanced
+    to the post-sync head in the same checkpoint write. CR-1 owns the window inside a phase; this
+    check owns the window between two phases. They do not conflict.
+    """
+    pin = cp.get("records_pin")
+    if not pin or pin.get("doc") != document:
+        return None
+    now = head_now(run, document)
+    if now is None or now == pin["head"]:
+        return None
+    return ("the log of %s is at head %s, not the %s this run's open set was read against at the "
+            "start of the run: another writer appended to it between the phases and nothing this "
+            "run decided accounts for that event. Re-read the log and decide (section 10); no "
+            "record written" % (document, now[:12], pin["head"][:12]))
+
+
+def preplan_outside_edit(run, cp):
+    """M2: the transaction's targets must still carry the bytes pinned BEFORE the append.
+
+    The guard stores each target's hash beside the pre-transaction identity and the non-target
+    diff, because the identity's tracked diff EXCLUDES the targets (that is what lets the
+    transaction write them at all). Without the hashes an edit to a target made before the
+    document plan exists is invisible to every check and becomes the plan's `before` state. The
+    hashes are compared before a plan is created and before an empty-plan resume writes anything;
+    once a plan exists, section 11's receipted-state classification decides, unchanged.
+
+    Returns the stop reason, or None when every target is where the transaction left it.
+    """
+    guard = cp.get("transaction_guard") or {}
+    pinned = guard.get("target_sha256") or {}
+    for target in sorted(pinned):
+        current = rcmod.sha(rcmod.file_text(os.path.join(run.workspace, target)))
+        if current != pinned[target]:
+            return ("%s is at %s, not the %s the transaction pinned before its append: an outside "
+                    "edit reached it before the document plan existed, and the edited bytes are "
+                    "never taken as the baseline. No document, event, checkpoint or receipt write "
+                    "follows; this needs the user's word" % (target, current[:12], pinned[target][:12]))
+    return None
+
+
+def target_hashes(workspace, targets):
+    """M2: {target: sha256 of its bytes now}, stored in the transaction guard before the append."""
+    return dict((t, rcmod.sha(rcmod.file_text(os.path.join(workspace, t)))) for t in targets)
+
+
 def run_instant(run):
     """The `at` every event of this run carries: the run's DECLARED date (E8-25) with the current
     UTC time of day.
@@ -1516,12 +1614,43 @@ def transaction_targets(run, cp, document):
     return sorted(targets)
 
 
-def append_or_stop(run, rc, document, events, expect_head, checklist_count):
+def persist_refusal(rc, key, expect_head, refusal):
+    """M3: record a received refusal in the receipt's append block as non-resumable."""
+    block = dict(rc.doc.get(key) or {})
+    if not block.get("log"):
+        fallback = (rc.doc.get("append") or {}).get("log")
+        if not fallback:
+            return
+        block["log"] = fallback
+    block.setdefault("expected_head", expect_head)
+    block["refused"] = {"exit_code": refusal.exit_code, "error": refusal.error,
+                        "reason": refusal.sentence()}
+    rc.doc[key] = block
+    rc.save()
+
+
+def refused_reason(block, what):
+    """The named stop a persisted refusal produces on every later resume (M3)."""
+    r = block.get("refused") or {}
+    return ("%s was refused by the records component (exit %s, %s): %s. A refusal the component "
+            "gave is definitive and is never retried: nothing was appended, and nothing will be. "
+            "Re-read the log and decide (section 10)"
+            % (what, r.get("exit_code"), r.get("error") or "-", r.get("reason") or ""))
+
+
+def append_or_stop(run, rc, document, events, expect_head, checklist_count, key="append"):
     """The transaction's append. A refusal surfaces as the pilot's matching stop (brief 3.4) with
-    NOTHING written to the document; the receipt holds the intent and no entry."""
+    NOTHING written to the document; the receipt holds the intent and no entry.
+
+    M3: a refusal RECEIVED from the component is definitive, not an unknown outcome. It is
+    persisted in the receipt's append block as `refused` BEFORE the named stop is returned, so
+    that no resume ever retries it (an unknown outcome — a crash with no answer — is the only
+    thing `recover_append` settles, and it settles it against the head this block already names).
+    """
     try:
         return records().append(run.workspace, document, events, expect_head, run.run_dir)
     except rcl.RecordsRefusal as refusal:
+        persist_refusal(rc, key, expect_head, refusal)
         stop = rview.stop_for(refusal)
         reason = ("the records component refused the transaction's append (exit %s, %s -> %s): %s"
                   % (refusal.exit_code, refusal.error or "-", stop.status, stop.reason))
@@ -1543,41 +1672,126 @@ def append_or_stop(run, rc, document, events, expect_head, checklist_count):
                              run.pre_transaction, run.pre_cards)
 
 
-def append_card_events(run, rc, document, plan, pre_cards, at_transaction):
-    """The second append (E13 3.3): a `card_set` for every status-line step that actually LANDED.
-
-    A status step the boundary check cancelled leaves no `card_set` behind, which is the whole
-    reason the cards are a second append rather than part of the first. The pass is idempotent: a
-    slice the run already recorded a card for is skipped, so a resume never appends twice.
-    """
+def card_moves(plan, pre_cards):
+    """The card each status-line step that actually LANDED moved, in plan order. A step the
+    boundary check cancelled, and a seeded step the transaction never regenerated, move none."""
     moves = []
     for step in plan:
         if step["kind"] != "status_line" or step.get("cancelled") or not step.get("landed"):
             continue
         name, value = step.get("slice"), step.get("value")
         if not name or not value:
-            continue  # a seeded step the transaction never regenerated names no card move
+            continue
         moves.append((name, pre_cards.get(name, "none"), value))
-    if not moves:
-        return
-    already = set()
+    return moves
+
+
+def settle_card_events(run, rc, document, plan, pre_cards, at_transaction):
+    """The second append (E13 3.3) and its recovery (the fix round, M1, M3 and M4).
+
+    Completing the document steps does not complete the recording transaction: the `card_set`
+    events of the status steps that landed are the second half of it, and every pass — a first
+    `record`, a resume inside the transaction, and a resume holding a COMMITTED document receipt
+    alike — reconciles the landed, non-cancelled status steps with this run's card events through
+    the CLI. A cancelled status step produces no `card_set`, which is the whole reason the cards
+    are a second append rather than part of the first.
+
+    M4: a card-history query that FAILED is not an empty history. Its exit and explanation are
+    kept, the named pilot stop is delivered, and the function returns before any append; only
+    cards a SUCCESSFUL read proved absent are ever appended.
+
+    M3, applied to this append too: a refusal the component gave is persisted as non-resumable and
+    never retried. An unknown outcome (a crash with no answer) is settled against the head the
+    receipt already names, never against a newer one.
+
+    Returns `(missing half or None, RecordsStop or None)`.
+    """
+    if not (rc.doc.get("append") or {}).get("log"):
+        # A receipt with no `append` block was written before the records moved into the component
+        # (a seeded or legacy receipt, the E7 W lanes among them). This run made no append at all,
+        # and the lines its steps wrote reach the log the way every hand-written record does,
+        # through the importer, `card_observed` included. There is no card half of a transaction
+        # this core never opened, and fabricating `card_set` events for it would be a record of
+        # something that did not happen. The transaction branch settles such a receipt only after
+        # `recover_append` has adopted it (question 6 of the slice 1 report).
+        return None, None
+    moves = card_moves(plan, pre_cards)
+    block = rc.doc.get("card_append") or None
+    if not moves and not block:
+        return None, None
+    # A `card_append` block that already carries a head records the LAST append, not the whole card
+    # half: a resume that lands further status steps owes their cards too. So the reconciliation is
+    # made against the log every pass, and only the log says what this run already wrote.
+    if block and block.get("refused"):
+        return None, rview.RecordsStop(rview.CONFLICT_STATUS,
+                                       refused_reason(block, "the transaction's card events append"))
+    # M4: the history read decides what is already there; a failure is a stop, never an empty set
     try:
-        for row in records().events(run.workspace, document, kind="card_set")["results"]:
-            event = row["event"]
-            if (event.get("actor") or {}).get("run_id") == run.run_id:
-                already.add(event.get("slice"))
-    except rcl.RecordsRefusal:
-        already = set()
-    moves = [m for m in moves if m[0] not in already]
-    if not moves:
-        return
-    head = records().verify(run.workspace, document)["head"]
+        rows = records().events(run.workspace, document, kind="card_set")["results"]
+    except rcl.RecordsRefusal as refusal:
+        return None, rview.stop_for(
+            refusal, reading="the card history of this run could not be read, so no card event was "
+                             "appended and nothing was recorded twice")
+    already = {}
+    for row in rows:
+        event = row["event"]
+        if (event.get("actor") or {}).get("run_id") == run.run_id:
+            already.setdefault(event.get("slice"), []).append(row["seq"])
+    pending = [m for m in moves if m[0] not in already]
+    # an UNKNOWN outcome: the receipt names an append whose answer never came back
+    recovering = block is not None and not block.get("head")
+    if not pending:
+        if recovering and already:
+            # the append LANDED; only its record in the receipt is missing (E13 3.5, direction b)
+            walked = records().verify(run.workspace, document)
+            seqs = sorted(seq for rows_ in already.values() for seq in rows_)
+            rc.doc["card_append"] = {"log": block["log"], "expected_head": block["expected_head"],
+                                     "head": walked["head"], "seqs": seqs, "recovered": True}
+            rc.save()
+            return "the card events' record in the receipt", None
+        return None, None
+    if recovering:
+        # M3: the receipt's expected head, never a head read afresh. A head that moved since is a
+        # conflict the component refuses (exit 7), not permission to append against the new one.
+        head = block["expected_head"]
+    else:
+        head = records().verify(run.workspace, document)["head"]
+        rc.append_intent(rc.doc["append"]["log"], head, key="card_append")
     events = records_write.card_events(document, run.run_id, run.harness_name(), run_instant(run),
-                                       identity.reported(at_transaction), moves)
-    rc.append_intent(rc.doc["append"]["log"], head, key="card_append")
-    result = records().append(run.workspace, document, events, head, run.run_dir)
+                                       identity.reported(at_transaction), pending)
+    try:
+        result = records().append(run.workspace, document, events, head, run.run_dir)
+    except rcl.RecordsRefusal as refusal:
+        persist_refusal(rc, "card_append", head, refusal)
+        return None, rview.stop_for(
+            refusal, reading="the card events of this run were not appended; until the conflict is "
+                             "decided the log and the document's `Status:` lines disagree")
     rc.record_append(result["log"], head, result["head"],
                      [row["seq"] for row in result["appended"]], key="card_append")
+    return ("the card events" if recovering else None), None
+
+
+def card_outcome(run, rc, document, plan, pre_cards, at_transaction, outcome):
+    """Settle the card half and fold its result into the transaction's outcome.
+
+    `completed` is reported only when the document steps AND the card-event receipts are complete;
+    a definitive refusal of the card append is `recording_failed` with the half named, and never
+    an escaped exception (the fix round's M1).
+    """
+    half, stop = settle_card_events(run, rc, document, plan, pre_cards, at_transaction)
+    if half and not run.resumed_half:
+        run.resumed_half = half
+    if stop is None:
+        return outcome
+    if outcome["status"] != "completed":
+        # the document half had already failed; the card stop is added to what the run reports
+        out = dict(outcome)
+        out["stop_reason"] = "%s; the card events were not appended either: %s" % (
+            outcome.get("stop_reason") or "the transaction did not finish", stop.reason)
+        return out
+    return {"status": "recording_failed",
+            "stop_reason": "the document steps landed and the card events did not: %s" % stop.reason,
+            "violations": outcome["violations"], "cancelled": outcome["cancelled"]}
 
 
 def recover_append(run, rc, document):
@@ -1604,6 +1818,13 @@ def recover_append(run, rc, document):
     block = rc.doc.get("append")
     if block and block.get("head"):
         return None
+    if block and block.get("refused"):
+        # M3: the component ANSWERED, and its answer was a refusal. Nothing landed, the outcome is
+        # not unknown, and a resume never sends the append again.
+        run.plan = []
+        assemble_and_deliver(run, rc, {"status": "recording_failed", "violations": [], "cancelled": False,
+                                       "stop_reason": refused_reason(block, "the transaction's append")},
+                             run.pre_transaction, {})
     walked = records().verify(run.workspace, document)
     if not block:
         rc.doc["append"] = {"log": walked["log"], "expected_head": walked["head"],
@@ -1628,8 +1849,12 @@ def recover_append(run, rc, document):
                                               identity.reported(run.pre_transaction), view,
                                               cp["scope"]["checklist"], results, cp["new_defects"],
                                               waivers, reopenings, cp.get("new_defect_causes") or [])
-    appended = append_or_stop(run, rc, document, events, view.head, len(cp["items"]))
-    rc.record_append(appended["log"], view.head, appended["head"], [row["seq"] for row in appended["appended"]])
+    # M3: the head the RECEIPT expects, never the head read now. The receipt names the head the
+    # run read at plan time; a head that changed since is a conflict the component refuses, and a
+    # refusal is never permission to refresh it.
+    appended = append_or_stop(run, rc, document, events, block["expected_head"], len(cp["items"]))
+    rc.record_append(appended["log"], block["expected_head"], appended["head"],
+                     [row["seq"] for row in appended["appended"]])
     return "the append"
 
 
@@ -1680,7 +1905,8 @@ def plan_and_record(run):
     if outside is not None:
         cp["transaction_guard"] = {"identity": identity.reported(at_transaction),
                                    "nontarget_diff_sha256": canon.sha256_hex(pre_nontarget_diff),
-                                   "targets": targets}
+                                   "targets": targets,
+                                   "target_sha256": target_hashes(run.workspace, targets)}
         cp["phase"] = "recording"
         run.cp.save()
         rc = rcmod.Receipt.new(run.run_dir, run.run_id, [], run.schemas)
@@ -1691,6 +1917,12 @@ def plan_and_record(run):
         assemble_and_deliver(run, rc, {"status": "recording_failed", "violations": [], "cancelled": False,
                                        "stop_reason": rcmod.containment_reason(1, outside)},
                              at_transaction, {})
+    # CR-F1(a): before this run's OWN sync, the log must still be at the head the open set was read
+    # against at `start`. Anything past it came from another writer while this run was grading, and
+    # the run's decisions do not account for it: a named conflict stop, before any append.
+    rival = rival_since_pin(run, cp, document)
+    if rival is not None:
+        run.terminal("stopped", rival, checklist_count=len(cp["items"]))
     # CR-1: the log is levelled with the document before its records are read again
     try:
         rview.sync(records(), run.workspace, document)
@@ -1704,7 +1936,15 @@ def plan_and_record(run):
     # E8-A45: the transaction guard, stored as the transaction begins. The log is excluded from the
     # identity and from this diff (CR-3), so the append the transaction makes moves neither.
     cp["transaction_guard"] = {"identity": identity.reported(at_transaction), "nontarget_diff_sha256": canon.sha256_hex(pre_nontarget_diff),
-                               "targets": targets}
+                               "targets": targets,
+                               # M2: each target's bytes as they stand BEFORE the append. The
+                               # tracked diff above excludes the targets, so without these an edit
+                               # that reaches one of them before the plan exists is invisible.
+                               "target_sha256": target_hashes(run.workspace, targets)}
+    # CR-F1(a): the pin moves to the head this phase's own sync produced, so a later pass through
+    # this function compares against what THIS run last read, not against a stale `start` head.
+    if cp.get("records_pin") and cp["records_pin"].get("doc") == document:
+        cp["records_pin"]["head"] = view.head
     cp["phase"] = "recording"
     run.cp.save()
     rc = rcmod.Receipt.new(run.run_dir, run.run_id, [], run.schemas,
@@ -1744,6 +1984,16 @@ def finish_transaction(run, rc, document, pre_cards, at_transaction, pre_nontarg
     run.rendered = records().render(run.workspace, document, run.run_id)
     after = rview.read(records(), run.workspace, document)
     run.open_after = after.open_entries()
+    # M2: the plan below takes each target's CURRENT bytes as its `before` state, so those bytes
+    # must still be the ones the transaction pinned before its append. An edit that reached a
+    # target in between is an outside edit: the plan is never created, no document, event,
+    # checkpoint or receipt write follows, and the baseline is never regenerated from edited bytes.
+    edited = preplan_outside_edit(run, cp)
+    if edited is not None:
+        run.plan = []
+        assemble_and_deliver(run, rc, {"status": "recording_failed", "stop_reason": edited,
+                                       "violations": [], "cancelled": False},
+                             at_transaction, pre_cards)
     plan, states, cards_after, verdicts = rcmod.plan_document_steps(
         run.workspace, document, run.rendered, cp["scope"]["checklist"], pre_cards, run.open_after)
     rc.set_plan(plan)
@@ -1756,7 +2006,7 @@ def finish_transaction(run, rc, document, pre_cards, at_transaction, pre_nontarg
         outcome = {"status": "recording_failed", "stop_reason": violation, "violations": [], "cancelled": False}
     else:
         outcome = run_transaction(run, rc, plan, classes, pre_nontarget_diff)
-        append_card_events(run, rc, document, plan, pre_cards, at_transaction)
+        outcome = card_outcome(run, rc, document, plan, pre_cards, at_transaction, outcome)
     if outcome["status"] == "completed":
         cp["phase"] = "committed"
         run.cp.save()
@@ -2029,6 +2279,16 @@ def cmd_resume(args):
         # would win and undo the run's decision (an interrupted S2-01 reopens its waived item that
         # way). A receipt with no append block is the pre-E13 shape, whose landed lines really are
         # records the log lacks, so that one is imported (question 6).
+        if not rc_doc.get("plan"):
+            # M2: no document step has been planned, so no target has been receipted yet. An edit
+            # that reached one of them before this resume must never become the plan's baseline,
+            # and the check runs before any write of this resume — the import below included.
+            edited = preplan_outside_edit(run, cp)
+            if edited is not None:
+                run.plan = []
+                assemble_and_deliver(run, rc, {"status": "recording_failed", "stop_reason": edited,
+                                               "violations": [], "cancelled": False},
+                                     run.pre_transaction, {})
         if not rc_doc.get("append"):
             try:
                 rview.sync(records(), run.workspace, document)
@@ -2052,12 +2312,14 @@ def cmd_resume(args):
         run.pre_cards = pre_cards
         run.rendered = records().render(run.workspace, document, run.run_id)
         run.open_after = rview.read(records(), run.workspace, document).open_entries()
-        if run.resumed_half is None:
+        if run.resumed_half is None and any(c["class"] != "done" for c in classes):
             run.resumed_half = "the document steps"
         outcome = run_transaction(run, rc, work, classes, None, guard["nontarget_diff_sha256"] if guard else None)
         if outcome["status"] != "recording_failed":
             level_log(run, document)
-            append_card_events(run, rc, document, work, pre_cards, run.pre_transaction)
+            outcome = card_outcome(run, rc, document, work, pre_cards, run.pre_transaction, outcome)
+        if run.resumed_half is None:
+            run.resumed_half = "the document steps"
         if outcome["status"] == "completed":
             cp["phase"] = "committed"
             run.cp.save()
@@ -2079,9 +2341,16 @@ def cmd_resume(args):
         run.cp.save()
         # E8-A11: a violation the transaction recorded is read back, so the re-assembly keeps not_clear with the cards frozen
         violations = rcmod.read_boundary(run.run_dir)
+        # M1: a COMMITTED document receipt is not a completed transaction. Every resume reconciles
+        # this run's landed status steps with its card events through the CLI before it reports
+        # anything, so a run killed around the card append is finished here rather than delivered
+        # as a split state (or as a bare validation failure).
+        outcome = card_outcome(run, rc, target_document(cp), work, pre_cards, run.pre_transaction,
+                               {"status": "completed", "stop_reason": None, "violations": violations,
+                                "cancelled": bool(violations)})
         # E11-7 item 4: the STORED transaction identity, as above.
-        assemble_and_deliver(run, rc, {"status": "completed", "stop_reason": None, "violations": violations, "cancelled": bool(violations)},
-                             run.pre_transaction, pre_cards, keep_existing=True)
+        assemble_and_deliver(run, rc, outcome, run.pre_transaction, pre_cards,
+                             keep_existing=outcome["status"] == "completed")
     return emit(phase_document(run), 0)
 
 

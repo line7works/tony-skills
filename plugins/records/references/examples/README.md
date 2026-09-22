@@ -31,6 +31,14 @@ uv run ../../scripts/validate-examples.py
   path replaced by `/workspace`. The `resolutions/`
   examples are the input file of section 11.5, written by hand.
 
+## The A2 clears the examples cover
+
+Raise one finding, then append matching-source fixed and waived events, separately or in one
+batch. State reports waived, with the waiver deciding; a later reopened reports open.
+Fixed-over-fixed, fixed-over-waived and waived-over-waived return exit 6. Wrong or unknown
+verified source returns 6, unknown finding returns 5, and importer impersonation returns 4.
+Refused batches append nothing. Interface version remains 1.
+
 ## What the checker proves
 
 1. Every `valid/` example validates.

@@ -102,6 +102,14 @@
             "type": "string"
           },
           "description": "the plan's targets, workspace-relative"
+        },
+        "target_sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "description": "E13 fix round M2: SHA-256 of each transaction target's bytes at the moment the transaction began, beside the identity and the non-target diff. The tracked diff EXCLUDES the targets, so without these an edit that reaches a target before the document plan exists is invisible to every check and becomes the plan's before state. Compared before a plan is created and before an empty-plan resume writes anything; once a plan exists, section 11's receipted-state classification decides."
         }
       },
       "description": "stored when the transaction begins (phase recording, before the receipt); section 11 step 6 compares against it instead of the start identity (E8-A45)"
@@ -227,6 +235,33 @@
     },
     "integrity": {
       "$ref": "#/$defs/integrity"
+    },
+    "records_pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "log",
+        "head"
+      ],
+      "properties": {
+        "doc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the ledger document the open set was read from"
+        },
+        "log": {
+          "type": "string",
+          "minLength": 1,
+          "description": "that document's log, workspace-relative, as the component reports it"
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the head the view was read against"
+        }
+      },
+      "description": "E13 fix round CR-F1: the head the run's open set was read against, pinned at `start`. At `record`, BEFORE the run's own sync, the log must still be at it; an event another writer appended between the phases is a named conflict stop before any append. The pin advances to the head that phase's own sync produced."
     }
   },
   "$defs": {
