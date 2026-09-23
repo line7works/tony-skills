@@ -30,8 +30,9 @@ run id and directory, the harness, both sessions and the model with its floor) a
 reviewer is summoned on that harness in Step 3. Put that object into the input whole and type none
 of its fields. The building session comes only from the build run you are reviewing: pass its
 `result.json` as `--build-result` with `--workspace`, `--build-doc` and `--slice`, which it must
-match; the helper reads that run's recorded harness session (`invocation.session_id`). Without one,
-or from a result that records none, the building session is recorded as unknown; never type a
+match; the helper reads that run's recorded harness session (`invocation.session_id`). A result
+that records none is refused (exit 3, no invocation printed): STOP and say so, never build the
+input by hand. With no `--build-result` the building session is recorded as unknown; never type a
 session id.
 
 Build the input (`references/input.schema.json`; `references/examples/input-caller.json` is one) and run:

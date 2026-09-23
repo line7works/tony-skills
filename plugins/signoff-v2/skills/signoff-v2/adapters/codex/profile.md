@@ -51,10 +51,13 @@ bench's wall witness (E9-37, SB-8), its `session_meta.id` the value (`helper-der
 `--build-result PATH`, accepted only in its own run directory and only for the same workspace
 (`--workspace`, which `session_meta.cwd` binds too), document (`--build-doc`) and slice (`--slice`),
 a mismatch exit 2; the value is that run's recorded harness identity, the result's
-`invocation.session_id` (the thread the build adapter read, send-back 1; `helper-derived`). A result
-without it, or no `--build-result`, leaves the building session null with
-`measurement.building_provenance` `unavailable`, never the typed `answer.session_id`; equal is the core's independence refusal
-(`tests/test_full_fix_f4.py`, `TheProbeThroughTheCore`, through the real core).
+`invocation.session_id` (the thread the build adapter read, send-back 1; `helper-derived`). A
+selected result without it (the pre-send-back shape) is refused: exit 3, `unavailable provenance`,
+no invocation printed (Astra's N1; `tests/test_full_fix_f4.py`,
+`N1TheLegacyResultFromThisSession`, through the real core). No `--build-result` leaves the building
+session null with `measurement.building_provenance` `unavailable`; the typed `answer.session_id`
+is never read; equal is the core's independence refusal (`tests/test_full_fix_f4.py`,
+`TheProbeThroughTheCore`, through the real core).
 
 **The session lock (E13 pick P6).** Behind `setups/codex/launch.sh` the executor runs in its own
 per-launch home `<out-dir>/codex-home`, so this launch's session cannot be read by another launch
@@ -125,7 +128,7 @@ half behind `--live` and not run; `setups/codex/RESULTS.md` section "Negative te
 | Report the harness and the mode | `helper-derived` | this adapter's name; `session_meta.originator` |
 | Mint a single-use run id and an outside run directory | `helper-derived` | section 3 |
 | Identify the reviewing session | `helper-derived` | E9-40, E9-36, E9-37/SB-8 locator; `session_meta.id` |
-| Name the building session | `helper-derived` from the selected build run's result, bound; else `unavailable` | section 5 |
+| Name the building session | `helper-derived` from the selected build run's result, bound; a selected result with no `invocation.session_id` is exit 3 (N1); no `--build-result`, `unavailable` | section 5 |
 | Assert the model floor | `helper-derived`, map provisional | section 2 |
 | One fresh reviewer per call | NOT AVAILABLE: no qualified readers route for this harness (`lane-unavailable`) | section 7 |
 | Name the reviewer the answer carries | `helper-derived` from readers' sidecar, when a route exists | section 7 |

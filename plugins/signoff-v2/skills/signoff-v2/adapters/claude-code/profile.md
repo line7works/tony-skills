@@ -67,11 +67,13 @@ workspace (`--workspace`, which the transcript binds too), document (`--build-do
 (`--slice`); a mismatch is exit 2 naming it, and the value is that run's recorded harness
 identity, the result's `invocation.session_id`: the session the build adapter read from the
 harness's own record and the build core checked the answer's copy against (`session_mismatch`,
-send-back 1). `helper-derived` from that record. A result that carries no `invocation.session_id`,
-and a run with no `--build-result`, leave the building session null with
-`measurement.building_provenance` `unavailable`: provenance that is missing is reported as missing,
-never replaced by the executor's typed `answer.session_id` or by a session someone typed. The
-runtime `--building-session` override is gone. Equal values are the core's independence
+send-back 1). `helper-derived` from that record. A selected result that carries no
+`invocation.session_id` (the pre-send-back shape) is refused: exit 3, `unavailable provenance`,
+and no invocation is printed, so no input can be built from it (Astra's N1: a null building
+session reads as a different session and would let this one sign off its own build). A run with
+no `--build-result` leaves the building session null with `measurement.building_provenance`
+`unavailable`. Missing provenance is never replaced by the executor's typed `answer.session_id` or
+by a session someone typed. The runtime `--building-session` override is gone. Equal values are the core's independence
 refusal: `tests/test_full_fix_f4.py` `TheProbeThroughTheCore` rebuilds Astra's probe (a build
 result recorded from THIS session, then a review from it), and the core writes no request and
 refuses the answer on `independence`.
@@ -148,7 +150,7 @@ installed beside the core because the Claude Code reviewer route needs it. `RESU
 | Report the interaction mode (`mode`) | `helper-derived` | E9-33: environment cross-checked against the transcript's `entrypoint`; exit 3 without a record |
 | Mint a single-use run id and an outside run directory | `helper-derived` | section 3 |
 | Identify the reviewing session (`sessions.reviewing`) | `helper-derived` reading of an `instruction-bound` record | section 5 |
-| Name the building session (`sessions.building`) | `helper-derived` from the selected build run's result, bound to workspace, document and slice; else `unavailable` | section 5 |
+| Name the building session (`sessions.building`) | `helper-derived` from the selected build run's result, bound to workspace, document and slice; a selected result with no `invocation.session_id` is exit 3 (N1); no `--build-result`, `unavailable` | section 5 |
 | Assert the model floor (`model`) | `helper-derived`; the core recomputes the class from the id and refuses a disagreement (F5) | E9-3 map, v1 floor; unknown is never elevated |
 | One fresh reviewer per call, nothing from the builder's conversation | `harness-enforced` freshness; `instruction-bound` restrictions | section 7; the packet's withholding is the core's (contract section 5) |
 | Name the reviewer the answer carries | `helper-derived` from readers' sidecar | section 7 |

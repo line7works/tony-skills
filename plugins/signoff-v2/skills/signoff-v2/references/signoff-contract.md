@@ -125,9 +125,12 @@ read intent into what is on disk.
   helper fills `sessions.building` only from the selected build run's own `result.json`, bound to
   this review's workspace, document and slice, and only from that result's
   `invocation.session_id`: the session the build adapter read from the harness record, which the
-  build core holds the answer's copy to. A result without it is unavailable provenance (null,
-  reported as such); the executor's typed `answer.session_id`, and any typed session, never stand
-  in for it.
+  build core holds the answer's copy to. A selected result without it is REFUSED by the helper
+  (exit 3, `unavailable provenance`, no invocation emitted; Astra's N1), because a null building
+  session reads as a different session and would let the building session sign off its own work.
+  Only a run with no selected build result carries `sessions.building: null`, reported as
+  unavailable provenance. The executor's typed `answer.session_id`, and any typed session, never
+  stand in for it.
 - **The model floor is enforced here** (Astra's F5; v1 Step 0, unchanged under P5). The session's
   model is the adapter's observed `invocation.model.id`; the core computes its class with the
   adapters' own map (`claude-opus-*`, `claude-fable-*`, `claude-mythos-*`, and the provisional

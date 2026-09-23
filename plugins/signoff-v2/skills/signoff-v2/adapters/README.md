@@ -28,8 +28,10 @@ here launches a harness or a model, or carries a reader transport: the reviewer 
 **The building session** comes only from the selected build run's recorded harness identity (its
 result's `invocation.session_id`, never the typed `answer.session_id`), from its own result
 (`invocation.py --build-result PATH --workspace WS --build-doc DOC --slice S`), bound to the same
-workspace, document and slice; without one it is null and reported as unavailable provenance. No
-flag types it (Astra's F4).
+workspace, document and slice. A selected result that records no `invocation.session_id` is
+refused, exit 3, with no invocation printed (Astra's N1): a null building session would read as a
+different session. With no `--build-result` the building session is null and reported as
+unavailable provenance. No flag types it (Astra's F4).
 
 **Manual-only.** The skill must not auto-trigger (contract section 11): Codex reads
 `../agents/openai.yaml` (`allow_implicit_invocation: false`), Claude Code reads the `SKILL.md`

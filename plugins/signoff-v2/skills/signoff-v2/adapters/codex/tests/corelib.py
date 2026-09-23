@@ -65,3 +65,17 @@ def independence_run(test, invocation, case_dir, seeded):
     test.assertIsNone(doc["verdict"])
     test.assertFalse(doc["verdict_recorded"])
     return doc
+
+
+def records_snapshot(workspace):
+    """Every file under the workspace (its `.git` aside) with its bytes' SHA-256: equal snapshots
+    before and after a run mean the run recorded nothing in the project."""
+    import hashlib
+    out = {}
+    for root, dirs, files in os.walk(workspace):
+        dirs[:] = sorted(d for d in dirs if d != ".git")
+        for name in files:
+            path = os.path.join(root, name)
+            with open(path, "rb") as handle:
+                out[os.path.relpath(path, workspace)] = hashlib.sha256(handle.read()).hexdigest()
+    return out

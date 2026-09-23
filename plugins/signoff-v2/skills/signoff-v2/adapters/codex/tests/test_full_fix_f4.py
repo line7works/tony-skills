@@ -6,7 +6,9 @@ reviewed from that same session: `--build-result <actual result>` stopped on ind
 `--building-session an-unrelated-session` printed `completed / verdict_recorded true`. The runtime
 override is removed; the building session comes from the selected build run's own result, bound to
 the same workspace, document and slice; the reviewing session from this harness's record; a
-missing record is reported as unavailable provenance, never as a different building session.
+missing record is never a different building session: no --build-result leaves it null and
+unavailable, and a selected result that records no `invocation.session_id` is refused, exit 3,
+with no invocation emitted (Astra's N1).
 """
 
 import json
@@ -120,20 +122,25 @@ class TheBuildResultIsBound(unittest.TestCase):
 
 class SendBack1TheHarnessIdentityOnly(TheBuildResultIsBound):
     """Send-back 1: the building session is the build run's `invocation.session_id`, the session
-    the build adapter read from the harness record; a result without it is unavailable provenance
-    and never falls back to the executor's typed `answer.session_id`."""
+    the build adapter read from the harness record; a selected result without it is refused (Astra's
+    N1) and never falls back to the executor's typed `answer.session_id`."""
 
     def test_the_typed_answer_session_is_never_read(self):
         doc = testlib.run_json(HELPER, self.args(), env=self.env)
         self.assertEqual(doc["invocation"]["sessions"]["building"], "b-9")
         self.assertNotIn("typed-by-the-executor", json.dumps(doc["invocation"]))
 
-    def test_a_result_with_no_recorded_session_is_unavailable(self):
+    def test_a_result_with_no_recorded_session_is_refused(self):
+        """Astra's N1: a selected build result that records no `invocation.session_id` is refused
+        (exit 3) and no invocation is emitted; a null building session would read as independent."""
         self.path = build_result(os.path.join(self.work, "build-run"), self.workspace, "b-9",
                                  recorded=False)
-        doc = testlib.run_json(HELPER, self.args(), env=self.env)
-        self.assertIsNone(doc["invocation"]["sessions"]["building"])
-        self.assertEqual(doc["measurement"]["building_provenance"], "unavailable")
+        code, out, err = testlib.run(HELPER, self.args(), env=self.env)
+        self.assertEqual(code, 3, out)
+        body = json.loads(out)
+        self.assertNotIn("invocation", body)
+        self.assertIn("records no invocation.session_id", body["error"])
+        self.assertIn("no reviewing invocation was emitted", body["error"])
 
 
 class TheProbeThroughTheCore(unittest.TestCase):
@@ -156,6 +163,58 @@ class TheProbeThroughTheCore(unittest.TestCase):
             corelib.independence_run(self, doc["invocation"], case_dir, seeded)
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+
+class N1TheLegacyResultFromThisSession(unittest.TestCase):
+    """Astra's N1 through the helper and the core: the pre-send-back build result (the typed
+    `answer.session_id` only, no recorded `invocation.session_id`), selected from the SAME session
+    that now reviews, is refused by the helper and never reaches a verdict."""
+
+    def setUp(self):
+        self.work = tempfile.mkdtemp(prefix="n1-")
+        self.case_dir, self.seeded = corelib.build_case(self.work)
+        # the legacy shape: this session typed its own id; no harness identity was recorded
+        self.path = build_result(os.path.join(self.work, "build-run"), self.seeded["workspace"],
+                                 testlib.THREAD, self.seeded["build_doc"], self.seeded["slice"],
+                                 typed=testlib.THREAD, recorded=False)
+
+    def tearDown(self):
+        shutil.rmtree(self.work, ignore_errors=True)
+
+    def helper(self):
+        env = rollout_at(self.work, self.seeded["workspace"])
+        env["TMPDIR"] = self.work
+        return testlib.run(HELPER, [
+            "--build-result", self.path, "--workspace", self.seeded["workspace"],
+            "--build-doc", self.seeded["build_doc"], "--slice", self.seeded["slice"],
+            "--target-token", "F"], env=env)
+
+    def test_the_helper_refuses_and_emits_nothing(self):
+        code, out, err = self.helper()
+        self.assertEqual(code, 3, out)
+        body = json.loads(out)
+        self.assertEqual(set(body), {"error", "exit"})   # the refusal only: no invocation,
+        self.assertEqual(body["exit"], 3)                 # no measurement
+        self.assertIn("no reviewing invocation was emitted", body["error"])
+        self.assertNotIn(testlib.THREAD, out)     # the typed answer copy is never read
+
+    def test_the_core_records_no_verdict(self):
+        code, out, err = self.helper()
+        self.assertEqual(code, 3, out)
+        # the only input the executor can build without the helper's invocation is refused
+        document = {"protocol_version": 1, "workspace": self.seeded["workspace"],
+                    "target": {"build_doc": self.seeded["build_doc"],
+                               "slice": self.seeded["slice"], "base": self.seeded["base"]}}
+        path = os.path.join(self.case_dir, "adapter-input.json")
+        with open(path, "w") as handle:
+            json.dump(document, handle)
+        before = corelib.records_snapshot(self.seeded["workspace"])
+        code, doc, err = corelib.core(["check-input", path])
+        self.assertEqual(code, 4, err)
+        self.assertFalse((doc or {}).get("verdict_recorded"))
+        run_dir = os.path.join(self.work, "signoff-v2")
+        self.assertFalse(os.path.exists(run_dir), "a run directory was opened")
+        self.assertEqual(corelib.records_snapshot(self.seeded["workspace"]), before)
 
 
 if __name__ == "__main__":

@@ -88,9 +88,10 @@ class SessionsTest(unittest.TestCase):
             body["invocation"].pop("session_id")      # send-back 1: no recorded harness session
             with open(path, "w") as handle:
                 json.dump(body, handle)
-            doc = testlib.run_json(HELPER, args)
-            self.assertIsNone(doc["invocation"]["sessions"]["building"])
-            self.assertEqual(doc["measurement"]["building_provenance"], "unavailable")
+            code, out, err = testlib.run(HELPER, args)
+            self.assertEqual(code, 3, out)                # Astra's N1: refused, not null
+            self.assertNotIn("invocation", json.loads(out))
+            self.assertIn("no reviewing invocation was emitted", json.loads(out)["error"])
         finally:
             shutil.rmtree(work)
 

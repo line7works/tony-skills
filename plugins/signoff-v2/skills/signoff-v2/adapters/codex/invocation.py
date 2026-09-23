@@ -4,7 +4,8 @@
 Prints one JSON document: `invocation` (exactly the keys `references/input.schema.json` closes
 under `invocation`; copy it whole, type none of it) and `measurement` (copied nowhere).
 
-Exit 0 success, 2 usage, 3 a harness record or the `codex` binary is missing, 1 anything else.
+Exit 0 success, 2 usage, 3 a harness record or the `codex` binary is missing (a selected build
+result that records no `invocation.session_id` among them), 1 anything else.
 Python 3.9, standard library only.
 """
 
@@ -32,9 +33,10 @@ and when writable without the wall witness (E9-37, SB-8); its session_meta.id is
 sessions.building comes only from the selected build run's own record: --build-result PATH
 (that run's result.json, in its own run directory) with --workspace, --build-doc and --slice,
 which it must match; its recorded invocation.session_id (the harness session the
-build adapter read) is read, never the typed answer.session_id. Without it the building session is
-null and measurement.building_provenance says "unavailable". No flag types a building session
-(Astra's F4).
+build adapter read) is read, never the typed answer.session_id. A selected result that records no
+invocation.session_id is exit 3 and no invocation is printed (Astra's N1). With no --build-result
+the building session is null and measurement.building_provenance says "unavailable". No flag
+types a building session (Astra's F4).
 
 model.id is turn_context.model. floor_class and floor_met follow the pilot's E9-3 Codex map,
 PROVISIONAL: gpt-6-astra and gpt-5.6-sol are opus (met); every other id is unknown, floor_met
@@ -43,7 +45,8 @@ null. The v1 floor is Opus-class.
 A helper outside an install exits 3 unless SIGNOFF_V2_ADAPTER_TEST=1 and
 SIGNOFF_V2_ADAPTER_RECORD name a fixture record.
 
-Exit 0 success, 2 usage, 3 a harness record or the codex binary is missing, 1 anything else.
+Exit 0 success, 2 usage, 3 a harness record or the codex binary is missing (a selected build
+result that records no invocation.session_id among them), 1 anything else.
 
 Example:
   invocation.py --workspace /Users/x/Developer/widget --target-token F
@@ -65,8 +68,10 @@ def building_from_result(path, workspace, build_doc, slice_name, error, usage):
     there and only for the workspace, document and slice this review is of. The building session
     is that run's recorded HARNESS identity, `invocation.session_id`: the session the build
     adapter read from the harness's own record and the build core checked the answer against
-    (send-back 1). A result without it is unavailable provenance: the executor's typed
-    `answer.session_id` is never read in its place. Returns (session or None, provenance).
+    (send-back 1). A selected result without it is REFUSED (`error`, exit 3; Astra's N1): a null
+    building session would read as a different session and let this one sign off its own build,
+    and the executor's typed `answer.session_id` is never read in its place. Returns (session,
+    provenance).
     """
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -93,7 +98,10 @@ def building_from_result(path, workspace, build_doc, slice_name, error, usage):
     session = (result.get("invocation") or {}).get("session_id")
     run_name = result.get("run_id") or os.path.basename(run_dir)
     if not isinstance(session, str) or not session:
-        return None, "unavailable: build run %s recorded no harness session" % run_name
+        raise error(
+            "unavailable provenance: selected build run %s records no "
+            "invocation.session_id; no reviewing invocation was emitted"
+            % run_name)
     return session, "build run %s" % run_name
 
 
@@ -168,16 +176,9 @@ def main():
         building, provenance = building_from_result(args.build_result, args.workspace,
                                                     args.build_doc, args.slice, _common.Missing,
                                                     _common.Usage)
-        if building is None:
-            building_source = ("unavailable provenance: the build result %s carries no "
-                               "invocation.session_id (the harness session its adapter read), and "
-                               "the executor's typed answer.session_id is never read in its place"
-                               % args.build_result)
-            provenance = "unavailable"
-        else:
-            building_source = ("invocation.session_id recorded by %s (%s): the session its build "
-                               "adapter read from the harness record, bound to this workspace, "
-                               "document and slice" % (provenance, args.build_result))
+        building_source = ("invocation.session_id recorded by %s (%s): the session its build "
+                           "adapter read from the harness record, bound to this workspace, "
+                           "document and slice" % (provenance, args.build_result))
     else:
         building, provenance, building_source = None, "unavailable", UNAVAILABLE
     return {
