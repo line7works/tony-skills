@@ -16,12 +16,16 @@ rules, each producing one sentence in `answer.refusals`:
     R4  the same check name appears twice, so "the result of the check" has no single answer.
     R5  the same edit path appears twice with different reasons, so an out-of-scope path would
         have two stated reasons.
+    R6  a check reported `passed` carries a nonzero exit code (Astra's F2): the answer's own
+        observation contradicts its claim, and this core does not pick one.
 
 A refused answer is NOT acted on and NOT repaired: the card does not move, no event is appended,
 and the result says so plainly (`answer_refused`, `refusal_reason: answer_invalid`). It is a
-COMPLETION, not a stop — the run computed the source set, the out-of-scope list and the checks,
-and reports all three; it simply declines to record the claim. (Control room ruling, 2026-09-22,
-question 2 of the builder's report.)
+STOP (build-contract.md section 8; the control room reversed its first reading in the lane's first
+check round): the run still computed and reports the source set, the out-of-scope list and the
+checks, and it declines to record the claim. Since the slice 2 fix round (Astra's F15) the
+contents rules are applied before any check subprocess is launched, so a refused answer never
+runs a check command.
 """
 import json
 import os
@@ -81,6 +85,13 @@ def contents_refusals(body, case=None):
         if name in seen:
             out.append("the answer reports the check %r twice, so its result has no single value" % name)
         seen[name] = True
+
+    for row in checks:
+        code = row.get("exit_code")
+        if row.get("result") == "passed" and code not in (None, 0):
+            out.append("the answer reports the check %r as `passed` with exit code %s; a nonzero "
+                       "exit contradicts a pass, and this core does not choose between the two"
+                       % (row.get("name"), code))
 
     reasons = {}
     for row in body.get("edits") or []:

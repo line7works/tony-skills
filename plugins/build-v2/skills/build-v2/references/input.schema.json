@@ -64,7 +64,7 @@
     "report_only": {
       "type": "boolean",
       "default": false,
-      "description": "when true the run writes nothing to the workspace and nothing to the log, and its result says so; it still reports the source set, the out-of-scope list and the checks"
+      "description": "when true the run writes nothing to the workspace and nothing to the log, and its result says so; it still reports the source set, the out-of-scope list and the checks. Report-only covers child processes too: no check command is rerun in the workspace"
     },
     "allow_open_blocker": {
       "type": "boolean",
@@ -74,7 +74,7 @@
     "rerun_checks": {
       "type": "boolean",
       "default": false,
-      "description": "when true, this core runs each check command the slice names, in the workspace, and reports the result it observed instead of the recorded one. The result says per check which it did (`source`: `recorded` or `rerun`). This core never reruns a model."
+      "description": "when true, this core runs each check command the slice names, in the workspace, and reports the result it observed instead of the recorded one. The result says per check which it did (`source`: `recorded` or `rerun`). A requested rerun that cannot execute (shell syntax, an executable that is not there, a timeout) is `not_run`, and a report-only run reruns nothing in the live workspace, so there every requested check is `not_run` and the run finishes `checks_not_passed`. A refused answer launches no rerun. This core never reruns a model."
     },
     "invocation": {
       "type": "object",

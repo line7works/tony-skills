@@ -1,0 +1,66 @@
+{
+  "answer_refused": false,
+  "card": null,
+  "checks_executed": [],
+  "clean_review_checks_listed": false,
+  "findings": [],
+  "interface_version": 1,
+  "notes": [],
+  "packet": null,
+  "plugin_version": "0.1.0",
+  "problems": [],
+  "protocol_version": 1,
+  "receipt": null,
+  "records": null,
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-fix2-run/result.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-fix2-run/chat.md"
+    }
+  ],
+  "recovered": [],
+  "refusal_reason": null,
+  "report_only": false,
+  "review_sheet": null,
+  "reviewer": null,
+  "run": {
+    "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "caller": "test",
+    "depth": "LEAN",
+    "harness": "test-harness",
+    "lenses": [
+      "spec",
+      "correctness",
+      "seams"
+    ],
+    "route": "readers:claude-session",
+    "run_date": "2026-09-21",
+    "run_dir": "/tmp/signoff-fix2-run",
+    "run_id": "signoff-fix2-run",
+    "slice": "D",
+    "workspace": "/workspace/signpost"
+  },
+  "source_identity": null,
+  "source_set": null,
+  "status": "missing_input",
+  "stop_reason": "1 record line(s) of docs/plans/2026-09-18-signpost-rows.md fit no Appendix A shape, so this run will not level the log over them or record a verdict against a record it cannot place: docs/plans/2026-09-18-signpost-rows.md:27: - MAJOR · src/widget.py:2 · Call spin and observe zero. (field count 3 matches no Appendix A shape under a review heading). The records component's importer reads more loosely than Appendix A, and its silence does not authorize proceeding. Fix or answer each line and run again; nothing was written.",
+  "stop_reason_code": "legacy_ambiguous",
+  "terminal_status": "stop",
+  "unplaced": [
+    {
+      "doc": "docs/plans/2026-09-18-signpost-rows.md",
+      "line": 27,
+      "reason": "field count 3 matches no Appendix A shape under a review heading"
+    }
+  ],
+  "verdict": null,
+  "verdict_doc": null,
+  "verdict_matches_mapping": null,
+  "verdict_recorded": false,
+  "verdict_stated": null,
+  "writes_none": true
+}

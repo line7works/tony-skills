@@ -140,17 +140,25 @@ class Receipt:
         return self.doc.get("steps", [])
 
 
-def guard_of(identity_fingerprint, targets, workspace):
+def guard_of(identity_fingerprint, targets, workspace, masked=None):
     """The transaction guard: the source identity, and each target's hash, pinned together.
 
     Without the target hashes an edit that reaches a target before the document plan exists is
     invisible to every check, because the guard's tracked diff EXCLUDES the targets — that is
-    what lets the transaction write them (Revision 7)."""
-    return {
+    what lets the transaction write them (Revision 7).
+
+    `masked` is the identity with the targets left out, taken when the receipt is created, right
+    after the reviewed identity was confirmed (Astra's F3). A recovering pass compares it with the
+    same computation made then: the targets are the only paths this run may have changed, so a
+    difference anywhere else is source that moved under a recording the review never saw."""
+    guard = {
         "identity": dict(identity_fingerprint),
         "targets": {rel: canon.sha256_file_or_none(os.path.join(workspace, rel))
                     for rel in sorted(targets)},
     }
+    if masked is not None:
+        guard["masked"] = dict(masked)
+    return guard
 
 
 def guard_breaks(guard, workspace, identity_now):

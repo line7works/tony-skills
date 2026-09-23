@@ -322,6 +322,101 @@ class WaiverOverAClearance(unittest.TestCase):
         self.assertEqual(seen, len(WAIVER_CASES))
 
 
+ORPHAN_DOC = "docs/plans/2026-09-18-widget-export.md"
+ORPHAN_TEXT = """# Widget export
+
+## Slice A — CSV export
+Status: %s
+
+Slice A renders widget rows as CSV lines.
+
+## Punch list
+
+### 2026-09-20 — recheck: Slice A
+%s
+"""
+
+
+class OrphanClearingLine(unittest.TestCase):
+    """F13 (BLOCKER, E13-1), Astra's `probe_legacy_parity.py`: a syntactically valid legacy ORPHAN
+    clearing line — a recheck line whose location and claim no finding of the document holds.
+
+    The pilot at the branch point reads it by Appendix A's open filter as an entry of its own,
+    decided by the line, and `start` returns `nothing_open`. The joined pilot turned that into
+    `missing_input`, because the component's importer refuses the line (exit 5). The case is
+    driven through BOTH pilots' real CLIs the way `Parity` drives the E7 cases, and compared on
+    exit, status and the document; the rewired run's log must derive the baseline's open set.
+    Not one of the 113 E7 cases, so it is not counted among them.
+    """
+
+    LINE_FIXED = "- MAJOR · src/widget.py:2 · (orphan claim) · fixed · executed scenario"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = testlib.make_scratch("e13-f13-orphan-")
+        cls.baseline = baseline_root()
+        cls.baseline_script = os.path.join(cls.baseline, "skills", "recheck-v2", "scripts", "recheck.py")
+        cls.script = os.path.join(testlib.SCRIPTS, "recheck.py")
+        cls.client = rc.open_client(records_root=RECORDS)
+
+    @classmethod
+    def tearDownClass(cls):
+        testlib.rmtree(cls.dir)
+
+    def case(self, tag, card, line):
+        out = os.path.join(self.dir, tag)
+        case_dir = testlib.build_case("S1-colocated", "S1-01-two-claims-one-location", out)
+        workspace = os.path.join(case_dir, "workspace")
+        with open(os.path.join(workspace, ORPHAN_DOC), "w", encoding="utf-8") as fh:
+            fh.write(ORPHAN_TEXT % (card, line))
+        env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null",
+                   GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+                   GIT_COMMITTER_NAME="Fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid")
+        proc = subprocess.run(["git", "commit", "-qam", "an orphan clearing line"], cwd=workspace,
+                              env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        testlib.prepare_input(case_dir)
+        return case_dir
+
+    def compare(self, name, card, line):
+        base = Driver(self.baseline_script, self.case(name + "-base", card, line), self.dir)
+        mine = Driver(self.script, self.case(name + "-mine", card, line), self.dir)
+        before = base.documents()
+        base_record = base.drive()
+        mine_record = mine.drive(report_text=base_record["report"])
+        self.assertEqual((mine_record["exit"], mine_record["status"]),
+                         (base_record["exit"], base_record["status"]),
+                         "baseline: %s\nrewired: %s" % (base_record, mine_record))
+        self.assertEqual(base.documents(), before)
+        self.assertEqual(mine.documents(), before, "the document is untouched either way")
+        return base_record, mine
+
+    def test_a_fixed_orphan_is_nothing_open_as_at_the_branch_point(self):
+        base_record, mine = self.compare("fixed", "built", self.LINE_FIXED)
+        self.assertEqual(base_record["status"], "nothing_open")
+        state = self.client.state(mine.workspace, ORPHAN_DOC)
+        parsed = ledger.parse_document(ORPHAN_TEXT % ("built", self.LINE_FIXED), ORPHAN_DOC)
+        want = sorted((e["file"], e["line"], e["claim"], e["state"])
+                      for e in ledger.open_set(parsed)["entries"])
+        got = sorted((f["location"]["file"], f["location"]["line"], f["claim"], f["status"])
+                     for f in state["findings"])
+        self.assertEqual(got, want, "the log represents the baseline's effective state")
+
+    def test_the_read_only_check_input_agrees_and_writes_nothing(self):
+        case_dir = self.case("check-input", "built", self.LINE_FIXED)
+        workspace = os.path.join(case_dir, "workspace")
+        code, body, err = run_cli(self.script, ["check-input", os.path.join(case_dir, "input.json")],
+                                  self.dir)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(body["ok"], body)
+        self.assertEqual(body["status"], "nothing_open")
+        self.assertFalse(os.path.isdir(os.path.join(workspace, "docs", "records")))
+
+    def test_an_orphan_blocker_clearing_line_keeps_the_baselines_decision(self):
+        line = ("- BLOCKER · src/widget/export.py:11 · (an unrelated orphan) · fixed · executed")
+        self.compare("mixed", "built", line)
+
+
 def _add_case(lane, case_id):
     def test(self):
         outcome = self.one_case(lane, case_id)

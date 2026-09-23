@@ -279,13 +279,17 @@ def cmd_scope(args):
         return
 
     # CR-1, read-only half: level the log with the document as a DRY RUN, so a hand-written
-    # record is never missed and no signal of the importer is passed over.
+    # record is never missed and no signal of the importer is passed over. The reviewed identity
+    # is pinned here, beside the packet (Astra's F3): it is the identity the component computes,
+    # the one every event this run writes carries, and `record` compares it with the identity at
+    # that moment before any project record is written. A refusal is a named stop (F7).
     try:
         rw.level(client, workspace, doc, dry_run=True)
         pin = rw.head_of(client, workspace, doc)
+        reviewed = rw.identity_of(client, workspace)
     except rw.Stop as stop:
         raise_terminal(run, resolved, args, stop.status, stop.reason, stop.reason_code,
-                       records=stop_records(stop))
+                       records=stop_records(stop), unplaced=stop.extra.get("unplaced"))
         return
 
     try:
@@ -308,7 +312,7 @@ def cmd_scope(args):
     run.save_input(resolved)
 
     state.update({"phase": "request", "source_set": source,
-                  "source_identity": idmod.reported(fingerprint),
+                  "source_identity": reviewed,
                   "packet": built, "review_sheet": got_sheet,
                   "records_pin": {"doc": doc, "log": pin["log"], "head": pin["head"]}})
     run.save_state(state)
@@ -397,6 +401,15 @@ def cmd_request(args):
           "withheld": [row["what"] for row in built["withheld"]],
           "note": "the request carries the packet and the mandate and nothing from the "
                   "builder's conversation"}, EXIT_OK, args.plugin_root)
+
+
+def stale_sentence(reviewed, now):
+    moved = sorted(field for field in set(reviewed or {}) | set(now or {})
+                   if (reviewed or {}).get(field) != (now or {}).get(field))
+    return ("the source moved after the review packet was built: %s differ(s) between the "
+            "identity pinned then and the identity now. The review never saw what is on disk now, "
+            "so this run records nothing — no event, no block, no verdict, no card. Build the "
+            "packet again and review what is there." % ", ".join(moved or ["the identity"]))
 
 
 def mandate_text(resolved, built, got_sheet=None):
@@ -513,7 +526,8 @@ def cmd_record_answer(args):
                         "clean_review_checks_listed": False, "citations": [],
                         "session_id": reviewer["session_id"]}
     else:
-        adjudication = ansmod.adjudicate(raw, in_set, sessions, withheld_lines=withheld_lines)
+        adjudication = ansmod.adjudicate(raw, in_set, sessions, withheld_lines=withheld_lines,
+                                         provenance=provenance_of(resolved["workspace"], built))
     state["adjudication"] = adjudication
     state["reviewer"] = reviewer
     state["phase"] = "record" if adjudication["ok"] else "done"
@@ -541,6 +555,25 @@ def cmd_record_answer(args):
           "verdict_matches_mapping": adjudication["verdict_matches_mapping"],
           "clean_review_checks_listed": adjudication["clean_review_checks_listed"]},
          EXIT_OK, args.plugin_root)
+
+
+def provenance_of(workspace, built):
+    """What the answer check needs to know about the builder's conversation (Astra's F4): which
+    paths are it, which ledger sections were withheld, the withheld text, and what WAS delivered,
+    so a quotation can be traced to the only place its words appear."""
+    paths = [row["path"] for row in built["files"] if row["kind"] == "builder_conversation"]
+    delivered_paths = [row["path"] for row in built["files"]
+                       if row["kind"] != "builder_conversation"]
+    anchors = [row["what"] for row in built["withheld"] if "#" in row["what"]]
+    texts = []
+    for rel in paths:
+        text = packetmod.read_text_or_none(os.path.join(workspace, rel))
+        if text:
+            texts.append(text)
+    texts.extend(withheld_text(workspace, built))
+    material = packetmod.read_text_or_none(built["material_path"]) or ""
+    return {"paths": paths, "delivered_paths": delivered_paths, "anchors": anchors,
+            "withheld_text": "\n".join(texts), "delivered_text": material}
 
 
 def withheld_text(workspace, built):
@@ -598,6 +631,24 @@ def cmd_record(args):
                   verdict_stated=adjudication["verdict_stated"],
                   verdict_matches_mapping=adjudication["verdict_matches_mapping"])
 
+    # Astra's F16: the proposed completion is validated BEFORE any project-record write, so an
+    # answer the result validator would refuse never reaches the log, the document or the card.
+    proposed = resultmod.assemble(resolved, plugin_version(getattr(args, "plugin_root", None)),
+                                  "completed", verdict=adjudication["verdict"],
+                                  verdict_recorded=not resolved["report_only"],
+                                  writes_none=bool(resolved["report_only"]),
+                                  verdict_doc="docs/reviews/(planned)", **common)
+    refused = validate.semantic(proposed, resolved)
+    if refused:
+        finish(run, resolved, "stopped", args,
+               stop_reason="the proposed completion does not validate: %s; nothing is recorded"
+                           % refused[0]["message"],
+               stop_reason_code="answer_invalid", refusal_reason="answer_invalid",
+               answer_refused=True, writes_none=True,
+               problems=[{"why": row["message"]} for row in refused],
+               **dict((k, v) for k, v in common.items() if k not in ("findings", "notes")))
+        return
+
     if resolved["report_only"]:
         # Nothing to the workspace, nothing to the log. The findings the reviewer raised are
         # named as raised in the RESULT, which is the only place this run writes.
@@ -611,8 +662,7 @@ def cmd_record(args):
         body = do_record(run, resolved, state, adjudication, client, args)
     except rw.Stop as stop:
         parts = dict(common)
-        parts["records"] = records_block(state, stop)
-        parts["receipt"] = os.path.join(run.run_dir, "receipt.json")
+        parts.update(partial_from_receipt(run, state, stop))
         finish(run, resolved, stop.status, args, stop_reason=stop.reason,
                stop_reason_code=stop.reason_code, verdict=None, verdict_recorded=False,
                **parts)
@@ -632,7 +682,52 @@ def records_block(state, stop):
     return {"log": pin.get("log") or "docs/records/", "head_before": pin.get("head"),
             "head_after": None, "appended": [], "mirrors": None,
             "records_exit": stop.extra.get("records_exit"),
-            "records_error": stop.extra.get("records_error")}
+            "records_error": stop.extra.get("records_error"),
+            "records_command": stop.extra.get("records_command")}
+
+
+def partial_from_receipt(run, state, stop):
+    """A stopped transaction's result parts, read from the RECEIPT (Astra's F8).
+
+    What landed is reported as landed: every append the receipt holds as `landed` with its seqs,
+    every document step with its state, the verdict doc the plan authorized, and the card as far
+    as it got — its planned values, and `moved` only when its `Status:` step is done. The failing
+    command's exit, error and reason travel with it. A successful write is never reported absent.
+    """
+    parts = {"records": records_block(state, stop), "unplaced": stop.extra.get("unplaced"),
+             "identity_now": stop.extra.get("identity_now")}
+    receipt = rcptmod.Receipt(run.run_dir)
+    if not receipt.exists():
+        return parts
+    receipt.load()
+    parts["receipt"] = receipt.path
+    workspace = receipt.doc.get("workspace")
+    appended, head_after = [], None
+    for name in (rw.FINDINGS, rw.CARD):
+        block = receipt.append_block(name)
+        if block and block["outcome"] == rcptmod.LANDED:
+            appended.append({"name": name, "kinds": block["event_kinds"], "seqs": block["seqs"],
+                             "recovered": bool(block["recovered"])})
+            head_after = block["head"]
+            parts["records"]["log"] = block["log"]
+            run.note_write(os.path.join(workspace, block["log"]), "log")
+    parts["records"]["appended"] = appended
+    parts["records"]["head_after"] = head_after
+    steps = receipt.steps()
+    parts["document_steps"] = [{"kind": step["kind"], "target": step["target"],
+                                "state": step["state"]} for step in steps]
+    kinds = {"block": "build_doc", "verdict_doc": "verdict_doc", "card": "card"}
+    for step in steps:
+        if step["kind"] == "verdict_doc":
+            parts["verdict_doc"] = step["target"]
+        if step["state"] == rcptmod.DONE:
+            run.note_write(os.path.join(workspace, step["target"]), kinds[step["kind"]])
+        if step["kind"] == "card":
+            done = step["state"] == rcptmod.DONE
+            parts["card"] = {"slice": receipt.doc.get("slice"), "before": step.get("before_value"),
+                             "after": step.get("value"),
+                             "moved": bool(done and step.get("before_value") != step.get("value"))}
+    return parts
 
 
 def do_record(run, resolved, state, adjudication, client, args):
@@ -652,6 +747,7 @@ def do_record(run, resolved, state, adjudication, client, args):
     # 2. The pin, taken BEFORE this run's own levelling, so CR-1's import events are never the
     #    ones it flags. Another writer between two phases is a named conflict.
     pin = state.get("records_pin") or {}
+    reviewed = state.get("source_identity")
     if not settling:
         now = rw.head_of(client, workspace, doc)
         if pin.get("head") and now["head"] != pin["head"]:
@@ -662,15 +758,41 @@ def do_record(run, resolved, state, adjudication, client, args):
                           % (now["log"], pin["head"], now["head"]),
                           {"log": now["log"], "expected_head": pin["head"],
                            "actual_head": now["head"]})
+        # Astra's F3 and F7: before the first project-record write — and levelling is one — the
+        # identity now must be the identity pinned when the packet was built. A mismatch is
+        # source this review never saw: `stale_source`, both identities, nothing written. The
+        # reviewed identity is what every event carries; the identity now never stands in for it.
+        identity_now = rw.identity_of(client, workspace)
+        if identity_now != reviewed:
+            raise rw.Stop("stale_source", "source_moved", stale_sentence(reviewed, identity_now),
+                          {"identity_now": identity_now})
         # 1. CR-1, the writing half: level the log with the document for real.
         rw.level(client, workspace, doc, dry_run=False)
+    else:
+        # Recovery: only the run's receipted changes may have moved the source. Everything
+        # except the targets this run is authorized to write must be where it was when the
+        # receipt was created, right after the identity check above held.
+        guard = receipt.doc.get("guard") or {}
+        if guard.get("masked") is not None:
+            masked_now = idmod.identity_of(workspace, exclude=sorted(guard["targets"]))
+            if masked_now != guard["masked"]:
+                raise rw.Stop("stale_source", "source_moved",
+                              "on recovery, the source outside this run's own targets (%s) moved "
+                              "since the recording began; only the run's receipted changes are "
+                              "allowed, so nothing more is written"
+                              % ", ".join(sorted(guard["targets"])),
+                              {"identity_now": masked_now})
 
     levelled = rw.head_of(client, workspace, doc)
-    identity_now = client.identity(workspace)["identity"]
 
     verdict_rel, existed = ledger.verdict_doc_path(workspace, doc, slice_name, run_date)
+    if settling:
+        planned = [step for step in receipt.steps() if step["kind"] == "verdict_doc"]
+        if planned:
+            verdict_rel = planned[0]["target"]
     if not settling:
-        guard = rcptmod.guard_of(idmod.identity_of(workspace), [doc, verdict_rel], workspace)
+        guard = rcptmod.guard_of(idmod.identity_of(workspace), [doc, verdict_rel], workspace,
+                                 masked=idmod.identity_of(workspace, exclude=[doc, verdict_rel]))
         receipt.create(run_id, workspace, doc, slice_name, guard)
         run.note_write(receipt.path, "run_artifact")
         run.note_write(receipt.path[:-len(".json")] + ".log", "run_artifact")
@@ -682,7 +804,7 @@ def do_record(run, resolved, state, adjudication, client, args):
     #    session, the route and the model observed. That is E13-4's "recorded with who
     #    concluded it" without the record line carrying a field it was never meant to carry.
     events = rw.finding_events(adjudication["raised"], doc, slice_name, at, run_id, harness,
-                               identity_now, slice_name)
+                               reviewed, slice_name)
     scratch = run.scratch("records")
     recovered = []
     if events:
@@ -719,7 +841,13 @@ def do_record(run, resolved, state, adjudication, client, args):
 
     # 5. Place the block, copy it to the verdict doc, check the copy.
     verdict = adjudication["verdict"]
-    card_before, _ = ledger.card_of(ledger.read_text(workspace, doc) or "", slice_name)
+    # Astra's F6: once the plan exists, the card's values are the RECEIPT's, never bytes read
+    # afresh — on recovery the `Status:` line already carries this run's own value.
+    planned_card = [step for step in receipt.steps() if step["kind"] == "card"]
+    if planned_card:
+        card_before = planned_card[0].get("before_value")
+    else:
+        card_before, _ = ledger.card_of(ledger.read_text(workspace, doc) or "", slice_name)
     # The verdict doc carries WHO reviewed, because the record line carries only the slice
     # (Appendix A's fifth field). The run id is the join between the log and this record.
     reviewer = state.get("reviewer") or {}
@@ -729,7 +857,7 @@ def do_record(run, resolved, state, adjudication, client, args):
            reviewer.get("route") or "readers",
            reviewer.get("model") or "not reported by the route",
            "yes" if reviewer.get("independent") else "NO"),
-        "Run: %s · source: %s" % (run_id, identity_now.get("commit")),
+        "Run: %s · source: %s" % (run_id, (reviewed or {}).get("commit")),
         "",
         "Checks the reviewer executed:"]
     for row in adjudication["checks_executed"]:
@@ -778,7 +906,7 @@ def do_record(run, resolved, state, adjudication, client, args):
     card_after_value = card_step[0]["value"] if card_step else None
     if card_step and card_step[0]["state"] == rcptmod.DONE:
         card_events = [rw.card_event(doc, slice_name, card_before or "none", card_after_value,
-                                     at, run_id, harness, identity_now)]
+                                     at, run_id, harness, reviewed)]
         if receipt.append_block(rw.CARD):
             _, was_recovered = rw.settle_append(client, receipt, rw.CARD, workspace, doc,
                                                 card_events, run_id, "card_set", scratch)
@@ -788,6 +916,7 @@ def do_record(run, resolved, state, adjudication, client, args):
             head_now = rw.head_of(client, workspace, doc)
             rw.do_append(client, receipt, rw.CARD, workspace, doc, card_events,
                          head_now["head"], scratch, head_now["log"])
+    rw.verify_targets(receipt, workspace)     # F6: nothing moved between the writes and here
     receipt.commit()
 
     final = rw.head_of(client, workspace, doc)
@@ -797,10 +926,13 @@ def do_record(run, resolved, state, adjudication, client, args):
         if got and got["outcome"] == rcptmod.LANDED:
             appended.append({"name": name, "kinds": got["event_kinds"], "seqs": got["seqs"],
                              "recovered": bool(got["recovered"])})
+    card_done = bool(card_step) and card_step[0]["state"] == rcptmod.DONE
     return {
         "verdict_doc": verdict_rel,
         "card": {"slice": slice_name, "before": card_before, "after": card_after_value,
-                 "moved": card_before != card_after_value},
+                 "moved": card_done and card_before != card_after_value},
+        "document_steps": [{"kind": step["kind"], "target": step["target"],
+                            "state": step["state"]} for step in receipt.steps()],
         "records": {"log": final["log"], "head_before": pin.get("head"),
                     "head_after": final["head"], "appended": appended, "mirrors": mirrors,
                     "records_exit": None, "records_error": None},

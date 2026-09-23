@@ -232,6 +232,13 @@
         }
       }
     },
+    "identity_now": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "on a `stale_source` stop (`source_moved`): the identity the station read at that moment, beside `source_identity`, the identity pinned when the review packet was built. On recovery it is the identity with this run's own targets left out, compared with the same computation made when the recording began"
+    },
     "source_set": {
       "type": [
         "object",
@@ -650,6 +657,13 @@
             "string",
             "null"
           ]
+        },
+        "records_command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the component command that refused, when one did: with `records_exit`, `records_error` and the stop reason (the component's own sentence), what failed and why"
         }
       }
     },
@@ -698,6 +712,70 @@
       "description": "why an answer was refused, one entry per rule it broke",
       "items": {
         "type": "object"
+      }
+    },
+    "unplaced": {
+      "type": "array",
+      "description": "on a `missing_input` stop from the Appendix A stop check (`legacy_ambiguous`): every record line of the build doc that fits no Appendix A shape, with its document, its 1-based line, its bytes and why",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "doc",
+          "line",
+          "raw",
+          "reason"
+        ],
+        "properties": {
+          "doc": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "raw": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "document_steps": {
+      "type": "array",
+      "description": "the recording transaction's document steps as the receipt holds them: each step's kind, its target and its state (`pending`, `intent`, `done`). On a `recording_failed` result it is how far the writes got: a step that landed is reported as landed",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "target",
+          "state"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "block",
+              "verdict_doc",
+              "card"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "intent",
+              "done"
+            ]
+          }
+        }
       }
     },
     "review_sheet": {

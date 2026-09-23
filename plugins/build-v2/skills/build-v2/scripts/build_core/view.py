@@ -13,11 +13,13 @@ takes no lock and writes nothing, and reads what the log lacks from `would_impor
 adding it.
 
 **Amendment A3 item 3, the importer reads more loosely than this core does.** The slice 1
-builder's findings 2 and 3 are open: the importer reads a hand-written record more loosely than
-the pilot's strict reader, and it refuses an orphan clearing line. This core does not build a
-second record grammar and does not change `plugins/records/`. It STOPS, naming the line, on ANY
-importer signal: a `legacy_unparsed` above zero in the dry run, exit 5 (ambiguous), or any
-refusal. A line the importer silently drops is the known open point.
+builder's findings 2 and 3: the importer reads a hand-written record more loosely than the
+pilot's strict reader, and it refuses an orphan clearing line. This core does not build a second
+record grammar and does not change `plugins/records/`. Before any levelling it runs the pilot's
+OWN Appendix A stop check (`record_grammar.py`, the pilot's `ledger.py` byte for byte) and stops
+on a line Appendix A cannot place, naming the document, the line and its bytes (Astra's F12).
+Then it STOPS on ANY importer signal: a `legacy_unparsed` above zero in the dry run, exit 5
+(ambiguous), or any refusal.
 
 **The card, both directions.** A `card_set` this station appended and a `Status:` line the
 document carries can disagree, and the disagreement is reported, never repaired. The test is a
@@ -44,6 +46,9 @@ be moved by a change in that policy.
 A run whose halves both landed is recognised by the component itself: A4 counts the `Status:`
 line it wrote under `native_rendered` and imports nothing for it.
 """
+import os
+
+from . import record_grammar as grammar
 from . import records_link as link
 from .records_client import RecordsRefusal
 
@@ -90,13 +95,60 @@ def _native_rendered(report):
     return None if value is None else int(value)
 
 
+def unplaceable(workspace, document):
+    """Appendix A's stop check, unchanged, over the document's hand-written records (Astra's F12).
+
+    `record_grammar.py` is the recheck pilot's `recheck_core/ledger.py`, byte for byte, and a test
+    holds the two equal: this is the pilot's own reader, the one E13 slice 1 kept as an ambiguity
+    DETECTOR (`inputs.strict_ambiguities`), never a second grammar and never a source of records.
+    Nothing here reads a finding, an open set or a card from it; those stay the component's. It
+    answers one question before the log is levelled: does the document carry a record line that
+    Appendix A cannot place? The component's importer reads more loosely (it imports a line the
+    pilot calls ambiguous), so its silence is not an answer to that question.
+
+    Returns `[{doc, line, raw, reason}]`, empty when every record line is placeable.
+    """
+    path = os.path.join(workspace, document)
+    if not os.path.isfile(path):
+        return []
+    with open(path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    parsed = grammar.parse_document(text, document)
+    lines = parsed["lines"]
+    out = []
+    for record in grammar.open_set(parsed)["ambiguities"]:
+        number = record["line_no"]
+        out.append({"doc": document, "line": number, "raw": lines[number - 1],
+                    "reason": record.get("reason") or "matches no Appendix A shape"})
+    return out
+
+
+def strict_stop(workspace, document):
+    """Raise the `legacy_unplaced` stop when `unplaceable` finds anything; else return None."""
+    rows = unplaceable(workspace, document)
+    if not rows:
+        return None
+    raise RecordsStop(
+        "legacy_unplaced",
+        "%d record line(s) of %s fit no Appendix A shape, so this run will not level the log "
+        "over them or decide the slice against a record it cannot place: %s. The records "
+        "component's importer reads more loosely than Appendix A, and its silence does not "
+        "authorize proceeding. Fix or answer each line and run again; nothing was written."
+        % (len(rows), document, "; ".join("%s:%d: %s (%s)" % (r["doc"], r["line"], r["raw"],
+                                                               r["reason"]) for r in rows)),
+        detail={"unplaced": rows})
+
+
 def level(client, workspace, document, dry_run):
     """Level the log with the document, and stop on any importer signal.
 
-    Always runs a dry run first (the guide: "never import a legacy document without a dry run
-    first"), stops when that pass would write a `legacy_unparsed`, and only then makes the real
-    pass when one is asked for. Returns the report the caller should report.
+    First the strict Appendix A check over the document's hand-written records (`strict_stop`,
+    Astra's F12), before the importer reads anything. Then always a dry run (the guide: "never
+    import a legacy document without a dry run first"), a stop when that pass would write a
+    `legacy_unparsed`, and only then the real pass when one is asked for. Returns the report the
+    caller should report.
     """
+    strict_stop(workspace, document)
     try:
         preview = client.import_legacy(workspace, document, dry_run=True)
     except RecordsRefusal as refusal:

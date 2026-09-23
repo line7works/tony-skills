@@ -333,6 +333,13 @@ class Run:
 
 # ---- result assembly -------------------------------------------------------------------------
 
+REPORT_ONLY_RERUN = ("report-only: a check command is an unrestricted child process that could "
+                     "write to the workspace, and a report-only run writes nothing there, so no "
+                     "check command was run")
+REFUSED_ANSWER_RERUN = ("the recorded answer was refused, and a refused answer is honoured before "
+                        "any check subprocess is launched, so no check command was run")
+
+
 def stop(run, tag, reason, **extra):
     """Assemble and deliver a stop: the tool could not proceed."""
     run.deliver(resultmod.assemble(run, status="stopped", reason=reason, stop_tag=tag,
@@ -419,7 +426,8 @@ def phase_preflight(args):
         walked = view.head_of(client, run.workspace, run.document)
         identity = client.identity(run.workspace)["identity"]
     except view.RecordsStop as exc:
-        return stop(run, exc.tag, exc.reason, records_extra={"refused": exc.refused_block()})
+        return stop(run, exc.tag, exc.reason, records_extra={"refused": exc.refused_block()},
+                    unplaced=exc.detail.get("unplaced"))
     except RecordsRefusal as refusal:
         exc = view.stop_for(refusal, "preflight could not read the records of %s" % run.document)
         return stop(run, exc.tag, exc.reason, records_extra={"refused": exc.refused_block()})
@@ -534,7 +542,8 @@ def phase_report(args):
         rows = view.card_events(client, run.workspace, run.document)
     except view.RecordsStop as exc:
         records_block["refused"] = exc.refused_block()
-        return stop(run, exc.tag, exc.reason, records_extra=records_block)
+        return stop(run, exc.tag, exc.reason, records_extra=records_block,
+                    unplaced=exc.detail.get("unplaced"))
 
     card_before, _written = view.document_card(run.workspace, run.document, run.slice_name)
     card_before = card_before or "none"
@@ -555,12 +564,55 @@ def phase_report(args):
         return stop(run, "card_drift", view.drift_sentence(run.slice_name, run.document, drift),
                     records_extra=records_block)
 
+    # Astra's F15: a refused answer is honoured BEFORE any check subprocess is launched, and a
+    # report-only run launches none in the live workspace (report-only covers child writes too).
+    refusals = answermod.contents_refusals(body, case=run.input.get("case"))
+    wants_rerun = bool(run.input.get("rerun_checks"))
+    blocked = REPORT_ONLY_RERUN if (wants_rerun and run.report_only) else None
+    reruns = wants_rerun and not refusals and not blocked
+    before_checks = None
+    if reruns:
+        try:
+            before_checks = client.identity(run.workspace)["identity"]
+        except RecordsRefusal as refusal:
+            exc = view.stop_for(refusal, "the identity of %s could not be read before the check "
+                                         "reruns" % run.workspace)
+            records_block["refused"] = exc.refused_block()
+            return stop(run, exc.tag, exc.reason, records_extra=records_block)
+    check_rows = checksmod.rows(contract["checks"], body.get("checks"), workspace=run.workspace,
+                                rerun=wants_rerun and not refusals, rerun_blocked=blocked)
+    if wants_rerun and refusals:
+        for row in check_rows:
+            if row.get("named_by_slice"):
+                row["rerun_refused"] = REFUSED_ANSWER_RERUN
+
+    # Astra's F1: the source set and the identity the card is decided and recorded on are the
+    # ones AT REPORT, after any rerun and before the scope decision, against the base commit
+    # preflight pinned. Preflight's set is what the run started from; what reaches the card is
+    # what is on disk now. A set or an identity that cannot be computed stops the run.
+    pinned = run.doc["source_set"]
+    try:
+        source = sources.source_set(run.workspace, pinned["base_commit"], run.document)
+    except sources.GitError as exc:
+        tag = "no_base" if "base ref" in str(exc) else "no_git"
+        return stop(run, tag, "at report: %s" % exc, records_extra=records_block,
+                    checks=check_rows)
+    source["base"] = pinned["base"]
+    try:
+        identity = client.identity(run.workspace)["identity"]
+    except RecordsRefusal as refusal:
+        exc = view.stop_for(refusal, "the identity of %s could not be read at report"
+                            % run.workspace)
+        records_block["refused"] = exc.refused_block()
+        return stop(run, exc.tag, exc.reason, records_extra=records_block, checks=check_rows)
+    run.doc["source_set"] = source
+    run.doc["identity"] = identity
+    run.doc["checks_changed_workspace"] = bool(before_checks is not None
+                                               and before_checks != identity)
+
     # Scope adherence: every source-set path the slice does not name, with the stated reason.
     out_rows = scope.out_of_scope(source, contract["named_paths"],
                                   answermod.reasons_by_path(body), contract["not_in_slice"])
-    check_rows = checksmod.rows(contract["checks"], body.get("checks"),
-                                workspace=run.workspace, rerun=bool(run.input.get("rerun_checks")))
-    refusals = answermod.contents_refusals(body, case=run.input.get("case"))
 
     common = {"out_of_scope": out_rows, "checks": check_rows, "records_extra": records_block,
               "answer_refusals": refusals}
@@ -595,8 +647,20 @@ def phase_report(args):
                    "at %r; every named check passed." % (body.get("claimed_status"), card_before),
             root=run.root, **common))
 
-    # The card moves.
+    # The card moves — unless it already stands at `built` (Astra's F11): then there is nothing
+    # to move, so no transaction is opened, no `card_set` is appended and no `Status:` line is
+    # written, and the result says the card was already built.
     after = "built"
+    if card_before == after:
+        return run.deliver(resultmod.assemble(
+            run, status="completed",
+            reason="the slice is complete, every named check passed, and every out-of-scope path "
+                   "carries a reason. The card already stands at `built`, so nothing was moved: no "
+                   "card event was appended and no `Status:` line was written.",
+            card_after=card_before, card_moved=False,
+            card_reason="the card was already `built`; a build moves it to `built` and nowhere "
+                        "else, so there was no move to make",
+            root=run.root, **common))
     if run.report_only:
         return run.deliver(resultmod.assemble(
             run, status="completed",
@@ -617,7 +681,8 @@ def phase_report(args):
     # re-delivers THESE, and never recomputes them: rerunning a check command on a settle could
     # observe something else, and the decision the receipt is settling was made on what is here.
     run.doc["decision"] = {"out_of_scope": out_rows, "checks": check_rows,
-                           "card_before": card_before, "card_after": after}
+                           "card_before": card_before, "card_after": after,
+                           "source_set": source, "identity": identity}
     run.save()          # persisted BEFORE the transaction opens, or a kill would lose it
     receipt, _ = transaction.open_receipt(run.run_dir, run.run_id, run.document, run.slice_name)
     run.record_write(receipt.path, "run_artifact")

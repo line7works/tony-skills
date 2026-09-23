@@ -351,7 +351,7 @@
               "string",
               "null"
             ],
-            "description": "why a requested rerun did not happen, when it did not"
+            "description": "why a requested rerun did not happen, when it did not. A named check whose rerun was asked for and could not execute (shell syntax, an executable that is not there, a timeout, a report-only run) is `not_run`; the executor's claim stays in `recorded_result` and `recorded_output`"
           },
           "recorded_result": {
             "type": [
@@ -364,7 +364,28 @@
               "not_run",
               null
             ],
-            "description": "when this core reran the check and observed a different result than the answer recorded, what the answer recorded. Null otherwise: a disagreement is reported, never quietly overwritten."
+            "description": "what the answer recorded, whenever the row's `result` is not the answer's own claim: this core reran the check and observed something else, a requested rerun could not execute, or the answer's command is not the command the slice names. Null otherwise: a disagreement is reported, never quietly overwritten."
+          },
+          "recorded_command": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the command the answer says it ran for this check, when it is not the command the slice names. Its output is that command's and is never reported as the named check's output"
+          },
+          "recorded_output": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the output the answer recorded, kept apart from `output` whenever the row's `result` is not the answer's own claim"
+          },
+          "attribution_refused": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "why the answer's result is not this check's: the answer ran another command under the check's name. The row is then `not_run`"
           }
         }
       }
@@ -694,6 +715,41 @@
         "null"
       ],
       "description": "on a settle, which half of the card transaction was missing"
+    },
+    "checks_changed_workspace": {
+      "type": "boolean",
+      "description": "true when a check command this core reran changed the workspace (its six-field identity moved across the reruns). Such a run never says `wrote_nothing`: the bytes a child process changed are reported, and at report they are in the source set like any other change"
+    },
+    "unplaced": {
+      "type": "array",
+      "description": "on a `legacy_unplaced` stop from the Appendix A stop check: every record line of the build doc that fits no Appendix A shape, with its document, its 1-based line, its bytes and why",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "doc",
+          "line",
+          "raw",
+          "reason"
+        ],
+        "properties": {
+          "doc": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "raw": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     },
     "receipt": {
       "type": [

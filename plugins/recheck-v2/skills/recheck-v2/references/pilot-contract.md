@@ -1129,3 +1129,28 @@ finding is addressed.
   validates and the run proceeds, and the block the run places does not depend on where the raise
   sits. Before this revision such a finding was addressed with no heading, and a `start` on it
   refused its own checkpoint (`scope.checklist[i].record.heading '' should be non-empty`).
+
+Revision 9, 2026-09-22, E13 slice 2 fix round (Astra's F13, BLOCKER under ruling E13-1). This
+revision RETURNS a decision to the branch point's behaviour; nothing else recheck decides moves.
+
+- **Section 3 and Appendix A, an orphan clearing line.** A syntactically valid legacy recheck line
+  or waiver whose location and claim no finding of the document holds — an orphan — has always been
+  read by Appendix A's open filter as an entry of its own, decided by that line ("records that
+  match no entry become entries of their own when they carry a severity"). At the branch point a
+  document holding only a `fixed` orphan on a `built` slice was `nothing_open`. Slice 1 turned that
+  into `missing_input`, because the records component's importer refuses such a line (exit 5,
+  "no finding of this document holds the location"). Now, when EVERY line the importer stopped on
+  is exactly such an orphan by this skill's own unchanged reader (`ledger.open_set`, byte for byte
+  against the document), the core answers each one `new_finding` through the component's own
+  resolutions interface (`import-legacy --resolutions`), with `answered_by` naming this rule. The
+  log then holds what the branch point's reader held: a finding at that location with that claim
+  and severity, decided by that line, so `start` returns the branch point's stop again. Any other
+  importer stop, or a resolution the component refuses, stops the run exactly as before with the
+  importer's own explanation. A claim-less clearing line at a location another entry holds is
+  NOT an orphan: Appendix A calls it ambiguous, it stays the user's question, and the run stops
+  `missing_input` as it did in slice 1. The resolutions file is written to the system temporary directory
+  and removed at once; the read-only commands (`check-input`, and every `--dry-run` levelling)
+  still write nothing to the workspace or the log. No second log grammar and no change under
+  `plugins/records/`: the reader is the one this skill already runs as its Appendix A detector,
+  and the answer goes through the component's published CLI. The parity suite carries the case
+  (`tests/test_parity.py::OrphanClearingLine`), driven through both pilots' CLIs.

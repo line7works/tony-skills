@@ -23,6 +23,11 @@ the importer's own explanation and writes nothing to the document.
 CR-2, a command that is read-only today stays read-only: it runs `import-legacy --dry-run`, which
 takes no lock and writes nothing, and reports what the log lacks instead of adding it.
 
+F13 (pilot contract Revision 9): an importer stop made ONLY of orphan clearing lines — records the
+branch point's reader made entries of their own — is answered `new_finding` through the
+component's resolutions interface, so the log holds the branch point's effective state and the
+run's stop decision is the branch point's again. See `sync` and `orphan_answers`.
+
 The refusal map (brief 3.4), named here once and used by the driver:
 
 | component | pilot status     | why |
@@ -36,7 +41,10 @@ Anything else the component reports (exit 1, exit 2, exit 3) is `recording_faile
 inside the transaction and `missing_input` when it happens while scope is being read, each carrying
 the component's own sentence.
 """
+import datetime
+import json
 import os
+import tempfile
 
 from . import ledger, records_client as rcl
 
@@ -93,11 +101,86 @@ def sync(client, workspace, document, dry_run=False, field="target.build_doc"):
 
     Idempotent: a pass that finds no news appends nothing at all. With `dry_run` it takes no lock
     and writes nothing (CR-2), and the caller reads what the log still lacks from `would_import`.
+
+    Astra's F13 (E13-1): the importer stops (exit 5) on an ORPHAN clearing line — a recheck line
+    or a waiver whose location and claim match no finding of the document. The pilot at the branch
+    point never stopped there: Appendix A's open filter makes such a record an entry of its own
+    (`ledger.open_set`, "records that match no entry become entries of their own when they carry a
+    severity"), decided by the record itself. When EVERY line the importer stopped on is exactly
+    such a record by the pilot's own unchanged reader, the pilot answers each one `new_finding`
+    through the component's resolutions interface (`import-legacy --resolutions`), which
+    represents the same effective state in the log: a finding at that location with that claim
+    and severity, decided by that line. Anything else the importer stopped on stops the run as
+    before, with the importer's own explanation, and so does a resolution the component refuses.
     """
     try:
         return client.import_legacy(workspace, document, dry_run=dry_run)
     except rcl.RecordsRefusal as refusal:
-        raise stop_for(refusal, field=field)
+        answers = orphan_answers(workspace, document, refusal)
+        if answers is None:
+            raise stop_for(refusal, field=field)
+        handle, path = tempfile.mkstemp(prefix="recheck-v2-resolutions-", suffix=".json")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as fh:
+                json.dump(answers, fh, indent=2, ensure_ascii=False)
+                fh.write("\n")
+            try:
+                return client.import_legacy(workspace, document, dry_run=dry_run, resolutions=path)
+            except rcl.RecordsRefusal:
+                raise stop_for(refusal, field=field)
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
+
+ORPHAN_ANSWERED_BY = ("recheck-v2, by pilot contract Appendix A's open filter: a record that "
+                      "matches no entry and carries a severity is an entry of its own")
+
+
+def orphan_answers(workspace, document, refusal):
+    """The resolutions file that answers an importer stop made only of orphan records, or None.
+
+    An orphan record, by the pilot's own reader: a recheck line or a waiver that `ledger.open_set`
+    turned into an entry of its own because nothing earlier in the document holds its location
+    and claim. A claim-less record at a location another entry holds is NOT one: Appendix A calls
+    it ambiguous, and it stays the user's question. Each line the importer stopped on must be one of those, byte for byte, or nothing
+    is answered and the run stops as it always did.
+    """
+    if refusal.exit_code != 5 or not isinstance(refusal.body, dict):
+        return None
+    asked = refusal.body.get("ambiguities") or []
+    if not asked:
+        return None
+    path = os.path.join(workspace, document)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as fh:
+        parsed = ledger.parse_document(fh.read(), document)
+    entries = ledger.open_set(parsed)["entries"]
+    orphans = {}
+    for entry in entries:
+        origin = entry.get("origin") or {}
+        if origin.get("kind") not in ("recheck", "waiver"):
+            continue
+        # Appendix A: a claim-less record at a location other entries hold decides nothing and is
+        # the user's question, not an orphan. Only a line no entry could have meant is answered.
+        if origin.get("claim") is None and any(
+                other is not entry and other["file"] == origin["file"]
+                and other["line"] == origin["line"] for other in entries):
+            continue
+        orphans[origin["line_no"]] = origin
+    answers = []
+    for row in asked:
+        line = row.get("line")
+        origin = orphans.get(line)
+        if origin is None or row.get("raw") is None:
+            return None
+        if row["raw"].rstrip() != parsed["lines"][line - 1].rstrip():
+            return None
+        answers.append({"line": line, "raw": row["raw"], "new_finding": True})
+    return {"answered_by": ORPHAN_ANSWERED_BY,
+            "answered_on": datetime.datetime.utcnow().strftime("%Y-%m-%d"),
+            "doc": document, "answers": answers}
 
 
 def behind(report):

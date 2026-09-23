@@ -37,6 +37,7 @@ receipt already names. A read that failed is a stop, never an empty set.
 import os
 
 from . import canon, ledger, receipt as rcpt
+from . import record_grammar as grammar
 from . import records_client as rcl
 from .constants import STATION
 
@@ -64,8 +65,49 @@ def _refusal_stop(status, reason_code, refusal, extra=None):
 
 # ---- 1. levelling ------------------------------------------------------------------------
 
+def unplaceable(workspace, doc):
+    """Appendix A's stop check, unchanged, over the document's hand-written records (Astra's F12).
+
+    `record_grammar.py` is the recheck pilot's `recheck_core/ledger.py` byte for byte, and a test
+    holds the two equal: the pilot's own reader, which E13 slice 1 kept as an ambiguity DETECTOR
+    (`inputs.strict_ambiguities`) and never as a source of records. Nothing here reads a finding,
+    an open set or a card from it — those stay the component's. It answers one question before
+    the log is levelled: does the document carry a record line Appendix A cannot place? The
+    importer reads more loosely, so its silence is not an answer.
+
+    Returns `[{doc, line, raw, reason}]`, empty when every record line is placeable.
+    """
+    text = ledger.read_text(workspace, doc)
+    if text is None:
+        return []
+    parsed = grammar.parse_document(text, doc)
+    lines = parsed["lines"]
+    return [{"doc": doc, "line": row["line_no"], "raw": lines[row["line_no"] - 1],
+             "reason": row.get("reason") or "matches no Appendix A shape"}
+            for row in grammar.open_set(parsed)["ambiguities"]]
+
+
+def strict_stop(workspace, doc):
+    """The Appendix A stop, as the pilot takes it: `missing_input`, naming each line."""
+    rows = unplaceable(workspace, doc)
+    if not rows:
+        return
+    raise Stop("missing_input", "legacy_ambiguous",
+               "%d record line(s) of %s fit no Appendix A shape, so this run will not level the "
+               "log over them or record a verdict against a record it cannot place: %s. The "
+               "records component's importer reads more loosely than Appendix A, and its silence "
+               "does not authorize proceeding. Fix or answer each line and run again; nothing was "
+               "written." % (len(rows), doc, "; ".join("%s:%d: %s (%s)" % (
+                   r["doc"], r["line"], r["raw"], r["reason"]) for r in rows)),
+               {"doc": doc, "unplaced": rows})
+
+
 def level(client, workspace, doc, dry_run):
-    """Run the importer over `doc` and stop on any signal it gives (CR-1, amendment A3 item 3)."""
+    """Run the importer over `doc` and stop on any signal it gives (CR-1, amendment A3 item 3).
+
+    First the strict Appendix A check over the document's hand-written records (`strict_stop`,
+    Astra's F12), before the importer reads anything."""
+    strict_stop(workspace, doc)
     try:
         report = client.import_legacy(workspace, doc, dry_run=dry_run)
     except rcl.RecordsRefusal as refusal:
@@ -86,6 +128,14 @@ def level(client, workspace, doc, dry_run):
                    % (unparsed, doc),
                    {"doc": doc, "legacy_unparsed": unparsed, "lines": []})
     return report
+
+
+def identity_of(client, workspace):
+    """The component's six-field identity, or a named stop carrying its refusal (Astra's F7)."""
+    try:
+        return client.identity(workspace)["identity"]
+    except rcl.RecordsRefusal as refusal:
+        raise _refusal_stop(_status_for(refusal.exit_code), "identity_refused", refusal)
 
 
 def head_of(client, workspace, doc):
@@ -293,4 +343,32 @@ def apply_steps(receipt, workspace):
         receipt.step_done(index, observed)
         virtual[target_rel] = step["after_sha256"]
         applied.append(step["kind"])
+    verify_targets(receipt, workspace)
     return applied, redone
+
+
+def verify_targets(receipt, workspace):
+    """Every FULLY completed target is at its final planned hash, or the run stops (Astra's F6).
+
+    A target whose steps are all `done` must hash to the planned hash after its last step. Anything
+    else is an edit that reached it after this run wrote it — in a crash window, or between the
+    write and the card append — and the run stops `outside_edit`, leaving the edited bytes as they
+    are: never repaired, never rewritten, never read back as the card this run set. A target with
+    a pending or intent step is classified by `apply_steps` before/after as it always was.
+    """
+    finals, complete = {}, {}
+    for step in receipt.steps():
+        target = step["target"]
+        finals[target] = step["after_sha256"]
+        complete[target] = complete.get(target, True) and step["state"] == rcpt.DONE
+    for target in sorted(finals):
+        if not complete[target]:
+            continue
+        now = canon.sha256_file_or_none(os.path.join(workspace, target))
+        if now != finals[target]:
+            raise Stop("recording_failed", "outside_edit",
+                       "%s was written by this run and has changed since: it hashes to %s, not the "
+                       "%s this run's last step on it left. An outside edit is never repaired and "
+                       "never read back as this run's own record; it is left exactly as it is"
+                       % (target, (now or "nothing")[:12], (finals[target] or "")[:12]),
+                       {"target": target, "planned_after": finals[target], "observed": now})

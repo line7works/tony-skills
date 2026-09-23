@@ -88,8 +88,33 @@ the owner). Amendment A3 item 3 has this station stop on any importer signal, na
 Interface version 1 publishes `counts.legacy_unparsed` as a COUNT with no line number in any
 field, and the lines exist only as `legacy_unparsed` EVENTS, which requires a real import, a
 write, the opposite of a read-only stop. So the stop names the document and the count, says that
-interface version 1 does not name the lines, and points at `records.py survey`. A line the
-importer silently drops remains a known open point for the full review.
+interface version 1 does not name the lines, and points at `records.py survey`. Since the slice
+2 fix round (Astra's F12) a line Appendix A cannot place never reaches the importer: the pilot's
+own stop check runs first and names the document, the line and its bytes. A line Appendix A
+places and the importer still drops in silence is what remains open.
+
+## The slice 2 fix round (Astra's review, amendment A6)
+
+What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra.py`:
+
+- **F3** `scope` pins the reviewed identity beside the packet; `record` compares the identity now
+  before the first project-record write and ends `stale_source` (`source_moved`) with both on a
+  mismatch. Every event carries the reviewed identity. Recovery allows only the run's receipted
+  changes.
+- **F4** builder-conversation provenance reaches answer validation: a citation of a builder-notes
+  path or a withheld section, or a quotation found only in withheld material, anywhere in the
+  answer (`checks_executed` included) is refused on independence.
+- **F6** every fully completed target is checked against its final planned hash at the end of the
+  document steps and before commit; an outside edit is `recording_failed/outside_edit` and is left
+  intact; the card is reported from the receipt.
+- **F7** a refusal of `records.py identity` is a named stop with a result (`identity_refused`).
+- **F8** a `recording_failed` result is built from the receipt (landed appends, `document_steps`,
+  the authorized verdict doc, the card as far as it got, `records_command`) and validates, exit 10.
+- **F12** Appendix A's stop check before any levelling (`missing_input`, `legacy_ambiguous`,
+  `unplaced`): `signoff_core/record_grammar.py` is the pilot's `ledger.py` byte for byte.
+- **F16** the clean-review check runs after findings are partitioned; `record-answer` refuses a
+  review that raises nothing and lists no check, and `record` validates the proposed completion
+  before writing anything.
 
 ## Closed since round 1
 

@@ -141,17 +141,30 @@ def checks(entry):
     return out
 
 
+def _normal(value):
+    """A path with only its literal leading `./` segments removed (Astra's F14).
+
+    A filename-leading dot is part of the name: `.config.env` and `config.env` are two distinct
+    paths, so `lstrip("./")`, which strips any run of `.` and `/` characters, is never used here.
+    """
+    value = value.strip()
+    while value.startswith("./"):
+        value = value[2:]
+    return value
+
+
 def in_named_paths(path, names):
     """Is one source-set path inside the paths the slice names?
 
     A named path is a file when it names a file and a directory prefix when it ends in `/` or
     when the source path sits under it as a directory. Nothing else matches: a path the slice
     does not name is out of scope, and this function never guesses a relationship from a shared
-    prefix of a file name (`src/a.py` is not inside `src/a`).
+    prefix of a file name (`src/a.py` is not inside `src/a`), and a leading dot is part of a name
+    (`.config.env` is not `config.env`).
     """
-    normal = path.strip().lstrip("./")
+    normal = _normal(path)
     for name in names:
-        candidate = name.strip().lstrip("./")
+        candidate = _normal(name)
         if not candidate:
             continue
         if candidate.endswith("/"):

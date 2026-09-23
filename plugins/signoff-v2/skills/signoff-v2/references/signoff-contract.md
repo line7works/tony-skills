@@ -2,7 +2,9 @@
 
 What this station does, what it may write, what stops it, and the words it uses for a state.
 Written for E13 slice 2 of the skills v2 rebuild, against the stations E13 lane contract
-(section 10) and its amendment A3. Where this document and that contract differ, the contract is
+(section 10) and its amendments A3 to A6. The slice 2 fix round (amendment A6) changed sections 1,
+5, 8 and 9 after Astra's review of slice 2; each change names her finding (F3, F4, F6, F7, F8, F12,
+F16). Where this document and that contract differ, the contract is
 the authority and this document is the defect.
 
 Nothing this station DECIDES is new (ruling E13-1, owner pick P5): v1 signoff's steps, its
@@ -27,7 +29,12 @@ the result and renders. What the reviewer concluded is recorded with who conclud
 **The anti-rubber-stamp rule, kept from v1.** A review that returns no findings must state what
 it tried to break and failed to break. Here that is mechanical: a result with no raised findings
 carries a non-empty list of the checks the reviewer executed, each with its output, and an empty
-list is a validation failure of the result rather than a clean verdict.
+list is a validation failure of the result rather than a clean verdict. "No raised findings" is
+counted AFTER the findings are partitioned into raised findings and notes (Astra's F16): a review
+whose only findings sit outside the source set raises nothing, so it is a clean review for this
+rule and is refused `answer_invalid` at `record-answer` when it lists no executed check. The
+proposed completion is validated before `record` writes anything, so a result the validator would
+refuse never reaches the log, the document or the card.
 
 **The model floor, kept from v1.** Reviewers run at Opus-class or better. The floor is passed to
 `readers` as `floor: opus` with this session's own model id as `session_model`; it is never
@@ -120,6 +127,16 @@ CONTENT is withheld — both, in that order (amendment A3 item 2). Builder claim
 ledger document's own sections are the same: listed, withheld, never evidence. A finding or a
 verdict that quotes withheld text is refused (`refusal_reason: independence`).
 
+**Provenance, over the whole answer** (Astra's F4). The packet's knowledge of which paths are the
+builder's conversation reaches the answer check. Every string of the answer — the prose, the
+verdict, every finding and kept note, and every `checks_executed` entry's name, command and
+output — is refused as `independence` when it: cites a builder-conversation path (its workspace
+path, or its file name when no delivered file shares that name, case-insensitively, `:line` or
+not); cites a withheld ledger section (`<doc>#<section>`); quotes a span (in `"…"`, `'…'`, `` `…` ``
+or `“…”`, 12 or more characters) that appears in the withheld material and nowhere in the
+delivered packet; or repeats a withheld line of 24 or more characters verbatim. The last rule is
+the older one and stays; it never stood in for citation provenance.
+
 Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 
 **Until v2 signoff is itself qualified**, the plan's words hold: initial inspection in this
@@ -174,12 +191,29 @@ The complete list. Anything else is a boundary violation the result must report.
 
 The order, and what each step promises:
 
+- **The Appendix A stop check first** (Astra's F12). Before ANY levelling, the document's
+  hand-written records are read with Appendix A's stop check, unchanged: the recheck pilot's own
+  reader (`scripts/signoff_core/record_grammar.py` is the pilot's `recheck_core/ledger.py` byte
+  for byte, held equal by a test), used as a detector only and never as a source of records. A
+  line it cannot place stops the run `missing_input` (`legacy_ambiguous`) with the document, the
+  line and its bytes (`unplaced`), and nothing is written. The importer's tolerant success does
+  not authorize proceeding.
 - **Level the log (CR-1).** v1 signoff writes findings into the Markdown by hand, so a document
   can be ahead of its log. Every phase that reads the document's records runs `import-legacy`
   first — a dry run for a read-only command, the real thing before a write. The importer reads
   hand-written records more loosely than the pilot's stop rule and refuses an orphan clearing
   line, so this station stops on ANY signal it gives: `legacy_unparsed` above zero in a dry run,
   exit 5, or any refusal (amendment A3 item 3). It does not build a second record grammar.
+- **Pin the reviewed identity** (Astra's F3). `scope` pins, beside the packet, the six-field
+  identity the component computes for the workspace. At `record`, before the first project-record
+  write — the levelling is one — the identity now must equal it. A mismatch is source the review
+  never saw: the run ends `stale_source` (`source_moved`), reports both (`source_identity` is the
+  reviewed one, `identity_now` the other), and writes no project record. Every event this run
+  appends carries the REVIEWED identity; the identity now never stands in for it. A refusal of
+  `identity` at either phase is a named stop with a result (`identity_refused`, Astra's F7), never
+  a traceback. On recovery only the run's receipted changes are allowed: the receipt pins, when it
+  is created, the identity with the run's own targets left out, and a recovering pass that finds
+  anything else moved ends `stale_source` too.
 - **Pin the head.** The head the run read its state against is pinned at `scope`. At `record`,
   BEFORE this run's own levelling, the log must still be at that head; an event another writer
   appended between the two phases is a named conflict before any append. The comparison is taken
@@ -226,6 +260,22 @@ plan's baseline. Document steps are classified against the VIRTUAL state of each
 steps writing one file do not collide; a hash matching neither the planned state nor the virtual
 one is an outside edit and stops the run.
 
+**Every completed target is checked again** (Astra's F6). At the end of the document steps, and
+again just before the receipt is committed — on a first pass and on recovery alike — every target
+whose steps are all done must hash to the planned hash after its last step. An edit that reached
+it after this run wrote it, in a crash window or between the write and the card append, ends the
+run `recording_failed` (`outside_edit`) and is left exactly as it is. Once the plan exists the card
+is reported from the RECEIPT (its planned `before` and value, `moved` only when its step is done),
+never from bytes read afresh, which on recovery already carry this run's own value.
+
+**A partial failure is reported from the receipt** (Astra's F8). A `recording_failed` result lists
+every append the receipt holds as landed, with its seqs; every document step with its state
+(`document_steps`); the verdict doc the plan authorized (`verdict_doc`); the card as far as it got;
+and the failing command's exit, error and name (`records.records_exit`, `records_error`,
+`records_command`) with its sentence as the stop reason. It validates and exits 10. A write that
+landed is never reported absent, and a refusal the component returned is never retried: a second
+`record` re-delivers it.
+
 **Rerunning `record`** settles the run rather than repeating it: completed steps are never
 redone, the append is never made twice, and a committed receipt reports the same completion.
 
@@ -239,9 +289,14 @@ redone, the append is never made twice, and a committed receipt reports the same
 | The workspace has an initialized submodule | `stopped` | `submodules` |
 | A path of the source set does not reach the packet | `stopped` | `packet_incomplete` |
 | The reviewing session is the building session | `stopped` | `independence` |
-| A finding or verdict quotes withheld builder conversation | `stopped` | `independence` |
+| Any part of the answer cites or quotes withheld builder conversation | `stopped` | `independence` |
 | A finding is missing one of its four required parts | `stopped` | `answer_invalid` |
-| A clean review lists no executed check | `stopped` | `answer_invalid` |
+| A clean review lists no executed check, counted after findings outside the set became notes | `stopped` | `answer_invalid` |
+| The proposed completion fails the result's semantic checks | `stopped` | `answer_invalid` |
+| A record line fits no Appendix A shape | `missing_input` | `legacy_ambiguous` |
+| The source moved after the packet was built | `stale_source` | `source_moved` |
+| The component refused `identity` | per the refusal map | `identity_refused` |
+| `mirrors` or `render` refused inside the transaction | `recording_failed` | `mirrors_refused`, `render_refused` |
 | The importer reports an unparsed record line | `stopped` | `legacy_unparsed` |
 | The importer refuses an ambiguous document (component exit 5) | `missing_input` | `importer_ambiguous` |
 | Another writer moved the log between two phases | `recording_failed` | `log_moved_between_phases` |

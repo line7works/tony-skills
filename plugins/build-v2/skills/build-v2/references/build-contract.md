@@ -6,7 +6,9 @@ everything under `scripts/build_core/` is internal, and a caller that imports th
 of running `scripts/build.py` is outside this interface.
 
 Written for E13 slice 2 of the skills v2 rebuild, against the E13 lane contract
-(`docs/plans/2026-09-21-stations-e13.md`, sections 8 and 9, with amendments A1 to A3). Where this
+(`docs/plans/2026-09-21-stations-e13.md`, sections 8 and 9, with amendments A1 to A6). The slice 2
+fix round (amendment A6) changed the behaviour described in sections 5, 7, 8, 9, 10, 12, 13, 14
+and 15 after Astra's review of slice 2; each change names her finding (F1, F2, F11, F12, F14, F15). Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 
 Contents: 1 The job · 2 What is kept from v1 · 3 The phases · 4 The input · 5 The source set ·
@@ -109,6 +111,17 @@ writes the slice's `Status:` line — so without this the scope stop would fire 
 loop itself sanctions, on every run after the first. Sanctioning says so out loud; excluding
 would have hidden it.
 
+**The set is computed twice, and the second one decides** (Astra's F1). `preflight` computes it
+to read the slice's standing; `report` computes it AGAIN, after any requested check reruns and
+before the scope decision, against the base COMMIT preflight resolved (so a ref that moved in
+between does not move the base). That second set is the one the result publishes, the one the
+scope comparison runs over, and the one whose six-field identity the card event carries: an
+untracked file added, a tracked file changed or an out-of-scope commit made after preflight is in
+it, and is out of scope like any other path. A set or an identity that cannot be computed at
+report stops the run (`no_git`, `no_base`, or the records stop the refusal maps to). The decision
+is persisted before the card transaction opens, so a settling pass re-delivers that set and that
+identity and reruns no check. The ledger document stays in the set, sanctioned.
+
 Git runs read-only, only inside the workspace, under a fixed clean configuration
 (`GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, LANG C, TZ UTC), so no user
 configuration changes what is reported.
@@ -132,7 +145,9 @@ sanctioned (section 5), is listed in `out_of_scope`, each with:
 
 A path is inside the slice's named paths when it equals one, when it sits under one as a
 directory, or when a named path ends in `/` and the path starts with it. A shared prefix of a
-file name is not a relationship: `src/a.py` is not inside `src/a`.
+file name is not a relationship: `src/a.py` is not inside `src/a`. Only literal leading `./`
+segments are removed before the comparison; a filename-leading dot is part of the name, so
+`.config.env` and `config.env` are two distinct paths (Astra's F14).
 
 **A path outside them with no stated reason is a STOP** (`scope_unexplained`), naming every such
 path. A stated reason does not put the path back in scope and this core never judges whether the
@@ -153,7 +168,25 @@ The slice's `Checks:` list is the closed set that gates the card. Each row of `c
   A rerun that disagrees with the answer keeps both: `result` is what this core observed and
   `recorded_result` is what the answer claimed.
 - A rerun binds the command as an argv list and never runs it through a shell. A command carrying
-  shell syntax is NOT rerun; the row keeps the recorded result and `rerun_refused` says why.
+  shell syntax is NOT rerun.
+- **A requested rerun that cannot execute is `not_run`** (Astra's F2): shell syntax, an executable
+  that is not there, a timeout. `rerun_refused` keeps the reason and `output` whatever the attempt
+  captured; the executor's claim is kept SEPARATELY in `recorded_result` and `recorded_output` and
+  never stands in for the observation. The run finishes `checks_not_passed` and the card stays.
+- **One command's output is never attributed to another named command** (F2). When the answer's
+  `command` for a check does not split into the same arguments as the command the slice names, the
+  row is `not_run`, `attribution_refused` says why, and the answer's command, result and output are
+  kept in `recorded_command`, `recorded_result` and `recorded_output`.
+- **A refused answer runs nothing** (F15): the contents rules of section 8 are applied BEFORE any
+  check subprocess is launched, so a refused answer's rows are the recorded ones and
+  `rerun_refused` says no command was run.
+- **Report-only runs no check command in the live workspace** (F15): a check is an unrestricted
+  child process, this core has no read-only execution boundary to put around it, and report-only
+  promises nothing reaches the workspace. Every requested rerun is `not_run` with `rerun_refused`
+  saying so, and the run finishes `checks_not_passed`.
+- **A child that wrote is a write** (F15). Around the reruns of a normal run this core reads the
+  six-field identity before and after; when it moved, `checks_changed_workspace` is true,
+  `wrote_nothing` is false, and what the child changed is in the source set computed at report.
 - This core never reruns a model.
 
 **A failing or skipped check is reported as failing or skipped, with its output, and the card
@@ -176,6 +209,7 @@ An answer that passes the schema can still be REFUSED on its CONTENTS:
 | R3 | its `case` names a case other than the one the run is for |
 | R4 | the same check name appears twice, so "the result of the check" has no single value |
 | R5 | one edit path carries two different reasons |
+| R6 | a check reported `passed` carries a nonzero exit code (Astra's F2): the answer's own observation contradicts its claim |
 
 R1 reads the answer's OWN list, whether or not the slice names the check: an answer that calls
 itself finished while reporting a check of its own as failing contradicts itself, and the
@@ -203,7 +237,12 @@ The slice's card moves to `built` when, and only when, all three hold:
 2. every check the SLICE names passed;
 3. no path is out of scope without a stated reason.
 
-Otherwise it stays where it was, and `card.reason` says which condition failed. This core moves a
+Otherwise it stays where it was, and `card.reason` says which condition failed.
+
+**A card already at `built` is not moved again** (Astra's F11). When all three hold and the
+document's card already reads `built`, the run is `completed` without opening a card transaction:
+no receipt, no `card_set`, no `Status:` write. `card.moved` is false and `card.reason` says the card
+was already built. This core moves a
 card to `built` and to nothing else: `rejected`, `signed off with conditions` and `signed off` are
 other stations' verdicts, and the builder writes intentions, never signatures.
 
@@ -229,6 +268,17 @@ the Markdown by hand. The importer is idempotent; a pass that finds no news appe
 
 **CR-2, a read-only pass stays read-only.** A report-only run levels with `--dry-run`, which
 takes no lock and writes nothing.
+
+**The Appendix A stop check comes first** (Astra's F12). Before ANY levelling pass, `preflight`'s
+and `report`'s alike, the document's hand-written records are read with Appendix A's stop check,
+unchanged: the recheck pilot's own reader (`scripts/build_core/record_grammar.py` is the pilot's
+`recheck_core/ledger.py` byte for byte, and a test holds the two equal). A line under a record
+heading that fits no Appendix A shape — or any other of Appendix A's ambiguous records — stops the
+run `legacy_unplaced`, naming the document, the line and its bytes in `stop_reason` and in
+`unplaced`, before the importer reads anything: no log write, no card. The reader is used as a
+DETECTOR only, never as a source of records, so there is still one record grammar, the pilot's,
+and one log grammar, the component's. The importer's tolerant success does not authorize
+proceeding.
 
 **Amendment A3 item 3, any importer signal is a stop.** A dry run precedes every levelling pass.
 A `legacy_unparsed` above zero, an exit 5, or any refusal STOPS the run naming what the importer
@@ -325,7 +375,7 @@ file ahead of its log.
 
 | `status` | Kind | Means |
 |---|---|---|
-| `completed` | completion | the answer claimed complete, every named check passed, every out-of-scope path carried a reason; the card moved to `built` unless the run was report-only |
+| `completed` | completion | the answer claimed complete, every named check passed, every out-of-scope path carried a reason; the card moved to `built` unless the run was report-only or the card already stood at `built` (F11) |
 | `checks_not_passed` | completion | at least one named check is failing or was not run, reported with its output; the card did not move |
 | `not_complete` | completion | the answer claims `partial` or `stopped` and no named check failed; the card did not move |
 | `answer_refused` | **stop** | the recorded answer is not recordable; neither acted on nor repaired. `refusal_reason` says why; there is no `stop_tag`, because the tags of section 13 are the tool's own failures and this is not one |
@@ -357,7 +407,7 @@ apology, and it never stands in for a finding about the code.
 | `no_slice` | the document carries no such slice |
 | `no_git` | the workspace is not a git work tree root with a HEAD commit |
 | `no_base` | the base ref does not resolve to a commit |
-| `legacy_unplaced` | the importer read a line under a record heading that fits no record shape |
+| `legacy_unplaced` | a line under a record heading fits no Appendix A shape (the strict check, F12, with `unplaced`), or the importer read one it could not place (`legacy_unparsed`) |
 | `card_drift` | the log and the document disagree about the card |
 | `open_blocker` | the slice carries an open BLOCKER and the input did not allow building on it |
 | `scope_unexplained` | a source-set path is outside the slice's named paths with no stated reason |
@@ -385,6 +435,10 @@ The result still carries everything the run computed: the source set, the out-of
 its reasons, every check with its output, what the answer claimed, and where the card stands with
 a `card.reason` saying what would have happened.
 
+Report-only covers child processes too (Astra's F15): no check command is rerun in the live
+workspace, and a requested rerun is `not_run` (section 7), so a report-only run that asked for
+reruns finishes `checks_not_passed` and still writes nothing.
+
 ## 15. The semantic checks
 
 What the schema cannot say, run by `scripts/validate-result.py` and by every run before it
@@ -403,6 +457,7 @@ passing quietly.
 | V8 | `records.appended` agrees with `records.wrote`; a returned refusal appended nothing; at most one event, and it is a `card_set` |
 | V9 | `completed` and a failing or skipped named check cannot both stand, and `checks_not_passed` needs one |
 | V10 | an appended event's result reports the six-field identity the event carries |
+| V11 | a named check this core could not run (`rerun_refused`) or attribute (`attribution_refused`) is `not_run`; a report-only run reran nothing; a run whose reruns changed the workspace never says `wrote_nothing` |
 
 ## 16. Exit codes
 
@@ -436,12 +491,13 @@ it for this lane on 2026-09-22:
 ## 18. Open points
 
 - **The importer reads more loosely than this core does** (E13 amendment A3 item 3; the slice 1
-  builder's Findings 2 and 3, left open by the owner). The records component's importer reads a
-  hand-written record more loosely than the pilot's strict reader, and it refuses an orphan
-  clearing line. This core stops on ANY importer signal rather than trusting its silence, and it
-  neither carries a second record grammar nor changes `plugins/records/`. **A line the importer
-  silently drops is a known open point**: this core cannot see it, and the full review of the step
-  weighs it.
+  builder's Findings 2 and 3). The records component's importer reads a hand-written record more
+  loosely than the pilot's strict reader, and it refuses an orphan clearing line. Since the slice 2
+  fix round (Astra's F12) this core runs the pilot's own Appendix A stop check before any levelling
+  (section 10), so a line the importer would silently drop or loosely import stops the run first.
+  It still stops on ANY importer signal, including the importer's refusal of an orphan clearing
+  line (`records_ambiguous`), which the recheck pilot answers through the resolutions interface
+  and this core does not: build reads no clearing record. It changes nothing in `plugins/records/`.
 - **The ledger document is sanctioned, not excluded** (section 5). This lane first excluded it
   from the source set; the control room ruled in the first check round that it stays IN the set
   and is sanctioned for the scope comparison instead, so what changed is visible and the loop's

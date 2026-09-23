@@ -62,7 +62,7 @@ EMPTY_RECORDS = {"log": None, "levelled": {"ran": False, "dry_run": False, "woul
 def assemble(run, status, reason, root=None, stop_tag=None, stop_reason=None,
              refusal_reason=None, out_of_scope=None, checks=None, records_extra=None,
              answer_refusals=None, card_after=None, card_moved=False, card_reason=None,
-             card_line=None, receipt=None, resumed_half=None):
+             card_line=None, receipt=None, resumed_half=None, unplaced=None):
     """One result document, ready to validate and write."""
     if status == "stopped" and stop_tag not in STOP_TAGS:
         raise ValueError("%r is not one of this core's stop tags; every stop this core can make "
@@ -81,7 +81,11 @@ def assemble(run, status, reason, root=None, stop_tag=None, stop_reason=None,
             records_block[key] = value        # `levelled` is an object on every result, never null
         records_block.setdefault(key, value)
 
-    wrote_nothing = not any(entry.get("kind") != "run_artifact" for entry in (body.get("writes") or []))
+    # Astra's F15: a check subprocess that changed workspace bytes is a write, even though it is
+    # not one of this core's own. The result never claims no writes when a child made some.
+    children_wrote = bool(body.get("checks_changed_workspace"))
+    wrote_nothing = (not children_wrote and not any(entry.get("kind") != "run_artifact"
+                                                    for entry in (body.get("writes") or [])))
 
     result = {
         "result_version": 1,
@@ -107,8 +111,11 @@ def assemble(run, status, reason, root=None, stop_tag=None, stop_reason=None,
         "writes": list(body.get("writes") or []),
         "receipt": receipt,
         "resumed_half": resumed_half,
+        "checks_changed_workspace": children_wrote,
         "next": "done",
     }
+    if unplaced:
+        result["unplaced"] = [dict(row) for row in unplaced]
     if source:
         result["source_set"] = source
     if contract:

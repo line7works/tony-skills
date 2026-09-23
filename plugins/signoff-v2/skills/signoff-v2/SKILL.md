@@ -50,7 +50,7 @@ This writes the `/readers` request and the reviewer's mandate. It carries the pa
 
 Three things count as the builder's conversation and are listed in the packet with their content withheld: a path the input declares, a file whose name or first heading declares itself the builder's notes, and the ledger document's own `## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs` and `## Punch list` sections and its `Status:` lines. An untracked builder-notes file is IN the source set and IN the file list, and its content is withheld — both, in that order. Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 
-When the input marks the reviewing session as the building session, `request` writes no mandate and no request file, and `record-answer` refuses the answer with `refusal_reason: independence`. No verdict is recorded. Reviewing the diff solo and labeling it a sign-off is the one unforgivable move.
+When the input marks the reviewing session as the building session, `request` writes no mandate and no request file, and `record-answer` refuses the answer with `refusal_reason: independence`. No verdict is recorded. Reviewing the diff solo and labeling it a sign-off is the one unforgivable move. The builder's notes are never evidence anywhere in the answer: a citation of a builder-notes path, or a quotation found only in withheld material, in prose, findings or `checks_executed`, refuses the answer on independence.
 
 ## Step 3 — Review
 
@@ -84,7 +84,7 @@ The answer is `references/answer.schema.json` (`references/examples/answer-with-
 
 1. **Evidence or it does not count.** A finding missing a location, a claim, a scenario or an evidence kind refuses the WHOLE answer (`answer_invalid`): nothing is raised, no verdict is recorded, and the answer is not repaired into shape. Fix the reviewer's report or re-send the lens; never edit a finding into validity yourself.
 2. **A location outside the source set is a note**, not a finding.
-3. **A clean review lists its checks.** No findings and no executed check with output is refused.
+3. **A clean review lists its checks.** No RAISED finding and no executed check with output is refused — a review whose findings all sit outside the source set counts as clean here.
 4. **Verify before reporting.** Read the source yourself on every BLOCKER and MAJOR before it reaches the answer, and drop what you refute. Reviewers are fallible and a false blocker costs real time.
 5. **Unbuilt-by-design is not a defect.** `Out of scope:` and `Not in this slice:` lines are user-sanctioned. A `## Deviations` entry labeled `per user` counts as sanctioned; one labeled `builder call`, or unlabeled, that leaves an acceptance criterion unmet caps the verdict at conditions and goes to the user as a question. An unmet requirement with no record at all is a BLOCKER **and** a question to the user.
 

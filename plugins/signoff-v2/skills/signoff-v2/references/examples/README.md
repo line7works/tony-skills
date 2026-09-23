@@ -25,6 +25,13 @@ personal path is committed.
 | `result-report-only.json` | findings named as raised, nothing written, no verdict recorded |
 | `result-stopped-answer-invalid.json` | a finding with no evidence kind: the whole answer refused |
 | `result-stopped-independence.json` | the reviewing session is the building session |
+| `result-stale-source-moved.json` | an untracked file added after the answer: `stale_source`, both identities, nothing recorded (Astra's F3) |
+| `result-missing-input-legacy-ambiguous.json` | a hand-written review line Appendix A cannot place: stopped before levelling, with its document, line and bytes (F12) |
+| `result-recording-failed-after-writes-landed.json` | `mirrors` refused after the block, the verdict doc and the card landed: every landed write reported from the receipt (F8) |
+
+The last three came from the slice 2 fix round's own runs of the same CLI over seeded case
+`S1-02-untracked-defect`, normalized the same way with the run directory as
+`/tmp/signoff-fix2-run`.
 
 ## Rejected
 
@@ -32,5 +39,6 @@ Each names the one rule it breaks. Together they cover the refusals a reader mos
 schema to make: an unknown key rather than a silently ignored one, a ledger address the records
 component itself refuses (`docs/records/`, `docs/reviews/`), a run id that is not one path
 segment, an evidence kind outside the three, a verdict outside the three, a terminal status
-outside the two, a packet file in no list, a verdict recorded on a stop, and a report-only run
-that recorded one.
+outside the two, a packet file in no list, a verdict recorded on a stop, a report-only run
+that recorded one, a document step in a state outside the three, and an unplaceable record line
+reported without its bytes.

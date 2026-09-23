@@ -15,9 +15,22 @@ fixes in advance (ruling E13-4, "the executor decides, the script records"):
 3. **The verdict.** v1's severity mapping over the raised findings (`verdict.py`). The reviewer's
    stated verdict is recorded beside it and a disagreement is reported, never silently resolved.
 
-A clean review must list its checks: no findings and no executed check with output is not a clean
-verdict but an answer the run refuses, which the result schema then also refuses (exit 4).
+A clean review must list its checks: when no finding remains RAISED after the partition into
+raised findings and notes, and no executed check carries a name and an output, the answer is
+refused (`answer_invalid`) here, at `record-answer`, and no recording starts (Astra's F16: a review
+whose only finding was demoted to a note is a clean review for this rule, not an exception to it).
+
+**Builder-conversation provenance** (Astra's F4). The packet knows which files are the builder's
+conversation and which ledger sections were withheld; `adjudicate` is handed that as
+`provenance`. The WHOLE answer — prose, findings, notes kept, the verdict and every
+`checks_executed` entry, command and output included — is refused (`independence`) when it
+cites one of those paths (by its workspace path, or by its file name when no delivered file shares
+it) or a withheld section, or quotes text whose only source is the withheld material (a quoted
+span of 12 or more characters found in the withheld text and nowhere in the delivered packet).
+The older rule, a withheld line of 24 or more characters repeated verbatim, stays beside these; it
+never stood in for citation provenance.
 """
+import os
 import re
 
 from . import verdict as vdmod
@@ -26,7 +39,10 @@ from .constants import EVIDENCE_KINDS
 LOCATION = re.compile(r"^(?P<file>[^\s:][^:]*?):(?P<line>\d+)(?:-(?P<line_end>\d+))?"
                       r"(?:\s*\((?P<tag>[^)]*)\))?$")
 REQUIRED = ("location", "claim", "scenario", "evidence_kind")
-MIN_QUOTE = 24   # a withheld line shorter than this is not treated as a citation
+MIN_QUOTE = 24   # a withheld line shorter than this is not treated as a verbatim repetition
+MIN_QUOTED_SPAN = 12   # a quoted span at least this long is checked for withheld-only provenance
+QUOTED = re.compile(r'(?:(?<![\w])"([^"\n]+)"|(?<![\w])\'([^\'\n]+)\'(?![\w])|`([^`\n]+)`'
+                    r'|\u201c([^\u201d\n]+)\u201d)')
 
 
 def parse_location(raw):
@@ -55,6 +71,67 @@ def citations(row, withheld_lines):
         needle = _normalize(line)
         if len(needle) >= MIN_QUOTE and needle in haystack:
             hits.append(line)
+    return hits
+
+
+def strings_of(value):
+    """Every string value inside an answer, recursively, in a stable order. Keys are not text the
+    reviewer wrote about the code, so only values are read."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        out = []
+        for key in sorted(value):
+            out.extend(strings_of(value[key]))
+        return out
+    if isinstance(value, list):
+        out = []
+        for item in value:
+            out.extend(strings_of(item))
+        return out
+    return []
+
+
+def _path_pattern(token):
+    return re.compile(r"(?<![\w./-])" + re.escape(token) + r"(?![\w/-])", re.I)
+
+
+def provenance_citations(a, provenance):
+    """[{"why", "cited"}]: every place the answer cites or quotes the builder's conversation."""
+    provenance = provenance or {}
+    texts = strings_of(a)
+    if not texts:
+        return []
+    joined = "\n".join(texts)
+    hits = []
+    delivered_names = set(os.path.basename(p).lower() for p in provenance.get("delivered_paths") or [])
+    for path in provenance.get("paths") or []:
+        tokens = [path]
+        name = os.path.basename(path)
+        if name.lower() not in delivered_names:
+            tokens.append(name)
+        for token in tokens:
+            if _path_pattern(token).search(joined):
+                hits.append({"cited": token,
+                             "why": "the answer cites %s, the builder's own account of its work, "
+                                    "which is a claim and never evidence" % path})
+                break
+    lowered = joined.lower()
+    for anchor in provenance.get("anchors") or []:
+        if anchor.lower() in lowered:
+            hits.append({"cited": anchor,
+                         "why": "the answer cites %s, a withheld section of the builder's working "
+                                "record" % anchor})
+    withheld = _normalize(provenance.get("withheld_text"))
+    delivered = _normalize(provenance.get("delivered_text"))
+    if withheld:
+        for match in QUOTED.finditer(joined):
+            span = next(group for group in match.groups() if group is not None)
+            needle = _normalize(span)
+            if len(needle) >= MIN_QUOTED_SPAN and needle in withheld and needle not in delivered:
+                hits.append({"cited": span,
+                             "why": "the answer quotes %r, which appears only in the builder's "
+                                    "withheld conversation, never in the delivered packet" % span})
     return hits
 
 
@@ -107,7 +184,7 @@ def _refusal(reason, problems, a, listed):
             "session_id": a.get("session_id"), "citations": []}
 
 
-def adjudicate(a, source_paths, sessions, withheld_lines=()):
+def adjudicate(a, source_paths, sessions, withheld_lines=(), provenance=None):
     """What the run records from one reviewer answer. Never edits the answer."""
     source_paths = set(source_paths or ())
     withheld_lines = tuple(withheld_lines or ())
@@ -135,6 +212,14 @@ def adjudicate(a, source_paths, sessions, withheld_lines=()):
     for line in citations({"notes": a.get("notes"), "verdict": a.get("verdict")}, withheld_lines):
         cited.append({"line": line,
                       "why": "the verdict quotes the builder's own account of its work"})
+    # Astra's F4: the WHOLE answer, `checks_executed` and `notes_kept` included.
+    rest = {"checks_executed": a.get("checks_executed"), "notes_kept": a.get("notes_kept")}
+    for line in citations({"notes": " · ".join(strings_of(rest))}, withheld_lines):
+        cited.append({"line": line,
+                      "why": "the answer's checks or kept notes repeat the builder's own account "
+                             "of its work"})
+    for hit in provenance_citations(a, provenance):
+        cited.append({"line": hit["cited"], "why": hit["why"]})
     if cited:
         out = _refusal("independence", cited, a, listed)
         out["citations"] = [row["line"] for row in cited]
@@ -145,11 +230,6 @@ def adjudicate(a, source_paths, sessions, withheld_lines=()):
         problems.extend(check_finding(row, index, source_paths, withheld_lines))
     if problems:
         return _refusal("answer_invalid", problems, a, listed)
-
-    if not findings and not listed:
-        why = ("a review with no findings carries the checks it executed, each with its output; "
-               "an empty list is not a clean verdict")
-        return _refusal("answer_invalid", [{"why": why}], a, listed)
 
     raised, notes = [], []
     for row in findings:
@@ -170,6 +250,15 @@ def adjudicate(a, source_paths, sessions, withheld_lines=()):
                       "severity": row.get("severity"), "claim": row.get("claim"),
                       "scenario": row.get("scenario"), "evidence_kind": row.get("evidence_kind"),
                       "why": "the reviewer kept it as a note"})
+
+    # Astra's F16: the clean-review check runs over what REMAINS raised after the partition. A
+    # review whose every finding became a note raises nothing, so it is a clean review and must
+    # list the checks it executed, each with its output.
+    if not raised and not listed:
+        why = ("a review that raises no finding carries the checks it executed, each with its "
+               "output; an empty list is not a clean verdict (%d finding(s) reported, none of them "
+               "raised)" % len(findings))
+        return _refusal("answer_invalid", [{"why": why}], a, listed)
 
     computed = vdmod.verdict_for([row["severity"] for row in raised])
     stated = a.get("verdict")

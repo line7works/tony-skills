@@ -66,6 +66,13 @@ def assemble(resolved, plugin_version, status, **parts):
         "receipt": parts.get("receipt"),
         "problems": parts.get("problems") or [],
     }
+    # Present only when the run produced them, so a result that never needed one reads as before.
+    if parts.get("identity_now") is not None:
+        result["identity_now"] = parts["identity_now"]          # F3: beside the reviewed identity
+    if parts.get("unplaced"):
+        result["unplaced"] = [dict(row) for row in parts["unplaced"]]    # F12
+    if parts.get("document_steps") is not None:
+        result["document_steps"] = [dict(row) for row in parts["document_steps"]]   # F8
     return result
 
 

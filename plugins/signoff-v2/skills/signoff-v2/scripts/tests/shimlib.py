@@ -9,6 +9,10 @@ unchanged.
 
 One fault fires once: the shim drops a `<fault>.used` marker beside the configuration, so a
 resume after a killed `record` runs against the real component.
+
+`hide_git` (E13 slice 2 fix round, Astra's F7) is this station's addition: it moves the
+workspace's `.git` out of reach while the real component runs the one matching command, so the
+component's own refusal is what the station sees.
 """
 import json
 import os
@@ -56,6 +60,19 @@ if matches and not (config.get("once", True) and used and os.path.exists(used)):
         proc = subprocess.run([sys.executable, real] + argv, capture_output=True)
         open(config_path + ".rival.json", "wb").write(proc.stdout)
         assert proc.returncode == 0, proc.stderr
+    elif action == "hide_git":
+        # the REAL failure, not a message: the workspace's git directory is out of reach while
+        # the real component runs this one command, and is put back before this shim answers
+        workspace = args[args.index("--workspace") + 1]
+        git_dir = os.path.join(workspace, ".git")
+        os.rename(git_dir, git_dir + ".hidden")
+        try:
+            proc = subprocess.run([sys.executable, real] + args, capture_output=True)
+        finally:
+            os.rename(git_dir + ".hidden", git_dir)
+        sys.stdout.buffer.write(proc.stdout)
+        sys.stderr.buffer.write(proc.stderr)
+        sys.exit(proc.returncode)
     elif action == "kill_before":
         os.kill(os.getppid(), signal.SIGKILL)
         sys.exit(0)

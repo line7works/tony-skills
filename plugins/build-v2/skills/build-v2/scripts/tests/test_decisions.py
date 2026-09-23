@@ -410,13 +410,18 @@ class RerunningANamedCheck(_Run):
         self.assertEqual(result["checks"][0]["source"], "recorded")
 
     def test_a_command_with_shell_syntax_is_never_run_and_says_why(self):
-        rows = checksmod.rows([{"name": "unit", "command": "sh checks/unit.sh | tee out.log"}],
-                              [{"name": "unit", "command": "x", "result": "passed",
+        """Astra's F2 changed what the row says: a requested rerun that cannot execute is
+        `not_run`, and the answer's claim is kept beside it rather than standing in for it."""
+        command = "sh checks/unit.sh | tee out.log"
+        rows = checksmod.rows([{"name": "unit", "command": command}],
+                              [{"name": "unit", "command": command, "result": "passed",
                                 "exit_code": 0, "output": "recorded"}],
                               workspace=self.ws, rerun=True)
-        self.assertEqual(rows[0]["source"], "recorded")
+        self.assertEqual(rows[0]["result"], "not_run")
         self.assertIn("shell syntax", rows[0]["rerun_refused"])
-        self.assertEqual(rows[0]["output"], "recorded")
+        self.assertEqual(rows[0]["output"], "")
+        self.assertEqual(rows[0]["recorded_result"], "passed")
+        self.assertEqual(rows[0]["recorded_output"], "recorded")
 
 
 class TheDocumentIsReadForStructureOnly(unittest.TestCase):

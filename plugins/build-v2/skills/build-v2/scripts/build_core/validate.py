@@ -27,6 +27,10 @@ The semantic checks (`run_semantic`) close what the result schema cannot say:
     V8  `records.appended` agrees with `records.wrote`, and a refusal carries no appended event
     V9  a check reported `failing` or `not_run` and a status of `completed` cannot both stand
     V10 the identity is present exactly when a card event was appended (the event carries it)
+    V11 a named check this core could not run (`rerun_refused`) or could not attribute to its own
+        command (`attribution_refused`) is `not_run`, never a result; a report-only run reran
+        nothing; and a run whose check reruns changed the workspace never says `wrote_nothing`
+        (Astra's F2 and F15)
 """
 import json
 import os
@@ -50,7 +54,7 @@ SCHEMA_FILES = {
     "checkpoint": "checkpoint.schema.json",
 }
 
-CHECK_IDS = ["V%d" % i for i in range(1, 11)]
+CHECK_IDS = ["V%d" % i for i in range(1, 12)]
 
 
 class ReferenceUnavailable(RuntimeError):
@@ -333,5 +337,30 @@ def run_semantic(result, input_doc=None, run_dir=None):
     if appended and not result.get("identity"):
         findings.append(_finding("V10", "/identity",
                                  "a card event carries the six-field identity, so the result reports it"))
+
+    # V11: a check this core could not run or attribute is `not_run`, and child writes are writes
+    for index, row in enumerate(checks):
+        where = "/checks/%d/result" % index
+        if row.get("rerun_refused") and row.get("source") == "rerun" \
+                and row.get("result") != "not_run":
+            findings.append(_finding("V11", where,
+                                     "the rerun of %r could not execute (%s), so it is `not_run`, "
+                                     "not %r" % (row.get("name"), row.get("rerun_refused"),
+                                                 row.get("result"))))
+        if row.get("attribution_refused") and row.get("result") != "not_run":
+            findings.append(_finding("V11", where,
+                                     "the answer ran another command under %r, so its output is "
+                                     "not this check's and the check is `not_run`, not %r"
+                                     % (row.get("name"), row.get("result"))))
+        if result.get("report_only") and row.get("source") == "rerun" \
+                and row.get("result") != "not_run":
+            findings.append(_finding("V11", where,
+                                     "a report-only run runs no check command in the live "
+                                     "workspace, so %r cannot carry an observed result"
+                                     % row.get("name")))
+    if result.get("checks_changed_workspace") and result.get("wrote_nothing"):
+        findings.append(_finding("V11", "/wrote_nothing",
+                                 "a check this core reran changed the workspace, so the run did "
+                                 "not write nothing"))
 
     return {"semantic": findings, "skipped": skipped}

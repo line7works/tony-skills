@@ -132,14 +132,21 @@ def tracked_diff_excluding(workspace, paths=()):
     return git(workspace, args, binary=True)
 
 
-def identity_of(workspace):
-    """The six-field fingerprint, with `docs/records/` excluded from all three checks (CR-3)."""
+def identity_of(workspace, exclude=()):
+    """The six-field fingerprint, with `docs/records/` excluded from all three checks (CR-3).
+
+    `exclude` leaves further workspace-relative paths out of all three as well. Only the recording
+    transaction passes it, for its recovery check (Astra's F3): the fingerprint of everything
+    EXCEPT the targets this run is authorized to write. It is never the identity an event carries.
+    """
     require_work_tree_root(workspace)
+    extra = [":(exclude)" + p for p in sorted(exclude)]
     commit = git(workspace, ["rev-parse", "HEAD"]).strip()
     status = git(workspace, ["status", "--porcelain", "--untracked-files=all", "--", "."]
-                 + _exclude_args())
-    diff = tracked_diff_excluding(workspace)
-    untracked = _name_list(workspace, ["ls-files", "--others", "--exclude-standard"])
+                 + _exclude_args() + extra)
+    diff = tracked_diff_excluding(workspace, sorted(exclude))
+    untracked = [path for path in _name_list(workspace, ["ls-files", "--others", "--exclude-standard"])
+                 if path not in set(exclude)]
     lines = []
     for path in untracked:
         lines.append(path + "\0" + canon.sha256_hex(untracked_bytes(os.path.join(workspace, path))) + "\n")

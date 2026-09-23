@@ -13,8 +13,27 @@ Two sources per row, and the result always says which:
 
 A rerun is bound as data, never as shell text: the command is split with `shlex` and run without
 a shell. A command carrying shell syntax (a pipe, a redirect, `&&`, a variable, a glob) is NOT
-rerun — this core will not reconstruct a shell's meaning — and the row keeps the recorded result
-with `rerun_refused` saying why. `sh checks/unit.sh` runs; `a | b` does not.
+rerun — this core will not reconstruct a shell's meaning. `sh checks/unit.sh` runs; `a | b`
+does not.
+
+**A rerun that was asked for and could not execute is `not_run`** (Astra's F2): shell syntax, an
+executable that is not there, a timeout, or a report-only run (F15, below). The row keeps the
+refusal reason in `rerun_refused` and whatever the attempt captured in `output`, and it keeps the
+executor's claim SEPARATELY, in `recorded_result` and `recorded_output`, so the claim is visible
+and never stands in for an observation this core could not make. A `not_run` named check keeps
+the card where it is and the run finishes `checks_not_passed`.
+
+**One command's output is never attributed to another named command** (F2). The answer names the
+command it ran for each check; when that command is not the command the SLICE names for the
+check, what the answer reports is the output of a different command. The row then reports the
+named check as `not_run`, says why in `attribution_refused`, and keeps the answer's command,
+result and output separately (`recorded_command`, `recorded_result`, `recorded_output`). Two
+commands are the same when they split into the same arguments.
+
+**Report-only reruns nothing in the live workspace** (F15). A check command is an unrestricted
+child process, and report-only promises that nothing reaches the workspace, child writes
+included. This core has no read-only execution boundary to put around a child, so in a
+report-only run every requested rerun is `not_run` with `rerun_refused` saying so.
 
 This core never reruns a model.
 """
@@ -54,30 +73,78 @@ def run_command(workspace, command, timeout=600):
                               stderr=subprocess.STDOUT, timeout=timeout)
     except OSError as exc:
         return None, "", "the command could not be started: %s" % exc
-    except subprocess.TimeoutExpired:
-        return None, "", "the command did not finish within %d seconds" % timeout
+    except subprocess.TimeoutExpired as exc:
+        captured = exc.output or b""
+        return None, captured.decode("utf-8", "replace"), (
+            "the command did not finish within %d seconds" % timeout)
     return proc.returncode, proc.stdout.decode("utf-8", "replace"), None
 
 
-def _recorded_row(named, reported):
+def same_command(one, two):
+    """Do two command strings name the same command? Compared as the arguments they split into,
+    so spacing does not matter and nothing else is normalized away."""
+    def split(text):
+        try:
+            return shlex.split(text or "")
+        except ValueError:
+            return (text or "").split()
+    return split(one) == split(two)
+
+
+def _blank(name, command, named_by_slice):
     return {
-        "name": named["name"],
-        "command": named.get("command"),
-        "result": reported.get("result") if reported else "not_run",
-        "exit_code": reported.get("exit_code") if reported else None,
-        "output": reported.get("output") if reported else "",
+        "name": name,
+        "command": command,
+        "result": "not_run",
+        "exit_code": None,
+        "output": "",
         "source": "recorded",
-        "named_by_slice": True,
+        "named_by_slice": named_by_slice,
         "rerun_refused": None,
         "recorded_result": None,
+        "recorded_command": None,
+        "recorded_output": None,
+        "attribution_refused": None,
     }
 
 
-def rows(contract_checks, answer_checks, workspace=None, rerun=False):
+def _recorded_row(named, reported):
+    row = _blank(named["name"], named.get("command"), True)
+    if not reported:
+        return row
+    if named.get("command") and not same_command(reported.get("command"), named.get("command")):
+        # The answer ran something else under this check's name. Its output is that command's,
+        # never the named check's: the named check was not run, and the claim is kept beside it.
+        row.update(recorded_command=reported.get("command"),
+                   recorded_result=reported.get("result"),
+                   recorded_output=reported.get("output"),
+                   attribution_refused=(
+                       "the answer reports this check as `%s`, and the slice names it as `%s`; the "
+                       "output of one command is never the result of another, so the named check "
+                       "was not run" % (reported.get("command"), named.get("command"))))
+        return row
+    row.update(result=reported.get("result") or "not_run", exit_code=reported.get("exit_code"),
+               output=reported.get("output") or "")
+    return row
+
+
+def _not_run(row, why, captured=""):
+    """A requested rerun that could not execute: `not_run`, the claim kept separately."""
+    if row["recorded_result"] is None and row["attribution_refused"] is None:
+        row["recorded_result"] = row["result"]
+        row["recorded_output"] = row["output"]
+    row.update(result="not_run", exit_code=None, output=captured or "", source="rerun",
+               rerun_refused=why)
+    return row
+
+
+def rows(contract_checks, answer_checks, workspace=None, rerun=False, rerun_blocked=None):
     """One row per check, the slice's in document order first, then any the answer adds.
 
     `contract_checks` is `[{"name", "command"}]` from the build doc; `answer_checks` is the
-    recorded answer's `checks` list.
+    recorded answer's `checks` list. With `rerun`, each named command is run in the workspace,
+    unless `rerun_blocked` names why no child process may run there (a report-only run), in which
+    case every named check is `not_run` with that reason.
     """
     reported = {}
     for row in answer_checks or []:
@@ -86,38 +153,33 @@ def rows(contract_checks, answer_checks, workspace=None, rerun=False):
     out = []
     for named in contract_checks or []:
         row = _recorded_row(named, reported.get(named["name"]))
-        if rerun:
+        if rerun and rerun_blocked:
+            _not_run(row, rerun_blocked)
+        elif rerun:
             code, output, why = run_command(workspace, named.get("command"))
             if why is None:
                 observed = "passed" if code == 0 else "failing"
                 # A rerun that disagrees with what the answer recorded keeps both: the row
                 # reports what this core observed, and `recorded_result` says what the answer
                 # claimed, so the disagreement is visible rather than quietly overwritten.
-                if observed != row["result"]:
+                if observed != row["result"] and row["recorded_result"] is None:
                     row["recorded_result"] = row["result"]
                 row["result"] = observed
                 row["exit_code"] = code
                 row["output"] = output
                 row["source"] = "rerun"
             else:
-                row["rerun_refused"] = why
+                _not_run(row, why, output)
         out.append(row)
 
     named_names = set(row["name"] for row in out)
     for row in answer_checks or []:
         if row.get("name") in named_names:
             continue
-        out.append({
-            "name": row.get("name"),
-            "command": row.get("command"),
-            "result": row.get("result") or "not_run",
-            "exit_code": row.get("exit_code"),
-            "output": row.get("output") or "",
-            "source": "recorded",
-            "named_by_slice": False,
-            "rerun_refused": None,
-            "recorded_result": None,
-        })
+        extra = _blank(row.get("name"), row.get("command"), False)
+        extra.update(result=row.get("result") or "not_run", exit_code=row.get("exit_code"),
+                     output=row.get("output") or "")
+        out.append(extra)
     return out
 
 

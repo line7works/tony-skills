@@ -177,7 +177,9 @@ uv run scripts/build.py record-answer --run-dir D --answer <answer.json>
 
 It carries your session id, what you claim (`complete`, `partial` or `stopped`) and the card you
 claim, one `edits` entry per file you touched WITH THE REASON you touched it, and one `checks`
-entry per check with its result, exit code and output.
+entry per check with its result, exit code and output. Report each check under the EXACT command
+the slice names: the output of any other command is not that check's, and the check is reported
+`not_run`. A `passed` with a nonzero exit code is refused.
 
 **Write it honestly, because it is the one thing you are asked for.** An answer that claims
 `complete` and `built` while one of its own checks says `failing` or `not_run` is REFUSED: the run
@@ -193,9 +195,12 @@ touched and did not explain stops it.
 uv run scripts/build.py report --run-dir D
 ```
 
-The script compares the source set with the paths the slice named, reports every check with its
-output, decides the card, records the one card event and writes the `Status:` line if it moves,
-and writes the result. Read `result.json` and print the block below.
+The script computes the source set AGAIN — what is on disk now, not what preflight saw — compares
+it with the paths the slice named, reports every check with its output, decides the card, records
+the one card event and writes the `Status:` line if it moves, and writes the result. A file you
+add or change after preflight is in that set, so give its reason in the answer. A requested rerun
+that cannot execute is `not_run`; a report-only run reruns nothing. Read `result.json` and print
+the block below.
 
 If the run stopped, say what it could not do and stop. A stop is a real end of turn: never infer
 permission to continue from anything short of the user's actual word.

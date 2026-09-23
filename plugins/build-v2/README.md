@@ -134,13 +134,29 @@ and additionally reads every shipped file to fail when a comparison against a ca
   import to have happened and cannot be moved by a change in that policy.
 
 - **The importer reads a hand-written record more loosely than this core does** (E13 amendment A3
-  item 3; the slice 1 builder's Findings 2 and 3, which the owner left open). This core stops on
-  ANY importer signal — a `legacy_unparsed` above zero in the dry run, exit 5, or any refusal —
-  rather than trusting the importer's silence, and it neither carries a second record grammar nor
-  changes `plugins/records/`. **A line the importer silently drops is still a known open point**:
-  A4 narrowed what reaches the importer as news, but it did not close Finding 2 — a hand-written
-  line the importer drops in silence is still invisible to this core, and the full review of the
-  step weighs it.
+  item 3; the slice 1 builder's Findings 2 and 3). Since the slice 2 fix round (Astra's F12) this
+  core runs Appendix A's stop check, unchanged, before any levelling: `build_core/record_grammar.py`
+  is the recheck pilot's `recheck_core/ledger.py` byte for byte (a test holds the two equal), used
+  as an ambiguity detector and never as a source of records. A line it cannot place stops the run
+  `legacy_unplaced` with the document, the line and its bytes. After it, the core still stops on
+  ANY importer signal. It changes nothing in `plugins/records/`.
+
+## The slice 2 fix round (Astra's review, amendment A6)
+
+What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra.py`:
+
+- **F1** `report` recomputes the source set against the base commit preflight pinned, after any
+  rerun and before the scope decision; the card event carries the identity of THAT set, and a
+  settling pass re-delivers it without rerunning a check.
+- **F2** a requested rerun that cannot execute is `not_run` (claim kept in `recorded_result` and
+  `recorded_output`); an answer's check run under another command is `not_run`
+  (`attribution_refused`); a `passed` with a nonzero exit refuses the answer (rule R6).
+- **F11** a card already at `built` is not moved again: no transaction, no event, no line.
+- **F12** the Appendix A stop check before any levelling (above).
+- **F14** only literal leading `./` is stripped before the scope comparison; `.config.env` is not
+  `config.env`.
+- **F15** a refused answer launches no check; report-only reruns nothing in the live workspace;
+  a rerun that changed the workspace sets `checks_changed_workspace` and never `wrote_nothing`.
 - **The ledger document is sanctioned, not excluded.** It stays in the source set, so a reader
   sees that the build doc changed, and the scope comparison passes over it because the loop writes
   into it by design; `source_set.sanctioned` publishes it with its reason.
