@@ -44,6 +44,7 @@ STOP_TAGS = (
     "records_stale_source",   # the workspace moved under a clear (exit 6)
     "records_conflict",       # a moved head or a live lock (exit 7)
     "records_failed",         # any other refusal of the component
+    "result_invalid",         # the proposed completion failed validation before any card write
 )
 """Every tag a stop of this core can carry, in one place.
 

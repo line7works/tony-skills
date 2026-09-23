@@ -347,7 +347,11 @@ def run_semantic(result, input_doc=None, run_dir=None):
                                      "the rerun of %r could not execute (%s), so it is `not_run`, "
                                      "not %r" % (row.get("name"), row.get("rerun_refused"),
                                                  row.get("result"))))
-        if row.get("attribution_refused") and row.get("result") != "not_run":
+        # Astra's N2: `not_run` is required only when no executed observation of the NAMED
+        # command exists. A rerun that executed (`source: "rerun"`, nothing refused) reports what
+        # it observed, and the rejected recorded evidence stays apart beside it.
+        observed = row.get("source") == "rerun" and not row.get("rerun_refused")
+        if row.get("attribution_refused") and row.get("result") != "not_run" and not observed:
             findings.append(_finding("V11", where,
                                      "the answer ran another command under %r, so its output is "
                                      "not this check's and the check is `not_run`, not %r"

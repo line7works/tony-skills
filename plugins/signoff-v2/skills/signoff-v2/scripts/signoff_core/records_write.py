@@ -37,7 +37,7 @@ receipt already names. A read that failed is a stop, never an empty set.
 import os
 
 from . import canon, ledger, receipt as rcpt
-from . import record_grammar as grammar
+from . import native_lines as native
 from . import records_client as rcl
 from .constants import STATION
 
@@ -65,7 +65,7 @@ def _refusal_stop(status, reason_code, refusal, extra=None):
 
 # ---- 1. levelling ------------------------------------------------------------------------
 
-def unplaceable(workspace, doc):
+def unplaceable(workspace, doc, client=None):
     """Appendix A's stop check, unchanged, over the document's hand-written records (Astra's F12).
 
     `record_grammar.py` is the recheck pilot's `recheck_core/ledger.py` byte for byte, and a test
@@ -75,21 +75,27 @@ def unplaceable(workspace, doc):
     the log is levelled: does the document carry a record line Appendix A cannot place? The
     importer reads more loosely, so its silence is not an answer.
 
+    Astra's N1: the lines the records component ITSELF rendered for native events (a review line
+    keeps a ranged location since A7's F9, which the legacy grammar has no shape for) are not
+    hand-written. With a `client`, `native_lines.hand_written_ambiguities` asks the records CLI
+    which lines those are, consumes each native occurrence once, and applies the unchanged check to
+    the rest; only lines the component rendered are set aside, and only when its own
+    `native_rendered` agrees.
+
     Returns `[{doc, line, raw, reason}]`, empty when every record line is placeable.
     """
     text = ledger.read_text(workspace, doc)
     if text is None:
         return []
-    parsed = grammar.parse_document(text, doc)
-    lines = parsed["lines"]
+    lines, found = native.hand_written_ambiguities(client, workspace, doc, text)
     return [{"doc": doc, "line": row["line_no"], "raw": lines[row["line_no"] - 1],
              "reason": row.get("reason") or "matches no Appendix A shape"}
-            for row in grammar.open_set(parsed)["ambiguities"]]
+            for row in found]
 
 
-def strict_stop(workspace, doc):
+def strict_stop(workspace, doc, client=None):
     """The Appendix A stop, as the pilot takes it: `missing_input`, naming each line."""
-    rows = unplaceable(workspace, doc)
+    rows = unplaceable(workspace, doc, client)
     if not rows:
         return
     raise Stop("missing_input", "legacy_ambiguous",
@@ -107,7 +113,7 @@ def level(client, workspace, doc, dry_run):
 
     First the strict Appendix A check over the document's hand-written records (`strict_stop`,
     Astra's F12), before the importer reads anything."""
-    strict_stop(workspace, doc)
+    strict_stop(workspace, doc, client)
     try:
         report = client.import_legacy(workspace, doc, dry_run=dry_run)
     except rcl.RecordsRefusal as refusal:

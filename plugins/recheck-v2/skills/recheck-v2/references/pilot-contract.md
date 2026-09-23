@@ -981,7 +981,7 @@ and how the Markdown is produced.
 
 - **Reaching the component.** The core resolves the records component through the resolver snippet
   of that component's `references/interface.md` (a `--records-root` argument, `RECORDS_ROOT`, the
-  component beside this plugin, the installed shape below it), confirms `interface_version` 1 with
+  component beside this plugin, the installed shape below it), confirms `interface_version` 2 with
   `component-identity`, and reaches it through `scripts/records.py` as a subprocess only: it never
   opens a log file, never imports the component's library, and never copies its code beyond that
   one snippet. A component that cannot be found, or that speaks another interface version, is exit
@@ -1154,3 +1154,26 @@ revision RETURNS a decision to the branch point's behaviour; nothing else rechec
   `plugins/records/`: the reader is the one this skill already runs as its Appendix A detector,
   and the answer goes through the component's published CLI. The parity suite carries the case
   (`tests/test_parity.py::OrphanClearingLine`), driven through both pilots' CLIs.
+
+Revision 10, 2026-09-23, E13 slice 2's last fix round (Astra's N1, after her recheck). Nothing
+recheck decides about a document the branch point could read moves.
+
+- **Section 3 and Appendix A, a line the records component itself rendered.** Records keeps a
+  ranged location on the review line it renders for a native `finding_raised` (records amendment
+  A7, F9: `src/widget.py:2-3`), and Appendix A's grammar has no range, so the strict check (this
+  skill's own reader, kept as an ambiguity detector in E13 slice 1) called a signoff's own
+  rendered line unplaceable and stopped `start` with `missing_input`. When the unchanged check
+  finds an ambiguous record, the core now asks the records CLI which record lines the component
+  itself rendered, and never opens the log: `import-legacy --dry-run` gives `native_rendered`,
+  `events` gives the native runs and the slice each event's finding is charged to, and
+  `render --run-id` gives each native run's exact lines. A document line byte-equal to a rendered
+  line, under a heading of that line's kind and slice (a review line under a review heading of the
+  event's slice, a recheck-block line under a recheck heading naming it, a grant anywhere), and not
+  a line an earlier import recorded, answers for that one occurrence, in file order. Those lines
+  are set aside ONLY when their count, plus the `Status:` lines equal to their slice's last native
+  card, equals the component's `native_rendered`; otherwise none is. The unchanged check then reads
+  the document with the set-aside lines blanked (line numbers kept). A hand-written ranged line
+  stops exactly as at the branch point, and so does a second copy of a rendered line (one
+  occurrence answers for one line, and the importer itself refuses the copy). A document with
+  nothing ambiguous costs no CLI call, so the parity corpus is untouched. Tests:
+  `tests/test_fix3_n1.py`.

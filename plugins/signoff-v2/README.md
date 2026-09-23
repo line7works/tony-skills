@@ -57,7 +57,7 @@ checking work without `jsonschema`. Every response carries `interface_version` a
 ## How it reaches the records component
 
 Through the resolver and the CLI only, never a log file and never an import
-(`plugins/records/references/interface.md`, version 1). `signoff_core/records_client.py` is
+(`plugins/records/references/interface.md`, version 2). `signoff_core/records_client.py` is
 `recheck_core/records_client.py` **byte for byte**, and
 `scripts/tests/test_records_client.py::TheCopyIsExact` fails the moment the two differ. Because
 the copy is exact it carries the pilot's own `STATION` constant and test-hook name; nothing here

@@ -76,7 +76,7 @@
         "string",
         "null"
       ],
-      "description": "a short tag for a stop, one of: `no_doc`, `no_slice`, `no_git`, `no_base`, `legacy_unplaced`, `card_drift`, `open_blocker`, `scope_unexplained`, `outside_edit`, `records_invalid`, `records_ambiguous`, `records_stale_source`, `records_conflict`, `records_failed`. An input that fails its schema and an unreadable answer file are not among them: neither ends a run, so neither reaches a result."
+      "description": "a short tag for a stop, one of: `no_doc`, `no_slice`, `no_git`, `no_base`, `legacy_unplaced`, `card_drift`, `open_blocker`, `scope_unexplained`, `outside_edit`, `records_invalid`, `records_ambiguous`, `records_stale_source`, `records_conflict`, `records_failed`, `result_invalid`. An input that fails its schema and an unreadable answer file are not among them: neither ends a run, so neither reaches a result."
     },
     "refusal_reason": {
       "type": [

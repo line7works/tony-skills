@@ -22,7 +22,7 @@ contract `docs/plans/2026-09-21-stations-e13.md` sections 8 and 9 with amendment
 **The records component is a dependency.** Without it every command that needs it exits 3 with one
 line on stderr naming where it looked; `--help` and argument checking still work. It is found
 through `--records-root`, `RECORDS_ROOT`, the component beside this plugin, or the installed shape
-below it, and the pick is confirmed with `component-identity` at interface version 1.
+below it, and the pick is confirmed with `component-identity` at interface version 2.
 
 **The records wiring is copied, not reinvented.** `skills/build-v2/scripts/build_core/records_client.py`
 is the qualified recheck pilot's `recheck_core/records_client.py` byte for byte below a header

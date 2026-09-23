@@ -28,7 +28,10 @@ command it ran for each check; when that command is not the command the SLICE na
 check, what the answer reports is the output of a different command. The row then reports the
 named check as `not_run`, says why in `attribution_refused`, and keeps the answer's command,
 result and output separately (`recorded_command`, `recorded_result`, `recorded_output`). Two
-commands are the same when they split into the same arguments.
+commands are the same when they split into the same arguments. When a rerun was asked for and
+the NAMED command executes (Astra's N2), the row reports that observation (`source: "rerun"`, its
+exit code, output and `passed` or `failing`) and still keeps the rejected recorded evidence apart,
+with `attribution_refused` saying so; a rerun that cannot execute leaves the row `not_run`.
 
 **Report-only reruns nothing in the live workspace** (F15). A check command is an unrestricted
 child process, and report-only promises that nothing reaches the workspace, child writes
@@ -162,7 +165,18 @@ def rows(contract_checks, answer_checks, workspace=None, rerun=False, rerun_bloc
                 # A rerun that disagrees with what the answer recorded keeps both: the row
                 # reports what this core observed, and `recorded_result` says what the answer
                 # claimed, so the disagreement is visible rather than quietly overwritten.
-                if observed != row["result"] and row["recorded_result"] is None:
+                if row["attribution_refused"] is not None:
+                    # Astra's N2: the answer's recorded evidence was REJECTED (another command
+                    # under this check's name) and stays apart in `recorded_command`,
+                    # `recorded_result` and `recorded_output`; the NAMED command has now been
+                    # executed, so the row reports that observation, and says both things.
+                    row["attribution_refused"] = (
+                        "the answer reports this check as `%s`, and the slice names it as `%s`; "
+                        "the output of one command is never the result of another, so the "
+                        "answer's recorded command, result and output are rejected and kept apart, "
+                        "and the result reported is the one observed when this core ran `%s`"
+                        % (row["recorded_command"], named.get("command"), named.get("command")))
+                elif observed != row["result"] and row["recorded_result"] is None:
                     row["recorded_result"] = row["result"]
                 row["result"] = observed
                 row["exit_code"] = code
@@ -181,6 +195,47 @@ def rows(contract_checks, answer_checks, workspace=None, rerun=False, rerun_bloc
                      output=row.get("output") or "")
         out.append(extra)
     return out
+
+
+def workspace_digest(workspace):
+    """A digest of every byte under the workspace, `.git` excluded, ignored files INCLUDED.
+
+    Astra's F15 remainder: the source identity sees tracked and untracked-but-not-ignored files,
+    so a check that wrote a git-IGNORED file (a cache, a build product) changed the workspace
+    without changing the identity, and the result claimed `wrote_nothing`. This measurement is
+    taken right before the requested reruns and right after them; any difference is a child
+    write. Each file contributes its path, its kind and mode, and its content (a symlink its
+    target, never what it points at); a directory contributes its path, so an empty directory a
+    child created is a change too. Nothing is followed outside the workspace.
+    """
+    import hashlib
+    entries = []
+    for base, dirs, files in os.walk(workspace, followlinks=False):
+        rel_base = os.path.relpath(base, workspace)
+        if rel_base == ".":
+            dirs[:] = sorted(d for d in dirs if d != ".git")
+        else:
+            dirs[:] = sorted(dirs)
+            entries.append("d\0" + rel_base.replace(os.sep, "/"))
+        for name in sorted(files):
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, workspace).replace(os.sep, "/")
+            if rel == ".git":
+                continue
+            try:
+                st = os.lstat(full)
+                if os.path.islink(full):
+                    body = os.readlink(full).encode("utf-8", "surrogateescape")
+                    kind = "l"
+                else:
+                    with open(full, "rb") as fh:
+                        body = fh.read()
+                    kind = "f%04o" % (st.st_mode & 0o7777)
+            except OSError as exc:
+                body, kind = str(exc).encode("utf-8", "replace"), "e"
+            entries.append("%s\0%s\0%s" % (kind, rel, hashlib.sha256(body).hexdigest()))
+    entries.sort()
+    return hashlib.sha256(("\n".join(entries) + "\n").encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def named(rows_):

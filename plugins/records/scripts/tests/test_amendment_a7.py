@@ -19,6 +19,7 @@ Every test drives the real CLI; the reader and the finding-id function are the o
 import json
 import os
 import shutil
+import sys
 import unittest
 
 import testlib
@@ -416,6 +417,165 @@ class F10TheA4ShapesAreInterfaceVersion2(Workspace):
         schema = json.loads(text)
         for branch in ("import_ok", "import_refused"):
             self.assertFalse(schema["$defs"][branch]["additionalProperties"], branch)
+
+
+# ---- the last fix round (E13 slice 2, Astra's recheck): F5's remainder and N3 ------------------
+
+class F5RemainderTheFindingIdentityIsPartOfTheMatch(Workspace):
+    """F5, Astra's stricter shape (`probe_identity_match.py`): a native ranged DEFECT renders in
+    Appendix A's first-line form (the recheck block keeps `location_text`, A7), so the line reads
+    back under another finding identity than the native event's stored id. It used to be skipped
+    (`native_rendered: 1, would_import: 0`); a line whose identity differs is legacy news."""
+
+    RANGED = testlib.location("src/widget.py:2-3", "src/widget.py", 2, line_end=3, resolved=True)
+    RUN_R = "recheck-2026-04-02-a"
+    ACTOR_R = {"station": "recheck", "run_id": RUN_R, "harness": "claude-code"}
+
+    def raise_defect(self, loc):
+        """A native finding for slice A, then a recheck run clearing it and raising a defect."""
+        self.append([testlib.opened(self.identity), self.raise_native("A")], testlib.ZERO)
+        finding = self.raised_events()[0]["finding"]
+        clear = testlib.disposition(finding, self.identity, at="2026-04-02T09:00:00Z")
+        clear["actor"] = dict(self.ACTOR_R)
+        defect = testlib.native("defect_raised", at="2026-04-02T09:00:01Z", identity=self.identity,
+                                actor=self.ACTOR_R, slice="A", severity="MAJOR", location=loc,
+                                claim="the reset runs twice", scenario="the second reset is a no-op",
+                                raised_by="the recheck verifier", caused_by=finding)
+        self.append([clear, defect])
+        code, listing, err = testlib.run_json(
+            ["events", "--workspace", self.workspace, "--doc", DOC, "--kind", "defect_raised"])
+        self.assertEqual(code, 0, err)
+        return listing["results"][0]["event"]["finding"]
+
+    def test_a_native_ranged_defect_line_whose_identity_differs_is_news(self):
+        """F5 remainder, her shape: the reader computes another id from the first-line form."""
+        native_id = self.raise_defect(self.RANGED)
+        body = self.render(self.RUN_R)
+        defect_line = body["lines"][1]
+        self.assertIn(legacy.SEP + "src/widget.py:2" + legacy.SEP, defect_line)
+        self.assertNotIn("2-3", defect_line)
+        item = [i for i in legacy.tolerant_document(body["block"], DOC)["items"]
+                if i["kind"] == "defect"][0]
+        read_back = ids.finding_id(DOC, legacy.item_slice(item, DOC), item["location"],
+                                   item.get("claim"), item.get("scenario"))
+        self.assertNotEqual(read_back, native_id, "the oracle: the line names another finding")
+        self.place(body["block"])
+        code, report, err = self.dry_run()
+        self.assertEqual(code, 0, (report, err))
+        self.assertEqual(report["native_rendered"], 1, report)  # the disposition line only
+        self.assertEqual(report["counts"].get("defect_raised"), 1, report)
+        self.assertGreater(report["would_import"], 0, report)
+        code, report, err = self.import_now()
+        self.assertEqual(code, 0, (report, err))
+        imported = [row["finding"] for row in report["appended"] if row["kind"] == "defect_raised"]
+        self.assertEqual(imported, [read_back])
+
+    def test_a_native_defect_line_that_reads_back_to_its_own_id_is_still_recognised(self):
+        """F5 remainder, the ordinary defect stays green: one `file:line`, the same identity."""
+        self.raise_defect(testlib.location("src/widget.py:2", "src/widget.py", 2))
+        self.place(self.render(self.RUN_R)["block"])
+        code, report, err = self.dry_run()
+        self.assertEqual(code, 0, (report, err))
+        self.assertEqual(report["native_rendered"], 2, report)
+        self.assertEqual(sorted(report["counts"]), ["card_observed"], report)
+
+    def test_a_native_clear_whose_line_joins_another_finding_is_news(self):
+        """F5 remainder for a clearing line: the finding a recheck line imports to is the one the
+        importer's own join names. A native ranged finding's clear renders its first `file:line`;
+        when the log also holds a finding of the same slice AT that line with the same claim, the
+        join names that other finding, so the line is its clear (news), never skipped."""
+        other = testlib.location("src/widget.py:2", "src/widget.py", 2)
+        self.append([testlib.opened(self.identity), self.raise_native("A", loc=self.RANGED),
+                     self.raise_native("A", loc=other, at="2026-04-01T09:00:02Z")], testlib.ZERO)
+        raised = self.raised_events()
+        ranged_id = [e["finding"] for e in raised if e["location"]["raw"].endswith("2-3")][0]
+        other_id = [e["finding"] for e in raised if e["finding"] != ranged_id][0]
+        clear = testlib.disposition(ranged_id, self.identity)
+        clear["actor"] = dict(ACTOR)
+        self.append([clear])
+        self.place(self.render()["block"])
+        code, report, err = self.dry_run()
+        self.assertEqual(code, 0, (report, err))
+        self.assertEqual(report["native_rendered"], 0, report)
+        self.assertEqual(report["counts"].get("disposition"), 1, report)
+        code, report, err = self.import_now()
+        self.assertEqual(code, 0, (report, err))
+        cleared = [row["finding"] for row in report["appended"] if row["kind"] == "disposition"]
+        self.assertEqual(cleared, [other_id])
+
+
+class N3TheMatcherIsIterative(Workspace):
+    """N3 (`probe_matching_depth.py`): 1,000 legal native `not_fixed` dispositions of one
+    finding, appended and rendered, placed in the document as written. The recursive augmenting
+    path died with `RecursionError` (exit 1, empty stdout); every line must be recognised."""
+
+    COUNT = 1000
+
+    def test_one_thousand_native_not_fixed_lines_are_all_recognised(self):
+        import time
+        self.append([testlib.opened(self.identity), self.raise_native("A")], testlib.ZERO)
+        code, body, err = self.import_now()  # the fixture's `Status:` line, observed once
+        self.assertEqual(code, 0, (body, err))
+        finding = self.raised_events()[0]["finding"]
+        clears = []
+        for n in range(self.COUNT):
+            clear = testlib.disposition(finding, self.identity, value="not_fixed",
+                                        verified={"known": False},
+                                        at="2026-04-02T%02d:%02d:%02dZ" % (n // 3600, n // 60 % 60, n % 60))
+            clear["actor"] = {"station": "recheck", "run_id": "recheck-n3",
+                              "harness": "claude-code"}
+            clears.append(clear)
+        self.append(clears)
+        body = self.render("recheck-n3")
+        self.assertEqual(body["rendered"], self.COUNT)
+        self.place(body["block"])
+        started = time.time()
+        code, report, err = self.dry_run()
+        elapsed = time.time() - started
+        self.assertEqual(code, 0, (report, err[-2000:]))
+        self.assertEqual(report["native_rendered"], self.COUNT, report)
+        self.assertEqual(report["would_import"], 0, report)
+        self.assertEqual(report["ambiguous"], 0, report)
+        sys.stderr.write("\n[N3] import-legacy --dry-run over %d native lines: %.2fs\n"
+                         % (self.COUNT, elapsed))
+
+    def test_the_matching_is_maximum_and_keeps_file_order(self):
+        """N3: the iterative matcher still finds a maximum matching, earlier lines first."""
+        from records_core import importer
+
+        class U(object):
+            def __init__(self, text, slices):
+                self.kind = "item"
+                self.item = {"kind": "recheck", "text": text,
+                             "heading": {"slices": list(slices)}}
+
+        natives = [importer.NativeLine("disposition", "x", "A", "f1:a", 1),
+                   importer.NativeLine("disposition", "x", "B", "f1:b", 2)]
+        # line 0 admits A or B, line 1 admits A only: a greedy pass gives line 0 A and strands
+        # line 1; the maximum matching recognises both.
+        units = [U("x", ["A", "B"]), U("x", ["A"])]
+        self.assertEqual(sorted(importer.match_native_lines(units, natives, DOC)), [0, 1])
+        # a path as long as the history: every line holds its first occurrence until the last
+        # line, which admits only the first; the one augmenting path runs through all of them.
+        n = 5000
+        natives = [importer.NativeLine("disposition", "x", "A", "f1:%d" % i, i) for i in range(n)]
+        units = [U("x", ["A"]) for _ in range(n)]
+        options = dict((i, [i, i + 1]) for i in range(n - 1))
+        options[n - 1] = [0]
+        owner, matched = {}, {}
+        for position in range(n):
+            free = next((i for i in options[position] if i not in owner), None)
+            if free is not None:
+                owner[free], matched[position] = position, free
+            else:
+                self.assertTrue(importer._augment(position, options, owner, matched))
+        self.assertEqual(len(matched), n)
+        self.assertEqual(sorted(matched.values()), list(range(n)))
+        # three lines, two occurrences: the first two lines (file order) keep them.
+        natives = natives[:2]
+        natives[1].slice = "B"
+        units = [U("x", ["A", "B"]), U("x", ["A", "B"]), U("x", ["A", "B"])]
+        self.assertEqual(sorted(importer.match_native_lines(units, natives, DOC)), [0, 1])
 
 
 if __name__ == "__main__":

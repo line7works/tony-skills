@@ -321,6 +321,242 @@ def native_addresses(client, workspace, document, by_seq, structure):
     return out
 
 
+
+# ---- Astra's N1: the record lines the component itself rendered ------------------------------
+#
+# The same functions as `build_core/native_lines.py` and `signoff_core/native_lines.py` (the two
+# cores carry that file byte for byte), with this pilot's own grammar module (`ledger`) and
+# client. Records keeps a ranged location on the review line it renders (A7's F9); the legacy
+# grammar has no range, so the unchanged strict check (`inputs.strict_ambiguities`) called the
+# component's own line unplaceable and stopped `start` with `missing_input`. The records CLI says
+# which lines those are (`import-legacy --dry-run`'s `native_rendered`, `events`, `render --run-id`);
+# each native occurrence is consumed once, only when the component's count agrees, and the
+# unchanged Appendix A check reads what remains. A document with nothing ambiguous costs no CLI
+# call, so every decision the baseline made on a document it could read is made the same way
+# (E13-1); only a line the component itself rendered is ever set aside.
+
+_GRANT_KINDS = ("waived", "reopened")
+_RENDERED_KINDS = (_REVIEW_KIND,) + _BLOCK_KINDS + _GRANT_KINDS
+_CARD_KINDS = ("card_set", "card_observed")
+
+
+def _n1_lines(text):
+    """The record lines of rendered block text: every non-blank line that is not a heading."""
+    return [line.rstrip() for line in (text or "").split("\n")
+            if line.strip() and not line.startswith("### ")]
+
+
+def _n1_is_legacy(event):
+    return (event.get("origin") or {}).get("kind") == "legacy"
+
+
+def native_runs(rows):
+    """The run ids whose events are all native and include a rendered kind, first-seen order."""
+    order, legacy_runs, rendering = [], set(), set()
+    for row in rows:
+        event = row.get("event") or {}
+        run_id = (event.get("actor") or {}).get("run_id")
+        if not isinstance(run_id, str):
+            continue
+        if _n1_is_legacy(event):
+            legacy_runs.add(run_id)
+            continue
+        if run_id not in order:
+            order.append(run_id)
+        if event.get("kind") in _RENDERED_KINDS:
+            rendering.add(run_id)
+    return [run_id for run_id in order if run_id not in legacy_runs and run_id in rendering]
+
+
+def occurrences_of_run(rendered, run_events, raised):
+    """[{text, where, slice}] for one native run, from its `render` response.
+
+    `run_events` is [(seq, event)] of the run in seq order; `raised` maps a finding id to the
+    event that raised it. `render` writes the review blocks one per slice in `review_slices` order,
+    each slice's `finding_raised` events in seq order; the recheck block one line per
+    `disposition` or `defect_raised` in seq order; then one line per grant. A part whose line
+    count disagrees with its events yields nothing (and the count check then fails closed).
+    """
+    out = []
+    slices = list(rendered.get("review_slices") or [])
+
+    def slice_rank(row):
+        name = row[1].get("slice") or "none"
+        return (slices.index(name) if name in slices else len(slices), row[0])
+
+    review = sorted([row for row in run_events if row[1].get("kind") == _REVIEW_KIND],
+                    key=slice_rank)
+    lines = _n1_lines(rendered.get("review"))
+    if len(lines) == len(review):
+        for (_, event), text in zip(review, lines):
+            out.append({"text": text, "where": "review", "slice": event.get("slice") or "none"})
+    block = [row for row in run_events if row[1].get("kind") in _BLOCK_KINDS]
+    lines = _n1_lines(rendered.get("block"))
+    if len(lines) == len(block):
+        for (_, event), text in zip(block, lines):
+            if event.get("kind") == "defect_raised":
+                name = event.get("slice")
+            else:
+                name = (raised.get(event.get("finding")) or {}).get("slice")
+            out.append({"text": text, "where": "recheck", "slice": name or "none"})
+    grants = [row for row in run_events if row[1].get("kind") in _GRANT_KINDS]
+    lines = [line.rstrip() for line in (rendered.get("grants") or [])]
+    if len(lines) == len(grants):
+        for _row, text in zip(grants, lines):
+            out.append({"text": text, "where": None, "slice": None})
+    return out
+
+
+def admits(record, occurrence):
+    """Can this document record be the rendering of this occurrence, by kind and slice context?"""
+    if occurrence["where"] is None:
+        return True  # a grant line is standalone: its grammar names no slice and no heading
+    heading = record.get("heading")
+    if not heading or heading.get("kind") != occurrence["where"]:
+        return False
+    names = heading.get("slices") or []
+    if occurrence["where"] == "review":
+        return bool(names) and names[0] == occurrence["slice"]
+    return occurrence["slice"] in names
+
+
+def match_native(records, occurrences):
+    """{record position: occurrence index}: a maximum matching in file order, without recursion.
+
+    Each record takes the lowest free occurrence it admits; only when none is free does a
+    breadth-first search look for an augmenting path. A record once matched stays matched, so
+    which records are matched is decided in file order.
+    """
+    options = {}
+    for position, record in enumerate(records):
+        admitted = [index for index, occ in enumerate(occurrences)
+                    if occ["text"] == record["text"] and admits(record, occ)]
+        if admitted:
+            options[position] = admitted
+    owner, matched = {}, {}
+    for position in sorted(options):
+        free = next((index for index in options[position] if index not in owner), None)
+        if free is not None:
+            owner[free], matched[position] = position, free
+            continue
+        parent, seen, queue, head = {}, set(), [position], 0
+        while head < len(queue):
+            current = queue[head]
+            head += 1
+            found = None
+            for index in options[current]:
+                if index in seen:
+                    continue
+                seen.add(index)
+                parent[index] = current
+                if index not in owner:
+                    found = index
+                    break
+                queue.append(owner[index])
+            if found is not None:
+                index = found
+                while True:
+                    line = parent[index]
+                    previous = matched.get(line)
+                    owner[index], matched[line] = line, index
+                    if line == position:
+                        break
+                    index = previous
+                break
+    return matched
+
+
+def native_card_lines(parsed, rows, document):
+    """How many `Status:` lines carry their slice's last card, when a NATIVE event wrote it."""
+    last = {}
+    for row in rows:
+        event = row.get("event") or {}
+        kind = event.get("kind")
+        if kind not in _CARD_KINDS or event.get("ledger_doc") != document:
+            continue
+        name = event.get("slice")
+        if not isinstance(name, str):
+            continue
+        value = event.get("value") if kind == "card_observed" else event.get("after")
+        last[name] = (value, not _n1_is_legacy(event))
+    count = 0
+    for entry in parsed.get("slices") or []:
+        held = last.get(entry["name"])
+        if entry.get("status") is not None and held and held[1] and held[0] == entry["status"]:
+            count += 1
+    return count
+
+
+def consumed_lines(client, workspace, document, parsed):
+    """The 1-based line numbers of `document` the component itself rendered, confirmed by its
+    `native_rendered`; an empty set whenever anything is refused, missing, or disagrees."""
+    try:
+        preview = client.import_legacy(workspace, document, dry_run=True)
+    except rcl.RecordsRefusal:
+        return set()
+    try:
+        expected = int(preview.get("native_rendered") or 0)
+    except (TypeError, ValueError):
+        return set()
+    if expected <= 0:
+        return set()
+    try:
+        rows = client.events(workspace, document).get("results") or []
+    except rcl.RecordsRefusal:
+        return set()
+    by_run, raised, imported = {}, {}, set()
+    for row in rows:
+        event = row.get("event") or {}
+        if event.get("kind") in RAISE_KINDS:
+            raised.setdefault(event.get("finding"), event)
+        origin = event.get("origin") or {}
+        if _n1_is_legacy(event) and origin.get("doc") == document \
+                and event.get("kind") != "card_observed" and isinstance(origin.get("line"), int):
+            imported.add(origin["line"])
+        run_id = (event.get("actor") or {}).get("run_id")
+        by_run.setdefault(run_id, []).append((row.get("seq"), event))
+    occurrences = []
+    for run_id in native_runs(rows):
+        try:
+            rendered = client.render(workspace, document, run_id)
+        except rcl.RecordsRefusal:
+            return set()
+        occurrences.extend(occurrences_of_run(rendered, sorted(by_run.get(run_id) or [],
+                                                               key=lambda row: row[0]), raised))
+    records = [record for record in parsed["records"] if record["line_no"] not in imported]
+    matched = match_native(records, occurrences)
+    if len(matched) + native_card_lines(parsed, rows, document) != expected:
+        return set()
+    return set(records[position]["line_no"] for position in matched)
+
+
+def remaining_ambiguities(text, document, consumed):
+    """Appendix A's stop check, unchanged, over the document with the consumed lines blanked.
+
+    Returns (the original lines, the ambiguous records `open_set` finds in what remains)."""
+    lines = text.split("\n")
+    if not consumed:
+        return lines, ledger.open_set(ledger.parse_document(text, document))["ambiguities"]
+    kept = [("" if number + 1 in consumed else line) for number, line in enumerate(lines)]
+    parsed = ledger.parse_document("\n".join(kept), document)
+    return lines, ledger.open_set(parsed)["ambiguities"]
+
+
+def hand_written_ambiguities(client, workspace, document, text):
+    """The Appendix A ambiguities of the hand-written records of `document` (N1).
+
+    The unchanged check reads the document whole first; only when it finds something does this
+    ask the records CLI which lines the component rendered, and read again without those. A
+    document with nothing ambiguous costs no CLI call at all."""
+    lines, found = remaining_ambiguities(text, document, None)
+    if not found or client is None:
+        return lines, found
+    consumed = consumed_lines(client, workspace, document, ledger.parse_document(text, document))
+    if not consumed:
+        return lines, found
+    return remaining_ambiguities(text, document, consumed)
+
+
 def build_entries(state, events, structure, natives=None):
     """The pilot's entry shape, built from the component's state and events.
 

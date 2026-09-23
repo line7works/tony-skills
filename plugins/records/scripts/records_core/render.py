@@ -44,10 +44,10 @@ back as the finding it was rendered from for every location. The recheck block (
 lines and its fix-introduced defect lines) and the grant lines keep `location_text`, byte for
 byte, as A7 rules: a resolved location renders there as its first `file:line`, the pilot's own
 form. A recheck or grant line names a finding rather than raising one; a DEFECT line with a
-ranged location still reads back, in a log that does not hold it, under another identity, which
-is outside A7's three items and is reported rather than changed. The importer recognises a
-line it rendered itself by kind, slice context and bytes (`importer.match_native_lines`), and
-`rendered_lines` tells it which event each line belongs to.
+ranged location reads back under another identity than its event's, and the importer, which
+recognises a line it rendered itself by kind, finding identity in slice context, and bytes
+(`importer.match_native_lines`), reads that line as the legacy news it is (Astra's recheck, F5's
+remainder). `rendered_lines` tells the importer which event each line belongs to.
 
 Under interface version 1 (`--interface-version 1`, E13 amendment A7, F10) `render` answers with
 the body version 1 published, `render_run_interface_1`: the lines are the same bytes.

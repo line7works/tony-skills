@@ -70,7 +70,7 @@ def plugin_root():
 
 
 def open_client(records_root=None, environ=None, python=None):
-    """Resolve the component, confirm interface version 1, and return the client.
+    """Resolve the component, confirm interface version 2, and return the client.
 
     Raises `ComponentUnavailable` with the interface's own one-line message when nothing is
     found or the version is not one this station knows.

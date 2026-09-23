@@ -16,7 +16,7 @@ round trip (V17)) and reporting itself as skipped otherwise. The workspace is ta
 --workspace, else from the --input document's `workspace` field when that directory exists. When a
 workspace is supplied the records component is resolved the way the driver resolves it
 (--records-root, RECORDS_ROOT, beside this plugin, the installed shape below it) and confirmed at
-interface version 1; a component that cannot be found or speaks another version is exit 3 with one
+interface version 2; a component that cannot be found or speaks another version is exit 3 with one
 line on stderr, the shape a missing `jsonschema` already had.
 
 stdout: one JSON object {"ok": bool, "schema": [{path, message}], "semantic": [{id, path,

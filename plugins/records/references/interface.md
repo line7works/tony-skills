@@ -969,11 +969,20 @@ line is that rendering when three things agree with one such event (E13 amendmen
    heading's slice, or a defect's own slice field under a heading naming several; `none` in the
    punch list), and a recheck line clears a finding of one of the slices its heading names. The
    event's finding must be charged to that slice. A waiver or reopening line names no slice in
-   its grammar and may sit below any heading, so its place adds nothing. A heading's DATE is not
-   part of the identity: a block whose heading date changed is still the same rendering.
+   its grammar and may sit below any heading, so its place adds nothing. Within that context the
+   finding the line WOULD IMPORT TO, as this importer's own reader computes it, must be the
+   event's stored finding: for a raising line (review or defect), section 7's id of the line's
+   own fields charged to that slice; for a clearing line (recheck, waiver, reopening), the
+   finding section 11.4's join names among the findings the log holds. A clearing line whose join
+   names no finding carries no identity of its own to compare, and rests on the rest of this
+   rule. A heading's DATE is not part of the identity: a block whose heading date changed is still
+   the same rendering.
 
 So a line with the same bytes but another identity (a native slice A review line placed under
-slice B's heading) is legacy news, and imports as B's finding. The rule covers every line
+slice B's heading) is legacy news, and imports as B's finding. So is a fix-introduced defect line
+whose location is a range: the recheck block writes its first `file:line` (Appendix A's form,
+unchanged), the reader computes another finding identity from that line than the event's, and
+the line imports as the finding it reads as. The rule covers every line
 `render` writes: a review finding line (`finding_raised`), a recheck line (`disposition`), a
 fix-introduced defect line (`defect_raised`), and a waiver or reopening line (`waived`,
 `reopened`). It also covers a `Status:` line whose text equals the last card this log holds for
@@ -984,7 +993,9 @@ keyed to its slice.
 Each native occurrence answers for one line and each line takes at most one. Where one line
 could be the rendering of more than one native event (two findings of two slices whose clears
 render the same bytes under a heading naming both), the lines are assigned in file order and an
-earlier line keeps its occurrence whenever another assignment exists. A line left over is news
+earlier line keeps its occurrence whenever another assignment exists. The assignment is a maximum
+matching computed without recursion, so a history of any length (a thousand byte-identical
+`not fixed` lines of one finding, say) is recognised whole. A line left over is news
 for the importer's own rules: a second copy of a review line, or two byte-identical lines of two
 slices placed under one slice's heading, is a second raise of one finding and stops the document
 under section 7, exit 5, as it always did. A run whose
@@ -1054,7 +1065,7 @@ Two further lines stop a document, both from amendment A9, and a resolutions ans
 | `lines_read` | how many lines the document holds. |
 | `lines_classified` | how many of them this pass classified. A record line an earlier pass already imported is not among them, and neither is any line the log already records natively (`native_rendered`), a `Status:` line included; every other `Status:` line is. |
 | `previously_imported` | how many RECORD lines an earlier pass of this document already recorded. |
-| `native_rendered` | how many lines the log already records as native events, recognised by kind, slice context and bytes and skipped: record lines `render` wrote, and a `Status:` line matching the last card a native `card_set` or `card_observed` holds for its slice. Interface version 2; absent from a `--interface-version 1` response. |
+| `native_rendered` | how many lines the log already records as native events, recognised by kind, finding identity in slice context, and bytes, and skipped: record lines `render` wrote, and a `Status:` line matching the last card a native `card_set` or `card_observed` holds for its slice. Interface version 2; absent from a `--interface-version 1` response. |
 | `blocks` | how many record blocks the document holds. |
 | `slices` | how many slices it names. |
 | `counts` | how many events of each kind this pass would write. |

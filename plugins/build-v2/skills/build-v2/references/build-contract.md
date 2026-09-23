@@ -8,7 +8,9 @@ of running `scripts/build.py` is outside this interface.
 Written for E13 slice 2 of the skills v2 rebuild, against the E13 lane contract
 (`docs/plans/2026-09-21-stations-e13.md`, sections 8 and 9, with amendments A1 to A6). The slice 2
 fix round (amendment A6) changed the behaviour described in sections 5, 7, 8, 9, 10, 12, 13, 14
-and 15 after Astra's review of slice 2; each change names her finding (F1, F2, F11, F12, F14, F15). Where this
+and 15 after Astra's review of slice 2; each change names her finding (F1, F2, F11, F12, F14, F15). The last
+fix round of that review loop (after her recheck) changed sections 7, 10 and 14 again, for her N1,
+N2 and F15's remainder, each named where it applies. Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 
 Contents: 1 The job · 2 What is kept from v1 · 3 The phases · 4 The input · 5 The source set ·
@@ -176,7 +178,11 @@ The slice's `Checks:` list is the closed set that gates the card. Each row of `c
 - **One command's output is never attributed to another named command** (F2). When the answer's
   `command` for a check does not split into the same arguments as the command the slice names, the
   row is `not_run`, `attribution_refused` says why, and the answer's command, result and output are
-  kept in `recorded_command`, `recorded_result` and `recorded_output`.
+  kept in `recorded_command`, `recorded_result` and `recorded_output`. When a rerun was asked for and
+  the NAMED command executes (Astra's N2), the row reports that observation (`source: "rerun"`, its
+  exit code and output, `passed` or `failing`), and the rejected recorded evidence stays apart in
+  those three fields with `attribution_refused` saying so; a rerun that cannot execute stays
+  `not_run`. V11 requires `not_run` only when no executed observation of the named command exists.
 - **A refused answer runs nothing** (F15): the contents rules of section 8 are applied BEFORE any
   check subprocess is launched, so a refused answer's rows are the recorded ones and
   `rerun_refused` says no command was run.
@@ -185,8 +191,11 @@ The slice's `Checks:` list is the closed set that gates the card. Each row of `c
   promises nothing reaches the workspace. Every requested rerun is `not_run` with `rerun_refused`
   saying so, and the run finishes `checks_not_passed`.
 - **A child that wrote is a write** (F15). Around the reruns of a normal run this core reads the
-  six-field identity before and after; when it moved, `checks_changed_workspace` is true,
-  `wrote_nothing` is false, and what the child changed is in the source set computed at report.
+  six-field identity before and after, AND a digest of every byte under the workspace (`.git`
+  excluded, git-ignored files included, Astra's F15 remainder: a check that wrote only an ignored
+  cache moved no identity); when either moved, `checks_changed_workspace` is true, `wrote_nothing`
+  is false, and what the child changed in the source set is in the set computed at report (an
+  ignored file is never in the source set, and is still a write).
 - This core never reruns a model.
 
 **A failing or skipped check is reported as failing or skipped, with its output, and the card
@@ -256,7 +265,7 @@ clears nothing.** It never writes a `finding_raised`, a `defect_raised`, a `disp
 `waived` or a `reopened`.
 
 The component is reached through the resolver snippet and `scripts/records.py` as a subprocess,
-confirmed at `interface_version` 1 with `component-identity`. This core never opens a log file,
+confirmed at `interface_version` 2 with `component-identity`. This core never opens a log file,
 never imports `records_core`, and never copies the component's code beyond the one snippet;
 `build_core/records_client.py` is the recheck pilot's file byte for byte, and a test fails when
 the two differ. A component that is missing or speaks another interface version is exit 3, one
@@ -279,6 +288,22 @@ run `legacy_unplaced`, naming the document, the line and its bytes in `stop_reas
 DETECTOR only, never as a source of records, so there is still one record grammar, the pilot's,
 and one log grammar, the component's. The importer's tolerant success does not authorize
 proceeding.
+
+**A line the component itself rendered is not hand-written** (Astra's N1). Records keeps a ranged
+location on the review line it renders (`src/widget.py:2-3`, amendment A7's F9), which Appendix A's
+grammar has no shape for, so the unchanged check read a signoff's NATIVE review line as unplaceable
+and stopped the next build. When the check finds anything, this core asks the records CLI which
+lines the component rendered, and never opens the log: `import-legacy --dry-run` gives
+`native_rendered`, `events` gives the native runs and the slice each event's finding is charged to,
+and `render --run-id` gives each native run's exact lines. A document line that is byte-equal to a
+rendered line, under a heading of that line's kind and slice (a review line under a review heading
+of the event's slice, a recheck-block line under a recheck heading naming it, a grant anywhere), and
+not a line an earlier import recorded, answers for that one occurrence, in file order. The lines so
+consumed are set aside ONLY when their count, plus the `Status:` lines that equal their slice's last
+native card, equals `native_rendered`; otherwise nothing is set aside. The unchanged check then reads
+the document with the set-aside lines blanked. A hand-written ranged line, and a second copy of a
+rendered line, still stop `legacy_unplaced` before any write (`scripts/build_core/native_lines.py`,
+shared byte for byte with the signoff core).
 
 **Amendment A3 item 3, any importer signal is a stop.** A dry run precedes every levelling pass.
 A `legacy_unparsed` above zero, an exit 5, or any refusal STOPS the run naming what the importer
@@ -417,6 +442,7 @@ apology, and it never stands in for a finding about the code.
 | `records_stale_source` | the workspace moved under a clear (its exit 6) |
 | `records_conflict` | a moved head or a live lock (its exit 7) |
 | `records_failed` | any other refusal of the component |
+| `result_invalid` | the completion this run proposed failed the result schema or a semantic check before any card transaction opened (Astra's N2): nothing was appended and no `Status:` line was written |
 
 `answer_refused` is a stop too, but it carries `refusal_reason` rather than one of these tags:
 the tags above are the tool's own failures, and a refused answer is the tool working correctly
@@ -457,7 +483,7 @@ passing quietly.
 | V8 | `records.appended` agrees with `records.wrote`; a returned refusal appended nothing; at most one event, and it is a `card_set` |
 | V9 | `completed` and a failing or skipped named check cannot both stand, and `checks_not_passed` needs one |
 | V10 | an appended event's result reports the six-field identity the event carries |
-| V11 | a named check this core could not run (`rerun_refused`) or attribute (`attribution_refused`) is `not_run`; a report-only run reran nothing; a run whose reruns changed the workspace never says `wrote_nothing` |
+| V11 | a named check this core could not run (`rerun_refused`) or attribute (`attribution_refused`, unless the named command was then rerun and executed: N2) is `not_run`; a report-only run reran nothing; a run whose reruns changed the workspace never says `wrote_nothing` |
 
 ## 16. Exit codes
 

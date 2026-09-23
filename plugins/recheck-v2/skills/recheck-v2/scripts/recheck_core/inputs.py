@@ -332,7 +332,7 @@ def _ambiguity_lines(document, records):
     return ["%s:%d: %s: %s" % (document, r["line_no"], r["reason"], r["text"]) for r in records]
 
 
-def strict_ambiguities(workspace, rel, field):
+def strict_ambiguities(workspace, rel, field, client=None):
     """Appendix A's ambiguous legacy records, read with the core's OWN strict grammar (RB6, R36).
 
     E13 slice 1 keeps this ONE use of the record grammar: as an ambiguity DETECTOR, never as a
@@ -343,10 +343,19 @@ def strict_ambiguities(workspace, rel, field):
     BEFORE the importer, so an ambiguous document stops the run with nothing written anywhere.
     Report question 3 names this reading and the alternative it declines.
 
+    Astra's N1 (the last fix round of E13 slice 2): a line the records component ITSELF rendered
+    for a native event is not a hand-written record. Records keeps a ranged location on the review
+    line it renders (A7's F9), which Appendix A's grammar has no shape for, so the check used to
+    stop on the component's own line. With a `client`, `records_view.hand_written_ambiguities`
+    asks the records CLI which lines those are and reads the rest with the unchanged grammar. The
+    CLI is consulted only when the whole document already reads ambiguous, and a line is set aside
+    only when the component's own `native_rendered` agrees, so a hand-written ranged line, and a
+    second copy of a rendered one, stop exactly as at the baseline (E13-1).
+
     Returns a missing_input result, or None.
     """
-    parsed = ledger.parse_document(read_doc(workspace, rel), rel)
-    ambiguities = ledger.open_set(parsed)["ambiguities"]
+    _lines, ambiguities = records_view.hand_written_ambiguities(client, workspace, rel,
+                                                                read_doc(workspace, rel))
     if not ambiguities:
         return None
     first = ambiguities[0]
@@ -416,7 +425,7 @@ def resolve_scope(doc, workspace, accepted_reopenings, client=None, dry_run=Fals
         return {"status": "missing_input", "fields": ["target.build_doc"],
                 "ambiguity": ["build doc %s does not exist in the workspace" % rel],
                 "question": "The build doc %s does not exist in the workspace; which document holds the record?" % rel}
-    ambiguous = strict_ambiguities(workspace, rel, "target.build_doc")
+    ambiguous = strict_ambiguities(workspace, rel, "target.build_doc", client)
     if ambiguous:
         return ambiguous
     report = records_view.sync(client, workspace, rel, dry_run=dry_run)
@@ -579,7 +588,7 @@ def _resolve_items(doc, workspace, items, accepted_reopenings, client=None, dry_
         return {"status": "missing_input", "fields": ["target.items[0].record.document"],
                 "ambiguity": ["record document %s does not exist in the workspace" % rel],
                 "question": "The record document %s does not exist in the workspace; which document holds the record?" % rel}
-    ambiguous = strict_ambiguities(workspace, rel, "target.items[0].record.document")
+    ambiguous = strict_ambiguities(workspace, rel, "target.items[0].record.document", client)
     if ambiguous:
         ambiguous["question"] = ("The record line at %s matches no Appendix A shape; supply or confirm its fields."
                                  % ambiguous["ambiguity"][0].split(":")[1])

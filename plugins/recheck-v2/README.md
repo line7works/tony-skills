@@ -25,7 +25,7 @@ path with both replaced by traps.
 **The records component is a dependency.** Without it every command exits 3 with one line on
 stderr naming where it looked; `--help` and argument checking still work. It is found through
 `--records-root`, `RECORDS_ROOT`, the component beside this plugin, or the installed shape below
-it, and the pick is confirmed with `component-identity` (interface version 1).
+it, and the pick is confirmed with `component-identity` (interface version 2).
 
 Before that: **E9: the three adapters and setups built, reviewed and closed; the plugin is a genuine
 entry point on Claude Code, Codex CLI and OpenCode.** The plugin is listed in

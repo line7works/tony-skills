@@ -19,7 +19,9 @@ record grammar and does not change `plugins/records/`. Before any levelling it r
 OWN Appendix A stop check (`record_grammar.py`, the pilot's `ledger.py` byte for byte) and stops
 on a line Appendix A cannot place, naming the document, the line and its bytes (Astra's F12).
 Then it STOPS on ANY importer signal: a `legacy_unparsed` above zero in the dry run, exit 5
-(ambiguous), or any refusal.
+(ambiguous), or any refusal. A line the records component ITSELF rendered for a native event is
+not hand-written (Astra's N1): the records CLI says which lines those are
+(`native_lines.py`), and the unchanged stop check reads the rest.
 
 **The card, both directions.** A `card_set` this station appended and a `Status:` line the
 document carries can disagree, and the disagreement is reported, never repaired. The test is a
@@ -48,7 +50,7 @@ line it wrote under `native_rendered` and imports nothing for it.
 """
 import os
 
-from . import record_grammar as grammar
+from . import native_lines as native
 from . import records_link as link
 from .records_client import RecordsRefusal
 
@@ -95,7 +97,7 @@ def _native_rendered(report):
     return None if value is None else int(value)
 
 
-def unplaceable(workspace, document):
+def unplaceable(workspace, document, client=None):
     """Appendix A's stop check, unchanged, over the document's hand-written records (Astra's F12).
 
     `record_grammar.py` is the recheck pilot's `recheck_core/ledger.py`, byte for byte, and a test
@@ -106,6 +108,13 @@ def unplaceable(workspace, document):
     Appendix A cannot place? The component's importer reads more loosely (it imports a line the
     pilot calls ambiguous), so its silence is not an answer to that question.
 
+    Astra's N1: the lines the records component ITSELF rendered for native events (a review line
+    keeps a ranged location since A7's F9, which the legacy grammar has no shape for) are not
+    hand-written. With a `client`, `native_lines.hand_written_ambiguities` asks the records CLI
+    which lines those are, consumes each native occurrence once, and applies the unchanged check to
+    the rest; only lines the component rendered are set aside, and only when its own
+    `native_rendered` agrees.
+
     Returns `[{doc, line, raw, reason}]`, empty when every record line is placeable.
     """
     path = os.path.join(workspace, document)
@@ -113,19 +122,18 @@ def unplaceable(workspace, document):
         return []
     with open(path, "r", encoding="utf-8") as fh:
         text = fh.read()
-    parsed = grammar.parse_document(text, document)
-    lines = parsed["lines"]
+    lines, found = native.hand_written_ambiguities(client, workspace, document, text)
     out = []
-    for record in grammar.open_set(parsed)["ambiguities"]:
+    for record in found:
         number = record["line_no"]
         out.append({"doc": document, "line": number, "raw": lines[number - 1],
                     "reason": record.get("reason") or "matches no Appendix A shape"})
     return out
 
 
-def strict_stop(workspace, document):
+def strict_stop(workspace, document, client=None):
     """Raise the `legacy_unplaced` stop when `unplaceable` finds anything; else return None."""
-    rows = unplaceable(workspace, document)
+    rows = unplaceable(workspace, document, client)
     if not rows:
         return None
     raise RecordsStop(
@@ -148,7 +156,7 @@ def level(client, workspace, document, dry_run):
     `legacy_unparsed`, and only then the real pass when one is asked for. Returns the report the
     caller should report.
     """
-    strict_stop(workspace, document)
+    strict_stop(workspace, document, client)
     try:
         preview = client.import_legacy(workspace, document, dry_run=True)
     except RecordsRefusal as refusal:

@@ -4,7 +4,8 @@ What this station does, what it may write, what stops it, and the words it uses 
 Written for E13 slice 2 of the skills v2 rebuild, against the stations E13 lane contract
 (section 10) and its amendments A3 to A6. The slice 2 fix round (amendment A6) changed sections 1,
 5, 8 and 9 after Astra's review of slice 2; each change names her finding (F3, F4, F6, F7, F8, F12,
-F16). Where this document and that contract differ, the contract is
+F16). The last fix round of that review loop (after her recheck) changed section 5 again for her
+N1 and F7's remainder. Where this document and that contract differ, the contract is
 the authority and this document is the defect.
 
 Nothing this station DECIDES is new (ruling E13-1, owner pick P5): v1 signoff's steps, its
@@ -197,7 +198,17 @@ The order, and what each step promises:
   for byte, held equal by a test), used as a detector only and never as a source of records. A
   line it cannot place stops the run `missing_input` (`legacy_ambiguous`) with the document, the
   line and its bytes (`unplaced`), and nothing is written. The importer's tolerant success does
-  not authorize proceeding.
+  not authorize proceeding. **A line the component itself rendered is not hand-written** (Astra's
+  N1): records keeps a ranged location on the review line it renders (A7's F9), which Appendix A's
+  grammar has no shape for, so the unchanged check stopped the next signoff on a previous
+  signoff's own line. When the check finds anything, this station asks the records CLI which lines
+  the component rendered (`import-legacy --dry-run`'s `native_rendered`, `events`, and
+  `render --run-id` per native run; never the log), matches each rendered line once, in file order,
+  to a byte-equal document line under a heading of its kind and slice, and sets those lines aside
+  only when their count, plus the `Status:` lines equal to their slice's last native card, equals
+  `native_rendered`. The unchanged check then reads the rest. A hand-written ranged line and a
+  second copy of a rendered line still stop `legacy_ambiguous` before any write
+  (`scripts/signoff_core/native_lines.py`, the build core's file byte for byte).
 - **Level the log (CR-1).** v1 signoff writes findings into the Markdown by hand, so a document
   can be ahead of its log. Every phase that reads the document's records runs `import-legacy`
   first — a dry run for a read-only command, the real thing before a write. The importer reads
@@ -213,7 +224,11 @@ The order, and what each step promises:
   `identity` at either phase is a named stop with a result (`identity_refused`, Astra's F7), never
   a traceback. On recovery only the run's receipted changes are allowed: the receipt pins, when it
   is created, the identity with the run's own targets left out, and a recovering pass that finds
-  anything else moved ends `stale_source` too.
+  anything else moved ends `stale_source` too. This station's OWN identity computations on the
+  record path (the receipt's guard, the masked identity a recovering pass compares, the guard
+  check before the document writes) end the same way when git cannot answer (Astra's F7
+  remainder): `recording_failed` (`identity_refused`), with what the receipt already holds, and a
+  later `record` settles the run.
 - **Pin the head.** The head the run read its state against is pinned at `scope`. At `record`,
   BEFORE this run's own levelling, the log must still be at that head; an event another writer
   appended between the two phases is a named conflict before any append. The comparison is taken
@@ -296,6 +311,7 @@ redone, the append is never made twice, and a committed receipt reports the same
 | A record line fits no Appendix A shape | `missing_input` | `legacy_ambiguous` |
 | The source moved after the packet was built | `stale_source` | `source_moved` |
 | The component refused `identity` | per the refusal map | `identity_refused` |
+| This station's own identity computation failed while recording or recovering | `recording_failed` | `identity_refused` |
 | `mirrors` or `render` refused inside the transaction | `recording_failed` | `mirrors_refused`, `render_refused` |
 | The importer reports an unparsed record line | `stopped` | `legacy_unparsed` |
 | The importer refuses an ambiguous document (component exit 5) | `missing_input` | `importer_ambiguous` |

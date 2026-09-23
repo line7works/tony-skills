@@ -730,6 +730,27 @@ def partial_from_receipt(run, state, stop):
     return parts
 
 
+def own_identity(workspace, exclude=()):
+    """This core's own identity computation on the record path, as a named stop when it fails.
+
+    Astra's F7 remainder: `rw.identity_of` turned a refusal of the COMPONENT's `identity` into a
+    terminal result, but the station's own git-based computation (the recovery guard, the masked
+    identity, the guard check before the document writes) still escaped as exit 1 with a
+    `ScopeUnavailable` traceback and no `result.json` when git could not answer during recovery.
+    Every one of them now ends `recording_failed / identity_refused`, with the receipt's partial
+    state, like every other stop of the transaction.
+    """
+    try:
+        return idmod.identity_of(workspace, exclude=exclude)
+    except (idmod.ScopeUnavailable, idmod.GitError) as failure:
+        raise rw.Stop("recording_failed", "identity_refused",
+                      "the source identity of %s could not be computed while recording (%s), so "
+                      "this run cannot tell its own receipted changes from anyone else's and "
+                      "writes nothing more; run `record` again once git answers in the workspace"
+                      % (workspace, failure),
+                      {"identity_reason": getattr(failure, "reason_code", "git_failed")})
+
+
 def do_record(run, resolved, state, adjudication, client, args):
     """The recording transaction. Every step receipted; every refusal definitive."""
     workspace = resolved["workspace"]
@@ -774,7 +795,7 @@ def do_record(run, resolved, state, adjudication, client, args):
         # receipt was created, right after the identity check above held.
         guard = receipt.doc.get("guard") or {}
         if guard.get("masked") is not None:
-            masked_now = idmod.identity_of(workspace, exclude=sorted(guard["targets"]))
+            masked_now = own_identity(workspace, exclude=sorted(guard["targets"]))
             if masked_now != guard["masked"]:
                 raise rw.Stop("stale_source", "source_moved",
                               "on recovery, the source outside this run's own targets (%s) moved "
@@ -791,8 +812,8 @@ def do_record(run, resolved, state, adjudication, client, args):
         if planned:
             verdict_rel = planned[0]["target"]
     if not settling:
-        guard = rcptmod.guard_of(idmod.identity_of(workspace), [doc, verdict_rel], workspace,
-                                 masked=idmod.identity_of(workspace, exclude=[doc, verdict_rel]))
+        guard = rcptmod.guard_of(own_identity(workspace), [doc, verdict_rel], workspace,
+                                 masked=own_identity(workspace, exclude=[doc, verdict_rel]))
         receipt.create(run_id, workspace, doc, slice_name, guard)
         run.note_write(receipt.path, "run_artifact")
         run.note_write(receipt.path[:-len(".json")] + ".log", "run_artifact")
@@ -869,7 +890,7 @@ def do_record(run, resolved, state, adjudication, client, args):
         method_lines.append("- none were reported")
 
     if not receipt.steps():
-        breaks = rcptmod.guard_breaks(receipt.doc["guard"], workspace, idmod.identity_of(workspace))
+        breaks = rcptmod.guard_breaks(receipt.doc["guard"], workspace, own_identity(workspace))
         if breaks:
             raise rw.Stop("recording_failed", "outside_edit",
                           "the transaction guard no longer holds: %s. The baseline is never "

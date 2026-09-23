@@ -570,8 +570,9 @@ def phase_report(args):
     wants_rerun = bool(run.input.get("rerun_checks"))
     blocked = REPORT_ONLY_RERUN if (wants_rerun and run.report_only) else None
     reruns = wants_rerun and not refusals and not blocked
-    before_checks = None
+    before_checks = before_bytes = None
     if reruns:
+        before_bytes = checksmod.workspace_digest(run.workspace)
         try:
             before_checks = client.identity(run.workspace)["identity"]
         except RecordsRefusal as refusal:
@@ -581,6 +582,7 @@ def phase_report(args):
             return stop(run, exc.tag, exc.reason, records_extra=records_block)
     check_rows = checksmod.rows(contract["checks"], body.get("checks"), workspace=run.workspace,
                                 rerun=wants_rerun and not refusals, rerun_blocked=blocked)
+    after_bytes = checksmod.workspace_digest(run.workspace) if before_bytes is not None else None
     if wants_rerun and refusals:
         for row in check_rows:
             if row.get("named_by_slice"):
@@ -607,8 +609,12 @@ def phase_report(args):
         return stop(run, exc.tag, exc.reason, records_extra=records_block, checks=check_rows)
     run.doc["source_set"] = source
     run.doc["identity"] = identity
-    run.doc["checks_changed_workspace"] = bool(before_checks is not None
-                                               and before_checks != identity)
+    # Astra's F15 remainder: the identity misses a git-IGNORED file, so the bytes are measured too
+    # (`checks.workspace_digest`, `.git` excluded, ignored files included). Either moving is a
+    # child write, and the result never claims `wrote_nothing` over it.
+    run.doc["checks_changed_workspace"] = bool(
+        (before_checks is not None and before_checks != identity)
+        or (before_bytes is not None and before_bytes != after_bytes))
 
     # Scope adherence: every source-set path the slice does not name, with the stated reason.
     out_rows = scope.out_of_scope(source, contract["named_paths"],
@@ -677,6 +683,20 @@ def phase_report(args):
     except docmod.DocumentError as exc:
         return stop(run, "no_slice", str(exc), **common)
 
+    # Astra's N2: the completion this run is about to make is validated BEFORE the card
+    # transaction opens, against the same schema and semantic checks `deliver` and
+    # `validate-result.py` apply. An invalid completion is never committed: the run stops with
+    # `result_invalid`, nothing appended and no `Status:` line written.
+    proposed = resultmod.assemble(
+        run, status="completed", reason="the proposed completion, before the card transaction",
+        card_after=after, card_moved=True, card_reason="proposed", root=run.root, **common)
+    invalid = proposed_findings(run, proposed)
+    if invalid:
+        return stop(run, "result_invalid",
+                    "the completion this run would record does not validate (%s), so no card "
+                    "transaction was opened: no event was appended and the `Status:` line was not "
+                    "written" % "; ".join(invalid), **common)
+
     # The facts the card decision was made on, kept before the transaction opens. A settling pass
     # re-delivers THESE, and never recomputes them: rerunning a check command on a settle could
     # observe something else, and the decision the receipt is settling was made on what is here.
@@ -698,6 +718,19 @@ def phase_report(args):
         common["records_extra"] = records_block
         return stop(run, exc.tag, exc.reason, receipt=receipt.path, **common)
     return _finish(run, client, receipt, appended, after, card_before, common, resumed_half=None)
+
+
+def proposed_findings(run, proposed):
+    """The schema errors and semantic findings of a proposed result, as short sentences."""
+    try:
+        errors = validate.errors_for(proposed, validate.load_schema("result", run.root))
+        semantic = validate.run_semantic(proposed, run.input, run.run_dir)["semantic"]
+    except validate.ReferenceUnavailable as exc:
+        return [str(exc)]
+    out = ["%s: %s" % (row.get("path") or "/", row.get("message")) for row in errors or []
+           if isinstance(row, dict)]
+    out.extend("%s %s: %s" % (row["id"], row["path"], row["message"]) for row in semantic)
+    return out
 
 
 def _finish(run, client, receipt, appended, after, card_before, common, resumed_half):
