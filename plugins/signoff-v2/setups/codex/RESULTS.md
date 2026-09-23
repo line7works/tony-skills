@@ -28,7 +28,7 @@ One headless session, `launch.sh prompts/delivery-probe.md <throwaway git worksp
 
 - the skills catalog does NOT list `signoff-v2`: the sidecar's `policy: allow_implicit_invocation: false` removed it (catalog filtering, `harness-enforced`; the pilot measured the same on 0.154.0);
 - the explicit `$signoff-v2` injected NO body: the only `user` messages are the environment context and the prompt itself (its native `UserMessage` item), so **zero bytes of the skill body were delivered** before the model call, as the pilot measured for the plugin surface on 0.154.0 (a plugin skill's body reaches the model only through a file read, which a credential-free session never gets to);
-- `turn_context.sandbox_policy`: `workspace-write`, `writable_roots` `[<out>/codex-home/child]`, `exclude_tmpdir_env_var: true`, `exclude_slash_tmp: true`, network on (signoff-v2 turns it on for its nested reviewer).
+- `turn_context.sandbox_policy`: `workspace-write`, `writable_roots` `[<out>/codex-home/child]`, `exclude_tmpdir_env_var: true`, `exclude_slash_tmp: true`, network on at that measurement (signoff-v2 turned it on for its nested reviewer; since Astra's F6 that reviewer and the network exception are removed, `launch.sh`).
 
 Not measured: what a model does with the catalog entry or the explicit mention (no model turn ran). Real-body runs of the core are not part of E13 (contract section 12).
 
@@ -62,8 +62,8 @@ On Codex the catalog names the cache copy (the delivery probe above), so a skill
 
 This setup's `launch.sh` carries the session-lock block byte for byte (held equal to the pilot's
 and build-v2's by `plugins/recheck-v2/evals/runner/tests/test_e13_session_lock.py`): every launch
-runs in its own `<out-dir>/codex-home`, and the reviewer children `reviewer.py` starts write their
-rollouts under that home's own `child/`. The measurements, the design and the runner's preflight
+runs in its own `<out-dir>/codex-home` (the reviewer children `reviewer.py` started at this
+slice's measurement are gone since Astra's F6). The measurements, the design and the runner's preflight
 target are recorded once, in `plugins/build-v2/setups/codex/RESULTS.md`, "The session lock".
 
 ## Installed-package verification
@@ -83,3 +83,14 @@ A fresh home, `install.sh` (`ok: true`), then `verify-install.sh`: exit 0, `ok: 
 
 This file was written after that verification ran, so the package now differs from the verified
 one by this section; `verify-install.sh` re-verifies it in one command.
+
+## Fix round install proof (E13 full review, 2026-09-23)
+
+After Astra's F6 (the Codex reviewer transport removed, network no longer turned on for
+signoff-v2) and control-room item CR-1 (`disable-model-invocation: true` in the `SKILL.md`
+frontmatter), the builder of the fix round reran, in a fresh temporary home, `install.sh --home
+<fresh>` (exit 0), `verify-install.sh --home <fresh>` (exit 0: `ok: true`, no finding, the installed
+frontmatter byte-equal to the canonical block, `skill-identity` equal from the checkout and the
+installed copy) and `negative-tests.sh <fresh>`, free half (exit 0, the nine cases recorded as in the
+table above). No session was started and no model was called. Logs are in the round's scratch
+folder, which the control room files.

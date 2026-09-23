@@ -13,9 +13,9 @@ setup is `../../../../setups/claude-code/`; its record is that directory's `RESU
 `invocation.py` and put its `invocation` object into the input whole, typing none of its fields:
 not `mode`, not the run id or directory, not the sessions, not the model. It may pass
 `--target-token` (the slice), `--workspace`, a caller route (`--caller`, `--run-id`, `--run-dir`
-together, from a calling station's payload) and the building session, only as
-`--building-session ID` from the caller's payload or `--build-result PATH`, the build run's own
-`result.json`. `measurement` is copied nowhere; a key of it under `invocation` makes the input
+together, from a calling station's payload) and the selected build run, only as
+`--build-result PATH`, that run's own `result.json`, with `--workspace`, `--build-doc` and `--slice`
+(Astra's F4: there is no flag that types a building session). `measurement` is copied nowhere; a key of it under `invocation` makes the input
 invalid (`tests/test_invocation.py`, `SchemaCompositionTest`).
 
 ## 1. Identity
@@ -61,12 +61,20 @@ SKILL.md's instruction to the executor (`instruction-bound`). No `turns.py` ship
 Does not apply (the recheck pilot's field). Its counterpart here is `invocation.sessions`:
 `reviewing` is this session's own id through `CLAUDE_CODE_SESSION_ID`, bound to its transcript
 (ruling E9-28; `helper-derived` reading of a record the session can write, the pilot's section 4);
-`building` is null unless the caller names it (`--building-session`, `instruction-bound`) or the
-build run's own result names it (`--build-result`: `answer.session_id`, `helper-derived` from that
-record). Equal values are the core's independence refusal: `tests/test_invocation.py`
-`IndependenceThroughTheCoreTest` builds the S3 clean case, gives the core an adapter-built
-invocation with `building == reviewing`, and the core writes no request and refuses the answer on
-`independence`.
+`building` comes only from the selected build run's own record (Astra's F4): `--build-result PATH`
+is accepted only when the file sits in its own run directory (its `run_dir`) and names the same
+workspace (`--workspace`, which the transcript binds too), document (`--build-doc`) and slice
+(`--slice`); a mismatch is exit 2 naming it, and the value is that run's recorded harness
+identity, the result's `invocation.session_id`: the session the build adapter read from the
+harness's own record and the build core checked the answer's copy against (`session_mismatch`,
+send-back 1). `helper-derived` from that record. A result that carries no `invocation.session_id`,
+and a run with no `--build-result`, leave the building session null with
+`measurement.building_provenance` `unavailable`: provenance that is missing is reported as missing,
+never replaced by the executor's typed `answer.session_id` or by a session someone typed. The
+runtime `--building-session` override is gone. Equal values are the core's independence
+refusal: `tests/test_full_fix_f4.py` `TheProbeThroughTheCore` rebuilds Astra's probe (a build
+result recorded from THIS session, then a review from it), and the core writes no request and
+refuses the answer on `independence`.
 
 ## 6. Run date
 
@@ -88,7 +96,9 @@ only with a non-empty raw report, an `ok` that names no `effective_model`, `tran
 is exit 2, and the answer's reviewer is `answer_identity`: `session_id` `<transport>:<call_id>`
 (the sidecar names the call, not a session id of the subagent's own; the call id is single use,
 never the building session's id) and `model` the sidecar's `effective_model`
-(`tests/test_reviewer.py`). Freshness is `harness-enforced` (the Agent tool starts a new
+(`tests/test_reviewer.py`). The answer carries `answer_identity.model` as its `model`: the core
+takes the reviewer's floor from it (Astra's F5) and refuses an answer whose model is missing,
+below the Opus-class floor, or not this session's recorded model. Freshness is `harness-enforced` (the Agent tool starts a new
 subagent whose records carry `isSidechain: true`, the pilot's measurement); what it may not do is
 `instruction-bound` (readers' roster labels `repo-with-tools` isolation `unmeasured`). What the
 harness injects into that context is the readers contract's measured list for the Agent route
@@ -110,11 +120,13 @@ no model turn ran; contract section 12 keeps real-body runs out of E13's suites)
 
 Claude Code reads the `SKILL.md` frontmatter and not `agents/openai.yaml` (the pilot's
 measurement). The sidecar's `policy: allow_implicit_invocation: false` therefore restricts Codex
-only. signoff-v2's `SKILL.md` carries no `disable-model-invocation`, so on Claude Code it is
-auto-invocable by its description, exactly as v1 `signoff` is (v1's frontmatter carries `name` and
-`description` only). Making it manual-only on Claude Code needs that frontmatter key, which this
-slice's brief did not allow (the builder's report, question Q1). `harness-enforced` catalog
-activation by description; no restriction.
+only. Since the E13 full-review fix round (control-room item CR-1), signoff-v2's `SKILL.md`
+frontmatter carries `disable-model-invocation: true`, the manual-only sidecar contract section 11
+asks for, on the harness that reads the frontmatter: the skill runs when the user invokes it and is
+not auto-invoked by its description (v1 `signoff`, whose frontmatter carries `name` and
+`description` only, still is). `scripts/tests/test_full_fix_cr1.py` holds the key and the Codex
+sidecar together. Not re-measured in a live catalog in this round: the slice 3 delivery probe's
+catalog listing predates the key (`RESULTS.md`).
 
 ## 10. Negative tests
 
@@ -136,9 +148,9 @@ installed beside the core because the Claude Code reviewer route needs it. `RESU
 | Report the interaction mode (`mode`) | `helper-derived` | E9-33: environment cross-checked against the transcript's `entrypoint`; exit 3 without a record |
 | Mint a single-use run id and an outside run directory | `helper-derived` | section 3 |
 | Identify the reviewing session (`sessions.reviewing`) | `helper-derived` reading of an `instruction-bound` record | section 5 |
-| Name the building session (`sessions.building`) | `instruction-bound` from the caller, or `helper-derived` from the build run's result | section 5 |
-| Assert the model floor (`model`) | `helper-derived` | E9-3 map, v1 floor; unknown is never elevated |
+| Name the building session (`sessions.building`) | `helper-derived` from the selected build run's result, bound to workspace, document and slice; else `unavailable` | section 5 |
+| Assert the model floor (`model`) | `helper-derived`; the core recomputes the class from the id and refuses a disagreement (F5) | E9-3 map, v1 floor; unknown is never elevated |
 | One fresh reviewer per call, nothing from the builder's conversation | `harness-enforced` freshness; `instruction-bound` restrictions | section 7; the packet's withholding is the core's (contract section 5) |
 | Name the reviewer the answer carries | `helper-derived` from readers' sidecar | section 7 |
 | Deliver the complete skill body | per the pilot's measurement | section 8 |
-| Keep the core from launching a harness | enforced in code; only the Codex reviewer helper launches | `../README.md` |
+| Keep the core from launching a harness | enforced in code; no helper of this core launches a harness (F6) | `../README.md` |

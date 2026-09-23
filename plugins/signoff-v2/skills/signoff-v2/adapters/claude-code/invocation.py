@@ -34,9 +34,13 @@ run_dir: ${TMPDIR:-/tmp}/signoff-v2/<run_id>, outside every workspace; named, ne
 run_date: --run-date YYYY-MM-DD, else the machine's local calendar date.
 
 sessions.reviewing is this session's own id: CLAUDE_CODE_SESSION_ID, bound to the transcript
-(ruling E9-28). sessions.building is null unless --building-session ID (the caller's payload,
-instruction-bound) or --build-result PATH (the build run's own result.json, whose
-answer.session_id is read) names it. Equal to reviewing is the core's independence refusal.
+(ruling E9-28). sessions.building comes only from the selected build run's own record:
+--build-result PATH (that run's result.json, in its own run directory) with --workspace,
+--build-doc and --slice, which it must match; its recorded invocation.session_id (the harness session the
+build adapter read) is read, never the typed answer.session_id. Without it
+the building session is null and measurement.building_provenance says "unavailable". There is no
+flag that types a building session (Astra's F4). Equal to reviewing is the core's independence
+refusal.
 
 model.id is the last non-sidechain, non-synthetic assistant record's message.model. floor_class
 and floor_met follow ruling E9-3's map against the v1 floor, Opus-class: claude-opus-*,
@@ -61,16 +65,47 @@ def slug(text):
     return cleaned or "run"
 
 
-def building_from_result(path):
+def building_from_result(path, workspace, build_doc, slice_name, error, usage):
+    """The building session of the SELECTED build run, bound to this review (Astra's F4).
+
+    The build core writes `result.json` into its own run directory; the file is accepted only
+    there and only for the workspace, document and slice this review is of. The building session
+    is that run's recorded HARNESS identity, `invocation.session_id`: the session the build
+    adapter read from the harness's own record and the build core checked the answer against
+    (send-back 1). A result without it is unavailable provenance: the executor's typed
+    `answer.session_id` is never read in its place. Returns (session or None, provenance).
+    """
     try:
         with open(path, "r", encoding="utf-8") as handle:
             result = json.load(handle)
     except (OSError, ValueError) as exc:
-        raise _common.HelperError("the build result %s cannot be read: %s" % (path, exc), 3)
-    session = ((result or {}).get("answer") or {}).get("session_id")
+        raise error("the build result %s cannot be read: %s" % (path, exc))
+    if not isinstance(result, dict):
+        raise error("the build result %s is not a build-v2 result object" % path)
+    problems = []
+    run_dir = result.get("run_dir")
+    if not isinstance(run_dir, str) or os.path.realpath(run_dir) != os.path.realpath(
+            os.path.dirname(os.path.abspath(path))):
+        problems.append("it is not in its own run directory (%r)" % (run_dir,))
+    if not isinstance(result.get("workspace"), str) or os.path.realpath(
+            result["workspace"]) != os.path.realpath(workspace):
+        problems.append("it is for the workspace %r, not %r" % (result.get("workspace"), workspace))
+    if result.get("build_doc") != build_doc:
+        problems.append("it is for the document %r, not %r" % (result.get("build_doc"), build_doc))
+    if result.get("slice") != slice_name:
+        problems.append("it is for slice %r, not %r" % (result.get("slice"), slice_name))
+    if problems:
+        raise usage("the build result %s is not the selected build run of this review: %s"
+                    % (path, "; ".join(problems)))
+    session = (result.get("invocation") or {}).get("session_id")
+    run_name = result.get("run_id") or os.path.basename(run_dir)
     if not isinstance(session, str) or not session:
-        raise _common.HelperError("the build result %s records no answer.session_id" % path, 3)
-    return session
+        return None, "unavailable: build run %s recorded no harness session" % run_name
+    return session, "build run %s" % run_name
+
+
+UNAVAILABLE = ("unavailable provenance: no build run was selected (--build-result), so the building "
+               "session is not known and is null; it is never asserted from typed text")
 
 
 def build_parser():
@@ -86,12 +121,13 @@ def build_parser():
     p.add_argument("--caller", default=None, help="the calling station (default: direct)")
     p.add_argument("--run-id", default=None, help="the caller's run id (default: minted)")
     p.add_argument("--run-dir", default=None, help="the caller's run directory (default: minted)")
-    group = p.add_mutually_exclusive_group()
-    group.add_argument("--building-session", default=None,
-                       help="the session that built the slice, from the caller (default: null)")
-    group.add_argument("--build-result", default=None,
-                       help="the build run's result.json; its answer.session_id is the building "
-                            "session (default: none)")
+    p.add_argument("--build-result", default=None,
+                   help="the selected build run's own result.json; its recorded "
+                        "invocation.session_id is the building session. Needs --workspace, --build-doc and --slice, "
+                        "which it must match (default: none, building session unavailable)")
+    p.add_argument("--build-doc", default=None,
+                   help="the build doc under review, workspace-relative (with --build-result)")
+    p.add_argument("--slice", default=None, help="the slice under review (with --build-result)")
     p.add_argument("--config-dir", default=None,
                    help="the Claude Code config directory (default: $CLAUDE_CONFIG_DIR, else "
                         "~/.claude)")
@@ -149,13 +185,28 @@ def main():
             raise _common.HelperError("the run directory %s is inside the workspace" % run_dir, 2)
 
     if args.build_result:
-        building, building_source = building_from_result(args.build_result), (
-            "answer.session_id of the build run's result %s" % args.build_result)
-    elif args.building_session:
-        building, building_source = args.building_session, (
-            "--building-session (instruction-bound: the caller's payload)")
+        missing = [flag for flag, value in (("--workspace", args.workspace),
+                                            ("--build-doc", args.build_doc),
+                                            ("--slice", args.slice)) if not value]
+        if missing:
+            raise _common.HelperError("--build-result is bound to this review's workspace, "
+                                      "document and slice: pass %s" % ", ".join(missing), 2)
+        building, provenance = building_from_result(
+            args.build_result, args.workspace, args.build_doc, args.slice,
+            lambda message: _common.HelperError(message, 3),
+            lambda message: _common.HelperError(message, 2))
+        if building is None:
+            building_source = ("unavailable provenance: the build result %s carries no "
+                               "invocation.session_id (the harness session its adapter read), and "
+                               "the executor's typed answer.session_id is never read in its place"
+                               % args.build_result)
+            provenance = "unavailable"
+        else:
+            building_source = ("invocation.session_id recorded by %s (%s): the session its build "
+                               "adapter read from the harness record, bound to this workspace, "
+                               "document and slice" % (provenance, args.build_result))
     else:
-        building, building_source = None, "unknown: no --building-session and no --build-result"
+        building, provenance, building_source = None, "unavailable", UNAVAILABLE
     sandbox, sandbox_source = _common.sandbox_mode(session)
     return {
         "invocation": {
@@ -178,6 +229,7 @@ def main():
             "effort": session["efforts"][-1] if session["efforts"] else None,
             "provider_route": _common.provider_route(),
             "workspace_binding": binding,
+            "building_provenance": provenance,
             "_sources": {
                 "schema": "invocation carries exactly the keys references/input.schema.json "
                           "allows; the executor copies it whole and types none of it",

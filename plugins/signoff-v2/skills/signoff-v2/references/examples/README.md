@@ -28,8 +28,15 @@ personal path is committed.
 | `result-stale-source-moved.json` | an untracked file added after the answer: `stale_source`, both identities, nothing recorded (Astra's F3) |
 | `result-missing-input-legacy-ambiguous.json` | a hand-written review line Appendix A cannot place: stopped before levelling, with its document, line and bytes (F12) |
 | `result-recording-failed-after-writes-landed.json` | `mirrors` refused after the block, the verdict doc and the card landed: every landed write reported from the receipt (F8) |
+| `answer-with-findings-and-model.json` | the same MAJOR answer, carrying the reviewer's `model` as the adapter's sidecar map fills it (Astra's F5) |
+| `result-stopped-floor-refused.json` | a Haiku session: `request` stops `floor_refused` before any reviewer request, nothing recorded (Astra's F5) |
+| `result-stopped-floor-answer.json` | an answer naming a Sonnet reviewer under an Opus session: refused `floor` before it is accepted (Astra's F5) |
+| `result-stale-source-final-append.json` | `src/late.py` added while the final card append was forwarded: `stale_source`, the landed appends and document steps reported, no verdict (Astra's F2) |
 
-The last three came from the slice 2 fix round's own runs of the same CLI over seeded case
+The four marked F2 and F5 came from the E13 full-review fix round's runs of the same CLI over the
+same case, normalized the same way with the run directory as `/tmp/<run id>`.
+
+The three before them came from the slice 2 fix round's own runs of the same CLI over seeded case
 `S1-02-untracked-defect`, normalized the same way with the run directory as
 `/tmp/signoff-fix2-run`.
 
@@ -40,5 +47,6 @@ schema to make: an unknown key rather than a silently ignored one, a ledger addr
 component itself refuses (`docs/records/`, `docs/reviews/`), a run id that is not one path
 segment, an evidence kind outside the three, a verdict outside the three, a terminal status
 outside the two, a packet file in no list, a verdict recorded on a stop, a report-only run
-that recorded one, a document step in a state outside the three, and an unplaceable record line
-reported without its bytes.
+that recorded one, a document step in a state outside the three, an unplaceable record line
+reported without its bytes, a floor block whose `met` is not a boolean, a refusal reason outside
+the four, and a packet entry whose `link_target` is not its link text.

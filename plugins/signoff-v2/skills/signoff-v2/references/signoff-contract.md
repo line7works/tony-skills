@@ -101,6 +101,15 @@ slice's specification, and nothing from the builder's conversation. What is with
 NAMED in the material, so the reviewer knows a file exists and was kept back rather than
 believing it was never there.
 
+**Entries have lstat semantics** (Astra's F7). An entry's size, hash and delivered bytes are the
+bytes the entry IS: a regular file's content, and for a symbolic link its link target text, the
+bytes Git records for it. A link is never followed, and its referent is never presented as the
+tracked file's contents; the entry carries `link_target`, and a referent inside the source set is
+reviewed as its own entry. Before anything is recorded, every entry's content identity is computed
+again the same way and compared with the packet's; an entry that moved is a `stale_source` stop
+that names it (section 8). The records component's identity rules are unchanged: its identity has
+always hashed a link as its target text, and the packet now agrees with it.
+
 ## 5. Independence
 
 The session that wrote the code cannot review it. It knows what the code MEANT to do and will
@@ -112,6 +121,30 @@ read intent into what is on disk.
   no mandate and no request file are written — and the answer is REFUSED
   (`refusal_reason: independence`). No verdict is recorded.
 - The run records which route ran and the model it observed, never one it assumed.
+- **The building session is a recorded harness fact** (Astra's F4, send-back 1). The adapter's
+  helper fills `sessions.building` only from the selected build run's own `result.json`, bound to
+  this review's workspace, document and slice, and only from that result's
+  `invocation.session_id`: the session the build adapter read from the harness record, which the
+  build core holds the answer's copy to. A result without it is unavailable provenance (null,
+  reported as such); the executor's typed `answer.session_id`, and any typed session, never stand
+  in for it.
+- **The model floor is enforced here** (Astra's F5; v1 Step 0, unchanged under P5). The session's
+  model is the adapter's observed `invocation.model.id`; the core computes its class with the
+  adapters' own map (`claude-opus-*`, `claude-fable-*`, `claude-mythos-*`, and the provisional
+  Codex ids `gpt-6-astra`, `gpt-5.6-sol`, are Opus-class; `claude-sonnet-*` and `claude-haiku-*`
+  are below; anything else is unknown) and checks the input's `floor_class` and `floor_met`
+  against it, never in its place. `request` emits no reviewer request, `record-answer` accepts no
+  answer and `record` records nothing unless the floor is met: a false, null, missing or
+  unestablished floor, or typed floor facts that disagree with the id, is a `stopped` result with
+  `stop_reason_code: floor_refused` and no project-record write. The reviewer's model is the
+  readers result (the answer's `model`, readers' effective model through the adapter's sidecar map):
+  it must be established, at the floor, and the session's recorded model, since a `claude-session`
+  reader inherits it; otherwise the answer is refused (`refusal_reason: floor`). Nothing upgrades a
+  model and nothing changes who is eligible. The result's `floor` block says which facts were used
+  and where they came from. **Synthetic replay facts** (a seeded case replays a recorded answer and
+  no harness observed a model) enter through one explicit test interface only:
+  `SIGNOFF_TEST_REPLAY_MODEL=<id>` under `SIGNOFF_TEST=1`, used where the input or the answer
+  carries no model, and named as synthetic in `floor.source`; outside test mode it is ignored.
 
 **What counts as the builder's conversation**, three rules, all declarations rather than guesses
 about prose:
@@ -119,7 +152,10 @@ about prose:
 1. any path the input's `review.builder_conversation` list names;
 2. any path whose file name declares itself the builder's notes — the name, lower-cased with
    separators and the extension removed, holding `buildernotes` or `buildnotes` — or whose first
-   Markdown heading says so;
+   Markdown heading says so. The first heading is the first ACTUAL Markdown heading after any
+   frontmatter (a leading `---` block to its closing `---` or `...`), leading blank lines and
+   fenced code passed over, with no line cutoff; only that first heading is tested (Astra's F9).
+   A symbolic link is never followed to find one;
 3. inside the ledger document, the sections v1 Step 2 names as the builder's and the inspector's
    working records (`## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`,
    `## Punch list`) and every `Status:` line.
@@ -138,6 +174,16 @@ not); cites a withheld ledger section (`<doc>#<section>`); quotes a span (in `"�
 or `“…”`, 12 or more characters) that appears in the withheld material and nowhere in the
 delivered packet; or repeats a withheld line of 24 or more characters verbatim. The last rule is
 the older one and stays; it never stood in for citation provenance.
+
+**Citations are resolved before they are compared** (Astra's F3). Every token of every answer
+string that could name a path — a Markdown link destination, an angle-bracket link, a `file://`
+URL, or any run of path characters — is resolved lexically to a canonical workspace path before
+the comparison above: percent encoding is decoded, a `file:` scheme, a query, a `#fragment` and a
+`:line` suffix are split off, `.` and `..` segments are normalised, and an absolute path is taken
+relative to the workspace (its literal or its real path). A path outside the workspace resolves to
+nothing, and nothing is read to resolve anything. A resolved path equal to a withheld path (or, as
+before, a bare file name no delivered file shares), or a resolved `<ledger doc>#<section>` naming a
+withheld section, is the same `independence` refusal, before any verdict or finding is written.
 
 Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 
@@ -230,6 +276,16 @@ The order, and what each step promises:
   check before the document writes) end the same way when git cannot answer (Astra's F7
   remainder): `recording_failed` (`identity_refused`), with what the receipt already holds, and a
   later `record` settles the run.
+- **Pin the source for review, and check it after the last append** (Astra's F2). `scope` also
+  pins the identity with exactly the run's own document targets left out (the ledger document and
+  the verdict doc it would write), with the packet's entries. `record` compares the source now,
+  minus exactly those targets, with that pin: before the first write, on every recovery pass, and
+  again AFTER THE FINAL APPEND, just before the receipt is committed. Anything that moved (a file
+  that arrived while the card event was being appended included) is source the verdict never saw:
+  the run ends `stale_source` (`source_moved`), names the moved paths, reports every append and
+  document step that already landed from the receipt, records no verdict and never returns
+  `completed`; a new packet and a new review are required. A recovering pass reaches the same stop.
+  Every packet entry's content identity is verified in the same checks (section 4).
 - **Pin the head.** The head the run read its state against is pinned at `scope`. At `record`,
   BEFORE this run's own levelling, the log must still be at that head; an event another writer
   appended between the two phases is a named conflict before any append. The comparison is taken
@@ -292,6 +348,17 @@ and the failing command's exit, error and name (`records.records_exit`, `records
 landed is never reported absent, and a refusal the component returned is never retried: a second
 `record` re-delivers it.
 
+**The hand-off to recheck needs the verdict mirror tracked** (E13 full review, Astra's F8; a
+documented qualification gap, not a behaviour change). This station writes the verdict doc under
+`docs/reviews/` and never commits it. When `/recheck` follows on the same document with no commit
+between, the recheck pilot updates that authorized mirror and its boundary check reads the change
+to untracked content as a violation: the recheck ends `not_clear` and the card stays at this
+station's verdict, although the log records the finding fixed. E13 does not qualify that
+no-commit hand-off; the precondition is that the mirror is committed before `/recheck`. Nothing here
+stages or commits files for the user, and any runtime change to the pilot's decision waits for the
+owner's E13-1 ruling (the pilot contract's section 9, "The station loop";
+`plugins/recheck-v2/skills/recheck-v2/scripts/tests/test_full_fix_f8.py`).
+
 **Rerunning `record`** settles the run rather than repeating it: completed steps are never
 redone, the append is never made twice, and a committed receipt reports the same completion.
 
@@ -310,7 +377,10 @@ redone, the append is never made twice, and a committed receipt reports the same
 | A clean review lists no executed check, counted after findings outside the set became notes | `stopped` | `answer_invalid` |
 | The proposed completion fails the result's semantic checks | `stopped` | `answer_invalid` |
 | A record line fits no Appendix A shape | `missing_input` | `legacy_ambiguous` |
+| The model floor is not met, not established, or its typed facts disagree with the observed id (at `request` or `record`) | `stopped` | `floor_refused` |
+| The answer's reviewer model is below the floor, missing, or not the session's recorded model | `stopped` (`refusal_reason: floor`) | `floor_refused` |
 | The source moved after the packet was built | `stale_source` | `source_moved` |
+| The source outside the run's own targets moved during the transaction, the final append included, or a packet entry's bytes moved | `stale_source` | `source_moved` |
 | The component refused `identity` | per the refusal map | `identity_refused` |
 | This station's own identity computation failed while recording or recovering | `recording_failed` | `identity_refused` |
 | `mirrors` or `render` refused inside the transaction | `recording_failed` | `mirrors_refused`, `render_refused` |
@@ -395,7 +465,7 @@ sections 2, 8, 9 and 11, the input schema and the script's own exit table (A7a).
 |---|---|---|
 | `check-input` | `<input.json>` | 0, 1, 2, 3, 4, 10 |
 | `scope` | `--run-dir D` | 0, 1, 2, 3, 4, 10 |
-| `request` | `--run-dir D` | 0, 1, 2, 10 |
+| `request` | `--run-dir D` | 0, 1, 2, 3, 4, 10 |
 | `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 10 |
 | `record` | `--run-dir D` | 1, 2, 3, 4, 10 |
 | `identity` | `<workspace>` | 0, 1, 2, 3 |

@@ -68,7 +68,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from signoff_core import answer as ansmod, sheet as sheetmod  # noqa: E402
-from signoff_core import canon, identity as idmod, inputs, ledger, packet as packetmod  # noqa: E402
+from signoff_core import canon, floor as floormod, identity as idmod, inputs, ledger  # noqa: E402
+from signoff_core import packet as packetmod  # noqa: E402
 from signoff_core import receipt as rcptmod, records_write as rw, result as resultmod  # noqa: E402
 from signoff_core import records_client as rcl, validate, verdict as vdmod  # noqa: E402
 from signoff_core.constants import (EXIT_MISSING_DEPENDENCY, EXIT_OK, EXIT_TERMINAL, EXIT_USAGE,
@@ -311,8 +312,21 @@ def cmd_scope(args):
     resolved["review"]["lenses"] = lenses
     run.save_input(resolved)
 
+    # Astra's F2: the source state pinned FOR REVIEW with exactly the targets this run may later
+    # write left out (the ledger document and the verdict doc it would create or append to). The
+    # recording transaction compares the source now, minus those targets, with THIS after its
+    # final append and on recovery; a verdict is never recorded over source the packet never held.
+    review_mask = None
+    try:
+        verdict_rel, _ = ledger.verdict_doc_path(workspace, doc, slice_name,
+                                                 resolved["invocation"]["run_date"])
+        targets = sorted(set([doc, verdict_rel]))
+        review_mask = {"targets": targets,
+                       "masked": idmod.identity_of(workspace, exclude=targets)}
+    except ledger.DocumentShape:
+        review_mask = None       # `record` stops on the same shape before any write
     state.update({"phase": "request", "source_set": source,
-                  "source_identity": reviewed,
+                  "source_identity": reviewed, "review_mask": review_mask,
                   "packet": built, "review_sheet": got_sheet,
                   "records_pin": {"doc": doc, "log": pin["log"], "head": pin["head"]}})
     run.save_state(state)
@@ -373,6 +387,22 @@ def cmd_request(args):
              EXIT_OK, args.plugin_root)
         return
 
+    # Astra's F5: the Opus-class floor, from the adapter's observed model id, BEFORE any reviewer
+    # request exists. A false, null, missing or unestablished floor is a named stop; no mandate
+    # and no request file are written, and nothing reaches the project.
+    try:
+        session_floor = floormod.session_facts(resolved)
+    except floormod.FloorRefused as refused:
+        finish(run, resolved, "stopped", args, stop_reason=str(refused),
+               stop_reason_code=floormod.STOP_CODE, writes_none=True,
+               source_set=state.get("source_set"),
+               source_identity=state.get("source_identity"), packet=built,
+               review_sheet=sheet_block(state),
+               floor=floormod.reported(None, refused=str(refused), resolved=resolved))
+        return
+    state["floor"] = {"session": session_floor}
+    run.save_state(state)
+
     readers_dir = run.scratch("readers")
     mandate_path = os.path.join(readers_dir, "mandate.md")
     canon.atomic_write(mandate_path, mandate_text(resolved, built,
@@ -403,13 +433,70 @@ def cmd_request(args):
                   "builder's conversation"}, EXIT_OK, args.plugin_root)
 
 
-def stale_sentence(reviewed, now):
+def stale_sentence(reviewed, now, paths=()):
     moved = sorted(field for field in set(reviewed or {}) | set(now or {})
                    if (reviewed or {}).get(field) != (now or {}).get(field))
+    named = moved_paths_sentence(reviewed, now, paths)
     return ("the source moved after the review packet was built: %s differ(s) between the "
-            "identity pinned then and the identity now. The review never saw what is on disk now, "
-            "so this run records nothing — no event, no block, no verdict, no card. Build the "
-            "packet again and review what is there." % ", ".join(moved or ["the identity"]))
+            "identity pinned then and the identity now%s. The review never saw what is on disk "
+            "now, so this run records nothing — no event, no block, no verdict, no card. Build the "
+            "packet again and review what is there."
+            % (", ".join(moved or ["the packet's entries"]),
+               "; moved: %s" % named if named else ""))
+
+
+def moved_paths_sentence(before, now, paths=()):
+    """The paths that moved, named: packet entries whose bytes changed, and untracked paths that
+    arrived or left between two identities."""
+    names = set(paths or ())
+    was = set((before or {}).get("untracked") or [])
+    is_now = set((now or {}).get("untracked") or [])
+    names |= (was ^ is_now)
+    return ", ".join(sorted(names))
+
+
+def review_mask_moved(workspace, state, exclude_extra=()):
+    """A stale-source sentence when the source, minus the targets pinned at `scope`, is not the
+    source pinned for review (Astra's F2); None when it is, or when no mask was pinned."""
+    mask = (state or {}).get("review_mask") or {}
+    if not mask.get("masked"):
+        return None
+    targets = sorted(set(mask["targets"]) | set(exclude_extra))
+    now = own_identity(workspace, exclude=targets)
+    moved = packetmod.moved_entries(workspace, state.get("packet") or {}, exclude=targets)
+    if now == mask["masked"] and not moved:
+        return None
+    fields = sorted(field for field in set(mask["masked"]) | set(now)
+                    if mask["masked"].get(field) != now.get(field))
+    return ("the source outside this run's own document targets (%s) is not the source pinned "
+            "for review: %s differ(s)%s. The verdict would stand on source the reviewer never "
+            "saw, so it is not recorded; what already landed is reported from the receipt. Build "
+            "a new packet and review again."
+            % (", ".join(mask["targets"]), ", ".join(fields or ["the packet's entries"]),
+               "; moved: %s" % moved_paths_sentence(mask["masked"], now, moved)
+               if moved_paths_sentence(mask["masked"], now, moved) else ""))
+
+
+def final_source_moved(workspace, state, receipt):
+    """The final check, after the last append: the review mask when one was pinned, else the
+    guard's masked identity taken when the receipt was created."""
+    sentence = review_mask_moved(workspace, state)
+    if sentence:
+        return sentence
+    if (state or {}).get("review_mask"):
+        return None
+    guard = receipt.doc.get("guard") or {}
+    if guard.get("masked") is None:
+        return None
+    targets = sorted(guard["targets"])
+    now = own_identity(workspace, exclude=targets)
+    moved = packetmod.moved_entries(workspace, state.get("packet") or {}, exclude=targets)
+    if now == guard["masked"] and not moved:
+        return None
+    return ("the source outside this run's own document targets (%s) moved during the recording "
+            "(%s); the verdict is not recorded over source the review never saw"
+            % (", ".join(targets), moved_paths_sentence(guard["masked"], now, moved)
+               or "the identity differs"))
 
 
 def mandate_text(resolved, built, got_sheet=None):
@@ -528,6 +615,22 @@ def cmd_record_answer(args):
     else:
         adjudication = ansmod.adjudicate(raw, in_set, sessions, withheld_lines=withheld_lines,
                                          provenance=provenance_of(resolved["workspace"], built))
+    # Astra's F5, the readers half: the reviewer's model (readers' effective model) is at the
+    # floor and agrees with the session's recorded model, or the answer is refused before it is
+    # accepted. An answer already refused keeps its own reason.
+    floor_block = None
+    if adjudication["ok"]:
+        try:
+            session_floor = floormod.session_facts(resolved)
+            reviewer_floor = floormod.reviewer_facts(raw, session_floor)
+            state["floor"] = {"session": session_floor, "reviewer": reviewer_floor}
+            floor_block = floormod.reported(session_floor, reviewer_floor)
+        except floormod.FloorRefused as refused:
+            adjudication = dict(adjudication, ok=False, refusal_reason="floor",
+                                raised=[], notes=[], verdict=None,
+                                problems=[{"why": str(refused)}])
+            floor_block = floormod.reported(None, refused=str(refused), resolved=resolved,
+                                            answer=raw)
     state["adjudication"] = adjudication
     state["reviewer"] = reviewer
     state["phase"] = "record" if adjudication["ok"] else "done"
@@ -538,7 +641,9 @@ def cmd_record_answer(args):
         finish(run, resolved, "stopped", args,
                stop_reason=adjudication["problems"][0].get("why") if adjudication["problems"]
                else "the answer was refused",
-               stop_reason_code=adjudication["refusal_reason"],
+               stop_reason_code=(floormod.STOP_CODE if adjudication["refusal_reason"] == "floor"
+                                 else adjudication["refusal_reason"]),
+               floor=floor_block,
                refusal_reason=adjudication["refusal_reason"], answer_refused=True,
                writes_none=True, source_set=source,
                source_identity=state.get("source_identity"), packet=built,
@@ -567,13 +672,14 @@ def provenance_of(workspace, built):
     anchors = [row["what"] for row in built["withheld"] if "#" in row["what"]]
     texts = []
     for rel in paths:
-        text = packetmod.read_text_or_none(os.path.join(workspace, rel))
+        text = packetmod.entry_text_or_none(os.path.join(workspace, rel))
         if text:
             texts.append(text)
     texts.extend(withheld_text(workspace, built))
     material = packetmod.read_text_or_none(built["material_path"]) or ""
     return {"paths": paths, "delivered_paths": delivered_paths, "anchors": anchors,
-            "withheld_text": "\n".join(texts), "delivered_text": material}
+            "withheld_text": "\n".join(texts), "delivered_text": material,
+            "workspace": workspace}
 
 
 def withheld_text(workspace, built):
@@ -581,7 +687,7 @@ def withheld_text(workspace, built):
     lines = []
     for row in built["files"]:
         if row["kind"] == "builder_conversation":
-            text = packetmod.read_text_or_none(os.path.join(workspace, row["path"]))
+            text = packetmod.entry_text_or_none(os.path.join(workspace, row["path"]))
             if text:
                 lines.extend(part.strip().lstrip("- ").strip()
                              for part in text.split("\n") if part.strip())
@@ -621,8 +727,31 @@ def cmd_record(args):
                clean_review_checks_listed=adjudication["clean_review_checks_listed"])
         return
 
+    # Astra's F5: once more before anything is recorded, from the run's own facts. `record` never
+    # takes a floor it did not establish at `record-answer`.
+    try:
+        session_floor = floormod.session_facts(resolved)
+        reviewer_floor = floormod.reviewer_facts(
+            {"model": (state.get("reviewer") or {}).get("model")}, session_floor)
+        recorded = ((state.get("floor") or {}).get("reviewer") or {}).get("model")
+        if recorded != reviewer_floor["model"]:
+            raise floormod.FloorRefused(
+                "the reviewer's model this run established at `record-answer` (%r) is not the "
+                "model it would record now (%r); nothing is recorded"
+                % (recorded, reviewer_floor["model"]))
+    except floormod.FloorRefused as refused:
+        finish(run, resolved, "stopped", args, stop_reason=str(refused),
+               stop_reason_code=floormod.STOP_CODE, refusal_reason="floor",
+               answer_refused=True, writes_none=True, source_set=state.get("source_set"),
+               source_identity=state.get("source_identity"), packet=state.get("packet"),
+               review_sheet=sheet_block(state), reviewer=state.get("reviewer"),
+               floor=floormod.reported(None, refused=str(refused), resolved=resolved,
+                                       answer=state.get("reviewer")))
+        return
+    floor_block = floormod.reported(session_floor, reviewer_floor)
+
     common = dict(source_set=state.get("source_set"),
-                  source_identity=state.get("source_identity"),
+                  source_identity=state.get("source_identity"), floor=floor_block,
                   packet=state.get("packet"), reviewer=state.get("reviewer"),
                   review_sheet=sheet_block(state),
                   findings=adjudication["raised"], notes=adjudication["notes"],
@@ -784,8 +913,16 @@ def do_record(run, resolved, state, adjudication, client, args):
         # source this review never saw: `stale_source`, both identities, nothing written. The
         # reviewed identity is what every event carries; the identity now never stands in for it.
         identity_now = rw.identity_of(client, workspace)
-        if identity_now != reviewed:
-            raise rw.Stop("stale_source", "source_moved", stale_sentence(reviewed, identity_now),
+        # Astra's F7: every packet entry's content identity (lstat semantics) is verified too, so
+        # the stop names what moved, and bytes the identity cannot see never pass for reviewed.
+        moved = packetmod.moved_entries(workspace, state.get("packet") or {})
+        if identity_now != reviewed or moved:
+            raise rw.Stop("stale_source", "source_moved",
+                          stale_sentence(reviewed, identity_now, moved),
+                          {"identity_now": identity_now})
+        review_moved = review_mask_moved(workspace, state)
+        if review_moved:
+            raise rw.Stop("stale_source", "source_moved", review_moved,
                           {"identity_now": identity_now})
         # 1. CR-1, the writing half: level the log with the document for real.
         rw.level(client, workspace, doc, dry_run=False)
@@ -796,17 +933,29 @@ def do_record(run, resolved, state, adjudication, client, args):
         guard = receipt.doc.get("guard") or {}
         if guard.get("masked") is not None:
             masked_now = own_identity(workspace, exclude=sorted(guard["targets"]))
-            if masked_now != guard["masked"]:
+            moved = packetmod.moved_entries(workspace, state.get("packet") or {},
+                                            exclude=sorted(guard["targets"]))
+            if masked_now != guard["masked"] or moved:
                 raise rw.Stop("stale_source", "source_moved",
                               "on recovery, the source outside this run's own targets (%s) moved "
-                              "since the recording began; only the run's receipted changes are "
-                              "allowed, so nothing more is written"
-                              % ", ".join(sorted(guard["targets"])),
+                              "since the recording began (%s); only the run's receipted changes "
+                              "are allowed, so nothing more is written"
+                              % (", ".join(sorted(guard["targets"])),
+                                 moved_paths_sentence(guard["masked"], masked_now, moved)),
                               {"identity_now": masked_now})
+        review_moved = review_mask_moved(workspace, state)
+        if review_moved:
+            raise rw.Stop("stale_source", "source_moved", review_moved, {})
 
     levelled = rw.head_of(client, workspace, doc)
 
     verdict_rel, existed = ledger.verdict_doc_path(workspace, doc, slice_name, run_date)
+    mask = state.get("review_mask") or {}
+    if not settling and mask.get("targets") and verdict_rel not in mask["targets"]:
+        raise rw.Stop("stale_source", "source_moved",
+                      "the verdict doc this run would write is %s, not the one the review was "
+                      "pinned against (%s): the reviews folder moved after the packet was built, "
+                      "so nothing is written" % (verdict_rel, ", ".join(mask["targets"])), {})
     if settling:
         planned = [step for step in receipt.steps() if step["kind"] == "verdict_doc"]
         if planned:
@@ -938,6 +1087,14 @@ def do_record(run, resolved, state, adjudication, client, args):
             rw.do_append(client, receipt, rw.CARD, workspace, doc, card_events,
                          head_now["head"], scratch, head_now["log"])
     rw.verify_targets(receipt, workspace)     # F6: nothing moved between the writes and here
+    # Astra's F2: after the FINAL append, and on every recovery pass that reaches here, the source
+    # now minus exactly the receipt's document targets must be the source pinned for review. A
+    # file that arrived during the last append is source this verdict never saw: a named
+    # stale-source stop, the landed appends and document steps reported from the receipt, and
+    # never `completed` for changed source. A new packet and a new review are required.
+    final_moved = final_source_moved(workspace, state, receipt)
+    if final_moved:
+        raise rw.Stop("stale_source", "source_moved", final_moved, {})
     receipt.commit()
 
     final = rw.head_of(client, workspace, doc)

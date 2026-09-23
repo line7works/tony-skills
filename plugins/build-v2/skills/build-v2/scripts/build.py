@@ -485,6 +485,13 @@ def phase_record_answer(args):
                              errors=errors), exits.VALIDATION)
     refusals = answermod.contents_refusals(body, case=(run.input.get("case")))
     run.doc["answer"] = body
+    # Send-back 1 (Astra's F4): the session this run happens in is the one the adapter READ from
+    # the harness record (`invocation.session_id`); the answer's typed copy must be that session.
+    mismatch = session_mismatch(run, body)
+    if mismatch:
+        run.doc["answer_sha256"] = answermod.digest(body)
+        run.write_artifact("answer.json", body)
+        return stop(run, "session_mismatch", mismatch)
     run.doc["answer_sha256"] = answermod.digest(body)
     run.write_artifact("answer.json", body)
     run.save("answered")
@@ -520,6 +527,9 @@ def phase_report(args):
     run.require_phase("report", "answered")
 
     body = run.doc["answer"]
+    mismatch = session_mismatch(run, body)      # send-back 1: checked again before any write
+    if mismatch:
+        return stop(run, "session_mismatch", mismatch)
     contract = run.doc["contract"]
     source = run.doc["source_set"]
     records_block = dict(run.doc["records"])
@@ -700,9 +710,18 @@ def phase_report(args):
     # The facts the card decision was made on, kept before the transaction opens. A settling pass
     # re-delivers THESE, and never recomputes them: rerunning a check command on a settle could
     # observe something else, and the decision the receipt is settling was made on what is here.
+    # Astra's F1 (E13 full review): the source state the decision was made on is pinned WITH the
+    # decision, and verified before the append, before the document half and at the start of every
+    # recovery pass. Only this transaction's receipted document change is permitted.
+    try:
+        source_pin = sources.source_pin(run.workspace, run.document)
+    except sources.GitError as exc:
+        return stop(run, "no_git", "at report, the source state could not be pinned: %s" % exc,
+                    **common)
     run.doc["decision"] = {"out_of_scope": out_rows, "checks": check_rows,
                            "card_before": card_before, "card_after": after,
-                           "source_set": source, "identity": identity}
+                           "source_set": source, "identity": identity,
+                           "source_pin": source_pin}
     run.save()          # persisted BEFORE the transaction opens, or a kill would lose it
     receipt, _ = transaction.open_receipt(run.run_dir, run.run_id, run.document, run.slice_name)
     run.record_write(receipt.path, "run_artifact")
@@ -710,6 +729,7 @@ def phase_report(args):
                              card_before, after, run.run_id, body["session_id"],
                              (run.input.get("invocation") or {}).get("harness"),
                              run.doc["at"], run.doc["identity"])
+    _source_guard(run, common, receipt)       # F1: nothing is appended on a stale decision
     try:
         appended = transaction.append_card(receipt, client, run.workspace, run.document, event,
                                            receipt.doc["card_append"]["expected_head"], run.run_dir)
@@ -718,6 +738,23 @@ def phase_report(args):
         common["records_extra"] = records_block
         return stop(run, exc.tag, exc.reason, receipt=receipt.path, **common)
     return _finish(run, client, receipt, appended, after, card_before, common, resumed_half=None)
+
+
+def session_mismatch(run, body):
+    """A sentence when the recorded answer's session is not the harness-read invocation session,
+    else None. Absent `invocation.session_id` (an input built before send-back 1) is no finding."""
+    recorded = (run.input.get("invocation") or {}).get("session_id")
+    if not recorded:
+        return None
+    typed = (body or {}).get("session_id")
+    if typed == recorded:
+        return None
+    return ("the recorded answer says it came from session %r, and the session this run happens in, "
+            "as the adapter read it from the harness record (`invocation.session_id`), is %r. A "
+            "typed session never stands in for the recorded one: the answer was not acted on, no "
+            "check was run, no card event was appended and no `Status:` line was written. Copy the "
+            "adapter's `answer_fields.session_id` into the answer, or run the build from the "
+            "session that made it." % (typed, recorded))
 
 
 def proposed_findings(run, proposed):
@@ -750,6 +787,9 @@ def _finish(run, client, receipt, appended, after, card_before, common, resumed_
     common = dict(common)
     common["records_extra"] = records_block
 
+    # F1: source that moved while the append was in flight stops the document half; the landed
+    # append and its receipt stay, and are reported as landed.
+    _source_guard(run, common, receipt, resumed_half=resumed_half)
     try:
         wrote, step = transaction.write_document_step(receipt, run.workspace)
     except transaction.OutsideEdit as exc:
@@ -799,6 +839,18 @@ def _settle(run, client, receipt):
         "answer_refusals": [],
     }
     run.doc["terminal"] = None
+    block = receipt.doc.get("card_append") or {}
+    if not block.get("refused"):
+        # F1: every recovery pass verifies the pinned source FIRST. When it moved, the log is read
+        # (never written) to learn whether this run's append landed, so the receipt and the result
+        # say so; nothing is appended on the obsolete decision.
+        moved = _moved_paths(run)
+        if moved:
+            common["records_extra"] = _landed_block(run, client, receipt, common["records_extra"])
+            half = None
+            if receipt.doc["card_append"].get("recovered"):
+                half = "the card event's record in the receipt"
+            _source_stop(run, common, receipt, moved, resumed_half=half)
     try:
         appended, half = transaction.settle_append(receipt, client, run.workspace, run.document,
                                                    event, run.run_dir)
@@ -810,6 +862,84 @@ def _settle(run, client, receipt):
     return _finish(run, client, receipt, appended,
                    receipt.doc["card_append"]["event"]["after"],
                    receipt.doc["card_append"]["event"]["before"], common, resumed_half=half)
+
+
+def _moved_paths(run):
+    """The paths that moved since the decision's source pin; a run without a pin (or a git that
+    cannot answer) reports that as the one moved entry rather than guessing it unmoved."""
+    pin = (run.doc.get("decision") or {}).get("source_pin")
+    if not pin:
+        return ["(no source pin was recorded with this run's decision)"]
+    try:
+        return sources.pin_moved(run.workspace, run.document, pin)
+    except sources.GitError as exc:
+        return ["(the source state could not be read: %s)" % exc]
+
+
+def _landed_block(run, client, receipt, records_extra):
+    """The records block of a settling pass that will not append: this run's own card event, if
+    the log holds it, recorded in the receipt and reported as landed. Read-only toward the log."""
+    block = dict(receipt.doc.get("card_append") or {})
+    records_block = dict(records_extra or {})
+    if not block.get("head"):
+        try:
+            rows = view.card_events(client, run.workspace, run.document)
+        except view.RecordsStop:
+            return records_block
+        landed = transaction.landed_event(rows, block)
+        if landed is None:
+            return records_block
+        walked = view.head_of(client, run.workspace, run.document)
+        block.update(head=walked["head"], seqs=[landed["seq"]], recovered=True)
+        receipt.doc["card_append"] = block
+        receipt.save()
+    records_block["log"] = block.get("log")
+    records_block["head_after"] = block.get("head")
+    records_block["wrote"] = True
+    records_block["appended"] = [dict({"kind": "card_set", "seq": seq},
+                                      **({"recovered": True} if block.get("recovered") else {}))
+                                 for seq in block.get("seqs") or []]
+    run.record_write(block.get("log"), "records_log")
+    return records_block
+
+
+def _source_guard(run, common, receipt, resumed_half=None):
+    """Stop `source_changed` when the source moved since the decision was pinned; else return."""
+    moved = _moved_paths(run)
+    if moved:
+        _source_stop(run, common, receipt, moved, resumed_half=resumed_half)
+
+
+def _source_stop(run, common, receipt, moved, resumed_half=None):
+    """The named stop of F1. Publishes the CURRENT source set and its out-of-scope paths, and the
+    paths that moved; the card does not move, no `Status:` line is written, no check is rerun and
+    nothing more is appended. The receipt and any landed append stay as they are."""
+    decision = run.doc.get("decision") or {}
+    pinned = decision.get("source_set") or run.doc.get("source_set") or {}
+    common = dict(common)
+    try:
+        current = sources.source_set(run.workspace, pinned.get("base_commit") or pinned.get("base"),
+                                     run.document)
+        current["base"] = pinned.get("base") or current["base"]
+        run.doc["source_set"] = current
+        contract = run.doc.get("contract") or {}
+        common["out_of_scope"] = scope.out_of_scope(
+            current, contract.get("named_paths") or [],
+            answermod.reasons_by_path(run.doc.get("answer") or {}),
+            contract.get("not_in_slice") or [])
+    except sources.GitError:
+        pass
+    landed = bool((receipt.doc.get("card_append") or {}).get("head"))
+    return stop(run, "source_changed",
+                "the source moved after this run decided the card: %s. The decision was made on "
+                "the source as it stood then, and only this run's own `Status:` line may change "
+                "under it, so the card was not moved and the slice's `Status:` line was not "
+                "written. %s Read the current changes, including any outside the slice's paths, "
+                "and run build again."
+                % (", ".join(moved),
+                   "This run's card event had already landed in the log and is reported as landed; "
+                   "it was not appended again." if landed else "Nothing was appended to the log."),
+                receipt=receipt.path, resumed_half=resumed_half, source_moved=moved, **common)
 
 
 def command_identity(args):

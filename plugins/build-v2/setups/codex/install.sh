@@ -12,8 +12,9 @@
 # lines of ~/.codex/config.toml plus approval_policy never, web_search disabled and
 # shell_snapshot off (E10-30), a child/ home for the tool shells ([shell_environment_policy.set]
 # CODEX_HOME and UV_CACHE_DIR, E9-25), and marketplace/, this setup's own marketplace whose
-# entries are symlinks to the worktree's plugin folders: the core and records (signoff-v2's Codex
-# reviewer is a fresh codex exec, so readers is not installed here).
+# entries are symlinks to the worktree's plugin folders: the core and records. readers is not
+# installed here: it has no floor-qualified route a Codex session can dispatch, so signoff-v2's
+# Codex adapter stops lane-unavailable rather than summoning a reviewer (Astra's F6).
 #
 # --credential copies ~/.codex/auth.json byte for byte into DIR at mode 600 and links
 # child/auth.json to it, the pilot's own step; it is never read, printed or logged. Without the

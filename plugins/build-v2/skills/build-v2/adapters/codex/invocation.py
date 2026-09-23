@@ -64,7 +64,8 @@ def main():
     caller = args.caller or "user"
     return {
         "invocation": {"harness": _common.HARNESS, "caller": caller,
-                       "mode": "station" if args.caller else "direct"},
+                       "mode": "station" if args.caller else "direct",
+                       "session_id": thread},
         "answer_fields": {"session_id": thread},
         "measurement": {
             "harness_version": version,

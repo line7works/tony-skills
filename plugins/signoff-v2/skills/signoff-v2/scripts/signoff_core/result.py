@@ -71,6 +71,8 @@ def assemble(resolved, plugin_version, status, **parts):
         result["identity_now"] = parts["identity_now"]          # F3: beside the reviewed identity
     if parts.get("unplaced"):
         result["unplaced"] = [dict(row) for row in parts["unplaced"]]    # F12
+    if parts.get("floor") is not None:
+        result["floor"] = dict(parts["floor"])                   # F5: who established the floor
     if parts.get("document_steps") is not None:
         result["document_steps"] = [dict(row) for row in parts["document_steps"]]   # F8
     return result

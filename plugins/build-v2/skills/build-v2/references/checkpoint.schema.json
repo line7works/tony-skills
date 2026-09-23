@@ -193,7 +193,7 @@
         "object",
         "null"
       ],
-      "description": "the facts the card decision was made on, written before the transaction opens: the out-of-scope list, the check rows, and the card before and after. A pass that settles an unfinished transaction re-delivers these rather than recomputing them, because a rerun check could observe something else and the decision being settled was made on what is here."
+      "description": "the facts the card decision was made on, written before the transaction opens: the out-of-scope list, the check rows, and the card before and after, and `source_pin` (Astra's F1): HEAD and the content identity of every changed or untracked path, the build doc and `docs/records/` excepted, which every later step of the transaction and every settling pass verifies before it writes; a moved pin is the `source_changed` stop. A pass that settles an unfinished transaction re-delivers these rather than recomputing them, because a rerun check could observe something else and the decision being settled was made on what is here."
     }
   }
 }

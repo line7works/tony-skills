@@ -55,20 +55,112 @@ class PacketIncomplete(RuntimeError):
         self.missing = list(missing)
 
 
+FRONTMATTER_OPEN = "---"
+FRONTMATTER_CLOSE = ("---", "...")
+
+
+def first_heading(text):
+    """The title of the first actual Markdown heading after any frontmatter, or None (F9).
+
+    Leading blank lines are passed over; a first non-blank line of `---` opens a frontmatter block
+    that runs to its closing `---` (or `...`), and nothing inside it is a heading; a fenced code
+    block is passed over the same way. There is no line cutoff: frontmatter of any length, or any
+    number of blank lines, cannot push a declaration out of reach. Only this first heading is ever
+    tested against the declaration rule.
+    """
+    lines = text.split("\n")
+    index = 0
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index < len(lines) and lines[index].strip() == FRONTMATTER_OPEN:
+        index += 1
+        while index < len(lines) and lines[index].strip() not in FRONTMATTER_CLOSE:
+            index += 1
+        index += 1
+    fence = None
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if fence:
+            if stripped.startswith(fence):
+                fence = None
+        elif stripped.startswith("```") or stripped.startswith("~~~"):
+            fence = stripped[:3]
+        else:
+            match = HEADING.match(line)
+            if match:
+                return match.group(2)
+        index += 1
+    return None
+
+
 def declares_itself_builder_notes(workspace, rel):
-    """Rule 2: the file name says it is the builder's notes, or its first heading does."""
+    """Rule 2: the file name says it is the builder's notes, or its first heading does.
+
+    A symbolic link is never followed to find a heading: its entry is its link target (F7)."""
     name = os.path.splitext(os.path.basename(rel))[0]
     flat = re.sub(r"[^a-z0-9]", "", name.lower())
     if NOTES_NAME.search(flat):
         return "the file name declares it the builder's notes"
-    if rel.lower().endswith(".md"):
-        text = read_text_or_none(os.path.join(workspace, rel))
+    full = os.path.join(workspace, rel)
+    if rel.lower().endswith(".md") and not os.path.islink(full):
+        text = read_text_or_none(full)
         if text:
-            for line in text.split("\n")[:5]:
-                match = HEADING.match(line)
-                if match and NOTES_HEADING.search(match.group(2)):
-                    return "its first heading declares it the builder's notes"
+            heading = first_heading(text)
+            if heading and NOTES_HEADING.search(heading):
+                return "its first heading declares it the builder's notes"
     return None
+
+
+def link_target(full):
+    """The link target text of a symbolic link, or None for anything else."""
+    if not os.path.islink(full):
+        return None
+    return os.readlink(full)
+
+
+def entry_bytes(full):
+    """The bytes a source-set entry IS, with lstat semantics (F7), or None when it is absent.
+
+    A symbolic link contributes its link target text, as Git stores it, and is never followed; a
+    regular file its content; a directory or an absent path nothing (None)."""
+    try:
+        st = os.lstat(full)
+    except OSError:
+        return None
+    import stat as statmod
+    if statmod.S_ISLNK(st.st_mode):
+        return os.readlink(full).encode("utf-8", "surrogateescape")
+    if not statmod.S_ISREG(st.st_mode):
+        return None
+    with open(full, "rb") as fh:
+        return fh.read()
+
+
+def entry_text_or_none(full):
+    """An entry's text with lstat semantics: a symbolic link's link target, never its referent."""
+    if os.path.islink(full):
+        return os.readlink(full)
+    return read_text_or_none(full)
+
+
+def entry_digest(workspace, rel):
+    """The content identity of one entry now: sha256 of `entry_bytes`, or None when absent."""
+    raw = entry_bytes(os.path.join(workspace, rel))
+    return None if raw is None else canon.sha256_hex(raw)
+
+
+def moved_entries(workspace, built, exclude=()):
+    """The packet entries whose content identity differs from the packet's (F7): every delivered
+    or listed entry, lstat semantics, `exclude` (the receipt's own document targets) passed over."""
+    skip = set(exclude)
+    moved = []
+    for row in built.get("files") or []:
+        if row["path"] in skip:
+            continue
+        if entry_digest(workspace, row["path"]) != row.get("sha256"):
+            moved.append(row["path"])
+    return sorted(moved)
 
 
 def read_text_or_none(full):
@@ -149,19 +241,29 @@ def build(workspace, source, ledger_doc, slice_name, out_dir, builder_conversati
             continue
         full = os.path.join(workspace, rel)
         kind, reason = classify(workspace, rel, ledger_doc, declared)
-        text = read_text_or_none(full)
-        try:
-            size = os.path.getsize(full)
-        except OSError:
-            size = None
-        sha = canon.sha256_file(full) if os.path.isfile(full) else None
+        # F7: lstat semantics. A symbolic link IS its link target text, the bytes Git records for
+        # it; it is never followed, and its referent is never presented as this entry's contents.
+        # A referent that must be reviewed is reviewed as its own entry of the source set.
+        raw = entry_bytes(full)
+        link = link_target(full)
+        size = None if raw is None else len(raw)
+        sha = None if raw is None else canon.sha256_hex(raw)
+        text = None if link is not None else read_text_or_none(full)
         row = {"path": rel, "lists": entry["lists"], "size": size, "sha256": sha, "kind": kind,
                "delivered": False, "withheld_reason": None}
+        if link is not None:
+            row["link_target"] = link
         if kind == "builder_conversation":
             row["withheld_reason"] = reason
             withheld.append({"what": rel, "reason": reason})
             delivered_parts.append("## %s\n\n<!-- withheld: %s. It is under review as a file and "
                                    "is never evidence. -->\n" % (rel, reason))
+        elif link is not None:
+            row["delivered"] = True
+            delivered_parts.append("## %s\n\nA symbolic link. Its content, as Git records it, is "
+                                   "the link target text below; the file it points at is NOT this "
+                                   "entry and was not followed. A target inside the source set is "
+                                   "reviewed as its own entry.\n\n```\n%s\n```\n" % (rel, link))
         elif text is None:
             row["withheld_reason"] = ("absent from the work tree, binary, or not UTF-8 text"
                                       if size is None or sha is None else

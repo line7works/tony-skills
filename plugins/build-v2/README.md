@@ -191,6 +191,26 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   into it by design; `source_set.sanctioned` publishes it with its reason.
   `references/build-contract.md` sections 5 and 18 carry the reasoning.
 
+## Fix round (E13 full review, Astra's F1)
+
+- **F1 (BLOCKER)** `report` pins the source state with the card decision (`decision.source_pin`
+  in the checkpoint: HEAD plus the content identity of every changed or untracked path, the build
+  doc and `docs/records/` excepted, symlinks as their link text) and verifies it before the append,
+  after the append and before the `Status:` line, and first on every settling pass. Other source
+  that moved is the new stop `source_changed`: `source_moved` names the paths, the result carries
+  the current source set and its out-of-scope paths, a landed card event is kept, recorded in the
+  receipt and reported, and nothing moves the card, writes the line, reruns a check or appends
+  again. Before this, a file added during the append or before a killed run resumed was settled
+  as `completed` with `out_of_scope: []`. Tests: `scripts/tests/test_full_fix_f1.py`; the rerun
+  settle test in `test_transaction.py` now changes its check through a git-ignored switch, since a
+  tracked edit after the decision is this stop.
+- **Send-back 1 (F4, build side)** the input's `invocation` gains `session_id`, the session both
+  adapters READ from the harness record (the same value as `answer_fields.session_id`). When it is
+  present the answer's typed `session_id` must equal it, or `record-answer` (and `report`, again)
+  stops `session_mismatch` with no project write; the result records the invocation under
+  `invocation`, so signoff-v2 reads the building session from the build run's harness identity.
+  Tests: `scripts/tests/test_sendback1.py`, `adapters/*/tests/test_sendback1.py`.
+
 ## Build record (E13 slice 3: adapters and installs)
 
 - Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's

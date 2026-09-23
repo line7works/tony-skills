@@ -1,6 +1,7 @@
 ---
 name: signoff-v2
 description: Independent adversarial review of freshly built work, ending in a signed verdict. Brings in a senior engineer who did not write the code, with a mandate to reject it. Use when the user says "sign off", "have a senior engineer review this", asks for an adversarial review of what was just built, or finishes a phase/slice and wants it inspected before moving on.
+disable-model-invocation: true
 ---
 
 # Sign-Off
@@ -17,7 +18,7 @@ This is the inspection station of the loop: `/blueprint` draws the plans, `/buil
 
 ## Step 0 — Model floor
 
-Reviewers run at **Opus-class or better**. The floor is passed, never assumed: the request carries `floor: opus` and this session's own model id as `session_model`, and `readers` refuses a session below the floor as `floor-refused` rather than upgrading silently. No model id is typed into a reviewer's request; every reviewer inherits this session's model.
+Reviewers run at **Opus-class or better**. The floor is passed, never assumed: the request carries `floor: opus` and this session's own model id as `session_model`, and `readers` refuses a session below the floor as `floor-refused` rather than upgrading silently. No model id is typed into a reviewer's request; every reviewer inherits this session's model. The script enforces the floor too: it computes the session's class from the adapter's observed model id (never from a typed `floor_met`), and `request`, `record-answer` and `record` each stop `floor_refused` on a floor that is false, missing, unestablished, or typed in disagreement with the id; an answer whose `model` is missing, below the floor, or not this session's recorded model is refused. Nothing upgrades a model.
 
 If this session is below the floor, or a reviewer call comes back `floor-refused`: **STOP**. Never emit a verdict from below the floor. Offer a lightweight review explicitly labeled NOT a sign-off, with no verdict line, and run it only if the user accepts that framing.
 
@@ -27,7 +28,11 @@ First read `adapters/README.md`, the adapter index: it names the profile for the
 and that profile names the helper that prints the whole `invocation` object as facts (the mode, the
 run id and directory, the harness, both sessions and the model with its floor) and says how the
 reviewer is summoned on that harness in Step 3. Put that object into the input whole and type none
-of its fields.
+of its fields. The building session comes only from the build run you are reviewing: pass its
+`result.json` as `--build-result` with `--workspace`, `--build-doc` and `--slice`, which it must
+match; the helper reads that run's recorded harness session (`invocation.session_id`). Without one,
+or from a result that records none, the building session is recorded as unknown; never type a
+session id.
 
 Build the input (`references/input.schema.json`; `references/examples/input-caller.json` is one) and run:
 
@@ -54,9 +59,9 @@ uv run --python /usr/bin/python3 --with jsonschema==4.25.1 scripts/signoff.py re
 
 This writes the `/readers` request and the reviewer's mandate. It carries the packet, the mandate and the repo's sheet, and **nothing from the builder's conversation**: not your reasoning, not your justifications, not your account of what you built and why, never chat history, never another lens's output.
 
-Three things count as the builder's conversation and are listed in the packet with their content withheld: a path the input declares, a file whose name or first heading declares itself the builder's notes, and the ledger document's own `## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs` and `## Punch list` sections and its `Status:` lines. An untracked builder-notes file is IN the source set and IN the file list, and its content is withheld — both, in that order. Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
+Three things count as the builder's conversation and are listed in the packet with their content withheld: a path the input declares, a file whose name or first heading (the first real heading after any frontmatter, however far down) declares itself the builder's notes, and the ledger document's own `## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs` and `## Punch list` sections and its `Status:` lines. An untracked builder-notes file is IN the source set and IN the file list, and its content is withheld — both, in that order. Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 
-When the input marks the reviewing session as the building session, `request` writes no mandate and no request file, and `record-answer` refuses the answer with `refusal_reason: independence`. No verdict is recorded. Reviewing the diff solo and labeling it a sign-off is the one unforgivable move. The builder's notes are never evidence anywhere in the answer: a citation of a builder-notes path, or a quotation found only in withheld material, in prose, findings or `checks_executed`, refuses the answer on independence.
+When the input marks the reviewing session as the building session, `request` writes no mandate and no request file, and `record-answer` refuses the answer with `refusal_reason: independence`. No verdict is recorded. Reviewing the diff solo and labeling it a sign-off is the one unforgivable move. The builder's notes are never evidence anywhere in the answer: a citation of a builder-notes path, or a quotation found only in withheld material, in prose, findings or `checks_executed`, refuses the answer on independence. A citation is resolved before it is compared: `./`, an absolute path, a `file://` URL, percent encoding, `..` segments, a Markdown link and a `#fragment` all reach the same path.
 
 ## Step 3 — Review
 
@@ -70,7 +75,7 @@ When the input marks the reviewing session as the building session, `request` wr
 
 `scope` has already applied the sheet's passes to the lens set and named the result in its response. A pass marked `off` never runs, even at DEEP, and the verdict names the skip with its reason.
 
-**Mechanics.** `request` wrote the request file; summon `/readers` with it and nothing else. One call per lens, sharing the run id, launched as one fleet. Each is `row: claude-session`, `profile: repo-with-tools`, the workspace the repo root, `floor: opus`, `session_model` this session's model id, a single-use `call_id`, and no `model`, no `effort`, no `isolation`. A lens whose status is `transport-failed`, `empty` or `incomplete` is re-sent once; a second failure, or a deterministic refusal, leaves the review incomplete, which is a STOP with the honest state as the reason. A verdict from a partial review is the rubber stamp the spine forbids.
+**Mechanics.** `request` wrote the request file; summon `/readers` with it and nothing else. One call per lens, sharing the run id, launched as one fleet. Each is `row: claude-session`, `profile: repo-with-tools`, the workspace the repo root, `floor: opus`, `session_model` this session's model id, a single-use `call_id`, and no `model`, no `effort`, no `isolation`. A lens whose status is `transport-failed`, `empty` or `incomplete` is re-sent once; a second failure, or a deterministic refusal, leaves the review incomplete, which is a STOP with the honest state as the reason. A harness whose adapter reports `lane-unavailable` (Codex today: readers has no floor-qualified route it can dispatch) is the same STOP; never review through any other route. A verdict from a partial review is the rubber stamp the spine forbids.
 
 **Reviewers report everything**, low confidence included; the filtering is not theirs. Each finding: a location as `file:line` inside the source set, a claim, a concrete failure scenario, a severity, and an evidence kind (`executed`, `read`, `reasoned`). Do not instruct reviewers to self-censor.
 
@@ -86,7 +91,7 @@ Keep bulk output out of context: redirect to a file and read back the summary li
 uv run --python /usr/bin/python3 --with jsonschema==4.25.1 scripts/signoff.py record-answer --run-dir <run dir> --answer <answer.json>
 ```
 
-The answer is `references/answer.schema.json` (`references/examples/answer-with-findings.json` is one), built from the reviewers' reports merged on `file:line` plus claim. The script applies the rules; you do not:
+The answer is `references/answer.schema.json` (`references/examples/answer-with-findings-and-model.json` is one), built from the reviewers' reports merged on `file:line` plus claim, with the adapter's `answer_identity` as its `session_id` and `model`. The script applies the rules; you do not:
 
 1. **Evidence or it does not count.** A finding missing a location, a claim, a scenario or an evidence kind refuses the WHOLE answer (`answer_invalid`): nothing is raised, no verdict is recorded, and the answer is not repaired into shape. Fix the reviewer's report or re-send the lens; never edit a finding into validity yourself.
 2. **A location outside the source set is a note**, not a finding.
@@ -102,7 +107,7 @@ The script computes the verdict from the raised severities — BLOCKER gives rej
 uv run --python /usr/bin/python3 --with jsonschema==4.25.1 scripts/signoff.py record --run-dir <run dir>
 ```
 
-This levels the log, pins the head against what `scope` read, appends the findings as one batch through the records component, places the component's own rendered block at the ledger home's tail, copies it to the verdict doc under `docs/reviews/`, checks the copy with `mirrors`, and moves the slice's card. Every step is receipted; rerunning `record` settles a killed run rather than repeating it.
+This levels the log, pins the head against what `scope` read, appends the findings as one batch through the records component, places the component's own rendered block at the ledger home's tail, copies it to the verdict doc under `docs/reviews/`, checks the copy with `mirrors`, and moves the slice's card. Every step is receipted; rerunning `record` settles a killed run rather than repeating it. Before the first write, after the final append and on every recovery, the source (minus this run's own document targets) must still be what the packet held; if anything moved, even a file that arrived during the last append, the run ends `stale_source` with what already landed reported, and no verdict is recorded: build a new packet and review again.
 
 The block is the component's bytes, not this skill's: `render` returns it, the line writes the claim in parentheses, and nothing post-processes it. The component recognises those lines on a later levelling, so the document can be signed off again and `/recheck` can read the findings out of the records afterwards.
 

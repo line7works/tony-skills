@@ -68,7 +68,7 @@
             "floor_class": {"type": "string", "minLength": 1},
             "floor_met": {"type": ["boolean", "null"]}
           },
-          "description": "the reviewing session's model and whether it meets the Opus-class floor. A floor this run cannot establish is a stop, never an assumption (v1 Step 0)"
+          "description": "the reviewing session's model as the adapter OBSERVED it, and the floor facts the adapter derived. The core computes the class from `id` itself and checks `floor_class` and `floor_met` against it, never in its place (Astra's F5): a false, null, missing or unestablished floor, or typed facts that disagree with the id, stops the run `floor_refused` at `request` and at `record`, before any reviewer request and with no project-record write (v1 Step 0). The key stays optional in the schema so that a missing model reaches that named stop rather than a bare schema error"
         }
       }
     },

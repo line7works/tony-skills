@@ -83,7 +83,10 @@ builders' to design. A core's adapter reads what it needs from it:
 
 Where the behavior under test is the executor's (build) or the reviewer's (signoff), the case
 supplies that answer as a file instead of calling a model, the way the recheck pilot's
-`record-call` takes a verifier's report. Live model trials are not part of these suites.
+`record-call` takes a verifier's report. Live model trials are not part of these suites. Since
+the core enforces the Opus-class floor from observed model facts (Astra's F5), `observe.py` hands
+a replay its synthetic facts through the core's explicit test interface
+(`SIGNOFF_TEST_REPLAY_MODEL` under `SIGNOFF_TEST=1`), and the result names them as synthetic.
 
 An **executor** answer (`role: "executor"`):
 

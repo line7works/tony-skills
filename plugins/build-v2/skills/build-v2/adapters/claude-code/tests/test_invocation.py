@@ -83,7 +83,7 @@ class FactsTest(unittest.TestCase):
     def test_a_direct_run(self):
         doc = testlib.run_json(HELPER, testlib.fixture_args())
         self.assertEqual(doc["invocation"], {"harness": "claude-code", "caller": "user",
-                                             "mode": "direct"})
+                                             "mode": "direct", "session_id": testlib.SESSION})
         self.assertEqual(doc["answer_fields"], {"session_id": testlib.SESSION})
         m = doc["measurement"]
         self.assertEqual(m["harness_version"], testlib.FAKE_VERSION)
@@ -94,7 +94,7 @@ class FactsTest(unittest.TestCase):
     def test_a_station_route(self):
         doc = testlib.run_json(HELPER, testlib.fixture_args() + ["--caller", "ship"])
         self.assertEqual(doc["invocation"], {"harness": "claude-code", "caller": "ship",
-                                             "mode": "station"})
+                                             "mode": "station", "session_id": testlib.SESSION})
 
     def test_a_caller_named_user_is_refused(self):
         code, out, err = testlib.run(HELPER, testlib.fixture_args() + ["--caller", "user"])

@@ -55,16 +55,19 @@ class SessionsAndModeTest(unittest.TestCase):
         self.assertEqual((inv["mode"], inv["caller"], inv["harness"]),
                          ("headless", "direct", "codex-cli"))
 
-    def test_building_from_the_flag_or_a_build_result(self):
-        self.assertEqual(testlib.run_json(HELPER, ["--building-session", "b-1"])
-                         ["invocation"]["sessions"]["building"], "b-1")
+    def test_building_from_a_bound_build_result(self):
+        """The one route (Astra's F4; the typed override is gone, test_full_fix_f4.py)."""
+        from test_full_fix_f4 import build_result, rollout_at
         work = tempfile.mkdtemp(prefix="result-")
         try:
-            path = os.path.join(work, "result.json")
-            with open(path, "w") as handle:
-                json.dump({"answer": {"session_id": "t-9"}}, handle)
-            self.assertEqual(testlib.run_json(HELPER, ["--build-result", path])
-                             ["invocation"]["sessions"]["building"], "t-9")
+            workspace = os.path.join(work, "workspace")
+            os.makedirs(workspace)
+            path = build_result(os.path.join(work, "run"), workspace, "t-9",
+                                "docs/plans/2026-09-18-widget.md", "A")
+            self.assertEqual(testlib.run_json(HELPER, [
+                "--build-result", path, "--workspace", workspace,
+                "--build-doc", "docs/plans/2026-09-18-widget.md", "--slice", "A"],
+                env=rollout_at(work, workspace))["invocation"]["sessions"]["building"], "t-9")
         finally:
             shutil.rmtree(work)
 
@@ -104,7 +107,7 @@ class FloorTest(unittest.TestCase):
 
 class SchemaCompositionTest(unittest.TestCase):
     def test_the_invocation_validates_and_a_measurement_key_does_not(self):
-        doc = testlib.run_json(HELPER, ["--building-session", "b-1"])
+        doc = testlib.run_json(HELPER, [])
         self.assertEqual(testlib.validate(minimal_input(doc["invocation"])), [])
         bad = minimal_input(copy.deepcopy(doc["invocation"]))
         bad["invocation"]["measurement"] = doc["measurement"]
@@ -132,17 +135,12 @@ class InstalledLocatorTest(unittest.TestCase):
 
 
 class IndependenceThroughTheCoreTest(unittest.TestCase):
+    """The building session reaches the core only from a bound build result (Astra's F4); the
+    probe shape itself is `test_full_fix_f4.TheProbeThroughTheCore`."""
+
     def test_building_equal_to_reviewing_is_refused_by_the_core(self):
-        work = tempfile.mkdtemp(prefix="independence-")
-        try:
-            case_dir, seeded = corelib.build_case(work)
-            doc = testlib.run_json(HELPER, ["--building-session", testlib.THREAD,
-                                            "--target-token", "F"], env={"TMPDIR": work})
-            sessions = doc["invocation"]["sessions"]
-            self.assertEqual(sessions["building"], sessions["reviewing"])
-            corelib.independence_run(self, doc["invocation"], case_dir, seeded)
-        finally:
-            shutil.rmtree(work, ignore_errors=True)
+        from test_full_fix_f4 import TheProbeThroughTheCore
+        TheProbeThroughTheCore.test_a_build_from_this_session_is_refused_on_independence(self)
 
 
 if __name__ == "__main__":

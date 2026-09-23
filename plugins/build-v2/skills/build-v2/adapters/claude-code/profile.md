@@ -76,7 +76,10 @@ Does not apply: that is the recheck pilot's field. What build records about the 
 answer's `session_id`, which this adapter supplies as `answer_fields.session_id`: the session's own
 id, found through the harness's `CLAUDE_CODE_SESSION_ID` and bound to its transcript (the file is
 named for it, every `user` and `assistant` record carries it, and with `--workspace` a record names
-that workspace as its `cwd`; ruling E9-28, the pilot's code). `helper-derived` for the reading,
+that workspace as its `cwd`; ruling E9-28, the pilot's code). Since send-back 1 of the E13
+full-review fix round the helper prints the same value inside `invocation` as `session_id`: the
+core checks the answer's copy against it (`session_mismatch`) and records it in the result's
+`invocation`, which is where signoff-v2's adapters read the building session from (Astra's F4). `helper-derived` for the reading,
 `instruction-bound` for the record it reads: the pilot measured that Claude Code applies no
 sandbox to the session's own tools, so the transcript is writable by the session it describes
 (the pilot's profile section 4).

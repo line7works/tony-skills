@@ -97,6 +97,8 @@ First read `adapters/README.md`, the adapter index: it names the profile for the
 in, and that profile names the helper that prints the `invocation` object as facts. Put that
 object into the input whole and type none of its fields; the same helper prints
 `answer_fields.session_id`, which step 5's answer carries as its `session_id`, typed by no one.
+The same harness-read id sits in `invocation.session_id`; if the answer's `session_id` is anything
+else, `record-answer` stops the run `session_mismatch` and nothing is written.
 
 Write the rest of the document yourself from the request and the workspace, never from the
 conversation's history. `run_dir` is a fresh directory outside the workspace; `run_id` is single-use. `base` is
@@ -204,8 +206,12 @@ The script computes the source set AGAIN — what is on disk now, not what prefl
 it with the paths the slice named, reports every check with its output, decides the card, records
 the one card event and writes the `Status:` line if it moves, and writes the result. A file you
 add or change after preflight is in that set, so give its reason in the answer. A requested rerun
-that cannot execute is `not_run`; a report-only run reruns nothing. Read `result.json` and print
-the block below.
+that cannot execute is `not_run`; a report-only run reruns nothing. The source the card decision
+was made on is pinned with it: once the decision is made, touch nothing in the workspace until
+`report` returns. Source that moves under it — during the card event, or before a killed run is
+resumed — stops the run `source_changed` with the moved paths; a card event that already landed
+is kept and reported, the card does not move, and nothing is appended again. Build again on the
+current source. Read `result.json` and print the block below.
 
 If the run stopped, say what it could not do and stop. A stop is a real end of turn: never infer
 permission to continue from anything short of the user's actual word.

@@ -66,9 +66,10 @@
         "independence",
         "answer_invalid",
         "packet_incomplete",
+        "floor",
         null
       ],
-      "description": "why the run refused to record what it was given"
+      "description": "why the run refused to record what it was given. `floor`: the reviewer's model is below the Opus-class floor, not established, or disagrees with the session's recorded model (Astra's F5)"
     },
     "answer_refused": {
       "type": "boolean",
@@ -371,6 +372,10 @@
                   "string",
                   "null"
                 ]
+              },
+              "link_target": {
+                "type": "string",
+                "description": "present when the entry is a symbolic link: its link target text, which IS the entry's content (lstat semantics, Astra's F7). The referent is never followed and never presented as this entry's contents"
               }
             }
           }
@@ -839,6 +844,55 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "floor": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "floor",
+        "session_model",
+        "reviewer_model",
+        "met",
+        "source",
+        "refused"
+      ],
+      "description": "the Opus-class floor as this run established it (Astra's F5): the session's model from the adapter's observed id, the reviewer's from the readers result, and where each came from. A synthetic replay is named as one",
+      "properties": {
+        "floor": {
+          "const": "opus"
+        },
+        "session_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewer_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "met": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the floor stop's sentence, when the floor refused the run"
         }
       }
     }

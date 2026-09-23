@@ -318,7 +318,8 @@ and does not change `plugins/records/`. See section 18.
 2. `append` of ONE `card_set` with `--expect-head <that head>`, `actor` carrying the RUN's id
    (`actor.run_id`, unique per run, which is what every other station reads it as) and the
    harness, plus the six-field identity. The executor's session is in the result
-   (`answer.session_id`), in the receipt's append block and in the checkpoint, not on the event;
+   (`answer.session_id`, which must equal the harness-read `invocation.session_id` when the input
+   carries one), in the receipt's append block and in the checkpoint, not on the event;
 3. the outcome written to the receipt;
 4. the slice's `Status:` line, set to match.
 
@@ -332,7 +333,21 @@ Four rules hold that shape together, each one a failure found in the pilot befor
 - **a failed history read is not an empty history**: it keeps its exit and its explanation, becomes
   the matching stop, and returns before any append;
 - **the document target's bytes are pinned before the append**, so an edit that lands between the
-  plan and the write is a named stop (`outside_edit`) and never the new baseline.
+  plan and the write is a named stop (`outside_edit`) and never the new baseline;
+- **the source the decision was made on is pinned with it** (Astra's F1, E13 full review): the
+  checkpoint's `decision.source_pin` holds HEAD and the content identity of every changed or
+  untracked path (lstat semantics: a symlink is its link target text), the build doc and
+  `docs/records/` excepted. It is verified right before the append, again after the append and
+  before the document half, and FIRST on every settling pass, before the append half is settled.
+  Only this transaction's receipted document change is permitted under it. Any other source that
+  moved (a new untracked file, a tracked edit, a HEAD that moved) is the named stop
+  `source_changed`: the result carries the moved paths in `source_moved`, the CURRENT source set and
+  its out-of-scope paths (a late path outside the slice included), and the receipt; a card event that
+  already landed is kept, recorded in the receipt when a settling pass finds it in the log, and
+  reported as landed. The card does not move, the `Status:` line is not written, no baseline is
+  regenerated, no check is rerun and nothing is appended again, on this pass or any later one. A
+  run whose decision carries no pin (made before this rule) stops the same way on a settle rather
+  than guessing its source unmoved. Build again on the current source.
 
 A settle matches its OWN event by the seq the plan named AND by the run id on the event, so a
 card event of another run is never mistaken for it and no event is ever appended twice. Either
@@ -443,6 +458,8 @@ apology, and it never stands in for a finding about the code.
 | `records_conflict` | a moved head or a live lock (its exit 7) |
 | `records_failed` | any other refusal of the component |
 | `result_invalid` | the completion this run proposed failed the result schema or a semantic check before any card transaction opened (Astra's N2): nothing was appended and no `Status:` line was written |
+| `session_mismatch` | the recorded answer's `session_id` is not the harness-read `invocation.session_id` (send-back 1, Astra's F4): checked at `record-answer` and again at `report`, before any check or project write; the answer is not acted on |
+| `source_changed` | source other than the run's own `Status:` line moved after the card decision was pinned (Astra's F1): `source_moved` names the paths, the result carries the current source set, a landed card event is kept and reported, the card does not move and no `Status:` line is written |
 
 `answer_refused` is a stop too, but it carries `refusal_reason` rather than one of these tags:
 the tags above are the tool's own failures, and a refused answer is the tool working correctly
@@ -539,6 +556,18 @@ it for this lane on 2026-09-22:
   a check that reads WHEN another component writes, rather than WHAT the two sides say, is a check
   that component's next improvement can silently switch off.
 
+- **The station loop without commits is not qualified past signoff** (E13 full review, Astra's
+  F8; a documented gap, not a behaviour change of this core). Build, signoff and recheck run on one
+  document with no commit between them: build completes and moves its card, signoff completes and
+  leaves its verdict mirror under `docs/reviews/` UNTRACKED, and the recheck pilot's boundary check
+  then reads its own authorized update of that mirror as untracked content that changed, ending
+  `not_clear` with the card unchanged while the log records the finding fixed. E13 does not
+  qualify that no-commit hand-off: the precondition is that the verdict mirror is committed
+  (tracked) before `/recheck`. No station stages or commits files for the user, and any runtime
+  change to the pilot's decision waits for the owner's E13-1 ruling. The whole dirty loop, checked
+  after every station, is `plugins/recheck-v2/skills/recheck-v2/scripts/tests/test_full_fix_f8.py`;
+  the pilot contract's section 9, "The station loop", is the statement of record.
+
 - **`adapters/` and `setups/` are slice 3's.** The seam is left open: nothing in `SKILL.md` or in
   the scripts is harness-specific, and no adapter is named.
 
@@ -584,6 +613,7 @@ The input's `invocation` object, which the adapter's helper fills (`../adapters/
 | `harness` | yes | a string, or null |
 | `caller` | yes | `user`, or the calling station's name |
 | `mode` | yes | `direct` or `station` |
+| `session_id` | no | the session the adapter READ from the harness record (the Claude Code transcript, E9-28; the Codex rollout, E9-40), never typed; or null. When present, the answer's `session_id` must equal it (`session_mismatch`), and the result records it under `invocation` (send-back 1, Astra's F4) |
 
 ### Run-directory artifacts
 

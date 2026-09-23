@@ -146,6 +146,53 @@ The seeded cases under `evals/seeded-cases/` were written in slice 0 by an agent
 neither core; their expected outcomes live in an answer key this lane never saw, which is why
 `observe.py` emits facts and never an expectation.
 
+## Fix round (E13 full review: Astra's F2, F3, F4, F5, F6, F7, F9; control-room CR-1)
+
+What changed in behaviour, each with its tests (red first; the red output is in the round's
+scratch folder):
+
+- **F2 (BLOCKER)** `scope` pins the source for review with exactly the run's document targets left
+  out (the build doc and the verdict doc it would write). `record` compares the source now, minus
+  those targets, with that pin before the first write, after the FINAL append (just before the
+  receipt commits) and on every recovery. A file that arrived during the card append was recorded
+  as `completed / verdict_recorded true`; it is now `stale_source` (`source_moved`), naming the
+  path, with the landed appends and document steps reported from the receipt and no verdict.
+  `scripts/tests/test_full_fix_signoff.py` `F2...`.
+- **F3 (MAJOR)** every answer string's citations are resolved lexically to canonical workspace
+  paths before the withheld-provenance comparison (`./`, absolute paths, `file://` URLs, percent
+  encoding, `..` segments, Markdown destinations, `#fragment` and `:line` suffixes), including check
+  commands, outputs and kept notes: a citation of withheld builder material is an `independence`
+  refusal. `F3...` in the same module.
+- **F4 (BLOCKER)** both adapters' `invocation.py` lose `--building-session`. The building session
+  comes only from the selected build run's own `result.json` (`--build-result`), accepted in its
+  own run directory and bound to `--workspace`, `--build-doc` and `--slice`; without one it is null
+  and `measurement.building_provenance` is `unavailable`. Send-back 1 closed the build side: build-v2's
+  input and result carry `invocation.session_id`, the harness-read session its adapters print, and
+  the build core stops `session_mismatch` when the typed answer disagrees; these adapters read the
+  building session from the result's `invocation.session_id` only, and a result without one is
+  unavailable provenance, never a fallback to `answer.session_id`.
+  `adapters/*/tests/test_full_fix_f4.py` (class `SendBack1TheHarnessIdentityOnly`).
+- **F5 (MAJOR)** the core enforces the Opus-class floor (`scripts/signoff_core/floor.py`): the
+  session's class computed from the adapter's observed model id, typed `floor_class`/`floor_met`
+  checked against it, the reviewer's model from the answer (readers' effective model) at the floor
+  and equal to the session's; `request`, `record-answer` and `record` stop `floor_refused` with no
+  project-record write; the result carries `floor`. Seeded replays supply synthetic facts only
+  through `SIGNOFF_TEST_REPLAY_MODEL` under `SIGNOFF_TEST=1`, named as synthetic. `F5...` classes.
+- **F6 (MAJOR)** the Codex `reviewer.py` carries no transport: it checks the run's readers request
+  and stops `lane-unavailable` (exit 3) naming the missing capability (readers has no
+  floor-qualified route a Codex session can dispatch), and maps a readers sidecar. The private
+  `codex exec` path, its canned test route and the child-rollout fixture are gone; the Codex setup
+  no longer turns network on for signoff-v2. `adapters/codex/tests/test_full_fix_f6.py`.
+- **F7 (MAJOR)** packet entries use lstat semantics: a symlink is its link target text
+  (`link_target`), never the followed referent; every entry's content identity is verified before
+  recording and a moved entry is named in the `stale_source` stop. `F7...` classes.
+- **F9 (MAJOR)** the first actual Markdown heading after frontmatter decides builder-notes
+  classification, with no line cutoff. `F9...` class.
+- **CR-1** `SKILL.md` frontmatter carries `disable-model-invocation: true`, the manual-only sidecar
+  on Claude Code (`scripts/tests/test_full_fix_cr1.py`). **CR-2**
+  `signoff_core/constants.py`'s `KNOWN_RECORDS_VERSIONS = (1,)` is dead: nothing reads it (the
+  client copy checks the component's interface version itself), so it was left as it is.
+
 ## Build record (E13 slice 3: adapters and installs)
 
 - Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's
@@ -155,7 +202,7 @@ neither core; their expected outcomes live in an answer key this lane never saw,
 - Added: the adapter index; two profiles; `invocation.py` (the whole invocation block: mode, run
   ids, harness, both sessions, the model and its v1 floor) and `reviewer.py` (Claude Code: the
   readers request block and the sidecar map; Codex: one fresh `codex exec` reviewer and its
-  identity) per harness, with their suites (Claude Code 30 tests, Codex 21 at the builder's run,
+  identity, REMOVED in the full-review fix round below, Astra's F6) per harness, with their suites (Claude Code 30 tests, Codex 21 at the builder's run,
   the independence refusal driven through the real core in each); `agents/openai.yaml` with
   implicit invocation off; the setups of both harnesses; `references/signoff-contract.md` section
   14 "Interface" and `scripts/tests/test_interface_document.py` (7 tests);

@@ -1,0 +1,184 @@
+{
+  "answer_refused": true,
+  "card": null,
+  "checks_executed": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 1,
+      "name": "field-widths",
+      "output": "field-widths: name field is 11 characters, not 12"
+    },
+    {
+      "command": "sed -n '1,6p' src/signpost/pad.py",
+      "exit_code": 0,
+      "name": "read src/signpost/pad.py",
+      "output": "def pad(text, width):\n    return text.ljust(width - 1)"
+    }
+  ],
+  "clean_review_checks_listed": true,
+  "findings": [],
+  "floor": {
+    "floor": "opus",
+    "met": "no",
+    "refused": "the reviewer ran 'claude-sonnet-5', class 'sonnet': below the floor. A verdict from below the Opus-class floor is never recorded (v1 Step 0).",
+    "reviewer_model": "claude-sonnet-5",
+    "session_model": "claude-opus-5-5",
+    "source": null
+  },
+  "interface_version": 1,
+  "notes": [],
+  "packet": {
+    "base_commit": "9e6c21d87d7405649b8181de811200e50a9f3c39",
+    "base_ref": "base",
+    "counts": {
+      "delivered": 2,
+      "files": 2,
+      "withheld": 0
+    },
+    "files": [
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "untracked"
+        ],
+        "path": "src/signpost/pad.py",
+        "sha256": "f8cae0fe1a3cb0f66fd718a391938d065ac6927de6f503798971ee490bedc9cb",
+        "size": 171,
+        "withheld_reason": null
+      },
+      {
+        "delivered": true,
+        "kind": "source",
+        "lists": [
+          "committed"
+        ],
+        "path": "src/signpost/render.py",
+        "sha256": "d50b326da961b7bac0d9e42fe5a9c8f2f236eab53ae956b8bac01059f6172228",
+        "size": 539,
+        "withheld_reason": null
+      }
+    ],
+    "head": "45bb19707c16d9faf6837c13576c391f4ea96c63",
+    "ledger_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "material_path": "/tmp/signoff-floor-20260921-c3d4/packet/material.md",
+    "material_sha256": "34bc8e35374321ed78389adc18feacbb6032557172e451917aa3f8d171fbe7be",
+    "slice": "D",
+    "withheld": [
+      {
+        "reason": "a card is the builder's account of its own work, never evidence that a criterion passed",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Status:"
+      },
+      {
+        "reason": "a section of the ledger document that is the builder's or the inspector's working record, never spec and never evidence",
+        "what": "docs/plans/2026-09-18-signpost-rows.md#Punch list"
+      }
+    ]
+  },
+  "plugin_version": "0.1.0",
+  "problems": [
+    {
+      "why": "the reviewer ran 'claude-sonnet-5', class 'sonnet': below the floor. A verdict from below the Opus-class floor is never recorded (v1 Step 0)."
+    }
+  ],
+  "protocol_version": 1,
+  "receipt": null,
+  "records": null,
+  "records_written": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-floor-20260921-c3d4/answer.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-floor-20260921-c3d4/state.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-floor-20260921-c3d4/result.json"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/signoff-floor-20260921-c3d4/chat.md"
+    }
+  ],
+  "recovered": [],
+  "refusal_reason": "floor",
+  "report_only": false,
+  "review_sheet": {
+    "bar": [],
+    "is_sheet": false,
+    "path": "REVIEW.md",
+    "repo_checks": [],
+    "skip_reasons": {},
+    "skipped": [],
+    "state": "absent",
+    "unknown_passes": []
+  },
+  "reviewer": {
+    "independent": true,
+    "model": "claude-sonnet-5",
+    "route": "readers:claude-session",
+    "session_id": "sess-review-1"
+  },
+  "run": {
+    "build_doc": "docs/plans/2026-09-18-signpost-rows.md",
+    "caller": "direct",
+    "depth": "LEAN",
+    "harness": "claude-code",
+    "lenses": [
+      "spec",
+      "correctness",
+      "seams",
+      "accessibility",
+      "data-safety"
+    ],
+    "route": "readers:claude-session",
+    "run_date": "2026-09-21",
+    "run_dir": "/tmp/signoff-floor-20260921-c3d4",
+    "run_id": "signoff-floor-20260921-c3d4",
+    "slice": "D",
+    "workspace": "/workspace/signpost"
+  },
+  "source_identity": {
+    "commit": "45bb19707c16d9faf6837c13576c391f4ea96c63",
+    "dirty": true,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [
+      "src/signpost/pad.py"
+    ],
+    "untracked_sha256": "f99ae5120b3d6e19dc25172219d6e636f3da9c33ab66ab1b36110bad1925af6e"
+  },
+  "source_set": {
+    "base_commit": "9e6c21d87d7405649b8181de811200e50a9f3c39",
+    "base_ref": "base",
+    "changed": [],
+    "committed": [
+      "src/signpost/render.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "45bb19707c16d9faf6837c13576c391f4ea96c63",
+    "untracked": [
+      "src/signpost/pad.py"
+    ]
+  },
+  "status": "stopped",
+  "stop_reason": "the reviewer ran 'claude-sonnet-5', class 'sonnet': below the floor. A verdict from below the Opus-class floor is never recorded (v1 Step 0).",
+  "stop_reason_code": "floor_refused",
+  "terminal_status": "stop",
+  "verdict": null,
+  "verdict_doc": null,
+  "verdict_matches_mapping": null,
+  "verdict_recorded": false,
+  "verdict_stated": "signed off with conditions",
+  "writes_none": true
+}

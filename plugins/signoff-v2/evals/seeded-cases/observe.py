@@ -95,8 +95,17 @@ def build(family, case_id, into):
     return json.loads(proc.stdout.decode("utf-8"))["cases"][0]["path"]
 
 
+# A replayed answer has no live harness and no live reader behind it, so no model was observed.
+# The core's Opus-class floor (Astra's F5) takes synthetic replay facts through its one explicit
+# test interface, honoured only with SIGNOFF_TEST=1 and named as synthetic in the result's
+# `floor` block; the facts are an Opus-class id, so nothing the floor decides stands in for what a
+# case measures.
+REPLAY_ENV = {"SIGNOFF_TEST": "1", "SIGNOFF_TEST_REPLAY_MODEL": "claude-opus-5-5"}
+
+
 def signoff(args, env=None):
     e = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    e.update(REPLAY_ENV)
     if env:
         e.update(env)
     proc = subprocess.run([PYTHON, SIGNOFF] + [str(a) for a in args], env=e,

@@ -105,6 +105,14 @@
             "station"
           ],
           "description": "`direct` when a person asked, `station` when another station drove it"
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "the session this run happens in, as the adapter READ it from the harness's own record (the Claude Code transcript under CLAUDE_CODE_SESSION_ID, E9-28; the Codex rollout under CODEX_THREAD_ID, E9-40), never typed by the executor. When present, the recorded answer's `session_id` must equal it or the run stops `session_mismatch`; the result records it under `invocation`, which is where a signoff adapter reads the building session from (Astra's F4, send-back 1)"
         }
       }
     }

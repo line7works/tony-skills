@@ -35,7 +35,9 @@ What the harness recorded BEFORE the sign-in refusal, from the session's own `tr
 
 ## Sidecar and invocation restriction
 
-`skills/signoff-v2/agents/openai.yaml` carries `policy: allow_implicit_invocation: false`. Claude Code does not read the sidecar (the pilot's measurement) and signoff-v2's `SKILL.md` carries no `disable-model-invocation`, so on Claude Code it stays auto-invocable, as v1 signoff is: the init catalog above lists `signoff-v2:signoff-v2` among `skills`. Making it manual-only on Claude Code needs that frontmatter key (builder's question Q1).
+`skills/signoff-v2/agents/openai.yaml` carries `policy: allow_implicit_invocation: false`. Claude Code does not read the sidecar (the pilot's measurement). At this slice's measurement signoff-v2's `SKILL.md` carried no `disable-model-invocation`, so on Claude Code it stayed auto-invocable, as v1 signoff is: the init catalog above lists `signoff-v2:signoff-v2` among `skills`.
+
+**Since the E13 full-review fix round (control-room item CR-1)** the frontmatter carries `disable-model-invocation: true`, the manual-only key contract section 11 asks for on the harness that reads the frontmatter. The fix round reran the install proof (section "Fix round install proof" below); it did not start a session, so what the catalog shows with the key is not re-measured here.
 
 ## Negative tests
 
@@ -77,3 +79,14 @@ A fresh home, `install.sh` (`ok: true`), then `verify-install.sh`: exit 0, `ok: 
 
 This file was written after that verification ran, so the package now differs from the verified
 one by this section; `verify-install.sh` re-verifies it in one command.
+
+## Fix round install proof (E13 full review, 2026-09-23)
+
+After Astra's F6 (the Codex reviewer transport removed, network no longer turned on for
+signoff-v2) and control-room item CR-1 (`disable-model-invocation: true` in the `SKILL.md`
+frontmatter), the builder of the fix round reran, in a fresh temporary home, `install.sh --home
+<fresh>` (exit 0), `verify-install.sh --home <fresh>` (exit 0: `ok: true`, no finding, the installed
+frontmatter byte-equal to the canonical block, `skill-identity` equal from the checkout and the
+installed copy) and `negative-tests.sh <fresh>`, free half (exit 0, the nine cases recorded as in the
+table above). No session was started and no model was called. Logs are in the round's scratch
+folder, which the control room files.

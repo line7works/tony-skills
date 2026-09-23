@@ -44,8 +44,10 @@ executor sets on the user's word, `instruction-bound`). No `turns.py` ships.
 
 ## 5. `session_wrote_fix`
 
-Does not apply (the recheck pilot's field). The answer's `session_id` is
-`answer_fields.session_id`: the executor's own thread, the rollout named by `CODEX_THREAD_ID` under
+Does not apply (the recheck pilot's field). The helper prints the thread id twice, from one read:
+as `invocation.session_id`, which the core checks the answer against (`session_mismatch`) and
+records in the result's `invocation` for signoff-v2's adapters (send-back 1, Astra's F4), and as
+`answer_fields.session_id`. The answer's `session_id` is `answer_fields.session_id`: the executor's own thread, the rollout named by `CODEX_THREAD_ID` under
 the sessions root of the home this helper is INSTALLED in (E9-40: the helper's resolved path, never
 the environment, selects the home), refused when it sits under `CODEX_HOME` (E9-36: the tool
 shells' child home), refused when this process could append to it (E9-37) unless the sealed

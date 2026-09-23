@@ -92,6 +92,138 @@ def strings_of(value):
     return []
 
 
+# Astra's F3: a citation is resolved to its canonical workspace path BEFORE it is compared with
+# the withheld provenance, so `./x`, an absolute path, a `file://` URL, percent encoding, `..`
+# segments, a Markdown destination and a `#fragment` or `:line` suffix all land on the same path.
+# Nothing is read to do it: the resolution is lexical, and a path outside the workspace resolves to
+# nothing rather than to a file this module would open.
+MD_DESTINATION = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+[\"'(][^)]*)?\)")
+ANGLE = re.compile(r"<([^<>\s]+)>")
+TOKEN = re.compile(r"[^\s`'\"()<>\[\]{},;|]+")
+LINE_SUFFIX = re.compile(r"(?::\d+(?:-\d+)?(?::\d+)?)+$")
+TRAILING = ".,;:!?"
+
+
+def _decode(token):
+    """Percent-decoding applied until it stops changing the token (at most three rounds)."""
+    try:
+        from urllib.parse import unquote
+    except ImportError:  # pragma: no cover - Python 2 is not supported
+        return token
+    for _ in range(3):
+        decoded = unquote(token)
+        if decoded == token:
+            break
+        token = decoded
+    return token
+
+
+def canonical(token, workspace=None):
+    """(workspace-relative path, fragment or None) for one citation token, or None.
+
+    `file://` and `file:` URLs are reduced to their path; the token is percent-decoded; a query, a
+    `#fragment` and a trailing `:line[:col]` or `:line-line` suffix are split off; an absolute path
+    is taken relative to the workspace (its literal path or its real path) and dropped when it lies
+    outside; `.` and `..` segments are normalised and a path that climbs out is dropped."""
+    import posixpath
+    if not isinstance(token, str):
+        return None
+    token = token.strip().rstrip(TRAILING)
+    if not token:
+        return None
+    lowered = token.lower()
+    if lowered.startswith("file://"):
+        token = token[len("file://"):]
+        if not token.startswith("/"):              # file://host/path: drop the host
+            token = "/" + token.split("/", 1)[1] if "/" in token else ""
+    elif lowered.startswith("file:"):
+        token = token[len("file:"):]
+    elif re.match(r"^[a-z][a-z0-9+.-]*://", lowered):
+        return None                                # another scheme is never a workspace path
+    token = _decode(token)
+    fragment = None
+    if "#" in token:
+        token, fragment = token.split("#", 1)
+    if "?" in token:
+        token = token.split("?", 1)[0]
+    token = LINE_SUFFIX.sub("", token).rstrip(TRAILING)
+    if not token:
+        return None
+    if token.startswith("/"):
+        rel = None
+        if workspace:
+            for base in (workspace, os.path.realpath(workspace)):
+                base = base.rstrip("/")
+                if token == base:
+                    return None
+                if token.startswith(base + "/"):
+                    rel = token[len(base) + 1:]
+                    break
+        if rel is None:
+            return None
+        token = rel
+    normal = posixpath.normpath(token)
+    if normal in (".", "") or normal == ".." or normal.startswith("../"):
+        return None
+    return normal, (_decode(fragment) if fragment else None)
+
+
+def citation_tokens(text):
+    """Every token of `text` that could be a path citation: Markdown destinations, angle-bracket
+    autolinks, and every run of path characters."""
+    out = []
+    for pattern in (MD_DESTINATION, ANGLE):
+        out.extend(match.group(1) for match in pattern.finditer(text))
+    out.extend(TOKEN.findall(text))
+    return out
+
+
+def _slug(text):
+    return " ".join(re.sub(r"[-_]+", " ", str(text or "")).lower().split())
+
+
+def resolved_citations(texts, provenance):
+    """[{"cited", "why"}] for every citation in `texts` that resolves to withheld material.
+
+    A resolved path that equals a withheld builder-conversation path, or whose file name is a
+    withheld file's name while no delivered file shares that name, is a citation of the builder's
+    conversation; a resolved `<ledger doc>#<section>` whose section is a withheld section is a
+    citation of the builder's working record. Case is ignored, as the file systems this runs on do.
+    """
+    provenance = provenance or {}
+    workspace = provenance.get("workspace")
+    withheld = dict((p.lower(), p) for p in provenance.get("paths") or [])
+    delivered_names = set(os.path.basename(p).lower() for p in provenance.get("delivered_paths") or [])
+    names = dict((os.path.basename(p).lower(), p) for p in provenance.get("paths") or []
+                 if os.path.basename(p).lower() not in delivered_names)
+    anchors = {}
+    for anchor in provenance.get("anchors") or []:
+        doc, _, section = anchor.partition("#")
+        anchors.setdefault(doc.lower(), {})[_slug(section)] = anchor
+    hits, seen = [], set()
+    for text in texts:
+        for token in citation_tokens(text):
+            got = canonical(token, workspace)
+            if got is None:
+                continue
+            path, fragment = got
+            key = path.lower()
+            target = withheld.get(key) or (names.get(key) if "/" not in path else None)
+            if target and target not in seen:
+                seen.add(target)
+                hits.append({"cited": token,
+                             "why": "the answer cites %s (as %r), the builder's own account of its "
+                                    "work, which is a claim and never evidence" % (target, token)})
+            if fragment and key in anchors:
+                anchor = anchors[key].get(_slug(fragment))
+                if anchor and anchor not in seen:
+                    seen.add(anchor)
+                    hits.append({"cited": token,
+                                 "why": "the answer cites %s (as %r), a withheld section of the "
+                                        "builder's working record" % (anchor, token)})
+    return hits
+
+
 def _path_pattern(token):
     return re.compile(r"(?<![\w./-])" + re.escape(token) + r"(?![\w/-])", re.I)
 
@@ -220,6 +352,12 @@ def adjudicate(a, source_paths, sessions, withheld_lines=(), provenance=None):
                              "of its work"})
     for hit in provenance_citations(a, provenance):
         cited.append({"line": hit["cited"], "why": hit["why"]})
+    # Astra's F3: the same comparison after every citation, in every answer string (check commands,
+    # outputs and kept notes included), is resolved to its canonical workspace path.
+    known = set(row["line"] for row in cited)
+    for hit in resolved_citations(strings_of(a), provenance):
+        if hit["cited"] not in known:
+            cited.append({"line": hit["cited"], "why": hit["why"]})
     if cited:
         out = _refusal("independence", cited, a, listed)
         out["citations"] = [row["line"] for row in cited]

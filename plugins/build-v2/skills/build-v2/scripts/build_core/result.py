@@ -45,6 +45,8 @@ STOP_TAGS = (
     "records_conflict",       # a moved head or a live lock (exit 7)
     "records_failed",         # any other refusal of the component
     "result_invalid",         # the proposed completion failed validation before any card write
+    "source_changed",         # the source moved after the card decision (Astra's F1)
+    "session_mismatch",       # the answer's session is not the harness-read invocation session
 )
 """Every tag a stop of this core can carry, in one place.
 
@@ -63,7 +65,8 @@ EMPTY_RECORDS = {"log": None, "levelled": {"ran": False, "dry_run": False, "woul
 def assemble(run, status, reason, root=None, stop_tag=None, stop_reason=None,
              refusal_reason=None, out_of_scope=None, checks=None, records_extra=None,
              answer_refusals=None, card_after=None, card_moved=False, card_reason=None,
-             card_line=None, receipt=None, resumed_half=None, unplaced=None):
+             card_line=None, receipt=None, resumed_half=None, unplaced=None,
+             source_moved=None):
     """One result document, ready to validate and write."""
     if status == "stopped" and stop_tag not in STOP_TAGS:
         raise ValueError("%r is not one of this core's stop tags; every stop this core can make "
@@ -113,8 +116,12 @@ def assemble(run, status, reason, root=None, stop_tag=None, stop_reason=None,
         "receipt": receipt,
         "resumed_half": resumed_half,
         "checks_changed_workspace": children_wrote,
+        # Send-back 1 (Astra's F4): the invocation as recorded, `session_id` the harness-read session
+        "invocation": _invocation_of(run),
         "next": "done",
     }
+    if source_moved:
+        result["source_moved"] = list(source_moved)
     if unplaced:
         result["unplaced"] = [dict(row) for row in unplaced]
     if source:
@@ -138,6 +145,14 @@ def assemble(run, status, reason, root=None, stop_tag=None, stop_reason=None,
         "document_line": card_line,
     }
     return result
+
+
+def _invocation_of(run):
+    inv = (run.input or {}).get("invocation") or {}
+    if not inv:
+        return None
+    return {"harness": inv.get("harness"), "caller": inv.get("caller"), "mode": inv.get("mode"),
+            "session_id": inv.get("session_id")}
 
 
 def _card_reason(status, check_rows, out_rows, answer, card_before):

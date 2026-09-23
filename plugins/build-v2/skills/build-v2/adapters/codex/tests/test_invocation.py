@@ -62,7 +62,7 @@ class FactsTest(unittest.TestCase):
     def test_a_direct_run(self):
         doc = testlib.run_json(HELPER, ["--workspace", testlib.WORKSPACE])
         self.assertEqual(doc["invocation"], {"harness": "codex-cli", "caller": "user",
-                                             "mode": "direct"})
+                                             "mode": "direct", "session_id": testlib.THREAD})
         self.assertEqual(doc["answer_fields"], {"session_id": testlib.THREAD})
         m = doc["measurement"]
         self.assertEqual(m["harness_version"], testlib.FAKE_VERSION)
@@ -73,7 +73,7 @@ class FactsTest(unittest.TestCase):
     def test_a_station_route(self):
         doc = testlib.run_json(HELPER, ["--caller", "ship"])
         self.assertEqual(doc["invocation"], {"harness": "codex-cli", "caller": "ship",
-                                             "mode": "station"})
+                                             "mode": "station", "session_id": testlib.THREAD})
 
     def test_another_workspace_is_refused(self):
         code, out, err = testlib.run(HELPER, ["--workspace", "/tmp/another-workspace"])

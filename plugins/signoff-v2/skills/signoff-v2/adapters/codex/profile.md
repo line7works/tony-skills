@@ -10,8 +10,9 @@ from the pilot's record with its date and version (0.154.0). Labels follow E9-11
 record is not made. The setup is `../../../../setups/codex/`; its record is `RESULTS.md` there.
 
 **What the executor types and what it never types.** As on Claude Code: `invocation.py`'s
-`invocation` object whole, typed by no one; the building session only as `--building-session`
-(the caller's payload) or `--build-result` (the build run's result); `measurement` copied nowhere
+`invocation` object whole, typed by no one; the selected build run only as `--build-result` with
+`--workspace`, `--build-doc` and `--slice` (Astra's F4: no flag types a building session);
+`measurement` copied nowhere
 (`tests/test_invocation.py`, both-ways validation against the real schema).
 
 ## 1. Identity
@@ -46,15 +47,19 @@ Does not apply (the recheck pilot's field). `invocation.sessions.reviewing` is t
 thread: the rollout named by `CODEX_THREAD_ID` under the sessions root of the home this helper is
 installed in (E9-40), refused under `CODEX_HOME` (E9-36) and when writable without the sealed
 bench's wall witness (E9-37, SB-8), its `session_meta.id` the value (`helper-derived`).
-`sessions.building` is null unless `--building-session` (`instruction-bound`) or `--build-result`
-(`helper-derived` from the build run's `answer.session_id`) names it; equal is the core's
-independence refusal (`IndependenceThroughTheCoreTest`, through the real core).
+`sessions.building` comes only from the selected build run's own record (Astra's F4):
+`--build-result PATH`, accepted only in its own run directory and only for the same workspace
+(`--workspace`, which `session_meta.cwd` binds too), document (`--build-doc`) and slice (`--slice`),
+a mismatch exit 2; the value is that run's recorded harness identity, the result's
+`invocation.session_id` (the thread the build adapter read, send-back 1; `helper-derived`). A result
+without it, or no `--build-result`, leaves the building session null with
+`measurement.building_provenance` `unavailable`, never the typed `answer.session_id`; equal is the core's independence refusal
+(`tests/test_full_fix_f4.py`, `TheProbeThroughTheCore`, through the real core).
 
 **The session lock (E13 pick P6).** Behind `setups/codex/launch.sh` the executor runs in its own
-per-launch home `<out-dir>/codex-home`, and the reviewer children it starts write their rollouts
-under that home's own `child/` (the tool shells' `CODEX_HOME`), so neither this launch's session
-nor its reviewers' can be read by another launch in the same condition home once the bench's wall
-refuses other trials' records. Design and measurements: `setups/codex/RESULTS.md`, "The session
+per-launch home `<out-dir>/codex-home`, so this launch's session cannot be read by another launch
+in the same condition home once the bench's wall refuses other trials' records. (Since Astra's F6
+this adapter starts no reviewer children, so no reviewer rollout is written under that home.) Design and measurements: `setups/codex/RESULTS.md`, "The session
 lock".
 
 ## 6. Run date
@@ -63,24 +68,25 @@ lock".
 
 ## 7. The reviewer capability
 
-One fresh `codex exec` per call, launched by `reviewer.py --run-dir D --workspace WS [--lens L]`
-(the pilot's Codex `verifier.py` shape; the core never launches): the mandate the core's `request`
-phase wrote (`D/readers/mandate.md`) on stdin, `codex exec -s danger-full-access -c
-approval_policy=never -C WS -c web_search=disabled --json -o D/readers/calls/<call id>/raw.md -`,
-timeout 900 seconds, no model or effort override, no resume, no retry. Before any launch
-`CODEX_HOME` must name a directory and this process must be confined, by `CODEX_SANDBOX=seatbelt`
-(E9-26(a)) or the bench's wall witness (SB-2, SB-12 N4); otherwise exit 3 and nothing launches
-(`test_no_confinement_witness_launches_nothing`). A second seatbelt cannot nest (E9-21), which is
-why the child runs `danger-full-access` inside the outer confinement: containment is
-`harness-enforced` by the outer sandbox and `instruction-bound` inside the permitted roots. The
-child's `thread.started` selects exactly one rollout under `CODEX_HOME/sessions` whose
-`session_meta.id` is that thread; its `turn_context.model` is the model observed. The answer's
-reviewer is `answer_identity`: `session_id` the child's thread, `model` the observed model
-(`helper-derived`); a call whose child record cannot be found is `lane-unavailable`, never `ok`.
-The call id is single use (`test_a_call_id_is_single_use`). The helper prints the `record-answer`
-flags; the executor writes the answer from the report (SKILL.md Step 4). Every test uses the
-canned transport under `SIGNOFF_V2_ADAPTER_TEST=1`; not measured in E13: a live reviewer call
-(contract section 12).
+**None on this harness today: the run stops `lane-unavailable`** (Astra's F6). The reviewer is
+summoned through `readers` and nothing else (contract sections 3 and 10, the repository invariant);
+floor, isolation, no-web and retry policy are readers'. readers has no route a Codex session can
+dispatch at the Opus-class floor: its floor-qualified rows (`claude-session`, `claude-fable`,
+`claude-opus`) run on the `claude-subagent` transport through Claude Code's Agent and Workflow
+tools, and its `codex-exec` rows (`gpt-astra`, `gpt-sol`) are `eligibility: not classified`, which
+readers refuses as `unknown-model` under a floor. `reviewer.py --run-dir D [--workspace WS]`
+checks that `D/request.json` is the run's own and prints `status: lane-unavailable` with that
+`missing_capability`, `requests: []`, exit 3, writing and launching nothing
+(`tests/test_full_fix_f6.py` puts a `codex` that records its arguments on PATH and finds it never
+called). SKILL.md Step 3 makes that a STOP with the honest state as the reason. A qualified Codex
+route is readers' to add, by roster PR on Tony's word; this adapter then needs only its request
+mode to hand the block over. `reviewer.py --sidecar FILE --run-dir D` already maps a readers
+sidecar the same way as the Claude Code helper (`answer_identity`: `<transport>:<call_id>` and
+the sidecar's `effective_model`, which the core's floor check reads, F5).
+
+The slice 3 helper launched one private `codex exec -s danger-full-access` per call, the pilot's
+Codex `verifier.py` shape, which the slice 3 brief asked for in error; that transport, its canned
+test route and its child-rollout fixture are removed.
 
 ## 8. Delivery
 
@@ -119,9 +125,9 @@ half behind `--live` and not run; `setups/codex/RESULTS.md` section "Negative te
 | Report the harness and the mode | `helper-derived` | this adapter's name; `session_meta.originator` |
 | Mint a single-use run id and an outside run directory | `helper-derived` | section 3 |
 | Identify the reviewing session | `helper-derived` | E9-40, E9-36, E9-37/SB-8 locator; `session_meta.id` |
-| Name the building session | `instruction-bound` from the caller, or `helper-derived` from the build result | section 5 |
+| Name the building session | `helper-derived` from the selected build run's result, bound; else `unavailable` | section 5 |
 | Assert the model floor | `helper-derived`, map provisional | section 2 |
-| One fresh reviewer per call, confined | `harness-enforced` outer containment; `instruction-bound` inside it | section 7 |
-| Name the reviewer the answer carries | `helper-derived` | the child's own rollout |
+| One fresh reviewer per call | NOT AVAILABLE: no qualified readers route for this harness (`lane-unavailable`) | section 7 |
+| Name the reviewer the answer carries | `helper-derived` from readers' sidecar, when a route exists | section 7 |
 | Keep one launch's session records from another's | layout by the launcher; `harness-enforced` only behind the bench's wall | section 5; `setups/codex/RESULTS.md` |
 | Keep a model from auto-selecting the station | `harness-enforced` catalog filtering, `instruction-bound` beyond it | section 9 |

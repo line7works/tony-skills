@@ -154,9 +154,19 @@ def stub_without_jsonschema(parent):
     return stub
 
 
+# Astra's F5: the core enforces the Opus-class floor from the adapter's observed model and the
+# readers result. The recorded-answer replays these suites run have neither a live harness nor a
+# live reader, so they supply SYNTHETIC facts through the core's one explicit test interface
+# (`signoff_core/floor.py`): honoured only with SIGNOFF_TEST=1, and named as synthetic in the
+# result. A test that exercises the real rule passes {"SIGNOFF_TEST_REPLAY_MODEL": ""}.
+REPLAY_MODEL = "claude-opus-5-5"
+REPLAY_ENV = {"SIGNOFF_TEST": "1", "SIGNOFF_TEST_REPLAY_MODEL": REPLAY_MODEL}
+
+
 def run_script(script, args, cwd=None, python=None, env=None):
     """Run a CLI script of this skill; return (exit code, stdout, stderr)."""
     e = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    e.update(REPLAY_ENV)
     if env:
         e.update(env)
     cmd = [python or sys.executable, os.path.join(SCRIPTS, script)] + [str(a) for a in args]

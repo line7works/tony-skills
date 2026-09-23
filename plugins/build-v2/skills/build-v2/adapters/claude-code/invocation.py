@@ -80,6 +80,7 @@ def main():
             "harness": _common.HARNESS,
             "caller": caller,
             "mode": "station" if args.caller else "direct",
+            "session_id": session_id,
         },
         "answer_fields": {"session_id": session_id},
         "measurement": {

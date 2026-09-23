@@ -76,7 +76,7 @@
         "string",
         "null"
       ],
-      "description": "a short tag for a stop, one of: `no_doc`, `no_slice`, `no_git`, `no_base`, `legacy_unplaced`, `card_drift`, `open_blocker`, `scope_unexplained`, `outside_edit`, `records_invalid`, `records_ambiguous`, `records_stale_source`, `records_conflict`, `records_failed`, `result_invalid`. An input that fails its schema and an unreadable answer file are not among them: neither ends a run, so neither reaches a result."
+      "description": "a short tag for a stop, one of: `no_doc`, `no_slice`, `no_git`, `no_base`, `legacy_unplaced`, `card_drift`, `open_blocker`, `scope_unexplained`, `outside_edit`, `records_invalid`, `records_ambiguous`, `records_stale_source`, `records_conflict`, `records_failed`, `result_invalid`, `source_changed`, `session_mismatch`. An input that fails its schema and an unreadable answer file are not among them: neither ends a run, so neither reaches a result."
     },
     "refusal_reason": {
       "type": [
@@ -291,6 +291,15 @@
           }
         }
       }
+    },
+    "source_moved": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "description": "a `source_changed` stop only (Astra's F1): the paths whose state moved after the card decision was pinned with the source, the build doc excepted. Present only on that stop; the result's `source_set` and `out_of_scope` are then the CURRENT ones, so a path outside the slice that appeared late is listed there too"
     },
     "checks": {
       "type": "array",
@@ -766,6 +775,45 @@
       "type": "string",
       "minLength": 1,
       "description": "the run directory every artifact of this run was written to, so a result read on its own says where its run lived and a checker can hold every run_artifact write to it"
+    },
+    "invocation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode",
+        "session_id"
+      ],
+      "description": "the input's invocation block as the run recorded it: the harness facts the adapter supplied. `session_id` is the session the adapter read from the harness record (null when the input carried none); a signoff adapter reads the building session from here, never from `answer.session_id` (Astra's F4, send-back 1)",
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
     }
   },
   "allOf": [

@@ -176,3 +176,57 @@ def lists_holding(source, path):
     """Which of the three lists a path is in, in a fixed order."""
     return [name for name in ("committed", "changed", "untracked")
             if path in ((source or {}).get(name) or [])]
+
+
+# ---- the source pin (Astra's F1, E13 full review) ----------------------------------------------
+
+def _lstat_digest(full):
+    """The content identity of one path, with lstat semantics: a symlink is its link target text
+    and is never followed, a missing path is None, a directory is the empty string's digest."""
+    import hashlib
+    if os.path.islink(full):
+        return "link:" + hashlib.sha256(os.readlink(full).encode("utf-8", "surrogateescape")).hexdigest()
+    if not os.path.lexists(full):
+        return None
+    if os.path.isdir(full):
+        return "dir"
+    with open(full, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def source_pin(workspace, document):
+    """The source state a build decision was made on: HEAD, and the content identity of every path
+    that differs from HEAD (changed or untracked, not ignored), `docs/records/` and the ledger
+    document excluded. The document is this transaction's own receipted target, guarded by its
+    pinned hashes; the log is the component's. Raises GitError when git cannot answer."""
+    head = git(workspace, ["rev-parse", "HEAD"]).strip()
+    excludes = _exclude_args()
+    changed = _paths(git(workspace, ["diff", "--name-only", "-z", "HEAD", "--", "."] + excludes,
+                         binary=True))
+    untracked = _paths(git(workspace, ["ls-files", "--others", "--exclude-standard", "-z",
+                                       "--", "."] + excludes, binary=True))
+    paths = {}
+    for path in sorted(set(changed) | set(untracked)):
+        if path == document or excluded(path):
+            continue
+        paths[path] = _lstat_digest(os.path.join(workspace, path))
+    return {"head": head, "paths": paths}
+
+
+def pin_moved(workspace, document, pin):
+    """The sorted paths whose state moved since `pin`, or [] when none did. A path added to or
+    dropped from the set moved, a path whose content identity differs moved, and when HEAD moved
+    every path the commits between the two heads name moved too (or the HEAD itself, named as
+    `HEAD`, when git cannot list them). Raises GitError when git cannot answer."""
+    now = source_pin(workspace, document)
+    before = (pin or {}).get("paths") or {}
+    moved = set(p for p in set(before) | set(now["paths"]) if before.get(p) != now["paths"].get(p))
+    if now["head"] != (pin or {}).get("head"):
+        between = git(workspace, ["diff", "--name-only", "-z", "%s..%s" % (pin.get("head"), now["head"]),
+                                  "--", "."] + _exclude_args(), binary=True, check=False) \
+            if (pin or {}).get("head") else None
+        names = [p for p in _paths(between) if p != document] if between is not None else []
+        moved.update(names)
+        if not names:
+            moved.add("HEAD")
+    return sorted(moved)

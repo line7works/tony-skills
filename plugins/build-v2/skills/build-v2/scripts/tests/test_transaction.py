@@ -367,6 +367,14 @@ class ASettleReDeliversTheFactsTheDecisionWasMadeOn(_Transaction):
     the second time, and what the receipt is settling was decided on what the run already had."""
 
     def test_a_rerun_run_that_was_killed_still_reports_the_rerun_it_made(self):
+        # The check answers from a git-IGNORED file, so it can answer differently later without
+        # any source moving: since Astra's F1 (E13 full review) a TRACKED edit after the decision
+        # is the `source_changed` stop (test_full_fix_f1), not a settle.
+        testlib.write_text(os.path.join(self.ws, "checks", "unit.sh"),
+                           "#!/bin/sh\nif [ -f build/fail ]; then echo 'it fails now'; exit 1; fi\n"
+                           "echo ok\n")
+        testlib.commit_work(self.ws, "the check reads an ignored switch")
+        testlib.git(self.ws, ["tag", "-f", "base"])
         path = os.path.join(self.scratch, "input.json")
         testlib.write_json(path, testlib.make_input(self.run_dir, self.ws, rerun_checks=True))
         for args in (["check-input", path], ["contract", "--run-dir", self.run_dir],
@@ -380,8 +388,7 @@ class ASettleReDeliversTheFactsTheDecisionWasMadeOn(_Transaction):
         shimlib.disarm(self.fault)
 
         # the check command now answers differently; the settle must not run it again
-        testlib.write_text(os.path.join(self.ws, "checks", "unit.sh"),
-                           "#!/bin/sh\necho 'it fails now'\nexit 1\n")
+        testlib.write_text(os.path.join(self.ws, "build", "fail"), "on\n")
         code, out, err = self.report()
         self.assertEqual(code, 10, err)
         result = self.result()

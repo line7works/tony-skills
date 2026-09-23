@@ -15,9 +15,9 @@
 # own sandbox off, this setup keeps Codex's own sandbox: workspace-write, approvals never,
 # TMPDIR and /tmp NOT writable (so <out-dir>, wherever it sits, is not writable by the tool
 # shells and the executor's rollout stays unwritable to them, E9-37), --add-dir only the
-# per-launch child home and each --writable root. signoff-v2 turns network on for the tool shells,
-# because its Codex reviewer is a nested codex exec that must reach the model (the pilot's E9-21
-# setup); build-v2 leaves it off.
+# per-launch child home and each --writable root. Network stays off for both cores: signoff-v2's
+# Codex adapter launches no nested reviewer since Astra's F6 (the reviewer is summoned through
+# readers, which has no qualified route on Codex today, so a signoff run stops lane-unavailable).
 #
 # Copies to <out-dir>: events.jsonl, final.md, stderr.log, command.json, rollout.jsonl (the
 # executor's own rollout, from <out-dir>/codex-home/sessions) and launch.json. Exit: the codex
@@ -103,7 +103,6 @@ for extra in writable:cmd+=['--add-dir',str(extra)]
 cmd+=['-s','workspace-write','-c','approval_policy=never',
       '-c','sandbox_workspace_write.exclude_tmpdir_env_var=true',
       '-c','sandbox_workspace_write.exclude_slash_tmp=true']
-if core=='signoff-v2':cmd+=['-c','sandbox_workspace_write.network_access=true']
 cmd+=['-']
 (out/'command.json').write_text(json.dumps(cmd))
 with prompt.open('rb') as inp,(out/'events.jsonl').open('wb') as events,(out/'stderr.log').open('wb') as err:

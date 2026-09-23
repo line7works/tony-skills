@@ -427,6 +427,20 @@ sequence of receipted steps:
   leaves every card at its before value or its mapped after value, never anything else, and
   never a moved card ahead of its block.
 
+**The station loop: a documented qualification gap, not a behaviour change** (E13 full review,
+Astra's F8). E13 does NOT qualify the no-commit hand-off from signoff to recheck while the
+signoff station's verdict doc under `docs/reviews/` (an authorized mirror, write 5 above) is
+untracked. The boundary check reads any change to untracked content as a violation, so a recheck
+that appends its block to that untracked mirror ends `completed / not_clear`, its status-line
+steps are cancelled and the card stays where signoff left it, while the log records the findings
+the run cleared. Precondition for the loop: commit the verdict mirror (track it) before
+`/recheck`; with it tracked the same run clears and moves the card. Nothing in this skill stages
+or commits files for the user. Changing this (comparing untracked non-target content separately
+and permitting only the exact receipt-planned mirror changes) changes what recheck decides and
+stops on, so it waits for an explicit E13-1 ruling by the owner.
+`scripts/tests/test_full_fix_f8.py` runs the whole dirty loop (build, signoff, recheck on one
+document, no commit between) and the tracked-mirror control, and pins both outcomes.
+
 The semantic validator (an E8 script, `scripts/validate-result.py`) checks what the schema
 cannot: the result's items correspond one-to-one to the checklist entries and `checklist.count`
 equals their number; every item and new defect carries a slice or `none` that exists in the

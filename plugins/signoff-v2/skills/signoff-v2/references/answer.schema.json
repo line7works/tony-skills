@@ -15,7 +15,7 @@
       "minLength": 1,
       "description": "the session that produced this answer. Equal to the input's building session is the independence refusal"
     },
-    "model": {"type": ["string", "null"], "description": "the model the run OBSERVED, never one it assumed"},
+    "model": {"type": ["string", "null"], "description": "the model the run OBSERVED, never one it assumed: readers' effective model as the adapter's sidecar map hands it over (`answer_identity.model`). The core takes the reviewer's floor from it (Astra's F5): missing, below the Opus-class floor, or not the session's recorded model refuses the answer (`refusal_reason: floor`)"},
     "checks_executed": {
       "type": "array",
       "description": "every check the reviewer ran, with its output. A review with no findings and no entry here is not a clean verdict",

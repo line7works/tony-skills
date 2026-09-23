@@ -27,6 +27,14 @@ stderr naming where it looked; `--help` and argument checking still work. It is 
 `--records-root`, `RECORDS_ROOT`, the component beside this plugin, or the installed shape below
 it, and the pick is confirmed with `component-identity` (interface version 2).
 
+**The station loop needs the verdict mirror tracked (a documented gap, E13 full review F8).** E13
+does not qualify the no-commit hand-off from signoff to recheck while signoff's verdict doc under
+`docs/reviews/` is untracked: recheck appends to that mirror, its boundary check reads the
+untracked change as a violation, and the run ends `not_clear` with the card unchanged although the
+log records the finding fixed. Commit the mirror before `/recheck`; this skill never stages or
+commits anything itself. A runtime change here waits for the owner's E13-1 ruling
+(`pilot-contract.md` section 9, "The station loop"; `scripts/tests/test_full_fix_f8.py`).
+
 Before that: **E9: the three adapters and setups built, reviewed and closed; the plugin is a genuine
 entry point on Claude Code, Codex CLI and OpenCode.** The plugin is listed in
 `.claude-plugin/marketplace.json`. The rulings that shaped the core (E8-1 to E8-30 and the
