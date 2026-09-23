@@ -4,7 +4,7 @@
     "ambiguous": 0,
     "appended": [],
     "blocks": 2,
-    "component_version": "0.1.0",
+    "component_version": "0.2.0",
     "counts": {
       "card_observed": 1,
       "disposition": 1,
@@ -16,7 +16,7 @@
     "events": 0,
     "head": "0000000000000000000000000000000000000000000000000000000000000000",
     "imported": 0,
-    "interface_version": 1,
+    "interface_version": 2,
     "lines_classified": 4,
     "lines_read": 17,
     "log": "docs/records/docs__plans__2026-05-03-join-exact.events.jsonl",

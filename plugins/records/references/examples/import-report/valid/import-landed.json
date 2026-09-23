@@ -85,7 +85,7 @@
     }
   ],
   "blocks": 3,
-  "component_version": "0.1.0",
+  "component_version": "0.2.0",
   "counts": {
     "card_observed": 1,
     "disposition": 1,
@@ -97,9 +97,9 @@
   "doc_sha256": "c43ae7331fdd461a80d642c7620f2f55955cdf603cd4d4d14ac69af09e091758",
   "dry_run": false,
   "events": 9,
-  "head": "82beff8647b71148c15629111c4cccc42bc4b520672555aeb7fc90e29b714eea",
+  "head": "ac48cc3c92e44a6bb73ef43082252a1e41b90d33c1ee60a700794aa706a93aee",
   "imported": 9,
-  "interface_version": 1,
+  "interface_version": 2,
   "lines_classified": 6,
   "lines_read": 23,
   "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",

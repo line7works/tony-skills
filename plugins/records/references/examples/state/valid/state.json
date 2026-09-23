@@ -1,6 +1,6 @@
 {
   "at_source": null,
-  "component_version": "0.1.0",
+  "component_version": "0.2.0",
   "counts": {
     "cleared_unbound": 1,
     "findings": 2,
@@ -86,8 +86,8 @@
       "verified_source": null
     }
   ],
-  "head": "82beff8647b71148c15629111c4cccc42bc4b520672555aeb7fc90e29b714eea",
-  "interface_version": 1,
+  "head": "ac48cc3c92e44a6bb73ef43082252a1e41b90d33c1ee60a700794aa706a93aee",
+  "interface_version": 2,
   "log": "docs/records/docs__plans__2026-05-05-grants.events.jsonl",
   "ok": true,
   "open": {

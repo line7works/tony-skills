@@ -606,7 +606,7 @@ class TheHelpExamplesRun(unittest.TestCase):
             self.assertNotEqual(code, 3, "the example could not start: %s (%s)" % (ready, err))
             self.assertIn(code, (0, 4, 5, 7), "%s exited %d: %s" % (ready, code, err))
             document = json.loads(out)
-            self.assertEqual(document["interface_version"], 1)
+            self.assertEqual(document["interface_version"], 2)  # E13 A7 (F10)
             self.assertEqual(document["component_version"], records.component_meta(testlib.ROOT)["version"])
 
 
@@ -615,20 +615,20 @@ class ThePluginManifest(unittest.TestCase):
         with open(os.path.join(testlib.ROOT, ".claude-plugin", "plugin.json"), encoding="utf-8") as fh:
             meta = json.load(fh)
         self.assertEqual(meta["name"], "records")
-        self.assertEqual(meta["version"], "0.1.0")
+        self.assertEqual(meta["version"], "0.2.0")  # E13 A7: interface version 2
         self.assertTrue(meta["description"])
 
     def test_every_response_carries_that_version(self):
         for case in cases():
             if case["body"] is None:
                 continue
-            self.assertEqual(case["body"]["component_version"], "0.1.0", case["case"])
-            self.assertEqual(case["body"]["interface_version"], 1, case["case"])
+            self.assertEqual(case["body"]["component_version"], "0.2.0", case["case"])
+            self.assertEqual(case["body"]["interface_version"], 2, case["case"])
 
     def test_component_identity_agrees_with_the_manifest(self):
         code, body, err = testlib.run_json(["component-identity"])
         self.assertEqual(code, 0, err)
-        self.assertEqual(body["version"], "0.1.0")
+        self.assertEqual(body["version"], "0.2.0")
         self.assertEqual(body["name"], "records")
 
 

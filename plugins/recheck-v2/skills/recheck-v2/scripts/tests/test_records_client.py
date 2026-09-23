@@ -89,10 +89,12 @@ class Resolution(unittest.TestCase):
         self.assertIn("no such directory", message)
 
     def test_confirm_refuses_another_interface_version(self):
-        two = stub_component(os.path.join(self.dir, "two"), 2)
+        """F10 (E13 amendment A7): the pilot speaks records interface version 2, so a component
+        at version 1 is refused and the refusal says so."""
+        one = stub_component(os.path.join(self.dir, "one"), 1)
         with self.assertRaises(LookupError) as caught:
-            rc.confirm_interface(two, [1], python=testlib.GEN_PYTHON)
-        self.assertIn("speaks interface version 2, not 1", str(caught.exception))
+            rc.confirm_interface(one, list(rc.KNOWN_INTERFACE_VERSIONS), python=testlib.GEN_PYTHON)
+        self.assertIn("speaks interface version 1, not 2", str(caught.exception))
 
     def test_confirm_refuses_a_component_that_reports_nothing(self):
         mute = stub_component(os.path.join(self.dir, "mute"), 1, body="import sys\nsys.exit(1)\n")
@@ -102,7 +104,7 @@ class Resolution(unittest.TestCase):
 
     def test_open_client_confirms_the_real_component(self):
         client = rc.open_client(records_root=os.path.normpath(RECORDS))
-        self.assertEqual(client.interface_version, 1)
+        self.assertEqual(client.interface_version, 2)  # F10, E13 amendment A7
 
 
 class Commands(unittest.TestCase):
@@ -206,13 +208,14 @@ class DriverExitThree(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(case, "run", "checkpoint.json")))
 
     def test_another_interface_version_is_exit_3(self):
+        """F10 (E13 amendment A7): a component still at records interface version 1 is exit 3."""
         case = testlib.build_case("F1-fixed-defect", "F1-01-fixed-clean", self.dir)
         testlib.prepare_input(case)
-        two = stub_component(os.path.join(self.dir, "two"), 2)
-        code, out, err = self.run_cli("--records-root", two, "start", os.path.join(case, "input.json"))
+        one = stub_component(os.path.join(self.dir, "one"), 1)
+        code, out, err = self.run_cli("--records-root", one, "start", os.path.join(case, "input.json"))
         self.assertEqual(code, 3)
         self.assertEqual(out.strip(), "")
-        self.assertIn("speaks interface version 2, not 1", err)
+        self.assertIn("speaks interface version 1, not 2", err)
         self.assertFalse(os.path.exists(os.path.join(case, "run", "checkpoint.json")))
 
 

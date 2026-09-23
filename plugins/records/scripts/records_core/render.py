@@ -37,15 +37,20 @@ legacy grant form, the same line without its trailing quoted field; and a `findi
 because a rendered line that ended in an empty field would lose it to the reader's trailing
 whitespace trim and be read as a four-field line instead.
 
-One location grammar serves every line of this module (`location_text`), so a review line and a
-recheck line name a finding's location the same way. A location whose `raw` says more than
-`file:line` (a range, or several locations in one field) therefore renders as its first
-`file:line`, and section 7's key computed from the rendered line is then not the key of the
-event's own `raw`: such a line reads back as a finding of its own rather than as the one it was
-rendered from. Every location a station writes is `file:line` and round-trips exactly, and a
-legacy location whose extras are backticks or a glued tag does too, because section 7's key drops
-both. The importer does not depend on the key for a line it rendered itself: it recognises those
-lines by their bytes (`importer.rendered_native_lines`).
+The review line writes the location field exactly as the raise recorded it, its `raw` (E13
+amendment A7, Astra's F9: `review_location_text`), because a review line is the one rendered line
+section 7 computes a finding's identity FROM: a range stays a range, and the rendered line reads
+back as the finding it was rendered from for every location. The recheck block (its recheck
+lines and its fix-introduced defect lines) and the grant lines keep `location_text`, byte for
+byte, as A7 rules: a resolved location renders there as its first `file:line`, the pilot's own
+form. A recheck or grant line names a finding rather than raising one; a DEFECT line with a
+ranged location still reads back, in a log that does not hold it, under another identity, which
+is outside A7's three items and is reported rather than changed. The importer recognises a
+line it rendered itself by kind, slice context and bytes (`importer.match_native_lines`), and
+`rendered_lines` tells it which event each line belongs to.
+
+Under interface version 1 (`--interface-version 1`, E13 amendment A7, F10) `render` answers with
+the body version 1 published, `render_run_interface_1`: the lines are the same bytes.
 """
 from . import legacy
 
@@ -98,8 +103,20 @@ def review_text(severity, location, claim, scenario, raised_by):
     `()` as well.
     """
     found = legacy._single_line(raised_by or "")
-    return "- " + legacy.SEP.join([severity, location_text(location), claim_field(claim),
+    return "- " + legacy.SEP.join([severity, review_location_text(location), claim_field(claim),
                                    legacy._single_line(scenario or ""), found or NO_FIELD])
+
+
+def review_location_text(location):
+    """The location field of a review line: the raw location the finding carries (E13 A7, F9).
+
+    A review line is the one rendered line section 7 computes a finding's identity FROM, so it
+    writes the field exactly as the raise recorded it: a range stays a range, and a field naming
+    several locations stays whole. `location_text`'s first `file:line` would read back under
+    another identity. The recheck block keeps `location_text`, byte for byte.
+    """
+    raw = location.get("raw") if isinstance(location, dict) else location
+    return legacy._single_line(str(raw or ""))
 
 
 def review_heading(date, slice_name):
@@ -160,7 +177,8 @@ def _origin_of(event, raised):
 
 
 def render_review(selected):
-    """(review text, review lines, slice names) for the run's `finding_raised` events.
+    """(review text, review lines, slice names, (event, line) pairs) for the run's
+    `finding_raised` events.
 
     One block per slice, the slices in ascending order (E13 amendment A4), the findings of each
     in `seq` order. Each block carries the date of its own first finding.
@@ -170,7 +188,7 @@ def render_review(selected):
         if event.get("kind") not in REVIEW_KINDS:
             continue
         groups.setdefault(event.get("slice") or "none", []).append(event)
-    text, lines, names = "", [], []
+    text, lines, names, pairs = "", [], [], []
     for name in legacy.sort_slices(list(groups)):
         block = [review_text(event.get("severity"), event.get("location"), event.get("claim"),
                              event.get("scenario"), event.get("raised_by"))
@@ -178,11 +196,30 @@ def render_review(selected):
         text += review_block(date_of(groups[name][0]), name, block)
         lines.extend(block)
         names.append(name)
-    return text, lines, names
+        pairs.extend(zip(groups[name], block))
+    return text, lines, names, pairs
 
 
 def render_run(doc, events, run_id):
-    """The Appendix A text one run's events produce.
+    """The Appendix A text one run's events produce (the `render` command's body)."""
+    return _render(doc, events, run_id)[0]
+
+
+def rendered_lines(doc, events, run_id):
+    """[(event, the one line `render` writes for it)] for every event of the run that carries one.
+
+    The importer's half of E13 amendment A7 (F5): it needs to know WHICH native event a rendered
+    line belongs to, not only that some event rendered those bytes, so that a line is matched by
+    event kind and by finding identity in its slice context as well as by its bytes. The lines
+    are the same strings `render_run` returns, from the same code path.
+    """
+    return _render(doc, events, run_id)[1]
+
+
+def _render(doc, events, run_id):
+    """(the body `render_run` returns, the (event, line) pairs `rendered_lines` returns).
+
+    The Appendix A text one run's events produce.
 
     Returns {"run_id", "date", "slices", "review", "review_lines", "review_slices", "block",
     "lines", "grants", "text", "rendered", "skipped", "spec"}: `review` is the review block text
@@ -198,7 +235,7 @@ def render_run(doc, events, run_id):
     grant_events = [e for e in selected if e.get("kind") in GRANT_KINDS]
     skipped = [{"seq": e["seq"], "kind": e.get("kind")} for e in selected
                if e.get("kind") not in RENDERED_KINDS]
-    review, review_lines, review_slices = render_review(selected)
+    review, review_lines, review_slices, pairs = render_review(selected)
     slices = []
     for event in block_events:
         if event.get("kind") == "defect_raised":
@@ -215,6 +252,7 @@ def render_run(doc, events, run_id):
             lines.append(defect_text(event.get("severity"), event.get("location"),
                                      event.get("claim") or "", event.get("scenario") or "",
                                      slice_field=charged))
+            pairs.append((event, lines[-1]))
             continue
         origin = _origin_of(event, raised)
         text = DISPOSITION_TEXT.get(event.get("disposition"))
@@ -222,6 +260,7 @@ def render_run(doc, events, run_id):
             raise RenderError("the event at seq %s carries no disposition" % event.get("seq"))
         lines.append(recheck_text(origin.get("severity"), origin.get("location"),
                                   origin.get("claim"), text, event.get("how") or ""))
+        pairs.append((event, lines[-1]))
     block = legacy.render_block(date, heading_slices, lines) if lines else ""
     grants = []
     for event in grant_events:
@@ -235,10 +274,45 @@ def render_run(doc, events, run_id):
         else:
             middle = [event.get("grant_date"), location_text(location)]
             grants.append(grant_text(legacy.REOPENED, middle, claim, event.get("words")))
+        pairs.append((event, grants[-1].rstrip("\n")))
     named = legacy.sort_slices(heading_slices + review_slices)
-    return {"run_id": run_id, "date": date, "slices": heading_slices, "review": review,
+    body = {"run_id": run_id, "date": date, "slices": heading_slices, "review": review,
             "review_lines": review_lines, "review_slices": review_slices, "block": block,
             "lines": lines, "grants": grants,
             "text": review + block + "".join(grants),
             "rendered": len(review_lines) + len(lines) + len(grants), "skipped": skipped,
             "spec": {"doc": doc, "slice": named[0] if len(named) == 1 else None}}
+    return body, pairs
+
+
+INTERFACE_1_FIELDS = ("run_id", "date", "slices", "block", "lines", "grants", "text", "rendered",
+                      "skipped", "spec")
+"""The body fields `render` published under interface version 1, before E13 amendment A4."""
+
+
+def render_run_interface_1(doc, events, run_id):
+    """The `render` body in interface version 1's shape and meanings (E13 amendment A7, F10).
+
+    Amendment A4 added `review`, `review_lines` and `review_slices` and widened five meanings:
+    `text` and `rendered` gained the review block, `skipped` lost `finding_raised`, and `date` and
+    `spec.slice` began to count the review blocks. The compatibility response a version-1 reader
+    asks for with `--interface-version 1` keeps every one of them as version 1 published it: the
+    recheck block, then the grants, and a `finding_raised` is an event that carries no line.
+    The recheck and grant lines themselves are the same bytes in both versions.
+    """
+    body = render_run(doc, events, run_id)
+    selected = run_events(events, run_id)
+    block_events = [e for e in selected if e.get("kind") in BLOCK_KINDS]
+    grant_events = [e for e in selected if e.get("kind") in GRANT_KINDS]
+    dated = block_events or grant_events
+    heading_slices = body["slices"]
+    old = dict((key, body[key]) for key in INTERFACE_1_FIELDS)
+    old.update({
+        "date": date_of(dated[0]) if dated else None,
+        "text": body["block"] + "".join(body["grants"]),
+        "rendered": len(body["lines"]) + len(body["grants"]),
+        "skipped": [{"seq": e["seq"], "kind": e.get("kind")} for e in selected
+                    if e.get("kind") not in BLOCK_KINDS + GRANT_KINDS],
+        "spec": {"doc": doc, "slice": heading_slices[0] if len(heading_slices) == 1 else None},
+    })
+    return old

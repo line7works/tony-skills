@@ -1,4 +1,5 @@
-"""Reaching the records component (E13 slice 2 lane S; records interface version 1).
+"""Reaching the records component (E13 slice 2 lane S; records interface version 2 since E13
+amendment A7).
 
 The wiring is COPIED, not reinvented (brief, "The pattern"): `signoff_core/records_client.py` is
 `recheck_core/records_client.py` byte for byte, and `TheCopyIsExact` fails the moment the two
@@ -11,8 +12,8 @@ station name lives in `signoff_core.constants`, and a test that wants a missing 
 the resolver at a station root with nothing beside it, which is the real failure rather than a
 hook. `TheCopyIsNeverReadForThisStationsName` holds that line.
 
-The refusals proved here are the brief's two: a component speaking interface version 2, and no
-component at all. Both are exit 3 with empty stdout and one line on stderr.
+The refusals proved here are the brief's two: a component speaking another interface version (1,
+since this station speaks 2 from amendment A7), and no component at all. Both are exit 3 with empty stdout and one line on stderr.
 """
 import os
 import shutil
@@ -75,7 +76,7 @@ def copy_component(dst, interface_version=None):
     if interface_version is not None:
         path = os.path.join(dst, "scripts", "records.py")
         text = testlib.read_text(path)
-        want = "INTERFACE_VERSION = 1"
+        want = "INTERFACE_VERSION = 2"
         assert want in text, "the component no longer declares %r" % want
         text = text.replace(want, "INTERFACE_VERSION = %d" % interface_version, 1)
         with open(path, "w", encoding="utf-8") as fh:
@@ -83,18 +84,19 @@ def copy_component(dst, interface_version=None):
     return dst
 
 
-class TheComponentMustSpeakVersionOne(unittest.TestCase):
+class TheComponentMustSpeakVersionTwo(unittest.TestCase):
     def setUp(self):
         self.dir = testlib.make_scratch("signoff-records-identity-")
         self.addCleanup(testlib.rmtree, self.dir)
 
-    def test_a_component_speaking_version_two_is_exit_three(self):
-        root = copy_component(os.path.join(self.dir, "records"), interface_version=2)
+    def test_a_component_speaking_version_one_is_exit_three(self):
+        """F10 (E13 amendment A7): the station speaks 2, so a component still at 1 is refused."""
+        root = copy_component(os.path.join(self.dir, "records"), interface_version=1)
         code, out, err = testlib.run_script("signoff.py", ["skill-identity", "--records-root", root])
         self.assertEqual(code, 3)
         self.assertEqual(out, "")
         self.assertEqual(len(err.strip().split("\n")), 1, err)
-        self.assertIn("speaks interface version 2, not 1", err)
+        self.assertIn("speaks interface version 1, not 2", err)
 
     def test_no_component_anywhere_is_exit_three(self):
         lonely = os.path.join(self.dir, "lonely-plugin")
@@ -106,11 +108,12 @@ class TheComponentMustSpeakVersionOne(unittest.TestCase):
         self.assertEqual(len(err.strip().split("\n")), 1, err)
         self.assertTrue(err.strip().startswith("missing dependency: records component (looked in: "), err)
 
-    def test_the_real_component_confirms_version_one(self):
+    def test_the_real_component_confirms_version_two(self):
+        """F10 (E13 amendment A7)."""
         from signoff_core import records_client as rc
         client = rc.open_client(records_root=testlib.RECORDS_ROOT)
-        self.assertEqual(client.interface_version, 1)
-        self.assertEqual(client.component_identity()["interface_version"], 1)
+        self.assertEqual(client.interface_version, 2)
+        self.assertEqual(client.component_identity()["interface_version"], 2)
 
 
 class TheComponentIsReachedThroughTheCliOnly(unittest.TestCase):

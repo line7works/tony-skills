@@ -1,8 +1,10 @@
 # Origin (E13 lane contract, ruling E13-3; lane B brief, "The pattern"): everything from the
 # docstring below to the end of this file is a copy of the qualified recheck pilot's
 # plugins/recheck-v2/skills/recheck-v2/scripts/recheck_core/records_client.py, taken from the
-# branch point of this lane, commit a80cdd04432c5f4662ed415d6a72d54f9b8208c1, unchanged from that
-# revision. The records wiring is copied, not reinvented. `tests/test_records_client.py` compares
+# branch point of this lane, commit a80cdd04432c5f4662ed415d6a72d54f9b8208c1, and moved with the
+# pilot's file once since: E13 amendment A7 (records interface version 2) changed that file's
+# docstring and KNOWN_INTERFACE_VERSIONS, and this copy took the same bytes. The records wiring is
+# copied, not reinvented. `tests/test_records_client.py` compares
 # the two files byte for byte and fails when they differ, the way the records component holds its
 # own copied region (plugins/records/scripts/tests/test_parity.py).
 #
@@ -12,7 +14,7 @@
 # the client through this module's `open_client` with its own plugin root. Changing either
 # constant here would break the byte comparison, which is the point: the copy moves only when the
 # pilot's file moves.
-"""Reaching the records component (E13 slice 1, brief 3.1; records interface version 1).
+"""Reaching the records component (E13 slice 1, brief 3.1; records interface version 2).
 
 The pilot never opens a log file, never imports `records_core`, and never copies the component's
 code: it resolves the component root with the interface's own snippet, confirms the interface
@@ -23,6 +25,10 @@ shell text.
 The station plugin root the resolver is given is derived from THIS FILE's location, not from
 `--skill-root`, which is a test hook for reference loading alone: route 3a must keep resolving
 when a test points the references at a copy.
+
+Records interface version 2 since E13 amendment A7 (Astra's F10): the component's A4 response
+shapes (`native_rendered` on an import report, the review block on `render`) are version 2, which
+is what this client reads. A component at version 1 is refused like any other version.
 
 Refusals. A component that cannot be found, or that speaks an interface version this station was
 not written against, is the pilot's exit 3 shape: one line on stderr, nothing on stdout
@@ -160,7 +166,7 @@ SNIPPET_BEGIN = "# ---- BEGIN resolver snippet (copied from the records componen
 SNIPPET_END = "# ---- END resolver snippet ----"
 
 STATION = "recheck-v2"                       # actor.station on every event this pilot writes
-KNOWN_INTERFACE_VERSIONS = (1,)
+KNOWN_INTERFACE_VERSIONS = (2,)             # E13 amendment A7: A4's response shapes are version 2
 NO_RECORDS_HOOK = "RECHECK_TEST_NO_RECORDS"  # gated by RECHECK_TEST=1
 
 

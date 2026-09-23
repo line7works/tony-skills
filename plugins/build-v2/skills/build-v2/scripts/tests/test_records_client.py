@@ -8,7 +8,8 @@ Three things this suite holds:
    copied region (`plugins/records/scripts/tests/test_parity.py`).
 2. The copy's pilot-owned constants are never this station's: `build_core/records_link.py`
    carries `build-v2` as the station and its own test hook name.
-3. The component-identity check: a component that speaks interface version 2, and a component
+3. The component-identity check: a component that speaks interface version 1 (this station
+   speaks 2 since E13 amendment A7), and a component
    that is not there at all, each exit 3 with empty stdout and one line on stderr.
 """
 import os
@@ -79,7 +80,7 @@ class TheStationPluginRootIsThisPlugin(unittest.TestCase):
 
     def test_the_client_opens_against_the_checkout(self):
         client = records_link.open_client()
-        self.assertEqual(client.interface_version, 1)
+        self.assertEqual(client.interface_version, 2)  # F10, E13 amendment A7
         self.assertEqual(os.path.realpath(client.root), os.path.realpath(testlib.RECORDS_ROOT))
 
 
@@ -91,15 +92,16 @@ class TheComponentIdentityCheck(unittest.TestCase):
         self.addCleanup(testlib.rmtree, self.scratch)
 
     def test_a_component_at_another_interface_version_is_refused(self):
-        """A real copy of the component with `INTERFACE_VERSION = 2`, not a stand-in."""
-        root = testlib.fake_component(self.scratch, interface_version=2)
+        """F10 (E13 amendment A7): a real copy of the component with `INTERFACE_VERSION = 1`, not
+        a stand-in. The station speaks 2, so a component still at 1 is refused."""
+        root = testlib.fake_component(self.scratch, interface_version=1)
         with open(os.path.join(root, "scripts", "records.py"), encoding="utf-8") as fh:
-            self.assertIn("\nINTERFACE_VERSION = 2\n", fh.read())
+            self.assertIn("\nINTERFACE_VERSION = 1\n", fh.read())
         code, out, err = testlib.run_build(["skill-identity", "--records-root", root])
         self.assertEqual(code, 3, err)
         self.assertEqual(out, "")
         self.assertEqual(len(err.strip().split("\n")), 1, err)
-        self.assertIn("speaks interface version 2, not 1", err)
+        self.assertIn("speaks interface version 1, not 2", err)
 
     def test_a_component_that_reports_no_interface_version_is_refused(self):
         root = os.path.join(self.scratch, "silent")

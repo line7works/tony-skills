@@ -1,4 +1,4 @@
-"""Reaching the records component (E13 slice 1, brief 3.1; records interface version 1).
+"""Reaching the records component (E13 slice 1, brief 3.1; records interface version 2).
 
 The pilot never opens a log file, never imports `records_core`, and never copies the component's
 code: it resolves the component root with the interface's own snippet, confirms the interface
@@ -9,6 +9,10 @@ shell text.
 The station plugin root the resolver is given is derived from THIS FILE's location, not from
 `--skill-root`, which is a test hook for reference loading alone: route 3a must keep resolving
 when a test points the references at a copy.
+
+Records interface version 2 since E13 amendment A7 (Astra's F10): the component's A4 response
+shapes (`native_rendered` on an import report, the review block on `render`) are version 2, which
+is what this client reads. A component at version 1 is refused like any other version.
 
 Refusals. A component that cannot be found, or that speaks an interface version this station was
 not written against, is the pilot's exit 3 shape: one line on stderr, nothing on stdout
@@ -146,7 +150,7 @@ SNIPPET_BEGIN = "# ---- BEGIN resolver snippet (copied from the records componen
 SNIPPET_END = "# ---- END resolver snippet ----"
 
 STATION = "recheck-v2"                       # actor.station on every event this pilot writes
-KNOWN_INTERFACE_VERSIONS = (1,)
+KNOWN_INTERFACE_VERSIONS = (2,)             # E13 amendment A7: A4's response shapes are version 2
 NO_RECORDS_HOOK = "RECHECK_TEST_NO_RECORDS"  # gated by RECHECK_TEST=1
 
 

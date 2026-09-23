@@ -61,8 +61,10 @@ The one test hook is the test-only flag `--component-root DIR`, which reads this
 references and computes its identity from DIR instead of from this script's own location; it is
 NOT section 12.1's `--records-root`, which is the argument a STATION takes to find this component
 (`references/interface.md`, "Reaching the component"). records.py is the component: it never
-performs that lookup, and it reads no `RECORDS_ROOT`. No environment variable changes what this
-script does; a missing dependency is tested with a `PYTHONPATH` package named `jsonschema` whose
+performs that lookup, and it reads no `RECORDS_ROOT`. `--interface-version N` (before the command) picks the interface version a response is
+shaped for: 2, the default and the current interface, or 1, the compatibility response that keeps
+version 1's closed shapes (E13 amendment A7); it never changes what a run writes. No environment
+variable changes what this script does; a missing dependency is tested with a `PYTHONPATH` package named `jsonschema` whose
 initializer raises ImportError.
 """
 import argparse
@@ -78,13 +80,25 @@ from records_core import (canon, events as events_mod, identity as identity_mod,
                           importer as importer_mod, render as render_mod, state as state_mod,
                           validate)
 
-INTERFACE_VERSION = 1
+INTERFACE_VERSION = 2
+INTERFACE_VERSIONS = (1, 2)
+"""The interface this component speaks, and every version a caller may ask a response in.
+
+E13 amendment A7 (Astra's F10): amendment A4's response shapes (`native_rendered` on an import
+report, the review block on `render`) are interface version 2, because a reader built to version
+1's closed shapes rejects them. `--interface-version 1` asks for the compatibility response, which
+keeps version 1's closed shape; nothing else about a run changes with it, and the log's bytes
+never do: a `log_opened` this component writes records `INTERFACE_VERSION` whatever was asked.
+"""
+A4_IMPORT_FIELDS = ("native_rendered",)
+"""The import-report fields version 1 never published; the compatibility response drops them."""
+_ASKED = {"version": INTERFACE_VERSION, "command": None}
 SKIP_DIRS = ("__pycache__",)
 SKIP_FILES = (".DS_Store",)
 
 EXAMPLES = """examples:
   uv run records.py verify --workspace ~/Developer/thing --doc docs/plans/2026-09-06-readers.md
-  -> {"interface_version": 1, "component_version": "0.1.0", "ok": true,
+  -> {"interface_version": 2, "component_version": "0.2.0", "ok": true,
       "log": "docs/records/docs__plans__2026-09-06-readers.events.jsonl", "head": "9f2c...", "events": 12}
 
   uv run records.py events --workspace . --doc docs/punch-list.md --kind disposition --from 4
@@ -185,11 +199,21 @@ def log(message):
 
 
 def envelope(root, body=None):
-    """The two fields every response carries, the body, and `ok` (false on every refusal)."""
-    doc = {"interface_version": INTERFACE_VERSION, "component_version": component_meta(root)["version"]}
+    """The two fields every response carries, the body, and `ok` (false on every refusal).
+
+    `interface_version` is the version the caller asked for (`--interface-version`, default
+    `INTERFACE_VERSION`). Under version 1 an import report, landed or refused, leaves out the
+    fields amendment A4 added, so it is version 1's closed shape (E13 amendment A7, F10); `render`
+    builds its version-1 body itself (`cmd_render`).
+    """
+    version = _ASKED["version"]
+    doc = {"interface_version": version, "component_version": component_meta(root)["version"]}
     if body:
         doc.update(body)
     doc.setdefault("ok", True)
+    if version == 1 and _ASKED["command"] == "import-legacy":
+        for field in A4_IMPORT_FIELDS:
+            doc.pop(field, None)
     return doc
 
 
@@ -382,8 +406,10 @@ def cmd_render(args, root, schemas):
     workspace = resolve_workspace(args.workspace)
     doc = resolve_doc(workspace, args.doc)
     walked = events_mod.walk(events_mod.log_path(workspace, doc), schemas, doc=doc)
+    # E13 amendment A7 (F10): version 1 gets `render`'s version-1 fields and meanings.
+    run = render_mod.render_run_interface_1 if _ASKED["version"] == 1 else render_mod.render_run
     try:
-        body = render_mod.render_run(doc, walked["events"], args.run_id)
+        body = run(doc, walked["events"], args.run_id)
     except render_mod.RenderError as exc:
         raise Refusal(4, {"ok": False, "error": "invalid", "reason": str(exc),
                           "log": events_mod.log_relpath(doc), "head": walked["head"],
@@ -450,6 +476,16 @@ def whole_number(given):
     return int(text)
 
 
+def interface_version(given):
+    """`--interface-version`: one of `INTERFACE_VERSIONS`; anything else is exit 2."""
+    text = str(given).strip()
+    if not text.isdigit() or int(text) not in INTERFACE_VERSIONS:
+        raise argparse.ArgumentTypeError(
+            "%r is not an interface version this component speaks (%s)"
+            % (given, ", ".join(str(v) for v in INTERFACE_VERSIONS)))
+    return int(text)
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         self.print_usage(sys.stderr)
@@ -488,6 +524,13 @@ def build_parser():
                         "instead of from this script's own location. Not section 12.1's --records-root, "
                         "which is the argument a STATION takes to find this component; records.py is the "
                         "component and is never the one doing that lookup.")
+    p.add_argument("--interface-version", metavar="N", type=interface_version,
+                   default=INTERFACE_VERSION,
+                   help="the interface version to answer in. 2 is the current interface; 1 is the "
+                        "compatibility response for a reader built to version 1's closed shapes "
+                        "(E13 amendment A7): an import report without `native_rendered`, and "
+                        "`render`'s version-1 fields and meanings. The log's bytes never depend "
+                        "on it.")
     sub = p.add_subparsers(dest="command", metavar="command")
     sub.required = True
 
@@ -633,6 +676,8 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    _ASKED["version"] = args.interface_version
+    _ASKED["command"] = args.command
     if args.command != "component-identity":
         # `component-identity` validates nothing, so it answers under a plain interpreter: that
         # is what lets a station confirm the root it picked before it can run anything else

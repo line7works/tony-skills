@@ -88,7 +88,7 @@ class Help(unittest.TestCase):
                 code, body, err = testlib.run_json(args)
                 self.assertEqual(code, 0, "%s: %s" % (name, err))
                 self.assertTrue(body["ok"], name)
-                self.assertEqual(body["interface_version"], 1, name)
+                self.assertEqual(body["interface_version"], 2, name)  # E13 A7 (F10)
                 self.assertIn("component_version", body, name)
             self.assertGreater(len(testlib.run_json(calls["state"])[1]["findings"]), 0)
             self.assertTrue(testlib.run_json(calls["render"])[1]["text"])
@@ -210,7 +210,7 @@ class ComponentIdentity(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(doc["name"], "records")
         self.assertEqual(len(doc["content_sha256"]), 64)
-        self.assertEqual(doc["interface_version"], 1)
+        self.assertEqual(doc["interface_version"], 2)  # E13 A7 (F10)
         self.assertEqual(doc["component_version"], doc["version"])
 
     def test_the_content_hash_moves_with_the_content(self):

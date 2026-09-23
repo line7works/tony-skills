@@ -156,10 +156,43 @@ class TheSameRunAgainstThePreA4Component(_TwoRuns):
 
     def setUp(self):
         _TwoRuns.setUp(self)
-        self.pre_a4 = testlib.pre_a4_component(self.scratch)
-        if self.pre_a4 is None:
+        self.as_extracted = testlib.pre_a4_component(self.scratch)
+        if self.as_extracted is None:
             self.skipTest("the pre-A4 component could not be extracted from history")
+        self.pre_a4 = self.relabelled(self.as_extracted)
         self.pre_env = testlib.base_env({"RECORDS_ROOT": self.pre_a4})
+
+    def relabelled(self, root):
+        """The pre-A4 component, relabelled to speak the interface version this station knows.
+
+        E13 amendment A7 (Astra's F10) moved the records interface to version 2 and this station's
+        client with it, so the component as it stood before A4, which says version 1, is refused
+        at the confirm step (exit 3) before any run begins; the test below proves that on the real
+        extracted component. The red this class exists for is about BEHAVIOUR (what the old
+        importer does with a line this station wrote), so it is measured on a copy whose one
+        `INTERFACE_VERSION` line says what the station expects and whose every other byte is the
+        old component's. The copy is made in this test's scratch directory; history is untouched.
+        """
+        import re
+        import shutil
+        copy = os.path.join(self.scratch, "records-pre-a4-relabelled")
+        shutil.copytree(root, copy)
+        script = os.path.join(copy, "scripts", "records.py")
+        with open(script, encoding="utf-8") as fh:
+            text = fh.read()
+        changed = re.sub(r"\nINTERFACE_VERSION = \d+\n", "\nINTERFACE_VERSION = 2\n", text, count=1)
+        self.assertNotEqual(changed, text, "the old component's INTERFACE_VERSION line moved")
+        with open(script, "w", encoding="utf-8") as fh:
+            fh.write(changed)
+        return copy
+
+    def test_the_pre_a4_component_as_it_stands_is_refused_at_version_1(self):
+        """F10 (E13 amendment A7): this station speaks records interface version 2; the real
+        component from before A4 says 1, and the station refuses it, exit 3, and says so."""
+        code, out, err = testlib.run_build(["skill-identity", "--records-root", self.as_extracted])
+        self.assertEqual(code, 3, err)
+        self.assertEqual(out, "")
+        self.assertIn("speaks interface version 1, not 2", err)
 
     def test_the_pre_a4_component_does_not_even_have_the_field(self):
         with open(os.path.join(self.pre_a4, "scripts", "records_core", "importer.py"),

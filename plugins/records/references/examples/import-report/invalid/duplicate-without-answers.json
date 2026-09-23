@@ -1,9 +1,9 @@
 {
   "document": {
-    "component_version": "0.1.0",
+    "component_version": "0.2.0",
     "doc": "docs/plans/2026-05-03-join-ambiguous-shared.md",
     "error": "invalid",
-    "interface_version": 1,
+    "interface_version": 2,
     "line": 16,
     "log": "docs/records/docs__plans__2026-05-03-join-ambiguous-shared.events.jsonl",
     "ok": false,

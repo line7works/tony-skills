@@ -14,6 +14,7 @@ when that succeeds, else PLUGIN, so a standalone copy of the plugin folder still
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -143,7 +144,7 @@ def stub_without_jsonschema(parent):
     return stub
 
 
-def fake_component(parent, interface_version=2):
+def fake_component(parent, interface_version=1):
     """A REAL COPY of the records component with `INTERFACE_VERSION` set to another version.
 
     The brief's own shape for this test: a copy of `records/` whose one constant is changed, not a
@@ -160,7 +161,9 @@ def fake_component(parent, interface_version=2):
     script = os.path.join(root, "scripts", "records.py")
     with open(script, encoding="utf-8") as fh:
         text = fh.read()
-    changed = text.replace("\nINTERFACE_VERSION = 1\n", "\nINTERFACE_VERSION = %d\n" % interface_version, 1)
+    # E13 amendment A7: the component speaks 2 now; whatever it speaks, rewrite that one line
+    changed = re.sub(r"\nINTERFACE_VERSION = \d+\n", "\nINTERFACE_VERSION = %d\n" % interface_version,
+                     text, count=1)
     assert changed != text, "the component's INTERFACE_VERSION assignment moved; update this helper"
     with open(script, "w", encoding="utf-8") as fh:
         fh.write(changed)

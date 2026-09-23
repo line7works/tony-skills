@@ -18,7 +18,7 @@
       "reason": "2 findings of this document hold the location 'src/seal.py:30' and none matches the claim"
     }
   ],
-  "component_version": "0.1.0",
+  "component_version": "0.2.0",
   "counts": {
     "card_observed": 1,
     "finding_raised": 2
@@ -28,7 +28,7 @@
   "error": "ambiguous_identity",
   "events": 0,
   "head": "0000000000000000000000000000000000000000000000000000000000000000",
-  "interface_version": 1,
+  "interface_version": 2,
   "lines_classified": 4,
   "lines_read": 17,
   "log": "docs/records/docs__plans__2026-05-03-join-ambiguous-shared.events.jsonl",

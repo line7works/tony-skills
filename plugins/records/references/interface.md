@@ -1,4 +1,4 @@
-# The records component interface, version 1
+# The records component interface, version 2
 
 What a station, a reader, or any other consumer writes against. The CLI
 (`scripts/records.py`) and the four schemas beside this file are the interface; everything under
@@ -16,15 +16,44 @@ promises nothing about the interface; it is in this table so the two are never c
 
 | Marker | Where | Meaning |
 |---|---|---|
-| `interface_version` | every response | this document. Starts at 1. A new required argument, a removed field, or a changed meaning is a new version. |
-| `component_version` | every response | the build, from `.claude-plugin/plugin.json`. `0.1.0` today. It moves when the code moves; it promises nothing about the interface. |
+| `interface_version` | every response | this document. `2` today; it started at 1, and "Interface version 2" below says what moved. A new required argument, a removed field, a new field in a closed shape, or a changed meaning is a new version. A caller may ask for version 1's shapes with `--interface-version 1`. |
+| `component_version` | every response | the build, from `.claude-plugin/plugin.json`. `0.2.0` today. It moves when the code moves; it promises nothing about the interface. |
 | `v` | every event in a log | the event schema. `1` today. A reader refuses an event whose `v` it does not know (exit 4, naming the line) rather than skipping it. |
 | `f1:` | every finding ID | the identity scheme. A future scheme is `f2:`, and both can sit in one log. |
 
-A field this document does not name is not part of interface version 1, whatever the code
+A field this document does not name is not part of the interface, whatever the code
 returns. A test (`scripts/tests/test_interface.py`) holds the two in step in both directions:
 every field the code returns is named here, and every field named here is returned by some real
 run.
+
+## Interface version 2
+
+E13 amendment A7 (the owner's ruling on Astra's F10, 2026-09-22) published the response shapes
+amendment A4 changed as interface version 2. A4 had added them under version 1, and a reader
+built to version 1's closed shapes rejects them: every object in this component's schemas is
+closed, so a new field is a break, not an addition.
+
+What moved from version 1 to version 2:
+
+| Command | Version 1 | Version 2 |
+|---|---|---|
+| `import-legacy` | the report and its ambiguity or rejected-resolutions refusal carry no `native_rendered` | both carry `native_rendered`, and `import-report.schema.json` pins their `interface_version` to 2 |
+| `render` | `run_id`, `date`, `slices`, `block`, `lines`, `grants`, `text`, `rendered`, `skipped`, `spec`; `text` is the recheck block then the grants; a `finding_raised` is `skipped` | adds `review`, `review_lines` and `review_slices`; `text` and `rendered` include the review blocks; `finding_raised` renders; `date` and `spec.slice` count the review blocks |
+| every response | `interface_version: 1` | `interface_version: 2` |
+
+What did not move: every other command's response, every exit code, every argument, the event
+schema and its `v: 1`, the `f1:` finding prefix, the log's grammar, and every decision a command
+makes. `import-legacy`'s recognition of native lines (A4, tightened by A7) and `render`'s review
+line bytes (A7) are behaviour, not shape, and are the same whichever version is asked for.
+
+What a version-1 reader gets: `records.py --interface-version 1 <command> ...` answers in version
+1's shapes. Every response says `interface_version: 1`; an import report, landed, previewed or
+refused, leaves out `native_rendered` and validates against `v1/import-report.schema.json`; and
+`render` answers with version 1's fields and meanings (see `render`). A station built to version 1
+that does not pass the flag is refused at its confirm step, exit 3, `speaks interface version 2,
+not 1`, which is the confirm step doing its job. A log a component at version 2 opens records
+`interface_version: 2` in its `log_opened`, whichever version the response was asked in; a log
+opened under version 1 keeps its `1`, and both read the same.
 
 ## Reaching the component
 
@@ -89,7 +118,7 @@ stderr and both exit 3:
 
 ```text
 missing dependency: records component at <root> did not report an interface version
-missing dependency: records component at <root> speaks interface version 2, not 1
+missing dependency: records component at <root> speaks interface version 1, not 2
 ```
 
 The first covers a `records.py` that fails, prints nothing, or prints something that is not JSON
@@ -110,7 +139,7 @@ real checkout and against a fake installed cache built in a temporary directory.
 """Resolve the records component root (records E12 contract section 12.1, amendment A6).
 
     python3 records_root.py [--records-root DIR] [--station-plugin-root DIR]
-                            [--known-interface-versions "1"]
+                            [--known-interface-versions "2"]
 
 Prints the root on stdout, or one refusal line on stderr and exits 3. Modification time is
 never read: route 3b matches a folder's name against the `version` inside it.
@@ -232,7 +261,7 @@ def confirm_interface(root, known_versions, python=None):
 
 if __name__ == "__main__":
     given = dict(zip(sys.argv[1::2], sys.argv[2::2]))
-    known = [int(part) for part in given.get("--known-interface-versions", "1").split()]
+    known = [int(part) for part in given.get("--known-interface-versions", "2").split()]
     try:
         root = records_root(given.get("--records-root"), given.get("--station-plugin-root"))
         confirm_interface(root, known)
@@ -253,7 +282,7 @@ records_resolver() {
 """Resolve the records component root (records E12 contract section 12.1, amendment A6).
 
     python3 records_root.py [--records-root DIR] [--station-plugin-root DIR]
-                            [--known-interface-versions "1"]
+                            [--known-interface-versions "2"]
 
 Prints the root on stdout, or one refusal line on stderr and exits 3. Modification time is
 never read: route 3b matches a folder's name against the `version` inside it.
@@ -452,6 +481,7 @@ uv run <root>/scripts/records.py <command> [arguments]
 |---|---|
 | `--help` | arguments, defaults, an example, the side effects, and the exit codes. Works without `jsonschema`. |
 | `--component-root DIR` | TEST ONLY, and before the command name. Reads this component's references and computes its identity from `DIR` instead of from the script's own location. It is not section 12.1's `--records-root`; a station never passes it. |
+| `--interface-version N` | before the command name: `2` (the default, this document) or `1`, the compatibility response for a reader built to version 1's closed shapes (E13 amendment A7). It shapes the response and nothing else: what a run reads, decides and writes is the same under both, and a log's bytes never depend on it. Any other value is exit 2. "Interface version 2" below says what version 1 readers get. |
 
 `--workspace W` is a directory, and for `identity` and `append` a git work tree root with a HEAD
 commit (anything else is exit 2). `--doc D` is workspace-relative, normalized, inside the
@@ -514,7 +544,7 @@ The log is UTF-8, one canonical JSON object per line (sorted keys, no insignific
 | Field | Meaning |
 |---|---|
 | `ok` | true on success, false on every refusal. One switch beside the exit code. |
-| `interface_version` | this document's version, `1`. |
+| `interface_version` | the interface version the response is shaped for: `2`, this document's version, or `1` when the caller asked for the compatibility response with `--interface-version 1`. |
 | `component_version` | the build, from `plugin.json`. |
 
 ## Every command that walks a log
@@ -851,14 +881,20 @@ order:
 `text` is all three, in that order, which is what a station appends. Nothing in this component
 writes that text into a document.
 
-A rendered review block read back by `import-legacy` into a log that does not hold the run
-raises the same findings, with the same finding IDs, for every location a station writes
-(`raw` is `file:line`) and every legacy location whose extras are backticks or a glued tag,
-which section 7's key drops. One location grammar serves every rendered line, so a location
-whose `raw` says more than `file:line` (a range, several locations in one field) renders as its
-first `file:line` and reads back as a finding of its own; the recheck line has always rendered
-one that way. A document whose log DOES hold the run is not affected: `import-legacy` recognises
-a line it rendered itself by its bytes and never re-imports it (`native_rendered`, below).
+A review finding line writes the location field exactly as the raise recorded it, its `raw`
+(E13 amendment A7, Astra's F9): a range stays a range and a field naming several locations stays
+whole, because a review line is the one rendered line section 7 computes a finding's identity
+FROM. A rendered review block read back by `import-legacy` into a log that does not hold the run
+therefore raises the same findings, with the same finding IDs, for every location, ranged ones
+included. The recheck line is unchanged by that: it names a finding rather than raising one, and
+still renders a resolved location as its first `file:line`, the pilot's own form. A document
+whose log DOES hold the run is not affected either way: `import-legacy` recognises a line it
+rendered itself and never re-imports it (`native_rendered`, below).
+
+Under `--interface-version 1` the body is version 1's: no `review`, `review_lines` or
+`review_slices`; `text` is the recheck block then the grants; `rendered` counts those lines;
+a `finding_raised` is listed in `skipped`; `date` is the recheck block's date or the first
+grant's; and `spec.slice` is the recheck heading's one slice, or null.
 
 An event of the run that names a finding the log never raised is exit 4: a log that an `append`
 wrote cannot hold one, but a git merge that joined two tails can, and the component says so
@@ -918,20 +954,40 @@ an answer from a resolutions file                    -> resolution_applied, then
 bracketed by `import_started` and `import_finished`, and preceded by `log_opened` when the log
 does not exist yet. A pass that finds no news appends nothing at all, not even a bracket.
 
-**Lines the log already records natively.** A record line that is byte-equal to what `render`
-produces for a NATIVE event this log already holds is already recorded: the pass counts it under
-`native_rendered`, skips it, never imports it, never calls it `legacy_unparsed`, and never calls
-it ambiguous. This component owns both grammars, so byte equality is the whole rule; nothing is
-normalized away and no join is attempted, and a hand-written line that merely resembles a
-rendered one is read as the news it is. It covers every line `render` writes: a review finding
-line (`finding_raised`), a recheck line (`disposition`), a fix-introduced defect line
-(`defect_raised`), and a waiver or reopening line (`waived`, `reopened`). It also covers a
-`Status:` line whose text equals the last card this log holds for that slice from a native
-`card_set` or `card_observed` — a card a station moved and wrote onto the line, which before
-E13 amendment A4 was read back as a fresh observation.
+**Lines the log already records natively.** A record line that is the rendering of a NATIVE
+event this log already holds is already recorded: the pass counts it under `native_rendered`,
+skips it, never imports it, never calls it `legacy_unparsed`, and never calls it ambiguous. A
+line is that rendering when three things agree with one such event (E13 amendments A4 and A7):
 
-One native event answers for one line: a second copy of the same line below it is news, and a
-second raise of one finding stops the document under section 7 as it always did. A run whose
+1. **its bytes** equal what `render` writes for the event. Nothing is normalized away and no join
+   is attempted, so a hand-written line that merely resembles a rendered one is read as the news
+   it is;
+2. **its kind**: the event it would import as is the event's kind;
+3. **its finding identity in the document's slice context.** The bytes carry every input of a
+   finding's identity but one, the slice, which the line's PLACE supplies: a review finding line
+   or a fix-introduced defect line raises a finding of the slice the reader charges it to (its
+   heading's slice, or a defect's own slice field under a heading naming several; `none` in the
+   punch list), and a recheck line clears a finding of one of the slices its heading names. The
+   event's finding must be charged to that slice. A waiver or reopening line names no slice in
+   its grammar and may sit below any heading, so its place adds nothing. A heading's DATE is not
+   part of the identity: a block whose heading date changed is still the same rendering.
+
+So a line with the same bytes but another identity (a native slice A review line placed under
+slice B's heading) is legacy news, and imports as B's finding. The rule covers every line
+`render` writes: a review finding line (`finding_raised`), a recheck line (`disposition`), a
+fix-introduced defect line (`defect_raised`), and a waiver or reopening line (`waived`,
+`reopened`). It also covers a `Status:` line whose text equals the last card this log holds for
+that slice from a native `card_set` or `card_observed` — a card a station moved and wrote onto
+the line, which before E13 amendment A4 was read back as a fresh observation; card matching is
+keyed to its slice.
+
+Each native occurrence answers for one line and each line takes at most one. Where one line
+could be the rendering of more than one native event (two findings of two slices whose clears
+render the same bytes under a heading naming both), the lines are assigned in file order and an
+earlier line keeps its occurrence whenever another assignment exists. A line left over is news
+for the importer's own rules: a second copy of a review line, or two byte-identical lines of two
+slices placed under one slice's heading, is a second raise of one finding and stops the document
+under section 7, exit 5, as it always did. A run whose
 events came FROM a document (an earlier import pass) recognises nothing; what the document
 already gave the log is what `previously_imported` answers for. Recognised lines are outside
 `lines_classified`, the way previously imported lines are, and outside section 11.7's tail rule,
@@ -998,7 +1054,7 @@ Two further lines stop a document, both from amendment A9, and a resolutions ans
 | `lines_read` | how many lines the document holds. |
 | `lines_classified` | how many of them this pass classified. A record line an earlier pass already imported is not among them, and neither is any line the log already records natively (`native_rendered`), a `Status:` line included; every other `Status:` line is. |
 | `previously_imported` | how many RECORD lines an earlier pass of this document already recorded. |
-| `native_rendered` | how many lines the log already records as native events, recognised by their bytes and skipped: record lines `render` wrote, and a `Status:` line matching the last card a native `card_set` or `card_observed` holds for its slice. |
+| `native_rendered` | how many lines the log already records as native events, recognised by kind, slice context and bytes and skipped: record lines `render` wrote, and a `Status:` line matching the last card a native `card_set` or `card_observed` holds for its slice. Interface version 2; absent from a `--interface-version 1` response. |
 | `blocks` | how many record blocks the document holds. |
 | `slices` | how many slices it names. |
 | `counts` | how many events of each kind this pass would write. |
@@ -1099,7 +1155,7 @@ document under a `docs/reviews/` directory is a mirror and is reported as one, n
 a ledger document; `docs/records/`, `.git`, `node_modules`, `__pycache__` and `.venv` are
 skipped.
 
-Its output is bounded, as interface version 1 promises: `--limit N` returns at most `N`
+Its output is bounded, as the interface promises: `--limit N` returns at most `N`
 documents, in path order, and defaults to 50; `--offset K` skips the first `K` of them. The
 `counts` still describe the WHOLE workspace whatever page is asked for, and `total`, `returned`,
 `offset` and `truncated` say what this page is. A `--limit` or `--offset` that is not a whole
@@ -1170,15 +1226,16 @@ number (0 or more) is exit 2.
 | `state.schema.json` | what `state` returns. |
 | `import-report.schema.json` | what `import-legacy` and `survey` return, in five shapes told apart by `report`, `ok` and the fields each carries. A response claims this schema when it carries `report`. |
 | `resolutions.schema.json` | the answers to ambiguous legacy records: an INPUT, checked before the importer reads a single answer. |
+| `v1/import-report.schema.json` | the import report exactly as interface version 1 published it, closed, frozen byte for byte from the schema this component shipped before E13 amendment A4. What a `--interface-version 1` import report validates against. |
 
 `references/examples/` holds a valid and an invalid example for every shape, and
 `scripts/validate-examples.py` checks them, including a dropped-field pass over every required
 field. Every object in every schema is closed (`additionalProperties: false`), so an unknown key
 is refused rather than ignored.
 
-Two rules a Draft 2020-12 schema cannot make are enforced in code, and both are part of interface
-version 1: a native event's `at` must be a real calendar instant (`date-time` goes unchecked
-without a format validator, so `2026-02-30T09:00:00Z` would otherwise pass), and a claim,
+Two rules a Draft 2020-12 schema cannot make are enforced in code, and both are part of the
+interface in either version: a native event's `at` must be a real calendar instant (`date-time`
+goes unchecked without a format validator, so `2026-02-30T09:00:00Z` would otherwise pass), and a claim,
 scenario, `how`, `words` or `raised_by` is a single line with no ` · ` in it, with one exception
 below.
 
@@ -1213,7 +1270,7 @@ below.
   `import-legacy`, and the exemption has no flag on this CLI.
 - **A waiver may follow a clearance.** `append` admits a `waived` whose finding is `fixed`, which
   is the one status pair amendment A2 opened; `state` decides it by the same later-wins rule it
-  always used, so no reader's behaviour changes and `interface_version` stays 1.
+  always used, so no reader's behaviour changed and `interface_version` stayed 1 for it.
 - **The chain is the conflict detector.** A git merge that joined two tails leaves the second
   tail's first `prev` naming a line that is no longer its predecessor, and `verify` names that
   line.
