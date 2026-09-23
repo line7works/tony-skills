@@ -23,6 +23,12 @@ If this session is below the floor, or a reviewer call comes back `floor-refused
 
 ## Step 1 — Establish scope and spec, and open the run
 
+First read `adapters/README.md`, the adapter index: it names the profile for the harness you run in,
+and that profile names the helper that prints the whole `invocation` object as facts (the mode, the
+run id and directory, the harness, both sessions and the model with its floor) and says how the
+reviewer is summoned on that harness in Step 3. Put that object into the input whole and type none
+of its fields.
+
 Build the input (`references/input.schema.json`; `references/examples/input-caller.json` is one) and run:
 
 ```sh

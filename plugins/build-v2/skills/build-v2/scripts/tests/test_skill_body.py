@@ -87,10 +87,13 @@ class TheBodyIsPortable(unittest.TestCase):
         for token in FORBIDDEN:
             self.assertNotIn(token, text, token)
 
-    def test_no_adapter_or_setup_is_named(self):
-        """Slice 3 builds them; this lane leaves the seam open and names none."""
+    def test_the_body_names_the_adapter_index_and_nothing_below_it(self):
+        """E13 slice 3 (brief 3.1): step 2 points at `adapters/README.md` the way the pilot's
+        step 2 does, and the body names no single adapter, no setup and no sidecar. (Slice 2
+        asserted that no adapter was named at all, while the seam was open.)"""
         text = body().lower()
-        for token in ("adapters/", "setups/", "agents/openai.yaml"):
+        self.assertIn("adapters/readme.md", text)
+        for token in ("adapters/claude-code", "adapters/codex", "setups/", "agents/openai.yaml"):
             self.assertNotIn(token, text, token)
 
     def test_no_harness_is_named_as_the_one_it_runs_in(self):

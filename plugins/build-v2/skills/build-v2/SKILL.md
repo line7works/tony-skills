@@ -93,8 +93,13 @@ doc on disk.
 uv run scripts/build.py check-input <input.json>
 ```
 
-Write the document yourself from the request and the workspace, never from the conversation's
-history. `run_dir` is a fresh directory outside the workspace; `run_id` is single-use. `base` is
+First read `adapters/README.md`, the adapter index: it names the profile for the harness you run
+in, and that profile names the helper that prints the `invocation` object as facts. Put that
+object into the input whole and type none of its fields; the same helper prints
+`answer_fields.session_id`, which step 5's answer carries as its `session_id`, typed by no one.
+
+Write the rest of the document yourself from the request and the workspace, never from the
+conversation's history. `run_dir` is a fresh directory outside the workspace; `run_id` is single-use. `base` is
 the ref the slice is measured from — the tag or commit the slice started at, not HEAD. Set
 `report_only` when the user asked what a build WOULD do. Set `allow_open_blocker` only when the
 user's word says to frame on a slice that still carries an open BLOCKER.

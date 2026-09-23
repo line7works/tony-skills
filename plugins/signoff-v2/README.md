@@ -35,7 +35,15 @@ skills/signoff-v2/
 evals/seeded-cases/              the slice 0 cases, unchanged, plus observe.py and RUNNING.md
 ```
 
-`adapters/` and `setups/` are slice 3's and are deliberately absent; the seam is left open.
+  agents/openai.yaml             the Codex sidecar: implicit invocation OFF (never auto-triggered)
+  adapters/                      README.md (the index Step 1 points at); claude-code/ and codex/:
+                                 profile.md, invocation.py, reviewer.py, _common.py, tests/
+setups/                          README.md; claude-code/ and codex/: install.sh, verify-install.sh,
+                                 negative-tests.sh, launch.sh, prompts/, RESULTS.md;
+                                 verify-package.py and negative-cases.py shared by both
+
+`adapters/` and `setups/` were added in E13 slice 3. The installed-shape lookup of all three
+stations is recorded in `plugins/build-v2/setups/RESULTS.md`, "Three stations, one component".
 
 ## The phases
 
@@ -137,3 +145,25 @@ Built in E13 slice 2 against the stations E13 lane contract (section 10) and its
 The seeded cases under `evals/seeded-cases/` were written in slice 0 by an agent that built
 neither core; their expected outcomes live in an answer key this lane never saw, which is why
 `observe.py` emits facts and never an expectation.
+
+## Build record (E13 slice 3: adapters and installs)
+
+- Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's
+  worktree on `feat/stations-e13` from `f62e4b3`, against the lane contract section 11 with
+  amendments A1 to A8 and the control room's slice 3 brief. Nothing the core decides changed
+  (E13-1, P5); the one `SKILL.md` change is Step 1's pointer to `adapters/README.md`.
+- Added: the adapter index; two profiles; `invocation.py` (the whole invocation block: mode, run
+  ids, harness, both sessions, the model and its v1 floor) and `reviewer.py` (Claude Code: the
+  readers request block and the sidecar map; Codex: one fresh `codex exec` reviewer and its
+  identity) per harness, with their suites (Claude Code 30 tests, Codex 21 at the builder's run,
+  the independence refusal driven through the real core in each); `agents/openai.yaml` with
+  implicit invocation off; the setups of both harnesses; `references/signoff-contract.md` section
+  14 "Interface" and `scripts/tests/test_interface_document.py` (7 tests);
+  `scripts/tests/test_installed_shape.py` (route 3b, 2 tests).
+- `scripts/tests/test_seeded_cases.py` drives `evals/seeded-cases/observe.py`, which the control
+  room runs when it grades; the builder did not run it.
+- Test counts, confirmed by the control room on 2026-09-23 under both runtimes (`/usr/bin/python3` 3.9.6
+  and `uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3`): `scripts/tests/` 161
+  (without `test_seeded_cases.py`), `adapters/claude-code/tests/` 30, `adapters/codex/tests/` 21;
+  `validate-examples.py` ok both ways; the thirteen seeded cases graded 13 of 13. The check is filed in
+  the Clerk packet (`astra-outputs/e13/reports/slice-3-check.md`).

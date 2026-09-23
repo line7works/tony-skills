@@ -16,7 +16,7 @@ document and that contract differ, the contract is the authority and this docume
 Contents: 1 The job · 2 What is kept from v1 · 3 The phases · 4 The input · 5 The source set ·
 6 Scope adherence · 7 The checks · 8 The recorded answer · 9 The card · 10 The records ·
 11 Authorized writes · 12 The result · 13 Stops · 14 Report-only · 15 The semantic checks ·
-16 Exit codes · 17 What this core never does · 18 Open points.
+16 Exit codes · 17 What this core never does · 18 Open points · 19 Interface.
 
 ## 1. The job
 
@@ -541,3 +541,61 @@ it for this lane on 2026-09-22:
 
 - **`adapters/` and `setups/` are slice 3's.** The seam is left open: nothing in `SKILL.md` or in
   the scripts is harness-specific, and no adapter is named.
+
+## 19. Interface
+
+This document closes `scripts/build.py`'s CLI; this section states it in one place, in tables a
+test reads (`scripts/tests/test_interface_document.py` extracts each table below by its heading
+and fails when the code, the schemas or this section disagree). Added in E13 slice 3 (lane
+contract section 11, last bullet). Nothing here changes what the core does; every row restates
+sections 3, 12, 11 and 16 and the input schema.
+
+### Commands
+
+| Command | Arguments | Exit codes |
+|---|---|---|
+| `check-input` | `<input.json>` | 0, 1, 2, 3, 4 |
+| `contract` | `--run-dir D` | 0, 1, 2, 10 |
+| `preflight` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 10 |
+| `report` | `--run-dir D` | 1, 2, 3, 10 |
+| `identity` | `<workspace>` | 0, 1, 2, 3 |
+| `skill-identity` | none | 0, 1, 2, 3 |
+
+Every command also takes `--skill-root DIR` (test only) and `--records-root DIR`, before or after
+its name. The codes mean what section 16 says.
+
+### Result statuses
+
+| Status | Terminal status |
+|---|---|
+| `completed` | `completion` |
+| `checks_not_passed` | `completion` |
+| `not_complete` | `completion` |
+| `answer_refused` | `stop` |
+| `stopped` | `stop` |
+
+### Invocation fields
+
+The input's `invocation` object, which the adapter's helper fills (`../adapters/README.md`).
+
+| Field | Required | Values |
+|---|---|---|
+| `harness` | yes | a string, or null |
+| `caller` | yes | `user`, or the calling station's name |
+| `mode` | yes | `direct` or `station` |
+
+### Run-directory artifacts
+
+Every file this core writes under `run_dir` (section 11, item 1).
+
+| Artifact | Written by |
+|---|---|
+| `input.json` | `check-input` |
+| `checkpoint.json` | every phase |
+| `checkpoint.log` | every phase |
+| `contract.json` | `contract` |
+| `answer.json` | `record-answer` |
+| `receipt.json` | `report` |
+| `receipt.log` | `report` |
+| `result.json` | the phase that ends the run |

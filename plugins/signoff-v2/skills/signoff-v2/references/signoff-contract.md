@@ -15,7 +15,8 @@ the findings are kept in the records component instead of in Markdown alone.
 
 Contents: 1 Job · 2 Inputs · 3 The source set · 4 The review packet · 5 Independence ·
 6 Evidence · 7 Severity to verdict · 8 Authorized writes and the recording transaction ·
-9 Failure handling · 10 Report-only · 11 Status vocabulary · 12 What is out of scope.
+9 Failure handling · 10 Report-only · 11 Status vocabulary · 12 What is out of scope ·
+13 The repo's inspection sheet · 14 Interface.
 
 ## 1. Job
 
@@ -379,3 +380,74 @@ and reports `present but not the kit sheet`. The file is the repo's and is never
 
 The result carries what the sheet said under `review_sheet`, and the chat block prints v1's
 `REVIEW.md:` line from it.
+
+## 14. Interface
+
+This document closes `scripts/signoff.py`'s CLI; this section states it in one place, in tables a
+test reads (`scripts/tests/test_interface_document.py` extracts each table below by its heading
+and fails when the code, the schemas or this section disagree). Added in E13 slice 3 (lane
+contract section 11, last bullet). Nothing here changes what the core does; every row restates
+sections 2, 8, 9 and 11, the input schema and the script's own exit table (A7a).
+
+### Commands
+
+| Command | Arguments | Exit codes |
+|---|---|---|
+| `check-input` | `<input.json>` | 0, 1, 2, 3, 4, 10 |
+| `scope` | `--run-dir D` | 0, 1, 2, 3, 4, 10 |
+| `request` | `--run-dir D` | 0, 1, 2, 10 |
+| `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 10 |
+| `record` | `--run-dir D` | 1, 2, 3, 4, 10 |
+| `identity` | `<workspace>` | 0, 1, 2, 3 |
+| `skill-identity` | none | 0, 1, 2, 3 |
+
+Every command also takes `--records-root DIR`, and `--plugin-root DIR` and `--skill-root DIR`
+(test only), before or after its name. Exit 0: the phase succeeded and the run continues; 10: the
+run reached a terminal status, a completion included; 2: usage; 3: missing dependency (jsonschema,
+or the records component missing or at another interface version); 4: validation (the input, or a
+result that failed its schema or the semantic checks); 1: anything else.
+
+### Result statuses
+
+| Status | Terminal status |
+|---|---|
+| `completed` | `completion` |
+| `stopped` | `stop` |
+| `recording_failed` | `stop` |
+| `missing_input` | `stop` |
+| `stale_source` | `stop` |
+
+### Invocation fields
+
+The input's `invocation` object, which the adapter's helper fills (`../adapters/README.md`).
+
+| Field | Required | Values |
+|---|---|---|
+| `mode` | yes | `interactive` or `headless` |
+| `caller` | yes | `direct`, or the calling station's name |
+| `run_id` | yes | one path segment, single use |
+| `run_dir` | yes | an absolute path outside the workspace |
+| `run_date` | no | `YYYY-MM-DD` |
+| `harness` | no | a string, or null |
+| `sessions` | yes | `{building: string or null, reviewing: string}` |
+| `model` | no | `{id, floor_class, floor_met}`, or null |
+
+### Run-directory artifacts
+
+Every file and folder this core writes directly under `run_dir` (section 8, item 1, with the one
+folder that list does not name: `records/`, where `record` keeps the payload files it hands the
+component's `append`).
+
+| Artifact | Written by |
+|---|---|
+| `input.json` | `check-input` |
+| `state.json` | every phase |
+| `packet/` | `scope` |
+| `readers/` | `request` (`readers/mandate.md`; the Codex reviewer's `readers/calls/`) |
+| `request.json` | `request` |
+| `answer.json` | `record-answer` |
+| `receipt.json` | `record` |
+| `receipt.log` | `record` |
+| `records/` | `record` |
+| `result.json` | the phase that ends the run |
+| `chat.md` | the phase that ends the run |

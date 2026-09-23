@@ -564,6 +564,13 @@ or read the other condition's installed home. Any `yes` fails the preflight, bec
 that cannot separate them does not produce a controlled absent comparison.
 `--accept-unseparated` records the acceptance in the campaign and continues.
 
+For a Codex setup the probe has a fourth target since E13 slice 3 (pick P6, SB-14): a sentinel
+planted in a sibling launch's own session folder (`<trial record>/harness/codex-home/sessions`,
+where `setups/codex/launch.sh`'s session lock keeps each launch's rollouts) and in the condition
+home's shared `sessions/` and `child/sessions/`, which no locked launch writes and every Codex
+launch's wall refuses. Each must be planted and refused (`session_lock_outcomes`), or the preflight
+fails.
+
 ### `scan [PATH...] [--scrub-copy DIR]`
 
 The credential scan over every record: the OpenCode scanner's shapes plus JWT and `sk-`

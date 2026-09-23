@@ -35,8 +35,11 @@ station's own.
 yes, questions 1 and 3 no): the read commands and ONE card event. Build raises nothing and clears
 nothing.
 
-**Not here yet.** `adapters/` and `setups/` are slice 3's, and the seam is left open: nothing in
-`SKILL.md` or in the scripts is harness-specific and no adapter is named.
+**Adapters and setups (E13 slice 3).** `skills/build-v2/adapters/` holds a Claude Code and a Codex
+adapter (a twelve-section profile and an `invocation.py` each, indexed by `adapters/README.md`,
+which SKILL.md step 2 points at); `setups/` holds the install, verify-install, negative-test and
+launch scripts of each harness and their measured `RESULTS.md`, plus `three-stations.sh`, the
+installed-shape lookup of all three stations. Nothing in the core's scripts is harness-specific.
 
 ## Layout
 
@@ -54,6 +57,11 @@ plugins/build-v2/
       receipt.schema.json             # the card transaction
       checkpoint.schema.json          # what a run carries between its phases
       examples/                       # accepted and rejected examples of each, with the stops
+    agents/openai.yaml                # the Codex sidecar: interface metadata, implicit invocation allowed
+    adapters/
+      README.md                       # the adapter index SKILL.md step 2 points at
+      claude-code/                    # profile.md, invocation.py, _common.py, tests/
+      codex/                          # profile.md, invocation.py, _common.py, tests/
     scripts/
       build.py                        # the phase driver: check-input, contract, preflight,
                                       #   record-answer, report, identity, skill-identity
@@ -63,6 +71,13 @@ plugins/build-v2/
       tests/                          # the unittest suites (standard library)
   evals/
     seeded-cases/                     # the slice 0 cases, copied unchanged, plus observe.py
+  setups/
+    README.md                         # what each script does and which pilot script it came from
+    claude-code/, codex/              # install.sh, verify-install.sh, negative-tests.sh, launch.sh,
+                                      #   prompts/, RESULTS.md
+    verify-package.py                 # the installed-package checks both harnesses run
+    negative-cases.py                 # the nine negative installation cases for either harness
+    three-stations.sh, RESULTS.md     # three stations, one records component (E12 A6's shape)
 ```
 
 ## Running it
@@ -98,6 +113,20 @@ resolver's own route 3a, and injects faults through a stand-in `records.py` hand
 as `RECORDS_ROOT`, so what the transaction tests measure is a real log and real refusals.
 
 `BUILD_TEST_SCRATCH` names the directory fixtures are built under, when it is set.
+
+The adapter suites run the same way from their own folders:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s skills/build-v2/adapters/claude-code/tests
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s skills/build-v2/adapters/codex/tests
+```
+
+They drive each helper as a child process from a temporary directory with a stand-in `claude` or
+`codex` that answers `--version` only, so no test launches a harness or calls a model; the schema
+checks run jsonschema at the pin through `uv run`. `scripts/tests/test_interface_document.py`
+reads `references/build-contract.md` section 19 and fails when the document and the code disagree
+(`BUILD_V2_INTERFACE_DOC` points it at another copy). `scripts/tests/test_seeded_cases.py` drives
+`evals/seeded-cases/observe.py`, which the control room runs when it grades.
 
 ## The seeded cases
 
@@ -161,3 +190,23 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   sees that the build doc changed, and the scope comparison passes over it because the loop writes
   into it by design; `source_set.sanctioned` publishes it with its reason.
   `references/build-contract.md` sections 5 and 18 carry the reasoning.
+
+## Build record (E13 slice 3: adapters and installs)
+
+- Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's
+  worktree on `feat/stations-e13` from `f62e4b3`, against the lane contract section 11 with
+  amendments A1 to A8 and the control room's slice 3 brief. Nothing the core decides changed
+  (E13-1): the adapters fill the `invocation` block and the answer's session id; the one
+  `SKILL.md` change is step 2's pointer to `adapters/README.md`.
+- Added: the adapter index, two profiles and two `invocation.py` helpers with their suites
+  (Claude Code 14 tests, Codex 15 at the builder's run); `agents/openai.yaml`; the setups of both
+  harnesses; `references/build-contract.md` section 19 "Interface" and
+  `scripts/tests/test_interface_document.py` (7 tests); `scripts/tests/test_installed_shape.py`
+  (route 3b of this core's client on a rebuilt installed shape, 2 tests).
+- Measured: `setups/claude-code/RESULTS.md`, `setups/codex/RESULTS.md`, and `setups/RESULTS.md`
+  ("Three stations, one component").
+- Test counts, confirmed by the control room on 2026-09-23 under both runtimes (`/usr/bin/python3` 3.9.6
+  and `uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3`): `scripts/tests/` 204
+  (without `test_seeded_cases.py`), `adapters/claude-code/tests/` 14, `adapters/codex/tests/` 15;
+  `validate-examples.py` ok both ways; the nine seeded cases graded 9 of 9. The check is filed in the
+  Clerk packet (`astra-outputs/e13/reports/slice-3-check.md`).

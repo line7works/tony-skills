@@ -1833,6 +1833,12 @@ def wall_refused_roots(campaign, setup, condition, allowed):
                       (os.path.join(campaign.root, "tables"), "the campaign's tables"),
                       (os.path.join(campaign.root, "probes"), "the campaign's probes")):
         rows.append({"path": os.path.realpath(path), "why": why})
+    # E13 pick P6 (SB-14): a locked Codex launch runs in its own `<out-dir>/codex-home` and never
+    # writes the condition home's shared session folders, so nothing the launch needs is under
+    # them, and what IS under them is earlier sessions' rollouts. Refused, after the allows.
+    for row in session_lock_targets(campaign, setup, None, condition):
+        if row.get("shared"):
+            rows.append({"path": os.path.realpath(row["path"]), "why": row["what"]})
     for entry in (wall_needs(setup).get("refused_even_though_the_harness_would_use_them")
                   or []):
         rows.append({"path": _expand(entry["path"]),
@@ -11994,6 +12000,9 @@ def _launch_and_cut(campaign, setup, prompt_path, workspace, out_dir, run_dir, t
         "checkpoint_states_polled": len(seen),
         "states_seen": seen[-6:],
         "session": _session_id(setup, out_dir),
+        # E13 pick P6: a locked Codex session lives in its launch's own home; the resume must
+        # run there or it finds no session to resume.
+        "session_home": _session_home(setup, out_dir),
         "reason": "cut at the first checkpoint showing one item done and one pending, then "
                   "stopped, then retained and verified (E10-47)" if valid else
                   (invalid_because or "no cut"),
@@ -12077,6 +12086,15 @@ def _session_id(setup, out_dir):
         if os.path.isfile(session):
             return read_json(session).get("session_id")
     return None
+
+
+def _session_home(setup, out_dir):
+    """The per-launch Codex home `setups/codex/launch.sh` recorded (E13 P6), else None."""
+    if setup.harness != "codex":
+        return None
+    path = os.path.join(out_dir, "launch.json")
+    home = read_json(path).get("codex_home") if os.path.isfile(path) else None
+    return home if home and os.path.isdir(home) else None
 
 
 # The compaction mechanism each harness offers, measured on this machine (E10-12).
@@ -12167,7 +12185,9 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
     elif setup.harness == "codex":
         # `-C`, `--add-dir` and the sandbox line are `codex exec` options and must come BEFORE
         # the `resume` subcommand, which accepts only its own options (E10-35).
-        child_home = os.path.join(setup.home("available"), "child")
+        # E13 pick P6: the first half ran in its own launch home; the resume runs there too.
+        session_home = cut.get("session_home") or setup.home("available")
+        child_home = os.path.join(session_home, "child")
         argv = ["codex", "exec", "--json", "-o", os.path.join(out_dir, "final.md"),
                 "-C", workspace, "--add-dir", child_home,
                 # fix 5 (D): the run leaf's own root, an `exec` option, so BEFORE `resume`
@@ -12182,7 +12202,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         argv = wall.prefix(argv)
         if registry is not None:
             registry.reserved(argv, "exec resume + compact limit")
-        step = run_cmd(argv, env=dict(env, CODEX_HOME=setup.home("available")),
+        step = run_cmd(argv, env=dict(env, CODEX_HOME=session_home),
                        cwd=wall.cwd or workspace,
                        stdin=prompt, timeout=timeout, label="exec resume + compact limit",
                        registry=registry)
@@ -12190,7 +12210,7 @@ def _compaction_resume(campaign, setup, cut, resume_path, workspace, out_dir, ti
         write_text(os.path.join(out_dir, "resume.err"), step["stderr"])
         # E10-36: the compaction witness lives in the thread's own rollout, not in the exec
         # event stream, which carries no compaction event at all.
-        rollouts = glob.glob(os.path.join(setup.home("available"), "sessions", "**",
+        rollouts = glob.glob(os.path.join(session_home, "sessions", "**",
                                           "rollout-*%s.jsonl" % session), recursive=True)
         if len(rollouts) == 1:
             shutil.copyfile(rollouts[0], os.path.join(out_dir, "rollout.jsonl"))
@@ -14447,6 +14467,39 @@ def native_read_boundary_probe(campaign, plan, setups=None, condition="available
 
 NATIVE_SENTINEL_NAME = "native-read-boundary-sentinel.txt"
 
+# E13 pick P6 (SB-14): `setups/codex/launch.sh` runs every Codex session in its own per-launch
+# home, `<out-dir>/codex-home`, so a launch's rollout (and its verifier children's) sits in that
+# launch's own record. Measured on codex-cli 0.155.1 in E13 slice 3: no setting moves the rollout
+# folder but CODEX_HOME itself, and Codex's own sandbox refuses no read, so the separation is the
+# wall's, and the preflight must prove it on these folders.
+SESSION_LOCK_HOME = "codex-home"
+
+
+def session_lock_targets(campaign, setup, theirs, condition="available"):
+    """The session folders a Codex launch must NOT read (P6), each `{path, what, shared}`.
+
+    `theirs` names a sibling trial whose own launch home is the first target; None leaves it
+    out (the wall's refused roots need only the shared ones, because every other trial's record
+    is refused already). A non-Codex setup has none.
+    """
+    if getattr(setup, "harness", None) != "codex":
+        return []
+    home = setup.home(condition)
+    rows = []
+    if theirs:
+        rows.append({"path": os.path.join(campaign.trial_dir(theirs), "harness", SESSION_LOCK_HOME,
+                                          "sessions"),
+                     "what": "a sibling launch's own session folder (its per-launch home, P6)",
+                     "shared": False})
+    rows.append({"path": os.path.join(home, "sessions"),
+                 "what": "the condition home's shared session folder, which no locked launch "
+                         "writes and which holds earlier sessions' rollouts (SB-14)",
+                 "shared": True})
+    rows.append({"path": os.path.join(home, "child", "sessions"),
+                 "what": "the condition home's shared child session folder (SB-14)",
+                 "shared": True})
+    return rows
+
 
 def read_boundary_probe(campaign, plan, setups=None):
     """E11-7 item 2: can a trial read ANOTHER trial's records, or another condition's install?
@@ -14505,9 +14558,17 @@ def read_boundary_probe(campaign, plan, setups=None):
                    "other_home_sentinel_bytes": planted_home["bytes"],
                    "why": "planted and confirmed present and non-empty from OUTSIDE the "
                           "wall, before the child ran (SB-12, N3)"}
+        lock = []
+        for target in session_lock_targets(campaign, setup, theirs):
+            got = plant_read_sentinel(os.path.join(target["path"], NATIVE_SENTINEL_NAME))
+            lock.append({"sentinel": got["sentinel"], "ok": got["ok"], "bytes": got["bytes"],
+                         "what": target["what"]})
+        if lock:
+            planted["session_lock"] = lock
         env = campaign.env(extra=setup.launch_env("available"), scratch=my_scratch,
                            require_binaries=False)
-        argv = [sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home]
+        argv = ([sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel, other_home]
+                + [row["sentinel"] for row in lock])
         walled_record, cwd = None, my_scratch
         if sealed:
             walled_record = read_boundary_wall(campaign, setup, mine, my_scratch)
@@ -14526,7 +14587,7 @@ def read_boundary_probe(campaign, plan, setups=None):
         if sealed:
             # the same child, with no profile at all: what the FILESYSTEM allows.
             bare = run_cmd([sys.executable, "-c", READ_BOUNDARY_SOURCE, their_sentinel,
-                            other_home],
+                            other_home] + [row["sentinel"] for row in lock],
                            env=env, cwd=my_scratch, label="read-boundary probe, unwalled")
             fact = _read_boundary_answer(bare)
             fact["planted"] = planted
@@ -14595,6 +14656,14 @@ def _read_boundary_separated(answer):
     if any(word is None for word in outcomes):
         # a record written before the typed outcomes existed: unmeasured, never a pass
         return False
+    # E13 pick P6 (SB-14): a Codex probe also plants a sentinel in a sibling launch's session
+    # folder and in the condition home's shared ones; each must be planted AND refused.
+    lock = (planted or {}).get("session_lock") or []
+    if lock:
+        seen = answer.get("session_lock_outcomes") or {}
+        for row in lock:
+            if not row.get("ok") or seen.get(row.get("sentinel")) != "refused":
+                return False
     return all(word == "refused" for word in outcomes)
 
 
@@ -14706,6 +14775,8 @@ except Exception as exc:
     out["other_home_outcome"] = "error"
     out["other_home_error"] = type(exc).__name__
     out["read_the_other_conditions_install"] = False
+if len(sys.argv) > 3:
+    out["session_lock_outcomes"] = {path: outcome(path)[0] for path in sys.argv[3:]}
 json.dump(out, sys.stdout)
 """
 

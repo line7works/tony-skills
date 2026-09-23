@@ -547,3 +547,16 @@ codex plugin list (the runner's own catalog read, no model)
 ```
 
 The `routing` home is still the copy of the available one.
+
+## E13 slice 3: the per-trial session-folder lock (pick P6, SB-14), 2026-09-23
+
+`launch.sh` now runs every session in its own per-launch home, `<out-dir>/codex-home`, derived from
+the condition home by the session-lock block (config copied with the child pointer rewritten, the
+credential linked, `plugins/` and `skills/` copied because E9-40 derives the sessions root from the
+helper's resolved path, a private `child/`). `launch.json` gains `codex_home`, `condition_home` and
+`session_lock`, and a spent `codex-home` makes the out-dir spent. The block is byte-identical in
+`plugins/build-v2/setups/codex/launch.sh` and `plugins/signoff-v2/setups/codex/launch.sh`. The
+runner's read-boundary preflight names a sibling launch's session folder and the condition home's
+shared session folders as targets, and every Codex launch's wall refuses the shared ones. The
+measurements (codex-cli 0.155.1), the design and the tests are recorded in
+`plugins/build-v2/setups/codex/RESULTS.md`, "The session lock". The bench was not rerun.

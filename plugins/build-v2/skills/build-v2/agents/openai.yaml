@@ -1,0 +1,3 @@
+interface:
+  display_name: "Build v2"
+  short_description: "Build one slice of a build doc inside its drawn scope, with honest reporting"

@@ -1,0 +1,5 @@
+/signoff-v2
+Do not run any command, do not read any file, and do not start the procedure. From the skill body the harness just delivered to you, reply with exactly three lines and nothing else:
+1. The heading of the last section of the body, verbatim.
+2. The last line of that section, verbatim.
+3. The heading of the last numbered step, verbatim.
