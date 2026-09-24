@@ -234,7 +234,7 @@ def settle_append(client, receipt, name, workspace, doc, events, run_id, kind, s
 
     Three states, and the difference between them is Revision 7:
 
-    - `landed`  : nothing to do.
+    - `landed`  : nothing to do (reported recovered when a stopped pass found it in the log).
     - `refused` : definitive. The same named stop is delivered again and nothing is retried.
     - `unknown` : the crash window. Ask the log for THIS RUN's events of this kind; a failed read
                   is a stop, never an empty set. They are there, so only the receipt's record was
@@ -246,7 +246,9 @@ def settle_append(client, receipt, name, workspace, doc, events, run_id, kind, s
     if block is None:
         return None, False
     if block["outcome"] == rcpt.LANDED:
-        return block, False
+        # punch-F2: an append an earlier stopped pass found in the log is still a RECOVERED one,
+        # and the run's result says so when a later pass completes.
+        return block, bool(block.get("recovered"))
     if block["outcome"] == rcpt.REFUSED:
         refused = block["refused"]
         raise Stop(_status_for(refused["exit_code"]), "append_refused", refused["reason"],

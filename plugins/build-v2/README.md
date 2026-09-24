@@ -204,6 +204,11 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   as `completed` with `out_of_scope: []`. Tests: `scripts/tests/test_full_fix_f1.py`; the rerun
   settle test in `test_transaction.py` now changes its check through a git-ignored switch, since a
   tracked edit after the decision is this stop.
+- **punch-F1 (E13 punch list, Astra's recheck)** the pin now keeps each path's type and git mode
+  with its content (`file:100644:`/`file:100755:`, `link:`, `dir`, `missing`), and a path that left
+  the pinned set or joined it counts as moved. Before this, a tracked file deleted when the decision
+  was made and restored before the resume, or an executable bit changed after the kill, compared
+  equal and the run settled `completed`. Tests: `scripts/tests/test_punch_f1.py`.
 - **Send-back 1 (F4, build side)** the input's `invocation` gains `session_id`, the session both
   adapters READ from the harness record (the same value as `answer_fields.session_id`). When it is
   present the answer's typed `session_id` must equal it, or `record-answer` (and `report`, again)

@@ -193,6 +193,38 @@ scratch folder):
   `signoff_core/constants.py`'s `KNOWN_RECORDS_VERSIONS = (1,)` is dead: nothing reads it (the
   client copy checks the component's interface version itself), so it was left as it is.
 
+## Punch list (E13, after Astra's recheck: punch-F2, punch-F3, punch-F9, punch-N1)
+
+- **punch-F2 (BLOCKER)** a recovery that stops (`stale_source` above all) first asks the records
+  component, through `records.py events` and `verify` (argv, read-only), about every append the
+  receipt still holds as `unknown`: a landed one moves to `landed` in the receipt, marked
+  recovered, and is reported under `records.appended` with the log's seqs; an absent one is
+  reported under `records.not_landed` (`absent`, or `unreadable`). Before, a kill during the card
+  append plus a moved source reported only the findings' seq while the log held the card's. A later
+  pass that completes still lists such an append under `recovered`. `test_fix3_astra.py`'s F7
+  recovery test asserted the old `appended: []` and now asserts the new rule.
+  `scripts/tests/test_punch_f2.py`.
+- **punch-F3 (MAJOR)** citation tokens follow CommonMark's link grammar: angle-bracketed
+  destinations with spaces, balanced and backslash-escaped parentheses, link titles, reference
+  definition lines, `<...>` tokens with spaces, HTML `href`/`src`, quoted spans and shell-escaped
+  runs, with backslash escapes and HTML entities undone; a withheld path holding a space is also
+  found in plain prose. Before, `[source](<./builder notes.md#proof>)` was recorded.
+  `scripts/tests/test_punch_f3.py`.
+- **punch-F9 (MAJOR)** `packet.first_heading` reads headings by CommonMark's block rules: Setext
+  headings, ATX headings indented up to three spaces (closing `#`s dropped), fences of three or more
+  backticks or tildes closed only by a fence of the same character at least as long, indented code,
+  thematic breaks, HTML comments and raw HTML blocks; a leading `---` block is read as frontmatter
+  and as a thematic break, and either reading's first heading can declare the notes. Before, a
+  Setext, an indented or a four-backtick-fenced case was delivered and signed.
+  `scripts/tests/test_punch_f9.py`.
+- **punch-N1 (look)** the N1 repair checked end to end through both helpers on the S3 case shape
+  (a legacy build result from this session, no `invocation.session_id`): exit 3, no invocation and
+  no session id printed, the project tree (`.git` included), the build run and the run-directory
+  root untouched. No behaviour change: the core's input carries no fact that a build result was
+  selected, so it reads `sessions.building: null` as "not known", and the signoff contract (section
+  5) puts the refusal of a selected result without an identity on the helper; a test pins that.
+  `adapters/*/tests/test_punch_n1.py`.
+
 ## Build record (E13 slice 3: adapters and installs)
 
 - Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's

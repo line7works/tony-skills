@@ -58,40 +58,128 @@ class PacketIncomplete(RuntimeError):
 FRONTMATTER_OPEN = "---"
 FRONTMATTER_CLOSE = ("---", "...")
 
+# punch-F9 (Astra's recheck): Setext headings, ATX headings indented up to three spaces, and fences
+# of three OR MORE backticks or tildes closed only by a fence at least as long of the same
+# character. CommonMark's block rules for exactly those constructs, and nothing more.
+ATX = re.compile(r"^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
+ATX_CLOSING = re.compile(r"(?:^|[ \t]+)#+[ \t]*$")
+SETEXT_UNDERLINE = re.compile(r"^(?:=+|-+)[ \t]*$")
+FENCE_OPEN = re.compile(r"^(`{3,}|~{3,})(.*)$")
+FENCE_CLOSE = re.compile(r"^(`{3,}|~{3,})[ \t]*$")
+THEMATIC_BREAK = re.compile(r"^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$")
+HTML_RAW = re.compile(r"^<(script|pre|style|textarea)(?:[\s>]|$)", re.I)
+
+
+def _indent(line):
+    """(columns of leading indentation, the rest), a tab stopping at the next multiple of four."""
+    width, index = 0, 0
+    while index < len(line) and line[index] in " \t":
+        width = width + 4 - (width % 4) if line[index] == "\t" else width + 1
+        index += 1
+    return width, line[index:]
+
+
+def _first_heading_from(lines, index):
+    """The first heading's title at or after `lines[index]`, read by CommonMark's rules for
+    headings, fences, indented code, thematic breaks and raw HTML blocks; or None."""
+    fence = None            # (character, length) of the open fence
+    html_end = None         # the text that closes an open raw HTML block
+    paragraph = []
+    while index < len(lines):
+        width, body = _indent(lines[index])
+        index += 1
+        if fence:
+            match = FENCE_CLOSE.match(body) if width <= 3 else None
+            if match and match.group(1)[0] == fence[0] and len(match.group(1)) >= fence[1]:
+                fence = None
+            continue
+        if html_end:
+            if html_end in body.lower():
+                html_end = None
+            continue
+        if not body.strip():
+            paragraph = []
+            continue
+        if paragraph and width <= 3 and SETEXT_UNDERLINE.match(body):
+            return " ".join(paragraph)
+        if width >= 4:
+            if paragraph:                       # a lazy continuation line of the paragraph
+                paragraph.append(body.strip())
+            continue                            # else indented code: never a heading
+        match = FENCE_OPEN.match(body)
+        if match and not (match.group(1)[0] == "`" and "`" in match.group(2)):
+            fence, paragraph = (match.group(1)[0], len(match.group(1))), []
+            continue
+        match = ATX.match(body)
+        if match:
+            return ATX_CLOSING.sub("", match.group(2) or "").strip()
+        if THEMATIC_BREAK.match(body):
+            paragraph = []
+            continue
+        if body.startswith("<!--"):
+            if "-->" not in body[4:]:
+                html_end = "-->"
+            paragraph = []
+            continue
+        match = HTML_RAW.match(body)
+        if match:
+            close = "</%s>" % match.group(1).lower()
+            if close not in body.lower():
+                html_end = close
+            paragraph = []
+            continue
+        paragraph.append(body.strip())
+    return None
+
+
+def _frontmatter_end(lines):
+    """The index just after a closed frontmatter block, or None when the text has none.
+
+    Leading blank lines are passed over; a first non-blank line of `---` opens the block, which
+    runs to its closing `---` (or `...`). An opener that never closes is not frontmatter."""
+    index = 0
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index >= len(lines) or lines[index].strip() != FRONTMATTER_OPEN:
+        return None
+    index += 1
+    while index < len(lines):
+        if lines[index].strip() in FRONTMATTER_CLOSE:
+            return index + 1
+        index += 1
+    return None
+
+
+def first_headings(text):
+    """Every reading's first heading (punch-F9), without duplicates.
+
+    A text that opens with a closed frontmatter block has two readings: frontmatter, then the
+    Markdown after it; or no frontmatter, where the opening `---` is a thematic break and a text
+    line before a later `---` is a Setext heading. Both are returned, the frontmatter reading
+    first, so a declaration either reading makes is seen and neither can hide one. A text with no
+    closed frontmatter has one reading."""
+    lines = text.split("\n")
+    out = []
+    end = _frontmatter_end(lines)
+    for start in ((end, 0) if end is not None else (0,)):
+        heading = _first_heading_from(lines, start)
+        if heading is not None and heading not in out:
+            out.append(heading)
+    return out
+
 
 def first_heading(text):
     """The title of the first actual Markdown heading after any frontmatter, or None (F9).
 
     Leading blank lines are passed over; a first non-blank line of `---` opens a frontmatter block
-    that runs to its closing `---` (or `...`), and nothing inside it is a heading; a fenced code
-    block is passed over the same way. There is no line cutoff: frontmatter of any length, or any
-    number of blank lines, cannot push a declaration out of reach. Only this first heading is ever
-    tested against the declaration rule.
-    """
-    lines = text.split("\n")
-    index = 0
-    while index < len(lines) and not lines[index].strip():
-        index += 1
-    if index < len(lines) and lines[index].strip() == FRONTMATTER_OPEN:
-        index += 1
-        while index < len(lines) and lines[index].strip() not in FRONTMATTER_CLOSE:
-            index += 1
-        index += 1
-    fence = None
-    while index < len(lines):
-        line = lines[index]
-        stripped = line.strip()
-        if fence:
-            if stripped.startswith(fence):
-                fence = None
-        elif stripped.startswith("```") or stripped.startswith("~~~"):
-            fence = stripped[:3]
-        else:
-            match = HEADING.match(line)
-            if match:
-                return match.group(2)
-        index += 1
-    return None
+    that runs to its closing `---` (or `...`), and nothing inside it is a heading; fenced code, an
+    indented code block and a raw HTML block are passed over the same way. There is no line
+    cutoff: frontmatter of any length, or any number of blank lines, cannot push a declaration out
+    of reach. Only this first heading is ever tested against the declaration rule (punch-F9: ATX
+    headings indented up to three spaces, Setext headings, and fences of any length, closed only
+    by a fence at least as long of the same character)."""
+    headings = first_headings(text)
+    return headings[0] if headings else None
 
 
 def declares_itself_builder_notes(workspace, rel):
@@ -106,9 +194,9 @@ def declares_itself_builder_notes(workspace, rel):
     if rel.lower().endswith(".md") and not os.path.islink(full):
         text = read_text_or_none(full)
         if text:
-            heading = first_heading(text)
-            if heading and NOTES_HEADING.search(heading):
-                return "its first heading declares it the builder's notes"
+            for heading in first_headings(text):
+                if NOTES_HEADING.search(heading):
+                    return "its first heading declares it the builder's notes"
     return None
 
 

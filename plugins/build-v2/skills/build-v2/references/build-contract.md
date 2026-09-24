@@ -335,19 +335,29 @@ Four rules hold that shape together, each one a failure found in the pilot befor
 - **the document target's bytes are pinned before the append**, so an edit that lands between the
   plan and the write is a named stop (`outside_edit`) and never the new baseline;
 - **the source the decision was made on is pinned with it** (Astra's F1, E13 full review): the
-  checkpoint's `decision.source_pin` holds HEAD and the content identity of every changed or
-  untracked path (lstat semantics: a symlink is its link target text), the build doc and
-  `docs/records/` excepted. It is verified right before the append, again after the append and
+  checkpoint's `decision.source_pin` holds HEAD and the identity of every changed or untracked
+  path, the build doc and `docs/records/` excepted. A path's identity is its type, the mode git
+  records and its content, with lstat semantics (punch list, punch-F1): `file:100644:<sha256>` or
+  `file:100755:<sha256>`, `link:<sha256 of the link target text>` (never followed), `dir`, or
+  `missing` for a deleted path. So a tracked deletion restored between the kill and the resume, an
+  executable bit turned on or off, a file that became a symlink or a directory, and a path re-created
+  with the same bytes and another mode all move the pin. A path that left the set or joined it moved. It is verified right before the append, again after the append and
   before the document half, and FIRST on every settling pass, before the append half is settled.
   Only this transaction's receipted document change is permitted under it. Any other source that
-  moved (a new untracked file, a tracked edit, a HEAD that moved) is the named stop
+  moved (a new untracked file, a tracked edit, a restored deletion, a mode change, a type change, a
+  HEAD that moved) is the named stop
   `source_changed`: the result carries the moved paths in `source_moved`, the CURRENT source set and
   its out-of-scope paths (a late path outside the slice included), and the receipt; a card event that
   already landed is kept, recorded in the receipt when a settling pass finds it in the log, and
   reported as landed. The card does not move, the `Status:` line is not written, no baseline is
   regenerated, no check is rerun and nothing is appended again, on this pass or any later one. A
   run whose decision carries no pin (made before this rule) stops the same way on a settle rather
-  than guessing its source unmoved. Build again on the current source.
+  than guessing its source unmoved; so does a run whose pin was written in the older
+  content-only form, since every pinned path then reads as moved. Not in the pin, and why: ignored
+  files (section 8 leaves them out of the source set), the git index (the set compares the working
+  tree with HEAD, staged or not), permission bits other than the executable bit (git keeps no
+  others), and the files inside a nested repository git lists only as a directory. Build again on
+  the current source.
 
 A settle matches its OWN event by the seq the plan named AND by the run id on the event, so a
 card event of another run is never mistaken for it and no event is ever appended twice. Either

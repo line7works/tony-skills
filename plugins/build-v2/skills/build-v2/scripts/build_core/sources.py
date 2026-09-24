@@ -180,18 +180,32 @@ def lists_holding(source, path):
 
 # ---- the source pin (Astra's F1, E13 full review) ----------------------------------------------
 
+MISSING = "missing"
+
+
 def _lstat_digest(full):
-    """The content identity of one path, with lstat semantics: a symlink is its link target text
-    and is never followed, a missing path is None, a directory is the empty string's digest."""
+    """The identity of one path, with lstat semantics: its type, the mode git records for it, and
+    its content. A symlink is `link:` and the digest of its link target text and is never
+    followed; a regular file is `file:100644:` or `file:100755:` (the executable bit git keeps,
+    punch-F1) and the digest of its bytes; a directory (a file replaced by one, or a nested
+    repository git lists as a directory) is `dir`; a missing path is `missing`, never None, so a
+    deleted path in the pin never compares equal to a path that has left the set (punch-F1: a
+    tracked deletion restored between the kill and the resume)."""
     import hashlib
-    if os.path.islink(full):
+    import stat as statmod
+    try:
+        st = os.lstat(full)
+    except FileNotFoundError:
+        return MISSING
+    if statmod.S_ISLNK(st.st_mode):
         return "link:" + hashlib.sha256(os.readlink(full).encode("utf-8", "surrogateescape")).hexdigest()
-    if not os.path.lexists(full):
-        return None
-    if os.path.isdir(full):
+    if statmod.S_ISDIR(st.st_mode):
         return "dir"
+    if not statmod.S_ISREG(st.st_mode):
+        return "other:%o" % statmod.S_IFMT(st.st_mode)
+    mode = "100755" if st.st_mode & statmod.S_IXUSR else "100644"
     with open(full, "rb") as fh:
-        return hashlib.sha256(fh.read()).hexdigest()
+        return "file:%s:%s" % (mode, hashlib.sha256(fh.read()).hexdigest())
 
 
 def source_pin(workspace, document):
@@ -220,7 +234,17 @@ def pin_moved(workspace, document, pin):
     `HEAD`, when git cannot list them). Raises GitError when git cannot answer."""
     now = source_pin(workspace, document)
     before = (pin or {}).get("paths") or {}
-    moved = set(p for p in set(before) | set(now["paths"]) if before.get(p) != now["paths"].get(p))
+    # A path absent from one side is compared as its identity on disk NOW, never as None: a path
+    # that left the set (a restored deletion, a mode put back) has moved from a pinned `missing`
+    # or a pinned mode, and a path that joined it has moved from whatever the pin would have said.
+    # Absent from the pin means "equal to HEAD then"; absent now means "equal to HEAD now".
+    moved = set()
+    for p in set(before) | set(now["paths"]):
+        if p in before and p in now["paths"]:
+            if before[p] != now["paths"][p]:
+                moved.add(p)
+        else:
+            moved.add(p)
     if now["head"] != (pin or {}).get("head"):
         between = git(workspace, ["diff", "--name-only", "-z", "%s..%s" % (pin.get("head"), now["head"]),
                                   "--", "."] + _exclude_args(), binary=True, check=False) \

@@ -158,6 +158,19 @@ about prose:
    Markdown heading says so. The first heading is the first ACTUAL Markdown heading after any
    frontmatter (a leading `---` block to its closing `---` or `...`), leading blank lines and
    fenced code passed over, with no line cutoff; only that first heading is tested (Astra's F9).
+   A heading is read by CommonMark's block rules (punch-F9): an ATX heading (`#` to `######`, then
+   a space or the line's end) indented up to three spaces, its closing `#` sequence dropped; a
+   Setext heading (a paragraph's text lines followed by an `===` or `---` underline indented up to
+   three spaces); a fence is three OR MORE backticks or tildes indented up to three spaces and is
+   closed only by a fence of the same character at least as long, so a four-backtick fence is not
+   closed by three; four spaces of indentation are code, never a heading; a raw HTML comment
+   (`<!--` to `-->`) or `<script>`, `<pre>`, `<style>`, `<textarea>` block is passed over like a
+   fence; `#word` is no heading. A text that opens with a closed `---` block is read both ways,
+   as frontmatter and as a thematic break (where a line before its closing `---` is a Setext
+   heading), and a declaration in either reading's first heading counts, so neither can hide one;
+   an opener that never closes is not frontmatter. Not read as headings, and why: a heading inside
+   a block quote or a list item, and an HTML `<h1>` to `<h6>` element (the rule speaks of the
+   first Markdown heading; the file-name rule and rule 1 still reach such a file).
    A symbolic link is never followed to find one;
 3. inside the ledger document, the sections v1 Step 2 names as the builder's and the inspector's
    working records (`## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`,
@@ -187,6 +200,21 @@ relative to the workspace (its literal or its real path). A path outside the wor
 nothing, and nothing is read to resolve anything. A resolved path equal to a withheld path (or, as
 before, a bare file name no delivered file shares), or a resolved `<ledger doc>#<section>` naming a
 withheld section, is the same `independence` refusal, before any verdict or finding is written.
+
+**The tokens follow CommonMark's link grammar** (punch list, punch-F3). A link or image
+destination is read the way CommonMark reads it, never by one regular expression: an
+angle-bracketed destination may hold spaces (`[source](<./builder notes.md#proof>)`), a bare one may
+hold balanced or backslash-escaped parentheses (`docs/builder-notes\(1\).md`), and its optional
+title (`"…"`, `'…'`, `(…)`) is scanned again as text. Also tokens: a link reference definition line
+(`[n]: <./builder notes.md> "t"`, so a reference-style `[x][n]` is caught at its definition); a
+`<…>` token with or without spaces, `file://` included; an HTML `href` or `src` value in any
+quoting; a quoted span; and a run of path characters holding backslash-escaped characters (a
+shell's `builder\ notes.md`). Backslash escapes and HTML entity references (`&#32;`) are undone as
+CommonMark undoes them, `%20` and every other percent escape as before. A withheld path that holds
+a space is also looked for in plain prose: each occurrence of its file name, joined with the run
+of path characters around it, is resolved the same way, so `./builder notes.md:2` or an absolute
+path with a space is caught without any markup. A delivered file with a space in its name, cited
+the same ways, is still accepted.
 
 Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 
@@ -289,6 +317,17 @@ The order, and what each step promises:
   document step that already landed from the receipt, records no verdict and never returns
   `completed`; a new packet and a new review are required. A recovering pass reaches the same stop.
   Every packet entry's content identity is verified in the same checks (section 4).
+  **What landed is asked of the log, per append, before any stop is delivered** (punch list,
+  punch-F2). A recovering pass that stops before its settle step would otherwise report only what
+  the receipt already held as landed: after a kill during the card append, the card event is in
+  the log while the receipt still says `unknown`. So every append the receipt holds as `unknown`
+  is looked up through the records component (`records.py events` for this run's events of that
+  kind, `verify` for the head; argv only, read-only). One the log holds moves in the receipt from
+  `unknown` to `landed` (marked recovered) and is reported under `records.appended` with the log's
+  seqs; one it does not hold is reported under `records.not_landed` as `absent` (or `unreadable`
+  when the log could not be read back) and stays an intent in the receipt. The stop's reason names
+  both. Nothing is appended by that question, and the stop being delivered (`stale_source` above
+  all) is unchanged.
 - **Pin the head.** The head the run read its state against is pinned at `scope`. At `record`,
   BEFORE this run's own levelling, the log must still be at that head; an event another writer
   appended between the two phases is a named conflict before any append. The comparison is taken

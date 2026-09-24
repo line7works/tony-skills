@@ -208,7 +208,8 @@ the one card event and writes the `Status:` line if it moves, and writes the res
 add or change after preflight is in that set, so give its reason in the answer. A requested rerun
 that cannot execute is `not_run`; a report-only run reruns nothing. The source the card decision
 was made on is pinned with it: once the decision is made, touch nothing in the workspace until
-`report` returns. Source that moves under it — during the card event, or before a killed run is
+`report` returns (a restored deletion, an executable bit or a file turned symlink counts as a
+move). Source that moves under it — during the card event, or before a killed run is
 resumed — stops the run `source_changed` with the moved paths; a card event that already landed
 is kept and reported, the card does not move, and nothing is appended again. Build again on the
 current source. Read `result.json` and print the block below.
