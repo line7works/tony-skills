@@ -196,6 +196,11 @@
         "string",
         "null"
       ]
+    },
+    "resumed_half": {
+      "type": "string",
+      "minLength": 1,
+      "description": "E13 slice 1 (brief 3.5): present only on a run a resume completed, naming the half of the recording transaction that was missing \u2014 `the append`, `the append's record in the receipt`, or `the document steps`. A run that needed no recovery carries no such field."
     }
   },
   "allOf": [

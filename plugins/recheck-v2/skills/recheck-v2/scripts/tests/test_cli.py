@@ -4,6 +4,8 @@ missing input file (exit 2), jsonschema unavailable (exit 3), --help content, an
 commands identity, ledger, skill-identity."""
 import json
 import os
+import subprocess
+import sys
 import unittest
 
 import testlib
@@ -102,12 +104,30 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(code, 0, err)
         got = json.loads(out)
         self.assertEqual(got["document"], "docs/plans/2026-09-18-widget-export.md")
-        self.assertEqual([r["kind"] for r in got["records"]], ["finding", "finding", "finding", "waiver"])
-        self.assertEqual(got["records"][0]["tag"], "csv"); self.assertEqual(got["records"][0]["file"], "src/widget/export.py")
+        # E13 slice 1: the entries and the cards are the records component's derived state, read
+        # through `import-legacy --dry-run` so the command still writes nothing (CR-2); the tag is
+        # dropped from the location and the MAJOR at :14 has no claim, exactly as before
+        # the document has never been imported, so the log is behind it. The command writes
+        # nothing (CR-2), so it says so rather than answering from a log it knows is behind.
+        self.assertFalse(got["ok"]); self.assertEqual(got["status"], "records_behind")
+        self.assertGreater(got["records_behind"], 0)
+        self.assertFalse(os.path.isdir(os.path.join(self.cdir, "workspace", "docs", "records")))
+        self.assertFalse(got["ledger_home"]["create"])
+        # once the log is level, the entries and the cards are the component's derived state: the
+        # tag is dropped from the location and the MAJOR at :14 has no claim, exactly as before
+        ws = os.path.join(self.cdir, "workspace")
+        # the copy run (test_testlib_root) has no sibling component and supplies RECORDS_ROOT
+        rc_root = os.environ.get("RECORDS_ROOT") or os.path.normpath(os.path.join(testlib.PLUGIN, os.pardir, "records"))
+        subprocess.run([sys.executable, os.path.join(rc_root, "scripts", "records.py"), "import-legacy",
+                        "--workspace", ws, "--doc", "docs/plans/2026-09-18-widget-export.md"],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        code, out, err = self.run_cli("ledger", doc, "--workspace", ws)
+        self.assertEqual(code, 0, err)
+        got = json.loads(out)
+        self.assertTrue(got["ok"], got); self.assertEqual(got["records_behind"], 0)
         self.assertEqual([(e["location"], e["claim"] is None, e["state"]) for e in got["entries"]],
                          [("src/widget/export.py:9", False, "open"), ("src/widget/export.py:14", True, "open"), ("src/widget/export.py:32", False, "waived")])
         self.assertEqual(got["cards"], [{"slice": "A", "card": "rejected", "open": 2, "mapping": "rejected"}])
-        self.assertFalse(got["ledger_home"]["create"]); self.assertEqual(got["ambiguities"], [])
         code, out, err = self.run_cli("ledger", os.path.join(self.dir, "absent.md"))
         self.assertEqual(code, 2)
 

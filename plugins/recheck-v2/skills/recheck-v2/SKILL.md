@@ -13,7 +13,7 @@ description: >-
   fixer, never for findings nobody recorded, and not the bare /recheck command, which
   belongs to the v1 station.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Recheck v2
@@ -69,9 +69,8 @@ Run every command from any directory with `scripts/recheck.py` resolved against 
 root, the directory holding this file; paths inside a run are absolute. Every command prints
 one JSON document on stdout carrying `next` and exits 0 (continue), 10 (the run reached a
 terminal status), 2 (a usage slip of yours: read stderr, fix the command, rerun; never edit a
-run file), 3 (the `jsonschema` dependency is missing: run through `uv run`, which reads the
-dependency the script declares), or 1 (a defect or a failure inside the workspace: report it,
-never work around it). Repeating a command is safe: a completed command reports the current
+run file), 3 (`jsonschema` or the records component is missing: use `uv run`, read stderr,
+set `RECORDS_ROOT`), or 1 (a defect in the workspace: report it, never work around it). Repeating a command is safe: a completed command reports the current
 phase and changes nothing. A phase command on a run that already ended answers `next: done`
 (exit 10) with the recorded `status`, the existing `result` path, and `reason` `the run
 ended as <status>: <reason>`; it writes nothing and issues no call id.
@@ -351,9 +350,10 @@ unchanged: `status`, `run`, `source_identity`, `checklist`, `items`, `new_defect
 - The checklist only shrinks: nothing the verifier or you notice is added except a
   fix-introduced defect charged to the item whose fix caused it.
 - Records are ordered by file position, later wins; the script appends at the ledger home's
-  tail and repairs nothing earlier.
-- A run directory that holds a checkpoint, a receipt, or a result is spent; a new run needs
-  a fresh id and directory.
+  tail and repairs nothing earlier. They live in the records component's log; the block
+  is that log rendered.
+- A run directory holding a checkpoint, a receipt, or a result is spent; a new run needs a
+  fresh id and directory.
 
 ## Failure handling
 

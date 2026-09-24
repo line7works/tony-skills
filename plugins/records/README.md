@@ -15,11 +15,13 @@ is internal.
 
 ## Status
 
-Interface version 1, component version 0.1.0. Built in E12 of the skills v2 rebuild, in three
-slices, under the lane contract the control room holds. Nothing consumes it yet: moving the
-qualified `recheck-v2` pilot onto it is the first task of E13, and `plugins/recheck-v2/` is
-byte-identical through E12 on purpose. Running the importer over real repositories is a separate
-job, one repository at a time, after E12 closes.
+Interface version 2, component version 0.2.0 (E13 amendment A7; version 1's shapes stay
+available through `--interface-version 1`). Built in E12 of the skills v2 rebuild, in three
+slices, under the lane contract the control room holds. Its first consumer is the `recheck-v2`
+pilot, which moved onto it in E13 slice 1; the E12 freeze that kept `plugins/recheck-v2/`
+byte-identical ended with that step. Rules have moved since, E13 amendments A2, A4 and A7, all
+in the build record below. Running the importer over real repositories is a separate job, one
+repository at a time.
 
 ## Build record
 
@@ -38,6 +40,10 @@ Facts about how this component was built, in order. Review results are not recor
 | Third fix round | the items once listed for E13, fixed here on the owner's word (A11): two refusals published, examples regenerated, every required list pinned, the lock a response carries published | 591 |
 | Recheck | the same reviewer, once more, on the second and third fix rounds and regressions | |
 | Fourth fix round | what the recheck found: lock ownership at commit time is inode and bytes; a guard on the liveness judgement | 593 |
+| E13 amendment A2 | the owner's ruling of 2026-09-21 on the recheck lane's finding 1: `append` admits a `waived` whose finding is `fixed` at the current head, which is the pair a station writes when one run clears an item the user also waived. A `waived` over a `waived`, and a `disposition: "fixed"` over anything but `open`, are refused as before, and the `known` and `identity` conditions did not move; `interface_version` stays 1 because `state` already decided the pair by its later-wins rule. The E12-2 freeze test over `plugins/recheck-v2` went with the same ruling; its sibling, that this component writes nowhere near the pilot, stays | 601 |
+| E13 amendment A4 | the owner's ruling of 2026-09-22 ("Option A") on one defect with two halves, found by lane S and by the control room (CR-F2). `render` gains Appendix A's review block, one per slice, for a run's `finding_raised` events, so the component owns that grammar as it owns the recheck block's; the recheck block's bytes did not move. `import-legacy` recognises a record line that is byte-equal to what `render` produces for a NATIVE event the log already holds, and a `Status:` line matching the last card a native `card_set` or `card_observed` carries for its slice: it counts them under the new report field `native_rendered`, skips them, and never imports or questions them. Before this, a completed recheck run's own rendered lines were read back as news on the next levelling: a second `disposition` with `known: false` that `state` reported as `cleared_unbound`, and a review line that stopped the document exit 5 as a second raise of one finding. `interface_version` stays 1: every change is additive, and no reader of a version-1 response loses a field. The component version stays `0.1.0`: amendment A2 changed `append`'s clearing rule in this same step without moving it, and the version is written into every `log_opened` event, so moving it rewrites the chain hash of every shipped example and buries this fix's own diff. Whoever closes E13 can move it in one regeneration pass | 615 |
+| E13 amendment A7 | the owner's ruling of 2026-09-22 ("Yes fix all 3") on three defects Astra's review of slice 2 found here. **F5**: `import-legacy` recognised a native line by its bytes alone, so a slice A review line placed under slice B's heading vanished instead of importing as B's finding, and two byte-identical native lines of two slices placed under one heading were both skipped without the ambiguity stop; a line is now the rendering of a native event only when its kind, its finding identity in the document's slice context (the heading's slice for a raise, one of the heading's slices for a recheck line; not the heading's date) and its bytes all agree, each native occurrence answers for one line, and a line left over meets the importer's existing rules, whose section 7 stop catches a second raise. **F9**: the review line writes the raise's raw location, so a ranged location reads back to the same finding id; the recheck block's bytes did not move. **F10**: A4's changed response shapes are interface version 2: `records.py` answers in version 2 by default and in version 1's closed shapes under the new top-level `--interface-version 1`; `import-report.schema.json` pins 2 on the two import shapes, and version 1's import report is frozen at `references/v1/import-report.schema.json`; the three copied station clients move to 2 together. Event `v` and the `f1:` prefix did not move. The component version moves to `0.2.0`: the minor digit, because on a `0.x` component the minor is the breaking digit and an interface version is a break for every reader that does not ask for the compatibility response; A4's deferral (the version sits in every `log_opened`, so moving it rewrites example hashes) no longer holds, because moving the interface version rewrites the same hashes, so the examples the suite reproduces from a live run were regenerated once for both | 637 |
+| E13 amendment A7, the last fix round | Astra's recheck of slice 2 left F5 partly closed and found N3, both inside A7's own fix, so the control room reads them as A7's work, not a new records change. **F5's remainder**: a native ranged DEFECT renders in Appendix A's first-line form (the recheck block is unchanged), the reader computes another finding id from that line, and `import-legacy` still skipped it; the finding identity the line would import to, as this importer's own reader computes it in the document's slice context (section 7's id for a raising line, section 11.4's join for a clearing line), is now part of the match, so such a line is legacy news. A clearing line whose join names no finding carries no identity of its own and rests on kind, slice context and bytes, which keeps a ranged finding's own recheck line recognised. **N3**: the matcher's recursive augmenting path died at 1,000 repeated native lines (`RecursionError`); it is iterative now (lowest free occurrence first, then a breadth-first augmenting path), with the same set of recognised lines, and 1,000 identical native `not fixed` lines are recognised whole in under a second. No schema, response shape, interface version or component version moved | 642 |
 
 Every count is the full suite under `/usr/bin/python3`, and the same count through `uv run`.
 Rulings and amendments A1 to A11 and the builders' standing readings are in section 16 of the lane contract, `docs/plans/2026-09-20-records-e12.md`.
@@ -53,6 +59,7 @@ references/
   state.schema.json          the derived-state object `state` returns
   import-report.schema.json  what `import-legacy` and `survey` return
   resolutions.schema.json    the answers to ambiguous legacy records
+  v1/import-report.schema.json  interface version 1's import report, frozen (E13 amendment A7)
   examples/                  valid and invalid examples for every schema
 scripts/
   records.py                 the one CLI

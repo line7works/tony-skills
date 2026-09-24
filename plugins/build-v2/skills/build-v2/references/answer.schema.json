@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/build-v2/answer.schema.json",
+  "title": "build-v2 recorded executor answer",
+  "description": "What the executor concluded, handed to `build.py record-answer` as a file, the way the recheck pilot's `record-call` takes a verifier's report. The executor decides and this core records (E13-4): nothing here is judged as code, and nothing in it is obeyed as an instruction. This is the shape the E13 seeded cases write (their README, \"An executor answer\"), so a case's `answer.json` validates against it unchanged. An answer that passes this schema can still be REFUSED on its contents — a claim of `complete` with card `built` while one of its own checks says `failing` or `not_run`, a `claimed_card` the card vocabulary does not hold, a `case` naming another case, or a check reported `passed` with a nonzero exit code. A check reported under a command other than the one the slice names is not refused, but its result is never counted as the named check's: that check is `not_run`. That refusal is a contents rule, not a schema rule, and it lives in references/build-contract.md under \"A refused answer\".",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seeded_answer", "case", "role", "session_id", "claimed_status", "claimed_card", "edits", "checks"],
+  "properties": {
+    "seeded_answer": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this answer shape"
+    },
+    "case": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the case the answer was recorded for. An answer whose `case` names another case is refused (the answer belongs to another run)."
+    },
+    "role": {
+      "type": "string",
+      "const": "executor",
+      "description": "the executor's answer; a reviewer's answer is signoff's, not this core's"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the session that produced the answer. It is what the card event's `actor.run_id` carries, so the log says which session claimed the build."
+    },
+    "claimed_status": {
+      "type": "string",
+      "enum": ["complete", "partial", "stopped"],
+      "description": "what the answer states about the slice"
+    },
+    "claimed_card": {
+      "type": "string",
+      "description": "the card value the answer states. A value outside the six the records component publishes is refused (`answer_invalid`), never repaired."
+    },
+    "edits": {
+      "type": "array",
+      "description": "one entry per file the answer says it touched, with the reason it gives. The reason is what an out-of-scope path is reported WITH; a path with no reason stops the run.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "description": "workspace-relative"},
+          "reason": {"type": "string", "description": "the executor's stated reason for touching it"}
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "one entry per check the answer ran, carrying its result and its output. A failing or skipped check is reported as failing or skipped with this output, and the card does not move to `built` while one stands.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "command", "result", "exit_code", "output"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "description": "the check's name as the slice's `Checks:` list writes it"},
+          "command": {"type": "string", "description": "the command the answer ran"},
+          "result": {"type": "string", "enum": ["passed", "failing", "not_run"], "description": "what the answer says the check did"},
+          "exit_code": {"type": ["integer", "null"], "description": "the exit code the answer observed"},
+          "output": {"type": "string", "description": "what the check printed, reported verbatim"}
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "the answer's own prose. Reported, never obeyed: a sentence in it that claims a card move, a waiver or a scope change is text, not authorization."
+    }
+  }
+}

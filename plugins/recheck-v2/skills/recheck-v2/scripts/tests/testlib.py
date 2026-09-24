@@ -258,3 +258,42 @@ def read_text(path):
 
 def git(cwd, *args):
     return subprocess.run(["git"] + list(args), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.decode("utf-8")
+
+
+RECORDS_ROOT = os.path.normpath(os.path.join(PLUGIN, os.pardir, "records"))
+
+
+def records_client():
+    """The records component client the driver opens (E13 slice 1). A test that calls the library
+    directly — `inputs.resolve_scope`, `validate.run_semantic` — supplies the same one."""
+    add_scripts_to_path()
+    from recheck_core import records_client as rc
+    return rc.open_client(records_root=os.environ.get("RECORDS_ROOT") or RECORDS_ROOT)
+
+
+def git_init_and_commit(workspace, message="fixture"):
+    """Make a synthetic workspace a real git work tree with one commit, so the records component
+    can compute an identity and import its documents."""
+    env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null",
+               GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+               GIT_COMMITTER_NAME="Fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid",
+               GIT_AUTHOR_DATE="2026-09-19T09:00:00-07:00", GIT_COMMITTER_DATE="2026-09-19T09:00:00-07:00")
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", message]):
+        proc = subprocess.run(["git"] + args, cwd=workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0:
+            raise RuntimeError("git %s failed in %s: %s" % (args[0], workspace, proc.stderr.decode("utf-8", "replace")))
+    return workspace
+
+
+def import_document(workspace, doc):
+    """Level the workspace's log with one document, the way a run's first act does (CR-1)."""
+    return records_client().import_legacy(workspace, doc)
+
+
+def project_status(cwd):
+    """`git status --porcelain` with `docs/records/` excluded (E13 3.2, CR-2).
+
+    The records component's log became an authorized write of the pilot in E13 slice 1, and the
+    identity excludes exactly that prefix, so a test that means "the run wrote nothing into the
+    project's documents" asks for the status the identity sees rather than the raw one."""
+    return git(cwd, "status", "--porcelain", "--", ".", ":(exclude)docs/records")

@@ -404,7 +404,7 @@ class Runs(unittest.TestCase):
         self.assertIn("F1-01-fixed-clean-run-verify returned empty, the one re-send F1-01-fixed-clean-run-verify-2 returned transport-failed", result["stop_reason"])
         self.assertEqual([c["status"] for c in result["run"]["verifier"]["calls"]], ["empty", "transport-failed"])
         self.assertEqual(self.kinds(result), [], "nothing graded, no record write")
-        self.assertEqual(testlib.git(os.path.join(cdir, "workspace"), "status", "--porcelain"), "")
+        self.assertEqual(testlib.project_status(os.path.join(cdir, "workspace")), "")
 
     def test_incomplete_report_is_retryable(self):
         cdir = self.case("F1-fixed-defect", "F1-01-fixed-clean")
@@ -487,7 +487,7 @@ class Runs(unittest.TestCase):
         ws = os.path.join(cdir, "workspace")
         testlib.git(ws, "add", "-A")
         testlib.git(ws, "-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", message)
-        self.assertEqual(testlib.git(ws, "status", "--porcelain"), "", "the edit is committed")
+        self.assertEqual(testlib.project_status(ws), "", "the edit is committed")
 
     def rewrite_doc(self, cdir, fn):
         path = os.path.join(cdir, "workspace", DOC)
@@ -575,7 +575,7 @@ class Runs(unittest.TestCase):
         self.assertEqual(first["result"], "not_clear"); self.assertTrue(first["boundary_violations"])
         ws = os.path.join(cdir, "workspace")
         testlib.git(ws, "checkout", "--", "src/widget/export.py")
-        self.assertEqual(testlib.git(ws, "status", "--porcelain").strip(), "M " + DOC, "only the build doc differs now")
+        self.assertEqual(testlib.project_status(ws).strip(), "M " + DOC, "only the build doc differs now")
         code, doc, err = self.resume(cdir)
         self.assertEqual(doc["status"], "completed", err)
         again = self.validate(cdir)
@@ -680,7 +680,15 @@ class Runs(unittest.TestCase):
         places): the run appends at the Punch list's tail (the place whose tail comes last in the file), the open
         filter sees the new line, all_clear, the card moves."""
         cdir = self.case("F1-fixed-defect", "F1-01-fixed-clean")
-        notes = "## Notes\n\n### 2026-09-20 — recheck: Slice A\n- MAJOR · src/widget/export.py:30 · (an earlier note) · fixed · executed ran it once\n\n"
+        # E13 slice 1: the planted block carries the review finding its recheck line clears. The
+        # records component refuses a clearing line that names no finding of the document (exit 5,
+        # an ambiguity for the user), where the core's own reader made a standalone entry of it;
+        # that divergence is report finding 3 and is not what this test is about, which is where
+        # the home sits when records live in two places.
+        notes = ("## Notes\n\n### 2026-09-19 — review: Slice A\n"
+                 "- MAJOR · src/widget/export.py:30 · an earlier note · run it once and read the tail · Slice A\n"
+                 "\n### 2026-09-20 — recheck: Slice A\n"
+                 "- MAJOR · src/widget/export.py:30 · (an earlier note) · fixed · executed ran it once\n\n")
         self.rewrite_doc(cdir, lambda t: t.replace("## Punch list", notes + "## Punch list"))
         self.commit_workspace(cdir, "notes block before the punch list")
         started = self.start(cdir)
@@ -772,7 +780,7 @@ class Runs(unittest.TestCase):
         self.assertEqual(doc["status"], "completed", err)
         result = self.validate(cdir)
         self.assertEqual(result["result"], "all_clear"); self.assertEqual(self.kinds(result), ["punch_list_block", "status_line"])
-        self.assertEqual(testlib.git(ws, "status", "--porcelain").strip(), "M " + DOC, "only the build doc changed (R18)")
+        self.assertEqual(testlib.project_status(ws).strip(), "M " + DOC, "only the build doc changed (R18)")
         self.assertEqual(testlib.read_text(util), util_before); self.assertEqual(testlib.read_text(notes), notes_before)
         self.assertEqual(os.listdir(os.path.join(ws, "docs", "reviews")), [])
         self.assertIn("Verdict doc: none found, build doc only", testlib.read_text(doc["chat"]))

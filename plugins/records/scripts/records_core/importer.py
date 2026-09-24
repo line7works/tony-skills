@@ -8,6 +8,7 @@ that changes state; `git blame` is read-only and is the only one it runs.
 What it produces, per line of the document, in file order:
 
     a `Status:` line whose text is new for its slice  -> card_observed (amendment A4)
+    (a line the log already records as a native event -> nothing: E13 amendment A4, below)
     a review finding line                            -> finding_raised
     a fix-introduced defect line                     -> defect_raised
     a recheck line                                   -> disposition
@@ -45,6 +46,23 @@ Readings this module takes where the contract left a choice; each is in the slic
   line is gone appends nothing, and a pass whose only news is one flipped card appends
   `import_started`, that `card_observed`, and `import_finished`. RECORD lines keep section 11.7
   exactly as written.
+- E13 amendment A4: a record line that is byte-equal to what `render` produces for a NATIVE event
+  this log already holds, and a `Status:` line whose text equals the last card a native `card_set`
+  or `card_observed` holds for that slice, are ALREADY RECORDED. The pass counts them under
+  `native_rendered`, skips them, and never imports them, calls them `legacy_unparsed`, or calls
+  them ambiguous; they are outside `lines_classified` and outside section 11.7's tail rule.
+  Nothing is normalized away and no join is attempted, and a hand-written line that only
+  resembles a rendered one is still news. A run holding any legacy record is an import pass, not
+  a station's run, and recognises nothing.
+- E13 amendment A7 (Astra's F5): bytes alone do not name a finding. A record line is the rendering
+  of a native event when the event kind it would import as, the finding identity its place in the
+  document gives it (`slice_context`), and its bytes all agree with that event's
+  (`match_native_lines`). The identity is the one this reader computes for the line there
+  (`line_identity`, Astra's recheck of F5): a ranged defect whose line the recheck block writes
+  in first-line form reads as another finding, and is news. Each native occurrence answers for
+  one line, the matching iterative (N3), and a line left over is legacy news for the importer's
+  own rules, whose existing ambiguity stop catches a second raise of one finding. A `Status:`
+  line stays keyed to its slice's last native card.
 - A resolutions file carries `answered_by`, `answered_on`, and one answer per line, each with
   the `raw` text of the line as the answer was given, which is what makes section 11.5's
   "a resolution that names a line whose raw text has changed ... is rejected" checkable. The
@@ -54,7 +72,8 @@ import datetime
 import os
 import re
 
-from . import canon, events as events_mod, identity as identity_mod, ids, legacy
+from . import (canon, events as events_mod, identity as identity_mod, ids, legacy,
+               render as render_mod)
 
 STATION = "records-import"
 UNKNOWN_SOURCE = {"known": False}
@@ -200,20 +219,282 @@ def previously_imported(existing_events, doc):
 
 
 def last_card_values(existing_events, doc):
-    """{slice name: the `value` of that slice's LAST `card_observed` in the log} (amendment A4).
+    """{slice name: (the text of that slice's LAST card in the log, was it written natively)}.
 
     Matched by slice name, never by line number, so a `Status:` line that moved is still the same
-    slice's card. A `card_set` is a native card move, not an observation of the document's text,
-    and does not count here.
+    slice's card. Both card events count, which is the pair `state._card_events` already reads
+    (E13 amendment A4): a `card_observed` records what a `Status:` line SAID when an import read
+    it, and a `card_set` records the card a station MOVED, whose `after` is the text that station
+    wrote on the line. Reading only the first is the `card_observed: 1` of the control room's
+    CR-F2: a card the pilot had just moved was read back as news on the next pass.
+
+    The second half of each pair says whether that last card came from a NATIVE event. A
+    `Status:` line matching a native card is the rendering of an event the log already holds, and
+    the pass counts it under `native_rendered`; a line matching a card an earlier IMPORT observed
+    is simply unchanged, and is skipped as it always was, counted under nothing.
     """
     out = {}
     for event in existing_events:
-        if event.get("kind") != "card_observed" or event.get("ledger_doc") != doc:
+        kind = event.get("kind")
+        if kind not in ("card_observed", "card_set") or event.get("ledger_doc") != doc:
             continue
         name = event.get("slice")
-        if isinstance(name, str):
-            out[name] = event.get("value")
+        if not isinstance(name, str):
+            continue
+        origin = event.get("origin")
+        native = not (isinstance(origin, dict) and origin.get("kind") == "legacy")
+        out[name] = (event.get("value") if kind == "card_observed" else event.get("after"), native)
     return out
+
+
+def native_run_ids(existing_events):
+    """The run ids of this log whose events are all native, in first-seen order.
+
+    A run holding any legacy record is an import pass, not a station's run: its lines came FROM
+    the document and rendering them back would say the document already records them, which is
+    what `previously_imported` answers for instead.
+    """
+    seen, legacy_runs = [], set()
+    for event in existing_events:
+        actor = event.get("actor")
+        run_id = actor.get("run_id") if isinstance(actor, dict) else None
+        if not isinstance(run_id, str):
+            continue
+        origin = event.get("origin")
+        if isinstance(origin, dict) and origin.get("kind") == "legacy":
+            legacy_runs.add(run_id)
+            continue
+        if run_id not in seen:
+            seen.append(run_id)
+    return [run_id for run_id in seen if run_id not in legacy_runs]
+
+
+class NativeLine(object):
+    """One line `render` writes for one native event of this log, and what identifies it.
+
+    `kind` is the event's kind, `text` the rendered line, and `slice` the slice the finding it
+    names is charged to (the raise's own slice for a raise, the raised finding's slice for a
+    clear), `none` for a finding charged to no slice.
+    """
+
+    def __init__(self, kind, text, slice_name, finding, seq):
+        self.kind = kind
+        self.text = text
+        self.slice = slice_name or "none"
+        self.finding = finding
+        self.seq = seq
+
+
+def native_lines(doc, existing_events):
+    """Every line `render` writes for a NATIVE event this log already holds, in `seq` order.
+
+    E13 amendment A4 made the rule "a record line byte-equal to the rendering of a native event is
+    already recorded". Amendment A7 (Astra's F5) keeps the bytes and adds the event behind them,
+    because bytes alone do not name a finding: a review line carries no slice, so one native
+    line placed under another slice's heading is a different finding, and two findings of two
+    slices can render byte-identical lines. `split_already_recorded` matches each document line
+    against these by kind, by slice context, and by bytes.
+    """
+    raised = render_mod.raised_findings(existing_events)
+    out = []
+    for run_id in native_run_ids(existing_events):
+        try:
+            pairs = render_mod.rendered_lines(doc, existing_events, run_id)
+        except render_mod.RenderError:
+            continue  # a run this component cannot render recognises nothing
+        for event, text in pairs:
+            kind = event.get("kind")
+            if kind in render_mod.RAISE_KINDS:
+                slice_name = event.get("slice")
+            else:
+                slice_name = (raised.get(event.get("finding")) or {}).get("slice")
+            out.append(NativeLine(kind, text.rstrip("\n"), slice_name, event.get("finding"),
+                                  event.get("seq")))
+    out.sort(key=lambda native: native.seq)
+    return out
+
+
+def slice_context(unit, doc):
+    """The slices a document line can name a finding of, or None when its grammar names none.
+
+    This is the part of a finding's identity (section 7: document, slice, location key, claim
+    key) that a line's bytes do not carry and its PLACE in the document does (E13 A7, F5):
+
+    - a review finding line or a fix-introduced defect line raises a finding of exactly the
+      slice the reader charges it to (`legacy.item_slice`: the heading's first slice, or a
+      defect's own slice field under a heading naming several, `none` in the punch list);
+    - a recheck line clears a finding of one of the slices its heading names;
+    - a waiver or reopening line is a standalone grant whose grammar names no slice, and it may
+      sit below any heading, so its place says nothing about its finding: None.
+
+    The heading's DATE is not an input: it is not part of a finding's identity.
+    """
+    item = unit.item
+    if item["kind"] in RAISE_ITEMS:
+        return set([legacy.item_slice(item, doc)])
+    if item["kind"] == "recheck":
+        heading = item.get("heading") or {}
+        return set(heading.get("slices") or [])
+    return None
+
+
+def card_text(unit):
+    """The text after `Status: ` on a card unit's line."""
+    raw = unit.raw
+    return raw[len("Status:"):].strip() if raw.startswith("Status:") else raw
+
+
+def line_identity(unit, doc, findings):
+    """The finding a record line would import to, as this importer's own reader computes it.
+
+    E13 amendment A7 (F5), the remainder Astra's recheck found: bytes and slice context agree for
+    a native ranged DEFECT whose line the recheck block writes in Appendix A's first-line form, yet
+    the reader computes ANOTHER finding identity from that line than the event's stored id. The
+    identity is part of the match, so such a line is legacy news, never skipped:
+
+    - a review finding line or a defect line RAISES a finding: its identity is section 7's id of
+      the line's own fields, charged to the slice its place gives it (`legacy.item_slice`), the
+      same computation `plan_import` makes when it imports the line;
+    - a recheck, waiver or reopening line NAMES a finding: its identity is the one section 11.4's
+      join names among the findings this log holds (`join_of`, the heading's slices for rule 3).
+      When the join names none (no finding holds the line's location key, or several do and none
+      is singled out), the line carries no identity of its own to compare, and the match rests on
+      kind, slice context and bytes, as A7 has it. This is the reading that keeps the rendered
+      clear of a ranged finding (its first `file:line`) recognised in its own slice context.
+
+    Returns None for a clearing line whose join names nothing, else a finding id.
+    """
+    item = unit.item
+    if item["kind"] in RAISE_ITEMS:
+        return ids.finding_id(doc, legacy.item_slice(item, doc), item["location"],
+                              item.get("claim"), item.get("scenario"))
+    if findings is None:
+        return None
+    finding, _, _ = join_of(item, findings, item.get("heading"))
+    return finding.id if finding is not None else None
+
+
+def match_native_lines(units, natives, doc, findings=None):
+    """{index into `units`: index into `natives`}: which document line is which native line.
+
+    E13 amendment A7 (F5). A document line and a native line match when all three agree:
+
+    1. the event KIND the line would import as is the native event's kind (a review line under a
+       recheck heading is not the rendering of a raise);
+    2. the finding IDENTITY in the document's slice context: the native event's finding is
+       charged to a slice the line's place admits (`slice_context`), and the finding the line
+       would import to, as the importer's own reader computes it there (`line_identity`), is the
+       native event's stored finding. A raising line whose reader-computed id differs, and a
+       clearing line whose join names another finding, are legacy news. A changed heading date
+       changes nothing: the date is no input of either;
+    3. the BYTES are equal, exactly as A4 has it: nothing is normalized away.
+
+    `findings` are the findings this log holds (`findings_from_log`), for the clearing lines'
+    join; without them a clearing line is matched on kind, slice context and bytes.
+
+    Each native occurrence is consumed once, and each line takes at most one. When one line
+    could be the rendering of more than one native event (two findings of two slices whose
+    clears render the same bytes under a heading naming both), the assignment is a maximum
+    matching found in file order: an earlier line keeps the occurrence it matched whenever
+    another assignment exists, so which lines are recognised never depends on dictionary order.
+    A line left without an occurrence is legacy news, and the importer's own rules decide it: a
+    second raise of one finding is its existing ambiguity stop (section 7, exit 5).
+
+    The matching is iterative (Astra's N3): the recursive augmenting path's call stack grew with
+    the number of repeated native occurrences and died at 1,000 lines. Lines are taken in file
+    order; each first takes the lowest free occurrence it admits, and only when none is free does
+    a breadth-first search, in the same order, look for an augmenting path. A line once matched
+    stays matched through every later augmentation, so the SET of recognised lines is the one the
+    file-order augmenting algorithm always gave: a line is recognised exactly when it and the
+    lines recognised before it can all be matched at once.
+    """
+    by_key = {}
+    for index, native in enumerate(natives):
+        by_key.setdefault((native.kind, native.text), []).append(index)
+    options = {}
+    for position, unit in enumerate(units):
+        if unit.kind == "card":
+            continue
+        kind = ITEM_KINDS.get(unit.item["kind"])
+        pool = by_key.get((kind, unit.item["text"]))
+        if not pool:
+            continue
+        context = slice_context(unit, doc)
+        admitted = [i for i in pool if context is None or natives[i].slice in context]
+        if admitted:
+            named = line_identity(unit, doc, findings)
+            if named is not None:  # None: a clearing line whose join names no finding
+                admitted = [i for i in admitted if natives[i].finding == named]
+        if admitted:
+            options[position] = admitted
+    owner = {}  # native index -> unit position
+    matched = {}  # unit position -> native index
+    for position in sorted(options):
+        free = next((i for i in options[position] if i not in owner), None)
+        if free is not None:
+            owner[free] = position
+            matched[position] = free
+            continue
+        _augment(position, options, owner, matched)
+    return matched
+
+
+def _augment(start, options, owner, matched):
+    """One breadth-first search for an augmenting path from the unmatched line `start`.
+
+    Iterative: no call stack grows with the history. Occurrences are explored in each line's own
+    option order and lines in the order they are reached, so the path found is deterministic.
+    Returns True when the path was found and applied.
+    """
+    parent = {}  # native index -> the line position it was reached from
+    seen = set()
+    queue = [start]
+    head = 0
+    while head < len(queue):
+        position = queue[head]
+        head += 1
+        for index in options[position]:
+            if index in seen:
+                continue
+            seen.add(index)
+            parent[index] = position
+            if index not in owner:
+                # flip the path back to `start`
+                while True:
+                    line = parent[index]
+                    previous = matched.get(line)
+                    owner[index] = line
+                    matched[line] = index
+                    if line == start:
+                        return True
+                    index = previous
+            queue.append(owner[index])
+    return False
+
+
+def split_already_recorded(units, natives, cards_seen, doc, findings=None):
+    """(the units this pass still has to classify, how many it recognised) (amendment A4).
+
+    A line the log already holds as a NATIVE event is already recorded: it is counted, skipped,
+    never imported, never `legacy_unparsed`, and never ambiguous. It leaves `lines_classified`
+    the way a previously imported line does, and it is outside section 11.7's tail rule, because
+    a line the log already records cannot be news arriving above the tail. Which record lines
+    those are is `match_native_lines`' answer (E13 A7, F5); a `Status:` line is recognised by its
+    slice's last native card, keyed to that slice as before.
+    """
+    matched = match_native_lines(units, natives, doc, findings)
+    kept, recognised = [], 0
+    for position, unit in enumerate(units):
+        if unit.kind == "card":
+            row = cards_seen.get(unit.slice_name)
+            if row is not None and row[1] and row[0] == card_text(unit):
+                recognised += 1
+                continue
+        elif position in matched:
+            recognised += 1
+            continue
+        kept.append(unit)
+    return kept, recognised
 
 
 def check_only_grown(seen, lines, doc, log_rel):
@@ -391,7 +672,11 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     seen = previously_imported(existing_events, doc)
     check_only_grown(seen, lines, doc, log_rel)
     blame = blame_commits(workspace, doc)
+    cards_seen = last_card_values(existing_events, doc)
     units = [u for u in units_of(parsed, doc) if u.line_no not in seen]
+    units, native_rendered = split_already_recorded(
+        units, native_lines(doc, existing_events), cards_seen, doc,
+        findings_from_log(existing_events, doc))
     check_only_grew_at_the_tail(units, high_water_line(existing_events, doc), doc, log_rel)
     try:
         answers = answers_by_line(resolutions)
@@ -407,7 +692,6 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     counts = {}
     candidates = findings_from_log(existing_events, doc)
     by_id = dict((f.id, f) for f in candidates)
-    cards_seen = last_card_values(existing_events, doc)
     run_id = run_id_for(doc, moment)
     actor = {"station": STATION, "run_id": run_id, "harness": None}
 
@@ -531,15 +815,18 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
 
     for unit in units:
         if unit.kind == "card":
-            value = unit.raw[len("Status:"):].strip() if unit.raw.startswith("Status:") else unit.raw
-            # Amendment A4: one observation per change. The comparison is against the last value
-            # observed for this SLICE, whatever line the `Status:` line sits on now; an unchanged
+            value = card_text(unit)
+            # Amendment A4: one observation per change. The comparison is against the last card
+            # held for this SLICE, whatever line the `Status:` line sits on now; an unchanged
             # card appends nothing, so a second import of an unchanged document is still empty.
-            if unit.slice_name in cards_seen and cards_seen[unit.slice_name] == value:
+            # A line matching a card a NATIVE event wrote never reaches here: it was recognised
+            # in `split_already_recorded` and counted under `native_rendered` (E13 amendment A4).
+            row = cards_seen.get(unit.slice_name)
+            if row is not None and row[0] == value:
                 continue
             card = value if value in legacy.CARD_VALUES else "none"
             out.append(event_of(unit, "card_observed", slice=unit.slice_name, value=value, card=card))
-            cards_seen[unit.slice_name] = value
+            cards_seen[unit.slice_name] = (value, False)
             continue
         item = unit.item
         if item["kind"] == "unparsed":
@@ -628,7 +915,7 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
             "doc_sha256": doc_sha, "lines_read": len(lines), "units": len(units),
             "run_id": run_id, "at": stamp(moment), "date": moment.strftime("%Y-%m-%d"),
             "log": log_rel, "previously_imported": len(seen), "slices": len(parsed["slices"]),
-            "blocks": len(parsed["blocks"])}
+            "blocks": len(parsed["blocks"]), "native_rendered": native_rendered}
 
 
 def bracket_events(doc, plan, kind, **fields):
@@ -673,6 +960,7 @@ def report(doc, plan, batch, dry_run, appended=None, head=None, total=None, log_
         "lines_read": plan["lines_read"],
         "lines_classified": plan["units"],
         "previously_imported": plan["previously_imported"],
+        "native_rendered": plan["native_rendered"],
         "blocks": plan["blocks"],
         "slices": plan["slices"],
         "counts": dict(plan["counts"]),
@@ -771,6 +1059,7 @@ def _stop_on(plan, doc, log_rel, head, total, dry_run):
     common = {"report": "import", "log": log_rel, "doc": doc, "head": head, "events": total,
               "dry_run": bool(dry_run), "counts": dict(plan["counts"]),
               "lines_read": plan["lines_read"], "lines_classified": plan["units"],
+              "native_rendered": plan["native_rendered"],
               "spec": events_mod.spec_address(doc)}
     if plan["rejected"]:
         first = plan["rejected"][0]

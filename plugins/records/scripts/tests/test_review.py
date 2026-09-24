@@ -731,7 +731,7 @@ class TheDocumentedInterfaceIsTheRealOne(ReviewCase):
         code, out, err = self.cli_with_stub(stub, "component-identity")
         self.assertEqual(code, 0, err)
         self.assertEqual(out["name"], "records")
-        self.assertEqual(out["interface_version"], 1)
+        self.assertEqual(out["interface_version"], 2)  # E13 A7 (F10)
 
     def test_every_other_command_still_needs_jsonschema(self):
         stub = testlib.stub_without_jsonschema(self.scratch)

@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-from . import canon, ledger
+from . import canon, ledger, records_view
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -328,15 +328,48 @@ def read_doc(workspace, rel):
         return fh.read()
 
 
-def _checklist_item(entry):
-    return {"severity": entry["severity"], "location": {"file": entry["file"], "line": entry["line"]},
-            "claim": ledger.entry_claim_field(entry), "failure_scenario": entry.get("scenario") or "",
-            "record": {"document": entry["document"], "heading": entry["heading"] or "", "date": entry["date"] or ""},
-            "slice": entry["slice"]}
-
-
 def _ambiguity_lines(document, records):
     return ["%s:%d: %s: %s" % (document, r["line_no"], r["reason"], r["text"]) for r in records]
+
+
+def strict_ambiguities(workspace, rel, field, client=None):
+    """Appendix A's ambiguous legacy records, read with the core's OWN strict grammar (RB6, R36).
+
+    E13 slice 1 keeps this ONE use of the record grammar: as an ambiguity DETECTOR, never as a
+    source. No record, no open set and no card comes from it — those are the component's (3.2) —
+    but the component's reader is deliberately tolerant (it reads a grant line without its bullet,
+    drops a line that fits no shape, and joins a claim-less clear on location alone), so a document
+    this skill has always refused to guess at would otherwise be imported and graded. The check runs
+    BEFORE the importer, so an ambiguous document stops the run with nothing written anywhere.
+    Report question 3 names this reading and the alternative it declines.
+
+    Astra's N1 (the last fix round of E13 slice 2): a line the records component ITSELF rendered
+    for a native event is not a hand-written record. Records keeps a ranged location on the review
+    line it renders (A7's F9), which Appendix A's grammar has no shape for, so the check used to
+    stop on the component's own line. With a `client`, `records_view.hand_written_ambiguities`
+    asks the records CLI which lines those are and reads the rest with the unchanged grammar. The
+    CLI is consulted only when the whole document already reads ambiguous, and a line is set aside
+    only when the component's own `native_rendered` agrees, so a hand-written ranged line, and a
+    second copy of a rendered one, stop exactly as at the baseline (E13-1).
+
+    Returns a missing_input result, or None.
+    """
+    _lines, ambiguities = records_view.hand_written_ambiguities(client, workspace, rel,
+                                                                read_doc(workspace, rel))
+    if not ambiguities:
+        return None
+    first = ambiguities[0]
+    return {"status": "missing_input", "fields": [field],
+            "ambiguity": _ambiguity_lines(rel, ambiguities),
+            "question": "The record line at %s:%d matches no Appendix A shape (%s); supply or confirm its fields."
+                        % (rel, first["line_no"], first["reason"])}
+
+
+def _checklist_item(entry):
+    return {"severity": entry["severity"], "location": {"file": entry["file"], "line": entry["line"]},
+            "claim": records_view.claim_field(entry), "failure_scenario": entry.get("scenario") or "",
+            "record": {"document": entry["document"], "heading": entry["heading"] or "", "date": entry["date"] or ""},
+            "slice": entry["slice"]}
 
 
 def bind_service_observations(doc, checklist):
@@ -372,35 +405,38 @@ def bind_service_observations(doc, checklist):
     return bound
 
 
-def resolve_scope(doc, workspace, accepted_reopenings):
-    """Section 3. Returns one of:
+def resolve_scope(doc, workspace, accepted_reopenings, client=None, dry_run=False):
+    """Section 3, reading the records through the component (E13 3.2). Returns one of:
     {"status": "missing_input", "fields", "ambiguity", "question"}
     {"status": "nothing_open", "document", "slice", "reason"}
     {"status": "ok", "checklist": [items], "source", "document", "slice", "parsed", "entries",
-     "reopened": {index: grant}, "candidates"}
+     "view", "records_behind", "reopened": {index: grant}, "candidates"}
+
+    CR-1: `import-legacy` levels the log with the document first; with `dry_run` (the read-only
+    commands, CR-2) nothing is written and `records_behind` says what the log still lacks. An
+    ambiguous document, or a record changed above the imported tail, raises `records_view.RecordsStop`.
     """
     target = doc["target"]
     named = doc.get("named_items") or []
     if "items" in target:
-        return _resolve_items(doc, workspace, target["items"], accepted_reopenings)
+        return _resolve_items(doc, workspace, target["items"], accepted_reopenings, client, dry_run)
     rel = target["build_doc"]
     if not os.path.isfile(os.path.join(workspace, rel)):
         return {"status": "missing_input", "fields": ["target.build_doc"],
                 "ambiguity": ["build doc %s does not exist in the workspace" % rel],
                 "question": "The build doc %s does not exist in the workspace; which document holds the record?" % rel}
-    parsed = ledger.parse_document(read_doc(workspace, rel), rel)
-    opened = ledger.open_set(parsed)
-    if opened["ambiguities"]:
-        amb = _ambiguity_lines(rel, opened["ambiguities"])
-        return {"status": "missing_input", "fields": ["target.build_doc"], "ambiguity": amb,
-                "question": "The record line at %s:%d matches no Appendix A shape (%s); supply or confirm its fields." % (rel, opened["ambiguities"][0]["line_no"], opened["ambiguities"][0]["reason"])}
-    entries = opened["entries"]
+    ambiguous = strict_ambiguities(workspace, rel, "target.build_doc", client)
+    if ambiguous:
+        return ambiguous
+    report = records_view.sync(client, workspace, rel, dry_run=dry_run)
+    view = records_view.read(client, workspace, rel)
+    parsed, entries = view.structure, view.entries
     slice_name = target.get("slice")
     canonical_because = None
     candidates = []
     deferred = None  # E8-A29: an empty automatic selection is nothing_open only after the named entries and reopenings
     if slice_name is None:
-        slice_name, candidates, problem = _select_slice(parsed, entries)
+        slice_name, candidates, problem = _select_slice(parsed, entries, view)
         if problem and problem["status"] != "nothing_open":
             return problem
         deferred = problem
@@ -431,7 +467,7 @@ def resolve_scope(doc, workspace, accepted_reopenings):
     entered_by_name = set()
     for field, ref, grant in refs:
         loc = ref["location"]
-        found = ledger.find_entries(entries, loc["file"], loc["line"], ref["claim"])
+        found = records_view.match_entries(entries, loc["file"], loc["line"], ref["claim"])
         if len(found) != 1:
             fields.append(field)
             problems.append("%s names %s:%s (%s) which matches %s in %s" % (
@@ -443,7 +479,7 @@ def resolve_scope(doc, workspace, accepted_reopenings):
             if not has_grant:
                 fields.append("authorization.reopen")
                 problems.append("%s names %s:%s (%s), whose latest record leaves it %s; reopening it needs a reopening grant on the user channel naming it" % (
-                    field, e["file"], e["line"], ledger.entry_claim_field(e), e["state"]))
+                    field, e["file"], e["line"], records_view.claim_field(e), e["state"]))
                 continue
         if e not in selected:
             selected.append(e)
@@ -457,7 +493,7 @@ def resolve_scope(doc, workspace, accepted_reopenings):
     if problems:
         return {"status": "missing_input", "fields": fields, "ambiguity": problems, "question": problems[0] + "; which entry is meant?"}
     # order: file order of the entries (the open filter's order); named entries keep that order too
-    selected.sort(key=lambda e: e["origin"]["line_no"])
+    selected.sort(key=records_view.order_key)
     for e in selected:
         checklist.append(_checklist_item(e))
     if slice_name is None and selected:
@@ -468,23 +504,25 @@ def resolve_scope(doc, workspace, accepted_reopenings):
     # E8-A32: the normalized checklist is checked before the brief and the checkpoint are written
     no_scenario = [e for e in selected if not (e.get("scenario") or "").strip()]
     if no_scenario:
-        amb = ["the record at %s:%d has no failure scenario; supply or confirm it" % (rel, e["origin"]["line_no"]) for e in no_scenario]
+        amb = ["the record at %s has no failure scenario; supply or confirm it" % records_view.where(rel, e) for e in no_scenario]
         return {"status": "missing_input", "fields": ["target.build_doc"], "ambiguity": amb, "question": amb[0]}
     if not checklist:
         if deferred is not None:
             return deferred
-        card = ledger.slice_card(parsed, slice_name)
+        card = view.card(slice_name)
         if card in ("rejected", "signed off with conditions"):
             return {"status": "missing_input", "fields": ["target.build_doc"],
                     "ambiguity": ["slice %s stands at %s with no open BLOCKER or MAJOR entry in %s: a record gap, not a clean slate (R14)" % (slice_name, card, rel)],
                     "question": "Slice %s stands at %s but the record holds no open finding for it; what are the findings this recheck should cover?" % (slice_name, card)}
         return {"status": "nothing_open", "document": rel, "slice": slice_name, "parsed": parsed, "entries": entries,
+                "view": view, "records_behind": records_view.behind(report),
                 "reason": "slice %s stands at %s with no open BLOCKER or MAJOR entry; nothing to recheck, no record written" % (slice_name, card)}
     # E8-26: named_items when every checklist entry entered by naming, else build_doc
     source = "named_items" if all(id(e) in entered_by_name for e in selected) else "build_doc"
     return {"status": "ok", "checklist": checklist, "source": source, "document": rel, "slice": slice_name,
             "slice_as_given": target.get("slice"), "slice_resolved_because": canonical_because,
-            "parsed": parsed, "entries": entries, "reopened": {id(e): reopened[id(e)] for e in selected if id(e) in reopened},
+            "parsed": parsed, "entries": entries, "view": view, "records_behind": records_view.behind(report),
+            "reopened": {id(e): reopened[id(e)] for e in selected if id(e) in reopened},
             "selected": selected, "candidates": candidates}
 
 
@@ -497,11 +535,14 @@ def _same_item(item, entry):
         claim == entry["claim"] or entry["claim"] is None or claim is None)
 
 
-def _select_slice(parsed, entries):
-    """build_doc without slice (section 3): the candidate whose punch-list block carries the latest date."""
+def _select_slice(parsed, entries, view):
+    """build_doc without slice (section 3): the candidate whose punch-list block carries the latest date.
+
+    The slice headings and the block dates are the document's structure; the card and the open set
+    are the component's (E13 3.2)."""
     cands = []
     for s in parsed["slices"]:
-        card = s["card"]
+        card = view.card(s["name"])
         open_bm = [e for e in entries if e["slice"] == s["name"] and e["state"] == "open" and e["severity"] in ("BLOCKER", "MAJOR")]
         if card in ("rejected", "signed off with conditions") or (card == "built" and open_bm):
             dates = [b["date"] for b in parsed["blocks"] if s["name"] in b["slices"]]
@@ -519,8 +560,11 @@ def _select_slice(parsed, entries):
     return top[0][1], cands, None
 
 
-def _resolve_items(doc, workspace, items, accepted_reopenings):
-    """Explicit items: each carries its provenance and slice; the core guesses neither."""
+def _resolve_items(doc, workspace, items, accepted_reopenings, client=None, dry_run=False):
+    """Explicit items: each carries its provenance and slice; the core guesses neither.
+
+    The document's records still come through the component (E13 3.2): the log is levelled first
+    (CR-1), and the entries the grants and the waiver resolution join against are the component's."""
     fields, amb = [], []
     seen = {}
     for i, it in enumerate(items):
@@ -544,12 +588,14 @@ def _resolve_items(doc, workspace, items, accepted_reopenings):
         return {"status": "missing_input", "fields": ["target.items[0].record.document"],
                 "ambiguity": ["record document %s does not exist in the workspace" % rel],
                 "question": "The record document %s does not exist in the workspace; which document holds the record?" % rel}
-    parsed = ledger.parse_document(read_doc(workspace, rel), rel)
-    opened = ledger.open_set(parsed)
-    if opened["ambiguities"]:
-        return {"status": "missing_input", "fields": ["target.items[0].record.document"],
-                "ambiguity": _ambiguity_lines(rel, opened["ambiguities"]),
-                "question": "The record line at %s:%d matches no Appendix A shape; supply or confirm its fields." % (rel, opened["ambiguities"][0]["line_no"])}
+    ambiguous = strict_ambiguities(workspace, rel, "target.items[0].record.document", client)
+    if ambiguous:
+        ambiguous["question"] = ("The record line at %s matches no Appendix A shape; supply or confirm its fields."
+                                 % ambiguous["ambiguity"][0].split(":")[1])
+        return ambiguous
+    report = records_view.sync(client, workspace, rel, dry_run=dry_run, field="target.items[0].record.document")
+    view = records_view.read(client, workspace, rel)
+    parsed = view.structure
     # E8-A16: an item's slice that is not `none` needs a `## Slice <name>` heading in its document
     names = ledger.slice_names(parsed)
     for i, it in enumerate(items):
@@ -567,4 +613,5 @@ def _resolve_items(doc, workspace, items, accepted_reopenings):
             if grant_key(g) == (it["location"]["file"], it["location"]["line"], it["claim"]):
                 reopened[idx] = (gi, g)
     return {"status": "ok", "checklist": checklist, "source": "items", "document": rel, "slice": slices[0] if len(slices) == 1 else None,
-            "parsed": parsed, "entries": opened["entries"], "reopened_by_index": reopened, "selected": None, "candidates": []}
+            "parsed": parsed, "entries": view.entries, "view": view, "records_behind": records_view.behind(report),
+            "reopened_by_index": reopened, "selected": None, "candidates": []}

@@ -212,7 +212,7 @@ class Fix4(unittest.TestCase):
         os.makedirs(venv)
         shutil.copyfile(os.path.join(ws, DOC), os.path.join(venv, "plan.md"))
         self.append(os.path.join(ws, ".git", "info", "exclude"), "linked-docs\n")
-        self.assertEqual(testlib.git(ws, "status", "--porcelain"), "", "linked-docs is excluded: the identity is unchanged by the copy")
+        self.assertEqual(testlib.project_status(ws), "", "linked-docs is excluded: the identity is unchanged by the copy")
         item = dict(ITEM, record=dict(ITEM["record"], document="linked-docs/plan.md"))
         testlib.prepare_input(cdir, mutate=lambda d: d.__setitem__("target", {"items": [item]}))
         started = self.start(cdir)
@@ -225,7 +225,7 @@ class Fix4(unittest.TestCase):
         shutil.rmtree(venv)
         os.symlink(outside, venv)
         outside_bytes = testlib.read_text(os.path.join(outside, "plan.md"))
-        self.assertEqual(testlib.git(ws, "status", "--porcelain"), "", "the symlink is excluded too: the identity still holds")
+        self.assertEqual(testlib.project_status(ws), "", "the symlink is excluded too: the identity still holds")
         code, doc, err = self.record(cdir)
         self.assertEqual(doc["status"], "recording_failed", err)
         result = self.validate(cdir)
@@ -234,8 +234,10 @@ class Fix4(unittest.TestCase):
         self.assertEqual(self.kinds(result), [])
         rc = testlib.load_json(os.path.join(run_dir, "receipt.json"))
         self.assertEqual(rc["entries"], []); self.assertEqual(rc["phase"], "recording")
-        self.assertEqual([s["target"] for s in rc["plan"]][:1], ["linked-docs/plan.md"])
-        self.assertEqual(testlib.git(ws, "status", "--porcelain"), "", "no project write")
+        # E13 slice 1: a target outside the workspace is found before the append, and the plan is
+        # only computed from the rendered text after it, so the receipt carries no plan at all
+        self.assertEqual(rc["plan"], [])
+        self.assertEqual(testlib.project_status(ws), "", "no project write")
         self.assertEqual(self.cp(cdir)["transaction_guard"]["targets"], ["linked-docs/plan.md"])
 
     def test_a19_apply_refuses_a_target_outside_the_workspace(self):
@@ -373,7 +375,7 @@ class Fix4(unittest.TestCase):
         self.assertEqual(doc["status"], "stopped", err)
         result = testlib.load_json(doc["result"])
         self.assertEqual(result["stop_reason"], "evidence changed: %s" % raw)
-        self.assertEqual(self.doc_text(cdir), text, "no project write"); self.assertEqual(testlib.git(ws, "status", "--porcelain"), "")
+        self.assertEqual(self.doc_text(cdir), text, "no project write"); self.assertEqual(testlib.project_status(ws), "")
         self.assertFalse(os.path.exists(os.path.join(run_dir, "receipt.json")), "the transaction never planned")
         cp = self.cp(cdir)
         self.assertEqual(cp["phase"], "stopped"); self.assertEqual(cp["terminal"], {"status": "stopped", "stop_reason": result["stop_reason"], "resumable": False})

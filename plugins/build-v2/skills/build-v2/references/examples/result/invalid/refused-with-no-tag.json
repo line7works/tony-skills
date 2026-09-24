@@ -1,0 +1,147 @@
+{
+  "answer": {
+    "accepted": false,
+    "claimed_card": "built",
+    "claimed_status": "complete",
+    "path": "/tmp/build-c-20260922-7f3c/answer.json",
+    "refusals": [
+      "the answer claims `complete` with the card `built` while its own checks report unit failing; a check that is failing or was not run is not a finished slice, and the contradiction is the executor's to resolve, not this core's"
+    ],
+    "session_id": "sess-test-1"
+  },
+  "build_doc": "docs/plans/2026-09-20-widget.md",
+  "card": {
+    "after": "not started",
+    "before": "not started",
+    "document_line": null,
+    "moved": false,
+    "reason": "the recorded answer was refused, so it was neither acted on nor repaired and the card stays at 'not started'"
+  },
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 1,
+      "name": "unit",
+      "named_by_slice": true,
+      "output": "FAILED (failures=1)",
+      "recorded_result": null,
+      "rerun_refused": null,
+      "result": "failing",
+      "source": "recorded"
+    }
+  ],
+  "contract": {
+    "checks": [
+      {
+        "command": "sh checks/unit.sh",
+        "name": "unit"
+      }
+    ],
+    "named_paths": [
+      "src/widget.py"
+    ],
+    "not_in_slice": [
+      "src/other.py",
+      "checks/"
+    ],
+    "path": "/tmp/build-c-20260922-7f3c/contract.json",
+    "requirements": [
+      "R1. `spin()` returns the number of turns."
+    ]
+  },
+  "identity": {
+    "commit": "218381e628f7ae3ac596ce47f7ba624c7b929b41",
+    "dirty": false,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [],
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "interface_version": 1,
+  "next": "done",
+  "out_of_scope": [],
+  "plugin_version": "0.1.0",
+  "reason": "the recorded answer is not recordable: the answer claims `complete` with the card `built` while its own checks report unit failing; a check that is failing or was not run is not a finished slice, and the contradiction is the executor's to resolve, not this core's. It was neither acted on nor repaired: the card stays at 'not started' and no event was appended.",
+  "receipt": null,
+  "records": {
+    "appended": [],
+    "head_after": "579a1bd70fb4e1d9f1b3cf481fdfdcbb9c1da8f509574ea3d1d1f90997f239e2",
+    "head_before": "579a1bd70fb4e1d9f1b3cf481fdfdcbb9c1da8f509574ea3d1d1f90997f239e2",
+    "levelled": {
+      "dry_run": false,
+      "imported": 0,
+      "native_rendered": 0,
+      "ran": true,
+      "unparsed": 0,
+      "would_import": 0
+    },
+    "log": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+    "open": {
+      "BLOCKER": 0,
+      "MAJOR": 0,
+      "MINOR": 0
+    },
+    "pinned_head": "579a1bd70fb4e1d9f1b3cf481fdfdcbb9c1da8f509574ea3d1d1f90997f239e2",
+    "refused": null,
+    "wrote": true
+  },
+  "refusal_reason": null,
+  "report_only": false,
+  "result_version": 1,
+  "resumed_half": null,
+  "run_dir": "/tmp/build-c-20260922-7f3c",
+  "run_id": "run-1",
+  "slice": "A",
+  "source_set": {
+    "base": "base",
+    "base_commit": "575802f0c16dd4bc45c8df740afec375dc8a6645",
+    "changed": [],
+    "committed": [
+      "src/widget.py"
+    ],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "218381e628f7ae3ac596ce47f7ba624c7b929b41",
+    "sanctioned": [
+      {
+        "path": "docs/plans/2026-09-20-widget.md",
+        "reason": "the ledger document this run is executing: the loop writes into it by design, and this core writes the slice's `Status:` line there, so a change to it is never out of scope"
+      }
+    ],
+    "untracked": []
+  },
+  "status": "answer_refused",
+  "stop_reason": "the recorded answer is not recordable: the answer claims `complete` with the card `built` while its own checks report unit failing; a check that is failing or was not run is not a finished slice, and the contradiction is the executor's to resolve, not this core's. It was neither acted on nor repaired: the card stays at 'not started' and no event was appended.",
+  "stop_tag": null,
+  "terminal_status": "stop",
+  "workspace": "/home/builder/work/signpost",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/input.json",
+      "sha256_after": "ec488a8221c09e6373deef5c3be59d5fd17e8f99197bfa4e82d32105573b0815"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/contract.json",
+      "sha256_after": "a491da91eaef35468d7060b590d4e5d568b4cf957e1db4830649ad4e3cd2bdf4"
+    },
+    {
+      "kind": "records_log",
+      "path": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+      "sha256_after": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/answer.json",
+      "sha256_after": "f6a9dd007410e6c3f4beba7e85f0bad80e5476266e90de470a1bacd7f25864be"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/result.json",
+      "sha256_after": null
+    }
+  ],
+  "wrote_nothing": false
+}

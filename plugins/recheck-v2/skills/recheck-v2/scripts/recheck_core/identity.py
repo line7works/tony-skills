@@ -4,11 +4,30 @@ identity_of(workspace) returns the six fields exactly as fixturelib.identity_of 
 git runs read-only, inside the workspace only, under the same clean configuration environment
 (GIT_CONFIG_NOSYSTEM=1, GIT_CONFIG_GLOBAL=/dev/null, LANG=C, TZ=UTC, the same -c flags), so no
 user configuration can change the bytes that are hashed.
+
+E13 slice 1 (brief 3.2, CR-3): one fixed prefix is excluded from the dirty check, the tracked diff
+and the untracked list — `docs/records/`, the records component's own history. The component
+excludes exactly that list (interface "identity": "The exclusion list is fixed: docs/records/"),
+and `append` refuses a clear whose `verified_source` is not the identity the component computes, so
+the two must agree field for field. The section 9 boundary check uses the same exclusion, so a log
+this run wrote is never a boundary violation and never makes the run `stale_source`. A workspace
+with no `docs/records/` hashes to exactly the bytes it did before, which is why E7 step 6 stays
+green.
 """
 import os
 import subprocess
 
 from . import canon
+
+# The component's fixed exclusion list, published by `records.py identity` under `excluded`
+# (E13 3.2, CR-3). A test compares this tuple with what the component publishes. The pathspecs
+# below are the same prefixes without their trailing slash, which is the form git takes.
+EXCLUDED_PREFIXES = ("docs/records/",)
+EXCLUDED_PATHSPECS = tuple(p.rstrip("/") for p in EXCLUDED_PREFIXES)
+
+
+def _exclude_args():
+    return [":(exclude)" + p for p in EXCLUDED_PATHSPECS]
 
 GIT_CONFIG_ARGS = [
     "-c", "core.hooksPath=/dev/null",
@@ -80,9 +99,9 @@ def identity_of(workspace):
     """The six-field fingerprint of pilot contract section 6 (byte-compatible with fixturelib for regular
     files; a symlink is hashed by its link target text, E8-A46, where fixturelib would follow it)."""
     commit = git(workspace, ["rev-parse", "HEAD"]).strip()
-    status = git(workspace, ["status", "--porcelain", "--untracked-files=all"])
-    diff = git(workspace, ["diff", "HEAD", "--binary"], binary=True)
-    raw = git(workspace, ["ls-files", "--others", "--exclude-standard", "-z"], binary=True)
+    status = git(workspace, ["status", "--porcelain", "--untracked-files=all", "--", "."] + _exclude_args())
+    diff = tracked_diff_excluding(workspace, list(EXCLUDED_PATHSPECS))
+    raw = git(workspace, ["ls-files", "--others", "--exclude-standard", "-z", "--", "."] + _exclude_args(), binary=True)
     untracked = sorted(p.decode("utf-8") for p in raw.split(b"\0") if p)
     lines = []
     for path in untracked:
@@ -138,14 +157,19 @@ def pin_matches(workspace, actual, pin):
 
 
 def changed_tracked_paths(workspace):
-    """Tracked paths that differ from HEAD (staged or unstaged), sorted."""
-    out = git(workspace, ["diff", "HEAD", "--name-only", "-z"], binary=True)
+    """Tracked paths that differ from HEAD (staged or unstaged), sorted; `docs/records/` excluded
+    the way the identity excludes it (E13 3.2, CR-3), so a log write is never an outside change."""
+    out = git(workspace, ["diff", "HEAD", "--name-only", "-z", "--", "."] + _exclude_args(), binary=True)
     return sorted(set(p.decode("utf-8") for p in out.split(b"\0") if p))
 
 
 def tracked_diff_excluding(workspace, paths):
-    """The bytes of `git diff HEAD --binary` with the given workspace-relative paths excluded."""
+    """The bytes of `git diff HEAD --binary` with the given workspace-relative paths excluded.
+
+    `docs/records/` is always excluded on top of `paths` (E13 3.2, CR-3): the section 9 boundary
+    check compares this diff before and during the transaction, and the append the transaction
+    makes must not read as a tracked change outside the plan."""
     args = ["diff", "HEAD", "--binary", "--", "."]
-    for p in paths:
+    for p in list(paths) + [p for p in EXCLUDED_PATHSPECS if p not in paths]:
         args.append(":(exclude)" + p)
     return git(workspace, args, binary=True)

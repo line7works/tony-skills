@@ -1,0 +1,36 @@
+{
+  "case": "S3-03-builder-notes-untracked",
+  "checks_executed": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 4 tests in 0.000s\n\nOK"
+    },
+    {
+      "command": "sh checks/field-widths.sh",
+      "exit_code": 0,
+      "name": "field-widths",
+      "output": "field-widths: name field is 12 characters"
+    },
+    {
+      "command": "PYTHONPATH=src /usr/bin/python3 -m signpost.render 'Fork|Ridge' 4",
+      "exit_code": 0,
+      "name": "render a name holding the separator",
+      "output": "Fork\\|Ridge  |4\ncolumns=2"
+    },
+    {
+      "command": "PYTHONPATH=src /usr/bin/python3 -c 'from signpost.columns import count,join; print(count(join([\"Fork\\\\\\\\\", 4])))'",
+      "exit_code": 0,
+      "name": "join a field holding the escape character",
+      "output": "2"
+    }
+  ],
+  "findings": [],
+  "notes": "Both requirements were exercised from the workspace root: the separator case through render, the escape-character case through join directly.",
+  "notes_kept": [],
+  "role": "reviewer",
+  "seeded_answer": 1,
+  "session_id": "sess-review-1",
+  "verdict": "signed off"
+}

@@ -25,6 +25,48 @@ export UV_CACHE_DIR="$CODEX_HOME/child/uv-cache"
 python3 - "$PROMPT_FILE" "$WORKSPACE" "$OUT_DIR" $WRITABLE <<'PY'
 import json, os, shutil, subprocess, sys
 from pathlib import Path
+# >>> session lock (E13 pick P6, SB-14): one private Codex home per launch >>>
+def session_lock(condition, out):
+    """This launch's own CODEX_HOME, inside its own out-dir, derived from the condition home.
+
+    Measured on codex-cli 0.155.1 (E13 slice 3): a headless launch writes its rollout under
+    `$CODEX_HOME/sessions/YYYY/MM/DD/`, and no setting moves that folder but CODEX_HOME itself
+    (`CODEX_SQLITE_HOME` moves only the state databases; `--ephemeral` keeps no rollout, and the
+    adapters read theirs). Codex's own sandbox refuses no read, and Codex rewrites
+    `$CODEX_HOME/config.toml` on every launch. So the lock is a per-launch home: both config
+    files copied with the child-home pointer rewritten (UV_CACHE_DIR stays the condition's warmed
+    cache, which is not a session record), the credential LINKED to the condition's (one file,
+    never copied), the plugin and skill folders COPIED (E9-40 derives the sessions root from the
+    helper's resolved path, so a link would send the adapters back to the shared home), and a
+    private child home for the tool shells and the verifier children. Every session this launch
+    starts is then under <out>/codex-home; a sibling launch's folder is another trial's record,
+    which the bench's wall refuses and the runner's read-boundary preflight proves.
+    """
+    import re, shutil
+    mine = out / 'codex-home'
+    if mine.exists() or mine.is_symlink():
+        raise SystemExit('the per-launch home ' + str(mine) + ' already exists; a launch home is never reused')
+    mine.mkdir()
+    for folder in ('plugins', 'skills'):
+        if (condition / folder).is_dir():
+            shutil.copytree(str(condition / folder), str(mine / folder),
+                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    for path in (list((mine / 'plugins').rglob('*.json')) if (mine / 'plugins').is_dir() else []):
+        path.write_text(path.read_text().replace(str(condition), str(mine)))
+    child = mine / 'child'
+    child.mkdir()
+    pointer = re.compile(r'^CODEX_HOME = .*$', re.M)
+    for source, target in ((condition / 'config.toml', mine / 'config.toml'),
+                           (condition / 'child' / 'config.toml', child / 'config.toml')):
+        if source.is_file():
+            target.write_text(pointer.sub(lambda _m: 'CODEX_HOME = ' + json.dumps(str(child)),
+                                          source.read_text()))
+    credential = condition / 'auth.json'
+    if credential.exists() or credential.is_symlink():
+        for link in (mine / 'auth.json', child / 'auth.json'):
+            link.symlink_to(credential)
+    return mine
+# <<< session lock <<<
 prompt,ws,out=map(lambda x:Path(x).resolve(),sys.argv[1:4])
 writable=[Path(x).resolve() for x in sys.argv[4:]]
 # E9-34: a SPENT output directory is refused, never overwritten - but the directory
@@ -33,10 +75,13 @@ writable=[Path(x).resolve() for x in sys.argv[4:]]
 # launcher runs, so `out.exists()` was true on every walled launch and every Codex
 # trial would have exited 1 before reaching the model. The refusal now names the
 # records a spent directory holds, exactly as setups/claude-code/launch.sh does.
-spent=[n for n in ['events.jsonl','launch.json','final.md','rollout.jsonl','stderr.log'] if (out/n).exists()]
+spent=[n for n in ['events.jsonl','launch.json','final.md','rollout.jsonl','stderr.log','codex-home'] if (out/n).exists()]
 if spent:raise SystemExit('out-dir already holds '+', '.join(spent)+'; refusing to overwrite a live session')
 out.mkdir(parents=True,exist_ok=True)
-cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',str(Path(os.environ['CODEX_HOME'])/'child')]  # E9-25: only the child home is writable; executor sessions and installed core stay outside.
+condition=Path(os.environ['CODEX_HOME']).resolve()
+home=session_lock(condition,out)  # E13 P6: this launch's sessions live in <out>/codex-home only
+env=dict(os.environ,CODEX_HOME=str(home))
+cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',str(home/'child')]  # E9-25: only the child home is writable; executor sessions and installed core stay outside.
 for extra in writable:cmd+=['--add-dir',str(extra)]  # E11-26: the roots the runner named, this trial's only
 # SB-2 (the sealed bench, A3): the WALL is this lane's sandbox. macOS refuses a second
 # seatbelt inside the first (sandbox_apply: Operation not permitted, exit 71, E9-21), and
@@ -48,15 +93,15 @@ for extra in writable:cmd+=['--add-dir',str(extra)]  # E11-26: the roots the run
 cmd+=['--sandbox','danger-full-access','-c','approval_policy=never','-']
 (out/'command.json').write_text(json.dumps(cmd))
 with prompt.open('rb') as inp,(out/'events.jsonl').open('wb') as events,(out/'stderr.log').open('wb') as err:
- code=subprocess.run(cmd,stdin=inp,stdout=events,stderr=err).returncode
+ code=subprocess.run(cmd,stdin=inp,stdout=events,stderr=err,env=env).returncode
 thread=None
 for line in (out/'events.jsonl').read_text().splitlines():
  try:d=json.loads(line)
  except ValueError:continue
  if d.get('type')=='thread.started':thread=d.get('thread_id')
-records=list((Path(os.environ['CODEX_HOME'])/'sessions').rglob('rollout-*'+thread+'.jsonl')) if thread else []
+records=list((home/'sessions').rglob('rollout-*'+thread+'.jsonl')) if thread else []
 if len(records)==1:shutil.copyfile(records[0],out/'rollout.jsonl')
-summary={'exit':code,'thread_id':thread,'rollout':str(out/'rollout.jsonl') if len(records)==1 else None}
+summary={'exit':code,'thread_id':thread,'rollout':str(out/'rollout.jsonl') if len(records)==1 else None,'codex_home':str(home),'condition_home':str(condition),'session_lock':'per-launch home (E13 P6, SB-14)'}
 (out/'launch.json').write_text(json.dumps(summary));print(json.dumps(summary))
 sys.exit(code)
 PY

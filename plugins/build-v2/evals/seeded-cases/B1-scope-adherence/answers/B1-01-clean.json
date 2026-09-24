@@ -1,0 +1,24 @@
+{
+  "case": "B1-01-clean",
+  "checks": [
+    {
+      "command": "sh checks/unit.sh",
+      "exit_code": 0,
+      "name": "unit",
+      "output": "Ran 2 tests in 0.000s\n\nOK",
+      "result": "passed"
+    }
+  ],
+  "claimed_card": "built",
+  "claimed_status": "complete",
+  "edits": [
+    {
+      "path": "src/signpost/render.py",
+      "reason": "R1: row() escapes the separator inside the name before it reaches join()."
+    }
+  ],
+  "notes": "One file touched. The joiner and the padder were read and left alone.",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "sess-build-1"
+}

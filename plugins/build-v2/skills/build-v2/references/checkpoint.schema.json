@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/build-v2/checkpoint.schema.json",
+  "title": "build-v2 checkpoint",
+  "description": "What one run carries between its phase commands: `<run_dir>/checkpoint.json`, announced in `<run_dir>/checkpoint.log` the same way the receipt is. Each phase reads it, adds its own facts, and writes it whole. Nothing is re-derived from a conversation: the contract comes from the build doc at `contract`, the source set and the identity from git and the component at `preflight`, the answer from the file at `record-answer`, and `report` uses exactly those. `records_pin` is the head the run's state was read against; `report` compares the log with it BEFORE its own levelling pass, so an event another writer appended between two phases is a named conflict rather than something this run silently builds on.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checkpoint_version",
+    "run_id",
+    "phase",
+    "input_sha256",
+    "input",
+    "integrity"
+  ],
+  "properties": {
+    "checkpoint_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "checked",
+        "contracted",
+        "preflighted",
+        "answered",
+        "reported",
+        "stopped"
+      ],
+      "description": "the last phase that completed. A phase command against the wrong phase is a usage slip (exit 2), and a command on a run that already ended reports the recorded outcome and writes nothing."
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "the canonical serialization of the validated input, so a later phase cannot be pointed at another run"
+    },
+    "input": {
+      "type": "object",
+      "description": "the validated input, as `references/input.schema.json` describes it"
+    },
+    "run_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "at": {
+      "type": "string",
+      "description": "the RFC 3339 UTC instant the run started; the card event carries it"
+    },
+    "contract": {
+      "type": "object",
+      "description": "the slice as the document states it (the `contract` block of the result)"
+    },
+    "source_set": {
+      "type": "object",
+      "description": "the three lists and the base (the `source_set` block of the result)"
+    },
+    "identity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "the six-field identity as `records.py identity` computed it"
+    },
+    "card_before": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the slice's card as preflight read it"
+    },
+    "records_pin": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "log",
+        "head"
+      ],
+      "properties": {
+        "doc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "log": {
+          "type": "string",
+          "minLength": 1
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "records": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "what preflight read from the component (the `records` block of the result, before the append)"
+    },
+    "answer": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "the recorded executor answer, as `references/answer.schema.json` describes it"
+    },
+    "answer_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "terminal": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason"
+      ],
+      "description": "set once a phase command delivered a terminal status; every later phase command returns this and writes nothing",
+      "properties": {
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "terminal_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the result path"
+        }
+      }
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "every file the run has written so far, in write order"
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "prev",
+        "self"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prev": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "self": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "decision": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "the facts the card decision was made on, written before the transaction opens: the out-of-scope list, the check rows, and the card before and after, and `source_pin` (Astra's F1): HEAD and the content identity of every changed or untracked path, the build doc and `docs/records/` excepted, which every later step of the transaction and every settling pass verifies before it writes; a moved pin is the `source_changed` stop. A pass that settles an unfinished transaction re-delivers these rather than recomputing them, because a rerun check could observe something else and the decision being settled was made on what is here."
+    }
+  }
+}

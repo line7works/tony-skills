@@ -8,7 +8,7 @@ import unittest
 import testlib
 
 testlib.add_scripts_to_path()
-from recheck_core import canon, ledger  # noqa: E402
+from recheck_core import canon, ledger, records_view  # noqa: E402
 
 DOC = "docs/plans/2026-09-18-widget-export.md"
 
@@ -85,10 +85,10 @@ class Parsing(unittest.TestCase):
         self.assertEqual(len(amb), 1); self.assertIn("claim-less finding at a location several entries share", amb[0]["reason"])
         o = ledger.open_set(parsed_doc(case("S1-colocated", "S1-03")))
         self.assertEqual(o["ambiguities"], []); self.assertEqual(len(o["entries"]), 1); self.assertIsNone(o["entries"][0]["claim"])
-        self.assertEqual(ledger.find_entries(o["entries"], "src/widget/export.py", 11, "anything"), o["entries"])
+        self.assertEqual(records_view.match_entries(o["entries"], "src/widget/export.py", 11, "anything"), o["entries"])
         o1 = ledger.open_set(parsed_doc(case("S1-colocated", "S1-01")))
         self.assertEqual(len(o1["entries"]), 2); self.assertEqual(o1["ambiguities"], [])
-        self.assertEqual(len(ledger.find_entries(o1["entries"], "src/widget/export.py", 11, "a missing title exports as the string None")), 1)
+        self.assertEqual(len(records_view.match_entries(o1["entries"], "src/widget/export.py", 11, "a missing title exports as the string None")), 1)
 
     def test_s2_05_legacy_waiver_closes(self):
         """S2 CASES.md, S2-05: the legacy waiver line (no quoted words) is later in the file than the BLOCKER
@@ -246,11 +246,13 @@ class ClaimNormalization(unittest.TestCase):
         self.assertEqual([e["state"] for e in self.entries(reopened2)], ["open"])
 
     def test_join_key_strips_the_reference(self):
-        """Named-item matching normalizes the reference's claim the same way."""
+        """Named-item matching normalizes the reference's claim the same way. E13 slice 1: the join
+        moved to `records_view.match_entries`, which runs over the component's entries; the rule it
+        applies is unchanged, and the entries here are the same shape."""
         entries = self.entries(self.HEAD)
-        self.assertEqual(len(ledger.find_entries(entries, "a.py", 1, "(the claim)")), 1)
-        self.assertEqual(len(ledger.find_entries(entries, "a.py", 1, "the claim")), 1)
-        self.assertEqual(ledger.find_entries(entries, "a.py", 1, "another claim"), [])
+        self.assertEqual(len(records_view.match_entries(entries, "a.py", 1, "(the claim)")), 1)
+        self.assertEqual(len(records_view.match_entries(entries, "a.py", 1, "the claim")), 1)
+        self.assertEqual(records_view.match_entries(entries, "a.py", 1, "another claim"), [])
         self.assertEqual(ledger.strip_parens("(x)"), "x")
         self.assertEqual(ledger.strip_parens("()"), None)
         self.assertEqual(ledger.strip_parens("x"), "x")

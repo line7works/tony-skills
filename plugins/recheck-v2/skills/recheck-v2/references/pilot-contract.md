@@ -427,6 +427,20 @@ sequence of receipted steps:
   leaves every card at its before value or its mapped after value, never anything else, and
   never a moved card ahead of its block.
 
+**The station loop: a documented qualification gap, not a behaviour change** (E13 full review,
+Astra's F8). E13 does NOT qualify the no-commit hand-off from signoff to recheck while the
+signoff station's verdict doc under `docs/reviews/` (an authorized mirror, write 5 above) is
+untracked. The boundary check reads any change to untracked content as a violation, so a recheck
+that appends its block to that untracked mirror ends `completed / not_clear`, its status-line
+steps are cancelled and the card stays where signoff left it, while the log records the findings
+the run cleared. Precondition for the loop: commit the verdict mirror (track it) before
+`/recheck`; with it tracked the same run clears and moves the card. Nothing in this skill stages
+or commits files for the user. Changing this (comparing untracked non-target content separately
+and permitting only the exact receipt-planned mirror changes) changes what recheck decides and
+stops on, so it waits for an explicit E13-1 ruling by the owner.
+`scripts/tests/test_full_fix_f8.py` runs the whole dirty loop (build, signoff, recheck on one
+document, no commit between) and the tracked-mirror control, and pins both outcomes.
+
 The semantic validator (an E8 script, `scripts/validate-result.py`) checks what the schema
 cannot: the result's items correspond one-to-one to the checklist entries and `checklist.count`
 equals their number; every item and new defect carries a slice or `none` that exists in the
@@ -972,3 +986,208 @@ Revision 5, E9 seam 2026-09-14 (ruling E9-1 in the E9 lane contract
 naming no turn of the session (section 8); E8-24's reading that a missing map leaves the field
 rules alone in force is unchanged. The core's `grant_channel_ok` and one test implement it; no
 fixture outcome changes (every IA trial map lists every reference its grants cite).
+
+Revision 6, 2026-09-21, step E13 slice 1 (the stations E13 lane contract, rulings E13-1 to E13-5):
+**the records move into the records component; nothing this skill decides moves with them.** The
+meaning of open, fixed, waived and reopened, the card mapping, the severity bar, the independence
+rule and every stop rule are unchanged (ruling E13-1). What changes is where the records are kept
+and how the Markdown is produced.
+
+- **Reaching the component.** The core resolves the records component through the resolver snippet
+  of that component's `references/interface.md` (a `--records-root` argument, `RECORDS_ROOT`, the
+  component beside this plugin, the installed shape below it), confirms `interface_version` 2 with
+  `component-identity`, and reaches it through `scripts/records.py` as a subprocess only: it never
+  opens a log file, never imports the component's library, and never copies its code beyond that
+  one snippet. A component that cannot be found, or that speaks another interface version, is exit
+  3 with one line on stderr and nothing on stdout, the shape a missing `jsonschema` already had;
+  `--help` and argument checking still work without it. Every caller value is bound as an argv
+  item, never as shell text.
+
+- **Section 6, the exclusion.** The six-field identity is computed with one fixed prefix excluded
+  from the dirty check, the tracked diff and the untracked list: `docs/records/`, the component's
+  own history. The component excludes exactly that list, and `append` refuses a clear (exit 6)
+  unless `verified_source` equals the identity the component computes, so the two must agree field
+  for field. The section 9 boundary check uses the same exclusion, so the log this run writes is
+  never a boundary violation and never makes the run `stale_source`. A workspace with no
+  `docs/records/` hashes to the bytes it always did.
+
+- **Section 9, the log as an authorized write.** A seventh authorized write joins the list: the
+  document's log under `docs/records/`, written through the component's CLI and never directly. A
+  command of this skill that writes nothing today still writes nothing: it uses
+  `import-legacy --dry-run`, which takes no lock, and reports what the log lacks instead of adding
+  it.
+
+- **Section 9, the append inside the transaction.** v1 signoff still writes findings into the
+  Markdown by hand, so a document can be ahead of its log. At the start of every phase that reads
+  the document's records, the core runs `import-legacy` for that document, whether or not a log
+  exists; the importer is idempotent and a pass that finds no news appends nothing. An ambiguous
+  document (component exit 5) or a record changed above the imported tail (exit 7) stops the run
+  with the importer's own explanation and writes nothing to the document.
+
+  The recording transaction then runs in this order: the pre-transaction checks of section 9
+  unchanged; `receipt.json` created carrying the APPEND's intent (the log and the head read at plan
+  time) and an empty plan; one `append` with `--expect-head <that head>`, all events or none
+  (`reopened` per reopening grant, `disposition` per checklist item, `defect_raised` per new
+  defect, `waived` per waiver grant, in that order); the receipt's record of the append (expected
+  head, resulting head, the seqs) BEFORE any document step; `render --run-id <run_id>`; the plan of
+  the document steps computed from that rendered text and stored in the receipt; then the document
+  steps exactly as before. A `card_set` is a SECOND, later append under the same receipt pattern
+  (`card_append`), made only for a status-line step that actually landed, so a status step the
+  boundary check cancelled leaves no card event behind. Every event carries `actor` with the run's
+  `run_id` and `recheck-v2` as the station; a clear (`disposition`, `waived`) carries the full
+  six-field `verified_source` with `known: true`. The Markdown the core places — the block, the
+  waiver and reopening lines, the verdict-doc copy — is the `block`, `grants` and `text` of
+  `render`, placed where this skill has always placed them. The heading's date is the run date,
+  which is why every event of a run carries that date in its `at`.
+
+- **Section 9 and 10, the refusals.** Each refusal of `append` is the matching stop with NOTHING
+  written to the document: component exit 4 (`invalid`) and exit 7 (`conflict`, a moved head or a
+  live lock) are `recording_failed`, exit 5 (`ambiguous_identity`) is `missing_input`, exit 6
+  (`stale_source`) is `stale_source`. Exit 7 is never retried and never merged.
+
+- **Section 11, resume and the crash window.** A failure after the append and before the document
+  steps finish is recoverable, and the append is never made twice. The receipt's `append` block
+  carries the head it expected as soon as the transaction begins and the resulting head only once
+  the append was recorded, so an intent with no head is the crash window itself. A resume asks the
+  log for this run's events by `run_id`: they are there, so only the receipt's record was missing
+  and the block is completed from the log and marked `recovered`; or there are none, so the append
+  never landed and is made now. Either way the result names the half that was missing under
+  `resumed_half`, and the document steps are then classified against the virtual state exactly as
+  before.
+
+- **`recheck_core/ledger.py` is byte-frozen by the records component, not by this skill.** That
+  component keeps a byte-for-byte copy of the whole module in `records_core/legacy.py` (records
+  E12-2), and its own suite compares the two. Two helpers in it, `find_entries` and
+  `entry_claim_field`, no longer serve any decision of this skill — the join moved to
+  `records_view.match_entries` and `records_view.claim_field`, over the entries the component
+  derives — and they are kept solely so that copy still matches. Nothing in this skill may call
+  them: `tests/test_validator_records.py::TheRestoredHelpersAreNeverOnTheDecisionPath` reads every
+  shipped file for a call and runs the decision path with both replaced by traps. The same
+  invariant means no comment or edit of any kind can be made inside `ledger.py` without the
+  records component's copy moving with it, which is a change to that component and the owner's.
+
+- **Appendix A, the block is a rendering of events.** The record grammar is unchanged and stays the
+  authority for what a line means. What changes is who writes the line: the core supplies the facts
+  as events and the component renders them, byte for byte as the core's own renderers did. A parity
+  suite holds the two together over every built case of every E7 lane, which is how this skill's
+  qualification is re-earned for the move (owner pick P1: re-verified by parity on 2026-09, not
+  re-trialled).
+
+Revision 7, 2026-09-21, the E13 slice 1 fix round (the outside reviewer's four MAJORs and one
+MINOR, plus the control room's conflicts finding). Nothing recheck decides moves (ruling E13-1);
+what moves is when the transaction is over, what the baseline is, and which refusals are final.
+
+- **Section 9, the commit point covers both appends.** Completing the document steps does not
+  complete the recording transaction. Every pass — a first `record`, a resume inside the
+  transaction, and a resume holding a COMMITTED document receipt alike — reconciles the landed,
+  non-cancelled status steps with this run's `card_set` events through the CLI before it reports
+  anything. `completed` is reported only when the document steps AND the card-event receipts are
+  complete. A status step the boundary check cancelled still produces no `card_set`. A definitive
+  refusal of the card append is a named stop (`recording_failed`, the section 10 row for a write
+  that failed inside the transaction, carrying the component's own sentence), never an escaped
+  exception and never exit 1; the receipt's `card_append` block names what was missing.
+
+- **Section 9, the transaction guard pins the targets' bytes.** The guard stores each transaction
+  target's SHA-256 beside the pre-transaction identity and the non-target diff. The guard's
+  tracked diff excludes the targets — that is what lets the transaction write them — so without
+  the hashes an edit that reaches a target before the document plan exists is invisible to every
+  check and becomes the plan's `before` state. The hashes, and the remaining source checks, are
+  required to match before a document plan is created and before any write of an empty-plan
+  resume; a mismatch is an outside-edit stop (`recording_failed`) with no further document,
+  event, checkpoint or receipt write. The baseline is never regenerated from edited bytes. Once a
+  plan exists, section 11's receipted-state classification decides, unchanged.
+
+- **Section 9 and 11, a refusal the component gave is definitive.** An unknown append outcome (a
+  crash with no answer) and a refusal the component returned are different states. A received
+  refusal is persisted in the receipt's append block as `refused` — the exit code, the error and
+  the component's own sentence — before the named stop is returned, and no resume retries it. An
+  unknown outcome is settled against the head the receipt already names (`expected_head`), never
+  against a head read afresh: a head that changed since is a conflict the component refuses, not
+  permission to append against the new one.
+
+- **Section 9, a failed history read is not an empty history.** A `card_set` history query that
+  failed keeps its exit and explanation, delivers the matching named pilot stop, and returns
+  before any append. Only cards a SUCCESSFUL read proved absent are ever appended.
+
+- **Section 11, the head the open set was read against is pinned at `start`.** The checkpoint
+  carries `records_pin` (the document, its log, and the head the view was read against). At
+  `record`, BEFORE this run's own sync, the log must still be at that head; an event another
+  writer appended between the two phases is a named conflict stop before any append, telling the
+  user to re-read the log and decide (section 10). The comparison is taken before the sync
+  precisely so CR-1's import events — which legitimately move the head inside a phase — are never
+  the ones it flags, and the pin advances to the head that sync produced. CR-1 owns the window
+  inside a phase; this check owns the window between two phases.
+
+- **Section 10, a landed append is never reported as a bare validation stop.** Once the
+  transaction's append has landed, a result that fails validation is `recording_failed` with the
+  half named and the receipt path beside it, not `stopped` with a bare validation message.
+
+Revision 8, 2026-09-22, E13 CR-F3 (a finding a station raised natively). Nothing recheck decides
+moves (ruling E13-1): the same findings are open, the same checklist is selected, the same card
+moves, and no stop rule is added. What moves is how the record provenance of a natively raised
+finding is addressed.
+
+- **Section 3 and Appendix A, the address of a native raise.** A `finding_raised` or `defect_raised`
+  the log holds as a native event (a station's own `append`: signoff after records amendment A4, or
+  this skill's fix-introduced defect of an earlier run) carries no document line of its own. Its
+  address is where the records component's rendering of that event sits in the document. The core
+  asks the component, through the CLI and nothing else, `render --run-id <the event's
+  actor.run_id>` once per run for each reading of the records, and takes from it the exact line the
+  event renders to and the heading its block carries (`### <date> — review: Slice X` for a review
+  finding, the recheck heading for a defect line). It then finds that line, byte for byte, among the
+  document's own record lines — the first one no other event already answers for — and addresses
+  the finding at that line, under the heading it actually sits under: the document's heading wins.
+  A raise whose line the document does not carry (the station's append landed and its document
+  write did not, or the line sits outside any record heading or inside a fence) keeps the heading
+  the component's render carries and no line; no existing rule stops on that, so the checklist item
+  validates and the run proceeds, and the block the run places does not depend on where the raise
+  sits. Before this revision such a finding was addressed with no heading, and a `start` on it
+  refused its own checkpoint (`scope.checklist[i].record.heading '' should be non-empty`).
+
+Revision 9, 2026-09-22, E13 slice 2 fix round (Astra's F13, BLOCKER under ruling E13-1). This
+revision RETURNS a decision to the branch point's behaviour; nothing else recheck decides moves.
+
+- **Section 3 and Appendix A, an orphan clearing line.** A syntactically valid legacy recheck line
+  or waiver whose location and claim no finding of the document holds — an orphan — has always been
+  read by Appendix A's open filter as an entry of its own, decided by that line ("records that
+  match no entry become entries of their own when they carry a severity"). At the branch point a
+  document holding only a `fixed` orphan on a `built` slice was `nothing_open`. Slice 1 turned that
+  into `missing_input`, because the records component's importer refuses such a line (exit 5,
+  "no finding of this document holds the location"). Now, when EVERY line the importer stopped on
+  is exactly such an orphan by this skill's own unchanged reader (`ledger.open_set`, byte for byte
+  against the document), the core answers each one `new_finding` through the component's own
+  resolutions interface (`import-legacy --resolutions`), with `answered_by` naming this rule. The
+  log then holds what the branch point's reader held: a finding at that location with that claim
+  and severity, decided by that line, so `start` returns the branch point's stop again. Any other
+  importer stop, or a resolution the component refuses, stops the run exactly as before with the
+  importer's own explanation. A claim-less clearing line at a location another entry holds is
+  NOT an orphan: Appendix A calls it ambiguous, it stays the user's question, and the run stops
+  `missing_input` as it did in slice 1. The resolutions file is written to the system temporary directory
+  and removed at once; the read-only commands (`check-input`, and every `--dry-run` levelling)
+  still write nothing to the workspace or the log. No second log grammar and no change under
+  `plugins/records/`: the reader is the one this skill already runs as its Appendix A detector,
+  and the answer goes through the component's published CLI. The parity suite carries the case
+  (`tests/test_parity.py::OrphanClearingLine`), driven through both pilots' CLIs.
+
+Revision 10, 2026-09-23, E13 slice 2's last fix round (Astra's N1, after her recheck). Nothing
+recheck decides about a document the branch point could read moves.
+
+- **Section 3 and Appendix A, a line the records component itself rendered.** Records keeps a
+  ranged location on the review line it renders for a native `finding_raised` (records amendment
+  A7, F9: `src/widget.py:2-3`), and Appendix A's grammar has no range, so the strict check (this
+  skill's own reader, kept as an ambiguity detector in E13 slice 1) called a signoff's own
+  rendered line unplaceable and stopped `start` with `missing_input`. When the unchanged check
+  finds an ambiguous record, the core now asks the records CLI which record lines the component
+  itself rendered, and never opens the log: `import-legacy --dry-run` gives `native_rendered`,
+  `events` gives the native runs and the slice each event's finding is charged to, and
+  `render --run-id` gives each native run's exact lines. A document line byte-equal to a rendered
+  line, under a heading of that line's kind and slice (a review line under a review heading of the
+  event's slice, a recheck-block line under a recheck heading naming it, a grant anywhere), and not
+  a line an earlier import recorded, answers for that one occurrence, in file order. Those lines
+  are set aside ONLY when their count, plus the `Status:` lines equal to their slice's last native
+  card, equals the component's `native_rendered`; otherwise none is. The unchanged check then reads
+  the document with the set-aside lines blanked (line numbers kept). A hand-written ranged line
+  stops exactly as at the branch point, and so does a second copy of a rendered line (one
+  occurrence answers for one line, and the importer itself refuses the copy). A document with
+  nothing ambiguous costs no CLI call, so the parity corpus is untouched. Tests:
+  `tests/test_fix3_n1.py`.

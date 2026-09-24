@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/build-v2/receipt.schema.json",
+  "title": "build-v2 receipt",
+  "description": "The record of the one transaction a build-v2 run makes: the card. `<run_dir>/receipt.json`, announced line by line in `<run_dir>/receipt.log`. The shape the recheck pilot's fix round arrived at (pilot contract Appendix B, Revision 7), reduced to this core's one append and one document step. What it is for: the append's INTENT — the log and the head read at plan time — is written before the call, and its OUTCOME after, so an intent with no outcome IS the crash window and is settled on the next run against the head this block already names, never a head read afresh. A refusal the component RETURNED is a different state: it is persisted here as `refused` before the stop is returned, and no later pass retries it. The document step carries the target's hash before and the hash the plan expects after, so an edit that reached the target between the plan and the write is a named stop rather than the new baseline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "run_id",
+    "document",
+    "slice",
+    "integrity"
+  ],
+  "properties": {
+    "receipt_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "this run's own id. The card event carries it as `actor.run_id`; the executor's session is in `card_append.event.session_id`."
+    },
+    "document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slice": {
+      "type": "string",
+      "minLength": 1
+    },
+    "card_append": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "log",
+        "expected_head"
+      ],
+      "description": "the append. `expected_head` and `expected_seq` are written BEFORE the call; `head` and `seqs` after it; `refused` instead of both when the component returned a refusal.",
+      "properties": {
+        "log": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the head the caller read at plan time, and the only head a settle ever appends against"
+        },
+        "expected_seq": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "the seq this run's event would take: the log's event count at plan time. A settle looks for its event exactly there."
+        },
+        "event": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "slice",
+            "before",
+            "after",
+            "session_id",
+            "run_id"
+          ],
+          "description": "the card move this run intends to record, written with the intent so a settle can recognise its own event",
+          "properties": {
+            "slice": {
+              "type": "string",
+              "minLength": 1
+            },
+            "before": {
+              "type": "string"
+            },
+            "after": {
+              "type": "string"
+            },
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the executor session whose answer this run recorded. It is NOT on the event: `actor.run_id` is the run's id, unique per run, the way every other station reads it."
+            },
+            "run_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the RUN's id, which the event carries as `actor.run_id`"
+            }
+          }
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the head after the append; absent while the outcome is unknown"
+        },
+        "seqs": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "recovered": {
+          "type": "boolean",
+          "description": "the append had landed and only this record was missing"
+        },
+        "refused": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "exit_code",
+            "error",
+            "reason"
+          ],
+          "description": "a refusal the component returned: definitive, never retried",
+          "properties": {
+            "exit_code": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "document_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "sha256_before",
+        "value"
+      ],
+      "description": "the slice's `Status:` line, written only after the card event landed",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256_before": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sha256_planned": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the hash applying the step to the bytes read at plan time produces"
+        },
+        "done": {
+          "type": "boolean"
+        },
+        "sha256_after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "the hash observed after the write"
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "prev",
+        "self"
+      ],
+      "description": "one entry per write: `seq` counts them from 0, `prev` is the previous write's `self` (null at 0), `self` is the SHA-256 of the canonical serialization with `integrity.self` removed. The announcing line `<seq> <self>` reaches receipt.log and the disk before the rename, so a crash leaves a log one line ahead of the file and never a file ahead of its log.",
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prev": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "self": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

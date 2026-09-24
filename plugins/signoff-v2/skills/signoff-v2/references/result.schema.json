@@ -1,0 +1,1038 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/signoff-v2/result.schema.json",
+  "title": "Signoff v2 result",
+  "description": "One result per run, with a terminal status for every run including every stop. Written to the run directory the input names, which is outside the workspace. Every object is closed. Two rules the schema carries that a reader must not miss: a result with no raised findings carries a NON-EMPTY `checks_executed`, each entry with its output, because a clean review lists what it tried (an empty list is a validation failure, not a clean verdict); and a run whose status is not `completed` records no verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "interface_version",
+    "plugin_version",
+    "status",
+    "terminal_status",
+    "run",
+    "report_only",
+    "verdict_recorded"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": 1
+    },
+    "interface_version": {
+      "const": 1
+    },
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "stopped",
+        "recording_failed",
+        "missing_input",
+        "stale_source"
+      ],
+      "description": "the run's terminal status. `completed` is the only one that records a verdict"
+    },
+    "terminal_status": {
+      "enum": [
+        "completion",
+        "stop"
+      ],
+      "description": "the neutral word: `completion` for `completed`, `stop` for every other status"
+    },
+    "stop_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "one sentence naming what stopped the run"
+    },
+    "stop_reason_code": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "a short tag a caller can branch on"
+    },
+    "refusal_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "independence",
+        "answer_invalid",
+        "packet_incomplete",
+        "floor",
+        null
+      ],
+      "description": "why the run refused to record what it was given. `floor`: the reviewer's model is below the Opus-class floor, not established, or disagrees with the session's recorded model (Astra's F5)"
+    },
+    "answer_refused": {
+      "type": "boolean",
+      "default": false,
+      "description": "true when the run did not accept the recorded answer as recordable. It is neither acted on nor silently repaired, and the result says so"
+    },
+    "report_only": {
+      "type": "boolean"
+    },
+    "writes_none": {
+      "type": "boolean",
+      "description": "true when the run wrote nothing to the workspace and nothing to the log"
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_dir",
+        "workspace",
+        "build_doc",
+        "slice",
+        "run_date",
+        "caller"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build_doc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "depth": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lenses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reviewer": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "route",
+        "model",
+        "independent"
+      ],
+      "properties": {
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "which route ran"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the model the run observed, never one it assumed"
+        },
+        "independent": {
+          "type": "boolean",
+          "description": "false when the reviewing session is the building session"
+        }
+      }
+    },
+    "source_identity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "dirty",
+        "tracked_diff_sha256",
+        "untracked",
+        "untracked_sha256",
+        "submodules"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "tracked_diff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "submodules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "identity_now": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "on a `stale_source` stop (`source_moved`): the identity the station read at that moment, beside `source_identity`, the identity pinned when the review packet was built. On recovery it is the identity with this run's own targets left out, compared with the same computation made when the recording began"
+    },
+    "source_set": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "base_ref",
+        "base_commit",
+        "head",
+        "committed",
+        "changed",
+        "untracked",
+        "excluded"
+      ],
+      "properties": {
+        "base_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "committed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "packet": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "slice",
+        "ledger_doc",
+        "base_ref",
+        "base_commit",
+        "head",
+        "files",
+        "withheld",
+        "material_path",
+        "material_sha256",
+        "counts"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "lists",
+              "size",
+              "sha256",
+              "kind",
+              "delivered",
+              "withheld_reason"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "lists": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "enum": [
+                    "committed",
+                    "changed",
+                    "untracked"
+                  ]
+                }
+              },
+              "size": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "kind": {
+                "enum": [
+                  "source",
+                  "spec",
+                  "builder_conversation"
+                ]
+              },
+              "delivered": {
+                "type": "boolean"
+              },
+              "withheld_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "link_target": {
+                "type": "string",
+                "description": "present when the entry is a symbolic link: its link target text, which IS the entry's content (lstat semantics, Astra's F7). The referent is never followed and never presented as this entry's contents"
+              }
+            }
+          }
+        },
+        "withheld": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "what",
+              "reason"
+            ],
+            "properties": {
+              "what": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "material_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "material_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "files",
+            "delivered",
+            "withheld"
+          ],
+          "properties": {
+            "files": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "delivered": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "withheld": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ledger_doc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "the findings this run RAISED, in the order the reviewer reported them",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "what was kept as a note rather than raised: a location outside the source set, or what the reviewer itself kept",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/finding"
+          }
+        ],
+        "type": "object",
+        "required": [
+          "why"
+        ]
+      }
+    },
+    "checks_executed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "output"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "output": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clean_review_checks_listed": {
+      "type": "boolean",
+      "description": "a result with no raised findings carries a non-empty list of executed checks, each with output"
+    },
+    "verdict": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "signed off",
+        "signed off with conditions",
+        "rejected",
+        null
+      ],
+      "description": "v1's severity mapping over the raised findings. Null on every run that recorded none"
+    },
+    "verdict_stated": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "what the reviewer said, recorded beside the mapping"
+    },
+    "verdict_matches_mapping": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "verdict_recorded": {
+      "type": "boolean"
+    },
+    "verdict_doc": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the mirror this run appended to or created"
+    },
+    "card": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "slice",
+        "before",
+        "after",
+        "moved"
+      ],
+      "properties": {
+        "slice": {
+          "type": "string",
+          "minLength": 1
+        },
+        "before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "moved": {
+          "type": "boolean"
+        }
+      }
+    },
+    "records": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "log",
+        "head_before",
+        "head_after",
+        "appended"
+      ],
+      "properties": {
+        "log": {
+          "type": "string",
+          "minLength": 1
+        },
+        "head_before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "head_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "appended": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "kinds",
+              "seqs"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kinds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "seqs": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "recovered": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "mirrors": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "records_exit": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "records_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "records_command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the component command that refused, when one did: with `records_exit`, `records_error` and the stop reason (the component's own sentence), what failed and why"
+        }
+      }
+    },
+    "records_written": {
+      "type": "array",
+      "description": "every path this run wrote, in write order: the run's own artifacts, then the project records",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "run_artifact",
+              "log",
+              "build_doc",
+              "verdict_doc",
+              "card"
+            ]
+          }
+        }
+      }
+    },
+    "recovered": {
+      "type": "array",
+      "description": "the halves a settling pass completed from the log rather than by writing again",
+      "items": {
+        "type": "string"
+      }
+    },
+    "receipt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "problems": {
+      "type": "array",
+      "description": "why an answer was refused, one entry per rule it broke",
+      "items": {
+        "type": "object"
+      }
+    },
+    "unplaced": {
+      "type": "array",
+      "description": "on a `missing_input` stop from the Appendix A stop check (`legacy_ambiguous`): every record line of the build doc that fits no Appendix A shape, with its document, its 1-based line, its bytes and why",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "doc",
+          "line",
+          "raw",
+          "reason"
+        ],
+        "properties": {
+          "doc": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "raw": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "document_steps": {
+      "type": "array",
+      "description": "the recording transaction's document steps as the receipt holds them: each step's kind, its target and its state (`pending`, `intent`, `done`). On a `recording_failed` result it is how far the writes got: a step that landed is reported as landed",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "target",
+          "state"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "block",
+              "verdict_doc",
+              "card"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "intent",
+              "done"
+            ]
+          }
+        }
+      }
+    },
+    "review_sheet": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "state",
+        "is_sheet",
+        "skipped",
+        "skip_reasons",
+        "unknown_passes",
+        "repo_checks",
+        "bar"
+      ],
+      "description": "what v1 Step 1's sheet test found. `state` is `read`, `present but not the kit sheet`, or `absent`; the last two mean this skill's defaults applied and the file, if any, was not touched.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "read",
+            "present but not the kit sheet",
+            "absent"
+          ]
+        },
+        "is_sheet": {
+          "type": "boolean"
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skip_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "unknown_passes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repo_checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bar": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "floor": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "floor",
+        "session_model",
+        "reviewer_model",
+        "met",
+        "source",
+        "refused"
+      ],
+      "description": "the Opus-class floor as this run established it (Astra's F5): the session's model from the adapter's observed id, the reviewer's from the readers result, and where each came from. A synthetic replay is named as one",
+      "properties": {
+        "floor": {
+          "const": "opus"
+        },
+        "session_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewer_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "met": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the floor stop's sentence, when the floor refused the run"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location",
+        "file",
+        "line",
+        "severity",
+        "claim",
+        "scenario",
+        "evidence_kind"
+      ],
+      "properties": {
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR"
+          ]
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_kind": {
+          "enum": [
+            "executed",
+            "read",
+            "reasoned"
+          ]
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "source_set",
+          "packet",
+          "findings",
+          "checks_executed"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "verdict_recorded"
+        ],
+        "properties": {
+          "verdict_recorded": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "verdict_doc"
+        ],
+        "properties": {
+          "status": {
+            "const": "completed"
+          },
+          "verdict": {
+            "type": "string"
+          },
+          "report_only": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "report_only"
+        ],
+        "properties": {
+          "report_only": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "verdict_recorded": {
+            "const": false
+          },
+          "writes_none": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
+}

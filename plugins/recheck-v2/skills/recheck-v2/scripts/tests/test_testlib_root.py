@@ -79,7 +79,12 @@ class RootDiscovery(unittest.TestCase):
 
     def test_cli_and_skill_body_suites_pass_from_the_copy(self):
         self.no_git_layout()
-        env = dict(os.environ, RECHECK_TEST_SCRATCH=self.scratch)
+        # E13 3.1: a bare copy of THIS plugin has no records component beside it, so neither route
+        # 3a nor route 3b resolves and every command would stop with exit 3. The copy is given the
+        # component through route 2, which is what an installed station does when the two plugins
+        # are not siblings; the suites then run as they did.
+        env = dict(os.environ, RECHECK_TEST_SCRATCH=self.scratch,
+                   RECORDS_ROOT=os.path.normpath(os.path.join(testlib.PLUGIN, os.pardir, "records")))
         proc = subprocess.run([sys.executable, "-m", "unittest", "test_cli", "test_skill_body"], cwd=self.tests, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         err = proc.stderr.decode("utf-8", "replace")

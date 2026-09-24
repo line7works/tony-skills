@@ -5,7 +5,7 @@ import datetime
 import json
 import os
 
-from . import canon, identity, ledger, validate, verifier as vmod
+from . import canon, identity, ledger, records_view, validate, verifier as vmod
 
 UNKNOWN_HARNESS = {"name": "unknown", "version": "unknown", "entry": "unknown", "sandbox": "unknown"}
 RECORD_KINDS = ("reopened_line", "punch_list_block", "waived_line", "verdict_doc_copy", "status_line")
@@ -211,7 +211,9 @@ def waiver_slices(entries_after, waivers):
     out = set()
     for g in waivers:
         loc = g["item"]["location"]
-        for e in ledger.find_entries(entries_after, loc["file"], loc["line"], g["item"]["claim"]):
+        # E13 slice 1: this reads RECORDS (it resolves a grant to the entry it names and takes
+        # that entry's slice), so it joins through the component's entries, not the core's reader
+        for e in records_view.match_entries(entries_after, loc["file"], loc["line"], g["item"]["claim"]):
             if e["slice"] != "none":
                 out.add(e["slice"])
     return out
@@ -234,7 +236,7 @@ def existing_valid_result(run_dir, schemas):
     return doc
 
 
-def deliver(result, run_dir, schemas, input_doc=None, workspace=None, chat_text=None, skill_root=None, stop_builder=None, keep_existing=False):
+def deliver(result, run_dir, schemas, input_doc=None, workspace=None, chat_text=None, skill_root=None, stop_builder=None, keep_existing=False, records=None):
     """Validate (schema + semantic), write result.json, then chat.md. On failure write
     result.invalid.json beside the validator's output and end stopped (section 5); with
     keep_existing (a re-assembly after the commit point, E8-A11) a valid result.json already in
@@ -244,7 +246,8 @@ def deliver(result, run_dir, schemas, input_doc=None, workspace=None, chat_text=
     schema_errors = validate.validate_result(result, schemas)
     findings = []
     if not schema_errors:
-        sem = validate.run_semantic(result, input_doc=input_doc, run_dir=run_dir, workspace=workspace, schemas=schemas)
+        sem = validate.run_semantic(result, input_doc=input_doc, run_dir=run_dir, workspace=workspace, schemas=schemas,
+                                    records=records)
         findings = sem["semantic"]
     if schema_errors or findings:
         invalid = os.path.join(run_dir, "result.invalid.json")
@@ -360,6 +363,8 @@ def chat_block(result, extra=None):
     for it in items:
         lines.append(_record_line(it))
     for d in defects:
+        # E13 slice 1: this formats a CHAT line (Appendix A's output block), not a document
+        # record — the bullet is stripped and nothing reads it back — so the renderer stays here
         lines.append(ledger.render_defect_line(d["severity"], d["location"]["file"], d["location"]["line"], d["claim"], d["failure_scenario"])[2:])
     lines.append("Still open: " + ("; ".join(result.get("still_open") or []) or "none"))
     lines.append("Other open slices: " + ("; ".join(result.get("other_open_slices") or []) or "none"))

@@ -1,6 +1,6 @@
 {
   "document": {
-    "component_version": "0.1.0",
+    "component_version": "0.2.0",
     "counts": {
       "blocks": 53,
       "documents": 25,
@@ -690,7 +690,7 @@
         "stops": []
       }
     ],
-    "interface_version": 1,
+    "interface_version": 2,
     "offset": 0,
     "ok": true,
     "report": "survey",

@@ -151,6 +151,132 @@ class Waivers(ClearingCase):
         self.assertEqual(doc["differing_fields"], ["commit"])
 
 
+class AWaiverOverAClearance(ClearingCase):
+    """E13 amendment A2: `append` admits a `waived` whose finding is `fixed` at the current head.
+
+    Appendix A orders records by file position and the later one wins, so a user's waiver written
+    after a clearance is what decides the finding; `state`'s deciding-event rule already reads the
+    pair that way, and the recheck pilot records exactly it when one run clears an item the user
+    also waived. Only that one pair moves: a `waived` over a `waived`, and a `disposition: fixed`
+    over anything but `open`, are refused as they always were, and the `known` and `identity`
+    conditions are untouched.
+    """
+
+    def waiver(self, identity=None, verified=None, at="2026-04-02T08:00:00Z", words="ship it"):
+        return testlib.native("waived", at=at, identity=identity or self.identity, finding=self.finding,
+                              severity="BLOCKER", words=words, grant_date="2026-04-01",
+                              join_basis=None,
+                              verified_source=verified if verified is not None
+                              else {"known": True, "identity": copy.deepcopy(identity or self.identity)})
+
+    def clearance(self, at="2026-04-01T11:00:00Z"):
+        return testlib.disposition(self.finding, self.identity, at=at)
+
+    def status(self):
+        code, doc, err = testlib.run_json(["state", "--workspace", self.workspace, "--doc", DOC])
+        self.assertEqual(code, 0, (doc, err))
+        return doc["findings"][0]
+
+    # ---- admitted, in both shapes ----------------------------------------------------------
+
+    def test_two_appends_the_waiver_lands_over_the_clearance(self):
+        head = self.append_ok([self.clearance()], self.head)
+        code, doc, err = self.append([self.waiver()], head)
+        self.assertEqual(code, 0, (doc, err))
+        self.assertEqual(doc["appended"][0]["kind"], "waived")
+        row = self.status()
+        self.assertEqual(row["status"], "waived")
+        self.assertEqual(row["decided"]["seq"], doc["appended"][0]["seq"],
+                         "the waiver is the deciding event")
+
+    def test_one_batch_the_waiver_sees_the_clearance_beside_it(self):
+        """The pilot's real shape: a `disposition: fixed` and a `waived` for one finding in one
+        `--events` call. The second event's check must see the first."""
+        code, doc, err = self.append([self.clearance(), self.waiver()], self.head)
+        self.assertEqual(code, 0, (doc, err))
+        self.assertEqual([row["kind"] for row in doc["appended"]], ["disposition", "waived"])
+        row = self.status()
+        self.assertEqual(row["status"], "waived")
+        self.assertEqual(row["decided"]["seq"], doc["appended"][1]["seq"])
+
+    def test_render_gives_the_block_line_then_the_waiver_line(self):
+        run = {"station": "recheck-v2", "run_id": "a2-run", "harness": "test"}
+        clearance = self.clearance()
+        clearance["actor"] = run
+        waiver = self.waiver()
+        waiver["actor"] = run
+        code, doc, err = self.append([clearance, waiver], self.head)
+        self.assertEqual(code, 0, (doc, err))
+        code, body, err = testlib.run_json(["render", "--workspace", self.workspace, "--doc", DOC,
+                                            "--run-id", "a2-run"])
+        self.assertEqual(code, 0, (body, err))
+        self.assertIn("\u00b7 fixed \u00b7", body["block"])
+        self.assertEqual(len(body["grants"]), 1)
+        self.assertTrue(body["grants"][0].startswith("- WAIVED (per user) \u00b7 2026-04-01 \u00b7 BLOCKER"),
+                        body["grants"][0])
+        self.assertTrue(body["text"].index(body["grants"][0]) > body["text"].index("\u00b7 fixed \u00b7"),
+                        "the waiver line follows the block, as Appendix A places it")
+
+    def test_a_reopening_after_that_waiver_still_reopens(self):
+        head = self.append_ok([self.clearance(), self.waiver()], self.head)
+        reopen = testlib.native("reopened", at="2026-04-03T09:00:00Z", identity=self.identity,
+                                finding=self.finding, words="it came back", grant_date="2026-04-03",
+                                join_basis=None)
+        code, doc, err = self.append([reopen], head)
+        self.assertEqual(code, 0, (doc, err))
+        self.assertEqual(self.status()["status"], "open")
+
+    # ---- everything else refuses exactly as it did ------------------------------------------
+
+    def test_a_waiver_over_a_waiver_is_still_refused(self):
+        head = self.append_ok([self.clearance(), self.waiver()], self.head)
+        before = testlib.read_log(self.workspace)
+        code, doc, _ = self.append([self.waiver(at="2026-04-03T08:00:00Z", words="again")], head)
+        self.assertEqual(code, 6)
+        self.assertEqual(doc["error"], "stale_source")
+        self.assertEqual(doc["condition"], "open")
+        self.assertEqual(doc["status"], "waived")
+        self.assertEqual(testlib.read_log(self.workspace), before, "nothing was written")
+
+    def test_a_clearance_over_a_clearance_is_still_refused(self):
+        head = self.append_ok([self.clearance()], self.head)
+        before = testlib.read_log(self.workspace)
+        code, doc, _ = self.append([self.clearance(at="2026-04-01T12:00:00Z")], head)
+        self.assertEqual(code, 6)
+        self.assertEqual(doc["condition"], "open")
+        self.assertEqual(doc["status"], "fixed")
+        self.assertEqual(testlib.read_log(self.workspace), before)
+
+    def test_a_clearance_over_a_waiver_is_still_refused(self):
+        head = self.append_ok([self.clearance(), self.waiver()], self.head)
+        before = testlib.read_log(self.workspace)
+        code, doc, _ = self.append([self.clearance(at="2026-04-03T12:00:00Z")], head)
+        self.assertEqual(code, 6)
+        self.assertEqual(doc["condition"], "open")
+        self.assertEqual(doc["status"], "waived")
+        self.assertEqual(testlib.read_log(self.workspace), before)
+
+    def test_the_identity_condition_still_holds_over_a_clearance(self):
+        head = self.append_ok([self.clearance()], self.head)
+        wrong = copy.deepcopy(self.identity)
+        wrong["commit"] = OTHER_COMMIT
+        before = testlib.read_log(self.workspace)
+        code, doc, _ = self.append([self.waiver(verified={"known": True, "identity": wrong})], head)
+        self.assertEqual(code, 6)
+        self.assertEqual(doc["condition"], "identity")
+        self.assertEqual(doc["differing_fields"], ["commit"])
+        self.assertEqual(testlib.read_log(self.workspace), before)
+
+    def test_the_known_condition_still_holds_over_a_clearance(self):
+        head = self.append_ok([self.clearance()], self.head)
+        before = testlib.read_log(self.workspace)
+        code, doc, _ = self.append([self.waiver(verified={"known": False})], head)
+        self.assertEqual(code, 6)
+        self.assertEqual(doc["condition"], "known")
+        self.assertIsNone(doc["expected"])
+        self.assertEqual(testlib.read_log(self.workspace), before)
+
+
 class TheImporterException(ClearingCase):
     """Owner ruling O4: the importer is the one writer allowed to append a clear with known false,
     and only with origin.kind legacy.

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/signoff-v2/answer.schema.json",
+  "title": "Signoff v2 reviewer answer",
+  "description": "What the independent reviewer reports back, as the executor hands it to `record-answer`. This schema fixes the SHAPE only. The evidence rules - a location inside the source set, a claim, a scenario and an evidence kind on every finding - are deliberately NOT required here: a finding missing one of them must reach the adjudication so the run can refuse the answer as `answer_invalid` with the field named, rather than dying as a schema error that says nothing about which rule the reviewer broke. A recorded answer replayed from a file has exactly this shape, which is why a seeded case can stand in for a live reviewer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "session_id", "checks_executed", "findings", "verdict"],
+  "properties": {
+    "seeded_answer": {"type": "integer", "description": "the seeded-case shape version, when the answer came from one"},
+    "case": {"type": "string", "description": "the seeded case this answer belongs to, when it came from one"},
+    "role": {"const": "reviewer"},
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the session that produced this answer. Equal to the input's building session is the independence refusal"
+    },
+    "model": {"type": ["string", "null"], "description": "the model the run OBSERVED, never one it assumed: readers' effective model as the adapter's sidecar map hands it over (`answer_identity.model`). The core takes the reviewer's floor from it (Astra's F5): missing, below the Opus-class floor, or not the session's recorded model refuses the answer (`refusal_reason: floor`)"},
+    "checks_executed": {
+      "type": "array",
+      "description": "every check the reviewer ran, with its output. A review with no findings and no entry here is not a clean verdict",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "command": {"type": ["string", "null"]},
+          "exit_code": {"type": ["integer", "null"]},
+          "output": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "what the reviewer would raise. Each entry is checked against the evidence rules by the adjudication, not by this schema",
+      "items": {"$ref": "#/$defs/reported"}
+    },
+    "notes_kept": {
+      "type": "array",
+      "description": "what the reviewer kept as a note rather than raising: a plausible defect its own execution disproved, for instance",
+      "items": {"$ref": "#/$defs/reported"}
+    },
+    "verdict": {"type": "string", "minLength": 1, "description": "the verdict the reviewer states; the severity mapping is computed beside it"},
+    "notes": {"type": ["string", "null"], "description": "the reviewer's own prose"}
+  },
+  "$defs": {
+    "reported": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "location": {"type": ["string", "null"]},
+        "severity": {"type": ["string", "null"]},
+        "claim": {"type": ["string", "null"]},
+        "scenario": {"type": ["string", "null"]},
+        "evidence_kind": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

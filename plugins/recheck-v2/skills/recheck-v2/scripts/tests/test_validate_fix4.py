@@ -49,6 +49,10 @@ class Base(unittest.TestCase):
         testlib.rmtree(self.dir)
 
     def run_checks(self, doc, **kw):
+        # E13 slice 1: V6 and V17 read the records through the component, so a check given a
+        # workspace is given the client too, the way `validate-result.py` opens one
+        if kw.get("workspace") is not None:
+            kw.setdefault("records", testlib.records_client())
         return validate.run_semantic(doc, schemas=self.schemas, **kw)
 
     def findings(self, doc, check_id, **kw):
@@ -337,44 +341,12 @@ class V7V14Grants(Base):
         self.assertEqual(self.paths(used, "V14", input_doc=inp), [], "a used continuation grant is listed for another reason (E8-A23)")
 
 
-class V17DefectSlice(Base):
-    """E8-A25: the written defect line's slice (the fourth field under a multi-slice heading, the heading's
-    slice otherwise) equals charged_to_slice."""
-
-    def build(self, slices, charged):
-        ws, run_dir = os.path.join(self.dir, "ws"), os.path.join(self.dir, "run")
-        os.makedirs(run_dir)
-        result = example("result-completed.json")
-        items = result["items"]
-        lines = [ledger.render_recheck_line(it["severity"], it["location"]["file"], it["location"]["line"], it["claim"], "fixed" if it["disposition"] == "fixed" else "not fixed", "executed it")
-                 for it in items]
-        defect = {"severity": "MAJOR", "severity_basis": "default table", "location": {"file": "src/export.ts", "line": 150},
-                  "claim": "quoted commas now double their quotes", "failure_scenario": "export a title with a comma",
-                  "source": "fix_introduced", "charged_to_slice": charged}
-        lines.append(ledger.render_defect_line("MAJOR", "src/export.ts", 150, defect["claim"], defect["failure_scenario"],
-                                               ledger.defect_slice_field(slices, "B" if len(slices) > 1 else slices[0])))
-        text = "# plan\n\n## Slice A — export\nStatus: rejected\n\n## Slice B — validation\nStatus: rejected\n\n## Punch list\n\n### 2026-09-19 — review: Slice A\n"
-        text += "- BLOCKER · src/export.ts:142 · %s · %s · A\n- MAJOR · src/export.ts:142 · %s · %s · A\n" % (items[0]["claim"], items[0]["failure_scenario"], items[1]["claim"], items[1]["failure_scenario"])
-        text += ledger.render_block("2026-09-20", slices, lines)
-        write_text(os.path.join(ws, DOC), text)
-        result["new_defects"] = [defect]
-        result["still_open"].append("MAJOR · src/export.ts:150 · broke: %s" % defect["claim"])
-        result["records_written"] = [w for w in result["records_written"] if w["kind"] in ("run_artifact", "punch_list_block")]
-        return result, ws, run_dir
-
-    def test_multi_slice_heading(self):
-        result, ws, run_dir = self.build(["A", "B"], "B")
-        self.assertEqual(self.paths(result, "V17", run_dir=run_dir, workspace=ws), [], self.messages(result, "V17", run_dir=run_dir, workspace=ws))
-        result["new_defects"][0]["charged_to_slice"] = "A"
-        found = self.findings(result, "V17", run_dir=run_dir, workspace=ws)
-        self.assertEqual([f["path"] for f in found], ["/new_defects/0/charged_to_slice"], found)
-        self.assertIn("charges 'B'", found[0]["message"])
-
-    def test_single_slice_heading(self):
-        result, ws, run_dir = self.build(["A"], "A")
-        self.assertEqual(self.paths(result, "V17", run_dir=run_dir, workspace=ws), [], self.messages(result, "V17", run_dir=run_dir, workspace=ws))
-        result["new_defects"][0]["charged_to_slice"] = "B"
-        self.assertEqual(self.paths(result, "V17", run_dir=run_dir, workspace=ws), ["/new_defects/0/charged_to_slice"])
+# E13 slice 1, send-back 1: `V17DefectSlice` lived here. It built a document and a result by hand
+# and read the written defect line back with the core's own grammar, which is the second reader of
+# the record that this step removes. The guarantee it held — E8-A25, the charge a defect line names
+# equals `charged_to_slice` — is now check D of V17, against the slice the run's own `defect_raised`
+# event carries, and it is tested end to end by
+# `test_validator_records.V17DefectsAndMarkers`.
 
 
 class V13RetainedReports(Base):
@@ -635,6 +607,10 @@ class V6MovedBefore(Base):
         text += ledger.render_block("2026-09-20", ["A"], [ledger.render_recheck_line("BLOCKER", "src/export.ts", 142, items[0]["claim"], "fixed", "executed"),
                                                           ledger.render_recheck_line("MAJOR", "src/export.ts", 142, items[1]["claim"], "not fixed", "executed")])
         write_text(os.path.join(ws, DOC), text)
+        # E13 slice 1: V6 derives the open set from `records.py state`, so the workspace is a real
+        # git tree whose log has been levelled with the document (CR-1)
+        testlib.git_init_and_commit(ws, "the review and the recheck block")
+        testlib.import_document(ws, DOC)
         result = example("result-completed.json")
         result["records_written"] = [w for w in result["records_written"] if w["kind"] != "waived_line"]
         self.assertEqual(self.paths(result, "V6", workspace=ws), [], self.messages(result, "V6", workspace=ws))

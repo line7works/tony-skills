@@ -87,7 +87,7 @@ def run_sh_snippet(scratch, argument=None, station=None, environ=None, known=Non
                   'records_confirm "$root" "$4" >/dev/null || exit 3\n'
                   'printf \'%s\\n\' "$root"\n')
     proc = subprocess.run(["/bin/sh", driver, function, argument or "", station or "",
-                           known or "1"],
+                           known or "2"],  # E13 A7: the snippet's default is 2
                           cwd=tempfile.gettempdir(), env=child_env(environ),
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return (proc.returncode, proc.stdout.decode("utf-8", "replace"),
@@ -119,7 +119,7 @@ class ResolverCase(unittest.TestCase):
     # ---- fixtures ------------------------------------------------------------------------
 
     def installed(self, name, version=None, records_py=True, manifest=True,
-                  interface_version=1, body=None):
+                  interface_version=2, body=None):
         """One folder under route 3b's directory. Returns its path, spelled as the message does.
 
         `version` is what the folder's own plugin.json claims; None means the folder's name.
@@ -144,7 +144,7 @@ class ResolverCase(unittest.TestCase):
                           else STUB % (interface_version, json.dumps(name)))
         return os.path.join(self.named_base, name)
 
-    def stub_component(self, name, interface_version=1, body=None):
+    def stub_component(self, name, interface_version=2, body=None):
         """A component root outside any cache, for the confirm step's own tests."""
         root = os.path.join(self.scratch, name)
         testlib.write(os.path.join(root, "scripts", "records.py"),
@@ -363,13 +363,13 @@ class TheSnippetsResolve(object):
 
     def test_3a_wins_over_3b(self):
         beside = os.path.join(self.marketplace, "station", "records")
-        testlib.write(os.path.join(beside, "scripts", "records.py"), STUB % (1, '"beside"'))
+        testlib.write(os.path.join(beside, "scripts", "records.py"), STUB % (2, '"beside"'))
         self.installed("9.9.9")
         self.assert_found(self.resolve(station=self.station), beside)
 
     def test_routes_1_and_2_win_over_3a_and_3b(self):
         beside = os.path.join(self.marketplace, "station", "records")
-        testlib.write(os.path.join(beside, "scripts", "records.py"), STUB % (1, '"beside"'))
+        testlib.write(os.path.join(beside, "scripts", "records.py"), STUB % (2, '"beside"'))
         self.installed("9.9.9")
         self.assert_found(self.resolve(argument=COMPONENT_ON_A_CHECKOUT, station=self.station),
                           COMPONENT_ON_A_CHECKOUT)

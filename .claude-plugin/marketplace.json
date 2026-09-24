@@ -205,7 +205,7 @@
     {
       "name": "records",
       "source": "./plugins/records",
-      "description": "The loop's records component: an append-only event log per ledger document, versioned finding IDs, source identifiers and the clearing rule, derived state, conflicting-write detection, and a tolerant importer for legacy punch-list records. No skill and no model trigger: stations reach it through one CLI (scripts/records.py) and write against references/interface.md, version 1.",
+      "description": "The loop's records component: an append-only event log per ledger document, versioned finding IDs, source identifiers and the clearing rule, derived state, conflicting-write detection, and a tolerant importer for legacy punch-list records. No skill and no model trigger: stations reach it through one CLI (scripts/records.py) and write against references/interface.md, version 2 (a version-1 compatibility response stays available through --interface-version 1).",
       "tags": [
         "build-loop",
         "records"
@@ -219,6 +219,25 @@
         "review",
         "quality-gate",
         "skills-v2-pilot"
+      ]
+    },
+    {
+      "name": "build-v2",
+      "source": "./plugins/build-v2",
+      "description": "Skills v2 build core: execute one slice of a build document inside strict boundaries, with the source set computed from git, the decision and its source state pinned and verified before the document half completes, every failing or skipped check reported with its output, and the ledger kept in the records component. One portable body plus an adapter and an install kit per harness (Claude Code, Codex). The -v2 suffix stays while v1 build is installed.",
+      "tags": [
+        "build-loop",
+        "skills-v2"
+      ]
+    },
+    {
+      "name": "signoff-v2",
+      "source": "./plugins/signoff-v2",
+      "description": "Skills v2 signoff core: independent adversarial review of a built slice by reviewers who did not write it, the packet built by script from the source set with the builder's conversation withheld, the reviewer summoned through readers at the Opus-class floor the script enforces, the verdict recorded in the records component. One portable body plus an adapter and an install kit per harness (Claude Code, Codex); manual invocation only. The -v2 suffix stays while v1 signoff is installed.",
+      "tags": [
+        "review",
+        "quality-gate",
+        "skills-v2"
       ]
     }
   ]

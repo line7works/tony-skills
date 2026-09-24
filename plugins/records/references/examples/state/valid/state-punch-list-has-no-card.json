@@ -1,6 +1,6 @@
 {
   "at_source": null,
-  "component_version": "0.1.0",
+  "component_version": "0.2.0",
   "counts": {
     "cleared_unbound": 1,
     "findings": 1,
@@ -51,8 +51,8 @@
       }
     }
   ],
-  "head": "fb4fc95c42e870782fb3309b369e68ea9efaf4aa7d324150d2fed6f2238e1116",
-  "interface_version": 1,
+  "head": "0bd8317b4f6214da32820d1927e7b0fed08896da16d3e2ade7d2b149ce88e7e2",
+  "interface_version": 2,
   "log": "docs/records/docs__punch-list.events.jsonl",
   "ok": true,
   "open": {

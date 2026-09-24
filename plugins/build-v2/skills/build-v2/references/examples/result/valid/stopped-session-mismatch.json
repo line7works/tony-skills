@@ -1,0 +1,138 @@
+{
+  "answer": {
+    "accepted": true,
+    "claimed_card": "built",
+    "claimed_status": "complete",
+    "path": "/tmp/build-c-20260922-7f3c/answer.json",
+    "refusals": [],
+    "session_id": "sess-test-1"
+  },
+  "build_doc": "docs/plans/2026-09-20-widget.md",
+  "card": {
+    "after": "not started",
+    "before": "not started",
+    "document_line": null,
+    "moved": false,
+    "reason": "the run stopped before the card was decided, so it stays at 'not started'"
+  },
+  "checks": [],
+  "checks_changed_workspace": false,
+  "contract": {
+    "checks": [
+      {
+        "command": "sh checks/unit.sh",
+        "name": "unit"
+      }
+    ],
+    "named_paths": [
+      "src/widget.py"
+    ],
+    "not_in_slice": [
+      "src/other.py",
+      "checks/"
+    ],
+    "path": "/tmp/build-c-20260922-7f3c/contract.json",
+    "requirements": [
+      "R1. `spin()` returns the number of turns."
+    ]
+  },
+  "identity": {
+    "commit": "575802f0c16dd4bc45c8df740afec375dc8a6645",
+    "dirty": false,
+    "submodules": [],
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": [],
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "sess-harness-9"
+  },
+  "next": "done",
+  "out_of_scope": [],
+  "plugin_version": "0.1.0",
+  "reason": "the recorded answer says it came from session 'sess-test-1', and the session this run happens in, as the adapter read it from the harness record (`invocation.session_id`), is 'sess-harness-9'. A typed session never stands in for the recorded one: the answer was not acted on, no check was run, no card event was appended and no `Status:` line was written. Copy the adapter's `answer_fields.session_id` into the answer, or run the build from the session that made it.",
+  "receipt": null,
+  "records": {
+    "appended": [],
+    "head_after": "a93238e6316b78bce7ec629a9ec6787c3698d352ba069a5e64a7935e233ccc04",
+    "head_before": "a93238e6316b78bce7ec629a9ec6787c3698d352ba069a5e64a7935e233ccc04",
+    "levelled": {
+      "dry_run": false,
+      "imported": 4,
+      "native_rendered": 0,
+      "ran": true,
+      "unparsed": 0,
+      "would_import": 4
+    },
+    "log": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+    "open": {
+      "BLOCKER": 0,
+      "MAJOR": 0,
+      "MINOR": 0
+    },
+    "pinned_head": "a93238e6316b78bce7ec629a9ec6787c3698d352ba069a5e64a7935e233ccc04",
+    "refused": null,
+    "wrote": true
+  },
+  "refusal_reason": null,
+  "report_only": false,
+  "result_version": 1,
+  "resumed_half": null,
+  "run_dir": "/tmp/build-c-20260922-7f3c",
+  "run_id": "run-1",
+  "slice": "A",
+  "source_set": {
+    "base": "base",
+    "base_commit": "575802f0c16dd4bc45c8df740afec375dc8a6645",
+    "changed": [],
+    "committed": [],
+    "excluded": [
+      "docs/records/"
+    ],
+    "head": "575802f0c16dd4bc45c8df740afec375dc8a6645",
+    "sanctioned": [
+      {
+        "path": "docs/plans/2026-09-20-widget.md",
+        "reason": "the ledger document this run is executing: the loop writes into it by design, and this core writes the slice's `Status:` line there, so a change to it is never out of scope"
+      }
+    ],
+    "untracked": []
+  },
+  "status": "stopped",
+  "stop_reason": "the recorded answer says it came from session 'sess-test-1', and the session this run happens in, as the adapter read it from the harness record (`invocation.session_id`), is 'sess-harness-9'. A typed session never stands in for the recorded one: the answer was not acted on, no check was run, no card event was appended and no `Status:` line was written. Copy the adapter's `answer_fields.session_id` into the answer, or run the build from the session that made it.",
+  "stop_tag": "session_mismatch",
+  "terminal_status": "stop",
+  "workspace": "/home/builder/work/signpost",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/input.json",
+      "sha256_after": "3443af1dcd0ede2cc89f1a7911b7ae10d46e916790d610ed3539171f378b07aa"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/contract.json",
+      "sha256_after": "a491da91eaef35468d7060b590d4e5d568b4cf957e1db4830649ad4e3cd2bdf4"
+    },
+    {
+      "kind": "records_log",
+      "path": "docs/records/docs__plans__2026-09-20-widget.events.jsonl",
+      "sha256_after": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/answer.json",
+      "sha256_after": "d1c04618511801dcc1ef58e4f496417c4107e26c637bc941908a030019eeeb79"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/build-c-20260922-7f3c/result.json",
+      "sha256_after": null
+    }
+  ],
+  "wrote_nothing": false
+}

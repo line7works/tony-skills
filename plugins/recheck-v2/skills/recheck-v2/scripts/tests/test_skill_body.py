@@ -160,7 +160,7 @@ class SkillBody(unittest.TestCase):
         self.assertEqual(self.fields["name"], "recheck-v2")
         self.assertEqual(self.fields["name"], os.path.basename(testlib.SKILL), "the name matches the directory")
         self.assertRegex(self.fields["name"], r"^[a-z0-9]+(-[a-z0-9]+)*$")
-        self.assertEqual(self.fields["metadata"], {"version": "0.1.0"})
+        self.assertEqual(self.fields["metadata"], {"version": "0.2.0"})
         self.assertIn("description: >-", self.text.split("\n---\n")[0], "the description is a folded scalar")
         self.assertNotIn("<", self.fields["description"], "no XML tag in the description")
 
@@ -577,7 +577,7 @@ class ReportFieldRules(unittest.TestCase):
 class Manifest(unittest.TestCase):
     def test_plugin_json(self):
         meta = testlib.load_json(PLUGIN_JSON)
-        self.assertEqual(meta["name"], "recheck-v2"); self.assertEqual(meta["version"], "0.1.0")
+        self.assertEqual(meta["name"], "recheck-v2"); self.assertEqual(meta["version"], "0.2.0")
         self.assertTrue(meta["description"].startswith(CAPABILITY), meta["description"])
         self.assertIn("pilot", meta["description"].lower())
         self.assertEqual(meta["homepage"], "https://github.com/line7works/tony-skills")
@@ -612,7 +612,7 @@ class Manifest(unittest.TestCase):
             testlib.rmtree(scratch)
         self.assertEqual(code, 0, err)
         got = json.loads(out)
-        self.assertEqual(got["name"], "recheck-v2"); self.assertEqual(got["version"], "0.1.0")
+        self.assertEqual(got["name"], "recheck-v2"); self.assertEqual(got["version"], "0.2.0")
         self.assertEqual(got["content_sha256"], canon.sha256_file(SKILL_MD))
 
 

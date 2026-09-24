@@ -11,7 +11,7 @@ stdout when it cannot be imported. The test hook RECHECK_TEST_NO_JSONSCHEMA=1, h
 together with RECHECK_TEST=1 (lane contract section 9, slice 3), makes it behave as if the import
 had failed.
 
-Semantic checks: `run_semantic(result, input_doc=None, run_dir=None, workspace=None)` returns
+Semantic checks: `run_semantic(result, input_doc=None, run_dir=None, workspace=None, records=None)` returns
 `{"semantic": [findings], "skipped": [{"id", "reason"}]}`. Each finding is
 `{"id": "V<n>", "path": "<json pointer>", "message": "..."}`. Every check of lane contract
 section 8 runs when what it needs was supplied (the input for cardinality, slices, grants, and
@@ -493,7 +493,8 @@ def check_v16(result, ctx):
     return [], None
 
 
-NEEDS_NAME = {"run_dir": "run directory", "workspace": "workspace", "input": "input"}
+NEEDS_NAME = {"run_dir": "run directory", "workspace": "workspace", "input": "input",
+              "records": "the records component"}
 
 
 def _skip(what):
@@ -763,30 +764,57 @@ def check_v4(result, ctx):
     return findings, None
 
 
+def _state_of(ctx, doc_rel, check_id, path):
+    """`records.py state` for one ledger document, or a finding naming why it could not be read."""
+    from . import records_client as rcl
+    client = ctx.get("records")
+    try:
+        return client.state(ctx["workspace"], doc_rel), None
+    except rcl.RecordsRefusal as refusal:
+        return None, _f(check_id, path, "the records component refused `state` for %s: %s"
+                        % (doc_rel, refusal.sentence()))
+
+
 def check_v6(result, ctx):
-    """The card mapping reproduces each after value over the slice's open set now (E8-4)."""
+    """The card mapping reproduces each after value over the slice's open set now (E8-4).
+
+    E13 slice 1, send-back 1: the open set and the card the slice currently carries come from
+    `records.py state`, never from a re-parse of the document's records. The MAPPING stays the
+    core's own `card_after`, which is a decision and therefore does not move (ruling E13-1);
+    `tests/test_validator_records.py::CardMappingAgreement` pins every movable card value and every
+    open-set shape on which it and the component's `card_derived` agree, and the one place they are
+    designed to differ (a card the skill may not move). `card_observed` is what the run's `card_set`
+    event recorded, so a card the result claims that nothing set is caught here; that the FILE holds
+    what the run wrote is V8's resting-hash check and V17's.
+    """
     if ctx.get("workspace") is None:
         return [], _skip("workspace")
     if result.get("status") != "completed":
         return [], None
+    if ctx.get("records") is None:
+        return [], _skip("records")
     from . import ledger
     findings = []
     doc_rel = _build_doc(result, ctx)
-    path = os.path.join(ctx["workspace"], doc_rel) if doc_rel else None
-    if not path or not os.path.isfile(path):
-        return [_f("V6", "/cards", "the build doc %r does not exist under the workspace" % doc_rel)], None
-    with open(path, "r", encoding="utf-8") as fh:
-        parsed = ledger.parse_document(fh.read(), doc_rel)
-    opened = ledger.open_set(parsed)
+    if not doc_rel:
+        return [_f("V6", "/cards", "the result names no build doc, so the cards cannot be checked")], None
+    state, refusal = _state_of(ctx, doc_rel, "V6", "/cards")
+    if refusal is not None:
+        return [refusal], None
+    open_by_slice = {}
+    for finding in state.get("findings") or []:
+        if finding.get("status") == "open":
+            open_by_slice.setdefault(finding.get("slice"), []).append(finding)
+    observed = {row["name"]: row.get("card_observed") for row in state.get("slices") or []}
     want_slices = ledger.sort_slices(it["slice"] for it in result.get("items") or [] if it.get("slice") != "none")
     got_slices = [c["slice"] for c in result.get("cards") or []]
     if got_slices != want_slices:
         findings.append(_f("V6", "/cards", "cards list slices %r; the checklist's slices are %r" % (got_slices, want_slices)))
     violated = bool(result.get("boundary_violations"))
     for i, c in enumerate(result.get("cards") or []):
-        open_here = [e for e in opened["entries"] if e["slice"] == c["slice"] and e["state"] == "open"]
+        open_here = open_by_slice.get(c["slice"]) or []
         mapped = ledger.card_after(c["before"], open_here)
-        current = ledger.slice_card(parsed, c["slice"])
+        current = observed.get(c["slice"]) or "none"
         if violated and c["after"] == c["before"]:
             pass  # frozen beside the violation: the mapping does not apply (V12 holds the cards)
         elif violated and c.get("reason") != MOVED_BEFORE_VIOLATION:
@@ -795,7 +823,7 @@ def check_v6(result, ctx):
             # E8-A44: a card that moved before the violation was found moved by the mapping, so it is held to it
             findings.append(_f("V6", "/cards/%d/after" % i, "after is %r; the mapping over the slice's open set gives %r" % (c["after"], mapped)))
         if c["after"] != current and c["before"] in ledger.MOVABLE_CARDS:
-            findings.append(_f("V6", "/cards/%d/after" % i, "after is %r but the document's status line reads %r" % (c["after"], current)))
+            findings.append(_f("V6", "/cards/%d/after" % i, "after is %r but the last card the log records for the slice is %r" % (c["after"], current)))
     return findings, None
 
 
@@ -1088,61 +1116,129 @@ def check_v14(result, ctx):
     return findings, None
 
 
+APPENDED_KINDS = ("reopened_line", "punch_list_block", "waived_line", "verdict_doc_copy")
+
+
 def check_v17(result, ctx):
-    """Every ledger line the run wrote parses back under Appendix A to the item it records."""
+    """The run's events, rendered by `records.py render --run-id`, are exactly the lines the
+    document holds at the places the receipt names (E13 slice 1, send-back 1).
+
+    This replaces "every ledger line the run wrote parses back under Appendix A", which read the
+    document with the core's own grammar and so was a second reader of the record. Four checks:
+
+    A. every line a landed step wrote is text the run's events render to — a log the document has
+       drifted from fails here;
+    B. the target still holds that text — a line altered after the write fails here;
+    C. every piece the render produces belongs to a plan step — an event of this run with no line
+       in the document fails here;
+    D. each new defect and each waived/reopened marker of the result corresponds to an event of
+       this run, and a defect's `charged_to_slice` equals the slice its event charges (E8-A25).
+
+    A, C and D need the run's own events. A receipt written BEFORE the records moved into the
+    component carries no appended seqs (its records reached the log through the importer, under the
+    importer's actor: question 6 of the builder's report), and for one of those only check B runs —
+    and only over the steps that store their bytes, since a seeded plan regenerates them at replay
+    (E8-28) and its after-hash is V8's check, not this one.
+    """
     if ctx.get("run_dir") is None:
         return [], _skip("run_dir")
     if ctx.get("workspace") is None:
         return [], _skip("workspace")
     if result.get("status") not in ("completed", "recording_failed"):
         return [], None
-    from . import ledger
-    findings = []
     writes = result.get("records_written") or []
-    docs = sorted(set(w["path"] for w in writes if w.get("kind") in RECORD_KINDS))
-    if not docs:
-        return findings, None
-    parsed_docs = {}
-    for rel in docs:
-        path = os.path.join(ctx["workspace"], rel)
-        if not os.path.isfile(path):
-            findings.append(_f("V17", "/records_written", "%s does not exist under the workspace" % rel))
+    if not any(w.get("kind") in RECORD_KINDS for w in writes):
+        return [], None
+    if ctx.get("records") is None:
+        return [], _skip("records")
+    from . import records_client as rcl
+    findings = []
+    run_dir = _run_dir(result, ctx)
+    receipt_path = os.path.join(run_dir, "receipt.json") if run_dir else None
+    if not receipt_path or not os.path.isfile(receipt_path):
+        return [_f("V17", "/receipt_path", "no receipt.json in the run directory, so the places the run wrote are unknown")], None
+    try:
+        receipt = _read_json(receipt_path)
+    except (OSError, ValueError) as exc:
+        return [_f("V17", "/receipt_path", "receipt.json does not parse: %s" % exc)], None
+    run_id = receipt.get("run_id")
+    doc_rel = _build_doc(result, ctx) or next((w["path"] for w in writes if w.get("kind") == "punch_list_block"), None)
+    if not doc_rel:
+        return [_f("V17", "/records_written", "the result names no ledger document, so its records cannot be read")], None
+    done = set(e["step"] for e in receipt.get("entries") or [] if e.get("type") == "done")
+    planned = [s for s in receipt.get("plan") or [] if s.get("kind") in APPENDED_KINDS and not s.get("cancelled")]
+    landed = [s for s in planned if s["step"] in done]
+
+    # B: the target still holds the text each landed step wrote
+    for step in landed:
+        content = step.get("content")
+        if content is None:
+            # a seeded or legacy plan stores no content and regenerates its bytes at replay
+            # (E8-28); there is nothing to compare here, and the step's after-hash is V8's check
             continue
-        with open(path, "r", encoding="utf-8") as fh:
-            parsed_docs[rel] = ledger.parse_document(fh.read(), rel)
-    block_written = any(w.get("kind") == "punch_list_block" for w in writes)
-    main_doc = next((w["path"] for w in writes if w.get("kind") == "punch_list_block"), None)
-    parsed = parsed_docs.get(main_doc) if main_doc else None
-    if block_written and parsed is not None:
-        for i, it in enumerate(result.get("items") or []):
-            want_claim = None if it["claim"] == "()" else it["claim"]
-            want_disp = "fixed" if it.get("disposition") == "fixed" else "not fixed"
-            hits = [r for r in parsed["records"] if r["kind"] == "recheck" and r["file"] == it["location"]["file"] and r["line"] == it["location"]["line"]
-                    and r["claim"] == want_claim and r["disposition"] == want_disp]
-            if not hits:
-                findings.append(_f("V17", "/items/%d" % i, "no recheck line in %s parses back to this item with disposition %r" % (main_doc, want_disp)))
-        for i, d in enumerate(result.get("new_defects") or []):
-            hits = [r for r in parsed["records"] if r["kind"] == "defect" and r["file"] == d["location"]["file"] and r["line"] == d["location"]["line"] and r["claim"] == d["claim"]]
-            if not hits:
-                findings.append(_f("V17", "/new_defects/%d" % i, "no fix-introduced defect line in %s parses back to this defect" % main_doc))
-                continue
-            # E8-A25: the written line's slice (the fourth field under a multi-slice heading, the heading's slice
-            # otherwise; none under docs/punch-list.md) is the charge; the run's line is the last in file order
-            written = ledger.entry_slice(hits[-1], main_doc)
-            if written != d.get("charged_to_slice"):
-                findings.append(_f("V17", "/new_defects/%d/charged_to_slice" % i, "charged_to_slice is %r but the written defect line in %s charges %r (E8-A25)"
-                                   % (d.get("charged_to_slice"), main_doc, written)))
+        full = os.path.join(ctx["workspace"], step["target"])
+        if not os.path.isfile(full):
+            findings.append(_f("V17", "/records_written", "%s does not exist under the workspace" % step["target"]))
+            continue
+        with open(full, "r", encoding="utf-8") as fh:
+            text = fh.read()
+        if content not in text:
+            findings.append(_f("V17", "/records_written", "%s no longer holds the text step %d (%s) wrote; a record was altered after the write"
+                               % (step["target"], step["step"], step["kind"])))
+
+    appended_seqs = (receipt.get("append") or {}).get("seqs") or []
+    if not appended_seqs:
+        # a receipt written before the records moved: its records are in the log as legacy events
+        # under the importer's actor, so there is no run of events to render (question 6)
+        return findings, None
+
+    try:
+        rendered = ctx["records"].render(ctx["workspace"], doc_rel, run_id)
+        rows = ctx["records"].events(ctx["workspace"], doc_rel)["results"]
+    except rcl.RecordsRefusal as refusal:
+        findings.append(_f("V17", "/records_written", "the run's events could not be read back: %s" % refusal.sentence()))
+        return findings, None
+    mine = [r["event"] for r in rows if (r["event"].get("actor") or {}).get("run_id") == run_id]
+    if not mine:
+        findings.append(_f("V17", "/records_written", "the receipt records an append of seq %s, and the log holds no event of run %r"
+                           % (", ".join(str(n) for n in appended_seqs), run_id)))
+        return findings, None
+    pieces = ([rendered["block"]] if rendered.get("block") else []) + list(rendered.get("grants") or [])
+
+    # A: every landed line is one the run's events render to
+    for step in landed:
+        content = step.get("content")
+        if content is not None and content not in pieces:
+            findings.append(_f("V17", "/records_written", "step %d (%s, %s) wrote text the run's events do not render; the log and the document have diverged"
+                               % (step["step"], step["kind"], step["target"])))
+    # C: every piece the render produces belongs to a plan step
+    for piece in pieces:
+        if not any(s.get("content") == piece for s in planned):
+            first = piece.strip().split("\n")[0][:120]
+            findings.append(_f("V17", "/records_written", "the run's events render text no plan step wrote: %s" % first))
+
+    # D: the defects and the markers correspond to the run's events
+    raised = [e for e in mine if e.get("kind") == "defect_raised"]
+    for i, d in enumerate(result.get("new_defects") or []):
+        where = d.get("location") or {}
+        match = [e for e in raised if (e.get("location") or {}).get("file") == where.get("file")
+                 and (e.get("location") or {}).get("line") == where.get("line") and e.get("claim") == d.get("claim")]
+        if not match:
+            findings.append(_f("V17", "/new_defects/%d" % i, "no defect_raised event of this run names this defect"))
+        elif match[-1].get("slice") != d.get("charged_to_slice"):
+            findings.append(_f("V17", "/new_defects/%d/charged_to_slice" % i,
+                               "charged_to_slice is %r but the event charges %r (E8-A25)"
+                               % (d.get("charged_to_slice"), match[-1].get("slice"))))
     for i, it in enumerate(result.get("items") or []):
-        for marker, kind in (("waived", "waiver"), ("reopened", "reopening")):
-            if marker in it and any(w.get("kind") == marker + "_line" for w in writes) and parsed is not None:
-                m = it[marker]
-                # the marker already carries the ledger form of the words (E8-A16), so the two compare directly
-                hits = [r for r in parsed["records"] if r["kind"] == kind and r["file"] == it["location"]["file"] and r["line"] == it["location"]["line"]
-                        and r.get("date") == m.get("date") and r.get("words") == m.get("quoted_words")]
-                if not hits:
-                    findings.append(_f("V17", "/items/%d/%s" % (i, marker), "no %s line in %s parses back to this marker" % (kind, main_doc)))
-    for a in (parsed["ambiguities"] if parsed else []):
-        findings.append(_f("V17", "/records_written", "%s:%d is ambiguous after the run: %s" % (main_doc, a["line_no"], a["reason"])))
+        for marker in ("waived", "reopened"):
+            if marker not in it:
+                continue
+            m = it[marker] or {}
+            hits = [e for e in mine if e.get("kind") == marker and e.get("grant_date") == m.get("date")
+                    and e.get("words") == m.get("quoted_words")]
+            if not hits:
+                findings.append(_f("V17", "/items/%d/%s" % (i, marker),
+                                   "no %s event of this run matches this marker" % marker))
     return findings, None
 
 
@@ -1293,9 +1389,12 @@ CHECKS = {
 }
 
 
-def run_semantic(result, input_doc=None, run_dir=None, workspace=None, schemas=None):
-    """Run every semantic check; return {"semantic": [findings], "skipped": [{"id", "reason"}]}."""
-    ctx = {"run_dir": run_dir, "workspace": workspace, "schemas": schemas}
+def run_semantic(result, input_doc=None, run_dir=None, workspace=None, schemas=None, records=None):
+    """Run every semantic check; return {"semantic": [findings], "skipped": [{"id", "reason"}]}.
+
+    `records` is the records component client V6 and V17 read the records through (E13 slice 1).
+    Without one those two report themselves skipped rather than falling back to the document."""
+    ctx = {"run_dir": run_dir, "workspace": workspace, "schemas": schemas, "records": records}
     if input_doc is not None:
         ctx["input"] = input_doc
     findings, skipped = [], []

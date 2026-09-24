@@ -5,7 +5,37 @@ The portable recheck pilot from the skills v2 execution plan
 re-inspection skill meant to run as a native entry point on several harnesses from one shared
 core with a small adapter per harness.
 
-Status: **E9: the three adapters and setups built, reviewed and closed; the plugin is a genuine
+Status: **E13 slice 1: the pilot keeps its records in the shared `records` component.** It reads
+the open set, the finding rows and the cards from `records.py state`, writes every record as an
+event through `records.py append`, and places the Markdown `records.py render` produces, byte for
+byte where it always placed it. The qualification earned in E10 and E11 is re-earned for the move
+by parity rather than by repeating the trial campaign (owner pick P1): `scripts/tests/test_parity.py`
+drives every built case of every E7 lane through this pilot and through the pilot at `062183c` with
+the same recorded verifier answers and compares the documents byte for byte.
+
+**`recheck_core/ledger.py` is byte-frozen.** The records component keeps a byte-for-byte copy of
+that whole module in `records_core/legacy.py` (its ruling E12-2) and its suite compares the two, so
+no edit of any kind — a deletion, or even a comment — can be made here without that component's
+copy moving with it. `find_entries` and `entry_claim_field` are in the file for that reason alone:
+the join they used to do moved to `records_view.match_entries` and `records_view.claim_field`, and
+nothing in this skill calls them any more. `TheRestoredHelpersAreNeverOnTheDecisionPath` in
+`tests/test_validator_records.py` keeps it that way, by a source read and by running the decision
+path with both replaced by traps.
+
+**The records component is a dependency.** Without it every command exits 3 with one line on
+stderr naming where it looked; `--help` and argument checking still work. It is found through
+`--records-root`, `RECORDS_ROOT`, the component beside this plugin, or the installed shape below
+it, and the pick is confirmed with `component-identity` (interface version 2).
+
+**The station loop needs the verdict mirror tracked (a documented gap, E13 full review F8).** E13
+does not qualify the no-commit hand-off from signoff to recheck while signoff's verdict doc under
+`docs/reviews/` is untracked: recheck appends to that mirror, its boundary check reads the
+untracked change as a violation, and the run ends `not_clear` with the card unchanged although the
+log records the finding fixed. Commit the mirror before `/recheck`; this skill never stages or
+commits anything itself. A runtime change here waits for the owner's E13-1 ruling
+(`pilot-contract.md` section 9, "The station loop"; `scripts/tests/test_full_fix_f8.py`).
+
+Before that: **E9: the three adapters and setups built, reviewed and closed; the plugin is a genuine
 entry point on Claude Code, Codex CLI and OpenCode.** The plugin is listed in
 `.claude-plugin/marketplace.json`. The rulings that shaped the core (E8-1 to E8-30 and the
 amendments E8-A1 to E8-A51) are in `docs/plans/2026-09-13-recheck-v2-e8-core.md`; the rulings that
@@ -22,7 +52,7 @@ renamed at cutover (ruling 10, 2026-09-13).
 
 ```text
 plugins/recheck-v2/
-  .claude-plugin/plugin.json          # name recheck-v2, version 0.1.0
+  .claude-plugin/plugin.json          # name recheck-v2, version 0.2.0
   README.md
   skills/recheck-v2/
     SKILL.md                          # the portable core: the procedure the executor follows
@@ -39,6 +69,10 @@ plugins/recheck-v2/
       validate-result.py              # schema plus semantic validator for a result
       validate-examples.py            # the example suite
       recheck_core/                   # the library the three scripts import
+                                      #   records_client.py: reaching the records component
+                                      #   records_view.py:   the open set, cards and addresses it derives
+                                      #   records_write.py:  the records a run writes, as events
+                                      #   ledger.py:         BYTE-FROZEN, see below
       tests/                          # unittest suites, stdlib
   evals/                              # E7: fixtures, answer key, trigger set, the check runner
 ```
@@ -57,8 +91,8 @@ Expected output:
 - The unittest run ends with `Ran <N> tests` and `OK`, exit 0; two tests print the description's
   300- and 500-character cuts and the body's size on the way.
 - `validate-examples.py` prints one JSON object on stdout and nothing else, exit 0 when every
-  check passes: `{"ok": true, "positive": {"files": 14, "failing": 0}, "negative": {"total": 155,
-  "rejected": 155}, "mutations": {"total": 32, "accepted": 32}, "checkpoint": {"total": 15,
+  check passes: `{"ok": true, "positive": {"files": 14, "failing": 0}, "negative": {"total": 162,
+  "rejected": 162}, "mutations": {"total": 33, "accepted": 33}, "checkpoint": {"total": 15,
   "passed": 15}, "receipt": {"total": 9, "passed": 9}, "failures": []}` (the counts follow the
   example set). Diagnostics go to stderr (`--verbose` adds the per-file lines); `--help` and
   `--skill-root DIR` (a test-only references directory) are accepted; exit 4 when any check

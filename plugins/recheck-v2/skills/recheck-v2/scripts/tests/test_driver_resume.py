@@ -70,7 +70,10 @@ class Resumes(unittest.TestCase):
         self.assertEqual(result["checklist"]["count"], 2)
         rc = testlib.load_json(os.path.join(cdir, "run", "receipt.json"))
         self.assertEqual([(e["step"], e["type"]) for e in rc["entries"]], [(1, "intent"), (1, "done"), (2, "intent"), (2, "done"), (3, "intent"), (3, "done"), (4, "intent"), (4, "done")])
-        self.assertEqual(rc["phase"], "committed"); self.assertEqual(rc["integrity"]["seq"], 8)
+        # E13 slice 1: the receipt gains three writes the entries do not show — the append it
+        # settled on the resume, and the intent and the record of the card append
+        self.assertEqual(rc["phase"], "committed"); self.assertEqual(rc["integrity"]["seq"], 11)
+        self.assertTrue(rc["append"]["recovered"]); self.assertEqual(rc["card_append"]["seqs"], [len(rc["card_append"]["seqs"]) and rc["card_append"]["seqs"][0]])
         self.assertEqual(result["run"]["invocation"]["continuations"], 1)
 
     def test_w2_02_landed_without_done(self):

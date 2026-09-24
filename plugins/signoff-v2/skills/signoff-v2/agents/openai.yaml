@@ -1,0 +1,5 @@
+interface:
+  display_name: "Signoff v2"
+  short_description: "Independent inspection of a built slice by a reviewer who did not build it"
+policy:
+  allow_implicit_invocation: false

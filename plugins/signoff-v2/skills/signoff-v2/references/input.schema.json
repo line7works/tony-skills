@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/signoff-v2/input.schema.json",
+  "title": "Signoff v2 input",
+  "description": "The one validated input structure of the portable signoff core (signoff-contract.md section 2). A calling station passes it whole; direct invocation builds it from the user's request and the workspace. Checks a schema cannot express - run_dir outside the workspace, build_doc containment after symbolic links, a base that does not resolve - belong to the path rules and the source-set computation, which report them as stops rather than as schema errors. Every object is closed, so an unknown key is refused rather than ignored.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "invocation", "workspace", "target"],
+  "properties": {
+    "protocol_version": {
+      "const": 1,
+      "description": "the version of this shape; a new required field or a changed meaning is a new version"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "caller", "run_id", "run_dir", "sessions"],
+      "properties": {
+        "mode": {
+          "enum": ["interactive", "headless"]
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1,
+          "description": "'direct' or the calling station's name"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "description": "one path segment, fresh for a new run; the run directory's receipt settles a run that was killed"
+        },
+        "run_dir": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "absolute scratch path OUTSIDE the workspace; every artifact of the run lands here"
+        },
+        "run_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "the date the block heading carries and every event of the run carries in its `at`; today in UTC when absent"
+        },
+        "harness": {
+          "type": ["string", "null"],
+          "description": "the harness the run is executing in, recorded on every event's actor"
+        },
+        "sessions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reviewing"],
+          "properties": {
+            "building": {
+              "type": ["string", "null"],
+              "description": "the session that built the slice; null when it is not known"
+            },
+            "reviewing": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the session doing the reviewing. Equal to `building` is the independence refusal, not a warning"
+            }
+          }
+        },
+        "model": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["id", "floor_class", "floor_met"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "floor_class": {"type": "string", "minLength": 1},
+            "floor_met": {"type": ["boolean", "null"]}
+          },
+          "description": "the reviewing session's model as the adapter OBSERVED it, and the floor facts the adapter derived. The core computes the class from `id` itself and checks `floor_class` and `floor_met` against it, never in its place (Astra's F5): a false, null, missing or unestablished floor, or typed facts that disagree with the id, stops the run `floor_refused` at `request` and at `record`, before any reviewer request and with no project-record write (v1 Step 0). The key stays optional in the schema so that a missing model reaches that named stop rather than a bare schema error"
+        }
+      }
+    },
+    "workspace": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "absolute path of the git work tree root under review"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build_doc", "slice", "base"],
+      "properties": {
+        "build_doc": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!docs/(?:records|reviews)/)(?!.*(?:^|/)\\.\\.?/).+\\.md$",
+          "description": "the ledger document, workspace-relative: never one under docs/records/ (the component's history) or docs/reviews/ (a mirror), which the component refuses with exit 4"
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the slice inside that document, as its `## Slice <X>` heading names it"
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the git ref naming the slice's base. A ref that does not resolve is a stop, never a guess"
+        }
+      }
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "when true the run writes nothing to the workspace and nothing to the log, and its result says so"
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "enum": ["LIGHT", "LEAN", "DEEP"],
+          "default": "LEAN",
+          "description": "v1 Step 3's depths. LEAN is three lenses; DEEP adds security and tests; LIGHT is one fused reviewer and is never self-selected"
+        },
+        "lenses": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "the lenses this run sends; the depth's own set when absent"
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "description": "how the reviewer is reached, recorded with what it concluded (E13-4). `readers:<row>` in a live run"
+        },
+        "builder_conversation": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "workspace-relative paths the caller declares to be the builder's own account of its work. They stay IN the source set and IN the packet's file list; their CONTENT is withheld from the delivered material (amendment A3 item 2)"
+        }
+      }
+    }
+  }
+}

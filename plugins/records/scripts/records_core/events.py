@@ -673,7 +673,9 @@ def _check_clear(event, position, events, doc, actual_identity, importer=False):
     """Section 8.3: a record cannot clear findings against a different source revision.
 
     All three conditions are one rule and one refusal (exit 6, `stale_source`), with the reason
-    naming the condition that failed and both identities in the response wherever they exist.
+    naming the condition that failed and both identities in the response wherever they exist. The
+    third condition is `_clear_admits`: `open` for every clear, and `fixed` as well for a `waived`
+    (E13 amendment A2).
     The importer is the one writer allowed to append a clear with `known: false`, and only with
     `origin.kind: "legacy"` (owner ruling O4); such a clear is exempt from all three, because an
     imported clear keeps its effect and history is not changed. The exemption needs the caller to
@@ -697,11 +699,32 @@ def _check_clear(event, position, events, doc, actual_identity, importer=False):
               event_index=position, finding=event.get("finding"), condition="identity",
               differing_fields=differing, expected=expected, actual=actual)
     status = finding_status(events, event.get("finding"))
-    if status != "open":
-        _fail(6, "stale_source", "event %d clears %s, which is %s at the log's current head, not open "
-                                 "(section 8.3)" % (position, event.get("finding"), status),
+    if not _clear_admits(event, status):
+        _fail(6, "stale_source", "event %d clears %s, which is %s at the log's current head, not %s "
+                                 "(section 8.3)" % (position, event.get("finding"), status,
+                                                    _admitted_text(event)),
               event_index=position, finding=event.get("finding"), condition="open",
               status=status, expected=expected, actual=actual)
+
+
+def _clear_admits(event, status):
+    """Which (clear, status) pairs section 8.3's third condition admits (E13 amendment A2).
+
+    `open` admits every clear, as it always did. A `waived` ALSO admits a finding that is `fixed`:
+    Appendix A orders records by file position and the later one wins, so a user's waiver written
+    after a clearance is what decides the finding, `state`'s deciding-event rule already reads the
+    pair that way, and a recheck run records exactly it when it clears an item the user also
+    waived. Nothing else moves: a `waived` over a `waived` is refused, and a `disposition: fixed`
+    over anything but `open` is refused.
+    """
+    if status == "open":
+        return True
+    return event.get("kind") == "waived" and status == "fixed"
+
+
+def _admitted_text(event):
+    """What the refused clear would have needed, for the reason line (amendment A2)."""
+    return "open or fixed" if event.get("kind") == "waived" else "open"
 
 
 def commit_batch(path, workspace, doc, existing, prepared, lock=None, importer=False,
