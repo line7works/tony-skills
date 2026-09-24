@@ -213,18 +213,36 @@ def _line_is_ours(workspace, step, slice_name):
 
 
 def _edit_window(workspace, step, slice_name):
-    """When the edit an `outside_edit` stop names reached the document, as far as it is known."""
-    if not _line_is_ours(workspace, step, slice_name):
-        return "between the plan and the write"
+    """When the edit an `outside_edit` stop names reached the document, as far as it is known.
+
+    punch4-C2-3: the receipt decides first. A receipted write is this run's write whatever the
+    line reads now, so any edit the stop names came after it; only without a receipted write does
+    the line's current value decide."""
     if step.get("done"):
         return "after this run's own `Status:` line reached it"
-    return "after this run planned the card move"
+    if _line_is_ours(workspace, step, slice_name):
+        return "after this run planned the card move"
+    return "between the plan and the write"
 
 
 def _line_words(workspace, step, slice_name):
     """What the `outside_edit` reason says about the `Status:` line, read from the document on
     disk (punch3-C2-3, NEW-1's words): when the line already holds the value this run writes, it
-    says so, whether the receipt records this run's write, and that the line is left as it is."""
+    says so, whether the receipt records this run's write, and that the line is left as it is.
+
+    punch4-C2-3: when the receipt records this run's write and the line reads something else now
+    (put back by hand, changed to a third value, the document re-saved), the words say what the
+    line reads now, that this run wrote its value there earlier, and that it is left as it is.
+    Without a receipted write the run cannot know the line was ever its, and the words say the
+    line was not written, as before."""
+    if step.get("done") and not _line_is_ours(workspace, step, slice_name):
+        current = _status_on_disk(workspace, step["target"], slice_name)
+        now = ("reads `%s` in %s now" % (current, step["target"]) if current is not None else
+               "can no longer be read in %s" % step["target"])
+        return ("the slice's `Status:` line %s, although this run's own document step wrote `%s` "
+                "there earlier (its receipt records that write); someone changed the line after "
+                "that write, and it is left as it is, neither written again nor reverted."
+                % (now, step.get("value")))
     if _line_is_ours(workspace, step, slice_name):
         return ("the slice's `Status:` line already reads `%s` in %s, %s, and it is left as it is, "
                 "neither written again nor reverted."

@@ -206,24 +206,25 @@ def _ends_definition(line):
     return _html_start(body, True) is not None or _list_item(body, False) is not None
 
 
-def _destination(text, pos):
-    """The end of a link destination starting at `text[pos]`, or None (CommonMark 6.3)."""
-    if text[pos:pos + 1] == "<":
+def _destination(text, pos, end):
+    """The end of a link destination starting at `text[pos]`, or None (CommonMark 6.3). Nothing
+    at or past `end` is read."""
+    if pos < end and text[pos] == "<":
         pos += 1
-        while pos < len(text):
+        while pos < end:
             char = text[pos]
             if char in "\n<":
                 return None
             if char == ">":
                 return pos + 1
-            pos += 2 if char == "\\" and pos + 1 < len(text) else 1
+            pos += 2 if char == "\\" and pos + 1 < end else 1
         return None
     start, level = pos, 0
-    while pos < len(text):
+    while pos < end:
         char = text[pos]
         if char == " " or ord(char) < 0x20 or ord(char) == 0x7F:
             break
-        if char == "\\" and pos + 1 < len(text):
+        if char == "\\" and pos + 1 < end:
             if text[pos + 1] == " ":
                 break
             pos += 2
@@ -240,13 +241,14 @@ def _destination(text, pos):
     return pos if pos > start and level == 0 else None
 
 
-def _title(text, pos):
-    """The end of a link title starting at `text[pos]`, or None."""
-    close = {'"': '"', "'": "'", "(": ")"}.get(text[pos:pos + 1])
+def _title(text, pos, end):
+    """The end of a link title starting at `text[pos]`, or None. Nothing at or past `end` is
+    read."""
+    close = {'"': '"', "'": "'", "(": ")"}.get(text[pos] if pos < end else "")
     if close is None:
         return None
     pos += 1
-    while pos < len(text):
+    while pos < end:
         char = text[pos]
         if char == close:
             return pos + 1
@@ -256,15 +258,24 @@ def _title(text, pos):
     return None
 
 
-def _definition_span(text):
-    """How many lines at the start of `text` one link reference definition takes, or 0 when the
-    text does not open with one (CommonMark 4.7: a label, a colon, a destination on that line or
-    the next, an optional title; the scan follows markdown-it's reference rule)."""
-    text = text.strip()
-    if not text.startswith("["):
+def _definition_span(text, start=0, end=None):
+    """How many lines one link reference definition takes at the start of `text[start:end]`, or 0
+    when that text does not open with one (CommonMark 4.7: a label, a colon, a destination on that
+    line or the next, an optional title; the scan follows markdown-it's reference rule).
+
+    punch4-C3-1: the definition is parsed in place, between `start` and `end`, and the scan reads
+    only as far as the definition runs, so a caller that joins a run of lines once can read every
+    definition in it without copying or rescanning the rest of the run. Leading and trailing
+    whitespace of `text[start:end]` is passed over, as `str.strip` would."""
+    end = len(text) if end is None else end
+    while start < end and text[start].isspace():
+        start += 1
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    if start >= end or text[start] != "[":
         return 0
-    pos, label_end = 1, None
-    while pos < len(text):
+    pos, label_end = start + 1, None
+    while pos < end:
         char = text[pos]
         if char == "[":
             return 0
@@ -272,43 +283,88 @@ def _definition_span(text):
             label_end = pos
             break
         pos += 2 if char == "\\" else 1
-    if label_end is None or text[label_end + 1:label_end + 2] != ":" \
-            or not text[1:label_end].strip():
+    if label_end is None or label_end + 1 >= end or text[label_end + 1] != ":" \
+            or not text[start + 1:label_end].strip():
         return 0
     pos = label_end + 2
-    while pos < len(text) and text[pos] in " \t\n":
+    while pos < end and text[pos] in " \t\n":
         pos += 1
-    end = _destination(text, pos)
-    if end is None:
+    stop = _destination(text, pos, end)
+    if stop is None:
         return 0
-    after = end
-    pos = end
-    while pos < len(text) and text[pos] in " \t\n":
+    after = stop
+    pos = stop
+    while pos < end and text[pos] in " \t\n":
         pos += 1
-    title = _title(text, pos) if pos > end and pos < len(text) else None
+    title = _title(text, pos, end) if pos > stop and pos < end else None
     if title is not None:
         rest = title
-        while rest < len(text) and text[rest] in " \t":
+        while rest < end and text[rest] in " \t":
             rest += 1
-        if rest >= len(text) or text[rest] == "\n":
-            return text[:rest].count("\n") + 1
+        if rest >= end or text[rest] == "\n":
+            return text.count("\n", start, rest) + 1
     rest = after
-    while rest < len(text) and text[rest] in " \t":
+    while rest < end and text[rest] in " \t":
         rest += 1
-    if rest < len(text) and text[rest] != "\n":
+    if rest < end and text[rest] != "\n":
         return 0
-    return text[:rest].count("\n") + 1
+    return text.count("\n", start, rest) + 1
 
 
 def _strip_definitions(lines):
-    """`lines` (a paragraph's) without the link reference definitions it opens with."""
+    """`lines` (a paragraph's) without the link reference definitions it opens with.
+
+    punch4-C3-1: the paragraph is joined once and each definition parsed in place, so a paragraph
+    of N definitions costs on the order of its length, not N times it."""
     lines = list(lines)
-    while lines:
-        taken = _definition_span("\n".join(lines))
+    text = "\n".join(lines)
+    end = len(text.rstrip())
+    index, offset = 0, 0
+    while index < len(lines):
+        taken = _definition_span(text, offset, end)
         if not taken:
             break
-        lines = lines[taken:]
-    return lines
+        for line in lines[index:index + taken]:
+            offset += len(line) + 1
+        index += taken
+    return lines[index:]
+
+
+class _DefinitionRuns(object):
+    """The lines a top-level link reference definition may run over, found once per run.
+
+    punch4-C3-1: a definition at a top-level line opening with `[` may take the following lines up
+    to a blank line or a terminator (`_ends_definition`). Every line of one such run ends at the
+    same place, so the run is found and joined once, when the walk first reaches it, and every
+    definition in it is parsed in place (`_definition_span`) from its own line. The walk only moves
+    forward, so each line is scanned for the run's end once and joined once: the cost is linear
+    in the file's length, where gathering the rest of the run afresh at every line was quadratic
+    in the run's length."""
+
+    def __init__(self, lines):
+        self.lines = lines
+        self.index = 0              # the line the walk is reading
+        self.first = self.stop = 0  # the cached run: lines[first:stop]
+        self.text, self.offsets, self.end = "", [], 0
+
+    def span(self, body):
+        """How many lines the definition that `body` (the current line, its indentation
+        removed) opens takes, or 0."""
+        index, lines = self.index, self.lines
+        if not self.first <= index < self.stop:
+            stop = index + 1
+            while stop < len(lines) and lines[stop].strip() and not _ends_definition(lines[stop]):
+                stop += 1
+            run = lines[index:stop]
+            self.first, self.stop = index, stop
+            self.text = "\n".join(run)
+            self.end = len(self.text.rstrip())
+            self.offsets, offset = [], 0
+            for line in run:
+                self.offsets.append(offset)
+                offset += len(line) + 1
+        start = self.offsets[index - self.first] + len(lines[index]) - len(body)
+        return _definition_span(self.text, start, self.end)
 
 
 class _Blocks(object):
@@ -338,7 +394,7 @@ class _Blocks(object):
 
     def feed(self, line, following=None):
         """Read one line; return a heading's title when this line completes one, else None.
-        `following` (the top level only) is the lines after this one, for a link reference
+        `following` (the top level only) is the walk's `_DefinitionRuns`, for a link reference
         definition that runs over several lines."""
         if self.skip:
             self.skip -= 1
@@ -433,12 +489,7 @@ class _Blocks(object):
             return None
         if not self.paragraph and self.definitions == DEFINITIONS_AS_BLOCKS:
             if following is not None and body.startswith("["):
-                lines = [body]
-                for later in following:
-                    if not later.strip() or _ends_definition(later):
-                        break
-                    lines.append(later)
-                taken = _definition_span("\n".join(lines))
+                taken = following.span(body)
                 if taken:
                     self.skip = taken - 1
                     return None                 # a definition, never paragraph text
@@ -451,22 +502,14 @@ class _Blocks(object):
 def _first_heading_from(lines, index, definitions=DEFINITIONS_AS_BLOCKS):
     """The first top-level heading's title at or after `lines[index]`, or None."""
     blocks = _Blocks(definitions)
+    runs = _DefinitionRuns(lines)
     while index < len(lines):
-        heading = blocks.feed(lines[index], _Following(lines, index + 1))
+        runs.index = index
+        heading = blocks.feed(lines[index], runs)
         index += 1
         if heading is not None:
             return heading
     return None
-
-
-class _Following(object):
-    """The lines after one index, iterated without a copy."""
-
-    def __init__(self, lines, index):
-        self.lines, self.index = lines, index
-
-    def __iter__(self):
-        return iter(self.lines[i] for i in range(self.index, len(self.lines)))
 
 
 def _lines(text):

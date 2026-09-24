@@ -230,6 +230,15 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   value this run writes, the reason says so, whether the receipt records the write, and that the
   line is left as it is, instead of "the `Status:` line was not written". An edit between the plan
   and the write still says the line was not written. Test: `scripts/tests/test_punch3_c2_3.py`.
+- **punch4-C2-3 (E13 punch list round 4, the round 3 checker)** the `outside_edit` words decide
+  from the receipt first: when the receipt records this run's `Status:` write and the person then
+  changed the line itself (put back with another edit, changed to a third value, the document
+  re-saved with CRLF endings), the reason says what the line reads now, that this run wrote `built`
+  there earlier, and that it is left as it is; before, it said the edit came "between the plan and
+  the write" and that the line "was not written". The stop, the landed card report and the one
+  write are unchanged. A kill after the bytes are written and before the receipt records them
+  leaves the run no record of its write, so those words stay there. Test:
+  `scripts/tests/test_punch4_c2_3.py`.
 - **punch3-C2-1 (signoff-v2's install proof)** no change to this core's documents was needed; its
   byte-identical `setups/verify-package.py` reference check is now run over the checkout by
   `scripts/tests/test_punch3_c2_1.py`, so a path-shaped example that does not resolve fails a test

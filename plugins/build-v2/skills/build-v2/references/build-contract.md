@@ -336,7 +336,13 @@ Four rules hold that shape together, each one a failure found in the pilot befor
   plan and the write is a named stop (`outside_edit`) and never the new baseline; the stop's reason
   says what the slice's `Status:` line holds on disk: when it already reads the value this run
   writes, it says so, whether the receipt records this run's write, and that the line is left as it
-  is, neither written again nor reverted (punch3-C2-3);
+  is, neither written again nor reverted (punch3-C2-3); when the receipt records this run's write
+  and the line reads something else now (put back by hand with another edit, changed to a third
+  value, the document re-saved with other line endings), the receipt decides: the reason says what
+  the line reads now, that this run wrote its value there earlier, and that the line is left as it
+  is, never that the edit came between the plan and the write (punch4-C2-3); only without a
+  receipted write, where the run cannot know the line was ever its, does it say the line was not
+  written;
 - **the source the decision was made on is pinned with it** (Astra's F1, E13 full review): the
   checkpoint's `decision.source_pin` holds HEAD and the identity of every changed or untracked
   path, the build doc and `docs/records/` excepted. A path's identity is its type, the mode git

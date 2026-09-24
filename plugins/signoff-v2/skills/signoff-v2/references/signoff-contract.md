@@ -194,7 +194,10 @@ about prose:
    start on the next line), is read two ways, and either reading's first heading counts: as a
    block of its own, which may take the next line as its destination (so `[a]:` over `===` is a
    definition and no heading), and as the opening lines of a paragraph, set aside when a Setext
-   underline arrives (so `[a]:` over `===` is a heading whose text is `[a]:`) (punch3-F9). Not
+   underline arrives (so `[a]:` over `===` is a heading whose text is `[a]:`) (punch3-F9). Both
+   readings take time linear in the file's length: the lines a definition may run over are found
+   once for each run of them, and each definition is read in place, as far as it runs; what is
+   withheld is unchanged (punch4-C3-1). Not
    read as headings, and why: a heading inside a block quote or a list item, and an HTML `<h1>` to
    `<h6>` element (the rule speaks of the first Markdown heading; the file-name rule and rule 1
    still reach such a file). Also left out of the walk: tab stops inside a block-quote marker

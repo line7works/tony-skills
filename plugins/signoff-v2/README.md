@@ -280,6 +280,19 @@ scratch folder):
 - **punch3-C2-4 (paperwork)** `SKILL.md`'s citation sentence names round 2's rules: line-break
   matching in prose and the climb out of the workspace and back in.
 
+## Punch list round 4 (E13, after the round 3 checker)
+
+- **punch4-C3-1 (MINOR)** the first-heading walker was quadratic on a run of link reference
+  definitions: in the blocks reading, every top-level line opening with `[` gathered and joined
+  the whole rest of the run before reading one definition, and the paragraphs reading joined the
+  rest of the paragraph again for each definition it set aside (20,000 one-line definitions took
+  205.9 s in `first_headings`; an untracked file of 8,000 made `scope` take 32 s). Each run is now
+  found and joined once and each definition parsed in place, reading only as far as it runs:
+  20,000 definitions take about 0.12 s, doubling the input doubles the time, and `scope` on the
+  8,000-definition file takes 1.5 s. The headings read are the same, text for text (an exact
+  comparison with the round 3 walker on about 195,000 generated texts found no difference).
+  `scripts/tests/test_punch4_c3_1.py`.
+
 ## Build record (E13 slice 3: adapters and installs)
 
 - Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's
