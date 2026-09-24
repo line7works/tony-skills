@@ -38,7 +38,7 @@ STOP_TAGS = (
     "card_drift",             # the log and the document disagree about the card
     "open_blocker",           # the slice carries an open BLOCKER and the input did not allow it
     "scope_unexplained",      # a path is outside the slice's named paths with no stated reason
-    "outside_edit",           # the build doc moved between the plan and the write
+    "outside_edit",           # the build doc moved between the plan and the write, or after it
     "records_invalid",        # the component refused an event (exit 4)
     "records_ambiguous",      # the component could not place a record (exit 5)
     "records_stale_source",   # the workspace moved under a clear (exit 6)

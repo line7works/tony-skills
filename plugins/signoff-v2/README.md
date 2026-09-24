@@ -255,6 +255,31 @@ scratch folder):
   5) puts the refusal of a selected result without an identity on the helper; a test pins that.
   `adapters/*/tests/test_punch_n1.py`.
 
+## Punch list round 3 (E13, after the round 2 checker)
+
+- **punch3-C2-1 (MAJOR)** `setups/<harness>/verify-install.sh` exited 4 on both harnesses: a
+  round 2 sentence in the signoff contract held a back-ticked, path-shaped example (a withheld path
+  broken at a line's end) that `setups/verify-package.py` reads as a reference that must resolve.
+  The sentence now says it in words; the verifier is unchanged. Its reference check runs over the
+  checkout in `scripts/tests/test_punch3_c2_1.py` (and in build-v2's copy), and the install proofs
+  pass again on both harnesses.
+- **punch3-F9 (F9's third round)** the first-heading walker closes the round 2 checker's gaps: a
+  type 2 to 5 HTML block ends on its start line when that line holds the end marker (`<!-->`,
+  `<!--->`, `<?>`, withheld at `dfe8919`); an empty list item followed by a blank line ends there;
+  a list item on a line that a block quote or list item does not continue starts a new list even
+  when it could not interrupt a paragraph (`- item\n2. x`, `- item\n1.`, `- a\n-`, `> a\n-`,
+  withheld at `8133cb3`); and a link reference definition may run over several lines and is read
+  two ways, as its own block (markdown-it: `[a]:` over `===` is a definition) and as paragraph text
+  set aside at a Setext underline (the reference implementation: `[a]:` over `===` is a heading),
+  every distinct first heading counting. Moved toward delivery, as CommonMark reads them: a
+  definition whose title sits on the next line, followed by `===` (no heading in either reading).
+  `scripts/tests/test_punch3_f9.py`.
+- **punch3-F3 (MINOR)** a withheld path broken at its space by a backslash hard line break
+  (`builder\` at a line's end, the file name on the next) is the same citation.
+  `scripts/tests/test_punch3_f3.py`.
+- **punch3-C2-4 (paperwork)** `SKILL.md`'s citation sentence names round 2's rules: line-break
+  matching in prose and the climb out of the workspace and back in.
+
 ## Build record (E13 slice 3: adapters and installs)
 
 - Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's

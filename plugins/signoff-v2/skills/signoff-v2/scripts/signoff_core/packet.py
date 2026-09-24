@@ -63,8 +63,12 @@ FRONTMATTER_CLOSE = ("---", "...")
 # endings (CRLF, CR) are normalised and a leading byte order mark dropped before the walk; ATX
 # headings indented up to three spaces; Setext headings; fences of three OR MORE backticks or
 # tildes closed only by a fence at least as long of the same character; indented code; thematic
-# breaks; the seven kinds of raw HTML block; single-line link reference definitions; and block
-# quotes and list items as containers whose content is never a top-level heading.
+# breaks; the seven kinds of raw HTML block; link reference definitions; and block quotes and list
+# items as containers whose content is never a top-level heading. punch3-F9: a type 2 to 5 HTML
+# block ends on its start line when that line holds the end marker (`<!-->`, `<?>`); an empty list
+# item followed by a blank line ends there; a list item that starts where the innermost matched
+# container is not a paragraph is a new list, not a lazy line; and a link reference definition
+# may run over several lines, read two ways (below, `first_headings`).
 ATX = re.compile(r"^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
 ATX_CLOSING = re.compile(r"(?:^|[ \t]+)#+[ \t]*$")
 SETEXT_UNDERLINE = re.compile(r"^(?:=+|-+)[ \t]*$")
@@ -92,6 +96,8 @@ _ATTRIBUTE = (r"(?:[ \t]+[A-Za-z_:][A-Za-z0-9_.:-]*"
 HTML_TYPE7 = re.compile(r"^(?:<[A-Za-z][A-Za-z0-9-]*%s*[ \t]*/?>|</[A-Za-z][A-Za-z0-9-]*[ \t]*>)"
                         r"[ \t]*$" % _ATTRIBUTE)
 HTML_ENDS_AT_BLANK = ""
+DEFINITIONS_AS_BLOCKS = "blocks"
+DEFINITIONS_IN_PARAGRAPHS = "paragraphs"
 
 
 def _indent(line):
@@ -164,8 +170,15 @@ def _list_item(body, in_paragraph):
 
 
 def _interrupts(line):
-    """Whether `line` starts a block that ends an open paragraph, so it cannot be a lazy
-    continuation line of a paragraph inside a block quote or a list item."""
+    """Whether `line` starts a block where a block quote or a list item it does not continue
+    stops matching, so it cannot be a lazy continuation line of a paragraph inside it.
+
+    punch3-F9: the paragraph-interrupt restriction on list items (an empty item, or an ordered
+    one not starting at 1) applies only when the innermost matched container is the paragraph
+    itself. Here the matched container is the one ABOVE the quote or the item, so `2. x`, an
+    empty `1.` or an empty `-` starts a new list (CommonMark 0.31.2 section 5.2, the reference
+    implementation's `container.type !== "paragraph"`). A type 7 HTML tag still does not end the
+    lazy paragraph (the reference implementation checks the open paragraph for it)."""
     width, body = _indent(line)
     if width > 3 or not body.strip():
         return not body.strip()
@@ -175,7 +188,127 @@ def _interrupts(line):
         return True
     if _html_start(body, True) is not None:
         return True
-    return _list_item(body, True) is not None
+    return _list_item(body, False) is not None
+
+
+def _ends_definition(line):
+    """Whether `line` (not blank, indented at most three columns) ends the lines a link reference
+    definition may run over: a fence, a block quote, a thematic break, a list item, a type 1 to 6
+    HTML block or an ATX heading (the reference rule's terminators in markdown-it)."""
+    width, body = _indent(line)
+    if width > 3:
+        return False
+    match = FENCE_OPEN.match(body)
+    if match and not (match.group(1)[0] == "`" and "`" in match.group(2)):
+        return True
+    if body.startswith(">") or THEMATIC_BREAK.match(body) or ATX.match(body):
+        return True
+    return _html_start(body, True) is not None or _list_item(body, False) is not None
+
+
+def _destination(text, pos):
+    """The end of a link destination starting at `text[pos]`, or None (CommonMark 6.3)."""
+    if text[pos:pos + 1] == "<":
+        pos += 1
+        while pos < len(text):
+            char = text[pos]
+            if char in "\n<":
+                return None
+            if char == ">":
+                return pos + 1
+            pos += 2 if char == "\\" and pos + 1 < len(text) else 1
+        return None
+    start, level = pos, 0
+    while pos < len(text):
+        char = text[pos]
+        if char == " " or ord(char) < 0x20 or ord(char) == 0x7F:
+            break
+        if char == "\\" and pos + 1 < len(text):
+            if text[pos + 1] == " ":
+                break
+            pos += 2
+            continue
+        if char == "(":
+            level += 1
+            if level > 32:
+                return None
+        elif char == ")":
+            if level == 0:
+                break
+            level -= 1
+        pos += 1
+    return pos if pos > start and level == 0 else None
+
+
+def _title(text, pos):
+    """The end of a link title starting at `text[pos]`, or None."""
+    close = {'"': '"', "'": "'", "(": ")"}.get(text[pos:pos + 1])
+    if close is None:
+        return None
+    pos += 1
+    while pos < len(text):
+        char = text[pos]
+        if char == close:
+            return pos + 1
+        if char == "(" and close == ")":
+            return None
+        pos += 2 if char == "\\" else 1
+    return None
+
+
+def _definition_span(text):
+    """How many lines at the start of `text` one link reference definition takes, or 0 when the
+    text does not open with one (CommonMark 4.7: a label, a colon, a destination on that line or
+    the next, an optional title; the scan follows markdown-it's reference rule)."""
+    text = text.strip()
+    if not text.startswith("["):
+        return 0
+    pos, label_end = 1, None
+    while pos < len(text):
+        char = text[pos]
+        if char == "[":
+            return 0
+        if char == "]":
+            label_end = pos
+            break
+        pos += 2 if char == "\\" else 1
+    if label_end is None or text[label_end + 1:label_end + 2] != ":" \
+            or not text[1:label_end].strip():
+        return 0
+    pos = label_end + 2
+    while pos < len(text) and text[pos] in " \t\n":
+        pos += 1
+    end = _destination(text, pos)
+    if end is None:
+        return 0
+    after = end
+    pos = end
+    while pos < len(text) and text[pos] in " \t\n":
+        pos += 1
+    title = _title(text, pos) if pos > end and pos < len(text) else None
+    if title is not None:
+        rest = title
+        while rest < len(text) and text[rest] in " \t":
+            rest += 1
+        if rest >= len(text) or text[rest] == "\n":
+            return text[:rest].count("\n") + 1
+    rest = after
+    while rest < len(text) and text[rest] in " \t":
+        rest += 1
+    if rest < len(text) and text[rest] != "\n":
+        return 0
+    return text[:rest].count("\n") + 1
+
+
+def _strip_definitions(lines):
+    """`lines` (a paragraph's) without the link reference definitions it opens with."""
+    lines = list(lines)
+    while lines:
+        taken = _definition_span("\n".join(lines))
+        if not taken:
+            break
+        lines = lines[taken:]
+    return lines
 
 
 class _Blocks(object):
@@ -183,11 +316,13 @@ class _Blocks(object):
     container's content is walked by a child `_Blocks` whose headings are never reported (a
     heading inside a block quote or a list item is not read, by the contract)."""
 
-    def __init__(self):
+    def __init__(self, definitions=DEFINITIONS_AS_BLOCKS):
         self.paragraph = []
         self.fence = None           # (character, length) of the open fence
         self.html_end = None        # the end marker of an open raw HTML block
-        self.container = None       # [kind, content indent, child, last line blank]
+        self.container = None       # [kind, content indent, child, last line blank, has content]
+        self.definitions = definitions
+        self.skip = 0               # lines still taken by a link reference definition
 
     def lazy(self):
         """Whether the innermost open block is a paragraph (a lazy continuation line joins it)."""
@@ -201,8 +336,13 @@ class _Blocks(object):
         else:
             self.paragraph.append(line.strip())
 
-    def feed(self, line):
-        """Read one line; return a heading's title when this line completes one, else None."""
+    def feed(self, line, following=None):
+        """Read one line; return a heading's title when this line completes one, else None.
+        `following` (the top level only) is the lines after this one, for a link reference
+        definition that runs over several lines."""
+        if self.skip:
+            self.skip -= 1
+            return None
         width, body = _indent(line)
         if self.fence:
             match = FENCE_CLOSE.match(body) if width <= 3 else None
@@ -217,7 +357,7 @@ class _Blocks(object):
                 self.html_end = None
             return None
         if self.container:
-            kind, indent, child, blank = self.container
+            kind, indent, child, blank, filled = self.container
             if kind == ">" and width <= 3 and body.startswith(">"):
                 content = body[1:]
                 if content[:1] == " ":
@@ -226,13 +366,19 @@ class _Blocks(object):
                     content = "  " + content[1:]
                 child.feed(content)
                 return None
+            if kind == "-" and not body.strip() and not filled:
+                # punch3-F9: a list item can begin with at most one blank line; an empty item
+                # followed by a blank line ends there (CommonMark 0.31.2 section 5.2)
+                self.container = None
+                self.paragraph = []
+                return None
             if kind == "-" and not body.strip():
                 child.feed("")
                 self.container[3] = True
                 return None
             if kind == "-" and width >= indent:
                 child.feed(_dedent(line, indent))
-                self.container[3] = False
+                self.container[3], self.container[4] = False, True
                 return None
             if body.strip() and not blank and child.lazy() and not _interrupts(line):
                 child.continue_lazily(line)
@@ -242,7 +388,13 @@ class _Blocks(object):
             self.paragraph = []
             return None
         if self.paragraph and width <= 3 and SETEXT_UNDERLINE.match(body):
-            heading = " ".join(self.paragraph)
+            text = self.paragraph
+            if self.definitions == DEFINITIONS_IN_PARAGRAPHS:
+                text = _strip_definitions(text)
+                if not text:            # a paragraph of definitions only: the line is its text
+                    self.paragraph.append(body.strip())
+                    return None
+            heading = " ".join(text)
             self.paragraph = []
             return heading
         if width >= 4:
@@ -263,37 +415,58 @@ class _Blocks(object):
         end = _html_start(body, bool(self.paragraph))
         if end is not None:
             self.paragraph = []
-            first = body[4:] if end == "-->" else body[2:] if end in ("?>", ">") else (
-                body[9:] if end == "]]>" else body)
-            if end == HTML_ENDS_AT_BLANK or not _html_ends(end, first):
+            # punch3-F9: the end condition is tested on the start line too, whole (`<!-->`
+            # holds `-->`, `<?>` holds `?>`), as CommonMark 0.31.2 section 4.6 reads it
+            if end == HTML_ENDS_AT_BLANK or not _html_ends(end, body):
                 self.html_end = end
             return None
         if body.startswith(">"):
             self.paragraph = []
-            self.container = [">", 0, _Blocks(), False]
+            self.container = [">", 0, _Blocks(self.definitions), False, True]
             return self.feed(line)
         item = _list_item(body, bool(self.paragraph))
         if item is not None:
             self.paragraph = []
-            child = _Blocks()
-            self.container = ["-", width + item[0], child, False]
+            child = _Blocks(self.definitions)
+            self.container = ["-", width + item[0], child, False, bool(item[1].strip())]
             child.feed(item[1])
             return None
-        if not self.paragraph and LINK_DEFINITION.match(body):
-            return None                         # a definition, never paragraph text
+        if not self.paragraph and self.definitions == DEFINITIONS_AS_BLOCKS:
+            if following is not None and body.startswith("["):
+                lines = [body]
+                for later in following:
+                    if not later.strip() or _ends_definition(later):
+                        break
+                    lines.append(later)
+                taken = _definition_span("\n".join(lines))
+                if taken:
+                    self.skip = taken - 1
+                    return None                 # a definition, never paragraph text
+            elif LINK_DEFINITION.match(body):
+                return None                     # a definition, never paragraph text
         self.paragraph.append(body.strip())
         return None
 
 
-def _first_heading_from(lines, index):
+def _first_heading_from(lines, index, definitions=DEFINITIONS_AS_BLOCKS):
     """The first top-level heading's title at or after `lines[index]`, or None."""
-    blocks = _Blocks()
+    blocks = _Blocks(definitions)
     while index < len(lines):
-        heading = blocks.feed(lines[index])
+        heading = blocks.feed(lines[index], _Following(lines, index + 1))
         index += 1
         if heading is not None:
             return heading
     return None
+
+
+class _Following(object):
+    """The lines after one index, iterated without a copy."""
+
+    def __init__(self, lines, index):
+        self.lines, self.index = lines, index
+
+    def __iter__(self):
+        return iter(self.lines[i] for i in range(self.index, len(self.lines)))
 
 
 def _lines(text):
@@ -329,14 +502,22 @@ def first_headings(text):
     Markdown after it; or no frontmatter, where the opening `---` is a thematic break and a text
     line before a later `---` is a Setext heading. Both are returned, the frontmatter reading
     first, so a declaration either reading makes is seen and neither can hide one. A text with no
-    closed frontmatter has one reading."""
+    closed frontmatter has one reading.
+
+    punch3-F9: each of those is read twice more for link reference definitions, which the two
+    common readers place differently: as blocks of their own that may run over several lines and
+    may take the next line as their destination (`[a]:` then `===` is a definition, markdown-it),
+    and as the opening lines of a paragraph, stripped when a Setext underline arrives
+    (`[a]:` then `===` is a heading, the reference implementation). Every distinct first heading
+    is returned."""
     lines = _lines(text)
     out = []
     end = _frontmatter_end(lines)
     for start in ((end, 0) if end is not None else (0,)):
-        heading = _first_heading_from(lines, start)
-        if heading is not None and heading not in out:
-            out.append(heading)
+        for definitions in (DEFINITIONS_AS_BLOCKS, DEFINITIONS_IN_PARAGRAPHS):
+            heading = _first_heading_from(lines, start, definitions)
+            if heading is not None and heading not in out:
+                out.append(heading)
     return out
 
 
@@ -351,7 +532,10 @@ def first_heading(text):
     headings indented up to three spaces, Setext headings, and fences of any length, closed only
     by a fence at least as long of the same character; punch2-F9: CRLF and CR line endings, a
     leading byte order mark, block quotes and list items as containers, all seven raw HTML block
-    kinds, and single-line link reference definitions)."""
+    kinds, and single-line link reference definitions; punch3-F9: an HTML block's end marker on
+    its start line, an empty list item ended by a blank line, a new list where the matched
+    container is not a paragraph, and link reference definitions over several lines, read two
+    ways)."""
     headings = first_headings(text)
     return headings[0] if headings else None
 

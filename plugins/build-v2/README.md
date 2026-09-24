@@ -219,6 +219,21 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   event as a rival writer and stopped `records_conflict` ("no record was written") on every later
   pass. Test: `scripts/tests/test_punch2_new2.py`; the kill in the document half comes from the
   test-only injector `scripts/tests/punch2_docwindow.py`.
+- **punch3-C2-2 (E13 punch list round 3, the round 2 checker)** the NEW-2 settle writes the line
+  once: when the receipt records this run's `Status:` write and the build doc is back at the bytes
+  the plan read (put back by hand), `report` stops `outside_edit`, leaves the document as the person
+  put it, says the line reads its old value again after this run's write, and reports the landed
+  card event as landed; nothing is appended again. Before, round 2 wrote `Status: built` a second
+  time and reported `completed`. Test: `scripts/tests/test_punch3_c2_2.py`.
+- **punch3-C2-3 (partly pre-existing)** an `outside_edit` stop after a kill in the document half
+  says what the build doc holds (NEW-1's words on another stop): when the line already reads the
+  value this run writes, the reason says so, whether the receipt records the write, and that the
+  line is left as it is, instead of "the `Status:` line was not written". An edit between the plan
+  and the write still says the line was not written. Test: `scripts/tests/test_punch3_c2_3.py`.
+- **punch3-C2-1 (signoff-v2's install proof)** no change to this core's documents was needed; its
+  byte-identical `setups/verify-package.py` reference check is now run over the checkout by
+  `scripts/tests/test_punch3_c2_1.py`, so a path-shaped example that does not resolve fails a test
+  before it fails an install.
 - **Send-back 1 (F4, build side)** the input's `invocation` gains `session_id`, the session both
   adapters READ from the harness record (the same value as `answer_fields.session_id`). When it is
   present the answer's typed `session_id` must equal it, or `record-answer` (and `report`, again)

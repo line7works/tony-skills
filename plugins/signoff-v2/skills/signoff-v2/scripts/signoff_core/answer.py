@@ -331,7 +331,8 @@ def spaced_mentions(text, provenance):
             continue
         # punch2-F3: every tail of the path that holds a space (the whole path, then without its
         # leading folders, down to the file name), each space matching a space or a soft line
-        # break (a line ending with the blanks around it, which Markdown renders as the space).
+        # break (a line ending with the blanks around it, which Markdown renders as the space;
+        # punch3-F3: a backslash right before the line ending, the other hard line break, too).
         parts = path.split("/")
         tails = ["/".join(parts[i:]) for i in range(len(parts)) if " " in "/".join(parts[i:])]
         for tail in tails:
@@ -354,8 +355,10 @@ def spaced_mentions(text, provenance):
     return hits
 
 
-SOFT_BREAK = re.compile(r"[ \t]*(?:\r\n|\r|\n)[ \t]*")
-SOFT_SPACE = r"(?:[ \t]*(?:\r\n|\r|\n)[ \t]*| )"
+# A line break where a withheld path's space was: blanks, an optional backslash (CommonMark's
+# backslash hard line break, punch3-F3), the line ending, blanks.
+SOFT_BREAK = re.compile(r"[ \t]*\\?(?:\r\n|\r|\n)[ \t]*")
+SOFT_SPACE = r"(?:[ \t]*\\?(?:\r\n|\r|\n)[ \t]*| )"
 
 
 def _slug(text):

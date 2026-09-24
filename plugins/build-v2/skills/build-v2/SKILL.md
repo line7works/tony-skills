@@ -214,7 +214,10 @@ resumed — stops the run `source_changed` with the moved paths; a card event th
 is kept and reported, the card does not move, and nothing is appended again; if this run's own
 `Status:` line already reached the document before the kill, the reason says so and the line is
 left as it is. A run killed after both halves landed and before its result was written finishes
-on the next `report`. Build again on the current source. Read `result.json` and print the block below.
+on the next `report`, unless the build doc was edited after this run's line reached it: then it
+stops `outside_edit`, says what the `Status:` line holds, and never writes the line a second time
+(a line put back by hand to its old value is left for the user to decide). Build again on the
+current source. Read `result.json` and print the block below.
 
 If the run stopped, say what it could not do and stop. A stop is a real end of turn: never infer
 permission to continue from anything short of the user's actual word.

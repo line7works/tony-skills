@@ -179,16 +179,26 @@ about prose:
    thematic break; a lazy continuation line (one that starts no block) stays in the container;
    a line that starts a block leaves it and is read at the top level. A list item or a block
    quote interrupts a paragraph by CommonMark's rules (an empty item, or an ordered one not
-   starting at 1, does not). All seven kinds of raw HTML block are passed over whole: `<script>`,
+   starting at 1, does not); that restriction holds only where the paragraph itself is the
+   innermost block the line continues, so on a line that a list item or a block quote does not
+   continue, such an item starts a new list and what follows it is read from there (punch3-F9).
+   A list item begins with at most one blank line: an empty item followed by a blank line ends
+   there (punch3-F9). All seven kinds of raw HTML block are passed over whole: `<script>`,
    `<pre>`, `<style>`, `<textarea>` to any of their end tags; a comment to `-->`; `<?` to `?>`;
    `<!` and a letter to `>`; `<![CDATA[` to `]]>`; a CommonMark type-6 tag (`<div>`,
    `<details>`, `<section>` and the rest of that list, opening or closing) to the next blank line;
    and any other complete tag alone on its line to the next blank line, where it does not
-   interrupt a paragraph. A single-line link reference definition is not paragraph text. Not read
-   as headings, and why: a heading inside a block quote or a list item, and an HTML `<h1>` to
+   interrupt a paragraph. The first five kinds end on the first line that holds their end marker,
+   the start line included, so `<!-->`, `<!--->` and `<?>` close on their own line (punch3-F9). A
+   link reference definition, on one line or over several (its destination, and its title, may
+   start on the next line), is read two ways, and either reading's first heading counts: as a
+   block of its own, which may take the next line as its destination (so `[a]:` over `===` is a
+   definition and no heading), and as the opening lines of a paragraph, set aside when a Setext
+   underline arrives (so `[a]:` over `===` is a heading whose text is `[a]:`) (punch3-F9). Not
+   read as headings, and why: a heading inside a block quote or a list item, and an HTML `<h1>` to
    `<h6>` element (the rule speaks of the first Markdown heading; the file-name rule and rule 1
-   still reach such a file). Also left out of the walk: a link reference definition that runs
-   over more than one line, and tab stops inside a block-quote marker beyond the first.
+   still reach such a file). Also left out of the walk: tab stops inside a block-quote marker
+   beyond the first.
    A symbolic link is never followed to find one;
 3. inside the ledger document, the sections v1 Step 2 names as the builder's and the inspector's
    working records (`## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`,
@@ -236,9 +246,11 @@ a space is also looked for in plain prose: each occurrence of its file name, joi
 of path characters around it, is resolved the same way, so `./builder notes.md:2` or an absolute
 path with a space is caught without any markup. Every tail of the withheld path that holds a space
 is looked for, not only its file name (so `./my docs/log.md` is caught), and each of its spaces also
-matches a line break with the blanks around it (a Markdown soft or hard line break renders there,
-so `./builder` at a line's end and `notes.md` on the next is the same citation, punch2-F3). A delivered file with a space in its name, cited
-the same ways, is still accepted.
+matches a line break with the blanks around it, and a backslash right before the line ending (a
+Markdown soft or hard line break renders there, so a withheld path broken at its space, its first
+half ending one line and its file name opening the next, is the same citation, punch2-F3; the
+backslash hard line break, punch3-F3). A delivered file with a space in its name, cited the same
+ways, is still accepted.
 
 Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 

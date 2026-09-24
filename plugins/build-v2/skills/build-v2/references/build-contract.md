@@ -333,7 +333,10 @@ Four rules hold that shape together, each one a failure found in the pilot befor
 - **a failed history read is not an empty history**: it keeps its exit and its explanation, becomes
   the matching stop, and returns before any append;
 - **the document target's bytes are pinned before the append**, so an edit that lands between the
-  plan and the write is a named stop (`outside_edit`) and never the new baseline;
+  plan and the write is a named stop (`outside_edit`) and never the new baseline; the stop's reason
+  says what the slice's `Status:` line holds on disk: when it already reads the value this run
+  writes, it says so, whether the receipt records this run's write, and that the line is left as it
+  is, neither written again nor reverted (punch3-C2-3);
 - **the source the decision was made on is pinned with it** (Astra's F1, E13 full review): the
   checkpoint's `decision.source_pin` holds HEAD and the identity of every changed or untracked
   path, the build doc and `docs/records/` excepted. A path's identity is its type, the mode git
@@ -376,7 +379,12 @@ what moved the head. That includes a run whose receipt holds both halves done an
 delivered its result (a kill between the document step and `result.json`, punch2-NEW-2): it
 settles like any other resume, the pin first, then the result from the receipt (`completed`, its
 own card event at the seq the receipt holds, the `Status:` line as written), and nothing is
-appended again. Only a run whose result was delivered returns its recorded outcome.
+appended again. The line is written once: when the receipt records this run's write and the
+document is back at the bytes the plan read (the line put back by hand, the case "The two halves
+disagreeing" leaves to a person), the settle stops `outside_edit` with words that say the line
+reads its old value again after this run's write, leaves the document as it is, and reports the
+landed card event as landed (punch3-C2-2). Only a run whose result was delivered returns its
+recorded outcome.
 
 **The two halves disagreeing.** Drift is a comparison of facts, not of import timing:
 
@@ -469,7 +477,7 @@ apology, and it never stands in for a finding about the code.
 | `card_drift` | the log and the document disagree about the card |
 | `open_blocker` | the slice carries an open BLOCKER and the input did not allow building on it |
 | `scope_unexplained` | a source-set path is outside the slice's named paths with no stated reason |
-| `outside_edit` | the build doc moved between the plan and the write |
+| `outside_edit` | the build doc moved between the plan and the write, or after this run's own write reached it (a line put back by hand included, punch3-C2-2) |
 | `records_invalid` | the component refused an event (its exit 4) |
 | `records_ambiguous` | the component could not place a record (its exit 5) |
 | `records_stale_source` | the workspace moved under a clear (its exit 6) |
