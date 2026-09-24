@@ -211,8 +211,10 @@ was made on is pinned with it: once the decision is made, touch nothing in the w
 `report` returns (a restored deletion, an executable bit or a file turned symlink counts as a
 move). Source that moves under it — during the card event, or before a killed run is
 resumed — stops the run `source_changed` with the moved paths; a card event that already landed
-is kept and reported, the card does not move, and nothing is appended again. Build again on the
-current source. Read `result.json` and print the block below.
+is kept and reported, the card does not move, and nothing is appended again; if this run's own
+`Status:` line already reached the document before the kill, the reason says so and the line is
+left as it is. A run killed after both halves landed and before its result was written finishes
+on the next `report`. Build again on the current source. Read `result.json` and print the block below.
 
 If the run stopped, say what it could not do and stop. A stop is a real end of turn: never infer
 permission to continue from anything short of the user's actual word.

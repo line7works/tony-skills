@@ -209,6 +209,16 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   the pinned set or joined it counts as moved. Before this, a tracked file deleted when the decision
   was made and restored before the resume, or an executable bit changed after the kill, compared
   equal and the run settled `completed`. Tests: `scripts/tests/test_punch_f1.py`.
+- **punch2-NEW-1 (E13 punch list round 2, the independent checker)** a `source_changed` stop after
+  a kill in the document half says what the build doc holds: when this run's own `Status:` line
+  already reached it, the reason says the line reads that value and is left as it is, instead of
+  "was not written". Test: `scripts/tests/test_punch2_new1.py`.
+- **punch2-NEW-2 (pre-existing)** a run killed after its document step was receipted done and
+  before `result.json` was written now finishes on the next `report` (`completed`, its own card
+  event, nothing appended again). Before, the pass fell through to a fresh decision, met its own
+  event as a rival writer and stopped `records_conflict` ("no record was written") on every later
+  pass. Test: `scripts/tests/test_punch2_new2.py`; the kill in the document half comes from the
+  test-only injector `scripts/tests/punch2_docwindow.py`.
 - **Send-back 1 (F4, build side)** the input's `invocation` gains `session_id`, the session both
   adapters READ from the harness record (the same value as `answer_fields.session_id`). When it is
   present the answer's typed `session_id` must equal it, or `record-answer` (and `report`, again)

@@ -150,6 +150,7 @@ def canonical(token, workspace=None):
     if not token:
         return None
     if token.startswith("/"):
+        token = posixpath.normpath(token)          # punch2-F3: `<ws>/../<ws name>/x` is inside
         rel = None
         if workspace:
             for base in (workspace, os.path.realpath(workspace)):
@@ -163,9 +164,28 @@ def canonical(token, workspace=None):
             return None
         token = rel
     normal = posixpath.normpath(token)
-    if normal in (".", "") or normal == ".." or normal.startswith("../"):
+    if normal == ".." or normal.startswith("../"):
+        normal = _back_inside(normal, workspace)
+    if normal is None or normal in (".", ""):
         return None
     return normal, (_decode(fragment) if fragment else None)
+
+
+def _back_inside(relative, workspace):
+    """The workspace path of a relative path that climbs out of the workspace and back in by the
+    folder's own name (punch2-F3: `../workspace/builder notes.md`), or None when it ends outside.
+
+    The path is joined to the workspace (its literal path, then its real path) and normalised,
+    lexically, as `canonical` resolves everything; nothing is read."""
+    import posixpath
+    if not workspace:
+        return None
+    for base in (workspace, os.path.realpath(workspace)):
+        base = posixpath.normpath(base)
+        full = posixpath.normpath(posixpath.join(base, relative))
+        if full.startswith(base.rstrip("/") + "/"):
+            return full[len(base.rstrip("/")) + 1:]
+    return None
 
 
 # punch-F3 (Astra's recheck): `[source](<./builder notes.md#proof>)` was recorded, because the
@@ -307,24 +327,35 @@ def spaced_mentions(text, provenance):
         if variant not in variants:
             variants.append(variant)
     for path in provenance.get("paths") or []:
-        name = os.path.basename(path)
-        if " " not in path or not name:
+        if " " not in path or not os.path.basename(path):
             continue
-        pattern = re.compile(re.escape(name), re.I)
-        for variant in variants:
-            for match in pattern.finditer(variant):
-                start, end = match.start(), match.end()
-                while start > 0 and not variant[start - 1].isspace() \
-                        and variant[start - 1] not in "`'\"()<>[]{},;|":
-                    start -= 1
-                while end < len(variant) and not variant[end].isspace() \
-                        and variant[end] not in "`'\"()<>[]{},;|":
-                    end += 1
-                token = variant[start:end]
-                got = canonical(token, workspace)
-                if got and got[0].lower() == path.lower():
-                    hits.append((token, path))
+        # punch2-F3: every tail of the path that holds a space (the whole path, then without its
+        # leading folders, down to the file name), each space matching a space or a soft line
+        # break (a line ending with the blanks around it, which Markdown renders as the space).
+        parts = path.split("/")
+        tails = ["/".join(parts[i:]) for i in range(len(parts)) if " " in "/".join(parts[i:])]
+        for tail in tails:
+            pattern = re.compile(SOFT_SPACE.join(re.escape(piece) for piece in tail.split(" ")),
+                                 re.I)
+            for variant in variants:
+                for match in pattern.finditer(variant):
+                    start, end = match.start(), match.end()
+                    while start > 0 and not variant[start - 1].isspace() \
+                            and variant[start - 1] not in "`'\"()<>[]{},;|":
+                        start -= 1
+                    while end < len(variant) and not variant[end].isspace() \
+                            and variant[end] not in "`'\"()<>[]{},;|":
+                        end += 1
+                    token = (variant[start:match.start()]
+                             + SOFT_BREAK.sub(" ", match.group(0)) + variant[match.end():end])
+                    got = canonical(token, workspace)
+                    if got and got[0].lower() == path.lower():
+                        hits.append((token, path))
     return hits
+
+
+SOFT_BREAK = re.compile(r"[ \t]*(?:\r\n|\r|\n)[ \t]*")
+SOFT_SPACE = r"(?:[ \t]*(?:\r\n|\r|\n)[ \t]*| )"
 
 
 def _slug(text):

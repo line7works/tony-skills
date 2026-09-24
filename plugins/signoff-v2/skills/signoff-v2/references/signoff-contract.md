@@ -128,7 +128,11 @@ read intent into what is on disk.
   build core holds the answer's copy to. A selected result without it is REFUSED by the helper
   (exit 3, `unavailable provenance`, no invocation emitted; Astra's N1), because a null building
   session reads as a different session and would let the building session sign off its own work.
-  Only a run with no selected build result carries `sessions.building: null`, reported as
+  The recorded id is stripped first, and a blank one is the same refusal (punch2-NEW-4). Both
+  harness records define a session id as a UUID, which names one session in either letter case:
+  the helper emits an id that reads as a UUID in its canonical lower-case form, and when it is the
+  reviewing session's UUID it emits the reviewing id itself, so the core's comparison (byte for
+  byte, unchanged) refuses the run on independence. Only a run with no selected build result carries `sessions.building: null`, reported as
   unavailable provenance. The executor's typed `answer.session_id`, and any typed session, never
   stand in for it.
 - **The model floor is enforced here** (Astra's F5; v1 Step 0, unchanged under P5). The session's
@@ -168,9 +172,23 @@ about prose:
    fence; `#word` is no heading. A text that opens with a closed `---` block is read both ways,
    as frontmatter and as a thematic break (where a line before its closing `---` is a Setext
    heading), and a declaration in either reading's first heading counts, so neither can hide one;
-   an opener that never closes is not frontmatter. Not read as headings, and why: a heading inside
-   a block quote or a list item, and an HTML `<h1>` to `<h6>` element (the rule speaks of the
-   first Markdown heading; the file-name rule and rule 1 still reach such a file).
+   an opener that never closes is not frontmatter. Before the walk (punch2-F9) CRLF and bare CR
+   line endings are read as LF and a leading byte order mark is dropped. Block quotes (`>`) and
+   list items (`-`, `+`, `*`, `1.`, `1)`) are containers: a line inside one never ends a top-level
+   paragraph as a Setext underline, so a `---` after a list item or a block-quote line is a
+   thematic break; a lazy continuation line (one that starts no block) stays in the container;
+   a line that starts a block leaves it and is read at the top level. A list item or a block
+   quote interrupts a paragraph by CommonMark's rules (an empty item, or an ordered one not
+   starting at 1, does not). All seven kinds of raw HTML block are passed over whole: `<script>`,
+   `<pre>`, `<style>`, `<textarea>` to any of their end tags; a comment to `-->`; `<?` to `?>`;
+   `<!` and a letter to `>`; `<![CDATA[` to `]]>`; a CommonMark type-6 tag (`<div>`,
+   `<details>`, `<section>` and the rest of that list, opening or closing) to the next blank line;
+   and any other complete tag alone on its line to the next blank line, where it does not
+   interrupt a paragraph. A single-line link reference definition is not paragraph text. Not read
+   as headings, and why: a heading inside a block quote or a list item, and an HTML `<h1>` to
+   `<h6>` element (the rule speaks of the first Markdown heading; the file-name rule and rule 1
+   still reach such a file). Also left out of the walk: a link reference definition that runs
+   over more than one line, and tab stops inside a block-quote marker beyond the first.
    A symbolic link is never followed to find one;
 3. inside the ledger document, the sections v1 Step 2 names as the builder's and the inspector's
    working records (`## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`,
@@ -196,8 +214,11 @@ string that could name a path — a Markdown link destination, an angle-bracket 
 URL, or any run of path characters — is resolved lexically to a canonical workspace path before
 the comparison above: percent encoding is decoded, a `file:` scheme, a query, a `#fragment` and a
 `:line` suffix are split off, `.` and `..` segments are normalised, and an absolute path is taken
-relative to the workspace (its literal or its real path). A path outside the workspace resolves to
-nothing, and nothing is read to resolve anything. A resolved path equal to a withheld path (or, as
+relative to the workspace (its literal or its real path). A relative path that climbs out of the
+workspace is joined to the workspace (its literal, then its real path) and normalised, so one that
+comes back in by the folder's own name (`../workspace/builder%20notes.md`) lands on its workspace
+path (punch2-F3); an absolute path is normalised the same way before it is taken relative. A path
+outside the workspace resolves to nothing, and nothing is read to resolve anything. A resolved path equal to a withheld path (or, as
 before, a bare file name no delivered file shares), or a resolved `<ledger doc>#<section>` naming a
 withheld section, is the same `independence` refusal, before any verdict or finding is written.
 
@@ -213,7 +234,10 @@ shell's `builder\ notes.md`). Backslash escapes and HTML entity references (`&#3
 CommonMark undoes them, `%20` and every other percent escape as before. A withheld path that holds
 a space is also looked for in plain prose: each occurrence of its file name, joined with the run
 of path characters around it, is resolved the same way, so `./builder notes.md:2` or an absolute
-path with a space is caught without any markup. A delivered file with a space in its name, cited
+path with a space is caught without any markup. Every tail of the withheld path that holds a space
+is looked for, not only its file name (so `./my docs/log.md` is caught), and each of its spaces also
+matches a line break with the blanks around it (a Markdown soft or hard line break renders there,
+so `./builder` at a line's end and `notes.md` on the next is the same citation, punch2-F3). A delivered file with a space in its name, cited
 the same ways, is still accepted.
 
 Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.

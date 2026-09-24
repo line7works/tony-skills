@@ -350,7 +350,11 @@ Four rules hold that shape together, each one a failure found in the pilot befor
   its out-of-scope paths (a late path outside the slice included), and the receipt; a card event that
   already landed is kept, recorded in the receipt when a settling pass finds it in the log, and
   reported as landed. The card does not move, the `Status:` line is not written, no baseline is
-  regenerated, no check is rerun and nothing is appended again, on this pass or any later one. A
+  regenerated, no check is rerun and nothing is appended again, on this pass or any later one.
+  The reason says what the document holds, read against the receipt's planned bytes: when this
+  run's own document step already wrote the line (a kill after the write and before its receipt,
+  or after the receipt and before the result), it says the line already reads that value and is
+  left as it is, neither written again nor reverted (punch2-NEW-1). A
   run whose decision carries no pin (made before this rule) stops the same way on a settle rather
   than guessing its source unmoved; so does a run whose pin was written in the older
   content-only form, since every pinned path then reads as moved. Not in the pin, and why: ignored
@@ -368,7 +372,11 @@ test alone would do; both are kept around the one write this core makes.
 writer appended between the phases is a named conflict (`records_conflict`) before any append.
 The comparison is taken before the levelling precisely so CR-1's own import events are never what
 it flags. A run that already opened its transaction settles instead, because its own append is
-what moved the head.
+what moved the head. That includes a run whose receipt holds both halves done and which never
+delivered its result (a kill between the document step and `result.json`, punch2-NEW-2): it
+settles like any other resume, the pin first, then the result from the receipt (`completed`, its
+own card event at the seq the receipt holds, the `Status:` line as written), and nothing is
+appended again. Only a run whose result was delivered returns its recorded outcome.
 
 **The two halves disagreeing.** Drift is a comparison of facts, not of import timing:
 

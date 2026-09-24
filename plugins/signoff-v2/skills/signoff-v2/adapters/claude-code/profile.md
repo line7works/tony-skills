@@ -70,7 +70,10 @@ harness's own record and the build core checked the answer's copy against (`sess
 send-back 1). `helper-derived` from that record. A selected result that carries no
 `invocation.session_id` (the pre-send-back shape) is refused: exit 3, `unavailable provenance`,
 and no invocation is printed, so no input can be built from it (Astra's N1: a null building
-session reads as a different session and would let this one sign off its own build). A run with
+session reads as a different session and would let this one sign off its own build). A blank
+recorded id, once stripped, is the same refusal; a UUID is emitted in its canonical lower-case
+form, and as the reviewing session id itself when it names the same session in another letter
+case (punch2-NEW-4, `tests/test_punch2_new4.py`). A run with
 no `--build-result` leaves the building session null with `measurement.building_provenance`
 `unavailable`. Missing provenance is never replaced by the executor's typed `answer.session_id` or
 by a session someone typed. The runtime `--building-session` override is gone. Equal values are the core's independence

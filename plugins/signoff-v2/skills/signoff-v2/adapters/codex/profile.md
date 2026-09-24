@@ -54,7 +54,10 @@ a mismatch exit 2; the value is that run's recorded harness identity, the result
 `invocation.session_id` (the thread the build adapter read, send-back 1; `helper-derived`). A
 selected result without it (the pre-send-back shape) is refused: exit 3, `unavailable provenance`,
 no invocation printed (Astra's N1; `tests/test_full_fix_f4.py`,
-`N1TheLegacyResultFromThisSession`, through the real core). No `--build-result` leaves the building
+`N1TheLegacyResultFromThisSession`, through the real core). A blank recorded id, once stripped, is
+the same refusal; a UUID is emitted in its canonical lower-case form, and as the reviewing thread
+id itself when it names the same thread in another letter case (punch2-NEW-4,
+`tests/test_punch2_new4.py`). No `--build-result` leaves the building
 session null with `measurement.building_provenance` `unavailable`; the typed `answer.session_id`
 is never read; equal is the core's independence refusal (`tests/test_full_fix_f4.py`,
 `TheProbeThroughTheCore`, through the real core).

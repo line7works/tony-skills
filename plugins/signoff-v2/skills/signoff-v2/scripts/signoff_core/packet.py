@@ -58,16 +58,40 @@ class PacketIncomplete(RuntimeError):
 FRONTMATTER_OPEN = "---"
 FRONTMATTER_CLOSE = ("---", "...")
 
-# punch-F9 (Astra's recheck): Setext headings, ATX headings indented up to three spaces, and fences
-# of three OR MORE backticks or tildes closed only by a fence at least as long of the same
-# character. CommonMark's block rules for exactly those constructs, and nothing more.
+# punch-F9 (Astra's recheck) and punch2-F9 (the independent checker): the first heading is read by
+# CommonMark 0.31.2's block rules, as far as they decide which top-level line is a heading. Line
+# endings (CRLF, CR) are normalised and a leading byte order mark dropped before the walk; ATX
+# headings indented up to three spaces; Setext headings; fences of three OR MORE backticks or
+# tildes closed only by a fence at least as long of the same character; indented code; thematic
+# breaks; the seven kinds of raw HTML block; single-line link reference definitions; and block
+# quotes and list items as containers whose content is never a top-level heading.
 ATX = re.compile(r"^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
 ATX_CLOSING = re.compile(r"(?:^|[ \t]+)#+[ \t]*$")
 SETEXT_UNDERLINE = re.compile(r"^(?:=+|-+)[ \t]*$")
 FENCE_OPEN = re.compile(r"^(`{3,}|~{3,})(.*)$")
 FENCE_CLOSE = re.compile(r"^(`{3,}|~{3,})[ \t]*$")
 THEMATIC_BREAK = re.compile(r"^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$")
-HTML_RAW = re.compile(r"^<(script|pre|style|textarea)(?:[\s>]|$)", re.I)
+LIST_ITEM = re.compile(r"^(?:([-+*])|(\d{1,9})[.)])(?=[ \t]|$)")
+LINK_DEFINITION = re.compile(
+    r"^\[(?=[^\]]*\S)(?:[^\[\]\\]|\\.){1,999}\]:[ \t]*(?:<[^<>]*>|[^\s<]\S*)"
+    r"(?:[ \t]+(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?[ \t]*$")
+
+# The raw HTML blocks (CommonMark section 4.6). Types 1 to 5 end at a line holding their end
+# marker (the start line included); types 6 and 7 end at a blank line. Type 7 cannot interrupt a
+# paragraph.
+HTML_TYPE1 = re.compile(r"^<(?:script|pre|style|textarea)(?:[ \t>]|$)", re.I)
+HTML_TYPE1_END = re.compile(r"</(?:script|pre|style|textarea)>", re.I)
+HTML_TYPE6_TAGS = (
+    "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|"
+    "dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|h2|h3|h4|h5|h6|"
+    "head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|"
+    "p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul")
+HTML_TYPE6 = re.compile(r"^</?(?:%s)(?:[ \t]|/?>|$)" % HTML_TYPE6_TAGS, re.I)
+_ATTRIBUTE = (r"(?:[ \t]+[A-Za-z_:][A-Za-z0-9_.:-]*"
+              r"(?:[ \t]*=[ \t]*(?:[^ \t\"'=<>`]+|'[^']*'|\"[^\"]*\"))?)")
+HTML_TYPE7 = re.compile(r"^(?:<[A-Za-z][A-Za-z0-9-]*%s*[ \t]*/?>|</[A-Za-z][A-Za-z0-9-]*[ \t]*>)"
+                        r"[ \t]*$" % _ATTRIBUTE)
+HTML_ENDS_AT_BLANK = ""
 
 
 def _indent(line):
@@ -79,57 +103,205 @@ def _indent(line):
     return width, line[index:]
 
 
-def _first_heading_from(lines, index):
-    """The first heading's title at or after `lines[index]`, read by CommonMark's rules for
-    headings, fences, indented code, thematic breaks and raw HTML blocks; or None."""
-    fence = None            # (character, length) of the open fence
-    html_end = None         # the text that closes an open raw HTML block
-    paragraph = []
-    while index < len(lines):
-        width, body = _indent(lines[index])
+def _dedent(line, columns):
+    """`line` with up to `columns` columns of leading indentation removed (a partly used tab is
+    kept as the spaces it still stands for)."""
+    width, index = 0, 0
+    while index < len(line) and line[index] in " \t" and width < columns:
+        step = 4 - (width % 4) if line[index] == "\t" else 1
+        if width + step > columns:
+            return " " * (width + step - columns) + line[index + 1:]
+        width += step
         index += 1
-        if fence:
+    return line[index:]
+
+
+def _html_start(body, in_paragraph):
+    """The end marker of a raw HTML block that `body` (indented at most three spaces) opens, as a
+    compiled pattern, a plain string, or HTML_ENDS_AT_BLANK; or None when it opens none."""
+    if HTML_TYPE1.match(body):
+        return HTML_TYPE1_END
+    if body.startswith("<!--"):
+        return "-->"
+    if body.startswith("<?"):
+        return "?>"
+    if body.startswith("<![CDATA["):
+        return "]]>"
+    if body.startswith("<!") and body[2:3].isalpha() and body[2:3].isascii():
+        return ">"
+    if HTML_TYPE6.match(body):
+        return HTML_ENDS_AT_BLANK
+    if not in_paragraph and HTML_TYPE7.match(body):
+        name = re.match(r"</?([A-Za-z][A-Za-z0-9-]*)", body).group(1).lower()
+        if name not in ("script", "pre", "style", "textarea"):
+            return HTML_ENDS_AT_BLANK
+    return None
+
+
+def _html_ends(end, text):
+    """Whether `text` holds the end marker `end` of a type 1 to 5 block."""
+    if hasattr(end, "search"):
+        return bool(end.search(text))
+    return end in text
+
+
+def _list_item(body, in_paragraph):
+    """(content indent past the marker, content) when `body` opens a list item, else None. An
+    empty item, or an ordered one not starting at 1, cannot interrupt a paragraph."""
+    match = LIST_ITEM.match(body)
+    if not match:
+        return None
+    rest = body[match.end():]
+    if in_paragraph and (not rest.strip() or (match.group(2) and int(match.group(2)) != 1)):
+        return None
+    marker = match.end()
+    if not rest.strip():
+        return marker + 1, ""
+    spaces, content = _indent(rest)
+    if spaces > 4:                  # the content is indented code: one space belongs to the marker
+        return marker + 1, _dedent(rest, 1)
+    return marker + spaces, content
+
+
+def _interrupts(line):
+    """Whether `line` starts a block that ends an open paragraph, so it cannot be a lazy
+    continuation line of a paragraph inside a block quote or a list item."""
+    width, body = _indent(line)
+    if width > 3 or not body.strip():
+        return not body.strip()
+    if FENCE_OPEN.match(body) or ATX.match(body) or THEMATIC_BREAK.match(body):
+        return True
+    if body.startswith(">"):
+        return True
+    if _html_start(body, True) is not None:
+        return True
+    return _list_item(body, True) is not None
+
+
+class _Blocks(object):
+    """One level of CommonMark's block structure. The top level reports its first heading; a
+    container's content is walked by a child `_Blocks` whose headings are never reported (a
+    heading inside a block quote or a list item is not read, by the contract)."""
+
+    def __init__(self):
+        self.paragraph = []
+        self.fence = None           # (character, length) of the open fence
+        self.html_end = None        # the end marker of an open raw HTML block
+        self.container = None       # [kind, content indent, child, last line blank]
+
+    def lazy(self):
+        """Whether the innermost open block is a paragraph (a lazy continuation line joins it)."""
+        if self.container:
+            return self.container[2].lazy()
+        return bool(self.paragraph) and not self.fence and self.html_end is None
+
+    def continue_lazily(self, line):
+        if self.container:
+            self.container[2].continue_lazily(line)
+        else:
+            self.paragraph.append(line.strip())
+
+    def feed(self, line):
+        """Read one line; return a heading's title when this line completes one, else None."""
+        width, body = _indent(line)
+        if self.fence:
             match = FENCE_CLOSE.match(body) if width <= 3 else None
-            if match and match.group(1)[0] == fence[0] and len(match.group(1)) >= fence[1]:
-                fence = None
-            continue
-        if html_end:
-            if html_end in body.lower():
-                html_end = None
-            continue
+            if match and match.group(1)[0] == self.fence[0] and len(match.group(1)) >= self.fence[1]:
+                self.fence = None
+            return None
+        if self.html_end is not None:
+            if self.html_end == HTML_ENDS_AT_BLANK:
+                if not body.strip():
+                    self.html_end = None
+            elif _html_ends(self.html_end, line):
+                self.html_end = None
+            return None
+        if self.container:
+            kind, indent, child, blank = self.container
+            if kind == ">" and width <= 3 and body.startswith(">"):
+                content = body[1:]
+                if content[:1] == " ":
+                    content = content[1:]
+                elif content[:1] == "\t":
+                    content = "  " + content[1:]
+                child.feed(content)
+                return None
+            if kind == "-" and not body.strip():
+                child.feed("")
+                self.container[3] = True
+                return None
+            if kind == "-" and width >= indent:
+                child.feed(_dedent(line, indent))
+                self.container[3] = False
+                return None
+            if body.strip() and not blank and child.lazy() and not _interrupts(line):
+                child.continue_lazily(line)
+                return None
+            self.container = None
         if not body.strip():
-            paragraph = []
-            continue
-        if paragraph and width <= 3 and SETEXT_UNDERLINE.match(body):
-            return " ".join(paragraph)
+            self.paragraph = []
+            return None
+        if self.paragraph and width <= 3 and SETEXT_UNDERLINE.match(body):
+            heading = " ".join(self.paragraph)
+            self.paragraph = []
+            return heading
         if width >= 4:
-            if paragraph:                       # a lazy continuation line of the paragraph
-                paragraph.append(body.strip())
-            continue                            # else indented code: never a heading
+            if self.paragraph:                  # a lazy continuation line of the paragraph
+                self.paragraph.append(body.strip())
+            return None                         # else indented code: never a heading
         match = FENCE_OPEN.match(body)
         if match and not (match.group(1)[0] == "`" and "`" in match.group(2)):
-            fence, paragraph = (match.group(1)[0], len(match.group(1))), []
-            continue
+            self.fence, self.paragraph = (match.group(1)[0], len(match.group(1))), []
+            return None
         match = ATX.match(body)
         if match:
+            self.paragraph = []
             return ATX_CLOSING.sub("", match.group(2) or "").strip()
         if THEMATIC_BREAK.match(body):
-            paragraph = []
-            continue
-        if body.startswith("<!--"):
-            if "-->" not in body[4:]:
-                html_end = "-->"
-            paragraph = []
-            continue
-        match = HTML_RAW.match(body)
-        if match:
-            close = "</%s>" % match.group(1).lower()
-            if close not in body.lower():
-                html_end = close
-            paragraph = []
-            continue
-        paragraph.append(body.strip())
+            self.paragraph = []
+            return None
+        end = _html_start(body, bool(self.paragraph))
+        if end is not None:
+            self.paragraph = []
+            first = body[4:] if end == "-->" else body[2:] if end in ("?>", ">") else (
+                body[9:] if end == "]]>" else body)
+            if end == HTML_ENDS_AT_BLANK or not _html_ends(end, first):
+                self.html_end = end
+            return None
+        if body.startswith(">"):
+            self.paragraph = []
+            self.container = [">", 0, _Blocks(), False]
+            return self.feed(line)
+        item = _list_item(body, bool(self.paragraph))
+        if item is not None:
+            self.paragraph = []
+            child = _Blocks()
+            self.container = ["-", width + item[0], child, False]
+            child.feed(item[1])
+            return None
+        if not self.paragraph and LINK_DEFINITION.match(body):
+            return None                         # a definition, never paragraph text
+        self.paragraph.append(body.strip())
+        return None
+
+
+def _first_heading_from(lines, index):
+    """The first top-level heading's title at or after `lines[index]`, or None."""
+    blocks = _Blocks()
+    while index < len(lines):
+        heading = blocks.feed(lines[index])
+        index += 1
+        if heading is not None:
+            return heading
     return None
+
+
+def _lines(text):
+    """The text's lines, a leading byte order mark dropped and CRLF / CR line endings read as LF
+    (CommonMark section 2.1)."""
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
 
 def _frontmatter_end(lines):
@@ -158,7 +330,7 @@ def first_headings(text):
     line before a later `---` is a Setext heading. Both are returned, the frontmatter reading
     first, so a declaration either reading makes is seen and neither can hide one. A text with no
     closed frontmatter has one reading."""
-    lines = text.split("\n")
+    lines = _lines(text)
     out = []
     end = _frontmatter_end(lines)
     for start in ((end, 0) if end is not None else (0,)):
@@ -177,7 +349,9 @@ def first_heading(text):
     cutoff: frontmatter of any length, or any number of blank lines, cannot push a declaration out
     of reach. Only this first heading is ever tested against the declaration rule (punch-F9: ATX
     headings indented up to three spaces, Setext headings, and fences of any length, closed only
-    by a fence at least as long of the same character)."""
+    by a fence at least as long of the same character; punch2-F9: CRLF and CR line endings, a
+    leading byte order mark, block quotes and list items as containers, all seven raw HTML block
+    kinds, and single-line link reference definitions)."""
     headings = first_headings(text)
     return headings[0] if headings else None
 
