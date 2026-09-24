@@ -791,8 +791,9 @@ def cmd_record(args):
         body = do_record(run, resolved, state, adjudication, client, args)
     except rw.Stop as stop:
         parts = dict(common)
-        parts.update(partial_from_receipt(run, state, stop))
-        finish(run, resolved, stop.status, args, stop_reason=stop.reason,
+        parts.update(partial_from_receipt(run, state, stop, client))
+        finish(run, resolved, stop.status, args,
+               stop_reason=join_sentences(stop.reason, parts.pop("landed_sentence", "")),
                stop_reason_code=stop.reason_code, verdict=None, verdict_recorded=False,
                **parts)
         return
@@ -815,13 +816,83 @@ def records_block(state, stop):
             "records_command": stop.extra.get("records_command")}
 
 
-def partial_from_receipt(run, state, stop):
+def settle_unknown_read_only(client, receipt, run_id):
+    """punch-F2: every append the receipt still holds as `unknown`, asked about in the log.
+
+    A stop that ends a recovery pass (a `stale_source` above all) is delivered before the settle
+    step is reached, so an append whose outcome the run never learned — the kill came after the
+    component wrote it, or before — stayed `unknown`, and the result named only what the receipt
+    already held as landed (Astra's recheck: "reports only finding seq 4; the records CLI shows
+    landed card seq 5. Its receipt remains `unknown`").
+
+    Here each such append is looked up through the records component (`records.py events` for
+    this run's events of the block's kind, argv only, read-only; `verify` for the head). Found:
+    the receipt moves it from `unknown` to `landed`, marked recovered, with the log's seqs. Not
+    found: it is reported `absent`, and the receipt keeps it as the intent it is. A read that
+    fails is reported `unreadable`, never as absent. Nothing is ever appended here, and the stop
+    being delivered is not changed.
+
+    Returns `[{name, kinds, checked}]` for every append that did not land (`absent` or
+    `unreadable`)."""
+    not_landed = []
+    if client is None or receipt.doc is None:
+        return not_landed
+    workspace = receipt.doc.get("workspace")
+    doc = receipt.doc.get("ledger_doc")
+    for name in (rw.FINDINGS, rw.CARD):
+        block = receipt.append_block(name)
+        if not block or block.get("outcome") != rcptmod.UNKNOWN:
+            continue
+        kinds = list(block.get("event_kinds") or [])
+        try:
+            landed = rw.run_events(client, workspace, doc, run_id, kinds[0]) if kinds else []
+            head = rw.head_of(client, workspace, doc)["head"] if landed else None
+        except rw.Stop:
+            not_landed.append({"name": name, "kinds": kinds, "checked": "unreadable"})
+            continue
+        if landed:
+            receipt.append_landed(name, head, [row["seq"] for row in landed], recovered=True)
+        else:
+            not_landed.append({"name": name, "kinds": kinds, "checked": "absent"})
+    return not_landed
+
+
+def join_sentences(reason, more):
+    """`reason`, then `more` as its own sentence (punch-F2)."""
+    if not more:
+        return reason
+    reason = (reason or "").rstrip()
+    if reason and not reason.endswith((".", "!", "?")):
+        reason += "."
+    return reason + more
+
+
+def landed_sentence(appended, not_landed):
+    """What the log holds from this run, per append, for the stop's reason (punch-F2)."""
+    parts = ["%s %s at seq %s%s" % (row["name"], "/".join(row["kinds"]),
+                                     ", ".join(str(seq) for seq in row["seqs"]) or "-",
+                                     " (found in the log on recovery)" if row["recovered"] else "")
+             for row in appended]
+    parts += ["%s %s %s" % (row["name"], "/".join(row["kinds"]),
+                            "is absent from the log" if row["checked"] == "absent"
+                            else "could not be read back from the log")
+              for row in not_landed]
+    if not parts:
+        return ""
+    return " What this run's appends left in the log: %s." % "; ".join(parts)
+
+
+def partial_from_receipt(run, state, stop, client=None):
     """A stopped transaction's result parts, read from the RECEIPT (Astra's F8).
 
     What landed is reported as landed: every append the receipt holds as `landed` with its seqs,
     every document step with its state, the verdict doc the plan authorized, and the card as far
     as it got — its planned values, and `moved` only when its `Status:` step is done. The failing
     command's exit, error and reason travel with it. A successful write is never reported absent.
+
+    punch-F2: an append the receipt still holds as `unknown` is first asked about in the log
+    (`settle_unknown_read_only`), so a landed one is reported landed with its seq and an absent one
+    is reported under `records.not_landed`, and the stop's reason names both.
     """
     parts = {"records": records_block(state, stop), "unplaced": stop.extra.get("unplaced"),
              "identity_now": stop.extra.get("identity_now")}
@@ -831,6 +902,9 @@ def partial_from_receipt(run, state, stop):
     receipt.load()
     parts["receipt"] = receipt.path
     workspace = receipt.doc.get("workspace")
+    not_landed = settle_unknown_read_only(client, receipt, receipt.doc.get("run_id"))
+    if not_landed:
+        parts["records"]["not_landed"] = not_landed
     appended, head_after = [], None
     for name in (rw.FINDINGS, rw.CARD):
         block = receipt.append_block(name)
@@ -842,6 +916,7 @@ def partial_from_receipt(run, state, stop):
             run.note_write(os.path.join(workspace, block["log"]), "log")
     parts["records"]["appended"] = appended
     parts["records"]["head_after"] = head_after
+    parts["landed_sentence"] = landed_sentence(appended, not_landed)
     steps = receipt.steps()
     parts["document_steps"] = [{"kind": step["kind"], "target": step["target"],
                                 "state": step["state"]} for step in steps]

@@ -30,7 +30,10 @@ result's `invocation.session_id`, never the typed `answer.session_id`), from its
 (`invocation.py --build-result PATH --workspace WS --build-doc DOC --slice S`), bound to the same
 workspace, document and slice. A selected result that records no `invocation.session_id` is
 refused, exit 3, with no invocation printed (Astra's N1): a null building session would read as a
-different session. With no `--build-result` the building session is null and reported as
+different session. The recorded id is stripped and a blank one is the same refusal; an id that
+reads as a UUID (both harnesses record UUIDs) is compared with the reviewing id as a UUID and
+emitted in its canonical lower-case form, or as the reviewing id itself when it is the same
+session in another letter case (punch2-NEW-4, `*/tests/test_punch2_new4.py`). With no `--build-result` the building session is null and reported as
 unavailable provenance. No flag types it (Astra's F4).
 
 **Manual-only.** The skill must not auto-trigger (contract section 11): Codex reads

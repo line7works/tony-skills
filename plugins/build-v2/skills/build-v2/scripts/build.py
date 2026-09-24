@@ -521,6 +521,12 @@ def phase_report(args):
         finished = bool(block.get("head")) and bool((receipt.doc.get("document_step") or {}).get("done"))
         if not finished:
             return _settle(run, client, receipt)
+        # punch2-NEW-2: both halves are receipted and no result was delivered (a kill between the
+        # document step and `result.json`). This run's own event is what moved the head, so a
+        # fresh decision would meet it as a rival writer. The run settles like any other resume:
+        # the pin first, then the result from the receipt, nothing appended again.
+        if not run.doc.get("terminal"):
+            return _settle(run, client, receipt)
 
     if run.doc.get("terminal"):
         return emit(run.recorded_outcome(), exits.TERMINAL)
@@ -933,13 +939,28 @@ def _source_stop(run, common, receipt, moved, resumed_half=None):
     return stop(run, "source_changed",
                 "the source moved after this run decided the card: %s. The decision was made on "
                 "the source as it stood then, and only this run's own `Status:` line may change "
-                "under it, so the card was not moved and the slice's `Status:` line was not "
-                "written. %s Read the current changes, including any outside the slice's paths, "
-                "and run build again."
-                % (", ".join(moved),
+                "under it, so the card was not moved%s %s Read the current changes, including any "
+                "outside the slice's paths, and run build again."
+                % (", ".join(moved), _status_line_words(run, receipt),
                    "This run's card event had already landed in the log and is reported as landed; "
                    "it was not appended again." if landed else "Nothing was appended to the log."),
                 receipt=receipt.path, resumed_half=resumed_half, source_moved=moved, **common)
+
+
+def _status_line_words(run, receipt):
+    """What the build doc's `Status:` line is on disk, for the `source_changed` reason (punch2-NEW-1).
+
+    Read from the document against the receipt's planned bytes: when this run's own document step
+    already wrote the line (a kill between the write and its receipt, or between the receipt and
+    the result), the words say so; otherwise the line was not written."""
+    step = receipt.doc.get("document_step") or {}
+    target = step.get("target")
+    current = canon.sha256_file_or_none(os.path.join(run.workspace, target)) if target else None
+    if current is not None and current == step.get("sha256_planned"):
+        return (". The slice's `Status:` line, though, already reads `%s` in %s: this run's own "
+                "document step wrote it before the run was interrupted, and it is left as it is, "
+                "neither written again nor reverted." % (step.get("value"), target))
+    return " and the slice's `Status:` line was not written."
 
 
 def command_identity(args):

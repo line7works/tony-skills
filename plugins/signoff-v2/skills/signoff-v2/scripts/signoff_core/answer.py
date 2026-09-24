@@ -150,6 +150,7 @@ def canonical(token, workspace=None):
     if not token:
         return None
     if token.startswith("/"):
+        token = posixpath.normpath(token)          # punch2-F3: `<ws>/../<ws name>/x` is inside
         rel = None
         if workspace:
             for base in (workspace, os.path.realpath(workspace)):
@@ -163,19 +164,201 @@ def canonical(token, workspace=None):
             return None
         token = rel
     normal = posixpath.normpath(token)
-    if normal in (".", "") or normal == ".." or normal.startswith("../"):
+    if normal == ".." or normal.startswith("../"):
+        normal = _back_inside(normal, workspace)
+    if normal is None or normal in (".", ""):
         return None
     return normal, (_decode(fragment) if fragment else None)
 
 
-def citation_tokens(text):
-    """Every token of `text` that could be a path citation: Markdown destinations, angle-bracket
-    autolinks, and every run of path characters."""
+def _back_inside(relative, workspace):
+    """The workspace path of a relative path that climbs out of the workspace and back in by the
+    folder's own name (punch2-F3: `../workspace/builder notes.md`), or None when it ends outside.
+
+    The path is joined to the workspace (its literal path, then its real path) and normalised,
+    lexically, as `canonical` resolves everything; nothing is read."""
+    import posixpath
+    if not workspace:
+        return None
+    for base in (workspace, os.path.realpath(workspace)):
+        base = posixpath.normpath(base)
+        full = posixpath.normpath(posixpath.join(base, relative))
+        if full.startswith(base.rstrip("/") + "/"):
+            return full[len(base.rstrip("/")) + 1:]
+    return None
+
+
+# punch-F3 (Astra's recheck): `[source](<./builder notes.md#proof>)` was recorded, because the
+# destination pattern stopped at the space inside the angle brackets and never reached `canonical`.
+# The tokens below follow CommonMark's own link grammar instead of one regular expression: an
+# inline link or image destination, angle-bracketed (spaces allowed) or bare (balanced and
+# backslash-escaped parentheses allowed), with its optional title; a link reference definition
+# line; a `<...>` token with spaces; an HTML `href`/`src` attribute; a quoted span; a run of path
+# characters with backslash-escaped characters in it (a shell's `builder\ notes.md`). Backslash
+# escapes and HTML entities are undone the way CommonMark undoes them. A title's text is scanned
+# again as text, so a citation inside a title is found too.
+ESCAPABLE = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+REF_DEFINITION = re.compile(r"^[ ]{0,3}\[(?:[^\]\\]|\\.)+\]:[ \t]*(.*)$", re.M)
+ANGLE_ANY = re.compile(r"<([^<>\n]+)>")
+HTML_ATTR = re.compile(r"\b(?:href|src)\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>\"']+))", re.I)
+QUOTED_ANY = re.compile(r'"([^"\n]+)"|\'([^\'\n]+)\'|`([^`\n]+)`')
+ESCAPED_RUN = re.compile(r"(?:\\.|[^\s`'\"()<>\[\]{},;|\\])+")
+
+
+def _unescape(text):
+    """CommonMark's backslash escapes and HTML entity references, undone."""
+    import html
+    out, index = [], 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and index + 1 < len(text) and text[index + 1] in ESCAPABLE + " ":
+            out.append(text[index + 1])
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    return html.unescape("".join(out))
+
+
+def _destination_at(text, index):
+    """(destination, title, end) for the link destination starting at `index`, or None.
+
+    CommonMark's rule: optional whitespace, then either `<...>` (no line ending, no unescaped `<`
+    or `>`; spaces allowed) or a run of non-space characters in which parentheses balance or are
+    backslash-escaped; then an optional title in `"..."`, `'...'` or `(...)`."""
+    length = len(text)
+    while index < length and text[index] in " \t\n":
+        index += 1
+    if index >= length:
+        return None
+    if text[index] == "<":
+        end = index + 1
+        while end < length and text[end] not in "<>\n":
+            end += 2 if text[end] == "\\" else 1
+        if end >= length or text[end] != ">":
+            return None
+        dest, index = text[index + 1:end], end + 1
+    else:
+        depth, end = 0, index
+        while end < length:
+            char = text[end]
+            if char == "\\" and end + 1 < length:
+                end += 2
+                continue
+            if char in " \t\n" or ord(char) < 32:
+                break
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            end += 1
+        dest, index = text[index:end], end
+    while index < length and text[index] in " \t\n":
+        index += 1
+    title = None
+    if index < length and text[index] in "\"'(":
+        close = {'"': '"', "'": "'", "(": ")"}[text[index]]
+        end = index + 1
+        while end < length and text[end] != close:
+            end += 2 if text[end] == "\\" else 1
+        title = text[index + 1:min(end, length)]
+        index = end + 1
+    return dest, title, index
+
+
+def citation_tokens(text, _depth=0):
+    """Every token of `text` that could be a path citation (Astra's F3, punch-F3): link and image
+    destinations and their titles, reference definitions, `<...>` tokens with or without spaces,
+    HTML `href`/`src` values, quoted spans, backslash-escaped runs, and every run of path
+    characters. Each is returned as written and, when escapes or entities change it, undone too."""
+    if not isinstance(text, str) or not text:
+        return []
+    raw, titles = [], []
+    index = text.find("](")
+    while index != -1:
+        got = _destination_at(text, index + 2)
+        if got:
+            raw.append(got[0])
+            if got[1]:
+                titles.append(got[1])
+        index = text.find("](", index + 2)
+    for match in REF_DEFINITION.finditer(text):
+        got = _destination_at(match.group(1), 0)
+        if got:
+            raw.append(got[0])
+            if got[1]:
+                titles.append(got[1])
+    raw.extend(match.group(1) for match in ANGLE_ANY.finditer(text))
+    raw.extend(next(g for g in match.groups() if g is not None)
+               for match in HTML_ATTR.finditer(text))
+    raw.extend(next(g for g in match.groups() if g is not None)
+               for match in QUOTED_ANY.finditer(text))
+    raw.extend(ESCAPED_RUN.findall(text))
+    raw.extend(TOKEN.findall(text))
     out = []
-    for pattern in (MD_DESTINATION, ANGLE):
-        out.extend(match.group(1) for match in pattern.finditer(text))
-    out.extend(TOKEN.findall(text))
+    for token in raw:
+        out.append(token)
+        undone = _unescape(token)
+        if undone != token:
+            out.append(undone)
+    if _depth < 2:
+        for title in titles:
+            out.extend(citation_tokens(title, _depth + 1))
+        undone = _unescape(text)
+        if undone != text:
+            out.extend(citation_tokens(undone, _depth + 1))
     return out
+
+
+def spaced_mentions(text, provenance):
+    """[(token, withheld path)] for every mention of a withheld path in plain text that the token
+    rules cannot split out, because the path itself holds a space (punch-F3): `./builder notes.md:2`
+    in prose, an absolute path with a space, `src/../builder notes.md`. Each occurrence of the
+    withheld file's name, in the text as written and with percent encoding, backslash escapes and
+    entities undone, is joined with the run of path characters right before it and right after it,
+    and the whole is resolved with `canonical` like any other token."""
+    provenance = provenance or {}
+    workspace = provenance.get("workspace")
+    hits = []
+    variants = [text]
+    for variant in (_decode(text), _unescape(text), _decode(_unescape(text))):
+        if variant not in variants:
+            variants.append(variant)
+    for path in provenance.get("paths") or []:
+        if " " not in path or not os.path.basename(path):
+            continue
+        # punch2-F3: every tail of the path that holds a space (the whole path, then without its
+        # leading folders, down to the file name), each space matching a space or a soft line
+        # break (a line ending with the blanks around it, which Markdown renders as the space;
+        # punch3-F3: a backslash right before the line ending, the other hard line break, too).
+        parts = path.split("/")
+        tails = ["/".join(parts[i:]) for i in range(len(parts)) if " " in "/".join(parts[i:])]
+        for tail in tails:
+            pattern = re.compile(SOFT_SPACE.join(re.escape(piece) for piece in tail.split(" ")),
+                                 re.I)
+            for variant in variants:
+                for match in pattern.finditer(variant):
+                    start, end = match.start(), match.end()
+                    while start > 0 and not variant[start - 1].isspace() \
+                            and variant[start - 1] not in "`'\"()<>[]{},;|":
+                        start -= 1
+                    while end < len(variant) and not variant[end].isspace() \
+                            and variant[end] not in "`'\"()<>[]{},;|":
+                        end += 1
+                    token = (variant[start:match.start()]
+                             + SOFT_BREAK.sub(" ", match.group(0)) + variant[match.end():end])
+                    got = canonical(token, workspace)
+                    if got and got[0].lower() == path.lower():
+                        hits.append((token, path))
+    return hits
+
+
+# A line break where a withheld path's space was: blanks, an optional backslash (CommonMark's
+# backslash hard line break, punch3-F3), the line ending, blanks.
+SOFT_BREAK = re.compile(r"[ \t]*\\?(?:\r\n|\r|\n)[ \t]*")
+SOFT_SPACE = r"(?:[ \t]*\\?(?:\r\n|\r|\n)[ \t]*| )"
 
 
 def _slug(text):
@@ -202,6 +385,12 @@ def resolved_citations(texts, provenance):
         anchors.setdefault(doc.lower(), {})[_slug(section)] = anchor
     hits, seen = [], set()
     for text in texts:
+        for token, target in spaced_mentions(text, provenance):
+            if target not in seen:
+                seen.add(target)
+                hits.append({"cited": token,
+                             "why": "the answer cites %s (as %r), the builder's own account of its "
+                                    "work, which is a claim and never evidence" % (target, token)})
         for token in citation_tokens(text):
             got = canonical(token, workspace)
             if got is None:

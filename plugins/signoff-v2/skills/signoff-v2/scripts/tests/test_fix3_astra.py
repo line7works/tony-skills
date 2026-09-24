@@ -108,8 +108,12 @@ class F7AnIdentityFailureDuringRecoveryEndsInANamedStop(_Case):
         result = self.result()
         self.assertEqual(result["status"], "recording_failed", json.dumps(result)[:1500])
         self.assertEqual(result["stop_reason_code"], "identity_refused")
-        self.assertEqual(result["records"]["appended"], [],
-                         "the killed append is not settled yet, so it is not claimed as landed")
+        # punch-F2 (E13 punch list) replaced this assertion: before a stop is delivered, an append
+        # the receipt holds as `unknown` is asked about in the log (read-only), so the killed
+        # findings append, which the log holds, is reported landed and recovered, never appended.
+        self.assertEqual([(row["name"], row["recovered"]) for row in result["records"]["appended"]],
+                         [("findings", True)],
+                         "the killed append the log holds is reported landed, found on recovery")
         self.assertTrue(result["receipt"], "the receipt that recovery settles later is named")
         self.assertEqual(len(kinds(self.workspace, "finding_raised")), 1)
         # with git answering again, the next `record` recovers: the append is settled, not repeated

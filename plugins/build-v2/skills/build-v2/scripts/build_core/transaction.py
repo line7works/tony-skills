@@ -193,6 +193,68 @@ def settle_append(receipt, client, workspace, document, event, run_dir):
     return result, "the card event"
 
 
+def _status_on_disk(workspace, target, slice_name):
+    """The slice's `Status:` value in the build doc as it is on disk, or None when it cannot be
+    read (read only; the words of a stop, never a decision)."""
+    try:
+        with open(os.path.join(workspace, target), "r", encoding="utf-8") as fh:
+            return docmod.find_slice(fh.read(), slice_name).get("status")
+    except (OSError, UnicodeDecodeError, docmod.DocumentError):
+        return None
+
+
+def _line_is_ours(workspace, step, slice_name):
+    """Whether the slice's line on disk holds the value this run's document step writes, and that
+    value is this run's to have put there: the receipt records the write, or the plan changed the
+    line (its planned bytes differ from the bytes it read)."""
+    current = _status_on_disk(workspace, step["target"], slice_name)
+    return current is not None and current == step.get("value") and (
+        bool(step.get("done")) or step.get("sha256_before") != step.get("sha256_planned"))
+
+
+def _edit_window(workspace, step, slice_name):
+    """When the edit an `outside_edit` stop names reached the document, as far as it is known.
+
+    punch4-C2-3: the receipt decides first. A receipted write is this run's write whatever the
+    line reads now, so any edit the stop names came after it; only without a receipted write does
+    the line's current value decide."""
+    if step.get("done"):
+        return "after this run's own `Status:` line reached it"
+    if _line_is_ours(workspace, step, slice_name):
+        return "after this run planned the card move"
+    return "between the plan and the write"
+
+
+def _line_words(workspace, step, slice_name):
+    """What the `outside_edit` reason says about the `Status:` line, read from the document on
+    disk (punch3-C2-3, NEW-1's words): when the line already holds the value this run writes, it
+    says so, whether the receipt records this run's write, and that the line is left as it is.
+
+    punch4-C2-3: when the receipt records this run's write and the line reads something else now
+    (put back by hand, changed to a third value, the document re-saved), the words say what the
+    line reads now, that this run wrote its value there earlier, and that it is left as it is.
+    Without a receipted write the run cannot know the line was ever its, and the words say the
+    line was not written, as before."""
+    if step.get("done") and not _line_is_ours(workspace, step, slice_name):
+        current = _status_on_disk(workspace, step["target"], slice_name)
+        now = ("reads `%s` in %s now" % (current, step["target"]) if current is not None else
+               "can no longer be read in %s" % step["target"])
+        return ("the slice's `Status:` line %s, although this run's own document step wrote `%s` "
+                "there earlier (its receipt records that write); someone changed the line after "
+                "that write, and it is left as it is, neither written again nor reverted."
+                % (now, step.get("value")))
+    if _line_is_ours(workspace, step, slice_name):
+        return ("the slice's `Status:` line already reads `%s` in %s, %s, and it is left as it is, "
+                "neither written again nor reverted."
+                % (step.get("value"), step["target"],
+                   "written by this run's own document step before the run was interrupted (its "
+                   "receipt records that write)" if step.get("done") else
+                   "the value this run's document step writes (the run was interrupted before its "
+                   "receipt recorded a write, so the line is this run's write or an edit that set "
+                   "the same value)"))
+    return "the `Status:` line was not written."
+
+
 def write_document_step(receipt, workspace):
     """The second half. Returns (wrote, the step) or raises OutsideEdit.
 
@@ -216,14 +278,30 @@ def write_document_step(receipt, workspace):
             receipt.doc["document_step"] = step
             receipt.save()
         return False, step
+    if current == step.get("sha256_before") and step.get("done"):
+        # punch3-C2-2: this run already wrote the line (the receipt says so) and the document is
+        # back at the bytes the plan read: a hand edit BACK to the value the move started from,
+        # which the contract leaves to a person. The line is never written a second time.
+        raise OutsideEdit(
+            "the build doc %s is back at the bytes this run read when it planned the card move "
+            "(%s): its `Status:` line reads `%s` again, although this run's own document step "
+            "wrote `%s` there and its receipt records that write (%s). Someone put the line back "
+            "after the write. This run will not write it a second time and leaves the document as "
+            "it is; its card event is in the log and is reported as landed, so the document now "
+            "contradicts the last recorded move and a person decides. Read the document and the "
+            "log." % (step["target"], (step.get("sha256_before") or "")[:12],
+                      _status_on_disk(workspace, step["target"], receipt.doc.get("slice")) or "-",
+                      step.get("value"), (step.get("sha256_after") or "")[:12]))
     if current != step.get("sha256_before"):
         raise OutsideEdit(
             "the build doc %s is at neither the bytes this run read when it planned the card move "
             "(%s) nor the bytes that plan produces (%s); it now hashes to %s. Something edited it "
-            "between the plan and the write, so this run will not take the edited bytes as its "
-            "baseline: the `Status:` line was not written. Read the document and run again."
+            "%s, so this run will not take the edited bytes as its baseline: %s Read the document "
+            "and run again."
             % (step["target"], (step.get("sha256_before") or "")[:12],
-               (step.get("sha256_planned") or "")[:12], current[:12]))
+               (step.get("sha256_planned") or "")[:12], current[:12],
+               _edit_window(workspace, step, receipt.doc.get("slice")),
+               _line_words(workspace, step, receipt.doc.get("slice"))))
 
     with open(path, "r", encoding="utf-8") as fh:
         text = fh.read()

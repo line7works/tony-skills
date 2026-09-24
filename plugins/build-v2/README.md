@@ -204,6 +204,45 @@ What changed in behaviour, each with its tests in `scripts/tests/test_fix2_astra
   as `completed` with `out_of_scope: []`. Tests: `scripts/tests/test_full_fix_f1.py`; the rerun
   settle test in `test_transaction.py` now changes its check through a git-ignored switch, since a
   tracked edit after the decision is this stop.
+- **punch-F1 (E13 punch list, Astra's recheck)** the pin now keeps each path's type and git mode
+  with its content (`file:100644:`/`file:100755:`, `link:`, `dir`, `missing`), and a path that left
+  the pinned set or joined it counts as moved. Before this, a tracked file deleted when the decision
+  was made and restored before the resume, or an executable bit changed after the kill, compared
+  equal and the run settled `completed`. Tests: `scripts/tests/test_punch_f1.py`.
+- **punch2-NEW-1 (E13 punch list round 2, the independent checker)** a `source_changed` stop after
+  a kill in the document half says what the build doc holds: when this run's own `Status:` line
+  already reached it, the reason says the line reads that value and is left as it is, instead of
+  "was not written". Test: `scripts/tests/test_punch2_new1.py`.
+- **punch2-NEW-2 (pre-existing)** a run killed after its document step was receipted done and
+  before `result.json` was written now finishes on the next `report` (`completed`, its own card
+  event, nothing appended again). Before, the pass fell through to a fresh decision, met its own
+  event as a rival writer and stopped `records_conflict` ("no record was written") on every later
+  pass. Test: `scripts/tests/test_punch2_new2.py`; the kill in the document half comes from the
+  test-only injector `scripts/tests/punch2_docwindow.py`.
+- **punch3-C2-2 (E13 punch list round 3, the round 2 checker)** the NEW-2 settle writes the line
+  once: when the receipt records this run's `Status:` write and the build doc is back at the bytes
+  the plan read (put back by hand), `report` stops `outside_edit`, leaves the document as the person
+  put it, says the line reads its old value again after this run's write, and reports the landed
+  card event as landed; nothing is appended again. Before, round 2 wrote `Status: built` a second
+  time and reported `completed`. Test: `scripts/tests/test_punch3_c2_2.py`.
+- **punch3-C2-3 (partly pre-existing)** an `outside_edit` stop after a kill in the document half
+  says what the build doc holds (NEW-1's words on another stop): when the line already reads the
+  value this run writes, the reason says so, whether the receipt records the write, and that the
+  line is left as it is, instead of "the `Status:` line was not written". An edit between the plan
+  and the write still says the line was not written. Test: `scripts/tests/test_punch3_c2_3.py`.
+- **punch4-C2-3 (E13 punch list round 4, the round 3 checker)** the `outside_edit` words decide
+  from the receipt first: when the receipt records this run's `Status:` write and the person then
+  changed the line itself (put back with another edit, changed to a third value, the document
+  re-saved with CRLF endings), the reason says what the line reads now, that this run wrote `built`
+  there earlier, and that it is left as it is; before, it said the edit came "between the plan and
+  the write" and that the line "was not written". The stop, the landed card report and the one
+  write are unchanged. A kill after the bytes are written and before the receipt records them
+  leaves the run no record of its write, so those words stay there. Test:
+  `scripts/tests/test_punch4_c2_3.py`.
+- **punch3-C2-1 (signoff-v2's install proof)** no change to this core's documents was needed; its
+  byte-identical `setups/verify-package.py` reference check is now run over the checkout by
+  `scripts/tests/test_punch3_c2_1.py`, so a path-shaped example that does not resolve fails a test
+  before it fails an install.
 - **Send-back 1 (F4, build side)** the input's `invocation` gains `session_id`, the session both
   adapters READ from the harness record (the same value as `answer_fields.session_id`). When it is
   present the answer's typed `session_id` must equal it, or `record-answer` (and `report`, again)

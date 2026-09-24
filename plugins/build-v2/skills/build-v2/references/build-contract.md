@@ -333,21 +333,44 @@ Four rules hold that shape together, each one a failure found in the pilot befor
 - **a failed history read is not an empty history**: it keeps its exit and its explanation, becomes
   the matching stop, and returns before any append;
 - **the document target's bytes are pinned before the append**, so an edit that lands between the
-  plan and the write is a named stop (`outside_edit`) and never the new baseline;
+  plan and the write is a named stop (`outside_edit`) and never the new baseline; the stop's reason
+  says what the slice's `Status:` line holds on disk: when it already reads the value this run
+  writes, it says so, whether the receipt records this run's write, and that the line is left as it
+  is, neither written again nor reverted (punch3-C2-3); when the receipt records this run's write
+  and the line reads something else now (put back by hand with another edit, changed to a third
+  value, the document re-saved with other line endings), the receipt decides: the reason says what
+  the line reads now, that this run wrote its value there earlier, and that the line is left as it
+  is, never that the edit came between the plan and the write (punch4-C2-3); only without a
+  receipted write, where the run cannot know the line was ever its, does it say the line was not
+  written;
 - **the source the decision was made on is pinned with it** (Astra's F1, E13 full review): the
-  checkpoint's `decision.source_pin` holds HEAD and the content identity of every changed or
-  untracked path (lstat semantics: a symlink is its link target text), the build doc and
-  `docs/records/` excepted. It is verified right before the append, again after the append and
+  checkpoint's `decision.source_pin` holds HEAD and the identity of every changed or untracked
+  path, the build doc and `docs/records/` excepted. A path's identity is its type, the mode git
+  records and its content, with lstat semantics (punch list, punch-F1): `file:100644:<sha256>` or
+  `file:100755:<sha256>`, `link:<sha256 of the link target text>` (never followed), `dir`, or
+  `missing` for a deleted path. So a tracked deletion restored between the kill and the resume, an
+  executable bit turned on or off, a file that became a symlink or a directory, and a path re-created
+  with the same bytes and another mode all move the pin. A path that left the set or joined it moved. It is verified right before the append, again after the append and
   before the document half, and FIRST on every settling pass, before the append half is settled.
   Only this transaction's receipted document change is permitted under it. Any other source that
-  moved (a new untracked file, a tracked edit, a HEAD that moved) is the named stop
+  moved (a new untracked file, a tracked edit, a restored deletion, a mode change, a type change, a
+  HEAD that moved) is the named stop
   `source_changed`: the result carries the moved paths in `source_moved`, the CURRENT source set and
   its out-of-scope paths (a late path outside the slice included), and the receipt; a card event that
   already landed is kept, recorded in the receipt when a settling pass finds it in the log, and
   reported as landed. The card does not move, the `Status:` line is not written, no baseline is
-  regenerated, no check is rerun and nothing is appended again, on this pass or any later one. A
+  regenerated, no check is rerun and nothing is appended again, on this pass or any later one.
+  The reason says what the document holds, read against the receipt's planned bytes: when this
+  run's own document step already wrote the line (a kill after the write and before its receipt,
+  or after the receipt and before the result), it says the line already reads that value and is
+  left as it is, neither written again nor reverted (punch2-NEW-1). A
   run whose decision carries no pin (made before this rule) stops the same way on a settle rather
-  than guessing its source unmoved. Build again on the current source.
+  than guessing its source unmoved; so does a run whose pin was written in the older
+  content-only form, since every pinned path then reads as moved. Not in the pin, and why: ignored
+  files (section 8 leaves them out of the source set), the git index (the set compares the working
+  tree with HEAD, staged or not), permission bits other than the executable bit (git keeps no
+  others), and the files inside a nested repository git lists only as a directory. Build again on
+  the current source.
 
 A settle matches its OWN event by the seq the plan named AND by the run id on the event, so a
 card event of another run is never mistaken for it and no event is ever appended twice. Either
@@ -358,7 +381,16 @@ test alone would do; both are kept around the one write this core makes.
 writer appended between the phases is a named conflict (`records_conflict`) before any append.
 The comparison is taken before the levelling precisely so CR-1's own import events are never what
 it flags. A run that already opened its transaction settles instead, because its own append is
-what moved the head.
+what moved the head. That includes a run whose receipt holds both halves done and which never
+delivered its result (a kill between the document step and `result.json`, punch2-NEW-2): it
+settles like any other resume, the pin first, then the result from the receipt (`completed`, its
+own card event at the seq the receipt holds, the `Status:` line as written), and nothing is
+appended again. The line is written once: when the receipt records this run's write and the
+document is back at the bytes the plan read (the line put back by hand, the case "The two halves
+disagreeing" leaves to a person), the settle stops `outside_edit` with words that say the line
+reads its old value again after this run's write, leaves the document as it is, and reports the
+landed card event as landed (punch3-C2-2). Only a run whose result was delivered returns its
+recorded outcome.
 
 **The two halves disagreeing.** Drift is a comparison of facts, not of import timing:
 
@@ -451,7 +483,7 @@ apology, and it never stands in for a finding about the code.
 | `card_drift` | the log and the document disagree about the card |
 | `open_blocker` | the slice carries an open BLOCKER and the input did not allow building on it |
 | `scope_unexplained` | a source-set path is outside the slice's named paths with no stated reason |
-| `outside_edit` | the build doc moved between the plan and the write |
+| `outside_edit` | the build doc moved between the plan and the write, or after this run's own write reached it (a line put back by hand included, punch3-C2-2) |
 | `records_invalid` | the component refused an event (its exit 4) |
 | `records_ambiguous` | the component could not place a record (its exit 5) |
 | `records_stale_source` | the workspace moved under a clear (its exit 6) |

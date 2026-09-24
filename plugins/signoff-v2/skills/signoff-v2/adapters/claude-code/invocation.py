@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -104,12 +105,39 @@ def building_from_result(path, workspace, build_doc, slice_name, error, usage):
                     % (path, "; ".join(problems)))
     session = (result.get("invocation") or {}).get("session_id")
     run_name = result.get("run_id") or os.path.basename(run_dir)
+    if isinstance(session, str):
+        session = session.strip()       # punch2-NEW-4: a blank id is no id
     if not isinstance(session, str) or not session:
         raise error(
             "unavailable provenance: selected build run %s records no "
             "invocation.session_id; no reviewing invocation was emitted"
             % run_name)
+    try:
+        session = str(uuid.UUID(session))   # punch2-NEW-4: a UUID in its canonical form
+    except ValueError:
+        pass
     return session, "build run %s" % run_name
+
+
+def same_session_form(building, reviewing):
+    """The building session as the core should compare it with the reviewing one (punch2-NEW-4).
+
+    The harness record defines a session id as a UUID, and a UUID names the same session in either
+    letter case and with or without its hyphens. When both ids read as UUIDs and are the same one,
+    the reviewing id itself is returned, so the core's byte-for-byte comparison sees one session
+    and refuses on independence; a building id that reads as a UUID is otherwise returned in its
+    canonical lower-case form; anything else is returned as it is."""
+    def as_uuid(value):
+        try:
+            return uuid.UUID(value) if isinstance(value, str) else None
+        except ValueError:
+            return None
+    built, reviewed = as_uuid(building), as_uuid(reviewing)
+    if built is None:
+        return building
+    if reviewed is not None and built == reviewed:
+        return reviewing
+    return str(built)
 
 
 UNAVAILABLE = ("unavailable provenance: no build run was selected (--build-result), so the building "
@@ -203,6 +231,7 @@ def main():
             args.build_result, args.workspace, args.build_doc, args.slice,
             lambda message: _common.HelperError(message, 3),
             lambda message: _common.HelperError(message, 2))
+        building = same_session_form(building, session_id)
         building_source = ("invocation.session_id recorded by %s (%s): the session its build "
                            "adapter read from the harness record, bound to this workspace, "
                            "document and slice" % (provenance, args.build_result))

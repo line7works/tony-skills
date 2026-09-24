@@ -1,7 +1,7 @@
 # Origin (lane B brief, "Read first" item 2: "shimlib.py (the fault injector you may copy)"):
 # a copy of the recheck pilot's plugins/recheck-v2/skills/recheck-v2/scripts/tests/shimlib.py,
 # taken from this lane's branch point, commit a80cdd04432c5f4662ed415d6a72d54f9b8208c1. Only the
-# module docstring below is this lane's; the injector itself is unchanged, because it is keyed on
+# module docstring below is this lane's, and two actions (`write`, `chmod`, punch-F1) were added; the rest of the injector is unchanged, because it is keyed on
 # the CLI command and the event kind and knows nothing about which station is calling.
 #
 # `env()` sets RECORDS_ROOT, which is route 2 of the component's resolver, so build.py reaches the
@@ -49,6 +49,13 @@ if matches and not (config.get("once", True) and used and os.path.exists(used)):
     if action == "mutate":
         with open(config["path"], "a") as fh:
             fh.write(config["text"])
+    elif action == "write":
+        # punch-F1: re-create a path whole (a restored deletion) while the call is in flight
+        with open(config["path"], "w") as fh:
+            fh.write(config["text"])
+    elif action == "chmod":
+        # punch-F1: a mode-bit change while the call is in flight
+        os.chmod(config["path"], int(config["mode"], 8))
     elif action == "compete":
         # a real rival writer: one card_set appended through the real CLI before ours
         rival = {k: events[0][k] for k in ("v", "at", "ledger_doc", "origin", "source")}

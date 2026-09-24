@@ -128,7 +128,11 @@ read intent into what is on disk.
   build core holds the answer's copy to. A selected result without it is REFUSED by the helper
   (exit 3, `unavailable provenance`, no invocation emitted; Astra's N1), because a null building
   session reads as a different session and would let the building session sign off its own work.
-  Only a run with no selected build result carries `sessions.building: null`, reported as
+  The recorded id is stripped first, and a blank one is the same refusal (punch2-NEW-4). Both
+  harness records define a session id as a UUID, which names one session in either letter case:
+  the helper emits an id that reads as a UUID in its canonical lower-case form, and when it is the
+  reviewing session's UUID it emits the reviewing id itself, so the core's comparison (byte for
+  byte, unchanged) refuses the run on independence. Only a run with no selected build result carries `sessions.building: null`, reported as
   unavailable provenance. The executor's typed `answer.session_id`, and any typed session, never
   stand in for it.
 - **The model floor is enforced here** (Astra's F5; v1 Step 0, unchanged under P5). The session's
@@ -158,6 +162,46 @@ about prose:
    Markdown heading says so. The first heading is the first ACTUAL Markdown heading after any
    frontmatter (a leading `---` block to its closing `---` or `...`), leading blank lines and
    fenced code passed over, with no line cutoff; only that first heading is tested (Astra's F9).
+   A heading is read by CommonMark's block rules (punch-F9): an ATX heading (`#` to `######`, then
+   a space or the line's end) indented up to three spaces, its closing `#` sequence dropped; a
+   Setext heading (a paragraph's text lines followed by an `===` or `---` underline indented up to
+   three spaces); a fence is three OR MORE backticks or tildes indented up to three spaces and is
+   closed only by a fence of the same character at least as long, so a four-backtick fence is not
+   closed by three; four spaces of indentation are code, never a heading; a raw HTML comment
+   (`<!--` to `-->`) or `<script>`, `<pre>`, `<style>`, `<textarea>` block is passed over like a
+   fence; `#word` is no heading. A text that opens with a closed `---` block is read both ways,
+   as frontmatter and as a thematic break (where a line before its closing `---` is a Setext
+   heading), and a declaration in either reading's first heading counts, so neither can hide one;
+   an opener that never closes is not frontmatter. Before the walk (punch2-F9) CRLF and bare CR
+   line endings are read as LF and a leading byte order mark is dropped. Block quotes (`>`) and
+   list items (`-`, `+`, `*`, `1.`, `1)`) are containers: a line inside one never ends a top-level
+   paragraph as a Setext underline, so a `---` after a list item or a block-quote line is a
+   thematic break; a lazy continuation line (one that starts no block) stays in the container;
+   a line that starts a block leaves it and is read at the top level. A list item or a block
+   quote interrupts a paragraph by CommonMark's rules (an empty item, or an ordered one not
+   starting at 1, does not); that restriction holds only where the paragraph itself is the
+   innermost block the line continues, so on a line that a list item or a block quote does not
+   continue, such an item starts a new list and what follows it is read from there (punch3-F9).
+   A list item begins with at most one blank line: an empty item followed by a blank line ends
+   there (punch3-F9). All seven kinds of raw HTML block are passed over whole: `<script>`,
+   `<pre>`, `<style>`, `<textarea>` to any of their end tags; a comment to `-->`; `<?` to `?>`;
+   `<!` and a letter to `>`; `<![CDATA[` to `]]>`; a CommonMark type-6 tag (`<div>`,
+   `<details>`, `<section>` and the rest of that list, opening or closing) to the next blank line;
+   and any other complete tag alone on its line to the next blank line, where it does not
+   interrupt a paragraph. The first five kinds end on the first line that holds their end marker,
+   the start line included, so `<!-->`, `<!--->` and `<?>` close on their own line (punch3-F9). A
+   link reference definition, on one line or over several (its destination, and its title, may
+   start on the next line), is read two ways, and either reading's first heading counts: as a
+   block of its own, which may take the next line as its destination (so `[a]:` over `===` is a
+   definition and no heading), and as the opening lines of a paragraph, set aside when a Setext
+   underline arrives (so `[a]:` over `===` is a heading whose text is `[a]:`) (punch3-F9). Both
+   readings take time linear in the file's length: the lines a definition may run over are found
+   once for each run of them, and each definition is read in place, as far as it runs; what is
+   withheld is unchanged (punch4-C3-1). Not
+   read as headings, and why: a heading inside a block quote or a list item, and an HTML `<h1>` to
+   `<h6>` element (the rule speaks of the first Markdown heading; the file-name rule and rule 1
+   still reach such a file). Also left out of the walk: tab stops inside a block-quote marker
+   beyond the first.
    A symbolic link is never followed to find one;
 3. inside the ledger document, the sections v1 Step 2 names as the builder's and the inspector's
    working records (`## Build assumptions`, `## Deviations`, `## Discovered`, `## Handoffs`,
@@ -183,10 +227,33 @@ string that could name a path — a Markdown link destination, an angle-bracket 
 URL, or any run of path characters — is resolved lexically to a canonical workspace path before
 the comparison above: percent encoding is decoded, a `file:` scheme, a query, a `#fragment` and a
 `:line` suffix are split off, `.` and `..` segments are normalised, and an absolute path is taken
-relative to the workspace (its literal or its real path). A path outside the workspace resolves to
-nothing, and nothing is read to resolve anything. A resolved path equal to a withheld path (or, as
+relative to the workspace (its literal or its real path). A relative path that climbs out of the
+workspace is joined to the workspace (its literal, then its real path) and normalised, so one that
+comes back in by the folder's own name (`../workspace/builder%20notes.md`) lands on its workspace
+path (punch2-F3); an absolute path is normalised the same way before it is taken relative. A path
+outside the workspace resolves to nothing, and nothing is read to resolve anything. A resolved path equal to a withheld path (or, as
 before, a bare file name no delivered file shares), or a resolved `<ledger doc>#<section>` naming a
 withheld section, is the same `independence` refusal, before any verdict or finding is written.
+
+**The tokens follow CommonMark's link grammar** (punch list, punch-F3). A link or image
+destination is read the way CommonMark reads it, never by one regular expression: an
+angle-bracketed destination may hold spaces (`[source](<./builder notes.md#proof>)`), a bare one may
+hold balanced or backslash-escaped parentheses (`docs/builder-notes\(1\).md`), and its optional
+title (`"…"`, `'…'`, `(…)`) is scanned again as text. Also tokens: a link reference definition line
+(`[n]: <./builder notes.md> "t"`, so a reference-style `[x][n]` is caught at its definition); a
+`<…>` token with or without spaces, `file://` included; an HTML `href` or `src` value in any
+quoting; a quoted span; and a run of path characters holding backslash-escaped characters (a
+shell's `builder\ notes.md`). Backslash escapes and HTML entity references (`&#32;`) are undone as
+CommonMark undoes them, `%20` and every other percent escape as before. A withheld path that holds
+a space is also looked for in plain prose: each occurrence of its file name, joined with the run
+of path characters around it, is resolved the same way, so `./builder notes.md:2` or an absolute
+path with a space is caught without any markup. Every tail of the withheld path that holds a space
+is looked for, not only its file name (so `./my docs/log.md` is caught), and each of its spaces also
+matches a line break with the blanks around it, and a backslash right before the line ending (a
+Markdown soft or hard line break renders there, so a withheld path broken at its space, its first
+half ending one line and its file name opening the next, is the same citation, punch2-F3; the
+backslash hard line break, punch3-F3). A delivered file with a space in its name, cited the same
+ways, is still accepted.
 
 Blueprint's `Out of scope:` and `Not in this slice:` lines ARE spec and are delivered.
 
@@ -289,6 +356,17 @@ The order, and what each step promises:
   document step that already landed from the receipt, records no verdict and never returns
   `completed`; a new packet and a new review are required. A recovering pass reaches the same stop.
   Every packet entry's content identity is verified in the same checks (section 4).
+  **What landed is asked of the log, per append, before any stop is delivered** (punch list,
+  punch-F2). A recovering pass that stops before its settle step would otherwise report only what
+  the receipt already held as landed: after a kill during the card append, the card event is in
+  the log while the receipt still says `unknown`. So every append the receipt holds as `unknown`
+  is looked up through the records component (`records.py events` for this run's events of that
+  kind, `verify` for the head; argv only, read-only). One the log holds moves in the receipt from
+  `unknown` to `landed` (marked recovered) and is reported under `records.appended` with the log's
+  seqs; one it does not hold is reported under `records.not_landed` as `absent` (or `unreadable`
+  when the log could not be read back) and stays an intent in the receipt. The stop's reason names
+  both. Nothing is appended by that question, and the stop being delivered (`stale_source` above
+  all) is unchanged.
 - **Pin the head.** The head the run read its state against is pinned at `scope`. At `record`,
   BEFORE this run's own levelling, the log must still be at that head; an event another writer
   appended between the two phases is a named conflict before any append. The comparison is taken

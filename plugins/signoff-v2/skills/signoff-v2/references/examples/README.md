@@ -32,6 +32,12 @@ personal path is committed.
 | `result-stopped-floor-refused.json` | a Haiku session: `request` stops `floor_refused` before any reviewer request, nothing recorded (Astra's F5) |
 | `result-stopped-floor-answer.json` | an answer naming a Sonnet reviewer under an Opus session: refused `floor` before it is accepted (Astra's F5) |
 | `result-stale-source-final-append.json` | `src/late.py` added while the final card append was forwarded: `stale_source`, the landed appends and document steps reported, no verdict (Astra's F2) |
+| `result-stale-source-recovered-after-a-kill.json` | `record` killed right after its card append landed, `src/late.py` added, `record` again: `stale_source`, and the card append the receipt held as `unknown` found in the log and reported landed at its seq, `recovered` (punch-F2) |
+| `result-stale-source-card-absent-after-a-kill.json` | `record` killed before its card append reached the log, `src/late.py` added, `record` again: `stale_source`, the findings reported landed and the card reported under `records.not_landed` as `absent` (punch-F2) |
+
+The two marked punch-F2 came from the E13 punch list's runs of the same CLI over seeded case
+`S1-02-untracked-defect`, normalized the same way with the run directory as
+`/tmp/signoff-fix2-run`.
 
 The four marked F2 and F5 came from the E13 full-review fix round's runs of the same CLI over the
 same case, normalized the same way with the run directory as `/tmp/<run id>`.
@@ -49,4 +55,5 @@ segment, an evidence kind outside the three, a verdict outside the three, a term
 outside the two, a packet file in no list, a verdict recorded on a stop, a report-only run
 that recorded one, a document step in a state outside the three, an unplaceable record line
 reported without its bytes, a floor block whose `met` is not a boolean, a refusal reason outside
-the four, and a packet entry whose `link_target` is not its link text.
+the four, a packet entry whose `link_target` is not its link text, and a `records.not_landed` entry whose
+`checked` is outside `absent` and `unreadable` (punch-F2).

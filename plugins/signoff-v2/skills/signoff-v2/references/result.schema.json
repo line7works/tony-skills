@@ -645,6 +645,41 @@
             }
           }
         },
+        "not_landed": {
+          "type": "array",
+          "description": "punch-F2: a stop only. Every append this run's receipt planned whose outcome it never learned (the run was killed around it) and that the records component, asked through `records.py events` on the stop, does NOT hold: `absent` when the log answered and holds none of this run's events of that kind, `unreadable` when the log could not be read back. An append the log does hold is reported under `appended` instead, marked `recovered`, and its receipt entry moves from `unknown` to `landed`. Nothing is appended by that question.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "kinds",
+              "checked"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "findings",
+                  "card"
+                ]
+              },
+              "kinds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "checked": {
+                "type": "string",
+                "enum": [
+                  "absent",
+                  "unreadable"
+                ]
+              }
+            }
+          }
+        },
         "mirrors": {
           "type": [
             "object",

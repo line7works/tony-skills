@@ -193,6 +193,106 @@ scratch folder):
   `signoff_core/constants.py`'s `KNOWN_RECORDS_VERSIONS = (1,)` is dead: nothing reads it (the
   client copy checks the component's interface version itself), so it was left as it is.
 
+## Punch list (E13, after Astra's recheck: punch-F2, punch-F3, punch-F9, punch-N1)
+
+- **punch-F2 (BLOCKER)** a recovery that stops (`stale_source` above all) first asks the records
+  component, through `records.py events` and `verify` (argv, read-only), about every append the
+  receipt still holds as `unknown`: a landed one moves to `landed` in the receipt, marked
+  recovered, and is reported under `records.appended` with the log's seqs; an absent one is
+  reported under `records.not_landed` (`absent`, or `unreadable`). Before, a kill during the card
+  append plus a moved source reported only the findings' seq while the log held the card's. A later
+  pass that completes still lists such an append under `recovered`. `test_fix3_astra.py`'s F7
+  recovery test asserted the old `appended: []` and now asserts the new rule.
+  `scripts/tests/test_punch_f2.py`.
+- **punch-F3 (MAJOR)** citation tokens follow CommonMark's link grammar: angle-bracketed
+  destinations with spaces, balanced and backslash-escaped parentheses, link titles, reference
+  definition lines, `<...>` tokens with spaces, HTML `href`/`src`, quoted spans and shell-escaped
+  runs, with backslash escapes and HTML entities undone; a withheld path holding a space is also
+  found in plain prose. Before, `[source](<./builder notes.md#proof>)` was recorded.
+  `scripts/tests/test_punch_f3.py`.
+- **punch-F9 (MAJOR)** `packet.first_heading` reads headings by CommonMark's block rules: Setext
+  headings, ATX headings indented up to three spaces (closing `#`s dropped), fences of three or more
+  backticks or tildes closed only by a fence of the same character at least as long, indented code,
+  thematic breaks, HTML comments and raw HTML blocks; a leading `---` block is read as frontmatter
+  and as a thematic break, and either reading's first heading can declare the notes. Before, a
+  Setext, an indented or a four-backtick-fenced case was delivered and signed.
+  `scripts/tests/test_punch_f9.py`.
+
+## Punch list round 2 (E13, after the independent checker: punch2-F9)
+
+- **punch2-F9 (MAJOR, one regression)** the first-heading reader is a small CommonMark block walker:
+  CRLF and bare CR line endings read as LF and a leading byte order mark dropped; block quotes and
+  list items read as containers, so a `---` after a list item or a block-quote line is a thematic
+  break and never a Setext underline (round 1 had turned `- first item\n---\n# Builder notes`,
+  withheld at `dfe8919`, into a delivered file); all seven raw HTML block kinds passed over whole
+  (type 6 `<div>`, `<details>` and the rest, and type 7, to the next blank line); single-line link
+  reference definitions are not paragraph text. Before, the checker's list, quote, CRLF Setext,
+  `<div>`/`<details>` and byte-order-mark shapes were delivered and signed. A file whose `---`
+  follows a list item that interrupts a paragraph (`Builder notes\n- item\n---`), or whose `===`
+  is a lazy line inside a block quote, has no heading in CommonMark and is now delivered where
+  round 1 withheld it. `scripts/tests/test_punch2_f9.py`.
+- **punch2-F3 (MINOR)** a withheld path that holds a space is found in prose when it is wrapped
+  at that space onto the next line (a soft or a hard line break), and when the space sits in a
+  folder name; a relative path that climbs out of the workspace and back in by the folder's own
+  name (`../workspace/builder%20notes.md`), and an absolute one through the parent, resolve to
+  their workspace path. A climb out that ends outside the workspace still resolves to nothing.
+  Before, the checker's soft-wrapped and climb-out-and-in spellings were recorded.
+  `scripts/tests/test_punch2_f3.py`.
+- **punch2-NEW-4 (MINOR)** both adapters' `building_from_result` strips the recorded
+  `invocation.session_id` and refuses a blank one like a missing one (exit 3); an id that reads as
+  a UUID is emitted in its canonical lower-case form, and as the reviewing id itself when it is the
+  same session in another spelling, so the core (unchanged, byte-for-byte) refuses on independence.
+  Before, `"   "` or the reviewing id upper-cased reached a verdict.
+  `adapters/*/tests/test_punch2_new4.py`.
+- **NEW-3 (left for the owner)** an untracked reviewed file whose executable bit flips during or
+  after the final append still completes: the packet pins content bytes and size, as this
+  contract says. Not changed in this round.
+- **punch-N1 (look)** the N1 repair checked end to end through both helpers on the S3 case shape
+  (a legacy build result from this session, no `invocation.session_id`): exit 3, no invocation and
+  no session id printed, the project tree (`.git` included), the build run and the run-directory
+  root untouched. No behaviour change: the core's input carries no fact that a build result was
+  selected, so it reads `sessions.building: null` as "not known", and the signoff contract (section
+  5) puts the refusal of a selected result without an identity on the helper; a test pins that.
+  `adapters/*/tests/test_punch_n1.py`.
+
+## Punch list round 3 (E13, after the round 2 checker)
+
+- **punch3-C2-1 (MAJOR)** `setups/<harness>/verify-install.sh` exited 4 on both harnesses: a
+  round 2 sentence in the signoff contract held a back-ticked, path-shaped example (a withheld path
+  broken at a line's end) that `setups/verify-package.py` reads as a reference that must resolve.
+  The sentence now says it in words; the verifier is unchanged. Its reference check runs over the
+  checkout in `scripts/tests/test_punch3_c2_1.py` (and in build-v2's copy), and the install proofs
+  pass again on both harnesses.
+- **punch3-F9 (F9's third round)** the first-heading walker closes the round 2 checker's gaps: a
+  type 2 to 5 HTML block ends on its start line when that line holds the end marker (`<!-->`,
+  `<!--->`, `<?>`, withheld at `dfe8919`); an empty list item followed by a blank line ends there;
+  a list item on a line that a block quote or list item does not continue starts a new list even
+  when it could not interrupt a paragraph (`- item\n2. x`, `- item\n1.`, `- a\n-`, `> a\n-`,
+  withheld at `8133cb3`); and a link reference definition may run over several lines and is read
+  two ways, as its own block (markdown-it: `[a]:` over `===` is a definition) and as paragraph text
+  set aside at a Setext underline (the reference implementation: `[a]:` over `===` is a heading),
+  every distinct first heading counting. Moved toward delivery, as CommonMark reads them: a
+  definition whose title sits on the next line, followed by `===` (no heading in either reading).
+  `scripts/tests/test_punch3_f9.py`.
+- **punch3-F3 (MINOR)** a withheld path broken at its space by a backslash hard line break
+  (`builder\` at a line's end, the file name on the next) is the same citation.
+  `scripts/tests/test_punch3_f3.py`.
+- **punch3-C2-4 (paperwork)** `SKILL.md`'s citation sentence names round 2's rules: line-break
+  matching in prose and the climb out of the workspace and back in.
+
+## Punch list round 4 (E13, after the round 3 checker)
+
+- **punch4-C3-1 (MINOR)** the first-heading walker was quadratic on a run of link reference
+  definitions: in the blocks reading, every top-level line opening with `[` gathered and joined
+  the whole rest of the run before reading one definition, and the paragraphs reading joined the
+  rest of the paragraph again for each definition it set aside (20,000 one-line definitions took
+  205.9 s in `first_headings`; an untracked file of 8,000 made `scope` take 32 s). Each run is now
+  found and joined once and each definition parsed in place, reading only as far as it runs:
+  20,000 definitions take about 0.12 s, doubling the input doubles the time, and `scope` on the
+  8,000-definition file takes 1.5 s. The headings read are the same, text for text (an exact
+  comparison with the round 3 walker on about 195,000 generated texts found no difference).
+  `scripts/tests/test_punch4_c3_1.py`.
+
 ## Build record (E13 slice 3: adapters and installs)
 
 - Built on 2026-09-23 by one fresh Opus 5.5 builder at high, in-process, in the control room's
