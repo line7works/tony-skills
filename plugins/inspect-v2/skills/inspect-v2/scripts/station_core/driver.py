@@ -342,12 +342,16 @@ def check_commands(commands):
             if not isinstance(argument, dict):
                 raise ValueError("an argument of %r is not a mapping: %r" % (name, argument))
             flags = argument.get("flags")
-            for flag in flags or ():
+            if not flags or not isinstance(flags, (list, tuple)):
+                raise ValueError("an argument of %r has no flags: %r" % (name, argument))
+            for flag in flags:
                 if flag in seen_flags:
                     raise ValueError("an argument flag of %r repeats: %r" % (name, flag))
                 seen_flags.add(flag)
-            if not flags or not isinstance(flags, (list, tuple)):
-                raise ValueError("an argument of %r has no flags: %r" % (name, argument))
+            if argument.get("action") in ("store_true", "store_false", "count", "store_const"):
+                bad = [k for k in ("metavar", "type", "choices", "nargs") if k in argument]
+                if bad or (argument.get("action") != "store_const" and "const" in argument):
+                    raise ValueError("an argument of %r combines action %r with %s" % (name, argument["action"], ", ".join(bad or ["const"])))
             for flag in flags:
                 if not isinstance(flag, str) or not flag.startswith("-"):
                     raise ValueError("an argument flag of %r is not a flag: %r" % (name, flag))
@@ -356,6 +360,8 @@ def check_commands(commands):
             unknown = set(argument) - ARGPARSE_KEYS
             if unknown:
                 raise ValueError("an argument of %r carries keys argparse does not take: %s" % (name, ", ".join(sorted(unknown))))
+            if "dest" in argument and not isinstance(argument["dest"], str):
+                raise ValueError("the dest of an argument of %r is not a string" % name)
             dest = argument.get("dest") or [f for f in flags if f.startswith("--")][:1] or [flags[0]]
             dest = (dest if isinstance(dest, str) else dest[0]).lstrip("-").replace("-", "_")
             if dest in RESERVED_DESTS:
