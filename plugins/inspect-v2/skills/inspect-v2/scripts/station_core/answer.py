@@ -41,6 +41,7 @@ detect a paraphrase; whether a reworded question re-asks a decided line is the e
 judge and the reader's to check (E14-4), never this module's.
 """
 import os
+import re
 
 from . import exits, fsio
 
@@ -52,6 +53,14 @@ def _refusal(rule, message, **where):
     row = {"rule": rule, "message": message}
     row.update(where)
     return row
+
+
+_FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--)\\s+")
+
+
+def _fields(text):
+    """The whole fields of a `·`- or dash-separated line."""
+    return _FIELD_SPLIT.split(text)
 
 
 def _normalized(text):
@@ -170,9 +179,11 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             # the same evasion by text (lane P's checker, CP1-1; lane L's round 2 checker, CS-4): a parked or
             # open line's words asserted as decided under another trace kind, OR under a ledger trace to some
             # other line, with no question of this run touching the parked or open line
-            normalized = _normalized(line["text"])
+            # the whole line, or any whole field of a `·`- or dash-separated line (an architecture doc's
+            # `<category> — <decision> — <why>` form; lane A's round 2 checker, CS-1)
+            candidates = set([_normalized(line["text"])] + [_normalized(f) for f in _fields(line["text"]) if f.strip()])
             for row in ledger_lines:
-                if (row["tag"] in ("parked", "open") and normalized == _normalized(row["text"])
+                if (row["tag"] in ("parked", "open") and _normalized(row["text"]) in candidates
                         and row["id"] not in touched and not (kind == "ledger" and ref == row["id"])):
                     refusals.append(_refusal("quietly-resolved", "the line %r is asserted as decided under a %s "
                                              "trace, but it is the %s ledger line %s and no question of this "

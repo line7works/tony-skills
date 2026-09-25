@@ -188,6 +188,14 @@ class UntracedLine(_Answer):
         doc["questions"] = [{"id": "Q9", "text": "Which storage?", "touches": [parked["id"]], "answer": "none"}]
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
+    def test_an_open_line_asserted_decided_as_one_field_of_a_dashed_line(self):
+        """CS-1 (lane A's round 2 checker): the open line's words as the decision field of a three-part line."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        for text in (u"storage \u2014 %s \u2014 one-way" % opened["text"], u"storage \u00b7 %s \u00b7 why" % opened["text"]):
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "his words"}},
+                                      allowed=("ledger", "repo_path", "question", "owner_words"))
+            self.assertEqual(rules, ["quietly-resolved"], text)
+
     def test_an_open_line_asserted_decided_by_text_under_an_unrelated_ledger_trace(self):
         """CS-4 (lane L's round 2 checker): the open line's words traced to some OTHER ledger id."""
         opened = [row for row in self.ledger if row["tag"] == "open"][0]
