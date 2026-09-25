@@ -308,6 +308,92 @@ class UntracedLine(_Answer):
                                                 "trace": {"kind": "owner_words", "ref": "he said"}})
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
+    def test_the_seam_13_reader_shapes(self):
+        """The seam 13 reader (CS13-1 to CS13-6): a wrapper pair with an apostrophe or a parenthesis inside, mark-like
+        tokens of the Sm, Sk and quote categories, the ledger's tag tail with every parenthesis word, the templates'
+        own section labels, a fullwidth colon, the highlight mark, a line break read as a space; on the row side
+        too. And the other way: a sign token that is the line's meaning is part of its words on both sides."""
+        allowed = ("ledger", "repo_path", "question", "owner_words")
+        words = "keep the tally in memory"
+
+        def refused(text, note=""):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], repr(text) + note)
+
+        def accepted(text, note=""):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], repr(text) + note)
+
+        # CS13-1: a typographic apostrophe or a parenthesis inside the wrapper pair
+        self.ledger.append({"id": "prk-s14a", "tag": "parked", "section": "Decisions", "text": u"keep the owner\u2019s tally in memory"})
+        apos = u"keep the owner\u2019s tally in memory"
+        for text in (u"\u201e%s\u201c" % apos, u"\u300c%s\u300d" % apos, u"\uff08%s\uff09" % apos, u"\u2039%s\u203a" % apos,
+                     u"\u3010%s\u3011" % apos, "{%s}" % apos, u"\u00bb%s\u00ab" % apos, '"%s"' % apos, u"\u201c%s\u201d" % apos,
+                     "(%s)" % apos, "<%s>" % apos, u"\u00ab%s\u00bb" % apos):
+            refused(text)
+        self.ledger.pop()
+        self.ledger.append({"id": "prk-s14b", "tag": "parked", "section": "Decisions", "text": "keep the tally (in memory)"})
+        for text in (u"\u201ekeep the tally (in memory)\u201c", "(keep the tally (in memory))", "[keep the tally (in memory)]"):
+            refused(text)
+        self.ledger.pop()
+        self.ledger.append({"id": "prk-s14c", "tag": "parked", "section": "Decisions", "text": words})
+        for text in ("%s {parked: x}" % words, u"%s \u3014parked: x\u3015" % words, "%s <parked: x>" % words,
+                     u"%s \u3008waits on: Q2\u3009" % words):
+            refused(text)
+        # CS13-2: Sm, Sk and quote glyphs as a leading or trailing token
+        for mark in (u"=>", u"==>", u"<-", u"<=", u"\u25b7", u"\uff1e", u"\u226b", u"\u2212", u"\u2217", u"\u2218", u"\u22c5",
+                     u"\u22b3", u"\u22c6", u"~", u"\u00d7", u"\u00bb", u"\u203a", u"\U0001f44d\U0001f3fd"):
+            refused(u"%s %s" % (mark, words))
+            refused(u"%s %s" % (words, mark))
+        # CS13-4: the tag tail carries every word the parenthesis does
+        for text in ("%s, tbd" % words, "%s; not now" % words, u"%s\u2014pending" % words, "%s, pending" % words,
+                     "%s, not now" % words, "%s, undecided" % words, u"%s\u2014tbd" % words, "%s, to decide" % words,
+                     "%s, to be decided" % words, "%s (to be decided)" % words):
+            refused(text)
+        # CS13-5: the templates' own section labels, a fullwidth colon, the highlight mark, a line break
+        for text in ("Footprint: %s" % words, "Components: %s" % words, "Status: %s" % words, "Depends on: %s" % words,
+                     "Handoffs: %s" % words, "Data flow: %s" % words, "Exit ramp: %s" % words, "Run log: %s" % words,
+                     u"Deferred\uff1a %s" % words, u"Open\uff1a%s" % words, "==%s==" % words, "keep the ==tally== in memory",
+                     u"keep the tally\u2028in memory", u"keep the tally\x85in memory", u"keep the tally\u2029in memory"):
+            refused(text)
+        # CS13-3, the guard: a marked line still meets an unmarked row and the reverse
+        for text in (u"%s \u2014" % words, u"%s \u2713" % words, u"%s +" % words, u"\u2191 %s" % words):
+            refused(text)
+        self.ledger.pop()
+        self.ledger.append({"id": "prk-s14d", "tag": "parked", "section": "Decisions", "text": u"%s \u2014" % words})
+        refused(words, " (a marked row meets an unmarked line)")
+        self.ledger.pop()
+        # CS13-6: the seam 13 shapes and this round's wrapper shapes decorating the ROW, the line plain
+        for shape in (u"\u201e%s\u201c", u"\u300c%s\u300d", u"\uff08%s\uff09", u"\u2039%s\u203a", "__R2__ %s", "***R2*** %s",
+                      "%s (R2)", u"\u2610 %s", u"\u2717 %s", u"\u21d2 %s", u"\u2014 %s", ">> %s", "(a) %s", "A. %s", "1.1. %s",
+                      u"\u25cf %s", "Deferred: %s", "Poured concrete: %s", "Not in this slice: %s", u"%s\u3001", u"%s \u2014",
+                      u"%s\u2014later", "%s (deferred)", u"%s\uff08waits on: x\uff09", "%s (waits on: the bench call (see (Q2) first))",
+                      "=> %s", u"\u25b7 %s", u"\u00bb %s", "%s, tbd", "%s; not now", "Footprint: %s", "==%s==",
+                      "%s {parked: x}", u"\u3010%s\u3011"):
+            self.ledger.append({"id": "prk-s14r", "tag": "parked", "section": "Decisions", "text": shape % words})
+            refused(words, " (row side)")
+            self.ledger.pop()
+        self.ledger.append({"id": "prk-s14r", "tag": "parked", "section": "Decisions", "text": u"\u201ekeep the owner\u2019s tally in memory\u201c"})
+        refused(apos, " (row side, apostrophe inside)")
+        self.ledger.pop()
+        # CS13-3: a sign token that carries the meaning is part of the words on both sides
+        pairs = (("zoom -", "zoom +"), (u"sort \u2193", u"sort \u2191"), (u"status \u2717", u"status \u2713"),
+                 (u"rating \u2605", u"rating \u2605\u2605\u2605"), ("volume --", "volume ++"),
+                 ("(US) data residency", "(EU) data residency"), ("(12V) supply", "(5V) supply"), ("(v1) API", "(v2) API"),
+                 ("(CLI) rate limit", "(API) rate limit"),
+                 # a sign that is part of the words (the seam 13 brief's accepted list) still holds
+                 ("5 a month", "$5 a month"), ("use C", "use C++"), ("hashtag", "#hashtag"), ("name", "@name"),
+                 ("20 of them", "20% of them"), ("logs", "~/logs"))
+        for row, line in pairs:
+            self.ledger.append({"id": "prk-s14p", "tag": "parked", "section": "Decisions", "text": row})
+            accepted(line, " vs row %r" % row)
+            self.ledger.pop()
+        # and the list marks the parenthesis alternative still takes
+        self.ledger.append({"id": "prk-s14c", "tag": "parked", "section": "Decisions", "text": words})
+        for text in ("(a) %s" % words, "(i) %s" % words, "(12) %s" % words, "(iv) %s" % words, "(B) %s" % words):
+            refused(text)
+        self.ledger.pop()
+
     def test_an_open_line_asserted_decided_as_one_field_of_a_dashed_line(self):
         """CS-1 (lane A's round 2 checker): the open line's words as the decision field of a three-part line."""
         opened = [row for row in self.ledger if row["tag"] == "open"][0]
