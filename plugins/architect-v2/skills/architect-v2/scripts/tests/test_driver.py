@@ -325,7 +325,10 @@ class OwnCommands(_Cli):
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--command']}], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['-c'], 'dest': 'skill_root'}], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a']}, {'flags': ['--a']}], 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'colour': 'red'}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'colour': 'red'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': 5}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'action': 'store_true', 'metavar': 'X'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'dest': 5}], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)

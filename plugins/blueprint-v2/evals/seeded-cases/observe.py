@@ -288,7 +288,10 @@ def lane_observe(step, case_dir, neutral, facts, via, scratch):
     phases = lane.pop("_phases", None)
     errors = lane.pop("_errors", None)
     facts["_phases"].extend(phases if isinstance(phases, list) else [])
-    facts["_errors"].extend(errors if isinstance(errors, list) else [])
+    if isinstance(errors, list):
+        facts["_errors"].extend(errors)
+    elif errors:
+        facts["_errors"].append({"step": "lane", "error": "the lane observer's _errors is not a list: %r" % (errors,)})
     merged = []
     for name in sorted(lane):
         if name in listed and name not in facts:
@@ -303,6 +306,9 @@ def lane_observe(step, case_dir, neutral, facts, via, scratch):
         else:
             facts["_errors"].append({"step": "lane", "error": "the lane observer set a provenance for %r, which "
                                      "it did not fill as a listed fact; not merged" % name})
+    for name in merged:
+        if name not in lane_via:
+            facts["_errors"].append({"step": "lane", "error": "the lane observer filled %r with no via" % name})
     return listed
 
 

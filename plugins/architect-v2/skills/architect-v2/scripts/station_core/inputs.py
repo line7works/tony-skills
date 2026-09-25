@@ -45,9 +45,6 @@ def with_defaults(doc):
     return out
 
 
-_VISIBLE = re.compile(u"[\u200b\u200c\u200d\u2060\ufeff\u00ad\u3164\u2800\u2028\u2029\u0085\x0b\x0c]")
-
-
 def path_rules(doc):
     errors = []
     workspace = doc.get("workspace")
@@ -75,7 +72,8 @@ def path_rules(doc):
     owner_word = doc.get("owner_word")
     if isinstance(owner_word, dict):
         words = owner_word.get("words")
-        if isinstance(words, str) and not _VISIBLE.sub("", words).strip():
+        from . import answer as _answer
+        if isinstance(words, str) and not _answer._visible(words).strip():
             errors.append({"path": "/owner_word/words", "message": "the owner's words are not blank, whitespace "
                                                                     "or invisible characters only"})
     return errors
