@@ -220,7 +220,16 @@ class UntracedLine(_Answer):
         for text in ["%s [parked: needs research]" % words, "*%s*" % words, "_%s_" % words, "~~%s~~" % words,
                      "R2a: %s" % words, "R12.3 %s" % words, "AC1.2: %s" % words, u"\u2013 %s" % words, "a) %s" % words,
                      "(1) %s" % words, "### %s" % words, "> %s" % words, "- [ ] %s" % words, u"%s\u2026" % words,
-                     u"%s\u2014decided (x)" % words, u"%s\u17b4" % words, u"%s\u180b" % words, "i. %s" % words, "[x] %s" % words, u"\u25e6 %s" % words, u"%s\u0301" % words,
+                     u"%s\u2014decided (x)" % words, u"%s\u17b4" % words, u"%s\u180b" % words, "i. %s" % words, "[x] %s" % words, u"\u25e6 %s" % words,
+                     # the seam 11 reader (CS11-2, CS11-5): a bold label, a fullwidth full stop, brackets, marks, guillemets,
+                     # a five-digit label, a hyphen field, a section label, unassigned default-ignorables
+                     "- **R2** %s" % words, "**R2:** %s" % words, u"%s\uff0e" % words, "(%s)" % words, "[%s]" % words,
+                     u"\u2713 %s" % words, u"\u2192 %s" % words, u"\u2705 %s" % words, u"\u00ab%s\u00bb" % words,
+                     "R10000 %s" % words, "storage - %s - one-way" % words, "Open: %s" % words, "Constraint: %s" % words,
+                     u"%s\u2065" % words, u"%s\U000e0000" % words, u"%s\ufff0" % words, u"%s\u180f" % words,
+                     # CS11-4: a second label behind a marked one, a re-cased marked label, a relabel with marks
+                     "R2: %s" % words, "AC1: %s" % words, "r2: %s" % words, u"r2 \u2014 %s" % words, "D1: %s" % words,
+                     u"R7 \u2014 %s" % words, "R7: %s" % words,
                      "%s (waits on: the bench call (see (Q2) first))" % words]:
             rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
                                       allowed=allowed)
@@ -245,7 +254,7 @@ class UntracedLine(_Answer):
         self.ledger.pop()
         # an owner_words ref of invisibles only is untraced
         doc = self.clean(); doc["lines"].append({"text": "a brand new line", "tag": "decided",
-                                                "trace": {"kind": "owner_words", "ref": u"\u200b\u200e"}})
+                                                "trace": {"kind": "owner_words", "ref": u"\u200b\u200e\u2065\U000e0000"}})
         self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["untraced"])
         # round 4 (lanes L and A, CS4-1, CS4-2, CS4-4): a label is part of the words when both sides carry one;
         # a field that is only a label has no words; a one-word later field of a line is no item
@@ -262,6 +271,19 @@ class UntracedLine(_Answer):
                      u"cost \u2014 nothing else", u"storage \u2014 keep the tally in memory \u2014 one-way"):
             doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
             self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], text)
+        # the seam 11 reader (CS11-3, CS11-7, CS11-4, CS11-5): composed and decomposed read the same; a mark is part of
+        # a word; a second label behind a marked one is carried; a dotted label is its own key
+        self.ledger.append({"id": "prk-8", "tag": "parked", "section": "Decisions", "text": u"r\u00e9sum\u00e9 storage"})
+        self.ledger.append({"id": "prk-9", "tag": "parked", "section": "Decisions", "text": u"\u0e01\u0e34\u0e19"})
+        self.ledger.append({"id": "prk-10", "tag": "parked", "section": "Decisions", "text": "A4 paper labels"})
+        self.ledger.append({"id": "prk-11", "tag": "parked", "section": "Decisions", "text": "R2.1 storage"})
+        for text in (u"re\u0301sume\u0301 storage", "C1: A4 paper labels", "Q3 budget."):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], repr(text))
+        for text in (u"\u0e01\u0e35\u0e19", u"n\u0303", "R21 storage", u"%s\u0301" % words):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], repr(text))
+        del self.ledger[-4:]
         for text in (u"Firmware \u00b7 update path", u"Display \u00b7 10 inch."):
             doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
             self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], text)
