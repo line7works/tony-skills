@@ -19,7 +19,8 @@ The drives, each only when a pending name needs it:
     harvest         after select -> ledger_refused, ledger_refused_lines, ledger_tags
     record-answer   after harvest, the case's answer renamed onto precon-v2's answer (`questions`
                     and `lines` as they are, `run_id` and `answer_version` bound to this run; no
-                    field of the executor's judgment, a triage or a gate, is supplied)
+                    field of the executor's judgment, a triage or a gate, is supplied), written
+                    as `lane-answer.json` inside the run directory, where `record-answer` reads it
                     -> answer_refused, answer_written, refusal_rules (exit 5), refusal_reason;
                     when precon-v2's answer schema refuses the renamed answer (exit 4: the
                     neutral answer carries no triage and no gate), no answer fact is filled, since
@@ -186,7 +187,9 @@ def _after_select(step, case_dir, neutral, run, run_dir, run_id, pending, fill):
     answer = _answer(case_dir, neutral, run_id)
     if answer is None or not pending & set(ANSWER + ("refusal_reason",)):
         return
-    path = os.path.join(os.path.dirname(run_dir), "lane-answer.json")
+    # inside the run directory: `record-answer` reads an answer only from the workspace, the staging home
+    # or the run directory (the property line), and the case's workspace is never written
+    path = os.path.join(run_dir, "lane-answer.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(answer, fh)
     code, out, err = run(["record-answer", "--run-dir", run_dir, "--answer", path])

@@ -123,7 +123,10 @@ A doc the reader refuses prints `counts: null` and the refused lines.
 
 `references/answer.schema.json` (closed at every level; examples under
 `references/examples/answer/`). The schema holds the shape; the content rules are refusals,
-exit 5, each named, and nothing is written.
+exit 5, each named, and nothing is written. The answer file itself is read only from inside the
+workspace, the staging home or the run directory (the property line): its path, resolved
+immediately before it is opened, lying anywhere else (a symlink out of a root included) is refused
+before a byte of it is read (`outside-home`, exit 5, `accepted: false`, nothing written).
 
 | Field | What it carries |
 |---|---|
@@ -174,8 +177,8 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `disposition-before-raw` | dispositions in the run that writes the readers' raw text |
 | `disposition` | a disposition outside `surfaced`, `absorbed`, `left downstream`; left downstream with no why; a row with no section in the doc; no summary |
 | `cold-read-doc` | dispositions for a cold-read doc this run did not select |
-| `outside-home` | a document this run would read (the cold-read doc of the name `write` continues, a selected scope or cold-read doc) whose own path, resolved immediately before it is opened, leaves its home (a symlink): not only its folder at `request`. Refused by whichever command meets it (`record-answer` as it plans, `write` if the symlink appeared since), exit 5, nothing read into the run or a preview and nothing written |
-| `outside-run` | a run artifact (`preview/`, `exit-test/` and its index, readers' run directory, the receipt, the answer, the harvest, the result) whose path, resolved before it is written, leaves the run directory (a symlinked folder or file). Every command checks every artifact it will write before it writes the first, exit 5, nothing written; a reader's sidecar resolving outside the run is never read (`exit-test-unrecorded`) |
+| `outside-home` | the answer file `record-answer` is given, resolving outside the workspace, the staging home and the run directory (checked before it is opened, so nothing of it is read); a document this run would read (the cold-read doc of the name `write` continues, a selected scope or cold-read doc) whose own path, resolved immediately before it is opened, leaves its home (a symlink): not only its folder at `request`. Refused by whichever command meets it (`record-answer` as it plans, `write` if the symlink appeared since), exit 5, nothing read into the run or a preview and nothing written |
+| `outside-run` | a run artifact (`preview/`, `exit-test/` and its index, readers' run directory, the receipt, the answer, the harvest, the result) whose path, resolved before it is written, leaves the run directory (a symlinked folder or file). The same for every run artifact `report` hashes into the result and for the `result.json` a finished run prints again: each is resolved before it is opened, and a file leaving the run is refused before the checkpoint moves (the run stays at the phase it was, never `done`), nothing hashed or printed. Every command checks every artifact it will write before it writes the first, exit 5, nothing written; a reader's sidecar resolving outside the run is never read (`exit-test-unrecorded`) |
 
 The E14-11 rule on the precon side: a parked or open line is never rewritten as decided unless
 an answered question of this run touches it (the shared `quietly-resolved`, which also catches
@@ -311,7 +314,10 @@ ordinary round.
 and the shared semantic checks S1 to S4 before writing it (a result that does not validate is a
 defect, exit 1, and the run stays at the phase it was, never ended without its `result.json`),
 writes `result.json`, and prints it (exit 10). A repeated `report` prints the same result and
-writes nothing. The doc, the counts, the board and the parked lines it reports are the ones `write`
+writes nothing. Every run artifact the result hashes, and the `result.json` a finished run prints
+again, is resolved and checked to lie inside the run directory before it is opened: a file that is
+a symlink leaving the run is refused (`outside-run`, exit 5), nothing is hashed or recorded, and
+the checks run before the checkpoint moves, so a refused run is not `done`. The doc, the counts, the board and the parked lines it reports are the ones `write`
 recorded in `receipt.json` from the text it wrote (or previewed, or found unchanged), never the
 doc on disk by the time `report` runs, which a hand may have changed since.
 

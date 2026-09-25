@@ -80,6 +80,16 @@ def _resolves_inside(path, roots):
                              % (path, " and ".join(r for r in roots if r)), path)
 
 
+def _answer_inside(run, answer_path):
+    """The supplied answer file, resolved immediately before it is opened, lies inside the workspace, the
+    staging home or the run directory; anywhere else (a symlink included) it is never read: `outside-home`,
+    exit 5, `accepted` never true, nothing written (the property line, R1 of round 6)."""
+    roots = (run.input.get("workspace"), run.input.get("staging"), run.run_dir)
+    if not any(root and fsio.inside(answer_path, root) for root in roots):
+        raise runmod.Outside("outside-home", "the answer file %s resolves outside %s (a symlink?); it is not read"
+                             % (answer_path, ", ".join(r for r in roots if r)), answer_path)
+
+
 def _selection(run, hunt):
     return runmod.read_json(run, "selection-%s.json" % hunt)
 
@@ -400,6 +410,11 @@ def record_answer(ctx, args):
     runmod.need(run, ("harvested",), "record-answer", "after `harvest`")
     if not os.path.isfile(args.answer):
         raise driver.Usage("no such answer file: %s" % args.answer)
+    try:
+        _answer_inside(run, args.answer)
+    except runmod.Outside as outside:
+        return runmod.emit(ctx.envelope(ok=False, accepted=False, refusals=[outside.refusal()],
+                                        reason="%s; nothing was written" % outside.message), exits.REFUSED)
     try:
         with open(args.answer, "rb") as fh:
             answer = json.loads(fh.read().decode("utf-8"))

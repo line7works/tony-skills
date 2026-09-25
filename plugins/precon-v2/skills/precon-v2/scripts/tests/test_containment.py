@@ -255,5 +255,151 @@ class ArtifactFolderLeavingTheRun(_Base):
         self.assertEqual(self.digests(), before)
 
 
+class PropertyLineReads(_Base):
+    """The outside reviewer's closing look, P-1 (ruling R1 of round 6): the three reads that opened a path
+    without the containment check. The terminal replay's `result.json` and every enumerated run artifact
+    resolve inside the run directory before either is opened (exit 5, `outside-run`, nothing hashed or
+    recorded, the checkpoint not advanced to `done`); the answer `record-answer` reads resolves inside the
+    workspace, the staging home or the run directory (exit 5, `outside-home`, `accepted` never true,
+    nothing written). The reviewer's probes `terminal-result-outside-read`, `artifact-outside-read` and
+    `answer-outside-read`, each with its control."""
+
+    MARK = "OUTSIDE_ROOT_SENTINEL"
+
+    def no_sentinel(self, code, out, err):
+        self.assertNotIn(self.MARK, out)
+        self.assertNotIn(self.MARK, err)
+
+    def outside_file(self, name, text):
+        path = os.path.join(self.outside, name)
+        testlib.write_text(path, text)
+        return path
+
+    def reported(self, report_only=True):
+        run = self.harvested(report_only=report_only)
+        code, doc, err = run.record(preconlib.answer(run))
+        self.assertEqual(code, 0, json.dumps(doc))
+        self.assertEqual(run.write()[0], 0)
+        return run
+
+    def phase_of(self, run):
+        return testlib.load_json(run.run_file("checkpoint.json"))["phase"]
+
+    def test_terminal_result_outside_read(self):
+        """A completed run's `result.json` swapped for a symlink to an outside result: every phase that
+        replays it refuses, and the sentinel reason is printed nowhere."""
+        for report_only in (True, False):
+            run = self.reported(report_only)
+            code, result, err = run.report()
+            self.assertEqual(code, 10, err)
+            data = dict(result, reason=self.MARK)
+            external = self.outside_file("outside-result-%s.json" % report_only, json.dumps(data))
+            os.remove(run.run_file("result.json"))
+            os.symlink(external, run.run_file("result.json"))
+            before = self.digests()
+            for name in ("report", "write", "harvest", "request"):
+                args = ("--row", "claude-session", "--session-model", "synthetic-model") if name == "request" else ()
+                code, out, err = run.phase(name, *args)
+                self.assertEqual(code, 5, "%s: %s %s" % (name, out, err))
+                doc = json.loads(out)
+                self.assertEqual([r["rule"] for r in doc["refusals"]], ["outside-run"], out)
+                self.no_sentinel(code, out, err)
+            code, out, err = run.phase("record-answer", "--answer", run.run_file("checkpoint.json"))
+            self.assertEqual(code, 5, out + err)
+            self.no_sentinel(code, out, err)
+            code, out, err = run.phase("state")  # the board: it never opens the result
+            self.no_sentinel(code, out, err)
+            self.assertEqual(self.digests(), before)
+
+    def test_terminal_result_inside_the_run_is_replayed(self):
+        """The control: the real in-run `result.json` is printed again, exit 10."""
+        run = self.reported()
+        code, result, err = run.report()
+        self.assertEqual(code, 10, err)
+        code, again, err = run.report()
+        self.assertEqual((code, again), (10, result))
+
+    def test_artifact_outside_read(self):
+        """An extra run artifact that is a symlink to an outside file: `report` refuses before the checkpoint
+        advances, hashes nothing and records no result; the run is not `done`."""
+        for report_only in (True, False):
+            run = self.reported(report_only)
+            external = self.outside_file("external-sentinel-%s.txt" % report_only, self.MARK + "\n")
+            os.symlink(external, run.run_file("extra.txt"))
+            nested = run.run_file(os.path.join("preview", "deeper"))
+            os.makedirs(nested)
+            before = self.digests()
+            code, out, err = run.phase("report")
+            self.assertEqual(code, 5, out + err)
+            doc = json.loads(out)
+            self.assertEqual([r["rule"] for r in doc["refusals"]], ["outside-run"], out)
+            self.assertNotIn(testlib.sha256_file(external), out)
+            self.no_sentinel(code, out, err)
+            self.assertFalse(os.path.lexists(run.run_file("result.json")))
+            self.assertEqual(self.phase_of(run), "written")
+            self.assertEqual(self.digests(), before)
+            # a link deeper in the run is refused the same way
+            os.remove(run.run_file("extra.txt"))
+            os.symlink(external, os.path.join(nested, "extra.txt"))
+            code, out, err = run.phase("report")
+            self.assertEqual(code, 5, out + err)
+            self.assertNotIn(testlib.sha256_file(external), out)
+            self.assertEqual(self.phase_of(run), "written")
+            # the control: with the link gone the same run reports, exit 10, and is `done`
+            os.remove(os.path.join(nested, "extra.txt"))
+            code, result, err = run.report()
+            self.assertEqual(code, 10, err)
+            self.assertEqual(self.phase_of(run), "done")
+
+    def test_an_artifact_linked_inside_the_run_is_hashed(self):
+        """The control: a run artifact that is a symlink to another file of the same run is hashed as usual."""
+        run = self.reported()
+        os.symlink(run.run_file("answer.json"), run.run_file("extra.txt"))
+        code, result, err = run.report()
+        self.assertEqual(code, 10, err)
+        self.assertIn(run.run_file("extra.txt"), [w["path"] for w in result["writes"]])
+
+    def test_answer_outside_read(self):
+        """The supplied answer outside the workspace, the staging home and the run directory: exit 5,
+        `outside-home`, `accepted` never true, nothing written; directly and through a symlink in a root."""
+        run = self.harvested()
+        answer = preconlib.answer(run, lines=[preconlib.owner_line("Outside input " + self.MARK, "yes")])
+        external = self.outside_file("outside-answer.json", json.dumps(answer))
+        before = (self.digests(), sorted(os.listdir(run.run_dir)))
+        link = os.path.join(self.fx.ws, "linked-answer.json")
+        os.symlink(external, link)
+        for supplied in (external, link):
+            code, out, err = run.phase("record-answer", "--answer", supplied)
+            self.assertEqual(code, 5, out + err)
+            doc = json.loads(out)
+            self.assertIsNot(doc.get("accepted"), True)
+            self.assertFalse(doc["ok"])
+            self.assertEqual([r["rule"] for r in doc["refusals"]], ["outside-home"], out)
+            self.no_sentinel(code, out, err)
+            self.assertFalse(os.path.exists(run.run_file("answer.json")))
+            self.assertEqual(self.phase_of(run), "harvested")
+        os.remove(link)
+        self.assertEqual((self.digests(), sorted(os.listdir(run.run_dir))), before)
+
+    def test_an_outside_file_that_is_not_json_is_refused_before_it_is_read(self):
+        run = self.harvested()
+        external = self.outside_file("outside-not-json.txt", "not json " + self.MARK)
+        code, out, err = run.phase("record-answer", "--answer", external)
+        self.assertEqual(code, 5, out + err)
+        self.no_sentinel(code, out, err)
+
+    def test_an_answer_in_each_root_is_accepted(self):
+        """The control: an answer in the workspace, the staging home or the run directory is read."""
+        for where in ("workspace", "staging", "run"):
+            run = self.harvested()
+            folder = {"workspace": self.fx.ws, "staging": self.fx.staging, "run": run.run_dir}[where]
+            path = os.path.join(folder, "answer-in-%s.json" % run.run_id)
+            testlib.write_json(path, preconlib.answer(run))
+            code, out, err = run.phase("record-answer", "--answer", path)
+            self.assertEqual(code, 0, "%s: %s %s" % (where, out, err))
+            self.assertTrue(json.loads(out)["accepted"])
+            os.remove(path)
+
+
 if __name__ == "__main__":
     unittest.main()

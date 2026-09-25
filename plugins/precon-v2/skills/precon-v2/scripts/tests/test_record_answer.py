@@ -349,7 +349,7 @@ class Schema(_Answer):
         self.assertEqual(code, 4, json.dumps(doc))
 
     def test_an_answer_that_is_not_json_is_usage(self):
-        path = os.path.join(self.tmp, "bad.json")
+        path = os.path.join(self.run_.run_dir, "bad.json")
         testlib.write_text(path, "not json")
         code, out, err = self.run_.phase("record-answer", "--answer", path)
         self.assertEqual(code, 2, out + err)

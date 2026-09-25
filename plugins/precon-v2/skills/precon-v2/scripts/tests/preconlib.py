@@ -49,6 +49,9 @@ def ids(text=SCOPE_DOC):
     return out
 
 
+EXECUTOR_DIR = "executor"   # the executor's own files inside a run directory (its answer file)
+
+
 class Fixture(object):
     """A workspace (a git work tree), a staging home and a run directory under one scratch."""
 
@@ -95,6 +98,7 @@ class Fixture(object):
         code, out, err = self.cli(["check-input", path])
         if code != 0:
             raise AssertionError("check-input exit %d: %s%s" % (code, out, err))
+        os.makedirs(os.path.join(run_dir, EXECUTOR_DIR), exist_ok=True)
         return Run(self, run_id, run_dir, doc)
 
 
@@ -126,7 +130,9 @@ class Run(object):
         return code, (json.loads(out) if out.strip() else None), err
 
     def record(self, answer):
-        path = os.path.join(self.fx.tmp, "answer-%s.json" % self.run_id)
+        """The executor's answer file, written where `record-answer` reads one: inside the run directory
+        (a folder made with the run, so a test's listing of the run directory is not changed by it)."""
+        path = os.path.join(self.run_dir, EXECUTOR_DIR, "answer-%s.json" % self.run_id)
         testlib.write_json(path, answer)
         code, out, err = self.phase("record-answer", "--answer", path)
         return code, (json.loads(out) if out.strip() else None), err

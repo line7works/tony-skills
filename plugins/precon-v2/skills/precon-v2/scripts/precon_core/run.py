@@ -32,9 +32,9 @@ def open_run(ctx, args):
     """The run, or its recorded result printed again when it has already ended (exit 10)."""
     run = ctx.open_run(args.run_dir)
     if run.checkpoint.get("phase") == "done":
-        path = os.path.join(run.run_dir, "result.json")
+        result_path = path(run, "result.json")  # resolved inside the run before it is opened (R1 of round 6)
         try:
-            doc = fsio.read_json(path)
+            doc = fsio.read_json(result_path)
         except (OSError, ValueError) as exc:
             raise driver.Defect("the run at %s ended but its result cannot be read: %s" % (run.run_dir, exc))
         raise Ended(doc)
@@ -117,9 +117,12 @@ def report_only(run):
 
 # ---- the result --------------------------------------------------------------------------------
 
-def _run_artifacts(run):
-    """Every file this run wrote under its directory (readers' own directory excluded)."""
-    rows = []
+def _artifact_paths(run):
+    """Every file this run wrote under its directory (readers' own directory and the result excluded),
+    each resolved and checked to lie inside the run directory before anything opens it: a file that is a
+    symlink leaving the run is refused (`outside-run`, exit 5), so no outside file is hashed or recorded
+    (R1 of round 6)."""
+    out = []
     for base, dirs, files in os.walk(run.run_dir):
         rel = os.path.relpath(base, run.run_dir)
         if rel == READERS_DIR or rel.startswith(READERS_DIR + os.sep):
@@ -127,12 +130,15 @@ def _run_artifacts(run):
             continue
         dirs[:] = sorted(d for d in dirs if not (rel == "." and d == READERS_DIR))
         for name in sorted(files):
-            full = os.path.join(base, name)
             if rel == "." and name == "result.json":
                 continue
-            rows.append({"path": full, "kind": "run_artifact", "sha256_before": None,
-                         "sha256_after": fsio.sha256_file(full)})
-    return rows
+            out.append(path(run, *([] if rel == "." else [rel]) + [name]))
+    return out
+
+
+def _run_artifacts(run):
+    return [{"path": full, "kind": "run_artifact", "sha256_before": None, "sha256_after": fsio.sha256_file(full)}
+            for full in _artifact_paths(run)]
 
 
 def _selections(run):
@@ -150,9 +156,12 @@ def finish(ctx, run, status, reason, station_result, stop_tag=None):
 
     The checkpoint says `done` before the result is assembled, so the result's writes list the
     checkpoint as it ends; a result that does not validate (a defect) puts the checkpoint back at the
-    phase it was, so a run is never `done` without its `result.json` (CP1-16)."""
+    phase it was, so a run is never `done` without its `result.json` (CP1-16). Every run artifact the
+    result will hash is checked inside the run directory before the checkpoint moves, so a refused run
+    (`outside-run`, exit 5) stays at the phase it was (R1 of round 6)."""
     prior = run.checkpoint.get("phase")
     result_path = path(run, "result.json")
+    _artifact_paths(run)
     advance(run, "done")
     try:
         return _finish(ctx, run, status, reason, station_result, stop_tag)
