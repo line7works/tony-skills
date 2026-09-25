@@ -343,7 +343,7 @@ class OwnCommands(_Cli):
         """A driver whose one own command `thing` runs the handler defined by `handler_source` (a `def h(ctx, args)`)."""
         path = os.path.join(self.tmp, "contract.py")
         testlib.write_text(path, "\n".join([
-            "import os, sys, json",
+            "import os, sys, json, subprocess",
             "sys.dont_write_bytecode = True",
             "sys.path.insert(0, %r)" % testlib.SCRIPTS,
             "from station_core import driver, exits",
@@ -372,6 +372,14 @@ class OwnCommands(_Cli):
             ("def h(ctx, args):\n    sys.exit(0)", "SystemExit 0 without a document"),
             ("def h(ctx, args):\n    sys.stdout.write('x\\n'); sys.exit(3)", "SystemExit 3 with stdout"),
             ("def h(ctx, args):\n    doc = ctx.envelope(); doc['station'] = 'other'; return driver.emit(doc)", "a foreign station"),
+            ("def h(ctx, args):\n    doc = ctx.envelope(); doc['interface_version'] = True; return driver.emit(doc)", "interface_version true"),
+            ("def h(ctx, args):\n    doc = ctx.envelope(); doc['interface_version'] = 1.0; return driver.emit(doc)", "interface_version 1.0"),
+            ("def h(ctx, args):\n    subprocess.run(['/bin/echo', 'child']); return 2", "a child process writing to stdout"),
+            ("def h(ctx, args):\n    os.write(1, b'raw\\n'); return 2", "a write to file descriptor 1"),
+            ("def h(ctx, args):\n    sys.__stdout__.write('raw\\n'); return 2", "a write to sys.__stdout__"),
+            ("def h(ctx, args):\n    return driver.emit(ctx.envelope(x=float('nan')))", "NaN"),
+            ("def h(ctx, args):\n    sys.stdout.write('{\"interface_version\": 1, \"interface_version\": 1}\\n'); return 0", "a repeated key"),
+            ("def h(ctx, args):\n    sys.stdout.close(); return 0", "a closed stdout"),
         )
         for source, what in bad:
             path = self.contract_driver(source)
