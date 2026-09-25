@@ -5,8 +5,10 @@ answer key no builder reads): every family builds every case it lists, twice to 
 hash; `observe.py` runs every case with no step error, emits `writes_none`, and lists the lane's
 pending facts for every `lane` step; no shipped case file names an expected value.
 """
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -82,6 +84,55 @@ class TheObserver(unittest.TestCase):
                     self.assertTrue(name in observed or name in observed.get("_lane_pending", []),
                                     "%s: the lane fact %s is neither observed nor pending" % (row["case"], name))
 
+
+@unittest.skipIf(testlib.checkout_sibling("readers") is None,
+                 "no readers component beside this core (the installed shape): observe.py reads its roster")
+class TheLaneHook(unittest.TestCase):
+    """The `lane_observe.py` seam (CS-1, CS-2), driven in-process on a scratch copy of the plugin with a
+    planted observer and a planted `lane` step: an observer works on its own dict; only the names its step
+    lists that the frame did not observe are merged; every other name it fills is recorded under `_errors`
+    and never merged; `SystemExit` lands in `_errors`; its own `_errors` and `_phases` are appended."""
+
+    def hook(self, body):
+        tmp = testlib.make_scratch("lanehook-")
+        self.addCleanup(testlib.rmtree, tmp)
+        plugin = os.path.join(tmp, os.path.basename(testlib.PLUGIN))
+        shutil.copytree(testlib.PLUGIN, plugin, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        seeded = os.path.join(plugin, "evals", "seeded-cases")
+        testlib.write_text(os.path.join(seeded, "lane_observe.py"), body)
+        spec = importlib.util.spec_from_file_location("observe_under_test", os.path.join(seeded, "observe.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module, tmp
+
+    def run_hook(self, body, facts):
+        module, tmp = self.hook(body)
+        step = {"kind": "lane", "pending": ["listed_fact", "other_listed"]}
+        module.lane_observe(step, tmp, {"workspace": tmp, "staging": tmp}, facts, {}, tmp)
+        return facts
+
+    def test_only_listed_unobserved_names_merge(self):
+        facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                              "    facts['listed_fact'] = 'lane'\n"
+                              "    facts['selection_outcome'] = 'planted'\n"
+                              "    facts['unlisted_fact'] = 1\n"
+                              "    facts['_phases'].append('lane:planted')\n",
+                              {"_phases": [], "_errors": [], "selection_outcome": "one"})
+        self.assertEqual(facts["listed_fact"], "lane")
+        self.assertEqual(facts["selection_outcome"], "one")
+        self.assertNotIn("unlisted_fact", facts)
+        self.assertEqual(facts["_phases"], ["lane:planted"])
+        self.assertEqual(sorted(e["error"].split("'")[1] for e in facts["_errors"]), ["selection_outcome", "unlisted_fact"])
+        self.assertNotIn("other_listed", facts, "a listed name the observer did not fill stays unfilled (pending)")
+
+    def test_a_system_exit_and_a_removed_errors_key_land_in_errors(self):
+        facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                              "    facts['listed_fact'] = 'lane'\n"
+                              "    facts.pop('_errors')\n"
+                              "    raise SystemExit(3)\n", {"_phases": [], "_errors": []})
+        self.assertEqual(facts["listed_fact"], "lane")
+        self.assertEqual(len(facts["_errors"]), 1)
+        self.assertIn("SystemExit", facts["_errors"][0]["error"])
 
 if __name__ == "__main__":
     unittest.main()

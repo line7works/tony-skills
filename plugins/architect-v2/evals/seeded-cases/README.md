@@ -95,7 +95,7 @@ deliberately ill-formed; nothing in an answer or a `CASES.md` states an outcome.
 | `ledger_tags` | per tag, how many lines the reader emits |
 | `answer_refused` | true when the recorded answer is refused on its content |
 | `refusal_rules` | the rule names of the refusals, sorted, unique |
-| `refusal_reason` | a lane's short reason for a refusal the frame does not make |
+| `refusal_reason` | a lane's short reason for a refusal the frame does not make: the lane's own rule name, several sorted and joined by `, `; null when nothing was refused |
 | `answer_written` | true when the run records the answer in its run directory |
 | `form_holds` | true when the document conforms to its template's labels and headings |
 | `round_trip_identical` | true when parse then render gives the document's bytes back |

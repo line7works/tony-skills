@@ -88,10 +88,17 @@ def _shape(answer):
 
 
 def _in_workspace(workspace, rel):
+    """A `repo_path` trace names a file or folder inside the workspace: never the workspace itself
+    (`.`, `./`, an empty segment) and never anything under `.git`."""
     if not workspace or not isinstance(rel, str) or not rel.strip() or os.path.isabs(rel):
         return False
+    normal = os.path.normpath(rel)
+    if normal in (".", "") or normal == ".git" or normal.startswith(".git" + os.sep):
+        return False
     path = os.path.join(workspace, rel)
-    return os.path.exists(path) and fsio.inside(path, workspace)
+    if not (os.path.exists(path) and fsio.inside(path, workspace)):
+        return False
+    return os.path.realpath(path) != os.path.realpath(workspace)
 
 
 def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
