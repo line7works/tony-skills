@@ -188,6 +188,25 @@ class UntracedLine(_Answer):
         doc["questions"] = [{"id": "Q9", "text": "Which storage?", "touches": [parked["id"]], "answer": "none"}]
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
+    def test_the_quiet_upgrade_rule_sees_through_every_known_decoration(self):
+        """The class, not the instance (four escapes in slice 2): a label in front, a waits-on or parked
+        parenthesis behind, a tag tail behind, a bullet, invisibles, and the row itself decorated."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        words = opened["text"]
+        shapes = [u"R2 \u2014 %s" % words, "AC1: %s" % words, "Q7 %s" % words, "- %s" % words,
+                  "%s (waits on: the owner's call)" % words, "%s (parked: needs research)" % words,
+                  u"%s \u2014 decided (his words)" % words, u"%s \u00b7 parked: needs prototype" % words,
+                  u"%s\u200b" % words, u"R3 \u2014 %s (waits on: x)" % words]
+        allowed = ("ledger", "repo_path", "question", "owner_words")
+        for text in shapes:
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        # and a plain line whose words are NOT a parked or open row is untouched by the rule
+        doc = self.clean(); doc["lines"].append({"text": "R9 \u2014 a brand new requirement", "tag": "decided",
+                                                "trace": {"kind": "owner_words", "ref": "he said"}})
+        self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
+
     def test_an_open_line_asserted_decided_as_one_field_of_a_dashed_line(self):
         """CS-1 (lane A's round 2 checker): the open line's words as the decision field of a three-part line."""
         opened = [row for row in self.ledger if row["tag"] == "open"][0]
