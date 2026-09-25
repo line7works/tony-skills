@@ -56,37 +56,53 @@ def _refusal(rule, message, **where):
     return row
 
 
-_FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--)\\s+")
+_FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|\\|)\\s+")
 # The decorations the four stations' forms put around a line's words (the class the quiet-upgrade rule must see
-# through; four escapes in slice 2, each behind one of these): a list mark (`- `, `* `, `+ `, `• `, `1. `, `2) `),
-# a leading item label (`R2`, `AC1:`, `C3.`, `Q4`, `(R2)`, `[R2]`, `R-2:`, `AC-1:`), a wrapping pair of `**`,
-# backticks or quotes, a trailing `(waits on: ...)` / `(parked: ...)` / `(assumed: ...)` parenthesis, a trailing
-# ` <dash> <tag> (...)` or ` <dash> <tag>: ...` ledger tail, trailing punctuation, and invisible characters. The
-# strips run until nothing changes, so two decorations at once (a parenthesis, then a period) cannot escape.
-_BULLET = re.compile(u"^(?:[-*+\u2022]|\\d{1,3}[.)])\\s+")
+# through; four escapes in slice 2, each behind one of these, and two false refusals in round 4 around item
+# labels): a list mark (`- `, `* `, `+ `, `• `, `– `, `> `, `# `, `1. `, `2) `, `(3) `, `a) `, `- [ ] `), a leading
+# item label (`R2`, `AC1:`, `C3.`, `Q4`, `(R2)`, `[R2]`, `R-2:`, `AC-1:`, `R2a:`, `R12.3`), a wrapping pair of
+# `**`, `*`, `_`, `~~`, backticks or quotes, a trailing `(waits on: ...)` / `[parked: ...]` / `(assumed: ...)`
+# parenthesis to any nesting, a trailing ` <dash> <tag> (...)` or ` <dash> <tag>: ...` ledger tail, trailing
+# punctuation, and invisible characters. The strips run until nothing changes, so two decorations at once (a
+# parenthesis, then a period) cannot escape.
+_BULLET = re.compile(u"^(?:- \\[[ xX]\\]|\\[[ xX]\\]|[-*+\u2022\u2013\u25e6\u2023>]|#{1,6}|\\d{1,3}[.)]|\\(\\d{1,3}\\)|[a-hj-z][.)]|[ivx]{1,4}[.)])\\s+")
 # The item labels the station forms use (R<n> requirement, AC<n> criterion, C<n> constraint, Q<n> question,
-# O<n> open item, A<n> assumption, D<n> decision), with or without a hyphen, brackets or a trailing mark; a
-# label is stripped only when a separator or a mark follows it, or when it is one of these known letters
-# alone before a space, so a content token such as `S3`, `IPv6` or `H264` is never a label.
-_LABEL = re.compile(r"^(?:[(\[](?:R|AC|C|Q|O|A|D)-?\d{1,4}[)\]][.:]?\s*"
-                    r"|(?:R|AC|C|Q|O|A|D)-?\d{1,4}(?:[.:)]\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+|\s+))"
+# O<n> open item, A<n> assumption, D<n> decision), with or without a hyphen, brackets, a dotted sub-number, a
+# letter suffix or a trailing mark; a label is stripped only when a separator or a mark follows it, or when it
+# is one of these known letters alone before a space, so a content token such as `S3`, `IPv6` or `H264` is never
+# a label. A label is part of the words when BOTH sides carry one (round 4, lanes L and A: `Q4 budget` is not
+# `Q3 budget`, and a line relabelled against a labelled row is a reworded line, the executor's and the reader's
+# to judge, E14-4); a line or field that is only a label has no words.
+_LABEL_CORE = r"(?:R|AC|C|Q|O|A|D)-?\d{1,4}(?:\.\d{1,3})*[a-z]?"
+_LABEL = re.compile(r"^(?:[(\[]" + _LABEL_CORE + r"[)\]][.:]?\s*"
+                    r"|" + _LABEL_CORE + r"(?:[.:)]\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+|\s+))"
                     r"(?:\u00b7|\u2014|\u2013|--|-|:)?\s*")
-_PAREN_TAIL = re.compile(r"\s*\((?:waits on|waiting on|parked|assumed|decided|open|needs research|needs prototype|later)\b"
-                         r"[^()]*(?:\([^()]*\)[^()]*)*\)\s*$", re.IGNORECASE)
-_TAG_TAIL = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s+(?:decided|assumed|parked|open)\\b.*$", re.IGNORECASE)
-_WRAP = (("**", "**"), ("`", "`"), ('"', '"'), (u"\u201c", u"\u201d"), ("'", "'"))
-_EXTRA_INVISIBLE = frozenset(u"\u3164\u2800\u034f\u115f\u1160\uffa0\x0b\x0c\u180e"
+_LABEL_ALONE = re.compile(r"^[(\[]?" + _LABEL_CORE + r"[)\]]?[.:]?$")
+_PAREN_WORDS = re.compile(r"^(?:waits? on|waiting on|parked|assumed|decided|open|needs research|needs prototype|later)\b",
+                          re.IGNORECASE)
+_TAG_TAIL = re.compile(u"(?:\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s*|\\s*(?:\u00b7|\u2014|\u2013|--)\\s*)(?:decided|assumed|parked|open)\\b.*$",
+                       re.IGNORECASE)
+_WRAP = (("**", "**"), ("~~", "~~"), ("*", "*"), ("_", "_"), ("`", "`"), ('"', '"'), (u"\u201c", u"\u201d"),
+         ("'", "'"), (u"\u2018", u"\u2019"))
+_TRAILING = u" .;,:!?\u2026\u3002"
+_EXTRA_INVISIBLE = frozenset(u"\u3164\u2800\u034f\u115f\u1160\uffa0\x0b\x0c\u180b\u180c\u180d\u180e\u17b4\u17b5"
                              + u"".join(chr(c) for c in range(0xfe00, 0xfe10)) + u"".join(chr(c) for c in range(0xe0100, 0xe01f0)))
+# A reading of a labelled ROW's words with its label dropped, and of an unlabelled LINE's words, carry this
+# mark, so that with plain set intersection a labelled line meets an unlabelled row (its words), an unlabelled
+# line meets a labelled row (the row's words), equal labels meet, and two different labels never do.
+_ROW_MARK = u"\x00"
 
 
 def _visible(text):
     """The text with every invisible character dropped: Unicode format characters (Cf: zero-width, BOM,
-    bidi marks, joiners), line and paragraph separators (Zl, Zp), the C0/C1 controls other than tab, newline
-    and carriage return, and the letter-shaped fillers (U+3164, U+2800, U+034F, U+115F, U+1160, U+FFA0)."""
+    bidi marks, joiners), combining marks (Mn, Me: an accent reads the same composed or decomposed, and a
+    word of marks alone is no word), line and paragraph separators (Zl, Zp), the C0/C1 controls other than
+    tab, newline and carriage return, the variation selectors and the letter-shaped fillers (U+3164, U+2800, U+034F,
+    U+115F, U+1160, U+17B4, U+17B5, U+180B to U+180D, U+FFA0)."""
     out = []
     for ch in text:
         cat = unicodedata.category(ch)
-        if cat in ("Cf", "Zl", "Zp") or ch in _EXTRA_INVISIBLE:
+        if cat in ("Cf", "Zl", "Zp", "Mn", "Me") or ch in _EXTRA_INVISIBLE:
             continue
         if cat == "Cc" and ch not in "\t\n\r":
             continue
@@ -95,7 +111,7 @@ def _visible(text):
 
 
 def _fields(text):
-    """The whole fields of a `·`- or dash-separated line."""
+    """The whole fields of a `·`-, dash- or pipe-separated line."""
     return _FIELD_SPLIT.split(text)
 
 
@@ -104,47 +120,93 @@ def _normalized(text):
     return " ".join(_visible(text).split()).casefold()
 
 
-def _bare(text):
-    """The words of a line with every known decoration stripped, the strips repeated until nothing changes."""
+def _strip_paren_tail(text):
+    """The text without a trailing `(waits on: ...)`, `[parked: ...]` or other ledger parenthesis, to any
+    depth of nesting (lane P's round 4 builder: a call such as `(waits on: the bench call (see (Q2) first))`)."""
+    out = text.rstrip()
+    if not out or out[-1] not in ")]":
+        return text
+    close = out[-1]
+    opener = "(" if close == ")" else "["
+    depth = 0
+    for index in range(len(out) - 1, -1, -1):
+        if out[index] == close:
+            depth += 1
+        elif out[index] == opener:
+            depth -= 1
+            if depth == 0:
+                inner = out[index + 1:-1].strip()
+                if _PAREN_WORDS.match(inner):
+                    return out[:index].rstrip()
+                return text
+    return text
+
+
+def _split(text):
+    """(label, words): a line's or field's words with every known decoration stripped, the strips repeated
+    until nothing changes, and the item label it carried in front as a key of letters and digits ('' when
+    none). A text that is only a label has no words."""
     out = _visible(text).strip()
+    label = ""
     while True:
         before = out
         out = _BULLET.sub("", out, count=1)
-        label = _LABEL.match(out)
-        if label and label.end() < len(out):
-            out = out[label.end():]
+        match = _LABEL.match(out)
+        if match and match.end() < len(out):
+            label = label or re.sub(r"[^a-z0-9]", "", match.group(0).casefold())
+            out = out[match.end():]
         for left, right in _WRAP:
             if len(out) > len(left) + len(right) and out.startswith(left) and out.endswith(right):
                 out = out[len(left):-len(right)]
         out = _TAG_TAIL.sub("", out)
-        out = _PAREN_TAIL.sub("", out)
-        out = out.strip().rstrip(" .;,:!?").strip()
+        out = _strip_paren_tail(out)
+        out = out.strip().rstrip(_TRAILING).strip()
         if out == before:
             break
-    return " ".join(out.split()).casefold()
+    if _LABEL_ALONE.match(out):
+        label = label or re.sub(r"[^a-z0-9]", "", out.casefold())
+        out = ""
+    return label, " ".join(out.split()).casefold()
+
+
+def _bare(text):
+    """The words of a line with every known decoration stripped (its label included)."""
+    return _split(text)[1]
+
+
+def _readings(text, side, later=False):
+    """The readings of one text on the LINE side or the ROW side (see `_ROW_MARK`); a later field of a line
+    counts only when it holds two or more words (a one-word why or reason field is no item)."""
+    label, words = _split(text)
+    if not words or (later and len(words.split()) < 2):
+        return set()
+    if side == "line":
+        return set([label + " " + words, words]) if label else set([words, _ROW_MARK + words])
+    return set([label + " " + words, _ROW_MARK + words]) if label else set([words])
 
 
 def _forms(text):
-    """Every reading of a LINE's words the quiet-upgrade rule compares: the whole line, its bare words, and
-    each whole field of a dashed line, bare too."""
-    out = set([_normalized(text), _bare(text)])
-    for field in _fields(text):
+    """Every reading of a LINE's words the quiet-upgrade rule compares: the whole line, and each whole field
+    of a dashed line (a later field when it holds two or more words), each with its label kept and dropped."""
+    out = _readings(text, "line")
+    for index, field in enumerate(_fields(text)):
         if field.strip():
-            out.add(_normalized(field))
-            out.add(_bare(field))
-    out.discard("")
+            out |= _readings(field, "line", later=index > 0)
     return out
 
 
+_ROW_TAIL_SPLIT = re.compile(u"\\s+(?:\u2014|\u2013|--)\\s+")
+
+
 def _row_forms(text):
-    """Every reading of a ROW's words: the whole row, its bare words, and its first field bare (the text before
-    a ` <dash> <tag or reason>` tail). Never a later field: a row's reason or why is not its words (lane L's
-    round 3 checker, CS3-2)."""
-    out = set([_normalized(text), _bare(text)])
-    fields = _fields(text)
+    """Every reading of a ROW's words: the whole row and its first field before a ` <dash> <tag or reason>`
+    tail (the ledger's dash; a middle dot or a pipe inside an item is part of the item: `Firmware · update
+    path` is one item, lane P's round 4 checker). Never a later field: a row's reason or why is not its words
+    (lane L's round 3 checker, CS3-2)."""
+    out = _readings(text, "row")
+    fields = _ROW_TAIL_SPLIT.split(text)
     if len(fields) > 1 and fields[0].strip():
-        out.add(_bare(fields[0]))
-    out.discard("")
+        out |= _readings(fields[0], "row")
     return out
 
 
@@ -154,7 +216,8 @@ def bare(text):
 
 
 def forms(text):
-    """Public: every reading of a line's words (for a lane's own rules; E14-3)."""
+    """Public: every reading of a line's words (for a lane's own rules; E14-3). Compare a line's `forms` with
+    a row's `row_forms` by set intersection; the elements are the frame's encoding, not for display."""
     return _forms(text)
 
 

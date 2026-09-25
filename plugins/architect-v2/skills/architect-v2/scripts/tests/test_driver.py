@@ -328,7 +328,12 @@ class OwnCommands(_Cli):
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'colour': 'red'}], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': 5}], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'action': 'store_true', 'metavar': 'X'}], 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'dest': 5}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'dest': 5}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'action': 'store_const'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'action': 'append_const'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'help': 5}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'action': 'help', 'metavar': 'X'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': [['--x']]}], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)
