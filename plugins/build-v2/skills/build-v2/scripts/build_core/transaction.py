@@ -246,10 +246,11 @@ def _line_words(workspace, step, slice_name, planned_here=True):
     (put back by hand, changed to a third value, the document re-saved), the words say what the
     line reads now, that this run wrote its value there earlier, and that it is left as it is.
     Without a receipted write, a pass that planned the move itself and met the edit before its own
-    write says the line was not written, as before. E14 C4-1: a pass that reopened the receipt (the
-    run was interrupted before its receipt recorded a write) cannot know whether the line was ever
-    its own, so the words are hedged: this run did not write the line as it now reads, and it is
-    left as it is, neither written again nor reverted."""
+    write says the line was not written, as before. E14 C4-1: a pass that reopened a receipt with no
+    recorded write (an earlier pass was interrupted, or stopped, before one) cannot know whether the
+    line was ever its own, so the words are hedged and say only what the receipt shows: this run did
+    not write the line as it now reads, and it is left as it is, neither written again nor
+    reverted."""
     if step.get("done") and not _line_is_ours(workspace, step, slice_name):
         current = _status_on_disk(workspace, step["target"], slice_name)
         now = ("reads `%s` in %s now" % (current, step["target"]) if current is not None else
@@ -268,14 +269,16 @@ def _line_words(workspace, step, slice_name, planned_here=True):
                    "receipt recorded a write, so the line is this run's write or an edit that set "
                    "the same value)"))
     if not planned_here:
-        # E14 C4-1: no receipted write and a pass that did not plan it; the words are hedged.
+        # E14 C4-1: no receipted write and a pass that did not plan it; the words are hedged and say
+        # only what the receipt shows (C1-1: an earlier pass may have been interrupted, or may have
+        # stopped itself, before a write; this pass cannot tell which).
         current = _status_on_disk(workspace, step["target"], slice_name)
-        now = ("reads `%s` in %s now" % (current, step["target"]) if current is not None else
+        now = ("reads `%s` in %s now, not the `%s` this run writes"
+               % (current, step["target"], step.get("value")) if current is not None else
                "can no longer be read in %s" % step["target"])
-        return ("the run was interrupted before its receipt recorded a write, so it cannot know "
-                "whether the slice's `Status:` line was ever its own; the line %s, not the `%s` "
-                "this run writes, so this run did not write the line as it now reads, and it is "
-                "left as it is, neither written again nor reverted." % (now, step.get("value")))
+        return ("its receipt records no write, so this pass cannot know whether the slice's "
+                "`Status:` line was ever its own; the line %s, so this run did not write the line "
+                "as it now reads, and it is left as it is, neither written again nor reverted." % now)
     return "the `Status:` line was not written."
 
 

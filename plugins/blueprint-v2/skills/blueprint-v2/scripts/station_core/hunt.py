@@ -12,7 +12,8 @@ lowercase letters, digits, `.`, `_`, `-`), or by `*` when no name is given.
 Every home is searched and reported in `searched`, a home whose root the caller did not give
 included (`given: false`). The candidates are those of the lowest tier that holds any; one of
 them is `one`, two or more are `several` (listed for the owner, never picked), none is `none`.
-The helper never expands `~`, never takes a relative root, and never lets a glob leave its root.
+The helper never expands `~`, never takes a relative root, and never lets a glob leave its root; a
+root is taken literally, a glob metacharacter in its path escaped (`glob.escape`).
 """
 import glob
 import os
@@ -66,7 +67,8 @@ def hunt(homes, roots, name=None):
         if root is not None:
             found = set()
             for pattern in patterns:
-                for path in glob.glob(os.path.join(root, pattern)):
+                # the root is escaped (a `[`, `*` or `?` in its path is literal); the pattern is not
+                for path in glob.glob(os.path.join(glob.escape(root), pattern)):
                     if os.path.isfile(path) and os.path.realpath(path).startswith(
                             os.path.realpath(root).rstrip(os.sep) + os.sep):
                         found.add(os.path.normpath(path))

@@ -160,6 +160,38 @@ class ParkedQuietlyResolved(_Answer):
         self.assertEqual(os.listdir(self.run_dir), [])
 
 
+    # C1-9 (the E14 slice 1 checker): only an ANSWERED question of this run settles a line; a
+    # question asked and left without an answer that touches the parked or open line settles nothing.
+    def unanswered(self, text):
+        doc = {"questions": [{"id": "Q1", "text": "Is it settled?", "touches": [self.ids[text]],
+                              "answer": ""}],
+               "lines": [{"text": text, "tag": "decided", "trace": {"kind": "ledger", "ref": self.ids[text]}}]}
+        return doc
+
+    def test_a_parked_line_touched_only_by_an_unanswered_question(self):
+        for empty in ("", "   ", None):
+            doc = self.unanswered("The storage format")
+            doc["questions"][0]["answer"] = empty
+            code, report = self.record(doc)
+            self.assertEqual(code, 5, (empty, report))
+            self.assertEqual([r["rule"] for r in report["refusals"]], ["quietly-resolved"])
+            self.assertEqual(os.listdir(self.run_dir), [], "nothing written")
+
+    def test_an_open_line_touched_only_by_an_unanswered_question(self):
+        code, report = self.record(self.unanswered("how often it resets"))
+        self.assertEqual(code, 5, report)
+        self.assertEqual([r["rule"] for r in report["refusals"]], ["quietly-resolved"])
+        self.assertEqual(os.listdir(self.run_dir), [], "nothing written")
+
+    def test_the_same_lines_touched_by_an_answered_question_are_accepted(self):
+        for text in ("The storage format", "how often it resets"):
+            doc = self.unanswered(text)
+            doc["questions"][0]["answer"] = "settled: in memory only"
+            self.assertEqual(self.check(doc), {"exit": 0, "refusals": []}, text)
+        code, report = self.record(doc)
+        self.assertEqual(code, 0, report)
+        self.assertTrue(os.path.isfile(os.path.join(self.run_dir, "answer.json")))
+
 class ShapeRefusals(_Answer):
 
     def test_a_malformed_answer_is_a_refusal_not_a_crash(self):

@@ -132,6 +132,35 @@ class Untaggable(unittest.TestCase):
         self.refused(DOC.replace("Decisions:\n", "Decision:\n"))
 
 
+    # C1-8 (the E14 slice 1 checker): a list line under a section below `Decisions:` that ends in a
+    # Decisions tag is a Decisions line out of place, refused with the line quoted, never read as
+    # an item of that section carrying the tag text.
+    def test_a_decisions_line_under_out_of_scope(self):
+        doc = DOC.replace("Out of scope: a web view \u2014 the owner declined it\n",
+                          "Out of scope:\n- a web view \u2014 decided (Q1)\n")
+        exc = self.refused(doc)
+        self.assertEqual([row["raw"] for row in exc.lines], ["- a web view \u2014 decided (Q1)"])
+        self.assertIn("a Decisions line below the Decisions block", exc.lines[0]["why"])
+        self.assertIn("- a web view \u2014 decided (Q1)", str(exc))
+
+    def test_a_decisions_line_under_open(self):
+        for tail in ("decided (Q1)", "assumed (small)", "parked: needs research"):
+            doc = DOC.replace("- whether the widget names itself\n",
+                              "- whether the widget names itself \u2014 %s\n" % tail)
+            exc = self.refused(doc)
+            self.assertEqual([row["raw"] for row in exc.lines],
+                             ["- whether the widget names itself \u2014 %s" % tail], tail)
+            self.assertIn("a Decisions line below the Decisions block", exc.lines[0]["why"])
+
+    def test_the_clean_shape_under_those_sections_is_still_read(self):
+        doc = DOC.replace("Out of scope: a web view \u2014 the owner declined it\n",
+                          "Out of scope:\n- a web view \u2014 the owner declined it\n- a decided look\n")
+        rows = ledger.read(doc)
+        self.assertEqual([r["text"] for r in rows if r["tag"] == "out-of-scope"],
+                         ["a web view \u2014 the owner declined it", "a decided look"])
+        self.assertEqual([r["text"] for r in rows if r["tag"] == "open"],
+                         ["how often the counter resets", "whether the widget names itself"])
+
 class Empty(unittest.TestCase):
 
     def test_bare_labels_hold_no_item(self):

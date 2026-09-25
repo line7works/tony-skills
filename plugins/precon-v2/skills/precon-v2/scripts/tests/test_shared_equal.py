@@ -26,6 +26,10 @@ def listed():
     return rows
 
 
+def all_four_skip_reason(present):
+    return "the checkout holds %s of the four cores" % (", ".join(present) or "none")
+
+
 def digest(path):
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
@@ -83,7 +87,7 @@ class AllFourCores(unittest.TestCase):
     def test_the_other_cores_hold_the_same_files(self):
         present = [c for c in testlib.CORES if testlib.checkout_sibling(c) is not None]
         if len(present) < len(testlib.CORES):
-            self.skipTest("the checkout holds %s of the four cores" % ", ".join(present) or "none")
+            self.skipTest(all_four_skip_reason(present))
         rows = listed()
         for row in rows:
             digests = set()
@@ -93,6 +97,17 @@ class AllFourCores(unittest.TestCase):
                 digests.add(digest(path))
             self.assertEqual(len(digests), 1, row)
 
+
+
+class TheSkipReason(unittest.TestCase):
+    """C1-11 (the E14 slice 1 checker): the reason names the cores present, or `none`."""
+
+    def test_no_core_present_reads_none(self):
+        self.assertEqual(all_four_skip_reason([]), "the checkout holds none of the four cores")
+
+    def test_the_cores_present_are_named(self):
+        self.assertEqual(all_four_skip_reason(["precon-v2", "inspect-v2"]),
+                         "the checkout holds precon-v2, inspect-v2 of the four cores")
 
 if __name__ == "__main__":
     unittest.main()

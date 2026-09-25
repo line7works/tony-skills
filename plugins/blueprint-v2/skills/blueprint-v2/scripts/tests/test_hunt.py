@@ -131,6 +131,47 @@ class Tiers(_Homes):
                          ("one", [old]))
 
 
+class MetacharacterRoots(unittest.TestCase):
+    """A root whose path holds a glob metacharacter (`[`, `*`, `?`) is searched as the literal
+    directory it names (the E14 slice 1 checker's C1-3): the root is escaped, the home's own glob
+    is not, and a glob still never leaves its root."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("hunt-meta-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+
+    def roots(self, mark):
+        base = os.path.join(self.tmp, "base%s" % mark)
+        ws, staging = os.path.join(base, "ws%s" % mark), os.path.join(base, "staging%s" % mark)
+        os.makedirs(os.path.join(ws, "docs", "scope"))
+        os.makedirs(staging)
+        return ws, staging
+
+    def test_one_document_in_each_home_under_each_mark(self):
+        for mark in ("[1]", "*", "?"):
+            for home, parts in (("repo-scope", ("docs", "scope", "2026-09-20-widget.md")),
+                                ("repo-flat", ("docs", "widget-scope.md")),
+                                ("staging", ("widget-scope.md",))):
+                with self.subTest(mark=mark, home=home):
+                    ws, staging = self.roots(mark + home)
+                    path = os.path.join(staging if home == "staging" else ws, *parts)
+                    testlib.write_text(path, "# a doc\n")
+                    result = hunt.hunt(HOMES, {"workspace": ws, "staging": staging}, name="widget")
+                    self.assertEqual((result["outcome"], [c["path"] for c in result["candidates"]]),
+                                     ("one", [path]))
+                    self.assertEqual([c["home"] for c in result["candidates"]], [home])
+                    row = [r for r in result["searched"] if r["home"] == home][0]
+                    self.assertEqual(row["found"], [path])
+
+    def test_a_sibling_the_unescaped_root_would_match_is_not_searched(self):
+        # `ws*` unescaped would also match `wsX`; escaped, only the literal `ws*` is read
+        ws, staging = self.roots("*")
+        other = os.path.join(os.path.dirname(ws), "wsX")
+        testlib.write_text(os.path.join(other, "docs", "widget-scope.md"), "# not this root\n")
+        result = hunt.hunt(HOMES, {"workspace": ws, "staging": staging}, name="widget")
+        self.assertEqual((result["outcome"], result["candidates"]), ("none", []))
+
+
 class Refusals(_Homes):
 
     def test_a_name_that_is_not_one_segment_is_refused(self):

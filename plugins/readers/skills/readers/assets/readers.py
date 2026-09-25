@@ -870,11 +870,14 @@ CLAUDE_CLI_CUT_SUBTYPES = ("error_max_turns",)
 
 def claude_cli_command(req, result, wd):
     """The argv of one headless Claude CLI read; every value an argv item, never shell text. The prompt
-    travels on stdin. `--setting-sources ""` loads no user, project or local settings (so no plugin, hook
-    or permission rule of the caller's home), `--strict-mcp-config` with no `--mcp-config` loads no MCP
-    server, `--disable-slash-commands` loads no skill; each flag was checked against `claude --help`."""
+    travels on stdin. `--safe-mode` (it takes no value) starts the child with every customization
+    disabled: CLAUDE.md, skills, installed plugins, hooks, MCP servers, custom commands and agents,
+    output styles, workflows. Kept beside it as belt and braces: `--setting-sources ""` loads no user,
+    project or local settings (so no plugin, hook or permission rule of the caller's home),
+    `--strict-mcp-config` with no `--mcp-config` loads no MCP server, `--disable-slash-commands` loads no
+    skill, and `--tools` and `--disallowedTools` below; each flag was checked against `claude --help`."""
     cmd = ["claude", "-p", "--model", result["effective_model"], "--output-format", "json",
-           "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+           "--no-session-persistence", "--safe-mode", "--setting-sources", "", "--strict-mcp-config",
            "--disable-slash-commands"]
     if req.get("effort"):
         cmd += ["--effort", result["effective_effort"]]

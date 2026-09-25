@@ -20,7 +20,9 @@ line added above it, or the same item moved from `parked` to `decided`, keeps it
 what lets a later station pass a decided line forward by id (E14-11).
 
 A line in a ledger section that the reader cannot tag is refused, quoted with its line number,
-never dropped and never guessed: `LedgerRefused` lists every such line at once. A document with no
+never dropped and never guessed; so is a line of `Out of scope:`, `Research:` or `Open:` that ends
+in a Decisions tag (` \u2014 decided (...)`, ` \u2014 assumed (...)`, ` \u2014 parked: ...`), a
+Decisions line below the Decisions block, never read as an item carrying the tag text: `LedgerRefused` lists every such line at once. A document with no
 `Decisions:` label is refused the same way.
 """
 import hashlib
@@ -35,6 +37,8 @@ TAG_OF_SECTION = {"Out of scope": "out-of-scope", "Research": "research", "Open"
 DECIDED = re.compile(r"^- (?P<text>.+?) %s (?P<tag>decided|assumed) \((?P<detail>.*)\)$" % D)
 PARKED = re.compile(r"^- (?P<text>.+?) %s parked: (?P<detail>.+)$" % D)
 TAGS = ("decided", "assumed", "parked", "out-of-scope", "research", "open")
+OUT_OF_PLACE = ("a Decisions line below the Decisions block: it ends in a Decisions tag under %s, "
+                "and the reader never takes it as an item of that section")
 
 
 class LedgerRefused(ValueError):
@@ -71,6 +75,11 @@ def _decision(raw):
     return "no tag: a Decisions line ends in ' %s decided (<source>)', ' %s assumed (<why>)' or ' %s parked: <reason>'" % (D, D, D)
 
 
+def _out_of_place(raw):
+    """True when a line of a section below `Decisions:` ends in a Decisions tag (C1-8)."""
+    return bool(DECIDED.match(raw) or PARKED.match(raw))
+
+
 def _id(section, text, seen):
     digest = hashlib.sha256(("%s\0%s" % (section, text.strip())).encode("utf-8")).hexdigest()[:12]
     base = "%s-%s" % (PREFIX[section], digest)
@@ -89,7 +98,9 @@ def read(text):
             section = label[1]
             found_decisions = found_decisions or section == "Decisions"
             rest = raw[len(label[0]):].strip()
-            if rest and section != "Decisions":
+            if rest and section != "Decisions" and _out_of_place("- " + rest):
+                refused.append({"line": number, "raw": raw, "why": OUT_OF_PLACE % section})
+            elif rest and section != "Decisions":
                 out.append(_item(section, rest, number, raw, seen))
             elif rest:
                 refused.append({"line": number, "raw": raw, "why": "a Decisions item goes on its own '- ' line"})
@@ -108,7 +119,9 @@ def read(text):
             out.append({"id": _id(section, text_, seen), "tag": tag, "section": section, "text": text_,
                         "source": source, "reason": reason, "line": number, "raw": raw})
             continue
-        if raw.startswith("- ") and raw[2:].strip():
+        if raw.startswith("- ") and _out_of_place(raw):
+            refused.append({"line": number, "raw": raw, "why": OUT_OF_PLACE % section})
+        elif raw.startswith("- ") and raw[2:].strip():
             out.append(_item(section, raw[2:].strip(), number, raw, seen))
         else:
             refused.append({"line": number, "raw": raw, "why": "an item under %s is a '- ' line" % section})

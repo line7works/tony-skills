@@ -208,8 +208,10 @@ class TheHookOutsideTest(_Lane):
 class TheCommandLine(_Lane):
     """The argv built for each profile, the stdin prompt, the environment keys, the working directory."""
 
+    # E14 slice 1 round 2 (C1-13, ruled ADOPT): `--safe-mode` right after `--no-session-persistence`
+    # in every profile; the narrower flags stay as belt and braces.
     FIXED = ["-p", "--model", "opus", "--output-format", "json", "--no-session-persistence",
-             "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]
+             "--safe-mode", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]
 
     def launch(self, **fields):
         path, req = self.request(**fields)
@@ -381,6 +383,15 @@ class TheRoster(unittest.TestCase):
         self.assertEqual(sorted(row["parity"]), sorted(row["supported_profiles"]))
         self.assertEqual(sorted(row["isolation"]), sorted(row["supported_profiles"]))
         self.assertEqual(set(row), set(rows["claude-opus"]), "the same fields as the Claude rows")
+
+    def test_the_row_words_carry_safe_mode_and_name_the_record(self):
+        row = {r["id"]: r for r in readers.load_roster()["rows"]}[ROW]
+        for profile in row["supported_profiles"]:
+            self.assertIn("--safe-mode", row["parity"][profile], profile)
+        self.assertIn("--no-session-persistence --safe-mode --setting-sources", row["quirks"])
+        self.assertIn("--safe-mode", row["web_off"])
+        self.assertIn("recorded in the E14 audit record", row["quirks"])
+        self.assertNotIn("README", row["quirks"])
 
     def test_every_existing_row_is_unchanged(self):
         git = shutil.which("git")

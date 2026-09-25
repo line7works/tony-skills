@@ -29,7 +29,8 @@ lines. The refusals, each `{"rule", "message", ...}` naming the question or line
                        that names nothing (an unknown ledger id, a path that is not in the
                        workspace, a question not answered in this run, an empty why or quote)
     quietly-resolved   a line asserted as `decided` whose trace is a `parked` or `open` ledger
-                       line that no question of this run touched
+                       line that no ANSWERED question of this run touched (a question asked and
+                       left without an answer settles nothing)
 
 Any refusal is exit 5 and nothing is written (station-loop.md section 3.4).
 """
@@ -98,7 +99,10 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
                 refusals.append(_refusal("unknown-line", "question %s touches %r, which is no line of the "
                                          "scope doc's ledger" % (q["id"], ident), question=q["id"], line_id=ident))
                 continue
-            touched.add(ident)
+            if q["id"] in answered:
+                # only an answered question of this run settles a line (C1-9); an unanswered one
+                # that touches a parked or open line settles nothing
+                touched.add(ident)
             if row["tag"] == "decided":
                 refusals.append(_refusal("re-asked-decided", "question %s re-asks a decided line: %r (%s); a "
                                          "decided line passes forward and is never asked again"
