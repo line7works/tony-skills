@@ -68,9 +68,25 @@ _FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|-|\\|)\\s+")
 # ...` ledger tail, trailing punctuation (fullwidth included), and invisible characters. The strips run until
 # nothing changes, so two decorations at once cannot escape. Text is compared in NFC, so a composed and a
 # decomposed accent read the same; combining marks are visible characters (a Thai or Hebrew word keeps its marks).
-_BULLET = re.compile(u"^(?:- \\[[ xX]\\]|\\[[ xX]\\]|[-*+\u2022\u2013\u25e6\u2023>\u2713\u2714\u2192\u2705\u2611]|#{1,6}|\\d{1,3}[.)]|\\(\\d{1,3}\\)|[a-hj-z][.)]|[ivx]{1,4}[.)])\\s+")
+_BULLET = re.compile(u"^(?:- \\[[ xX]\\]|\\[[ xX]\\]|[-*+\u2022\u2013\u25e6\u2023>\u2713\u2714\u2192\u2705\u2611]|#{1,6}|\\d{1,3}[.)]|\\d{1,3}(?:\\.\\d{1,3})+\\.|\\(\\w{1,3}\\)|[a-hj-zA-HJ-Z][.)]|[ivxIVX]{1,4}[.)])\\s+")
+_LEAD_TOKEN = re.compile(r"^(\S{1,3})\s+")
+_TAIL_TOKEN = re.compile(r"\s+(\S{1,3})$")
+
+
+def _markish(ch):
+    """A list or check mark, an arrow, a dash or a bullet: punctuation (not a quote, #, %, &, @ or a slash), a
+    symbol of the So category, or an arrow or bullet operator; never a letter, digit, currency or math sign."""
+    cat = unicodedata.category(ch)
+    code = ord(ch)
+    if ch in "+>*|\u2219":
+        return True
+    if 0x2190 <= code <= 0x21FF or 0x27F0 <= code <= 0x27FF or 0x2900 <= code <= 0x297F:
+        return True
+    return (cat in ("Pd", "So") or (cat == "Po" and ch not in "#%&@/\\\"'"))
 _SECTION = re.compile(r"^(?:constraints?|out of scope|out-of-scope|assumed|assumptions?|open|requirements?|decided|parked|"
-                      r"research|questions?|decisions?)\s*:\s+", re.IGNORECASE)
+                      r"research|questions?|decisions?|deferred|poured concrete(?: \(one-way doors\))?|one-way doors|not in this slice|"
+                      r"acceptance criteria|goal|intent|next|discovered|deviations?|build assumptions|punch list|rulings?)\s*:\s+",
+                      re.IGNORECASE)
 # The item labels the station forms use (R<n> requirement, AC<n> criterion, C<n> constraint, Q<n> question,
 # O<n> open item, A<n> assumption, D<n> decision), with or without a hyphen, a dotted sub-number or a letter
 # suffix. MARKED (brackets, a trailing mark, or a following separator, any case): a decoration, stripped on both
@@ -80,19 +96,26 @@ _SECTION = re.compile(r"^(?:constraints?|out of scope|out-of-scope|assumed|assum
 # as `S3`, `IPv6` or `H264` is never a label. A text that is only a label has no words.
 _LABEL_CORE = r"(?:R|AC|C|Q|O|A|D)-?\d{1,5}(?:\.\d{1,3})*[a-z]?"
 _MARKED_LABEL = re.compile(r"^(?:[(\[]" + _LABEL_CORE + r"[)\]][.:]?\s*"
-                           r"|" + _LABEL_CORE + r"(?:[.:)](?!\d)\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+))"
+                           r"|" + _LABEL_CORE + r"(?:[.:)\uff1a](?!\d)\s*|\s*(?:\u2014|\u2013)\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+))"
                            r"(?:\u00b7|\u2014|\u2013|--|-|:)?\s*", re.IGNORECASE)
 _BARE_LABEL = re.compile(r"^" + _LABEL_CORE + r"\s+")
+_END_LABEL = re.compile(r"\s*[(\[]" + _LABEL_CORE + r"[)\]]$", re.IGNORECASE)
 _LABEL_ALONE = re.compile(r"^[(\[]?" + _LABEL_CORE + r"[)\]]?[.:]?$", re.IGNORECASE)
-_BOLD_LABEL = re.compile(r"^(?:\*\*|\*|_|`|~~)(" + _LABEL_CORE + r")([.:)]?)(?:\*\*|\*|_|`|~~)[ \t]*", re.IGNORECASE)
-_PAREN_WORDS = re.compile(r"^(?:waits? on|waiting on|parked|assumed|decided|open|needs research|needs prototype|later)\b",
+_BOLD_LABEL = re.compile(r"^(\*{1,3}|_{1,3}|`|~~)(" + _LABEL_CORE + r")([.:)]?)\1[ \t]*", re.IGNORECASE)
+_PAREN_WORDS = re.compile(r"^(?:waits? on|waiting on|parked|assumed|decided|open|needs research|needs prototype|later|"
+                          r"deferred|pending|tbd|not now|undecided|to decide|to be decided)\b",
                           re.IGNORECASE)
-_TAG_TAIL = re.compile(u"(?:\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s*|\\s*(?:\u00b7|\u2014|\u2013|--)\\s*)(?:decided|assumed|parked|open)\\b.*$",
+_TAG_TAIL = re.compile(u"(?:\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s*|\\s*(?:\u00b7|\u2014|\u2013|--|,|;)\\s*)"
+                       u"(?:decided|assumed|parked|open|deferred|later|waits? on|waiting on|needs research|needs prototype)\\b.*$",
                        re.IGNORECASE)
 _WRAP = (("**", "**"), ("~~", "~~"), ("*", "*"), ("_", "_"), ("`", "`"), ('"', '"'), (u"\u201c", u"\u201d"),
          ("'", "'"), (u"\u2018", u"\u2019"), (u"\u00ab", u"\u00bb"))
 _BRACKETS = (("(", ")"), ("[", "]"))
-_TRAILING = u" .;,:!?\u2026\u3002\uff0e\uff0c\uff1a\uff1b\uff01\uff1f"
+# Emphasis around part of the words (the seam 12 reader, CS12-2): `**` `~~` and backticks anywhere, `*` around a word
+# run; never `_` (a name such as `__init__` keeps its underscores).
+_INNER_EMPHASIS = re.compile(r"(\*\*|~~|`)(?=\S)(.+?)(?<=\S)\1")
+_INNER_ITALIC = re.compile(r"(?<!\w)(\*)(?=\S)(.+?)(?<=\S)\1(?!\w)")
+_TRAILING = u" .;,:!?\u2026\u3002\uff0e\uff0c\uff1a\uff1b\uff01\uff1f\u3001\uff61\u203c\u2049\u2047\u2048\u2025\u0964\u0965\u06d4\u061f\u060c\u061b\u0589\u037e"
 # The default-ignorable code points (Unicode's list, the unassigned ones included: Python 3.9's tables know
 # nothing of U+2065 or U+E0080), plus the letter-shaped fillers and two controls; every Cf, Zl, Zp and C0/C1
 # character other than tab, newline and carriage return is invisible too.
@@ -146,10 +169,10 @@ def _strip_paren_tail(text):
     """The text without a trailing `(waits on: ...)`, `[parked: ...]` or other ledger parenthesis, to any
     depth of nesting (lane P's round 4 builder: a call such as `(waits on: the bench call (see (Q2) first))`)."""
     out = text.rstrip()
-    if not out or out[-1] not in ")]":
+    if not out or out[-1] not in u")]\uff09\u3011":
         return text
     close = out[-1]
-    opener = "(" if close == ")" else "["
+    opener = {")": "(", "]": "[", u"\uff09": u"\uff08", u"\u3011": u"\u3010"}[close]
     depth = 0
     for index in range(len(out) - 1, -1, -1):
         if out[index] == close:
@@ -178,7 +201,10 @@ def _split(text):
     while True:
         before = out
         out = _BULLET.sub("", out, count=1)
-        out = _BOLD_LABEL.sub(lambda m: m.group(1) + (m.group(2) or ":") + " ", out, count=1)
+        lead = _LEAD_TOKEN.match(out)
+        if lead and lead.end() < len(out) and all(_markish(c) for c in lead.group(1)):
+            out = out[lead.end():]
+        out = _BOLD_LABEL.sub(lambda m: m.group(2) + (m.group(3) or ":") + " ", out, count=1)
         out = _SECTION.sub("", out, count=1)
         marked = _MARKED_LABEL.match(out)
         if marked and marked.end() < len(out):
@@ -194,7 +220,18 @@ def _split(text):
         for left, right in _BRACKETS:
             if len(out) > 2 and out.startswith(left) and out.endswith(right) and not any(c in out[1:-1] for c in "()[]"):
                 out = out[1:-1]
+        pair = len(out) > 2 and unicodedata.category(out[0]) in ("Ps", "Pi", "Pf") \
+            and unicodedata.category(out[-1]) in ("Pe", "Pf", "Pi") \
+            and not any(unicodedata.category(c) in ("Ps", "Pe", "Pi", "Pf") for c in out[1:-1])
+        if pair or (len(out) > 2 and out[0] == "<" and out[-1] == ">" and "<" not in out[1:-1]):
+            out = out[1:-1]
+        out = _INNER_EMPHASIS.sub(r"\2", out)
+        out = _INNER_ITALIC.sub(r"\2", out)
         out = _TAG_TAIL.sub("", out)
+        out = _END_LABEL.sub("", out)
+        tail = _TAIL_TOKEN.search(out)
+        if tail and tail.start() > 0 and all(_markish(c) for c in tail.group(1)):
+            out = out[:tail.start()]
         out = _strip_paren_tail(out)
         out = out.strip().rstrip(_TRAILING).strip()
         if out == before:
