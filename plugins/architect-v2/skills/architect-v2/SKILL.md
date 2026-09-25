@@ -13,49 +13,179 @@ disable-model-invocation: true
 
 # Architect v2
 
-This station is the drawings step: from the scope doc it draws the least structure that serves a named first user's walkthrough, settles the one-way doors for the whole vision, and keeps one living architecture doc with its run log. It reads the scope doc (precon's) and an existing architecture doc for the slug; it writes the architecture doc, its local visual, and the blind reviews' files.
+The drawings step between precon and everything downstream. Precon settles what an idea is;
+provisioning and blueprint-v2 come after. This station draws the building in between: one
+interview that produces one living architecture doc, the least structure that serves a named first
+user's walkthrough without becoming demolition later, and a visual of what was decided.
 
-**This file is the frame (E14 slice 1).** The station's own steps, rules and gates arrive in its
-slice 2 lane; until then the phases a lane fills stop as `phase-not-built` and this station does
-nothing for the owner. Say so and stop.
+**The spine.** Decisions at full-vision quality, construction at MVP quantity. The one-way doors
+(language, storage, repo shape, data shapes, platform, and any other the project has) are settled
+now for the whole vision; their construction waits for the walkthrough that needs it. Delivery
+(who first touches this, by when, doing what) and architecture (the least structure that serves
+exactly that) run as one negotiation.
 
-**When to run.** Run it only when the owner types it by name. Never invoke it on your own, never suggest invoking it, and never start it because a discussion looks ready.
+**The one unforgivable move is the nod:** you propose one structure and the owner agrees. Two or
+three genuinely distinct candidates go on the table every run, each with what it assumes and what
+it makes expensive later, or the interview did not happen.
 
-**The spine.** The executor decides, the script records (rule E14-4). You talk to the owner and
-judge; `scripts/architect.py` does everything deterministic: it validates the input, finds the
-documents, reads the scope doc's ledger, renders and parses the load-bearing forms, checks your one
-recorded answer, and writes. It writes no event and never opens the shared records component (`references/station-loop.md` section 10).
+**You decide, the script records** (rule E14-4). You talk to the owner and judge; you hand your
+judgment to `scripts/architect.py` as ONE recorded answer (amended once after the blind review).
+The script finds the documents, reads the scope doc's ledger, checks your answer, renders and
+continues the doc, renders the visual, records the publish, builds the reviewers' requests, saves
+their takes and writes the result. It writes no event and never opens the records component. You
+never type the doc: it is rendered from your answer.
 
-## The loop
+Run only when the owner types it by name. Never invoke it on your own or suggest invoking it.
 
-Every run walks the same phases, each a command of `scripts/architect.py` (run with `uv run`):
+## How to run a command
 
-1. `check-input <input.json>`: one validated input (`references/input.schema.json`). The
-   `invocation` block comes from your harness's adapter (`adapters/README.md`); type none of it.
-2. `select --run-dir D --hunt <hunt>`: find the documents this station reads. `several` is listed
-   for the owner and never picked.
-3. `harvest --run-dir D`: read what exists before asking anything (slice 2).
-4. `record-answer --run-dir D --answer FILE`: your one recorded answer, checked; a question that
-   re-asks a decided ledger line, or a line with no trace, is refused (slice 2).
-5. `write --run-dir D`: the documents, rendered from the templates in `references/templates/`
-   (slice 2).
-6. `report --run-dir D`: the result, validated, and the chat block rendered from it (slice 2).
+Every command is `uv run scripts/architect.py <command> ...`, the script resolved against the
+directory holding this file; paths inside a run are absolute. Each prints one JSON document and
+exits 0 (go on), 10 (the run ended: read it back), 2 (your slip: read stderr, fix, rerun), 3
+(`jsonschema` missing: use `uv run`), 4 (your answer failed its schema: fix the file), 5 (your
+answer was refused on its content: nothing was written; read each refusal, fix what it names,
+record again), or 1 (a defect: report it, never work around it). `references/architect-v2-contract.md`
+is the contract of every command; `references/answer.schema.json` is your answer's shape.
 
-`identity <workspace>` and `skill-identity` answer at any time.
+## Step 1. The input gate
 
-## The references
+1. Read `adapters/README.md`: its profile names the helper that prints the `invocation` block and
+   your `answer_fields.session_id`. Copy both whole; type none of their fields.
+2. Write the input (`references/input.schema.json`): a fresh `run_id`, a `run_dir` outside the
+   workspace and the staging home, the workspace (the repository, when there is one), the staging
+   home, `station.scope_doc` when the owner named a scope doc's path, `station.publish: false` when
+   he said not to publish, and `owner_word` when his invocation already names reviewers (his
+   words verbatim). Run `check-input <input.json>`.
+3. Run `select --run-dir D --hunt scope`. `one`: that is the scope doc. `several`: list them for
+   the owner in a plain numbered question and never pick; `harvest` will stop the run, and his
+   pick goes into a new run's `station.scope_doc`. `none`: ask him once, in plain text, whether a
+   scope doc exists somewhere the glob cannot see, and take the path he gives (a new run, with it
+   as `station.scope_doc`). Only his "none" opens the docless gate: discuss why the station runs
+   without a scope doc until the talk lands on a reason and a working name.
+4. Run `select --run-dir D --hunt architecture --name <slug>`: the slug is the scope doc's idea
+   (the `<idea>` of `docs/scope/<date>-<idea>.md` or `<idea>-scope.md`), or the working name on a
+   docless run.
+5. Run `harvest --run-dir D`. Read what it prints before asking anything: every ledger line with
+   its id and tag, and the living doc with its run count when there is one. A `decided` line is
+   settled: it passes forward by script and you never ask it again. A stop (`selection-several`,
+   `ledger-refused`, `living-doc-malformed`) ends the run: read it back and stop.
 
-- `references/station-loop.md`: the contract every front station shares: the phases, the exit
-  codes, the input and result, report-only, the stop vocabulary, the rules, the hand-offs.
-- `references/templates/scope-doc.md`, `references/templates/architecture-doc.md`,
-  `references/templates/build-doc.md`, `references/templates/inspect-lines.md`: the load-bearing
-  forms, byte for byte, with v1's reading beside each.
-- `references/input.schema.json`, `references/result.schema.json` and `references/examples/`.
-- `adapters/README.md`: which adapter serves the harness you run in.
+**The property line.** Lookups are the repository, the project's docs and your own knowledge. No
+web access, no research agents, no research documents. An outside unknown is not looked up and
+not guessed: it becomes a `NEEDS CHECK` line (the answer's `lines`) for the owner.
 
-## Boundaries
+## Step 2. The exit ramp
 
-- No web, no research, no model call and no harness launch from a script. A reader, where this
-  station uses one, is summoned through `/readers` with the request the script builds.
-- Never write a document by hand: the script renders every load-bearing form.
-- The gate is real: read back and stop. Never start the next station.
+The first question, asked alone and answered before anything else: **is there a system here at
+all?** His answer is never inferred from silence or from your recommendation. A single static page
+is not a system. When it is that small, the interview ends after this one question: the answer
+records `exit_ramp.continued: false`, no candidates, no pick, and the tiny doc is still written and
+the visual still rendered.
+
+## Step 3. The interview
+
+Questions in plain text, numbered, each with a recommendation, so he can answer by number; never
+the harness's question UI. A recommended item his answer does not mention is accepted at its
+recommendation, and you say so in the next message, except the two answers that must be his in
+words: the exit ramp and the candidate pick, re-asked until he answers. Keep it short: about three
+answers plus the sorted scope; when a thread runs long, record what is settled and move on.
+
+1. **The walkthrough target.** A named real person (never "users"), the date of the session where
+   they use it, and what they must be able to do, as a short list. All three fields filled; `n/a` is
+   a value, a blank is not.
+2. **The candidates and the razor.** Two or three structures, distinct in at least one one-way-door
+   category (write each as `category:choice`), each with what it assumes and what it makes
+   expensive later. Grill each against the walkthrough: every component names the requirement it
+   serves, or it is cut from v0. He picks in his own words; every other candidate is rejected with
+   a one-line why.
+3. **The one-way doors.** Bring the full vision in for one purpose: nothing in v0 blocks it. Walk
+   the doors (language, storage, repo shape, data shapes, platform, and any other) as the floor.
+   One-way decisions become poured-concrete lines; banked decisions and deliberately-not-built
+   items become deferred lines, each with why its door stays open.
+
+## Step 4. The architecture doc
+
+Write ONE answer file in the shape of `references/answer.schema.json` and run
+`record-answer --run-dir D --answer FILE`. Every line that records a decision carries its trace: a
+ledger id, a repository path, a question of this run he answered, or `assumed` with your why. List
+every question you put to him with the ledger ids it touches. On a re-run, the poured-concrete and
+deferred sections are given in full: each prior line carried or struck (with its trace), then the
+new ones; nothing is dropped. The blind review is `pending` for now (`not-offered` on a docless
+run). A refusal (exit 5) says what is wrong; fix that and record again; never argue it away.
+
+Then run `write --run-dir D`. The script renders a new doc or continues the living one: a new
+`### Run <N>` block, superseded lines struck through, never deleted, the header's lines in their
+order. A `document-changed` stop means the doc moved under the run: its bytes are left as found.
+
+## Step 5. The visual
+
+Run `render-visual --run-dir D`: `<slug>-architecture.html` lands beside the doc, rendered from the
+doc. Then publish it as a separate step, through your harness's own artifact tool, privately, never
+anywhere public: on a re-run pass the doc's recorded `Artifact:` URL as the tool's `url` (the same
+URL across runs; omitting it makes a second artifact). Then run
+`record-publish --run-dir D --url <the URL it returned>`, or without `--url` when it returned none
+(the result will say the doc was rendered and not published). With `publish: false` in the answer,
+skip the publish and run `record-publish --run-dir D` so the result names the skip.
+
+## Step 6. The blind review
+
+Only when the run had a scope doc. Ask him once, as one plain-text question, whether he wants an
+outside-model review and from whom (the reviewers are readers roster rows; the default GPT row
+alone is the default; a bare "yes" is that row and nothing more). Run readers' `suggest` for the
+rows first, so the question shows what each would run.
+
+On his word in this run, and only then:
+
+1. Run `request --run-dir D --row <row>` once per reviewer he named (`--session-model` for the
+   `claude-session` row). Each request sends the scope doc ONLY, never your doc, never this
+   conversation, with the fixed instruction the contract quotes, `profile: starved`. `authorized`
+   rides only on an outside row his word in this run's input names; a row he names only now has no
+   word in the input (the contract's open point 1): say so, and do not add it by hand.
+2. Summon `/readers` with each request. A `READERS:` status other than `ok` is a failed review for
+   that lane: nothing is saved; a retry happens only on his word.
+3. Run `save-take --run-dir D --row <row> --take <raw text file> --model <effective model>
+   --isolation <label> --sidecar <sidecar path>` for each take, before any triage. The file is
+   never edited afterwards.
+4. Walk him through every disagreement between the doc and the takes, one at a time; he rules
+   each. Nothing merges silently.
+
+Then record the amended answer (`record-answer` again): the review's outcome (`declined` with the
+date, `failed` with the date and reason, or `done` with what the takes agreed on) and one ruling per
+disagreement with the fields it changes. The doc changes only where a ruling says so. Run `write`,
+`render-visual` and `record-publish` again, so the picture never lags the doc.
+
+## The gate
+
+Run `report --run-dir D` and print its `chat` block as it stands. A `review-pending` stop means the
+review has no outcome yet. Then stop. Never invoke another loop station: the read-back points the
+owner at provisioning and at blueprint-v2, and he moves. A gate he collapsed in his invocation is
+yours to act on; record his words in the answer's `changed`.
+
+When running this station required working around, reinterpreting, or excepting one of its rules,
+add one line marked `SKILL NOTE:` under the block: what and why, for the station's author.
+
+## The rules
+
+1. **User-invoked only.** He types it or it does not run.
+2. **The scope doc is the input.** Without one, the gate discussion lands on a recorded reason first.
+3. **The exit ramp is real.** It comes first; a "no" ends the interview with a tiny doc, not no doc.
+4. **Candidates or it didn't happen.** Two or three, distinct in a one-way-door category, before he picks.
+5. **The razor cuts.** Every v0 component points at a walkthrough requirement or it is out.
+6. **Decide for the vision, build for the walkthrough.** Banked decisions are recorded, never provisioned.
+7. **Doc and visual only.** No repositories, databases, hosting, accounts or installs; no other loop
+   station, except `/readers` for the blind review.
+8. **The property line is absolute.** Outside unknowns become `NEEDS CHECK` lines.
+9. **One living doc.** Continued with a run block and strikethroughs; never a fork, never a rewrite.
+10. **Blind means blind.** The scope doc only, on his word in this run only; he rules every disagreement.
+11. **Keep it short.** Ceremony that delays the MVP is the failure mode.
+
+## References
+
+| File | Read it | For |
+|---|---|---|
+| `references/architect-v2-contract.md` | before Step 1, and when a refusal or a stop is unclear | every command, refusal, stop and field |
+| `references/answer.schema.json` | before Step 4 | your answer's shape |
+| `references/station-loop.md` | when a shared phase or exit code is unclear | what the four front stations share |
+| `references/templates/architecture-doc.md` | when the doc's form is unclear | the load-bearing form, rendered by the script |
+| `references/examples/` | when a shape is unclear | accepted and rejected inputs, answers and results |
+| `adapters/README.md` | before Step 1 | your harness's profile and helper |

@@ -1,0 +1,90 @@
+{
+  "answer_version": 1,
+  "candidates": [],
+  "changed": "first run",
+  "components": [
+    {
+      "name": "index.html",
+      "serves": "open the page"
+    }
+  ],
+  "data_flow": "the fixture calls turnstile.py; reset() zeroes the count",
+  "deferred": [
+    {
+      "tag": "deferred",
+      "text": "a web dashboard \u2014 door stays open because the module has no I/O",
+      "trace": {
+        "kind": "ledger",
+        "ref": "oos-7dcece4f03ba"
+      }
+    }
+  ],
+  "diagram": "fixture -> turnstile.py -> count",
+  "doors": null,
+  "exit_ramp": {
+    "continued": false,
+    "why": "a single static page: no server, no data"
+  },
+  "lines": [],
+  "pick": null,
+  "poured_concrete": [
+    {
+      "tag": "decided",
+      "text": "platform \u2014 a static page \u2014 nothing runs on a server",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    }
+  ],
+  "project": "Turnstile",
+  "publish": true,
+  "publish_url": null,
+  "questions": [
+    {
+      "answer": "yes, a system",
+      "id": "Q1",
+      "text": "Is there a system here at all?",
+      "touches": []
+    },
+    {
+      "answer": "in memory for v0",
+      "id": "Q2",
+      "text": "Where is the count kept between sessions?",
+      "touches": [
+        "dec-e4907eb8a1ce"
+      ]
+    },
+    {
+      "answer": "Sam Bench, on 2026-10-01, counting and resetting",
+      "id": "Q3",
+      "text": "Who first touches it, and when?",
+      "touches": []
+    },
+    {
+      "answer": "the module",
+      "id": "Q4",
+      "text": "Which candidate?",
+      "touches": []
+    }
+  ],
+  "rejected": [],
+  "review": {
+    "outcome": "pending"
+  },
+  "rulings": [],
+  "run_id": "run-0001",
+  "session_id": "session-example-1",
+  "trigger": "first run",
+  "walkthrough": {
+    "must": [
+      "open the page"
+    ],
+    "trace": {
+      "kind": "question",
+      "ref": "Q1"
+    },
+    "when": "2026-10-01",
+    "who": "Sam Bench"
+  }
+}

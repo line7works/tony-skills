@@ -1,0 +1,99 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the architecture doc was written and its visual rendered and not published: the publish returned no URL",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "selection": {
+    "scope": {
+      "candidates": [
+        {
+          "home": "repo-scope",
+          "path": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+          "tier": 1
+        }
+      ],
+      "outcome": "one",
+      "searched": [
+        {
+          "found": [
+            "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md"
+          ],
+          "given": true,
+          "globs": [
+            "docs/scope/*.md"
+          ],
+          "home": "repo-scope",
+          "root": "workspace",
+          "tier": 1
+        }
+      ]
+    }
+  },
+  "station": "architect-v2",
+  "station_result": {
+    "artifact_url": null,
+    "candidates": [
+      "module",
+      "service"
+    ],
+    "counts": {
+      "components": 2,
+      "deferred": 1,
+      "poured": 2
+    },
+    "doc_path": "/tmp/widget-workspace/docs/architecture/2026-09-25-widget.md",
+    "docless": false,
+    "passed_forward": [
+      "dec-4858c7412180"
+    ],
+    "pick": "module",
+    "project": "Widget",
+    "publish_outcome": "rendered-not-published",
+    "published": false,
+    "review": "declined",
+    "review_files": [],
+    "review_reason": null,
+    "rulings_count": 0,
+    "run_number": 1,
+    "scope_doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+    "slug": "widget",
+    "visual_path": "/tmp/widget-workspace/docs/architecture/widget-architecture.html"
+  },
+  "status": "completed",
+  "stop_tag": null,
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/harvest.json",
+      "sha256_after": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256_before": null
+    },
+    {
+      "kind": "document",
+      "path": "/tmp/widget-workspace/docs/architecture/2026-09-25-widget.md",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "document",
+      "path": "/tmp/widget-workspace/docs/architecture/widget-architecture.html",
+      "sha256_after": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": false
+}

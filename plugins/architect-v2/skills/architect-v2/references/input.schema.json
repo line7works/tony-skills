@@ -91,9 +91,21 @@
     "station": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
       "default": {},
-      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+      "description": "architect-v2's own input fields (references/architect-v2-contract.md section 4), each optional.",
+      "properties": {
+        "scope_doc": {
+          "type": "string",
+          "minLength": 2,
+          "pattern": "^/",
+          "description": "the scope doc the owner named in his invocation, or his pick after a `selection-several` stop: an absolute path inside the workspace or the staging home; when present it is taken over the scope hunt"
+        },
+        "publish": {
+          "type": "boolean",
+          "default": true,
+          "description": "false when the owner said not to publish the visual in this run (E14-6); the answer then cannot publish"
+        }
+      }
     }
   }
 }
