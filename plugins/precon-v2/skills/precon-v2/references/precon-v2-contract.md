@@ -162,7 +162,7 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `parked-without-reason` | a parked line whose reason is none of the three: `needs research`, `needs prototype`, `waiting on <x>` (with what it waits on named) |
 | `open-without-call` | an open line that does not say which of the owner's calls it waits on |
 | `source-kind` | a new parked or open line, or an out-of-scope item, traced to anything but the owner's words or a question he answered (an assumption is no source, and what he ruled out is his ruling) |
-| `retagged` | a line traced to a ledger line under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line, or a new open item, whose words repeat a `Decisions:` or `Open:` ledger line's under any trace but that line's id (a ledger trace to another line included), whatever its tag and whether or not a question touched the line; an out-of-scope item whose words repeat one, unless the line is parked, open or assumed and an answered question of this run, not marked `needs_research`, touched it (and then `write` removes that line, section 6); two entries of one answer (lines, out-of-scope items, open items, in any mix) whose words meet, under any tags: each time the doc would hold the line and its twin. precon-v2 has no normalizer of its own (E14-3): the words are compared in the frame's readings (`station_core/answer.py`), a line's `forms` against a row's `row_forms` (the whole text, the words bare of every decoration the frame knows, each whole field of a `·`- or dash-separated line on the line's side and the first field on the row's, invisibles dropped by the frame's one set, whitespace collapsed, case folded), and two entries of one answer by `forms(a) & forms(b)`; `precon_core/text.py` adds only precon's own ` (waits on: <call>)` suffix, read on either side, for a call the frame's parenthesis rule does not strip (one holding a parenthesis two deep) |
+| `retagged` | a line traced to a ledger line under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line, or a new open item, whose words repeat a `Decisions:` or `Open:` ledger line's under any trace but that line's id (a ledger trace to another line included), whatever its tag and whether or not a question touched the line; an out-of-scope item whose words repeat one, unless the line is parked, open or assumed and an answered question of this run, not marked `needs_research`, touched it (and then `write` removes that line, section 6); two entries of one answer (lines, out-of-scope items, open items, in any mix) whose words meet, under any tags: each time the doc would hold the line and its twin. precon-v2 has no normalizer of its own (E14-3): the words are compared in the frame's readings (`station_core/answer.py`), a line's `forms` against a row's `row_forms` (the whole text, the words bare of every decoration the frame knows, each whole field of a `·`- or dash-separated line on the line's side and the first field on the row's, invisibles dropped by the frame's one set, whitespace collapsed, case folded), and two entries of one answer each read as a line against the other read as a row (`forms(a) & row_forms(b)` or `forms(b) & row_forms(a)`, never two line readings against each other, which meet through their unlabelled alternatives: `Q3 budget` and `Q4 budget` are two lines, `Q3 budget` beside `budget` or the same words twice are one); `precon_core/text.py` adds only precon's own ` (waits on: <call>)` suffix, read on either side, for a call the frame's parenthesis rule does not strip (one holding a parenthesis two deep) |
 | `research-resolved` | a line resolving a question marked `needs_research`, a parked line of another reason or an out-of-scope item traced to one, or a parked or open ledger line whose only touching questions are marked `needs_research` asserted as decided |
 | `research-not-parked` | a question marked `needs_research` that leaves no parked `needs research` line traced to it and touches none |
 | `napkin-outcome` | `no_scope_doc` outside the napkin tier, with any line, item, doc field or exit test, over an existing doc, or with a `sitting` other than `ends` (the napkin outcome ends the sitting) |
@@ -174,6 +174,8 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `disposition-before-raw` | dispositions in the run that writes the readers' raw text |
 | `disposition` | a disposition outside `surfaced`, `absorbed`, `left downstream`; left downstream with no why; a row with no section in the doc; no summary |
 | `cold-read-doc` | dispositions for a cold-read doc this run did not select |
+| `outside-home` | a document this run would read (the cold-read doc of the name `write` continues, a selected scope or cold-read doc) whose own path, resolved immediately before it is opened, leaves its home (a symlink): not only its folder at `request`. Refused by whichever command meets it (`record-answer` as it plans, `write` if the symlink appeared since), exit 5, nothing read into the run or a preview and nothing written |
+| `outside-run` | a run artifact (`preview/`, `exit-test/` and its index, readers' run directory, the receipt, the answer, the harvest, the result) whose path, resolved before it is written, leaves the run directory (a symlinked folder or file). Every command checks every artifact it will write before it writes the first, exit 5, nothing written; a reader's sidecar resolving outside the run is never read (`exit-test-unrecorded`) |
 
 The E14-11 rule on the precon side: a parked or open line is never rewritten as decided unless
 an answered question of this run touches it (the shared `quietly-resolved`, which also catches
@@ -266,7 +268,9 @@ Precon's rule on top of the shared builder: an outside row the owner's word does
 built. Every refusal of `request` (an unnamed outside row, an unknown row, no row, a row twice, no
 scope doc, a `--model` for a row not requested, readers not installed beside this core, a
 cold-read folder resolving outside the workspace or the staging home) is exit 2 with the reasons
-on stderr and nothing written. On success the requests are written under `<run_dir>/exit-test/`
+on stderr and nothing written; an artifact path of its own resolving outside the run directory (a
+symlinked `exit-test/` or `readers/`, or one request file) is `outside-run`, exit 5, checked for
+every request and the index before the first is written. On success the requests are written under `<run_dir>/exit-test/`
 with an index, `requests.json`, and printed. readers' roster is found the way the records
 component is, and only so: the readers plugin folder beside this plugin's (route 3a, a checkout),
 then the highest version folder of readers beside this plugin's own folder (route 3b, the
@@ -330,7 +334,9 @@ the reason), the `Cold read:` doc, and `Gate: <the gate line>`.
 requests (run artifacts), `record-answer` checks and records the answer in the run directory,
 `write` plans every document and writes each one as a preview under `<run_dir>/preview/`, listed
 in the receipt's and the result's `planned` (path, preview, the target's hash as found), and writes
-nothing to the workspace or the staging home. The result says `wrote_nothing: true` and lists run
+nothing to the workspace or the staging home. Every run artifact, each preview included, is resolved
+and checked to lie inside the run directory before the first is written (`outside-run`, exit 5,
+section 5), so a symlinked `preview/` or `exit-test/` never carries a write into the workspace. The result says `wrote_nothing: true` and lists run
 artifacts only.
 
 ## 10. The result
@@ -428,7 +434,7 @@ frame already set.
 | 2 | usage: out of turn (`report` before `write` included, the next command named), a missing selection or name, a file not there or not JSON, a refused `request`, a repo home that is not a git work tree root, a write folder resolving outside the workspace and the staging home |
 | 3 | `jsonschema` missing (`check-input`, `record-answer`, and every result) |
 | 4 | the answer fails `references/answer.schema.json` |
-| 5 | the answer refused on its content (section 5) |
+| 5 | the answer refused on its content (section 5); from any command, a path resolving where it does not belong (`outside-home`, `outside-run`, section 5), nothing written |
 | 10 | the run reached a terminal status: a stop of `harvest` or `write`, and every `report` after `write` |
 
 ## 17. What this core never does
@@ -483,10 +489,10 @@ description; `SKILL.md` names every command it runs; the mandate above is the on
 |---|---|---|
 | `check-input` | `<input.json>` | 0, 1, 2, 3, 4 |
 | `select` | `--run-dir D --hunt scope` or `--hunt cold-read`, `--name IDEA` | 0, 1, 2 |
-| `harvest` | `--run-dir D` | 0, 1, 2, 10 |
+| `harvest` | `--run-dir D` | 0, 1, 2, 5, 10 |
 | `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 5, 10 |
-| `write` | `--run-dir D` | 0, 1, 2, 10 |
-| `report` | `--run-dir D` (after `write`) | 1, 2, 3, 10 |
+| `write` | `--run-dir D` | 0, 1, 2, 5, 10 |
+| `report` | `--run-dir D` (after `write`) | 1, 2, 3, 5, 10 |
 | `identity` | `<workspace>` | 0, 2 |
 | `skill-identity` | none | 0 |
 
@@ -494,8 +500,8 @@ description; `SKILL.md` names every command it runs; the mandate above is the on
 
 | Command | Arguments | Exit codes |
 |---|---|---|
-| `state` | `--run-dir D` | 0, 1, 2 |
-| `request` | `--run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID]` | 0, 1, 2, 10 |
+| `state` | `--run-dir D` | 0, 1, 2, 5 |
+| `request` | `--run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID]` | 0, 1, 2, 5, 10 |
 
 ### Stop tags
 

@@ -27,8 +27,9 @@ The rules, each named once:
                             row_forms(row)`); an out-of-scope item that does, unless an answered
                             question of this run (not one marked needs research) touched that
                             parked, open or assumed line (the write then removes that row); two
-                            entries of one answer whose readings meet (`forms(a) & forms(b)`):
-                            each a twin the doc would hold beside the line it repeats
+                            entries of one answer whose readings meet, one read as a line and
+                            the other as a row (`forms(a) & row_forms(b)`, both ways): each a
+                            twin the doc would hold beside the line it repeats
     research-resolved       a question marked needs research that a line or an out-of-scope item
                             of this run resolves, or that leaves a parked line of another reason
     research-not-parked     a question marked needs research that leaves no parked line
@@ -93,7 +94,8 @@ def _settling(answer, ident):
 
 def _one_answer(answer):
     """Two entries of one answer (lines, out-of-scope items, open items, in any mix) whose frame
-    readings meet (`forms(a) & forms(b)`), under any tags (CP2-2): the doc would hold both."""
+    readings meet, one read as a line and the other as a row (`forms(a) & row_forms(b)` or
+    `forms(b) & row_forms(a)`), under any tags (CP2-2, R3 of round 5): the doc would hold both."""
     out, seen = [], []
     entries = [("line %d" % i, line.get("text"), {"line": i}) for i, line in enumerate(answer.get("lines") or [])]
     entries += [("out-of-scope item %d" % i, item.get("text"), {"out_of_scope": i})
@@ -103,11 +105,14 @@ def _one_answer(answer):
         forms = text.readings(value)
         if not forms:
             continue
-        prior = next((name for name, earlier in seen if forms & earlier), None)
+        rows = text.row_readings(value)
+        # each entry read as a line against the other read as a row, both ways (R3 of round 5): two line-side
+        # readings meet through their unlabelled alternatives, so `Q3 budget` and `Q4 budget` would be one
+        prior = next((name for name, earlier, earlier_rows in seen if forms & earlier_rows or earlier & rows), None)
         if prior is not None:
             out.append(refusal("retagged", "the answer asserts %r twice (%s and %s): one line per item, or the doc "
                                            "holds an item and its twin" % (value, prior, label), **where))
-        seen.append((label, forms))
+        seen.append((label, forms, rows))
     return out
 
 

@@ -117,6 +117,9 @@ def sidecar_path(run_dir, call_id):
 def read_call(run_dir, req):
     """The call's result as readers recorded it, or a why-not string."""
     path = sidecar_path(run_dir, req["call_id"])
+    if os.path.lexists(path) and not fsio.inside(path, run_dir):
+        # readers' own place is inside this run; a call folder symlinked elsewhere is never read (R1)
+        return "the sidecar at %s resolves outside the run directory %s; it is not read" % (path, run_dir)
     if not os.path.isfile(path):
         return "no sidecar at %s: readers recorded no result for call %s" % (path, req["call_id"])
     try:

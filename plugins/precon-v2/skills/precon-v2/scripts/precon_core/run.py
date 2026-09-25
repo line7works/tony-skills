@@ -56,8 +56,34 @@ def need(run, allowed, command, hint):
     return phase
 
 
+class Outside(RuntimeError):
+    """A path this run would open or write resolves where it does not belong: a run artifact outside the
+    run directory (`outside-run`), or a document outside its home (`outside-home`). Every phase and own
+    command refuses it with exit 5 and the refusal on stdout; nothing was written (R1 and R2 of round 5)."""
+
+    def __init__(self, rule, message, target):
+        RuntimeError.__init__(self, message)
+        self.rule, self.message, self.target = rule, message, target
+
+    def refusal(self):
+        return {"rule": self.rule, "message": self.message, "path": self.target}
+
+
 def path(run, *parts):
-    return os.path.join(run.run_dir, *parts)
+    """A run artifact's path, resolved and checked to lie inside the run directory before anything opens
+    or writes it: a symlinked artifact folder (`preview`, `exit-test`, `readers`), or a symlinked artifact
+    file, that leaves the run is refused, so report-only's "nothing was written outside the run
+    directory" holds."""
+    full = os.path.join(run.run_dir, *parts)
+    if not fsio.inside(full, run.run_dir):
+        raise Outside("outside-run", "the run artifact %s resolves outside the run directory %s (a symlink?)"
+                      % (full, run.run_dir), full)
+    return full
+
+
+def preflight(run, *names):
+    """Every artifact path a command will write, checked before the first is written."""
+    return [path(run, *(name if isinstance(name, tuple) else (name,))) for name in names]
 
 
 def read_json(run, name, default=None):
@@ -126,11 +152,12 @@ def finish(ctx, run, status, reason, station_result, stop_tag=None):
     checkpoint as it ends; a result that does not validate (a defect) puts the checkpoint back at the
     phase it was, so a run is never `done` without its `result.json` (CP1-16)."""
     prior = run.checkpoint.get("phase")
+    result_path = path(run, "result.json")
     advance(run, "done")
     try:
         return _finish(ctx, run, status, reason, station_result, stop_tag)
     except BaseException:
-        if not os.path.isfile(path(run, "result.json")):
+        if not os.path.isfile(result_path):
             advance(run, prior)
         raise
 

@@ -40,7 +40,9 @@ holding this file; paths inside a run are absolute, any working directory will d
 prints one JSON document. Exit 0: go on. Exit 10: the run ended; read its result. Exit 2: your
 usage slip; read stderr, fix, rerun. Exit 3: `jsonschema` is missing; use `uv run`. Exit 4: a file
 you supplied fails its schema; fix it. Exit 5: your answer was refused on its content; the
-refusals name each rule; fix the answer and record it again. Exit 1: a defect; report it, never
+refusals name each rule; fix the answer and record it again (from another command, exit 5 names a
+path that resolves outside the run directory or its home: `outside-run`, `outside-home`; show the
+owner, never work around it). Exit 1: a defect; report it, never
 work around it.
 
 **A run is one round.** A run records one answer, so every round of questions is its own run:

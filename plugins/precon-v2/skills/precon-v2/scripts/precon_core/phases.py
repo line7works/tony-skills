@@ -25,13 +25,18 @@ HOMES = {"repo-scope": "repo", "repo-flat": "repo", "staging": "staging"}
 
 
 def handler(fn):
-    """A phase: an ended run prints its recorded result again (exit 10) and writes nothing."""
+    """A phase or an own command: an ended run prints its recorded result again (exit 10) and writes
+    nothing; a path that resolves where it does not belong (a run artifact outside the run directory, a
+    document outside its home) is refused, exit 5, the refusal on stdout, nothing written (R1, R2)."""
     @functools.wraps(fn)
     def wrapped(ctx, args):
         try:
             return fn(ctx, args)
         except runmod.Ended as ended:
             return runmod.emit(ended.document, exits.TERMINAL)
+        except runmod.Outside as outside:
+            return runmod.emit(ctx.envelope(ok=False, refusals=[outside.refusal()],
+                                            reason="%s; nothing was written" % outside.message), exits.REFUSED)
     return wrapped
 
 
@@ -60,6 +65,19 @@ def _is_git_root(path):
 def _read_text(path):
     with open(path, "r", encoding="utf-8", newline="") as fh:
         return fh.read()
+
+
+def _read_inside(path, roots):
+    """A document's text, its resolved path checked immediately before it is opened: a file that is a
+    symlink leaving every one of `roots` (the workspace, the staging home) is never read (R1)."""
+    _resolves_inside(path, roots)
+    return _read_text(path)
+
+
+def _resolves_inside(path, roots):
+    if not any(root and fsio.inside(path, root) for root in roots):
+        raise runmod.Outside("outside-home", "the document %s resolves outside %s (a symlink?); it is not read"
+                             % (path, " and ".join(r for r in roots if r)), path)
 
 
 def _selection(run, hunt):
@@ -110,7 +128,7 @@ def harvest(ctx, args):
                            % (idea, ", ".join(untaken)))
     if sel["outcome"] == "one":
         cand = sel["candidates"][0]
-        text = _read_text(cand["path"])
+        text = _read_inside(cand["path"], (workspace, staging))
         try:
             rows = ledger.read(text)
         except ledger.LedgerRefused as exc:
@@ -128,6 +146,7 @@ def harvest(ctx, args):
         out["doc"] = dict(head, path=cand["path"], home=HOMES.get(cand["home"], cand["home"]),
                           sha256=fsio.sha256_bytes(text.encode("utf-8")))
         out["ledger"] = rows
+        runmod.preflight(run, "harvest-scope-doc.md", "harvest.json")
         fsio.atomic_write(runmod.path(run, "harvest-scope-doc.md"), text.encode("utf-8"))
     elif home == "repo" and not _is_git_root(workspace):
         raise driver.Usage("the input's home is repo, and the workspace %s is not a git work tree root: a new scope "
@@ -144,7 +163,7 @@ def harvest(ctx, args):
     if cold is not None:
         candidates = []
         for cand in cold["candidates"]:
-            text = _read_text(cand["path"])
+            text = _read_inside(cand["path"], (workspace, staging))
             candidates.append({"path": cand["path"], "home": cand["home"], "sha256": fsio.sha256_bytes(text.encode("utf-8")),
                                "rows": sorted(exit_test.section_rows(text, roots=(workspace, staging)))})
         out["cold_read"] = {"outcome": cold["outcome"], "candidates": candidates}
@@ -188,6 +207,7 @@ def _current_doc(run):
     return None
 
 
+@handler
 def state(ctx, args):
     run = ctx.open_run(args.run_dir)
     runmod.need(run, runmod.PHASES[1:], "state", "after `select`")
@@ -201,7 +221,7 @@ def state(ctx, args):
     if path:
         out["doc"] = path
         try:
-            rows = ledger.read(_read_text(path))
+            rows = ledger.read(_read_inside(path, (run.input.get("workspace"), run.input.get("staging"))))
         except ledger.LedgerRefused as exc:
             out.update(counts=None, board=None, ledger_refused=exc.lines)
             return runmod.emit(ctx.envelope(**out), exits.SUCCESS)
@@ -249,9 +269,12 @@ def request(ctx, args):
                                               models=models)
     if refusals:
         raise driver.Usage("no request was built: " + "; ".join(refusals))
+    # every artifact this command writes, and readers' run directory it hands on, resolved inside the run
+    # before the first is written (R2)
+    targets = runmod.preflight(run, *[(runmod.EXIT_TEST_DIR, "%s.json" % req["call_id"]) for req in built])
+    runmod.preflight(run, (runmod.EXIT_TEST_DIR, "requests.json"), runmod.READERS_DIR)
     listed = []
-    for req in built:
-        target = runmod.path(run, runmod.EXIT_TEST_DIR, "%s.json" % req["call_id"])
+    for req, target in zip(built, targets):
         fsio.write_json(target, req)
         listed.append({"row": req["row"], "call_id": req["call_id"], "path": target,
                        "authorized": req.get("authorized") is True})
@@ -284,6 +307,7 @@ def plan(run, harvest_doc, answer, requests):
     et = answer.get("exit_test") or {}
     if et.get("rows"):
         for req in (requests or {}).get("requests") or []:
+            runmod.path(run, os.path.relpath(exit_test.sidecar_path(run.run_dir, req["call_id"]), run.run_dir))
             call = exit_test.read_call(run.run_dir, exit_test.read_request(req["path"]))
             if isinstance(call, str):
                 raise scopedoc.PlanError([{"message": call}])
@@ -295,6 +319,10 @@ def plan(run, harvest_doc, answer, requests):
         pointer = scopedoc.COLD_POINTER % os.path.relpath(cold_path, root)
         if not any(row["tag"] == "research" and row["text"] == pointer for row in harvest_doc.get("ledger") or []):
             parts["research"].append(pointer)
+        # the cold-read file itself, not only its folder at `request`: resolved inside its home immediately
+        # before it is opened, so a symlink leaving the home is never copied into the doc or a preview (R1)
+        if os.path.lexists(cold_path):
+            _resolves_inside(cold_path, (root,))
         existing = _read_text(cold_path) if os.path.isfile(cold_path) else None
         text = exit_test.render_cold_read(existing, idea, date, os.path.relpath(doc["path"], root),
                                           answer.get("run_id"), calls)
@@ -330,7 +358,7 @@ def plan(run, harvest_doc, answer, requests):
     if et.get("dispositions") is not None:
         target = et["cold_read_doc"]
         cand = [c for c in (harvest_doc.get("cold_read") or {}).get("candidates") or [] if c["path"] == target][0]
-        existing = _read_text(target)
+        existing = _read_inside(target, (workspace, staging))
         if fsio.sha256_bytes(existing.encode("utf-8")) != cand["sha256"]:
             raise scopedoc.PlanError([{"message": "the cold-read doc %s changed after harvest" % target}])
         text = exit_test.render_disposition(existing, date, answer.get("run_id"), et["summary"], et["dispositions"])
@@ -398,6 +426,7 @@ def record_answer(ctx, args):
         return runmod.emit(ctx.envelope(ok=False, accepted=False, refusals=refusals,
                                         reason="the recorded answer was refused on its content (%d refusal(s)); "
                                                "nothing was written" % len(refusals)), exits.REFUSED)
+    runmod.preflight(run, "answer.json")
     code, report = answermod.record(run.run_dir, answer, harvest_doc.get("ledger") or [],
                                     workspace=run.input["workspace"], allowed=ALLOWED_TRACES)
     if code != exits.SUCCESS:
@@ -444,9 +473,12 @@ def write(ctx, args):
                "cold_read_doc": next((w["path"] for w in writes if w["role"] in ("cold-read", "disposition")), None),
                "calls": [dict((k, v) for k, v in c.items() if k != "raw_text") for c in calls]}
     receipt.update(_left(run, harvest_doc, writes))
+    # every run artifact this command writes, resolved inside the run before the first byte is written (R2)
+    runmod.preflight(run, "receipt.json")
     if runmod.report_only(run):
-        for number, item in enumerate(writes, 1):
-            preview = runmod.path(run, runmod.PREVIEW_DIR, "%d-%s" % (number, os.path.basename(item["path"])))
+        previews = runmod.preflight(run, *[(runmod.PREVIEW_DIR, "%d-%s" % (number, os.path.basename(item["path"])))
+                                           for number, item in enumerate(writes, 1)])
+        for item, preview in zip(writes, previews):
             fsio.atomic_write(preview, item["text"].encode("utf-8"))
             receipt["planned"].append({"path": item["path"], "kind": item["kind"], "preview": preview,
                                        "sha256_before": item["sha256_before"]})

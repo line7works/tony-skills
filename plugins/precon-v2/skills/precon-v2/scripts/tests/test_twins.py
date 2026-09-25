@@ -239,6 +239,43 @@ class OneAnswerDecorated(_Born):
             preconlib.owner_line("Sensor accuracy.", "the cheap one")]))
 
 
+class OneAnswerLabels(_Born):
+    """R3 of round 5 (the outside reviewer's P-3, the lane half): inside one answer a line is read
+    against the other entries as a row is (`forms(a) & row_forms(b)`, both ways), never two line-side
+    readings against each other, whose unlabelled alternatives collide. Two new lines whose bare
+    labels differ are two lines; the same words twice, or a labelled line beside its unlabelled
+    words, still refuse. (`Q3:` against `Q4:`, the marked labels, is the frame's reading, E14-4.)"""
+
+    def accepted(self, answer):
+        code, doc, err = self.run_.record(answer)
+        self.assertEqual(code, 0, "%s %s" % (json.dumps(doc, ensure_ascii=False), err))
+
+    def test_two_new_lines_with_different_bare_labels_are_two_lines(self):
+        self.accepted(self.answer(lines=[preconlib.owner_line("Q3 budget", "three"),
+                                         preconlib.owner_line("Q4 budget", "four")]))
+
+    def test_different_bare_labels_across_a_line_and_an_out_of_scope_item(self):
+        self.accepted(self.answer(lines=[preconlib.owner_line("R1 cache warmup", "keep it")], out_of_scope=[
+            {"text": "R2 cache warmup", "reason": "declined", "trace": {"kind": "owner_words", "ref": "not that one"}}]))
+
+    def test_different_bare_labels_across_a_line_and_an_open_item(self):
+        self.accepted(self.answer(lines=[preconlib.owner_line("AC1 reset shown", "yes")], open_items=["AC2 reset shown"]))
+
+    def test_the_same_labelled_words_twice_are_refused(self):
+        self.refused(self.answer(lines=[preconlib.owner_line("Q4 budget", "four"),
+                                        preconlib.owner_line("Q4 budget", "again")]))
+        self.refused(self.answer(lines=[preconlib.owner_line("Q4 budget", "four"),
+                                        preconlib.owner_line("q4  BUDGET.", "again")]))
+
+    def test_a_labelled_line_beside_its_unlabelled_words_is_refused(self):
+        for first, second in (("Q3 budget", "budget"), ("budget", "Q3 budget"), ("R2 Colour", "- Colour"),
+                              ("Colour", "Colour \u2014 decided (x)")):
+            self.refused(self.answer(lines=[preconlib.owner_line(first, "one"),
+                                            preconlib.owner_line(second, "two")]))
+        self.refused(self.answer(lines=[preconlib.owner_line("Q3 budget", "three")], out_of_scope=[
+            {"text": "budget", "reason": "declined", "trace": {"kind": "owner_words", "ref": "no budget"}}]))
+
+
 class OutOfScopeDecorated(_Born):
     """CP2-3 (round 4, R2): an out-of-scope item whose frame readings meet a parked, open or assumed
     row's, behind any decoration, is refused unless an answered question of this run touched it."""
