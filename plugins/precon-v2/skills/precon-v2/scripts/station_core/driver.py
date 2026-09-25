@@ -18,8 +18,10 @@ keyword arguments}`. The driver adds each as a subcommand with the common option
 a shared command, or an entry missing a field, is a defect of the calling script (`ValueError`).
 """
 import argparse
+import contextlib
 import datetime
 import hashlib
+import io
 import json
 import os
 import re
@@ -398,6 +400,51 @@ def check_handlers(handlers):
     return handlers
 
 
+DIAGNOSTIC_EXITS = (exits.GENERAL, exits.USAGE, exits.MISSING_DEPENDENCY)
+
+
+def checked_dispatch(handler, ctx, args):
+    """Every command's exit code and stdout are checked before either leaves the process (the fifteenth seam
+    fix: the outside reviewer's L-3, P-4, A3 and I F7). The handler runs with stdout captured. It may return
+    only an exit code the interface documents (`exits.ALL`); on a diagnostic exit (1, 2, 3) it has written
+    nothing to stdout; on every other exit its stdout is exactly one JSON object carrying this run's envelope
+    (interface_version, plugin_version, station); a SystemExit inside it is allowed only as a diagnostic exit
+    with nothing on stdout (the frame's missing-dependency path). Anything else is a
+    Defect: exit 1 with the sentence on stderr and nothing released to stdout. A Terminal raised inside is
+    emitted as before and then checked the same way; a Usage raised inside propagates as usage. The frame's
+    own commands, the lane phases and a core's own commands all pass through here: one rule."""
+    captured = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured):
+            try:
+                code = handler(ctx, args)
+            except Terminal as terminal:
+                code = emit(terminal.document, exits.TERMINAL)
+    except SystemExit as exc:
+        # the frame's own missing-dependency path exits 3 through SystemExit with nothing on stdout; that is a
+        # diagnostic exit like any other; every other SystemExit is a defect
+        if type(exc.code) is int and exc.code in DIAGNOSTIC_EXITS and not captured.getvalue().strip():
+            return exc.code
+        raise Defect("a command handler raised SystemExit: %r" % (exc.code,))
+    if type(code) is not int or code not in exits.ALL:
+        raise Defect("a command handler returned an exit code the interface does not document: %r" % (code,))
+    output = captured.getvalue()
+    if code in DIAGNOSTIC_EXITS:
+        if output.strip():
+            raise Defect("a command handler wrote to stdout on a diagnostic exit %d" % code)
+        return code
+    try:
+        document = json.loads(output)
+    except ValueError:
+        raise Defect("a command handler did not emit exactly one JSON document on exit %d" % code)
+    expected = ctx.envelope()
+    if not isinstance(document, dict) or any(document.get(key) != value for key, value in expected.items()):
+        raise Defect("a command handler emitted a document without this run's envelope")
+    sys.stdout.write(output)
+    sys.stdout.flush()
+    return code
+
+
 def main(station, hunts, handlers, argv=None, commands=None):
     commands = check_commands(commands)
     handlers = check_handlers(handlers)
@@ -419,7 +466,7 @@ def main(station, hunts, handlers, argv=None, commands=None):
     for own in commands:
         commands_by_name[own["name"]] = own["handler"]
     try:
-        return commands_by_name[args.command](ctx, args)
+        return checked_dispatch(commands_by_name[args.command], ctx, args)
     except Terminal as terminal:
         return emit(terminal.document, exits.TERMINAL)
     except Usage as exc:

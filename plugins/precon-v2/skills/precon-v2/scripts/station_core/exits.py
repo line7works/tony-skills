@@ -9,7 +9,9 @@ The A7a set the E13 cores use, plus 5 for a recorded answer refused on its conte
     3   missing dependency: jsonschema, or (inspect-v2) the records component missing or at another
         interface version. One line on stderr, nothing on stdout
     4   validation: a supplied file failed its schema; nothing is written
-    5   the recorded answer was refused on its content (E14-11); nothing is written
+    5   refused: the recorded answer on its content (E14-11), or an input, a path or a run artifact
+        a core's own rule refuses (a file outside its home, a run artifact outside the run); nothing
+        is written
     10  the run reached a terminal status, a completion or a stop alike
 """
 
