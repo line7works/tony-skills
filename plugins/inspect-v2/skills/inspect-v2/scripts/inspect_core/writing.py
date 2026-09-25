@@ -18,7 +18,8 @@ In this order, each step checked before the next:
    stamp, placed by v1's rule: directly below the previous `Plan: inspected` line; else directly
    after the `Out of scope:` block (its line and the list lines continuing it); else directly
    above the first `## Slice` heading. A prior stamp is never rewritten.
-4. **The banner** on each outside call's raw copy under `docs/reviews/`, once, at its top.
+4. **The banner** on each outside call's raw copy under `docs/reviews/` is already on: `record-answer`
+   prepends it before any triage (`banner_raw_copies`, v1 Step 3) and its writes open the receipt.
 5. **The verdict mirror** `docs/reviews/<date>-inspect-<feature>.md` (`-2`, `-3` on a same-day
    repeat, never an overwrite), holding the block's bytes, then `records.py mirrors` asked.
 
@@ -90,23 +91,26 @@ def _fenced(lines):
 
 
 def stamp_index(lines):
-    """Where the stamp goes (v1's placement rule), as an index into `lines` to insert before."""
+    """Where the stamp goes (v1's placement rule), as an index into `lines` to insert before: directly
+    below the previous `Plan: inspected` line (any unfenced line that starts so, parsed strictly or
+    not, so history reads top to bottom); else directly after the `Out of scope:` block (its line
+    and the `- ` lines continuing it), looked for in every unfenced line above the first `## Slice`
+    heading, a header section's included; else directly above the first `## Slice` heading."""
     fenced = _fenced(lines)
     body = [l.rstrip("\r\n") for l in lines]
-    stamps = [i for i, l in enumerate(body) if not fenced[i] and (templates.parse_line(l) or {}).get("kind") == "stamp"]
+    stamps = [i for i, l in enumerate(body) if not fenced[i] and l.startswith("Plan: inspected ")]
     if stamps:
         return stamps[-1] + 1
+    first_slice = next((i for i, l in enumerate(body) if not fenced[i] and l.startswith("## Slice")), None)
     first_section = next((i for i, l in enumerate(body) if not fenced[i] and l.startswith("## ")), len(body))
-    oos = next((i for i in range(first_section) if not fenced[i] and body[i].startswith("Out of scope:")), None)
+    limit = first_slice if first_slice is not None else first_section
+    oos = next((i for i in range(limit) if not fenced[i] and body[i].startswith("Out of scope:")), None)
     if oos is not None:
         at = oos + 1
-        while at < first_section and body[at].startswith("- "):
+        while at < limit and not fenced[at] and body[at].startswith("- "):
             at += 1
         return at
-    first_slice = next((i for i, l in enumerate(body) if not fenced[i] and l.startswith("## Slice")), None)
-    if first_slice is not None:
-        return first_slice
-    return first_section
+    return limit
 
 
 def punch_tail(lines):
@@ -184,12 +188,16 @@ def mirror_text(harvest, triage, date, render_text, own_lines, stamp):
                                 "none %s no-record rule applied" % D),
              "Refuted: %d" % triage["counts"]["refuted"],
              "Stamp: %s" % stamp]
+    if triage.get("lenses_not_run"):
+        lines.append("Lenses not run: %s (a short fleet: this run is weaker than a whole one)"
+                     % ", ".join(triage["lenses_not_run"]))
     body = "\n".join(lines) + "\n"
     if render_text:
         body += render_text
     if own_lines:
         body += ("" if render_text else "\n") + "".join(line + "\n" for line in own_lines)
-    body += "\nHunted and held: %s\n" % (triage.get("hunted_and_held") or "not recorded in the answer")
+    body += "\nHunted and held: %s\n" % triage["hunted_and_held"]
+    body += "Bottom line: %s\n" % triage["bottom_line"]
     return body
 
 
@@ -231,7 +239,8 @@ def handler(ctx, args):
                           "nothing was written; run inspect-v2 again on the doc as it is now" % doc_path)
     text = before_bytes.decode("utf-8")
     client = records_link.open_client(common.STATION, records_root=args.records_root)
-    writes = []
+    # the banners `record-answer` put on the outside raw copies before any triage come first
+    writes = list(common.read(run, "banner.json")["writes"]) if common.has(run, "banner.json") else []
     records = {"log": harvest["records"]["log"], "head_before": harvest["records"]["head"],
                "head_after": harvest["records"]["head"], "appended": 0}
     render_text = ""
@@ -265,18 +274,14 @@ def handler(ctx, args):
                           "to the doc" % (form_after[:2] or "a line would change"), {"records": records})
     fsio.atomic_write(doc_path, after.encode("utf-8"))
     _receipt(writes, doc_path, "document", fsio.sha256_bytes(before_bytes), fsio.sha256_file(doc_path))
-    for raw in _raw_copies(run, ws):
-        data = _bytes(raw)
-        if not data.decode("utf-8", "replace").startswith(BANNER):
-            new = (BANNER + "\n\n").encode("utf-8") + data
-            fsio.atomic_write(raw, new)
-            _receipt(writes, raw, "document", fsio.sha256_bytes(data), fsio.sha256_bytes(new))
     body = mirror_text(harvest, triage, date, render_text, own, stamp)
     fsio.atomic_write(mirror_path, body.encode("utf-8"))
     _receipt(writes, mirror_path, "document", None, fsio.sha256_file(mirror_path))
-    mirror = {"path": mirror_path, "recognised": None, "state": None}
+    mirror = {"path": mirror_path, "recognised": None, "state": None, "answer": None}
     try:
-        rows = client.mirrors(ws, rel).get("mirrors") or []
+        answer = client.mirrors(ws, rel)
+        mirror["answer"] = answer    # the component's answer, kept whole (contract section 15, point 2)
+        rows = answer.get("mirrors") or []
         mine = [r for r in rows if r.get("verdict_doc") == os.path.relpath(mirror_path, ws)]
         mirror["recognised"] = bool(mine)
         mirror["state"] = mine[0]["state"] if mine else "not listed by `mirrors`"
@@ -291,6 +296,20 @@ def handler(ctx, args):
     run.save()
     return ctx.emit(ctx.envelope(next="report", run_id=run.input["run_id"], stamp=stamp, records=records,
                                  mirror=mirror, questions=questions, clean_line=clean))
+
+
+def banner_raw_copies(run):
+    """v1 Step 3: before any triage, the banner goes on top of each outside raw copy readers filed for
+    this run, once, and on nothing else (`record-answer` calls this right after the answer is recorded,
+    never in report-only). Returns the writes, each with its bytes' hash before and after."""
+    writes = []
+    for raw in _raw_copies(run, common.workspace(run)):
+        data = _bytes(raw)
+        if not data.decode("utf-8", "replace").startswith(BANNER):
+            new = (BANNER + "\n\n").encode("utf-8") + data
+            fsio.atomic_write(raw, new)
+            _receipt(writes, raw, "document", fsio.sha256_bytes(data), fsio.sha256_bytes(new))
+    return writes
 
 
 def _raw_copies(run, ws):

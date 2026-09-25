@@ -177,6 +177,29 @@ class TheStationsOwnLines(_Write):
         self.assertEqual([l for l in original if l], [l for l in kept if l], "additive only")
 
 
+class ThePlacementRule(unittest.TestCase):
+    """CI1-8: v1's stamp placement, on the two shapes round 1 placed wrong (the library, no run)."""
+
+    def place(self, lines):
+        from inspect_core import writing
+        return writing.stamp_index([l + "\n" for l in lines])
+
+    def test_an_out_of_scope_block_under_a_heading_is_found(self):
+        lines = ["# Turnstile build plan", "", "## Header", "Intent: count turns.",
+                 "Out of scope:", "- a web dashboard", "- a reset", "", "## Slice A", "Status: not started"]
+        self.assertEqual(self.place(lines), lines.index("- a reset") + 1)
+
+    def test_a_prior_stamp_that_does_not_parse_strictly_is_still_the_previous_stamp(self):
+        lines = ["# Turnstile build plan", "Out of scope: a dashboard",
+                 "Plan: inspected 2026-09-01 by  someone \u00b7 clean", "", "## Slice A"]
+        self.assertEqual(self.place(lines), 3)
+
+    def test_a_stamp_inside_a_fence_is_not_a_stamp(self):
+        lines = ["# Turnstile build plan", "Out of scope: a dashboard", "```",
+                 "Plan: inspected 2026-09-01 by m \u00b7 clean", "```", "## Slice A"]
+        self.assertEqual(self.place(lines), 2)
+
+
 class TheMirrorAndTheReceipt(_Write):
 
     def test_the_mirror_holds_the_block_and_mirrors_is_asked(self):
@@ -191,6 +214,21 @@ class TheMirrorAndTheReceipt(_Write):
         self.assertEqual(mirror_row["path"], mirror)
         self.assertIsNotNone(mirror_row["state"], "records.py mirrors was asked and its answer kept")
         self.assertIn(mirror, [w["path"] for w in receipt["writes"]])
+
+    def test_the_mirrors_answer_is_kept_verbatim(self):
+        # CI1-6: the component's `mirrors` answer is kept whole, never only a derived word
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
+        code, doc, out, err = self.go(fleet)
+        self.assertEqual(code, 0, out + err)
+        code, body, err = ilib.records_cli(["mirrors", "--workspace", self.ws, "--doc", ilib.BUILD_REL])
+        self.assertEqual(code, 0, err)
+        kept = self.run.artifact("write.json")["mirror"]["answer"]
+        drop = ("interface_version", "plugin_version", "component_version")
+        self.assertEqual(dict((k, v) for k, v in kept.items() if k not in drop),
+                         dict((k, v) for k, v in body.items() if k not in drop))
+        code, doc, out, err = self.run.phase("report")
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["station_result"]["mirror"]["answer"], kept)
 
     def test_a_same_day_repeat_takes_the_next_mirror_name(self):
         fleet = ilib.claude_fleet(R, model=MODEL)
@@ -267,6 +305,69 @@ class TheRawCopies(_Write):
         paths = self.outside("other")
         self.assertEqual(testlib.read_text(paths["other"]), "a signoff verdict doc\n")
         self.assertEqual(testlib.read_text(paths["named"]), "the reader's reply\n")
+
+
+class TheBannerBeforeTriage(_Write):
+    """R2 (CI1-2): the banner goes on the outside raw copy at `record-answer`, before anything is triaged,
+    on every run that records one, a stopped run included; a short fleet is named in the mirror (R1)."""
+
+    WORD = {"rows": ["gpt-astra"], "words": "send it to gpt-astra"}
+
+    def recorded(self, paper_extra=None, with_repo=True):
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        doc = ilib.make_input(self.ws, self.run.run_dir, row="gpt-astra", owner_word=self.WORD)
+        self.run.upto("request", doc=doc)
+        self.raw = self.run.artifact("requests.json")["calls"][0]["raw_path"]
+        testlib.write_text(self.raw, "the reader's reply\n")
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", raw_path=self.raw,
+                                   findings=[ilib.finding("build-doc.md:12", quote="AC1")])
+        paper.update(paper_extra or {})
+        fleet = [paper] + ([ilib.reader_result("%s-repo-reality" % R, model=MODEL)] if with_repo else [])
+        path = os.path.join(self.tmp, "answer.json")
+        testlib.write_json(path, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD))
+        return self.run.phase("record-answer", "--answer", path)
+
+    def assert_bannered(self):
+        text = testlib.read_text(self.raw)
+        self.assertTrue(text.startswith("Raw inspector output \u2014 unverified."), text)
+        self.assertEqual(text.count("Raw inspector output"), 1)
+        self.assertTrue(text.endswith("the reader's reply\n"))
+
+    def test_the_banner_is_on_before_write_runs(self):
+        code, doc, out, err = self.recorded()
+        self.assertEqual(code, 0, out + err)
+        self.assert_bannered()
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 0, out + err)
+        self.assert_bannered()
+        writes = [w for w in self.run.artifact("receipt.json")["writes"] if w["path"] == self.raw]
+        self.assertEqual(len(writes), 1, "the banner write is in the receipt once")
+
+    def test_a_lane_down_stop_leaves_the_copy_bannered_and_says_so(self):
+        code, doc, out, err = self.recorded({"status": "incomplete", "reason": "the reply was cut off"})
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "lane-down")
+        self.assert_bannered()
+        self.assertIn(self.raw, [w["path"] for w in doc["writes"]])
+        self.assertFalse(doc["wrote_nothing"])
+
+    def test_a_no_effective_model_stop_leaves_the_copy_bannered(self):
+        code, doc, out, err = self.recorded({"effective_model": None})
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "no-effective-model")
+        self.assert_bannered()
+
+    def test_a_short_fleet_is_named_in_the_mirror_the_result_and_the_chat(self):
+        code, doc, out, err = self.recorded(with_repo=False)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.run.phase("write")[0], 0)
+        code, doc, out, err = self.run.phase("report")
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["station_result"]["lenses_not_run"], ["repo-reality"])
+        self.assertIn("Lenses not run: repo-reality", doc["chat"])
+        mirror = testlib.read_text(os.path.join(self.ws, "docs", "reviews", "%s-inspect-turnstile.md" % ilib.TODAY))
+        self.assertIn("Lenses not run: repo-reality", mirror)
 
 
 class ReportOnly(_Write):

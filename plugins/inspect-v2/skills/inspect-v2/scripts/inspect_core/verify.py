@@ -2,17 +2,20 @@
 
 The script never judges a finding (ruling E14-4). What it does is mechanical and stated:
 
-- **A citation is checked against the numbered packet** of the call's lens (a repo-reality finding
-  may also cite a workspace file). `<file>:<line>` or `<file>:<line>-<line>`; the file must be one
+- **A citation is checked against the numbered packet** of the call's lens, and only against the
+  documents that call's request carried (the paper call's `packet.md` carries all three); a
+  repo-reality finding may also cite a workspace file, never one under `docs/records/` (the records
+  log is read through the component only). `<file>:<line>` or `<file>:<line>-<line>`; the file must be one
   the packet holds (or, for repo reality, a regular file inside the workspace), every cited line
   must exist, and at least one must carry text. A citation that matches nothing is a refutation,
   counted, never raised. When the finding quotes the cited text (`quote`), a line that carries it
   is CONFIRMED and one that does not is a refutation; with no quote the finding is PLAUSIBLE until
   the executor's adjudication says `confirmed`.
-- **Which findings are checked** (v1): every outside finding, every severity; every Claude-lane
+- **Which findings are verified** (v1): every outside finding, every severity; every Claude-lane
   BLOCKER and MAJOR. A Claude-lane MINOR or QUESTION passes UNVERIFIED (v1: "Claude-lane MINORs
-  pass through unverified"), unless the executor keeps it by adjudication, which then needs its
-  citation to hold.
+  pass through unverified"): its claim is nobody's to confirm, but its citation is still checked,
+  because what reaches the records log or a QUESTION line must name a place in the workspace; one
+  whose citation matches nothing is refuted and counted like any other.
 - **A finding with no location** never reaches the result; it is counted `locationless`.
 - **The no-record rule**: with no scope doc, every finding of the traceability lens (and every
   paper-call finding the reply marks `lens: traceability`) becomes a QUESTION note, never a
@@ -88,14 +91,40 @@ def workspace_lines(workspace, rel):
     return dict((i, l.rstrip("\r")) for i, l in enumerate(lines, 1))
 
 
-def check_citation(finding, lens_dir, lens, workspace):
-    """(ok, why, where): where is {"kind": "packet"|"repo", "file", "start", "end"}."""
+def in_records(workspace, rel):
+    """Whether a workspace-relative path lies in the records component's folder (`docs/records/`),
+    however it is spelled (`./`, a link, another letter case): the log is read through the component's
+    CLI only, never opened by a citation check (contract section 12)."""
+    records = os.path.join(workspace, "docs", "records")
+    if not os.path.isdir(records):
+        return False
+    here = os.path.dirname(os.path.normpath(os.path.join(workspace, rel)))
+    while fsio.inside(here, workspace):
+        if os.path.exists(here) and os.path.samefile(here, records):
+            return True
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    return False
+
+
+def check_citation(finding, lens_dir, lens, workspace, documents=None):
+    """(ok, why, where): where is {"kind": "packet"|"repo", "file", "start", "end"}. `documents` names
+    the packet files the call's request carried (None: every file of the lens's packet, as the paper
+    call's `packet.md` carries all three); a citation of any other packet file matches nothing."""
     loc = parse_location(finding.get("location"))
     if loc is None:
         return False, "the location %r names no <file>:<line>" % finding.get("location"), None
     names = sorted(os.listdir(lens_dir)) if lens_dir and os.path.isdir(lens_dir) else []
+    if loc["file"] in names and documents is not None and loc["file"] not in documents:
+        return False, "%s is not among the documents the %s request carried (%s)" % (
+            loc["file"], lens, ", ".join(documents)), None
     if loc["file"] in names:
         lines, kind = packet_lines(lens_dir, loc["file"]), "packet"
+    elif lens == "repo-reality" and not os.path.isabs(loc["file"]) and in_records(workspace, loc["file"]):
+        return False, "%s is in the records log, which is read through the records component only, never " \
+                      "by a citation check" % loc["file"], None
     elif lens == "repo-reality":
         lines, kind = workspace_lines(workspace, loc["file"]), "repo"
         if lines is None:
@@ -116,6 +145,14 @@ def check_citation(finding, lens_dir, lens, workspace):
     if quote is not None and not any(quote in line for line in cited):
         return False, "the cited line does not carry the quoted text %r" % quote, None
     return True, None, where
+
+
+def carried(call):
+    """The packet files a call's request carried, or None for the paper call (its `packet.md` holds
+    all three numbered documents)."""
+    if call["lens"] == "paper":
+        return None
+    return list(call.get("documents") or [])
 
 
 def translate(where, harvest):
@@ -144,6 +181,7 @@ def slice_of(where, harvest):
 def triage(answer, requests, harvest, packet, workspace):
     """The whole mechanical pass; returns the triage document `record-answer` writes."""
     lens_of = dict((c["call_id"], c["lens"]) for c in requests["calls"])
+    docs_of = dict((c["call_id"], carried(c)) for c in requests["calls"])
     dir_of = dict((d["lens"], d["dir"]) for d in packet["dirs"])
     outside = packet["provider"] != common.ANTHROPIC
     adjudications = dict((a["finding"], a) for a in answer.get("adjudications") or [])
@@ -166,11 +204,13 @@ def triage(answer, requests, harvest, packet, workspace):
             outside_call = outside and lens == "paper"
             checked = outside_call or f["severity"] in ("BLOCKER", "MAJOR") or \
                 (adj is not None and adj["decision"] in ("confirmed", "plausible"))
-            ok, why, where = check_citation(f, dir_of.get(lens), lens, workspace)
-            if checked and not ok:
+            ok, why, where = check_citation(f, dir_of.get(lens), lens, workspace, docs_of[call_id])
+            if not ok:
+                # a citation that matches nothing is refuted and counted, whatever the severity: nothing
+                # reaches the records log or a QUESTION line without a place in the workspace (R5)
                 refuted.append({"call_id": call_id, "finding": fid, "location": f["location"], "why": why})
                 continue
-            location = translate(where, harvest) if where else f["location"]
+            location = translate(where, harvest)
             model = result["effective_model"]
             if adj is not None and adj["decision"] == "refuted":
                 refuted.append({"call_id": call_id, "finding": fid, "location": location,
@@ -210,7 +250,7 @@ def triage(answer, requests, harvest, packet, workspace):
     return {"findings": survivors, "questions": questions, "refuted": refuted, "locationless": locationless,
             "survivors": survivors, "counts": counts, "verdict": verdict(survivors), "weaker": no_record,
             "no_record": no_record, "calls": calls, "lenses_not_run": [l for l in requested if l not in ran],
-            "hunted_and_held": answer.get("hunted_and_held"), "bottom_line": answer.get("bottom_line")}
+            "hunted_and_held": answer["hunted_and_held"], "bottom_line": answer["bottom_line"]}
 
 
 def _dedupe(rows):

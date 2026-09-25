@@ -71,7 +71,12 @@ uv run scripts/inspect_v2.py check-input <input.json>
 
 ## Step 2: Gate and hunt
 
+A build doc the invocation names by path (an existing `.md` inside the workspace) is taken with
+`named` instead of the build hunt, before the scope hunt (a doc outside every build home adds its
+own directory's `scope/*.md` and `*-scope.md` to it); else the build hunt runs:
+
 ```sh
+uv run scripts/inspect_v2.py named --run-dir D --path <the doc>
 uv run scripts/inspect_v2.py select --run-dir D --hunt build --name <topic>
 uv run scripts/inspect_v2.py select --run-dir D --hunt scope
 ```
@@ -80,8 +85,12 @@ uv run scripts/inspect_v2.py select --run-dir D --hunt scope
 `docs/<topic>-build-plan.md`, then a phase or slice doc; nowhere else). Read both results. The
 build hunt: `none` means there is nothing to inspect (a plan that lives only in this conversation
 is not inspectable; point at blueprint-v2 and stop); `several` is a list-and-ask, never a silent
-pick. The scope hunt is by glob, never by a guessed slug: match its candidates to the feature by
-their `Intent:` lines; an ambiguous match is a list-and-ask. Record a match or the owner's pick:
+pick. When no filename matches, run `select --run-dir D --hunt build` without `--name`, match the
+listed docs by their `Intent:` lines and record it with
+`choose --run-dir D --hunt build --path <candidate> --by intent` (a filename match beats an Intent
+match; the chat's `Selected:` line names the doc taken). The scope hunt is by glob, never by a
+guessed slug: match its candidates by their `Intent:` lines; an ambiguous match is a list-and-ask.
+Record a match or the owner's pick:
 
 ```sh
 uv run scripts/inspect_v2.py choose --run-dir D --hunt scope --path <candidate> --by intent
@@ -114,7 +123,8 @@ Summon `/readers` with those request files, unchanged, as one fleet under the ru
 lane, the traceability, code-book and repo-reality calls; in an outside lane, the one paper call
 (its `authorized` set by the script from his word, never by you) and the repo-reality call. Keep
 each call's `READERS:` line and result JSON. An outside call's raw copy lands under
-`docs/reviews/`; the script prepends its banner at `write`.
+`docs/reviews/`; `record-answer` prepends the banner to it before anything is triaged, on every run
+that records one, a stopped run included. Read it; never edit it.
 
 **The lane-down rule.** A `READERS:` status other than `ok` on any call of the fleet means the lane
 cannot run: record the answer with that status and reason (the run stops `lane-down`, nothing
@@ -144,7 +154,10 @@ lines yourself, and record each verdict in `adjudications` (`<call id>#<n>`: `co
 `plausible`, `refuted` or `question`, each with its why). The script refutes, mechanically, every
 citation that matches nothing in the numbered packet, and turns untraceable items into questions
 when there is no scope doc; it never keeps a refuted citation on your word. Dedupe is the
-script's. Add `hunted_and_held` (what the inspectors attacked that held up) and `bottom_line`.
+script's. Always add `hunted_and_held` (what the inspectors attacked that held up) and `bottom_line`
+(two or three sentences: the plan's state and what to do next): rule 10, every run; an answer
+without them is refused (exit 4). An outside row's result is accepted only when this run's input
+carried the owner's word for that row (`unauthorized-send`, exit 5, otherwise).
 
 Exit 5 lists what was refused; nothing was written, so fix the answer and record it again. Exit
 10 is a stop: print the chat block and stop.
@@ -183,7 +196,7 @@ re-inspection is a fresh run. No invocation wording collapses that gate.
    section 2): the finding shape, verify before reporting, severity to verdict, report and never
    repair, the additive ledger. One stated exception: signoff's model floor does not bind here; the
    lane the owner picks is the floor and the stamp is the trust label.
-10. **Anti-rubber-stamp.** A clean verdict states what was hunted and failed to find.
+10. **Anti-rubber-stamp.** Every verdict states what was hunted and failed to find, every run.
 
 ## Output
 
@@ -191,6 +204,7 @@ The chat block `report` prints (v1's read-back, rendered from the result):
 
 ```text
 INSPECT: <doc path>
+Selected: <its folder>/ (tier N, <home>), <how the doc was taken>[; also matched by filename: <docs>]
 Verdict: APPROVED | APPROVED WITH CONDITIONS | REJECTED
 Inspector: <row · effective model id · isolation label>  ·  Scope doc: <path | none — no-record rule applied>  ·  Refuted: N
 Raw: <raw path | n/a — Claude lane>

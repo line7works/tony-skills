@@ -633,7 +633,8 @@
               "required": [
                 "path",
                 "recognised",
-                "state"
+                "state",
+                "answer"
               ],
               "properties": {
                 "path": {
@@ -653,6 +654,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "answer": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "the records component's `mirrors` answer for the build doc, kept whole as the component gave it (null when `mirrors` refused; `state` then carries its sentence)"
                 }
               }
             },

@@ -20,9 +20,13 @@
    unknown-finding       an adjudication names no finding of the results, or names one twice
    refuted-citation      an adjudication keeps (confirmed, plausible) a finding whose citation
                          matches nothing in the packet
+   unauthorized-send     a status-ok result of an outside row's paper call whose request was built
+                         without `authorized` (no owner word in this run's input names the row):
+                         readers sends no such call, so nothing of it is raised or stamped
 
-Only then is `answer.json` written, by `station_core.answer.record`, and the mechanical triage
-(`verify.triage`) with it. Two outcomes end the run instead of refusing the answer: a result whose
+Only then is `answer.json` written, by `station_core.answer.record`; then, before anything is
+triaged, the banner goes on each outside raw copy (`writing.banner_raw_copies`, `banner.json`; never in
+report-only), and the mechanical triage (`verify.triage`) follows. Two outcomes end the run instead of refusing the answer: a result whose
 status is not `ok` (stop `lane-down`: nothing is triaged, the ask is re-asked) and a result with no
 effective model, or paper calls that report two (stop `no-effective-model`: no stamp).
 """
@@ -31,7 +35,7 @@ import os
 from station_core import answer as sharedanswer
 from station_core import driver, validate
 
-from . import common, reporting, verify
+from . import common, reporting, verify, writing
 
 SEP = " · "
 
@@ -86,6 +90,14 @@ def own_checks(doc, run, requests, packet):
         if result["row"] != built[call_id]["row"]:
             out.append(_refusal("row-mismatch", "the result of %s names the row %r; its request was built for %r"
                                                 % (call_id, result["row"], built[call_id]["row"]), call_id=call_id))
+        if built[call_id]["lens"] == "paper" and not built[call_id]["authorized"] and \
+                result.get("status", "ok") == "ok":
+            out.append(_refusal("unauthorized-send", "the result of %s comes from the outside row %r, whose request "
+                                                     "this run built without `authorized`: the input's owner word "
+                                                     "names no such row, readers sends no such call, and nothing is "
+                                                     "raised or stamped under that row's name"
+                                                     % (call_id, built[call_id]["row"]),
+                                call_id=call_id, row=built[call_id]["row"]))
         model = result.get("effective_model")
         if isinstance(model, str) and (_bad_field(model) or len(model.split()) != 1 or "·" in model):
             out.append(_refusal("field-separator", "the effective model %r of %s cannot be written into a stamp or a "
@@ -117,7 +129,8 @@ def own_checks(doc, run, requests, packet):
         result, f = findings[fid]
         if adj["decision"] in ("confirmed", "plausible") and f.get("location") is not None:
             lens = built[result["call_id"]]["lens"]
-            ok, why, _ = verify.check_citation(f, lens_dir.get(lens), lens, common.workspace(run))
+            ok, why, _ = verify.check_citation(f, lens_dir.get(lens), lens, common.workspace(run),
+                                               verify.carried(built[result["call_id"]]))
             if not ok:
                 out.append(_refusal("refuted-citation", "the adjudication keeps %s, but its citation matches nothing "
                                                         "in the packet: %s" % (fid, why), finding=fid))
@@ -147,6 +160,9 @@ def handler(ctx, args):
                                        allowed=sharedanswer.DEFAULT_TRACES)
     if code != 0:
         raise driver.Defect("the shared check refused an answer it had accepted: %s" % report)
+    if not common.report_only(run):
+        # v1 Step 3: the raw copy carries its banner before anything is triaged, on every run, a stop included
+        common.write(run, "banner.json", {"writes": writing.banner_raw_copies(run)})
     down = [r for r in doc["results"] if r.get("status", "ok") != "ok"]
     if down:
         reporting.finish(ctx, run, "stopped", "lane-down", "the lane cannot run: %s. Nothing from this lane is "

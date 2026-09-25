@@ -52,6 +52,14 @@ class TheSchema(unittest.TestCase):
                       "lanes", "results"):
             self.assertIn(field, required)
 
+    def test_rule_10_is_mandatory(self):
+        # R3 (CI1-3): v1's anti-rubber-stamp line, every run (E14-1)
+        required = set(load_schema()["required"])
+        self.assertIn("hunted_and_held", required)
+        self.assertIn("bottom_line", required)
+        for name in ("hunted-and-held-missing.json", "bottom-line-missing.json", "hunted-and-held-blank.json"):
+            self.assertTrue(os.path.isfile(os.path.join(FOLDER, "invalid", name)), name)
+
     def test_the_seeded_reader_names_are_kept(self):
         result = load_schema()["$defs"]["result"]["properties"]
         for field in ("call_id", "row", "effective_model", "findings"):

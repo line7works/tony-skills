@@ -9,10 +9,18 @@ Built in E14 slice 2, lane I, on the frame of slice 1. The station's procedure i
 v1 inspect's order and under its ten rules) and its behavior in
 `references/inspect-v2-contract.md`, which also states the review mechanics v1 took from signoff
 by reference. Every phase of the driver is built (`harvest`, `record-answer`, `write`, `report`),
-with three commands of the core's own (`choose`, `packet`, `request`); the recorded answer has its
-schema (`references/answer.schema.json`) and examples; the seeded families I1 to I4 have their lane
-facts through `evals/seeded-cases/lane_observe.py`; both adapter profiles are filled. Surviving
-findings are raised through the records component's CLI; the station clears nothing.
+with four commands of the core's own (`named`, `choose`, `packet`, `request`); the recorded answer
+has its schema (`references/answer.schema.json`) and examples; the seeded families I1 to I4 have
+their lane facts through `evals/seeded-cases/lane_observe.py`; both adapter profiles are filled.
+Surviving findings are raised through the records component's CLI; the station clears nothing.
+
+Round 2 of the lane (the independent check's fourteen findings, under the control room's rulings
+R1 to R8): a short fleet is named in the verdict mirror too; the outside raw copy is bannered at
+`record-answer`, before any triage, stopped runs included; `hunted_and_held` and `bottom_line` are
+required (v1 rule 10); an outside result the input never authorized is refused
+(`unauthorized-send`); a finding whose citation matches nothing is refuted whatever its severity;
+a doc the invocation names by path is taken with `named`; and the `mirrors` answer, the citation
+rules, the stamp placement and the blank station fields as the check's replacement text says.
 
 What stays for the join (slice 3): the full suites on the joined tree, the seven-station install
 proof with inspect-v2 resolving blueprint-v2 by route 3b beside the real blueprint-v2 core (in this

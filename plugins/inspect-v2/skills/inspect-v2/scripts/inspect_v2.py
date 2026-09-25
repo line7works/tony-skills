@@ -7,6 +7,7 @@
 
     uv run inspect_v2.py check-input <input.json>
     uv run inspect_v2.py select --run-dir D --hunt build [--name NAME]
+    uv run inspect_v2.py named --run-dir D --path P
     uv run inspect_v2.py select --run-dir D --hunt scope
     uv run inspect_v2.py choose --run-dir D --hunt build|scope --path P --by intent|owner [--words TEXT]
     uv run inspect_v2.py harvest --run-dir D [--records-root DIR]
@@ -28,7 +29,9 @@ then the older flat `docs/<feature>-build-plan.md`, then any phase or slice doc 
 or `plan/`, in that order (the two-source narrowing, then the fallback). `scope`: by glob,
 never by a guessed slug, over every `docs/scope/*.md`, every older flat `docs/*-scope.md` and
 every staging `*-scope.md`, one tier; matching by `Intent:` line is the executor's, recorded with
-`choose`.
+`choose`. A build doc the invocation names by path is taken with `named` instead of the build hunt;
+when it lies outside every build home, this run's scope hunt also globs its own directory's
+`scope/*.md` and `*-scope.md` (`gate.hunts_for_run`).
 """
 import os
 import sys
@@ -62,6 +65,11 @@ READERS_ROOT = {"flags": ["--readers-root"], "metavar": "DIR", "default": None,
 RUN_DIR = {"flags": ["--run-dir"], "metavar": "D", "required": True, "help": "the run directory"}
 
 COMMANDS = [
+    {"name": "named", "help": "take the build doc the invocation names by path (instead of the build hunt)",
+     "arguments": [RUN_DIR,
+                   {"flags": ["--path"], "required": True, "metavar": "P",
+                    "help": "an existing .md inside the workspace (absolute, or relative to the workspace)"}],
+     "handler": gate.named},
     {"name": "choose", "help": "record the executor's Intent match or the owner's pick among a hunt's several",
      "arguments": [RUN_DIR,
                    {"flags": ["--hunt"], "required": True, "choices": ["build", "scope"], "help": "the hunt"},
@@ -82,4 +90,4 @@ COMMANDS = [
 
 
 if __name__ == "__main__":
-    sys.exit(driver.main(STATION, HUNTS, HANDLERS, commands=COMMANDS))
+    sys.exit(driver.main(STATION, gate.hunts_for_run(HUNTS, sys.argv[1:]), HANDLERS, commands=COMMANDS))

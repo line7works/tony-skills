@@ -69,7 +69,8 @@ class Report(unittest.TestCase):
         self.assertEqual(kinds, {"run_artifact", "document", "records_log"})
         self.assertFalse(result["wrote_nothing"])
         chat = doc["chat"]
-        self.assertTrue(chat.startswith("INSPECT: %s\nVerdict: REJECTED\n" % os.path.join(self.ws, ilib.BUILD_REL)))
+        self.assertTrue(chat.startswith("INSPECT: %s\nSelected: " % os.path.join(self.ws, ilib.BUILD_REL)), chat)
+        self.assertIn("\nVerdict: REJECTED\n", chat)
         self.assertIn("Refuted: 1", chat)
         self.assertIn("Findings: 1 BLOCKER · 1 MAJOR · 0 MINOR", chat)
         self.assertIn("Hunted and held: slice order held", chat)
@@ -87,6 +88,18 @@ class Report(unittest.TestCase):
         self.assertIn("Scope doc: none \u2014 no-record rule applied", doc["chat"])
         self.assertIn("weaker", doc["chat"])
 
+    def test_the_chat_names_the_doc_taken_and_how(self):
+        # CI1-11: v1 "the verdict says which doc it took" when both tiers match by filename
+        self.ws = ilib.workspace(self.tmp, extra={"docs/turnstile-build-plan.md": ilib.BUILD_DOC})
+        self.run = ilib.Runner(self.tmp, self.ws)
+        code, doc, out, err = self.run.upto("report", answer=ilib.answer(R, ilib.claude_fleet(R, model=MODEL)))
+        self.assertEqual(code, 10, out + err)
+        line = [l for l in doc["chat"].splitlines() if l.startswith("Selected: ")]
+        self.assertEqual(len(line), 1, doc["chat"])
+        self.assertIn("docs/plans/ (tier 1, repo-plans)", line[0])
+        self.assertIn("docs/turnstile-build-plan.md", line[0])
+        self.assertIn("also matched by filename", line[0])
+
     def test_report_prints_a_stopped_run_again(self):
         fleet = ilib.claude_fleet(R, model=None)
         code, doc, out, err = self.go(fleet, last="record-answer")
@@ -103,14 +116,31 @@ class Report(unittest.TestCase):
         self.assertEqual(code, 2, out + err)
         self.assertIn("write", err)
 
-    def test_a_clean_run_without_a_hunt_line_says_so(self):
+    def test_an_answer_without_the_hunt_line_is_refused_by_its_schema(self):
+        # R3 (CI1-3): v1 rule 10 is mandatory, every run; no "not recorded" fallback is printed
+        base = self.tmp
+        for key in ("hunted_and_held", "bottom_line"):
+            with self.subTest(key=key):
+                self.tmp = os.path.join(base, key)
+                os.makedirs(self.tmp)
+                code, doc, out, err = self.go(ilib.claude_fleet(R, model=MODEL), last="record-answer",
+                                              **{key: ilib.DROP})
+                self.assertEqual(code, 4, out + err)
+                self.assertIn(key, json.dumps(doc["errors"]))
+                self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer.json")))
+
+    def test_a_clean_run_prints_the_hunt_line_it_was_given(self):
         code, doc, out, err = self.go(ilib.claude_fleet(R, model=MODEL))
         self.assertEqual(code, 10, out + err)
         sr = self.validate()["station_result"]
-        self.assertIsNone(sr["hunted_and_held"])
-        self.assertIn("Hunted and held: not recorded", doc["chat"])
-        self.assertEqual(json.loads(json.dumps(sr["verdict"])), "APPROVED")
-
+        self.assertEqual(sr["hunted_and_held"], ilib.HUNTED)
+        self.assertIn("Hunted and held: %s\n" % ilib.HUNTED, doc["chat"])
+        self.assertNotIn("Hunted and held: not recorded", doc["chat"])
+        self.assertNotIn("Bottom line: not recorded", doc["chat"])
+        mirror = testlib.read_text(os.path.join(self.ws, "docs", "reviews", "%s-inspect-turnstile.md" % ilib.TODAY))
+        self.assertIn("Hunted and held: %s\n" % ilib.HUNTED, mirror)
+        self.assertIn("Bottom line: %s\n" % ilib.BOTTOM, mirror)
+        self.assertNotIn("Hunted and held: not recorded", mirror)
 
 if __name__ == "__main__":
     unittest.main()

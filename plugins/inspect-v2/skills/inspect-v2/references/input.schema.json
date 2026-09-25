@@ -129,17 +129,20 @@
         "model": {
           "type": "string",
           "minLength": 1,
-          "description": "a model id the owner typed against the row, sent as the paper call's `model`; absent, readers resolves the row's own"
+          "description": "a model id the owner typed against the row, sent as the paper call's `model`; absent, readers resolves the row's own",
+          "pattern": "\\S"
         },
         "displayed_model": {
           "type": "string",
           "minLength": 1,
-          "description": "the model the ask showed for the named row, from readers' `suggest`; `request --suggest` refuses to build when the later suggest shows another (stop `model-changed`)"
+          "description": "the model the ask showed for the named row, from readers' `suggest`; `request --suggest` refuses to build when the later suggest shows another (stop `model-changed`)",
+          "pattern": "\\S"
         },
         "session_model": {
           "type": "string",
           "minLength": 1,
-          "description": "the model id the executor's session reports for itself, carried as `session_model` on every `claude-session` request"
+          "description": "the model id the executor's session reports for itself, carried as `session_model` on every `claude-session` request",
+          "pattern": "\\S"
         }
       }
     }

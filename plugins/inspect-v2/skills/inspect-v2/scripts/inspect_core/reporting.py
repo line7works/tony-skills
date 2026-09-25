@@ -86,6 +86,9 @@ def chat_block(run, result):
     sr = result.get("station_result") or {}
     doc = sr.get("build_doc") or "(no build doc selected)"
     lines = ["INSPECT: %s" % doc]
+    selected = selected_line(run, result)
+    if selected:
+        lines.append(selected)
     if result["status"] == "stopped":
         lines.append("Stopped: %s" % result["stop_tag"])
         lines.append("Reason: %s" % result["reason"])
@@ -108,7 +111,7 @@ def chat_block(run, result):
     lines.append("Findings: %d BLOCKER %s %d MAJOR %s %d MINOR" % (counts["blocker"], M, counts["major"], M,
                                                                     counts["minor"]))
     lines.append("")
-    lines.append("Bottom line: %s" % (sr.get("bottom_line") or "not recorded in the answer"))
+    lines.append("Bottom line: %s" % sr["bottom_line"])
     lines.append("")
     for severity, head in (("BLOCKER", "BLOCKERS"), ("MAJOR", "MAJOR"), ("MINOR", "MINOR")):
         rows = [f for f in sr["findings"] if f["severity"] == severity]
@@ -124,15 +127,41 @@ def chat_block(run, result):
         lines.append("Note: construction already started on slice %s." % ", ".join(sr["construction_started"]))
     if sr.get("lenses_not_run"):
         lines.append("Lenses not run: %s." % ", ".join(sr["lenses_not_run"]))
-    lines.append("Hunted and held: %s" % (sr.get("hunted_and_held") or
-                                          "not recorded in the answer (rule 10: a clean verdict states what was "
-                                          "hunted and not found)"))
+    lines.append("Hunted and held: %s" % sr["hunted_and_held"])
     if sr["verdict"] == "APPROVED":
         lines.append("Next: build-v2 when ready.")
     else:
         lines.append("Next: the owner adjudicates the findings, the drafting session amends the doc on his word, "
                      "then a fresh inspect-v2 run.")
     return "\n".join(lines) + "\n"
+
+
+def selected_line(run, result):
+    """v1 Step 1: the verdict says which doc it took. How the build doc was taken (the one candidate of
+    its home's tier, the executor's Intent match, the owner's pick, or named by the invocation), and
+    every doc another tier matched by filename that the lower tier outranked. None before `harvest`."""
+    harvest = _artifact(run, "harvest.json")
+    build = (result.get("selection") or {}).get("build")
+    if not harvest or not build:
+        return None
+    ws = run.input["workspace"]
+    taken = harvest["build_doc"]["path"]
+    how = harvest["build_doc"].get("how")
+    home = next((c for c in build.get("candidates") or [] if os.path.normpath(c["path"]) == os.path.normpath(taken)),
+                {"home": "unknown", "tier": 0})
+    where = os.path.dirname(harvest["build_doc"]["rel"]).replace(os.sep, "/")
+    words = {"one": "the one doc its tier holds", "named": "named by the invocation",
+             "chosen by intent": "matched by its Intent: line", "chosen by owner": "the owner's pick"}
+    line = "Selected: %s/ (tier %d, %s), %s" % (where or ".", home.get("tier", 0), home.get("home"),
+                                                words.get(how, how))
+    others = []
+    for row in build.get("searched") or []:
+        if row.get("tier", 0) > home.get("tier", 0):
+            others.extend("%s (tier %d, %s)" % (os.path.relpath(p, ws), row["tier"], row["home"])
+                          for p in row.get("found") or [])
+    if others:
+        line += "; also matched by filename, outranked by the lower tier: %s" % ", ".join(others)
+    return line
 
 
 def _stamp_model(sr):
@@ -170,7 +199,9 @@ def _next_after_stop(tag):
 
 
 def assemble(ctx, run, status, stop_tag, reason):
-    receipt = _artifact(run, "receipt.json") or {"writes": []}
+    # the receipt of `write`, which opens with the banner writes; a run that stopped before `write`
+    # still names the banners `record-answer` wrote
+    receipt = _artifact(run, "receipt.json") or _artifact(run, "banner.json") or {"writes": []}
     writes = run_writes(run) + list(receipt["writes"])
     outside = [w for w in writes if not _under(w["path"], run.run_dir)]
     result = {"interface_version": driver.INTERFACE_VERSION, "plugin_version": validate.plugin_version(ctx.skill_root),

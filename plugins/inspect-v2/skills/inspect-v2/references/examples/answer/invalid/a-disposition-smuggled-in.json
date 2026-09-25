@@ -7,6 +7,7 @@
     }
   ],
   "answer_version": 1,
+  "bottom_line": "The plan holds one real defect. Fix it, then build.",
   "disposition": "fixed",
   "hunted_and_held": "the slice order and the ledger scaffold held",
   "lanes": [

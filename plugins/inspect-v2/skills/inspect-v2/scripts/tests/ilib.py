@@ -162,6 +162,12 @@ def finding(location, severity="MAJOR", claim="AC1 names no failure case",
     return doc
 
 
+# v1 rule 10 is mandatory (E14-1): every recorded answer carries both lines; DROP removes one
+HUNTED = "slice order, the footprint and the verify forms held"
+BOTTOM = "The plan reads as buildable. Build when ready."
+DROP = object()
+
+
 def answer(run_id, results, row="claude-session", lanes=None, session_id="session-test-1", **extra):
     lens_of = {"traceability": "traceability", "code-book": "code-book", "repo-reality": "repo-reality"}
     if lanes is None:
@@ -171,8 +177,11 @@ def answer(run_id, results, row="claude-session", lanes=None, session_id="sessio
             lanes.append(lens_of.get(tail, "paper"))
         lanes = sorted(set(lanes))
     doc = {"answer_version": 1, "run_id": run_id, "session_id": session_id, "questions": [],
-           "lines": [], "row": row, "lanes": lanes, "results": list(results)}
+           "lines": [], "row": row, "lanes": lanes, "results": list(results),
+           "hunted_and_held": HUNTED, "bottom_line": BOTTOM}
     doc.update(extra)
+    for key in [k for k, v in doc.items() if v is DROP]:
+        del doc[key]
     return doc
 
 

@@ -20,6 +20,17 @@ drive of this core did, never from what a case expects; `via` says how each fact
              before it builds anything, on the case's `packet/` directory as the station would hand
              it to `request`.
 
+Two translation choices, never facts of a case (the control room's rulings R3 and R4 of round 2):
+
+    rule 10     the recorded answer requires `hunted_and_held` and `bottom_line` (v1's anti-rubber-stamp
+                line is mandatory, every run); a seeded replay carries neither, so `translate` supplies
+                one neutral sentence for each (HUNTED, BOTTOM below). No fact is read from them.
+    owner word  an outside row's result is refused unless this run's input authorized the row; the I3
+                cases' neutral input carries no owner word while their recorded answers come from an
+                outside row (`gpt-astra`), so the drive's input and answer carry an `owner_word` naming
+                that row with a one-line quotation (WORDS below), exactly as an owner's answer at the
+                ask would. A case whose neutral input carries its own `owner_word` keeps it unchanged.
+
 The fact names are the neutral vocabulary of `README.md`: `refused_at_request`, `packet_files`,
 `question_locations`, `blocker_count`, `no_record_noted`, `raised_locations`, `refuted_count`,
 `stamp_written`, `stamp_model`, `terminal_status`. A location is written as the core writes it
@@ -30,13 +41,18 @@ import os
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN = os.path.dirname(os.path.dirname(HERE))
 SKILL = os.path.join(PLUGIN, "skills", "inspect-v2")
 SCRIPTS = os.path.join(SKILL, "scripts")
 DRIVER = os.path.join(SCRIPTS, "inspect_v2.py")
 RUN_ID = "run"
-CLI = "cli: check-input, select, harvest, packet, request, record-answer, write, report"
+# the translation choices of the module docstring: neutral sentences, never read back as facts
+HUNTED = "the seeded replay records no hunt of its own; its reader's findings are the whole reply"
+BOTTOM = "A seeded replay: the facts of this run are read from its result and its documents."
+WORDS = "send it to %s"
 
 
 def _cli(args, scratch):
@@ -61,7 +77,7 @@ def _read_json(path):
 class Drive(object):
     """One run of the real CLI in `scratch`; `trail` keeps each step's exit for the record."""
 
-    def __init__(self, neutral, scratch, row=None):
+    def __init__(self, neutral, scratch, row=None, owner_word=None):
         self.scratch = scratch
         self.run_dir = os.path.join(scratch, "run")
         self.trail = []
@@ -75,6 +91,8 @@ class Drive(object):
             self.input["staging"] = neutral["staging"]
         if neutral.get("owner_word"):
             self.input["owner_word"] = neutral["owner_word"]
+        elif owner_word:
+            self.input["owner_word"] = owner_word
 
     def step(self, name, *args):
         if name == "check-input":
@@ -103,17 +121,48 @@ class Drive(object):
         path = os.path.join(self.run_dir, name)
         return _read_json(path) if os.path.isfile(path) else None
 
+    def via(self, what):
+        """How the facts were observed: the phases this drive actually ran, in order."""
+        return "cli: %s (%s)" % (", ".join(t["phase"] for t in self.trail), what)
 
-def translate(reader, requests, session_id):
-    """The neutral reader answer as this core's answer: a renaming, nothing invented."""
+
+def _core():
+    sys.path.insert(0, SCRIPTS)
+    try:
+        from inspect_core import common, packet as packetmod, readers_link
+    finally:
+        sys.path.pop(0)
+    return common, packetmod, readers_link
+
+
+def outside_word(row):
+    """The owner word the translation supplies for an outside row (a translation choice, see the
+    module docstring), or None for a Claude row or a row the roster does not know."""
+    if not row:
+        return None
+    common, _, readers_link = _core()
+    _, roster = readers_link.load(common.plugin_root())
+    provider = readers_link.provider(roster, row)
+    if provider is None or provider == common.ANTHROPIC:
+        return None
+    return {"rows": [row], "words": WORDS % row}
+
+
+def translate(reader, requests, session_id, owner_word=None):
+    """The neutral reader answer as this core's answer: a renaming, plus the two translation choices
+    of the module docstring (the rule 10 sentences, the owner word of an outside row)."""
     lens_of = dict((c["call_id"], c["lens"]) for c in (requests or {}).get("calls", []))
     result = {"call_id": reader.get("call_id"), "row": reader.get("row"),
               "effective_model": reader.get("effective_model"),
               "findings": [dict((k, f.get(k)) for k in ("severity", "location", "claim", "scenario", "confidence"))
                            for f in reader.get("findings") or []]}
     lanes = [lens_of[result["call_id"]]] if result["call_id"] in lens_of else []
-    return {"answer_version": 1, "run_id": RUN_ID, "session_id": session_id, "questions": [], "lines": [],
-            "row": reader.get("row"), "lanes": lanes, "results": [result]}
+    doc = {"answer_version": 1, "run_id": RUN_ID, "session_id": session_id, "questions": [], "lines": [],
+           "row": reader.get("row"), "lanes": lanes, "results": [result],
+           "hunted_and_held": HUNTED, "bottom_line": BOTTOM}
+    if owner_word:
+        doc["owner_word"] = owner_word
+    return doc
 
 
 def _fill(step, facts, via, found, how):
@@ -138,24 +187,22 @@ def observe_i1(step, case_dir, neutral, facts, via, scratch):
     harvest = drive.artifact("harvest.json")
     if code != 0 or harvest is None:
         return
-    sys.path.insert(0, SCRIPTS)
-    try:
-        from inspect_core import packet as packetmod
-    finally:
-        sys.path.pop(0)
+    _, packetmod, _ = _core()
     present, refusals = packetmod.check_dir(os.path.join(case_dir, "packet"), harvest["no_record"])
     found = {"refused_at_request": bool(refusals), "packet_files": present}
     _fill(step, facts, via, found, "library: inspect_core.packet.check_dir, the rule `request` applies, on the "
-                                   "case's packet/ after check-input, select and harvest through the CLI")
+                                   "case's packet/ after %s through the CLI"
+                                   % ", ".join(t["phase"] for t in drive.trail))
 
 
 def observe_run(step, case_dir, neutral, facts, via, scratch):
     reader = _read_json(os.path.join(case_dir, neutral["answer"]))
-    drive = Drive(neutral, scratch, row=reader.get("row"))
+    drive = Drive(neutral, scratch, row=reader.get("row"), owner_word=outside_word(reader.get("row")))
     code, doc = drive.through([("check-input",), ("select", "--hunt", "build"), ("select", "--hunt", "scope"),
                                ("harvest",), ("packet",), ("request",)], facts)
     if code == 0:
-        answer = translate(reader, drive.artifact("requests.json"), drive.input["invocation"]["session_id"])
+        answer = translate(reader, drive.artifact("requests.json"), drive.input["invocation"]["session_id"],
+                           drive.input.get("owner_word"))
         path = os.path.join(scratch, "answer.json")
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(answer, fh)
@@ -179,7 +226,7 @@ def observe_run(step, case_dir, neutral, facts, via, scratch):
         found["question_locations"] = sorted(q["location"] for q in sr.get("questions") or [])
     if "weaker" in sr:
         found["no_record_noted"] = bool(sr["weaker"]) and "weaker" in (sr.get("chat") or "")
-    _fill(step, facts, via, found, "%s (result.json, and the build doc as written for the stamp)" % CLI)
+    _fill(step, facts, via, found, drive.via("result.json, and the build doc as written for the stamp"))
 
 
 def observe_lane(step, case_dir, neutral, facts, via, scratch):

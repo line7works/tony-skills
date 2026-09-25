@@ -1,5 +1,10 @@
-"""`choose` and `harvest`: the gate and the hunt (contract sections 3 and 4).
+"""`named`, `choose` and `harvest`: the gate and the hunt (contract sections 3, 5 and 6).
 
+`named` takes the build doc the invocation names by path (v1 Step 1: "the invocation names a build
+doc, or the skill hunts"): one existing `.md` inside the workspace by its real path, never through a
+link out, recorded as the build hunt's `one` with home `named`. When that doc lies outside every
+build home, this run's scope hunt adds the doc's own directory's `scope/*.md` and `*-scope.md`
+(`hunts_for_run`, read by the driver script before the shared `select` runs).
 `choose` records the executor's Intent match, or the owner's pick, among the candidates a hunt
 listed as `several`; it never picks by itself and takes nothing that was not listed. `harvest`
 takes the build doc and the scope doc the hunts settled (or the no-record rule when the scope hunt
@@ -8,6 +13,8 @@ SKILL.md, a v2 sibling by route 3a then 3b), confirms the records component at i
 (exit 3 otherwise), pins the log's head, and keeps a copy of each source in the run directory so
 the packet is the record exactly as harvested.
 """
+import glob
+import json
 import os
 import re
 
@@ -19,6 +26,89 @@ from . import common, reporting
 CODE_BOOK_PLUGIN = "blueprint-v2"
 SLICE = re.compile(r"^##\s+Slice\s+(.+?)(?:\s+[\u2014\u2013-]+\s*(.*?))?\s*$")
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
+# the directories the build hunt's homes glob in: a named doc in one of them is inside a home
+BUILD_HOME_DIRS = ("docs/plans", "docs", "plan")
+
+
+def _inside_a_build_home(ws, folder):
+    for rel in BUILD_HOME_DIRS:
+        home = os.path.join(ws, rel)
+        if os.path.isdir(home) and os.path.samefile(home, folder):
+            return True
+    return False
+
+
+def named(ctx, args):
+    """`named --run-dir D --path P`: the build doc the invocation names, taken as the build hunt's one."""
+    run = common.open_run(ctx, args.run_dir, ("checked", "selected"), "named")
+    ws = common.workspace(run)
+    given = args.path
+    path = given if os.path.isabs(given) else os.path.join(ws, given)
+    real, real_ws = os.path.realpath(path), os.path.realpath(ws)
+    if not fsio.inside(real, real_ws) or real == real_ws:
+        raise driver.Usage("%s lies outside the workspace %s (by its real path): the named build doc is a "
+                           "document of this repository, never one reached through a link out" % (given, ws))
+    if not (path.endswith(".md") and real.endswith(".md")):
+        raise driver.Usage("%s is not a Markdown build doc (`.md`)" % given)
+    if not os.path.isfile(real):
+        raise driver.Usage("no such build doc: %s (a named doc must exist and be a file)" % given)
+    rel = os.path.relpath(real, real_ws)
+    taken = os.path.normpath(os.path.join(ws, rel))
+    folder = os.path.dirname(real)
+    scope_dir = None if _inside_a_build_home(real_ws, folder) else os.path.dirname(rel).replace(os.sep, "/")
+    selection = {"outcome": "one", "candidates": [{"path": taken, "home": "named", "tier": 0}],
+                 "searched": [{"home": "named", "root": "workspace", "globs": [], "tier": 0, "given": True,
+                               "found": [taken]}],
+                 "hunt": "build", "name": None, "path": given}
+    fsio.write_json(common.path_of(run, "selection-build.json"), selection)
+    run.checkpoint["phase"] = "selected"
+    run.checkpoint.setdefault("selections", {})["build"] = "one"
+    run.checkpoint["named"] = {"path": taken, "rel": rel.replace(os.sep, "/"), "given": given, "scope_dir": scope_dir}
+    run.save()
+    return ctx.emit(ctx.envelope(next="select --hunt scope", run_id=run.checkpoint["run_id"], build_doc=taken,
+                                 home="named", scope_dir=scope_dir,
+                                 scope_homes_added=[] if scope_dir is None else [
+                                     "%s/scope/*.md" % scope_dir if scope_dir else "scope/*.md",
+                                     "%s/*-scope.md" % scope_dir if scope_dir else "*-scope.md"],
+                                 **{"outcome": "one", "candidates": selection["candidates"]}))
+
+
+def hunts_for_run(hunts, argv):
+    """The hunt table for this invocation: the core's own, plus, for `select --run-dir D` on a run whose
+    build doc was `named` outside every build home, the named doc's directory's two scope homes (v1
+    Step 1). Anything unreadable leaves the table as it is; the driver then reports the run itself."""
+    argv = list(argv or [])
+    if not argv or argv[0] != "select":
+        return hunts
+    run_dir = None
+    for index, item in enumerate(argv):
+        if item == "--run-dir" and index + 1 < len(argv):
+            run_dir = argv[index + 1]
+        elif item.startswith("--run-dir="):
+            run_dir = item.split("=", 1)[1]
+    if not run_dir:
+        return hunts
+    try:
+        with open(os.path.join(run_dir, "checkpoint.json"), encoding="utf-8") as fh:
+            checkpoint = json.load(fh)
+        with open(os.path.join(run_dir, "selection-build.json"), encoding="utf-8") as fh:
+            build = json.load(fh)
+    except (OSError, ValueError):
+        return hunts
+    chosen = (checkpoint.get("named") or {}) if isinstance(checkpoint, dict) else {}
+    scope_dir = chosen.get("scope_dir")
+    homes = [c.get("home") for c in build.get("candidates") or [] if isinstance(c, dict)] \
+        if isinstance(build, dict) else []
+    if scope_dir is None or homes != ["named"]:
+        return hunts
+    prefix = glob.escape(scope_dir) + "/" if scope_dir else ""
+    out = dict(hunts)
+    out["scope"] = list(hunts["scope"]) + [
+        {"home": "named-dir-scope", "root": "workspace", "globs": [prefix + "scope/*.md"], "tier": 1},
+        {"home": "named-dir-flat", "root": "workspace", "globs": [prefix + "*-scope.md"], "tier": 1}]
+    return out
 
 
 def _selection(run, hunt):
@@ -55,7 +145,8 @@ def _settled(ctx, run, hunt):
     selection = _selection(run, hunt)
     choice = (run.checkpoint.get("choices") or {}).get(hunt)
     if selection["outcome"] == "one":
-        return selection["candidates"][0]["path"], "one"
+        first = selection["candidates"][0]
+        return first["path"], ("named" if first.get("home") == "named" else "one")
     if selection["outcome"] == "several":
         listed = [os.path.normpath(c["path"]) for c in selection["candidates"]]
         if choice and os.path.normpath(choice["path"]) in listed:

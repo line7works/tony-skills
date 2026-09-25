@@ -38,7 +38,7 @@ mechanic v1 took from signoff by reference is stated here in this core's own wor
 
 | v1 step | Where it lives now |
 |---|---|
-| 1. Gate and hunt | `select --hunt build` and `select --hunt scope`, `choose` for a listed tie, and `harvest` (sections 3, 5, 6) |
+| 1. Gate and hunt | `named` for a doc the invocation names by path, else `select --hunt build`; `select --hunt scope`; `choose` for a listed tie; and `harvest` (sections 3, 5, 6) |
 | 2. The ask | before `check-input`: the row the owner named and, for an outside row, his words, are data in this run's input (section 4); `request --suggest` holds the send to the model he saw |
 | 3. The lenses | `packet` and `request` build the packet and the fleet's requests; the executor summons readers |
 | 4. Verify and adjudicate | the executor's adjudications in the answer, the mechanical pass in `record-answer` (section 7) |
@@ -66,8 +66,10 @@ The ten rules, as this core keeps them:
    never a typed id; a run that cannot read one stops with no stamp.
 9. **The review mechanics are this contract's own** (the list below), stated here so nothing is
    imported by silence.
-10. **Anti-rubber-stamp.** A clean verdict states what was hunted and not found: the answer's
-    `hunted_and_held`, printed in the chat block and the mirror.
+10. **Anti-rubber-stamp.** Every verdict states what was hunted and not found, every run: the
+    answer's `hunted_and_held` (with its `bottom_line`) is required by the answer schema, so an
+    answer without it is refused (exit 4) and nothing prints a fallback; both are printed in the chat
+    block and the verdict mirror.
 
 The review mechanics, restated (signoff-v2's contract sections 1, 5, 6 and 7 are the pattern;
 the words and the plan-stage meanings are this core's):
@@ -95,6 +97,11 @@ the words and the plan-stage meanings are this core's):
 - **The additive ledger.** Nothing already in the build doc is rewritten or removed; the records
   log only grows; inspect-v2 raises and never clears (no `disposition`, no `waived`, ever).
 
+One v1 behaviour retires under pick P8: a re-inspection writes no `fixed | not fixed` line for a
+prior inspect finding (v1's closure record for the loop's open-filter). Inspect clears nothing; a
+prior finding stays open in the records log, which carries its closure, until a station that
+clears, or the owner's waiver, decides it.
+
 One v1 exception is kept as v1 stated it: signoff's model floor does not bind here. The lane the
 owner picks is this station's floor and the model-named stamp is the compensating trust label, so
 no request this core builds carries a `floor`.
@@ -109,12 +116,13 @@ naming the command to run instead.
 |---|---|---|---|---|---|
 | `check-input <input.json>` | the input | `input.json`, `checkpoint.json` | `next: select` | 0, 2, 3, 4 | none |
 | `select --hunt build --name N` / `--hunt scope` | the homes of the hunt (section 6) | `selection-<hunt>.json` | the hunt's result | 0, 2 | none |
+| `named` (own) | the doc the invocation names | `selection-build.json` (`one`, home `named`), the checkpoint | the choice | 0, 2 | none |
 | `choose` (own) | a hunt's `several` | the choice in `checkpoint.json` | the choice | 0, 2 | none |
 | `harvest` | the settled build doc and scope doc, the code book, the records component | `harvest.json`, `sources/` (a copy of each document as read) | what was harvested | 0, 2, 3, 10 | `selection-none`, `selection-several`, `build-doc-unreadable`, `code-book-missing`, `records-refused` |
 | `packet` (own) | `sources/`, readers' roster | `packet/<lens>/` (three numbered files each), `packet.json` | the directories | 0, 2, 3 | none |
 | `request` (own) | the packet, the roster, `--suggest` | `requests/<call id>.json`, `outside/<call id>/packet.md`, `requests.json` | the calls to summon | 0, 2, 3, 5, 10 | `model-changed` |
-| `record-answer --answer FILE` | the answer | `answer.json`, `triage.json` | the counts, the verdict | 0, 2, 4, 5, 10 | `lane-down`, `no-effective-model` |
-| `write` | the triage, the build doc, the records component | the log (through the component), the build doc, the raw copies' banner, the mirror; `receipt.json`, `write.json` | what was written | 0, 2, 3, 10 | `write-refused`, `records-refused` |
+| `record-answer --answer FILE` | the answer | `answer.json`, the raw copies' banner (`banner.json`), `triage.json` | the counts, the verdict | 0, 2, 4, 5, 10 | `lane-down`, `no-effective-model` |
+| `write` | the triage, the build doc, the records component | the log (through the component), the build doc, the mirror; `receipt.json`, `write.json` | what was written | 0, 2, 3, 10 | `write-refused`, `records-refused` |
 | `report` | every artifact | `result.json` | the result and the chat block | 10, 2 | the tag the run reached |
 
 What `harvest` collects: the build doc (path, workspace-relative path, bytes' hash, line count, its
@@ -152,13 +160,16 @@ data in this run's input, the ask comes before `check-input` (section 15, point 
 
 | Command | Input | Output | Exits |
 |---|---|---|---|
+| `named` | `--run-dir D --path P`, after `check-input`, instead of `select --hunt build`: the build doc the invocation names (absolute, or relative to the workspace) | `selection-build.json` as the hunt's `one` (candidate home `named`, tier 0), the named doc and its scope directory in `checkpoint.json`; `harvest` then takes it | 0; 2 when the path is not an existing `.md` file, lies outside the workspace by its real path (a link out included), or the run is past `select` |
 | `choose` | `--run-dir D --hunt build\|scope --path P --by intent\|owner [--words TEXT]`, after `select`, at a hunt whose outcome was `several` | the choice recorded in `checkpoint.json` (`path`, `by`, the owner's words); `harvest` then takes it | 0; 2 when the hunt was not `several`, the path is not one of the listed candidates, or an owner's pick carries no words |
 | `packet` | `--run-dir D [--readers-root DIR]`, after `harvest` | `packet/<lens>/` for each lens of the named row's lane, each holding exactly `build-doc.md`, `scope-doc.md` or `no-record.md`, and `code-book.md`, numbered `N: `; `packet.json` with each file's hash | 0; 2 no `station.row`, a row not in the roster, a packet already built; 3 readers not found |
 | `request` | `--run-dir D [--suggest FILE] [--readers-root DIR]`, after `packet` | one request per lens under `requests/`, `requests.json`; for an outside row the filled mandate `outside/<call id>/packet.md` | 0; 2 a displayed model and no `--suggest`; 3 readers not found; 5 the packet refused (the file named, nothing built); 10 `model-changed` |
 
 `choose` never picks: it takes only a path the hunt listed, and says who decided (`intent`: the
 executor matched the candidate's `Intent:` line to the feature, v1's rule for a scope doc and for
-a build doc no filename matches; `owner`: the owner named it, with his words).
+a build doc no filename matches; `owner`: the owner named it, with his words). `named` never hunts:
+it takes the one path the invocation named, checked and recorded, v1's "the invocation names a
+build doc".
 
 ## 6. The hunt, the packet and the requests
 
@@ -172,8 +183,17 @@ a build doc no filename matches; `owner`: the owner named it, with his words).
 | `scope` | 1 | `repo-scope` (workspace) | `docs/scope/*.md` | precon's folder, by glob, never a guessed slug |
 | `scope` | 1 | `repo-flat` (workspace) | `docs/*-scope.md` | precon's older flat path |
 | `scope` | 1 | `staging` (the staging home) | `*-scope.md` | precon's pre-repository home |
+| `build` | 0 | `named` (the invocation) | none: `named --path P` | v1: "the invocation names a build doc, or the skill hunts" |
+| `scope` | 1 | `named-dir-scope`, `named-dir-flat` (workspace), only for a doc `named` outside every build home | `<its directory>/scope/*.md`, `<its directory>/*-scope.md` | v1 Step 1: a named doc outside the homes gets its own directory's `scope/*.md` and `*-scope.md` |
 
-The lowest tier holding a candidate decides. `several` is listed and never picked: the executor
+The lowest tier holding a candidate decides. When no filename matches (a `none` from the build hunt
+with a `--name`), the executor runs `select --hunt build` without `--name`, matches the listed docs
+by their `Intent:` lines and records the match with `choose --by intent`: a filename match beats an
+Intent match, and when two tiers match by filename the lower tier's doc is taken and the chat block's
+`Selected:` line names it, how it was taken, and every doc another tier matched. A doc `named` lies
+outside every build home when its directory is none of `docs/plans`, `docs` and `plan`; the two
+named-dir scope homes are added by `scripts/inspect_v2.py` for that run alone (`gate.hunts_for_run`)
+and are listed in `searched`. `several` is listed and never picked: the executor
 matches a scope doc by its `Intent:` line or puts the list to the owner, and records the result
 with `choose`. Only a `none` from the scope hunt applies the no-record rule; a `none` from the
 build hunt stops the run (`selection-none`: a plan that lives only in the conversation is not
@@ -208,7 +228,9 @@ row `<run id>-<row>`.
 | `paper` | the named outside row | `packet.md`: `references/inspect-mandate.md` with its three slots filled from the lens's packet | `packet-only` | the outside line |
 
 `authorized: true` rides only on the outside call whose row the input's `owner_word.rows` names,
-never on a Claude row. `session_model` rides on `claude-session` calls; `model` on the named row's
+never on a Claude row. The accept path holds the same line: `record-answer` refuses a status-`ok`
+result of an outside call whose request carried no `authorized` (`unauthorized-send`, section 7),
+so no finding is raised and no stamp is written under a row the owner never named in this run. `session_model` rides on `claude-session` calls; `model` on the named row's
 calls when the owner typed one; `raw_path` on the outside call,
 `<workspace>/docs/reviews/<YYYY-MM-DD>-inspect-<feature>-<lane>.md` (`gpt-*` rows file as `gpt`),
 and never in a report-only run. No request carries a `floor` (section 2). Repo reality is the one
@@ -283,20 +305,33 @@ Three layers, in order: the schema (exit 4); the shared E14-11 refusals through
 | `field-separator` | a claim, scenario or location holding a line break or the ` · ` separator, or an effective model a stamp cannot carry |
 | `unknown-finding` | an adjudication naming no finding of the results, or one already adjudicated |
 | `refuted-citation` | an adjudication keeping (`confirmed`, `plausible`) a finding whose citation matches nothing |
+| `unauthorized-send` | a status-`ok` result of an outside row's paper call whose request was built without `authorized` (the input's `owner_word` names no such row): readers sends nothing for an outside row until the owner names it, so such a result was never sent under the rule, and nothing of it is raised or stamped under that row's name. The refusal names the call and the row. A result whose status is not `ok` (readers refused the unauthorized send) is not refused here: it ends the run `lane-down` |
 
-Then two outcomes end the run instead of refusing the answer: any result whose `status` is not
+Once the answer is written and before anything is triaged, the banner goes on top of each outside
+raw copy readers filed at its request's `raw_path` (or readers' `-2`, `-3` variant) under
+`docs/reviews/`, once, and on nothing else (v1 Step 3); `banner.json` names each write with its
+hashes, `write`'s receipt opens with them, and a run that stops here names them in its result. Never
+in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
+of refusing the answer: any result whose `status` is not
 `ok` (stop `lane-down`, its status and reason in the stop's sentence), and any result with a null
 `effective_model`, or paper calls that report more than one (stop `no-effective-model`, no stamp).
 
 **The mechanical pass** (`inspect_core/verify.py`), written to `triage.json`:
 
 - A citation is `<file>:<line>` or `<file>:<line>-<line>` against the numbered packet of the
-  call's lens; a repo-reality finding may cite a regular file inside the workspace. It matches
-  nothing when the file is not in the packet, a line is past the end, or every cited line is
-  blank; and, when the finding quotes the cited text (`quote`), when no cited line carries it.
-- Checked: every outside finding of every severity; every Claude-lane BLOCKER and MAJOR; any
-  finding the executor keeps by adjudication. A checked citation that matches nothing is refuted
-  and counted. A Claude-lane MINOR or QUESTION passes UNVERIFIED.
+  call's lens, and only against the documents that call's request carried (traceability: the
+  build doc and the record; code book: the code book and the build doc; repo reality: the build
+  doc; the paper call's `packet.md` carries all three); a repo-reality finding may cite a regular
+  file inside the workspace, never one under `docs/records/` (the records log is read through the
+  component's CLI only, never opened by a citation check). It matches nothing when the file is
+  none of those, a line is past the end, or every cited line is blank; and, when the finding quotes
+  the cited text (`quote`), when no cited line carries it.
+- Every citation is checked, and one that matches nothing is refuted and counted, whatever the
+  severity and whoever found it: every finding raised into the records log, and every QUESTION
+  line, names a place in the workspace (ruling R5). Verified, in v1's sense: every outside finding
+  of every severity; every Claude-lane BLOCKER and MAJOR; any finding the executor keeps by
+  adjudication. A Claude-lane MINOR whose citation holds passes UNVERIFIED: its claim is nobody's to
+  confirm.
 - A finding with a null location never reaches the result (`locationless`, counted).
 - Labels: CONFIRMED when the quote was found or the executor adjudicated `confirmed`; PLAUSIBLE
   otherwise (the citation holds and no one confirmed the claim).
@@ -337,11 +372,13 @@ In this order, each step checked before the next (`inspect_core/writing.py`):
    below the previous `Plan: inspected` line; else directly after the `Out of scope:` block (its
    line and the `- ` lines continuing it); else directly above the first `## Slice` heading. A
    prior stamp is never rewritten. The station writes no finding line of its own.
-4. **The banner** on each outside raw copy under `docs/reviews/`, prepended once.
+4. **The banner** is already on each outside raw copy: `record-answer` put it there before any
+   triage (section 7); its writes open the receipt.
 5. **The verdict mirror** `docs/reviews/<YYYY-MM-DD>-inspect-<feature>.md` (`-2`, `-3` on a
    same-day repeat, never an overwrite): the verdict, the scope doc, the refuted count, the stamp,
-   the block's bytes as rendered, the station's lines, and what was hunted and held; then
-   `records.py mirrors` is asked and its answer kept (section 15, point 2).
+   the lenses not run on a short fleet (section 15, point 4), the block's bytes as rendered, the
+   station's lines, what was hunted and held, and the bottom line; then `records.py mirrors` is
+   asked and its answer kept whole, verbatim, as `mirror.answer` (section 15, point 2).
 
 The date is the UTC date of the run's instant, the same instant every event carries.
 `receipt.json` names every write with its bytes' hash before and after; the log is the component's
@@ -356,11 +393,15 @@ documents, `authorized`), the calls with their effective models and statuses, th
 (`blocker`, `major`, `minor`, `confirmed`, `plausible`, `unverified`, `refuted`, `questions`,
 `locationless`), the verdict, the surviving findings (with their records finding ids), the
 questions, the refutations, the stamp and whether it was written, the records (`log`,
-`head_before`, `head_after`, `appended`), the mirror, `hunted_and_held`, `bottom_line`, the slices
-already under construction, the lenses not run, and the chat block, v1's read-back:
+`head_before`, `head_after`, `appended`), the mirror (its path, whether `mirrors` lists it, and
+the component's answer whole), `hunted_and_held`, `bottom_line`, the slices already under
+construction, the lenses not run, and the chat block, v1's read-back, with one line added after
+`INSPECT:`, `Selected:`, naming the doc taken, its home and tier, how it was taken, and any doc
+another tier matched by filename (v1: "the verdict says which doc it took"):
 
 ```text
 INSPECT: <doc path>
+Selected: <its folder>/ (tier N, <home>), <how>[; also matched by filename, outranked by the lower tier: <docs>]
 Verdict: APPROVED | APPROVED WITH CONDITIONS | REJECTED
 Inspector: <row · effective model id · isolation label>  ·  Scope doc: <path | none — no-record rule applied>  ·  Refuted: N
 Raw: <the raw paths | n/a — Claude lane>
@@ -384,7 +425,7 @@ what follows.
 `report_only: true` selects, harvests, packs, builds requests (with no `raw_path`), records and
 triages the answer, and computes what `write` would write (`write.json`: the findings it would
 raise, the stamp, the station's lines, the mirror path) without writing any of it: no append, no
-stamp, no mirror, no banner, `receipt.json` empty, and the result says `wrote_nothing: true`.
+stamp, no mirror, no banner (at `record-answer` or anywhere), `receipt.json` empty, and the result says `wrote_nothing: true`.
 
 ## 11. Stops
 
@@ -430,6 +471,12 @@ Facts each family proves, never outcomes (the outcomes are in an answer key no b
 | I1 primary evidence | a packet directory holding a summary, a prior verdict, a repo file, or only the three files, held to `request`'s three-file rule | `refused_at_request`, `packet_files` |
 | I2 the no-record rule | a traceability reader's answer against a doc with and without a scope doc | `question_locations`, `blocker_count`, `no_record_noted` |
 | I3 records and the stamp | an outside reader's answer: a citation inside the doc, one past its end, a result with no effective model | `raised_locations`, `refuted_count`, `stamp_written`, `stamp_model`, `terminal_status` |
+
+Two translation choices of `lane_observe.py`, never facts of a case: a seeded replay carries no
+`hunted_and_held` and no `bottom_line`, so the translation supplies one neutral sentence for each;
+the I3 cases' neutral input carries no owner word while their answers come from `gpt-astra`, so the
+drive's input and answer carry an `owner_word` naming that row with a one-line quotation, as an
+owner's answer at the ask would.
 | I4 no v1 import | a planted v1 reference in a scratch copy of this core | the frame's `v1_findings_present` |
 
 ## 15. Open points
@@ -440,8 +487,8 @@ Facts each family proves, never outcomes (the outcomes are in an answer key no b
    hunt finds no build doc has asked one question for nothing. Recorded for the owner.
 2. **`mirrors` does not list an inspect mirror.** The component's `mirrors` associates a build
    doc's slices with `docs/reviews/*-signoff-<feature>-<slice>.md` only, so
-   `docs/reviews/<date>-inspect-<feature>.md` is written, `mirrors` is asked, and its answer
-   (`recognised: false`) is kept in the result. The records component is frozen in this step
+   `docs/reviews/<date>-inspect-<feature>.md` is written, `mirrors` is asked, and its answer is
+   kept whole in the result (`mirror.answer`), with `recognised: false` recorded honestly beside it. The records component is frozen in this step
    (E14-2); making `mirrors` recognise an inspect mirror is the owner's call.
 3. **An untaggable scope-doc line does not stop the run.** Quoted, never dropped or guessed, under
    `harvest.json`'s `ledger.refused`; v1 inspects a plan whatever its record's form, and the
@@ -452,4 +499,6 @@ Facts each family proves, never outcomes (the outcomes are in an answer key no b
    the chat block. v1 treats a failed lens as a lane that is down (kept here as `lane-down`); a lens
    whose result was never recorded is not a status readers reports. The seeded families' recorded
    answers (I2, I3) carry one reader's result each, so refusing a short fleet would refuse every
-   seeded replay. Whether a short fleet should stop the run is the owner's call.
+   seeded replay. Whether a short fleet should stop the run is the owner's call. A short fleet is
+   never silent: `lenses_not_run` names the missing lenses in the result, the chat block and the
+   verdict mirror (ruling R1 of round 2).

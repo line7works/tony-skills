@@ -48,6 +48,14 @@ class TheLaneFacts(unittest.TestCase):
                     self.assertIn(name, observed, (row["case"], name))
                     self.assertIn(name, observed["_via"], (row["case"], name))
                     self.assertTrue(observed["_via"][name].startswith(("cli", "library")), observed["_via"][name])
+                    # CI1-12: `_via` names the phases the drive reached, and none it never ran
+                    ran = [p["phase"] for p in observed["_phases"] if p.get("phase")]
+                    how = observed["_via"][name]
+                    named = how.split("cli: ", 1)[1].split(" (", 1)[0] if how.startswith("cli: ") else \
+                        how.split(" after ", 1)[1].split(" through", 1)[0]
+                    named = [p.strip() for p in named.split(",")]
+                    windows = [ran[i:i + len(named)] for i in range(len(ran) - len(named) + 1)]
+                    self.assertIn(named, windows, (row["case"], name, how, ran))
         self.assertEqual(seen, set(FAMILIES) - {"I4-no-v1-import"} | ({"I4-no-v1-import"} & seen))
 
 

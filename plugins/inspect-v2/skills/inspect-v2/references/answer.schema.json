@@ -13,7 +13,9 @@
     "lines",
     "row",
     "lanes",
-    "results"
+    "results",
+    "hunted_and_held",
+    "bottom_line"
   ],
   "properties": {
     "answer_version": {
@@ -196,13 +198,13 @@
     "hunted_and_held": {
       "type": "string",
       "minLength": 1,
-      "description": "what the inspectors attacked that held up (v1's anti-rubber-stamp line), in the executor's words from the replies",
+      "description": "what the inspectors attacked that held up (v1's anti-rubber-stamp line, rule 10: mandatory in every run), in the executor's words from the replies; printed in the chat block and the verdict mirror",
       "pattern": "\\S"
     },
     "bottom_line": {
       "type": "string",
       "minLength": 1,
-      "description": "two or three sentences for the chat block: the plan's state and what to do next",
+      "description": "two or three sentences for the chat block and the verdict mirror: the plan's state and what to do next; mandatory in every run",
       "pattern": "\\S"
     },
     "results": {

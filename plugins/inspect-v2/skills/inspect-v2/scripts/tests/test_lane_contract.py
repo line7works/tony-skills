@@ -53,7 +53,7 @@ class TheContractAndTheCode(unittest.TestCase):
 
     def test_the_own_commands_are_the_contracts(self):
         named = table_names(section("5. The core's own commands"))
-        self.assertEqual(named, ["choose", "packet", "request"])
+        self.assertEqual(named, ["named", "choose", "packet", "request"])
         text = self.help_text()
         block = text.split("Commands of this core", 1)[1].split("\n\n", 1)[0]
         listed = [line.split()[0] for line in block.splitlines()[1:] if line.strip()]
@@ -87,18 +87,35 @@ class TheContractAndTheCode(unittest.TestCase):
     def test_the_procedure_names_every_command_and_stays_short(self):
         skill = testlib.read_text(os.path.join(testlib.SKILL, "SKILL.md"))
         self.assertLess(len(skill.splitlines()), 250)
-        for command in ("check-input", "select", "choose", "harvest", "packet", "request",
+        for command in ("check-input", "select", "named", "choose", "harvest", "packet", "request",
                         "record-answer", "write", "report"):
             self.assertIn("inspect_v2.py %s" % command, skill, command)
         self.assertNotIn("is the law", skill)
         self.assertNotIn("is the law", contract())
         self.assertNotIn("frame (E14 slice 1)", skill, "the skeleton's placeholder is gone")
 
+    def test_the_re_inspection_closure_lines_retire_under_p8(self):
+        # CI1-9: said once, in section 2, so the claim "nothing v1 decided changes" is not silent on it
+        kept = section("2. What is kept from v1")
+        self.assertIn("re-inspection writes no `fixed | not fixed` line", kept)
+        self.assertIn("pick P8", kept)
+
+    def test_the_intent_fallback_and_the_named_doc_are_stated(self):
+        # CI1-11 and CI1-10: v1 Step 1's Intent-line fallback, and a doc the invocation names
+        skill = testlib.read_text(os.path.join(testlib.SKILL, "SKILL.md"))
+        step = skill.split("## Step 2", 1)[1].split("## Step 3", 1)[0]
+        self.assertIn("select --run-dir D --hunt build` without `--name`", step)
+        self.assertIn("choose --run-dir D --hunt build --path <candidate> --by intent", step)
+        self.assertIn("inspect_v2.py named --run-dir D --path <the doc>", step)
+        hunts = section("6. The hunt, the packet and the requests")
+        self.assertIn("`named`", hunts)
+        self.assertIn("`scope/*.md` and `*-scope.md`", hunts)
+
     def test_the_answer_schema_names_the_rules_the_contract_states(self):
         rules = table_names(section("7. record-answer"))
         for rule in ("independence", "session-mismatch", "run-mismatch", "row-mismatch",
                      "owner-word-mismatch", "lanes-mismatch", "duplicate-call", "field-separator",
-                     "unknown-finding", "refuted-citation"):
+                     "unknown-finding", "refuted-citation", "unauthorized-send"):
             self.assertIn(rule, rules)
 
 

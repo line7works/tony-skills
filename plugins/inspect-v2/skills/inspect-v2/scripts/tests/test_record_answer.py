@@ -23,6 +23,7 @@ from inspect_core import verify  # noqa: E402
 NEEDS = testlib.checkout_sibling("blueprint-v2") is None or testlib.records_root() is None or \
     testlib.checkout_sibling("readers") is None
 R = "run-0001"
+WORD = {"rows": ["gpt-astra"], "words": "send it to gpt-astra"}
 
 
 @unittest.skipIf(NEEDS, "the installed shape: no blueprint-v2, records or readers beside this core")
@@ -121,6 +122,39 @@ class TheGates(_Rec):
         adj = [{"finding": "%s-code-book#4" % R, "decision": "refuted", "why": "none"}]
         self.assert_refused("unknown-finding", self.record(ilib.claude_fleet(R), adjudications=adj))
 
+    def outside_fleet(self, status=None):
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model",
+                                   findings=[ilib.finding("build-doc.md:12", quote="AC1")])
+        if status:
+            paper["status"], paper["reason"] = status, "no authorized flag on the request"
+        return [paper, ilib.reader_result("%s-repo-reality" % R)]
+
+    def test_an_outside_result_the_input_never_authorized_is_refused(self):
+        # R4 (CI1-4): readers sends nothing for an outside row without the owner's word, so a result
+        # that claims it did is refused, and nothing is raised or stamped under that row's name
+        outcome = self.record(self.outside_fleet(), row="gpt-astra")
+        self.assert_refused("unauthorized-send", outcome)
+        refusal = [r for r in outcome[1]["refusals"] if r["rule"] == "unauthorized-send"][0]
+        self.assertIn("gpt-astra", refusal["message"])
+        self.assertEqual(refusal["call_id"], "%s-gpt-astra" % R)
+        self.assertFalse(os.path.exists(os.path.join(self.run.ws, "docs", "records")))
+
+    def test_a_word_for_another_row_authorizes_nothing(self):
+        other = {"rows": ["gemini"], "words": "gemini only"}
+        self.assert_refused("unauthorized-send", self.record(
+            self.outside_fleet(), row="gpt-astra", input_extra={"owner_word": other}, owner_word=other))
+
+    def test_the_same_result_with_the_word_is_accepted(self):
+        code, doc, out, err = self.record(self.outside_fleet(), row="gpt-astra",
+                                          input_extra={"owner_word": WORD}, owner_word=WORD)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.triage()["calls"][0]["authorized"], True)
+
+    def test_an_unauthorized_call_readers_refused_is_lane_down_not_a_refusal(self):
+        code, doc, out, err = self.record(self.outside_fleet(status="invalid-request"), row="gpt-astra")
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "lane-down")
+
     def test_an_accepted_answer_is_recorded_once(self):
         code, doc, out, err = self.record(ilib.claude_fleet(R))
         self.assertEqual(code, 0, out + err)
@@ -174,16 +208,29 @@ class Verify(_Rec):
         self.assertEqual((tri["survivors"], tri["questions"], tri["counts"]["locationless"]), ([], [], 1))
 
     def test_a_claude_minor_passes_unverified(self):
-        code, doc, out, err = self.record(ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:99", severity="MINOR")]))
+        code, doc, out, err = self.record(ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:13", severity="MINOR")]))
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
-        self.assertEqual([(s["severity"], s["label"]) for s in tri["survivors"]], [("MINOR", "UNVERIFIED")])
+        self.assertEqual([(s["severity"], s["label"], s["location"]) for s in tri["survivors"]],
+                         [("MINOR", "UNVERIFIED", ilib.BUILD_REL + ":13")])
+
+    def test_a_claude_minor_or_question_whose_citation_fails_is_refuted_never_raised(self):
+        # R5 (CI1-5): every finding written anywhere names a place in the workspace; a citation that
+        # matches nothing is refuted and counted even where the claim itself passes unverified
+        fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:500", severity="MINOR", claim="minor past end"),
+                                                ilib.finding("summary.md:2", severity="QUESTION", claim="a question nowhere")])
+        code, doc, out, err = self.record(fleet)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["questions"], tri["counts"]["refuted"]), ([], [], 2))
+        self.assertEqual(sorted(r["location"] for r in tri["refuted"]), ["build-doc.md:500", "summary.md:2"])
 
     def test_an_outside_minor_is_verified(self):
         fleet = [ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model",
                                     findings=[ilib.finding("build-doc.md:99", severity="MINOR")]),
                  ilib.reader_result("%s-repo-reality" % R)]
-        code, doc, out, err = self.record(fleet, row="gpt-astra")
+        code, doc, out, err = self.record(fleet, row="gpt-astra", input_extra={"owner_word": WORD},
+                                          owner_word=WORD)
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.triage()["counts"]["refuted"], 1)
 
@@ -232,6 +279,56 @@ class Verify(_Rec):
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
         self.assertEqual((tri["counts"]["refuted"], len(tri["questions"]), tri["survivors"]), (1, 1, []))
+
+
+class WhereACitationMayPoint(_Rec):
+    """CI1-7: the records log is read through the component only, never by a citation check.
+    CI1-13: a citation is checked against the documents that lens's request carried."""
+
+    def test_a_repo_reality_citation_into_the_records_log_is_refuted(self):
+        ws = ilib.workspace(self.tmp)
+        event = {"v": 1, "kind": "finding_raised", "at": "2026-09-25T11:00:00Z", "ledger_doc": ilib.BUILD_REL,
+                 "slice": "A", "severity": "MINOR",
+                 "location": {"raw": ilib.BUILD_REL + ":8", "file": ilib.BUILD_REL, "line": 8, "line_end": None,
+                              "tag": None, "more": [], "resolved": True},
+                 "claim": "an earlier finding", "scenario": "it is in the log", "raised_by": "someone",
+                 "actor": {"station": "another-station", "run_id": "other-run", "harness": None},
+                 "origin": {"kind": "native"}, "source": {"known": False}}
+        events = os.path.join(self.tmp, "events.json")
+        testlib.write_json(events, [event])
+        code, body, err = ilib.records_cli(["append", "--workspace", ws, "--doc", ilib.BUILD_REL, "--events", events,
+                                            "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+        log = body["log"]
+        self.run = ilib.Runner(self.tmp, ws)
+        self.run.upto("request")
+        fleet = ilib.claude_fleet(R, repo_reality=[ilib.finding("%s:1" % log, quote="finding_raised"),
+                                                   ilib.finding("./%s:1" % log, claim="c2", quote="finding_raised")])
+        code, doc, out, err = self._record(ilib.answer(R, fleet))
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["counts"]["refuted"]), ([], 2))
+        self.assertIn("records log", tri["refuted"][0]["why"])
+
+    def test_a_lens_cites_only_the_documents_its_request_carried(self):
+        fleet = ilib.claude_fleet(R, repo_reality=[ilib.finding("scope-doc.md:3", claim="c1")],
+                                  traceability=[ilib.finding("code-book.md:1", claim="c2")],
+                                  code_book=[ilib.finding("scope-doc.md:3", claim="c3")])
+        code, doc, out, err = self.record(fleet)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["counts"]["refuted"]), ([], 3))
+        self.assertTrue(all("not among the documents" in r["why"] for r in tri["refuted"]), tri["refuted"])
+
+    def test_the_paper_call_cites_any_of_the_three(self):
+        word = {"rows": ["gpt-astra"], "words": "send it"}
+        fleet = [ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", findings=[
+            ilib.finding("code-book.md:1", claim="c1"), ilib.finding("scope-doc.md:3", claim="c2"),
+            ilib.finding("build-doc.md:12", claim="c3")]), ilib.reader_result("%s-repo-reality" % R)]
+        code, doc, out, err = self.record(fleet, row="gpt-astra", input_extra={"owner_word": word}, owner_word=word)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((len(tri["survivors"]), tri["counts"]["refuted"]), (3, 0))
 
 
 class Stops(_Rec):
