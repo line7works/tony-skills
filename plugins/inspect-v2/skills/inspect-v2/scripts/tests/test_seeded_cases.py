@@ -122,7 +122,8 @@ class TheLaneHook(unittest.TestCase):
         self.assertEqual(facts["selection_outcome"], "one")
         self.assertNotIn("unlisted_fact", facts)
         self.assertEqual(facts["_phases"], ["lane:planted"])
-        self.assertEqual(sorted(e["error"].split("'")[1] for e in facts["_errors"]), ["selection_outcome", "unlisted_fact"])
+        self.assertEqual(sorted(e["error"].split("'")[1] for e in facts["_errors"]),
+                         ["listed_fact", "selection_outcome", "unlisted_fact"], "the unlisted name, the frame fact, and the merged fact with no via")
         self.assertNotIn("other_listed", facts, "a listed name the observer did not fill stays unfilled (pending)")
 
     def test_the_step_list_and_via_cannot_be_rewritten(self):
@@ -144,14 +145,25 @@ class TheLaneHook(unittest.TestCase):
         self.assertEqual(via, {"selection_outcome": "cli", "listed_fact": "cli"})
         self.assertEqual(len(facts["_errors"]), 2, facts["_errors"])
 
+    def test_a_fact_with_no_via_and_a_wrong_shaped_errors_are_recorded(self):
+        facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                              "    facts['listed_fact'] = 'lane'\n"
+                              "    facts['_errors'] = {'x': 1}\n", {"_phases": [], "_errors": []})
+        self.assertEqual(facts["listed_fact"], "lane")
+        texts = " ".join(e["error"] for e in facts["_errors"])
+        self.assertIn("with no via", texts)
+        self.assertIn("not a list", texts)
+
     def test_a_system_exit_and_a_removed_errors_key_land_in_errors(self):
         facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
                               "    facts['listed_fact'] = 'lane'\n"
                               "    facts.pop('_errors')\n"
                               "    raise SystemExit(3)\n", {"_phases": [], "_errors": []})
         self.assertEqual(facts["listed_fact"], "lane")
-        self.assertEqual(len(facts["_errors"]), 1)
-        self.assertIn("SystemExit", facts["_errors"][0]["error"])
+        texts = [e["error"] for e in facts["_errors"]]
+        self.assertEqual(len(texts), 2, texts)
+        self.assertTrue(any("SystemExit" in t for t in texts))
+        self.assertTrue(any("with no via" in t for t in texts))
 
 if __name__ == "__main__":
     unittest.main()

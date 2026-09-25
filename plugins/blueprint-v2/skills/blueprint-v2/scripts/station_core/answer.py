@@ -42,6 +42,7 @@ judge and the reader's to check (E14-4), never this module's.
 """
 import os
 import re
+import unicodedata
 
 from . import exits, fsio
 
@@ -57,14 +58,40 @@ def _refusal(rule, message, **where):
 
 _FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--)\\s+")
 # The decorations the four stations' forms put around a line's words (the class the quiet-upgrade rule must see
-# through; four escapes in slice 2, each behind one of these): a leading item label (`R2`, `AC1:`, `C3.`, `Q4`), a
-# trailing `(waits on: ...)` / `(parked: ...)` / `(assumed: ...)` parenthesis, a trailing ` <dash> <tag> (...)` or
-# ` <dash> <tag>: ...` ledger tail, and list bullets.
-_BULLET = re.compile(r"^[-*]\s+")
-_LABEL = re.compile(r"^(?:[A-Za-z]{1,4}\d{1,3}[.:]?)\s*(?:\u00b7|\u2014|\u2013|--|-|:)?\s*")
-_PAREN_TAIL = re.compile(r"\s*\((?:waits on|parked|assumed|decided|open)\b[^)]*\)\s*$", re.IGNORECASE)
+# through; four escapes in slice 2, each behind one of these): a list mark (`- `, `* `, `+ `, `• `, `1. `, `2) `),
+# a leading item label (`R2`, `AC1:`, `C3.`, `Q4`, `(R2)`, `[R2]`, `R-2:`, `AC-1:`), a wrapping pair of `**`,
+# backticks or quotes, a trailing `(waits on: ...)` / `(parked: ...)` / `(assumed: ...)` parenthesis, a trailing
+# ` <dash> <tag> (...)` or ` <dash> <tag>: ...` ledger tail, trailing punctuation, and invisible characters. The
+# strips run until nothing changes, so two decorations at once (a parenthesis, then a period) cannot escape.
+_BULLET = re.compile(u"^(?:[-*+\u2022]|\\d{1,3}[.)])\\s+")
+# The item labels the station forms use (R<n> requirement, AC<n> criterion, C<n> constraint, Q<n> question,
+# O<n> open item, A<n> assumption, D<n> decision), with or without a hyphen, brackets or a trailing mark; a
+# label is stripped only when a separator or a mark follows it, or when it is one of these known letters
+# alone before a space, so a content token such as `S3`, `IPv6` or `H264` is never a label.
+_LABEL = re.compile(r"^(?:[(\[](?:R|AC|C|Q|O|A|D)-?\d{1,4}[)\]][.:]?\s*"
+                    r"|(?:R|AC|C|Q|O|A|D)-?\d{1,4}(?:[.:)]\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+|\s+))"
+                    r"(?:\u00b7|\u2014|\u2013|--|-|:)?\s*")
+_PAREN_TAIL = re.compile(r"\s*\((?:waits on|waiting on|parked|assumed|decided|open|needs research|needs prototype|later)\b"
+                         r"[^()]*(?:\([^()]*\)[^()]*)*\)\s*$", re.IGNORECASE)
 _TAG_TAIL = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s+(?:decided|assumed|parked|open)\\b.*$", re.IGNORECASE)
-_INVISIBLE = re.compile(u"[\u200b\u200c\u200d\u2060\ufeff\u00ad\u3164\u2800\u2028\u2029\u0085\x0b\x0c]")
+_WRAP = (("**", "**"), ("`", "`"), ('"', '"'), (u"\u201c", u"\u201d"), ("'", "'"))
+_EXTRA_INVISIBLE = frozenset(u"\u3164\u2800\u034f\u115f\u1160\uffa0\x0b\x0c\u180e"
+                             + u"".join(chr(c) for c in range(0xfe00, 0xfe10)) + u"".join(chr(c) for c in range(0xe0100, 0xe01f0)))
+
+
+def _visible(text):
+    """The text with every invisible character dropped: Unicode format characters (Cf: zero-width, BOM,
+    bidi marks, joiners), line and paragraph separators (Zl, Zp), the C0/C1 controls other than tab, newline
+    and carriage return, and the letter-shaped fillers (U+3164, U+2800, U+034F, U+115F, U+1160, U+FFA0)."""
+    out = []
+    for ch in text:
+        cat = unicodedata.category(ch)
+        if cat in ("Cf", "Zl", "Zp") or ch in _EXTRA_INVISIBLE:
+            continue
+        if cat == "Cc" and ch not in "\t\n\r":
+            continue
+        out.append(ch)
+    return "".join(out)
 
 
 def _fields(text):
@@ -74,32 +101,66 @@ def _fields(text):
 
 def _normalized(text):
     """The text with invisibles dropped, its whitespace collapsed and its case folded, for the repeat check."""
-    return " ".join(_INVISIBLE.sub("", text).split()).casefold()
+    return " ".join(_visible(text).split()).casefold()
 
 
 def _bare(text):
-    """The words of a line with every known decoration stripped: bullets and item labels in front, the tag tail
-    and the parenthesised call behind."""
-    out = _INVISIBLE.sub("", text).strip()
-    out = _BULLET.sub("", out, count=1)
-    label = _LABEL.match(out)
-    if label and label.end() < len(out):
-        out = out[label.end():]
-    out = _TAG_TAIL.sub("", out)
-    out = _PAREN_TAIL.sub("", out)
-    out = out.rstrip(" .;,")
+    """The words of a line with every known decoration stripped, the strips repeated until nothing changes."""
+    out = _visible(text).strip()
+    while True:
+        before = out
+        out = _BULLET.sub("", out, count=1)
+        label = _LABEL.match(out)
+        if label and label.end() < len(out):
+            out = out[label.end():]
+        for left, right in _WRAP:
+            if len(out) > len(left) + len(right) and out.startswith(left) and out.endswith(right):
+                out = out[len(left):-len(right)]
+        out = _TAG_TAIL.sub("", out)
+        out = _PAREN_TAIL.sub("", out)
+        out = out.strip().rstrip(" .;,:!?").strip()
+        if out == before:
+            break
     return " ".join(out.split()).casefold()
 
 
 def _forms(text):
-    """Every reading of a line's words the quiet-upgrade rule compares: the whole line, its bare words, and each
-    whole field of a dashed line, bare too."""
+    """Every reading of a LINE's words the quiet-upgrade rule compares: the whole line, its bare words, and
+    each whole field of a dashed line, bare too."""
     out = set([_normalized(text), _bare(text)])
     for field in _fields(text):
         if field.strip():
             out.add(_normalized(field))
             out.add(_bare(field))
+    out.discard("")
     return out
+
+
+def _row_forms(text):
+    """Every reading of a ROW's words: the whole row, its bare words, and its first field bare (the text before
+    a ` <dash> <tag or reason>` tail). Never a later field: a row's reason or why is not its words (lane L's
+    round 3 checker, CS3-2)."""
+    out = set([_normalized(text), _bare(text)])
+    fields = _fields(text)
+    if len(fields) > 1 and fields[0].strip():
+        out.add(_bare(fields[0]))
+    out.discard("")
+    return out
+
+
+def bare(text):
+    """Public: a line's words with every known decoration stripped (for a lane's own rules; E14-3)."""
+    return _bare(text)
+
+
+def forms(text):
+    """Public: every reading of a line's words (for a lane's own rules; E14-3)."""
+    return _forms(text)
+
+
+def row_forms(text):
+    """Public: every reading of a ledger row's words (for a lane's own rules; E14-3)."""
+    return _row_forms(text)
 
 
 def _shape(answer):
@@ -161,9 +222,9 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
         if isinstance(question_text, str):
             # the decided text asked again with its id left out of `touches` (round 3, finding 2);
             # a question that names the line is refused below, once
-            forms = _forms(question_text)
+            forms_of_question = _forms(question_text)
             for row in ledger_lines:
-                if (row["tag"] == "decided" and forms & _forms(row["text"])
+                if (row["tag"] == "decided" and forms_of_question & _row_forms(row["text"])
                         and row["id"] not in q.get("touches", [])):
                     refusals.append(_refusal("re-asked-decided", "question %s repeats a decided line's text: "
                                              "%r (%s); a decided line passes forward and is never asked again"
@@ -199,7 +260,7 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             why = "its path %r is not in the workspace" % (ref,)
         elif kind == "question" and ref not in answered:
             why = "its question %r was not answered in this run" % (ref,)
-        elif kind in ("assumed", "owner_words") and not (isinstance(ref, str) and ref.strip()):
+        elif kind in ("assumed", "owner_words") and not (isinstance(ref, str) and _visible(ref).strip()):
             why = "its %s is empty" % ("why" if kind == "assumed" else "quote")
         if why:
             refusals.append(_refusal("untraced", "the line %r is refused: %s" % (line["text"], why), **where))
@@ -218,7 +279,7 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             # each behind one decoration; the class is closed here, not the instance)
             candidates = _forms(line["text"])
             for row in ledger_lines:
-                if (row["tag"] in ("parked", "open") and candidates & _forms(row["text"])
+                if (row["tag"] in ("parked", "open") and candidates & _row_forms(row["text"])
                         and row["id"] not in touched and not (kind == "ledger" and ref == row["id"])):
                     refusals.append(_refusal("quietly-resolved", "the line %r is asserted as decided under a %s "
                                              "trace, but it is the %s ledger line %s and no question of this "
