@@ -95,7 +95,7 @@ deliberately ill-formed; nothing in an answer or a `CASES.md` states an outcome.
 | `ledger_tags` | per tag, how many lines the reader emits |
 | `answer_refused` | true when the recorded answer is refused on its content |
 | `refusal_rules` | the rule names of the refusals, sorted, unique |
-| `refusal_reason` | a lane's short reason for a refusal the frame does not make |
+| `refusal_reason` | a lane's short reason for a refusal the frame does not make: the lane's own rule name, several sorted and joined by `, `; null when nothing was refused |
 | `answer_written` | true when the run records the answer in its run directory |
 | `form_holds` | true when the document conforms to its template's labels and headings |
 | `round_trip_identical` | true when parse then render gives the document's bytes back |
@@ -113,7 +113,9 @@ deliberately ill-formed; nothing in an answer or a `CASES.md` states an outcome.
 | `visual_rendered`, `published`, `artifact_line_unchanged` | architect's two actions |
 | `extended_in_place`, `protected_lines_identical`, `importer_reads` | blueprint's living doc |
 
-A list assertion is an exact list. A name the run has no fact for is omitted, never guessed.
+A list assertion is an exact list. A name the run has no fact for is omitted, never guessed. A location
+(`question_locations`, `raised_locations`) is `<file>:<line>` as the core writes it: the workspace-relative path
+of the document it names (`docs/plans/<date>-<topic>.md:10`), never a packet file name.
 
 ## Rules these cases were written under
 
