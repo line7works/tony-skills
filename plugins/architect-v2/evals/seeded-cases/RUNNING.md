@@ -18,9 +18,10 @@ roster beside this core (`plugins/readers/`), so they run in the checkout.
 ## What `observed.json` holds
 
 The neutral vocabulary of `README.md`, only the names the run has a fact for; `_case`, `_family`,
-`_core`, `_phases`, `_via` and `_lane_pending` are the observer's own bookkeeping. A `lane` step
-produces no fact: the names it lists are the lane's to produce in slice 2, and the lane extends
-`observe.py` (through the control room, since the file is shared) when it builds them.
+`_core`, `_phases`, `_via` and `_lane_pending` are the observer's own bookkeeping. A `lane` step's facts come from the core's own `lane_observe.py` beside `observe.py`, when it
+exists: only the names the step lists under `pending` that no frame step observed are taken from
+it; every name it did not fill stays under `_lane_pending`; a name it fills outside that list is
+recorded under `_errors` and never merged.
 
 ## What is NOT here
 

@@ -202,12 +202,13 @@ class Select(_Cli):
 class NotBuilt(_Cli):
     """The placeholder stop of a phase the lane has not built, keyed to what the driver declares built
     (`HANDLERS`): a built phase never answers `phase-not-built`, and on a run that has only been
-    checked it is usage (exit 2, `select` first) or a refusal, never a write."""
+    checked it is usage (exit 2, `select` first) or a refusal, never a write: the run directory, the
+    workspace and the staging home are digested before and after (CS-3)."""
 
     def test_the_lane_phases_not_in_handlers_stop_as_phase_not_built(self):
         built = set(getattr(station_module(), "HANDLERS", {}) or {})
         self.checked()
-        before = sorted(os.listdir(self.run_dir))
+        before = (testlib.tree_digest(self.run_dir), testlib.tree_digest(self.ws), testlib.tree_digest(self.staging))
         answer = os.path.join(self.tmp, "answer.json")
         testlib.write_json(answer, {"questions": [], "lines": []})
         for args in (["harvest"], ["record-answer", "--answer", answer], ["write"], ["report"]):
@@ -224,7 +225,8 @@ class NotBuilt(_Cli):
             doc = self.json_out(out)
             self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "phase-not-built"), args)
             self.assertIn(args[0], doc["reason"])
-        self.assertEqual(sorted(os.listdir(self.run_dir)), before, "nothing written")
+        after = (testlib.tree_digest(self.run_dir), testlib.tree_digest(self.ws), testlib.tree_digest(self.staging))
+        self.assertEqual(after, before, "nothing written: the run directory, the workspace and the staging home unchanged")
 
     def test_the_placeholder_itself(self):
         """`driver.not_built(phase)` in-process: the document shape every core's unbuilt phase answers with."""
@@ -297,7 +299,13 @@ class OwnCommands(_Cli):
     def test_a_shared_name_or_a_missing_field_is_a_defect_of_the_script(self):
         for source in ("[{'name': 'select', 'help': 'h', 'arguments': [], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--skill-root']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['thing']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [], 'handler': 'show'}]",
+                       "[{'name': '', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'two words', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'Thing', 'help': 'h', 'arguments': [], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)
@@ -307,6 +315,7 @@ class OwnCommands(_Cli):
         code, out, err = self.cli(["--help"])
         self.assertEqual(code, 0, err)
         self.assertIn("Commands of this core", out)
+        self.assertIn("own commands    the lane contract's", out)
 
 
 class Validators(_Cli):
