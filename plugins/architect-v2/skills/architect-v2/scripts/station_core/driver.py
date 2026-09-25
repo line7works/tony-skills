@@ -22,6 +22,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -256,7 +257,9 @@ SIDE_EFFECTS = """Side effects:
   check-input     creates the run directory; writes input.json and checkpoint.json in it
   select          writes selection-<hunt>.json and rewrites checkpoint.json in the run directory
   harvest, record-answer, write, report
-                  the lane's (station-loop.md section 3); until built, they write nothing
+                  the lane's (station-loop.md section 3): the run directory, and the documents `write`
+                  renders, each listed in the receipt; a phase the lane has not built writes nothing
+  own commands    the lane contract's (station-loop.md section 3.8)
   identity, skill-identity
                   none
   Nothing is written outside the run directory by the frame. No network, no model call, no harness.
@@ -312,18 +315,35 @@ def build_parser(station, hunts, commands=None):
 SHARED_COMMANDS = ("check-input", "select", "identity", "skill-identity") + LANE_PHASES
 
 
+COMMON_FLAGS = ("--skill-root", "--records-root", "-h", "--help")
+OWN_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
 def check_commands(commands):
-    """A core's own commands, checked for shape and for a name that collides with a shared one."""
+    """A core's own commands, checked for shape: every field present, a callable handler, a name of
+    lowercase letters, digits and hyphens that is neither a shared command's nor another own command's,
+    and no flag that collides with a common option or is not a flag at all."""
     out = []
     for own in commands or ():
         for key in ("name", "help", "arguments", "handler"):
             if key not in own:
                 raise ValueError("a core's own command is missing %r: %r" % (key, own))
-        if own["name"] in SHARED_COMMANDS or any(own["name"] == c["name"] for c in out):
-            raise ValueError("a core's own command may not reuse the name %r" % own["name"])
+        name = own["name"]
+        if not isinstance(name, str) or not OWN_NAME.match(name):
+            raise ValueError("a core's own command needs a name of lowercase letters, digits and hyphens: %r" % (name,))
+        if name in SHARED_COMMANDS or any(name == c["name"] for c in out):
+            raise ValueError("a core's own command may not reuse the name %r" % name)
+        if not callable(own["handler"]):
+            raise ValueError("the handler of %r is not callable" % name)
         for argument in own["arguments"]:
-            if "flags" not in argument:
-                raise ValueError("an argument of %r has no flags: %r" % (own["name"], argument))
+            flags = argument.get("flags")
+            if not flags or not isinstance(flags, (list, tuple)):
+                raise ValueError("an argument of %r has no flags: %r" % (name, argument))
+            for flag in flags:
+                if not isinstance(flag, str) or not flag.startswith("-"):
+                    raise ValueError("an argument flag of %r is not a flag: %r" % (name, flag))
+                if flag in COMMON_FLAGS:
+                    raise ValueError("an argument of %r reuses the common option %r" % (name, flag))
         out.append(own)
     return out
 

@@ -299,7 +299,13 @@ class OwnCommands(_Cli):
     def test_a_shared_name_or_a_missing_field_is_a_defect_of_the_script(self):
         for source in ("[{'name': 'select', 'help': 'h', 'arguments': [], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--skill-root']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['thing']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [], 'handler': 'show'}]",
+                       "[{'name': '', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'two words', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'Thing', 'help': 'h', 'arguments': [], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)
@@ -309,6 +315,7 @@ class OwnCommands(_Cli):
         code, out, err = self.cli(["--help"])
         self.assertEqual(code, 0, err)
         self.assertIn("Commands of this core", out)
+        self.assertIn("own commands    the lane contract's", out)
 
 
 class Validators(_Cli):
