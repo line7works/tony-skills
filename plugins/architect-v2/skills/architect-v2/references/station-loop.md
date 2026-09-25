@@ -7,7 +7,7 @@ change: where a phase's content belongs to one station (what `harvest` collects 
 against what it collects for architect), it names that station's own contract,
 `references/<core>-contract.md`, written in the core's slice 2 lane, as the place.
 
-Contents: 1 The cores and their loop · 2 The CLI and the exit codes · 3 The phases · 4 The input ·
+Contents: 1 The cores and their loop · 2 The CLI and the exit codes · 3 The phases (3.8 the core's own commands) · 4 The input ·
 5 The result · 6 Report-only · 7 The stop vocabulary · 8 The rules · 9 The hand-offs · 10 The
 records component · 11 The shared code · 12 What this contract never does.
 
@@ -146,6 +146,17 @@ command against a run at the wrong phase is exit 2 with the command to run inste
 - `skill-identity`: `{"name", "version", "commit", "content_sha256"}` of the installed skill, the
   hash over every file under the skill root in path order (`__pycache__` and `.pyc` excluded).
 - Exits: 0; 2 when the workspace is not a directory.
+
+### 3.8 The core's own commands
+
+A lane may add commands of its own to its driver, where its section of the E14 contract names
+one (`state`, `render-visual`, `record-publish`, `packet`, `request`), through the `commands`
+argument of `station_core/driver.py`'s `main`: each is a subcommand with the common options,
+listed under "Commands of this core" in `--help`, answering with the envelope and the exit codes
+of section 2, and never a shared name. What each does, its input, its output and its exits are
+the lane contract's (`references/<core>-contract.md`); the shared contract only fixes the seam. A
+core's own command never writes a document except through `write`'s receipt discipline, and
+never opens the records component unless the core is `inspect-v2`.
 
 ## 4. The input
 
