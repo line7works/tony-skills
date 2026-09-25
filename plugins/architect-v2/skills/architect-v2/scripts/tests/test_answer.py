@@ -202,6 +202,42 @@ class UntracedLine(_Answer):
             rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
                                       allowed=allowed)
             self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        # two decorations at once, list marks, wrappers, the wider invisibles (lane L's round 3 checker)
+        for text in ["%s (parked: needs research)." % words, "%s (waits on: Q2);" % words, "1. %s" % words,
+                     u"\u2022 %s" % words, "(R2) %s" % words, "[R2] %s" % words, "R-2: %s" % words, "AC-1: %s" % words,
+                     "**%s**" % words, "`%s`" % words, '"%s"' % words, u"%s\u200e" % words, u"\u2063%s" % words,
+                     u"%s\u034f" % words, "%s (waits on: the owner (Q2))." % words]:
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        # the ledger's own parenthesis wordings, a trailing question mark, more invisibles (lane A's round 3 checker)
+        for text in ["%s (waiting on the bench rig)" % words, "%s (needs research)." % words, "%s?" % words,
+                     u"%s\ufe0f" % words, "+ %s" % words, "2) %s" % words]:
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        # the false-positive side: a content token that looks like a label is not stripped (CS3-2 of lane A)
+        self.ledger.append({"id": "prk-2", "tag": "parked", "section": "Decisions", "text": "R2 storage"})
+        for text in ("S3 storage", "IPv6 support", "H264 encoding"):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], text)
+        doc = self.clean(); doc["lines"].append({"text": "storage", "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+        self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], "R2 storage's words are storage")
+        self.ledger.pop()
+        # the false-positive side: a row's REASON field is not its words (CS3-2)
+        self.ledger.append({"id": "defer-1", "tag": "parked", "section": "Decisions", "text": u"a web view \u2014 the module has no I/O"})
+        doc = self.clean(); doc["lines"].append({"text": u"R4 \u2014 the module has no I/O", "tag": "decided",
+                                                "trace": {"kind": "owner_words", "ref": "he said"}})
+        self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], "a reason field is not the row's words")
+        doc = self.clean(); doc["lines"].append({"text": u"a web view", "tag": "decided",
+                                                "trace": {"kind": "owner_words", "ref": "he said"}})
+        self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"],
+                         "the row's first field is its words")
+        self.ledger.pop()
+        # an owner_words ref of invisibles only is untraced
+        doc = self.clean(); doc["lines"].append({"text": "a brand new line", "tag": "decided",
+                                                "trace": {"kind": "owner_words", "ref": u"\u200b\u200e"}})
+        self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["untraced"])
         # and a plain line whose words are NOT a parked or open row is untouched by the rule
         doc = self.clean(); doc["lines"].append({"text": "R9 \u2014 a brand new requirement", "tag": "decided",
                                                 "trace": {"kind": "owner_words", "ref": "he said"}})
