@@ -345,9 +345,17 @@ def check_commands(commands):
             if not flags or not isinstance(flags, (list, tuple)):
                 raise ValueError("an argument of %r has no flags: %r" % (name, argument))
             for flag in flags:
+                if not isinstance(flag, str):
+                    raise ValueError("an argument flag of %r is not a string: %r" % (name, flag))
                 if flag in seen_flags:
                     raise ValueError("an argument flag of %r repeats: %r" % (name, flag))
                 seen_flags.add(flag)
+            if "help" in argument and not isinstance(argument["help"], str):
+                raise ValueError("the help of an argument of %r is not a string" % name)
+            if argument.get("action") in ("help", "version"):
+                raise ValueError("an argument of %r uses the reserved action %r" % (name, argument["action"]))
+            if argument.get("action") in ("store_const", "append_const") and "const" not in argument:
+                raise ValueError("an argument of %r has action %r and no const" % (name, argument["action"]))
             if argument.get("action") in ("store_true", "store_false", "count", "store_const"):
                 bad = [k for k in ("metavar", "type", "choices", "nargs") if k in argument]
                 if bad or (argument.get("action") != "store_const" and "const" in argument):
