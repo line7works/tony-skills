@@ -216,6 +216,15 @@ class UntracedLine(_Answer):
             rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
                                       allowed=allowed)
             self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        # round 4 (lanes L and A): more decorations, a bracket parenthesis to any nesting, a tag tail with no spaces
+        for text in ["%s [parked: needs research]" % words, "*%s*" % words, "_%s_" % words, "~~%s~~" % words,
+                     "R2a: %s" % words, "R12.3 %s" % words, "AC1.2: %s" % words, u"\u2013 %s" % words, "a) %s" % words,
+                     "(1) %s" % words, "### %s" % words, "> %s" % words, "- [ ] %s" % words, u"%s\u2026" % words,
+                     u"%s\u2014decided (x)" % words, u"%s\u17b4" % words, u"%s\u180b" % words, "i. %s" % words, "[x] %s" % words, u"\u25e6 %s" % words, u"%s\u0301" % words,
+                     "%s (waits on: the bench call (see (Q2) first))" % words]:
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], repr(text))
         # the false-positive side: a content token that looks like a label is not stripped (CS3-2 of lane A)
         self.ledger.append({"id": "prk-2", "tag": "parked", "section": "Decisions", "text": "R2 storage"})
         for text in ("S3 storage", "IPv6 support", "H264 encoding"):
@@ -238,6 +247,25 @@ class UntracedLine(_Answer):
         doc = self.clean(); doc["lines"].append({"text": "a brand new line", "tag": "decided",
                                                 "trace": {"kind": "owner_words", "ref": u"\u200b\u200e"}})
         self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["untraced"])
+        # round 4 (lanes L and A, CS4-1, CS4-2, CS4-4): a label is part of the words when both sides carry one;
+        # a field that is only a label has no words; a one-word later field of a line is no item
+        self.ledger.append({"id": "prk-3", "tag": "parked", "section": "Decisions", "text": u"R5 \u2014 keep the tally in memory"})
+        self.ledger.append({"id": "prk-4", "tag": "parked", "section": "Decisions", "text": "Q3 budget"})
+        self.ledger.append({"id": "prk-5", "tag": "parked", "section": "Decisions", "text": u"Cost \u2014 the why"})
+        self.ledger.append({"id": "prk-6", "tag": "parked", "section": "Decisions", "text": u"Firmware \u00b7 update path"})
+        self.ledger.append({"id": "prk-7", "tag": "parked", "section": "Decisions", "text": u"Display \u00b7 10 inch"})
+        for text in (u"R5 \u2014 a brand new requirement", "Q4 budget", "A3 budget", u"queue \u2014 SQS \u2014 cost",
+                     u"Queue \u00b7 SQS \u00b7 cost", "R5", "R7 budget", "Firmware", u"Display \u00b7 7 inch", u"R5 \u2014 new"):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], text)
+        for text in ("Q3 budget", "budget", "Q3 budget.", u"R5 \u2014 keep the tally in memory", "keep the tally in memory",
+                     u"cost \u2014 nothing else", u"storage \u2014 keep the tally in memory \u2014 one-way"):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], text)
+        for text in (u"Firmware \u00b7 update path", u"Display \u00b7 10 inch."):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], text)
+        del self.ledger[-5:]
         # and a plain line whose words are NOT a parked or open row is untouched by the rule
         doc = self.clean(); doc["lines"].append({"text": "R9 \u2014 a brand new requirement", "tag": "decided",
                                                 "trace": {"kind": "owner_words", "ref": "he said"}})

@@ -154,6 +154,26 @@ class TheLaneHook(unittest.TestCase):
         self.assertIn("with no via", texts)
         self.assertIn("not a list", texts)
 
+    def test_a_via_that_is_not_a_non_empty_string_and_a_falsy_wrong_shaped_errors_are_recorded(self):
+        """Lane L's and lane A's round 4 checkers (CS4-5, CS-4): a via of None, '', 5 or {} counted as a
+        provenance; an _errors of {}, 0 or '' dropped without a record."""
+        for via_value in ("None", "''", "5", "{}"):
+            facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                                  "    facts['listed_fact'] = 'lane'\n"
+                                  "    via['listed_fact'] = %s\n" % via_value, {"_phases": [], "_errors": []})
+            self.assertEqual(facts["listed_fact"], "lane", via_value)
+            texts = " ".join(e["error"] for e in facts["_errors"])
+            self.assertIn("not a non-empty string", texts, via_value)
+        for errors_value in ("{}", "0", "''"):
+            facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                                  "    facts['listed_fact'] = 'lane'\n"
+                                  "    via['listed_fact'] = 'cli'\n"
+                                  "    facts['_errors'] = %s\n"
+                                  "    facts['_phases'] = 'x'\n" % errors_value, {"_phases": [], "_errors": []})
+            texts = " ".join(e["error"] for e in facts["_errors"])
+            self.assertIn("_errors is not a list", texts, errors_value)
+            self.assertIn("_phases is not a list", texts, errors_value)
+
     def test_a_system_exit_and_a_removed_errors_key_land_in_errors(self):
         facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
                               "    facts['listed_fact'] = 'lane'\n"
