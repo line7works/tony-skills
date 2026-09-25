@@ -94,6 +94,54 @@ class ReAskedDecidedLine(_Answer):
         self.assertEqual(self.check(doc)["exit"], 5)
 
 
+class ReAskedDecidedText(_Answer):
+    """Finding 2 of the reviewer's short look (round 3): the decided line's text asked again with
+    its id left out of `touches` (or another id named in its place) is still a re-ask."""
+
+    def with_question(self, q):
+        doc = self.clean()
+        doc["questions"].append(q)
+        return doc
+
+    def test_the_decided_text_with_no_touches_is_exit_5_and_nothing_written(self):
+        doc = self.with_question({"id": "Q999", "text": "Python 3.9 standard library only", "touches": [],
+                                  "answer": "something else"})
+        code, report = self.record(doc)
+        self.assertEqual(code, 5, report)
+        self.assertEqual(os.listdir(self.run_dir), [], "nothing written")
+        (refusal,) = report["refusals"]
+        self.assertEqual((refusal["rule"], refusal["question"], refusal["line_id"]),
+                         ("re-asked-decided", "Q999", self.ids["Python 3.9 standard library only"]))
+        self.assertIn("Python 3.9 standard library only", refusal["message"])
+
+    def test_whitespace_and_case_do_not_hide_the_repeat(self):
+        doc = self.with_question({"id": "Q999", "text": "  python 3.9\tSTANDARD   library only ",
+                                  "answer": "something else"})
+        self.assertEqual([r["rule"] for r in self.check(doc)["refusals"]], ["re-asked-decided"])
+
+    def test_the_decided_text_touching_another_valid_line_is_refused(self):
+        doc = self.with_question({"id": "Q999", "text": "Python 3.9 standard library only",
+                                  "touches": [self.ids["The storage format"]], "answer": "something else"})
+        refusals = self.check(doc)["refusals"]
+        self.assertEqual([(r["rule"], r["line_id"]) for r in refusals],
+                         [("re-asked-decided", self.ids["Python 3.9 standard library only"])])
+
+    def test_the_decided_text_naming_its_line_is_refused_once_as_before(self):
+        ident = self.ids["Python 3.9 standard library only"]
+        doc = self.with_question({"id": "Q2", "text": "Python 3.9 standard library only", "touches": [ident],
+                                  "answer": "Python"})
+        (refusal,) = self.check(doc)["refusals"]
+        self.assertEqual((refusal["rule"], refusal["question"], refusal["line_id"]), ("re-asked-decided", "Q2", ident))
+        self.assertIn("re-asks a decided line", refusal["message"])
+
+    def test_different_text_is_accepted(self):
+        for text in ("Python 3.9 standard library only, or 3.12?", "The storage format"):
+            doc = self.with_question({"id": "Q2", "text": text, "touches": [], "answer": "3.9"})
+            self.assertEqual(self.check(doc), {"exit": 0, "refusals": []}, text)
+        code, report = self.record(doc)
+        self.assertEqual(code, 0, report)
+
+
 class UntracedLine(_Answer):
 
     def refused_rule(self, line, **kw):

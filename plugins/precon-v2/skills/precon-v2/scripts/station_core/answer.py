@@ -23,7 +23,8 @@ lines. The refusals, each `{"rule", "message", ...}` naming the question or line
 
     shape              the answer is not the view above (not a refusal a person could fix by
                        asking something else, but it is refused the same way, never repaired)
-    re-asked-decided   a question touches a `decided` ledger line
+    re-asked-decided   a question touches a `decided` ledger line, or its text is a `decided`
+                       line's text (whitespace collapsed, case folded) whatever it touches
     unknown-line       a question touches an id the ledger does not hold
     untraced           a line with no trace, a trace kind the core does not allow, or a trace
                        that names nothing (an unknown ledger id, a path that is not in the
@@ -33,6 +34,11 @@ lines. The refusals, each `{"rule", "message", ...}` naming the question or line
                        left without an answer settles nothing)
 
 Any refusal is exit 5 and nothing is written (station-loop.md section 3.4).
+
+The text match of `re-asked-decided` catches deterministic repetition only: a question whose text,
+with its whitespace collapsed and its case folded, equals a decided line's text. It does not
+detect a paraphrase; whether a reworded question re-asks a decided line is the executor's to
+judge and the reader's to check (E14-4), never this module's.
 """
 import os
 
@@ -46,6 +52,11 @@ def _refusal(rule, message, **where):
     row = {"rule": rule, "message": message}
     row.update(where)
     return row
+
+
+def _normalized(text):
+    """The text with its whitespace collapsed and its case folded, for the repeat check."""
+    return " ".join(text.split()).casefold()
 
 
 def _shape(answer):
@@ -93,6 +104,18 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
     for q in answer["questions"]:
         if isinstance(q.get("answer"), str) and q["answer"].strip():
             answered.add(q["id"])
+        question_text = q.get("text")
+        if isinstance(question_text, str):
+            # the decided text asked again with its id left out of `touches` (round 3, finding 2);
+            # a question that names the line is refused below, once
+            normalized = _normalized(question_text)
+            for row in ledger_lines:
+                if (row["tag"] == "decided" and normalized == _normalized(row["text"])
+                        and row["id"] not in q.get("touches", [])):
+                    refusals.append(_refusal("re-asked-decided", "question %s repeats a decided line's text: "
+                                             "%r (%s); a decided line passes forward and is never asked again"
+                                             % (q["id"], row["text"], row["id"]),
+                                             question=q["id"], line_id=row["id"]))
         for ident in q.get("touches", []):
             row = ledger.get(ident)
             if row is None:

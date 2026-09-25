@@ -10,12 +10,14 @@ and is never rendered. This module:
   endings and whether or not the file ends in a newline;
 - checks a document against its form's labels and headings (`check`): a label missing, renamed or
   out of order, a changed title form, a heading the form does not have, a stamp line that does not
-  read the stamp form, each one finding with its line;
+  read the stamp form, an architecture doc's walkthrough target line without its `Who:`, `When:`
+  and `Must be able to:` fields in order and each filled, each one finding with its line;
 - renders a document from values (`render_scope_doc`, `render_build_doc`,
   `render_architecture_doc`, `render_run_block`, `render_ledger_line`), laid out exactly as the
   form lays it out, so the forms given their own placeholders render back to themselves;
 - renders and parses the lines inspect writes itself (`render_stamp`, `render_question`,
-  `render_clean`, `parse_line`, `render_line`).
+  `render_clean`, `parse_line`, `render_line`); a QUESTION line with a blank path, line, what or
+  model, or a clean line with a blank model, is not a line of the form and parses to None.
 
 It never judges what a document says (E14-4): it holds the form, nothing more.
 """
@@ -152,6 +154,8 @@ ARCH = {
                    (("Rulings:",), True), (("Changed this run:",), True)],
 }
 SPECS = {"scope-doc": SCOPE, "build-doc": BUILD, "architecture-doc": ARCH}
+# the form's `Who: <named real person>  ·  When: <date>  ·  Must be able to: <short list>`
+WALKTHROUGH = re.compile(r"Who: (.*?) +%(M)s +When: (.*?) +%(M)s +Must be able to: (.*)" % {"M": M})
 
 
 def _all_labels(name):
@@ -240,6 +244,9 @@ def check(name, text):
         label = _label_of(name, line)
         if label:
             current["labels"].append((line_no, label))
+            if name == "architecture-doc" and label == "Who:" and not _walkthrough_holds(line):
+                findings.append({"line": line_no, "message": "the walkthrough target requires Who:, When:, and "
+                                 "Must be able to: in order, separated by %s, each with a value" % M})
         elif name == "build-doc" and current["kind"] == "header" and line.startswith("Plan: inspected"):
             parsed = parse_line(line)
             if parsed is None or parsed["kind"] != "stamp":
@@ -258,6 +265,12 @@ def check(name, text):
         findings += _check_arch_sections(sections)
     findings.sort(key=lambda f: (f["line"], f["message"]))
     return findings
+
+
+def _walkthrough_holds(line):
+    """The walkthrough target line carries its three fields, in the form's order, each filled."""
+    fields = WALKTHROUGH.fullmatch(line)
+    return fields is not None and all(value.strip() for value in fields.groups())
 
 
 def _check_build_sections(sections):
@@ -472,11 +485,11 @@ def parse_line(line):
                 "tail": tail, "clean": tail == "clean", "counts": counts,
                 "question": _count(match.group("q")) if match.group("q") is not None else 0}
     match = QUESTION.match(line)
-    if match:
+    if match and all(match.group(key).strip() for key in ("path", "line", "what", "model")):
         return {"kind": "question", "path": match.group("path"), "line": match.group("line"),
                 "what": match.group("what"), "model": match.group("model")}
     match = CLEAN.match(line)
-    if match:
+    if match and match.group("model").strip():
         return {"kind": "clean", "model": match.group("model")}
     return None
 

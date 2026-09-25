@@ -24,6 +24,11 @@ never dropped and never guessed; so is a line of `Out of scope:`, `Research:` or
 in a Decisions tag (` \u2014 decided (...)`, ` \u2014 assumed (...)`, ` \u2014 parked: ...`), a
 Decisions line below the Decisions block, never read as an item carrying the tag text: `LedgerRefused` lists every such line at once. A document with no
 `Decisions:` label is refused the same way.
+
+A `#` heading met while a ledger section is open is refused the same way, quoted, as "an
+unexpected heading inside <section>": it would otherwise end the section and drop every line
+after it. A heading between sections (the title, or one after `Intent:` or `Next:`) is not the
+ledger's and is passed over.
 """
 import hashlib
 import re
@@ -105,8 +110,15 @@ def read(text):
             elif rest:
                 refused.append({"line": number, "raw": raw, "why": "a Decisions item goes on its own '- ' line"})
             continue
-        if any(raw.startswith(lab) for lab in OTHER_LABELS) or raw.startswith("#"):
+        if any(raw.startswith(lab) for lab in OTHER_LABELS):
             section = None
+            continue
+        if raw.startswith("#"):
+            # a heading between sections (the title, or one after `Intent:` or `Next:`) is not
+            # the ledger's; one met while a section is open would end it silently and drop the
+            # lines after it, so it is refused, quoted (round 3, finding 1)
+            if section is not None:
+                refused.append({"line": number, "raw": raw, "why": "an unexpected heading inside %s" % section})
             continue
         if section is None or not raw.strip():
             continue

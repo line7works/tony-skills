@@ -168,6 +168,50 @@ class Conformance(unittest.TestCase):
             self.assertIsNone(templates.parse_line(bad), bad)
 
 
+class LoadBearingFields(unittest.TestCase):
+    """Finding 3 of the reviewer's short look (round 3): the walkthrough target line carries its
+    three fields, and a QUESTION or clean line with a blank field is not a line of the form."""
+
+    WHO = "Who: Sam Bench  %(M)s  When: 2026-10-01  %(M)s  Must be able to: count turns, reset" % {"M": M}
+
+    def findings(self, replacement):
+        text = ARCH.replace(self.WHO, replacement)
+        self.assertNotEqual(text, ARCH)
+        line_no = text.split("\n").index(replacement) + 1
+        found = templates.check("architecture-doc", text)
+        self.assertEqual(templates.render(templates.parse("architecture-doc", text)), text)
+        return line_no, found
+
+    def test_a_missing_recased_or_empty_field_is_a_finding_naming_the_line(self):
+        shapes = {"missing-when": "Who: Sam  %s  Must be able to: count" % M,
+                  "wrong-case": "Who: Sam  %s  when: tomorrow  %s  Must be able to: count" % (M, M),
+                  "blank-when": "Who: Sam  %s  When:   %s  Must be able to: count" % (M, M),
+                  "blank-who": "Who:   %s  When: 2026-10-01  %s  Must be able to: count" % (M, M),
+                  "blank-must": "Who: Sam  %s  When: 2026-10-01  %s  Must be able to:  " % (M, M),
+                  "out-of-order": "Who: Sam  %s  Must be able to: count  %s  When: 2026-10-01" % (M, M),
+                  "no-separator": "Who: Sam  When: 2026-10-01  Must be able to: count"}
+        for key, replacement in shapes.items():
+            line_no, found = self.findings(replacement)
+            self.assertTrue(found, key)
+            self.assertIn(line_no, [f["line"] for f in found], key)
+            self.assertTrue(any("Who:, When:, and Must be able to:" in f["message"] for f in found), (key, found))
+
+    def test_the_filled_line_and_the_form_still_conform(self):
+        for text in (ARCH, ARCH.replace("\n", "\r\n"), ARCH.rstrip("\n"), templates.form("architecture-doc")):
+            self.assertEqual(templates.check("architecture-doc", text), [])
+
+    def test_a_question_line_with_a_blank_field_does_not_parse(self):
+        for line in ("QUESTION %s a.md:1 %s   %s model" % (M, M, M),
+                     "QUESTION %s a.md:1 %s question %s   " % (M, M, M),
+                     "QUESTION %s   :1 %s question %s model" % (M, M, M)):
+            self.assertIsNone(templates.parse_line(line), line)
+        self.assertIsNotNone(templates.parse_line("QUESTION %s a.md:1 %s question %s model" % (M, M, M)))
+
+    def test_a_clean_line_with_a_blank_model_does_not_parse(self):
+        self.assertIsNone(templates.parse_line("clean %s no surviving findings or questions %s   " % (D, M)))
+        self.assertIsNotNone(templates.parse_line("clean %s no surviving findings or questions %s m" % (D, M)))
+
+
 class RenderFromValues(unittest.TestCase):
 
     def test_the_scope_doc_renderer_gives_the_form(self):

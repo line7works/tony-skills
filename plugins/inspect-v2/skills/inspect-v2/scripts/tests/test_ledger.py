@@ -161,6 +161,33 @@ class Untaggable(unittest.TestCase):
         self.assertEqual([r["text"] for r in rows if r["tag"] == "open"],
                          ["how often the counter resets", "whether the widget names itself"])
 
+
+    # Finding 1 of the reviewer's short look (round 3): a heading met while a ledger section is
+    # open is refused with the line quoted, never a silent end of the section that drops the
+    # lines after it.
+    def test_a_heading_inside_decisions_is_refused_and_quoted(self):
+        doc = "Decisions:\n### note\n- Python only \u2014 decided (Q1)\nOut of scope:\nResearch:\nOpen:\n"
+        exc = self.refused(doc)
+        self.assertEqual([(row["line"], row["raw"]) for row in exc.lines], [(2, "### note")])
+        self.assertEqual(exc.lines[0]["why"], "an unexpected heading inside Decisions")
+        self.assertIn("'### note'", str(exc))
+
+    def test_a_heading_inside_each_other_section_is_refused(self):
+        for label, anchor in (("Out of scope", "Out of scope: a web view \u2014 the owner declined it\n"),
+                              ("Research", "Research: docs/research/turns.md\n"),
+                              ("Open", "Open:\n")):
+            doc = DOC.replace(anchor, anchor + "## Aside\n")
+            exc = self.refused(doc)
+            self.assertEqual([row["raw"] for row in exc.lines], ["## Aside"], label)
+            self.assertEqual(exc.lines[0]["why"], "an unexpected heading inside %s" % label)
+
+    def test_a_heading_between_sections_is_still_read(self):
+        before = [(r["id"], r["tag"], r["text"]) for r in ledger.read(DOC)]
+        for doc in (DOC.replace("Decisions:\n", "### note\nDecisions:\n"),
+                    DOC + "## Notes\n- not a ledger line\n"):
+            self.assertEqual([(r["id"], r["tag"], r["text"]) for r in ledger.read(doc)], before)
+
+
 class Empty(unittest.TestCase):
 
     def test_bare_labels_hold_no_item(self):
