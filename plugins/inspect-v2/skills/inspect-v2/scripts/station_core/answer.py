@@ -166,13 +166,14 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             refusals.append(_refusal("quietly-resolved", "the line %r is asserted as decided, but its ledger "
                                      "line %s is %s and no question of this run settled it"
                                      % (line["text"], ref, ledger[ref]["tag"]), **where))
-        elif kind != "ledger" and line.get("tag") == "decided" and isinstance(line.get("text"), str):
-            # the same evasion by text (lane P's checker, CP1-1): a parked or open line's words asserted as
-            # decided under another trace kind, with no question of this run touching that line
+        elif line.get("tag") == "decided" and isinstance(line.get("text"), str):
+            # the same evasion by text (lane P's checker, CP1-1; lane L's round 2 checker, CS-4): a parked or
+            # open line's words asserted as decided under another trace kind, OR under a ledger trace to some
+            # other line, with no question of this run touching the parked or open line
             normalized = _normalized(line["text"])
             for row in ledger_lines:
                 if (row["tag"] in ("parked", "open") and normalized == _normalized(row["text"])
-                        and row["id"] not in touched):
+                        and row["id"] not in touched and not (kind == "ledger" and ref == row["id"])):
                     refusals.append(_refusal("quietly-resolved", "the line %r is asserted as decided under a %s "
                                              "trace, but it is the %s ledger line %s and no question of this "
                                              "run settled it" % (line["text"], kind, row["tag"], row["id"]),

@@ -6,8 +6,10 @@ directories); `select` on a fixture for every hunt the core's table names; the f
 fills stop as `phase-not-built`; `validate-examples.py` green; `validate-result.py` both ways.
 Every run is made from a working directory outside the worktree.
 """
+import fnmatch
 import glob
 import importlib.util
+import re
 import json
 import os
 import subprocess
@@ -178,7 +180,9 @@ class Select(_Cli):
             self.assertEqual(len(doc["searched"]), len(homes))
             first = sorted(homes, key=lambda h: h["tier"])[0]
             root = {"workspace": self.ws, "staging": self.staging}[first["root"]]
-            rel = first["globs"][0].replace("{name}", "widget").replace("*", "2026-09-20")
+            pattern = first["globs"][0].replace("{name}", "widget")
+            rel = re.sub(r"\[0-9\]", "0", pattern).replace("*", "2026-09-20")
+            self.assertTrue(fnmatch.fnmatchcase(rel, pattern), (name, pattern, rel))
             testlib.write_text(os.path.join(root, rel), "# a doc\n")
             code, out, err = self.cli(["select", "--run-dir", self.run_dir, "--hunt", name,
                                        "--name", "widget"])
@@ -322,17 +326,20 @@ class OwnCommands(_Cli):
         self.assertIn("  (none)", out)
         self.assertIn("own commands    the lane contract's", out)
 
-    def test_a_handlers_key_outside_the_lane_phases_is_a_defect(self):
-        path = os.path.join(self.tmp, "bad.py")
-        testlib.write_text(path, "\n".join([
-            "import os, sys",
-            "sys.dont_write_bytecode = True",
-            "sys.path.insert(0, %r)" % testlib.SCRIPTS,
-            "from station_core import driver",
-            "sys.exit(driver.main(%r, {}, {'harvst': lambda ctx, args: 0}))" % testlib.CORE]))
-        code, out, err = self.run_own(path, ["--help"])
-        self.assertNotEqual(code, 0)
-        self.assertIn("harvst", err)
+    def test_a_bad_handlers_table_is_a_defect(self):
+        for handlers, word in (("{'harvst': lambda ctx, args: 0}", "harvst"),
+                               ("{'harvest': 'phase_harvest'}", "not callable"),
+                               ("['harvest']", "mapping")):
+            path = os.path.join(self.tmp, "bad.py")
+            testlib.write_text(path, "\n".join([
+                "import os, sys",
+                "sys.dont_write_bytecode = True",
+                "sys.path.insert(0, %r)" % testlib.SCRIPTS,
+                "from station_core import driver",
+                "sys.exit(driver.main(%r, {}, %s))" % (testlib.CORE, handlers)]))
+            code, out, err = self.run_own(path, ["--help"])
+            self.assertNotEqual(code, 0, handlers)
+            self.assertIn(word, err, handlers)
 
 
 class Validators(_Cli):

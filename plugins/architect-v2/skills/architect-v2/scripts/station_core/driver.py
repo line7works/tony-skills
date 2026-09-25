@@ -360,11 +360,18 @@ RESERVED_DESTS = ("command", "skill_root", "records_root", "help")
 
 
 def check_handlers(handlers):
-    """A core's `HANDLERS` name lane phases only; a key outside them (a misspelling) is a defect."""
-    for phase in handlers or {}:
+    """A core's `HANDLERS` is a mapping of lane phase to a callable; a key outside the four phases (a
+    misspelling), a non-mapping, or a value that is not callable is a defect of the calling script."""
+    if handlers is None:
+        return {}
+    if not isinstance(handlers, dict):
+        raise ValueError("HANDLERS is a mapping of lane phase to handler, not %r" % type(handlers).__name__)
+    for phase, handler in handlers.items():
         if phase not in LANE_PHASES:
             raise ValueError("HANDLERS names %r, which is no lane phase (%s)" % (phase, ", ".join(LANE_PHASES)))
-    return handlers or {}
+        if not callable(handler):
+            raise ValueError("the handler of %r is not callable" % phase)
+    return handlers
 
 
 def main(station, hunts, handlers, argv=None, commands=None):
