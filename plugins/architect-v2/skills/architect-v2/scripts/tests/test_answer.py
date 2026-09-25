@@ -166,6 +166,13 @@ class UntracedLine(_Answer):
                                             "trace": {"kind": "repo_path", "ref": "src/missing.py"}}),
                          ["untraced"])
 
+    def test_a_repo_path_that_names_the_workspace_itself_or_git(self):
+        """CS observation (lane L's checker): `.`, `./` and anything under `.git` are not traces."""
+        for ref in (".", "./", ".git", ".git/HEAD", "src/.."):
+            self.assertEqual(self.refused_rule({"text": "the whole repository", "tag": "decided",
+                                                "trace": {"kind": "repo_path", "ref": ref}}),
+                             ["untraced"], ref)
+
     def test_a_repo_path_that_leaves_the_workspace(self):
         self.assertEqual(self.refused_rule({"text": "x", "tag": "decided",
                                             "trace": {"kind": "repo_path", "ref": "../outside.txt"}}),

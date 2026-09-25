@@ -202,12 +202,13 @@ class Select(_Cli):
 class NotBuilt(_Cli):
     """The placeholder stop of a phase the lane has not built, keyed to what the driver declares built
     (`HANDLERS`): a built phase never answers `phase-not-built`, and on a run that has only been
-    checked it is usage (exit 2, `select` first) or a refusal, never a write."""
+    checked it is usage (exit 2, `select` first) or a refusal, never a write: the run directory, the
+    workspace and the staging home are digested before and after (CS-3)."""
 
     def test_the_lane_phases_not_in_handlers_stop_as_phase_not_built(self):
         built = set(getattr(station_module(), "HANDLERS", {}) or {})
         self.checked()
-        before = sorted(os.listdir(self.run_dir))
+        before = (testlib.tree_digest(self.run_dir), testlib.tree_digest(self.ws), testlib.tree_digest(self.staging))
         answer = os.path.join(self.tmp, "answer.json")
         testlib.write_json(answer, {"questions": [], "lines": []})
         for args in (["harvest"], ["record-answer", "--answer", answer], ["write"], ["report"]):
@@ -224,7 +225,8 @@ class NotBuilt(_Cli):
             doc = self.json_out(out)
             self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "phase-not-built"), args)
             self.assertIn(args[0], doc["reason"])
-        self.assertEqual(sorted(os.listdir(self.run_dir)), before, "nothing written")
+        after = (testlib.tree_digest(self.run_dir), testlib.tree_digest(self.ws), testlib.tree_digest(self.staging))
+        self.assertEqual(after, before, "nothing written: the run directory, the workspace and the staging home unchanged")
 
     def test_the_placeholder_itself(self):
         """`driver.not_built(phase)` in-process: the document shape every core's unbuilt phase answers with."""
