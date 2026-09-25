@@ -17,7 +17,8 @@ the downstream stations (build, signoff, recheck, inspect) consume, written for 
 never in the room.
 
 **The spine.** The doc records what was decided; it does not decide. Every requirement traces to
-the scope doc, the repository, or a question asked and answered in this run. The most useful doc
+the discussion (the owner's words, quoted), the scope doc, the repository, or a question asked and
+answered in this run. The most useful doc
 is self-contained: real files, real interfaces, explicit out-of-scope, every criterion checkable,
 because a fresh session with no memory of this conversation must be able to execute it.
 
@@ -65,7 +66,8 @@ Mine what already exists before asking anything.
    and tag: its decided lines are settled ground, its out-of-scope lines are descope evidence), the
    architecture doc's poured-concrete lines (decided) and deferred lines (still open), and an
    existing build doc's slices, `Status:` lines, `Plan: inspected` lines and ledger sections. A
-   stop here (`selection-several`, `ledger-refused`) ends the run: report it to the owner.
+   stop here (`selection-several`, or `ledger-refused` for a scope line or a poured-concrete or
+   deferred line it cannot read) ends the run: report it to the owner, quoted.
 4. **The rest is yours to read:** the discussion (decisions made, options rejected, constraints
    stated, names used), the repository (the test command, the components and conventions to reuse,
    real file paths), a wargame doc if one exists (its verified failure modes become constraints and
@@ -76,8 +78,9 @@ Mine what already exists before asking anything.
 Ask about load-bearing gaps only: choices that shape the architecture, the data, a user-visible
 contract or a slice boundary. Batch them into one round of a few questions, each with your
 recommendation attached. Never ask about a decided ledger line or a poured-concrete line: they pass
-forward by their id, and a question that touches one, or repeats its text, is refused. Small
-reversible gaps do not earn a question: decide, and record the assumption. Invoked cold with no
+forward by their id, and a question that touches one, or repeats its text, is refused. Never
+re-ask what the owner already said in the discussion: that line carries his words as its trace.
+Small reversible gaps do not earn a question: decide, and record the assumption. Invoked cold with no
 prior discussion, this step is the discussion: interview until the shape is settled.
 
 Keep, for the answer, every question you put with the ledger ids it touches and the owner's
@@ -108,10 +111,14 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
   rendered verbatim, so write it as the doc should read, `R1 <dash> ...`), constraint (stack,
   conventions, test command, hard requirements) and out-of-scope line (the deferred item and the
   reason it was deferred). Each carries its `trace`: `{"kind": "ledger", "ref": <line id>}`,
-  `{"kind": "repo_path", "ref": <a path that exists>}` or `{"kind": "question", "ref": <an answered
-  question's id>}`. Nothing else traces a line here.
-- `criteria`: one measurable end state each, with its `verify` form (`existing test`, `new test at
-  <path>`, `manual: <steps>`).
+  `{"kind": "repo_path", "ref": <a path that exists>}`, `{"kind": "question", "ref": <an answered
+  question's id>}` or `{"kind": "owner_words", "ref": "<his words from the discussion, verbatim>"}`.
+  Nothing else traces a line here; what you decided alone is an assumption, never a line's trace.
+  An out-of-scope line may carry a parked scope line or a deferred architecture line forward by its
+  id; a scope `Open:` item is his call, so it goes out of scope only after he answered a question
+  touching it, and otherwise stays an open question.
+- `criteria`: one measurable end state each, with its `verify` form, exactly one of `existing test`,
+  `new test at <path>`, `manual: <steps>`; anything else is refused.
 - `slices`: each `name` (A, B, ...), `short`, `goal`, the requirement and criterion ids it carries,
   `footprint` (the files expected to change), `not_in_slice`, `depends_on`. Reuse an existing
   slice's name only to revise a slice whose status is `not started`.
@@ -120,17 +127,18 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
   collapsed the gate, with his words.
 
 Exit 4 (the schema) or exit 5 (the content: an untraced line, a re-asked decided line, a parked or
-open line asserted with no question that settled it, a criterion with no check, a slice naming
-what is not there, a feature the build hunt did not look for) lists every refusal and writes
-nothing: fix the answer, or go back to the owner, and record it again.
+open line asserted with no question that settled it, an open item descoped without his answer, a
+criterion with no check in one of the three forms, a slice naming what is not there, a feature the
+build hunt did not look for) lists every refusal and writes nothing: fix the answer, or go back to
+the owner, and record it again.
 
 ## Step 5: Write, read back and stop
 
 1. Run `write --run-dir D`. The script renders the doc (a new one at
    `docs/plans/<date>-<feature>.md`, or the living doc extended where it lies), the last five
    sections scaffolded empty and never pre-filled, and refuses before anything is written any
-   change to a ledger-section line, a `Status:` line or a `Plan: inspected` line
-   (`write-refused`), a doc edited after harvest (`stale-harvest`), or a path that leaves the
+   change to a ledger-section line, a `Status:` line or a `Plan: inspected` line, or a revision
+   of a slice whose status is not `not started` (`write-refused`), a doc edited after harvest (`stale-harvest`), or a path that leaves the
    workspace (`unsafe-path`). With `needs_build_doc: false` it writes nothing and stops
    `no-build-doc`.
 2. Run `report --run-dir D`. It validates and writes `result.json` and prints it.
@@ -144,8 +152,9 @@ nothing: fix the answer, or go back to the owner, and record it again.
 
 ## The rules
 
-1. **Record, never invent.** Every line traces to the scope doc's ledger, the repository, or an
-   answered question. An unanswered load-bearing question stays visibly open.
+1. **Record, never invent.** Every line traces to the discussion (the owner's words, quoted), the
+   scope doc's ledger, the repository, or an answered question. An unanswered load-bearing question
+   stays visibly open.
 2. **Write for a builder who was not in the room.** No "as discussed", no vocabulary the chat
    invented without defining it, no pronouns pointing at the conversation. Real paths, real names.
 3. **Criteria are checkable or they are not criteria.** One measurable end state plus the stated

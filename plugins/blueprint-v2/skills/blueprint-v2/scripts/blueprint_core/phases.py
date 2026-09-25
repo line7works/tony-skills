@@ -234,8 +234,16 @@ def phase_harvest(ctx, args):
     architecture = None
     if taken["architecture"][0]:
         path = taken["architecture"][0]
-        architecture = dict(harvestmod.architecture_lines(_read_selected(path, "architecture")), path=path,
-                            chosen_by_owner=taken["architecture"][1])
+        lines = harvestmod.architecture_lines(_read_selected(path, "architecture"))
+        refused = lines.pop("refused")
+        if refused:
+            # a poured-concrete or deferred line the reader cannot read is refused, never dropped (R4)
+            quoted = "; ".join("line %d %r (%s)" % (r["line"], r["raw"], r["why"]) for r in refused)
+            return _stop(ctx, run, "ledger-refused", "the architecture doc %s holds %d line(s) of its poured-concrete "
+                         "or deferred sections the reader cannot read: %s" % (os.path.relpath(path, workspace),
+                                                                             len(refused), quoted),
+                         harvest=dict(base, scope=scope, architecture={"path": path}))
+        architecture = dict(lines, path=path, chosen_by_owner=taken["architecture"][1])
     build = None
     if taken["build"][0]:
         path = taken["build"][0]
@@ -364,6 +372,20 @@ def phase_write(ctx, args):
         fsio.write_json(_path(run, "receipt.json"), empty)
         return _stop(ctx, run, "unsafe-path", "the build doc's path %s leaves the workspace through a link, or is "
                      "a link itself; nothing was written" % target, harvest=harvest, answer=answer, receipt=empty)
+    if build is not None:
+        # a slice is revised only while its status is `not started` (R4): one with any other status, in
+        # any case or indent, or with no Status: line at all, is refused before anything is rendered
+        existing = dict((sl["name"], sl) for sl in buildoc.structure(_read_text(build["path"]))["slices"])
+        held = [existing[sl["name"]] for sl in answer["slices"]
+                if sl["name"] in existing and existing[sl["name"]]["status"] != "not started"]
+        if held:
+            fsio.write_json(_path(run, "receipt.json"), empty)
+            lines = [sl["status_line"] or "(slice %s has no Status: line)" % sl["name"] for sl in held]
+            quoted = "; ".join("%r: slice %s is revised only while its status is 'not started'" % (line, sl["name"])
+                               for line, sl in zip(lines, held))
+            return _stop(ctx, run, "write-refused", "the write would revise %d slice(s) of %s that are not 'not "
+                         "started': %s; nothing was written" % (len(held), os.path.relpath(target, workspace), quoted),
+                         harvest=harvest, answer=answer, receipt=empty, refused_lines=lines)
     text, action, names = _proposal(answer, harvest)
     if build is not None:
         before = _read_text(build["path"])

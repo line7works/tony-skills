@@ -87,6 +87,45 @@ class EveryHunt(_Select):
                              ("one", flat), hunt)
 
 
+class DatedNames(_Select):
+    """R3 (CL1-2): a dated name matches the feature by its topic, the part after the date, whole; another
+    feature whose slug ends in this one's is never taken as this feature's doc."""
+
+    def test_another_features_dated_doc_is_none_for_this_feature(self):
+        for hunt, rel in (("build", "docs/plans/2026-09-22-big-turnstile.md"),
+                          ("scope", "docs/scope/2026-09-20-reverse-turnstile.md"),
+                          ("architecture", "docs/architecture/2026-09-21-big-turnstile.md")):
+            run = self.run_with({"README.md": "x\n", rel: "# another feature's doc\n"})
+            code, out, err = run.select(hunt, "turnstile")
+            self.assertEqual(code, 0, err)
+            self.assertEqual((out["outcome"], out["candidates"]), ("none", []), (hunt, rel))
+
+    def test_the_feature_beside_another_is_one(self):
+        run = self.run_with({"README.md": "x\n", "docs/plans/2026-09-22-big-turnstile.md": "# a\n",
+                             bplib.BUILD_PATH: "# b\n"})
+        code, out, err = run.select("build", "turnstile")
+        self.assertEqual((out["outcome"], [os.path.relpath(c["path"], run.ws) for c in out["candidates"]]),
+                         ("one", [bplib.BUILD_PATH]))
+
+    def test_an_undated_prefix_is_not_a_date(self):
+        run = self.run_with({"README.md": "x\n", "docs/plans/v2-turnstile.md": "# a\n"})
+        self.assertEqual(run.select("build", "turnstile")[1]["outcome"], "none")
+
+    def test_an_undated_doc_named_by_the_topic_is_one(self):
+        for hunt, rel in (("build", "docs/plans/turnstile.md"), ("scope", "docs/scope/turnstile.md"),
+                          ("architecture", "docs/architecture/turnstile.md")):
+            run = self.run_with({"README.md": "x\n", rel: "# a\n"})
+            code, out, err = run.select(hunt, "turnstile")
+            self.assertEqual((out["outcome"], [os.path.relpath(c["path"], run.ws) for c in out["candidates"]]),
+                             ("one", [rel]), hunt)
+
+    def test_with_no_name_every_dated_doc_is_a_candidate(self):
+        run = self.run_with({"README.md": "x\n", bplib.SCOPE_PATH: bplib.SCOPE,
+                             "docs/scope/2026-09-21-turnstile-reverse.md": bplib.SCOPE})
+        code, out, err = run.select("scope")
+        self.assertEqual((out["outcome"], len(out["candidates"])), ("several", 2))
+
+
 class Choose(_Select):
 
     def several(self):

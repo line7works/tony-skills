@@ -32,6 +32,7 @@ WHERE = {
     "line-tag-outside-the-enum.json": "/lines/0/tag",
     "needs-build-doc-without-a-feature.json": "/",
     "needs-build-doc-without-a-constraint-line.json": "/lines",
+    "owner-words-quote-blank.json": "/lines/0/trace/ref",
     "question-without-touches.json": "/questions/0",
     "requirements-empty.json": "/slices/0/requirements",
     "slice-name-not-a-name.json": "/slices/0/name",
@@ -65,11 +66,12 @@ class TheSchema(unittest.TestCase):
                     walk(value, "%s/%d" % (where, index))
         walk(schema(), "")
 
-    def test_the_trace_kinds_are_the_shared_five_and_only_three_are_allowed_by_the_core(self):
+    def test_the_trace_kinds_are_the_shared_five_and_four_are_allowed_by_the_core(self):
+        # R1 (CB-1): the owner's words quoted are a trace here; `assumed` stays refused (assumptions have a field)
         kinds = schema()["$defs"]["trace"]["properties"]["kind"]["enum"]
         self.assertEqual(sorted(kinds), sorted(["ledger", "repo_path", "question", "assumed", "owner_words"]))
         from blueprint_core import checks
-        self.assertEqual(checks.ALLOWED_TRACES, ("ledger", "repo_path", "question"))
+        self.assertEqual(checks.ALLOWED_TRACES, ("ledger", "repo_path", "question", "owner_words"))
 
 
 class TheExamples(unittest.TestCase):
@@ -88,6 +90,11 @@ class TheExamples(unittest.TestCase):
             self.assertTrue(errors, path)
             paths = [e["path"] for e in errors]
             self.assertIn(WHERE[os.path.basename(path)], paths, (path, errors))
+
+    def test_a_valid_example_traces_a_line_to_the_owners_words(self):
+        kinds = [line.get("trace", {}).get("kind") for path in files("valid")
+                 for line in testlib.load_json(path)["lines"]]
+        self.assertIn("owner_words", kinds)
 
     def test_dropping_any_required_field_is_refused(self):
         required = schema()["required"]

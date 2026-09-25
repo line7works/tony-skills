@@ -41,16 +41,20 @@ lives now.
 
 The seven rules:
 
-1. **Record, never invent.** Every line traces to the scope doc's ledger, a repository path, or a
-   question the owner answered in this run; an untraced line is refused (section 7). An open
-   load-bearing question stays visibly open: it is rendered into the doc and counted in the
-   read-back.
+1. **Record, never invent.** Every line traces to the discussion, the repo, or a question asked
+   and answered here: the scope doc's ledger, a repository path, a question the owner answered in
+   this run, or the owner's words quoted verbatim (the discussion before the run); an untraced line
+   is refused (section 7). An open load-bearing question stays visibly open: it is rendered into
+   the doc and counted in the read-back.
 2. **Write for a builder who was not in the room.** The executor's; the doc carries real paths
    and names, never a reference to the conversation.
-3. **Criteria are checkable.** A criterion with no `verify` form, or a blank one, is refused.
+3. **Criteria are checkable.** A criterion with no `verify` form, or one that is none of the
+   template's three forms (section 7), is refused.
 4. **Requirements say what, slices say when, the builder decides how.** The executor's.
 5. **Descoping is recorded with reasons.** Out-of-scope lines are rendered under `Out of scope:`
-   with their trace, the written evidence signoff reads.
+   with their trace, the written evidence signoff reads. A parked scope line or a deferred
+   architecture line passes forward here as out of scope, by its id; a scope `Open:` item does not,
+   unless an answered question of this run touched it (section 7).
 6. **Tests are part of the plan.** Each criterion names its check; a slice with no runnable check
    is the executor's to flag to the owner before the doc ships.
 7. **One living doc.** One build doc per feature, extended in place, never forked. The ledger
@@ -95,13 +99,22 @@ the slot reads `*`.
 | Hunt | Glob | Tier | Home |
 |---|---|---|---|
 | `scope` | `docs/scope/{name}.md` | 1 | the repo doc kit's scope folder |
-| `scope` | `docs/scope/*-{name}.md` | 1 | the same folder, dated names |
+| `scope` | `docs/scope/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the same folder, dated names |
 | `scope` | `docs/{name}-scope.md` | 1 | the older flat name |
 | `architecture` | `docs/architecture/{name}.md` | 1 | the architecture folder |
-| `architecture` | `docs/architecture/*-{name}.md` | 1 | the same folder, dated names |
+| `architecture` | `docs/architecture/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the same folder, dated names |
 | `architecture` | `docs/{name}-architecture.md` | 2 | the older flat name |
-| `build` | `docs/plans/*-{name}.md` | 1 | the plans folder |
+| `build` | `docs/plans/{name}.md` | 1 | the plans folder |
+| `build` | `docs/plans/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the same folder, dated names |
 | `build` | `docs/{name}-build-plan.md` | 2 | the older flat name |
+
+Why the dated globs. A doc in a dated home is named `<YYYY-MM-DD>-<topic>.md` and is matched by its
+topic, the part after the date, whole, as the station's step 4 says ("matched by its topic"): a
+`*-{name}.md` glob would take `2026-09-22-big-turnstile.md` or `2026-09-20-reverse-turnstile.md` as
+the `turnstile` feature's doc, and `write` would then extend another feature's living doc. With no
+name the slot reads `*`, so every dated doc of the folder is a candidate. Each of the three folders
+also takes the undated `<topic>.md`, the same topic matched whole; `write` itself always names a new
+doc with its date.
 
 Why the tiers. The scope homes share ONE tier (carried item C1-7): the station's step 1 says that
 when more than one scope doc could match the feature they are listed and the owner is asked, so a
@@ -126,12 +139,19 @@ listing every candidate.
   poured-concrete lines (`poured`, each with an `arch-` id), its struck ones (`struck`,
   superseded, listed and never passed forward) and its deferred lines (`deferred`, each with a
   `defer-` id). An id is twelve hex digits of the SHA-256 of the line's text, so it follows the
-  line, not its position.
+  line, not its position. A line of those two sections the reader cannot read is refused, never
+  dropped: every non-blank line under `## Poured concrete (one-way doors)` or `## Deferred` that
+  is not a `- <text>` item (an indented or `*` item, a blank `- `, a line in a fence), and every
+  `templates.check` finding that names either section (a re-cased heading, or one without its
+  suffix, reads as the section missing), stops the run `ledger-refused`, each quoted with its line
+  number. A `### ` subheading inside either section is passed over: the section runs to the next
+  `## ` heading, so it hides no item.
 - `build`: an existing build doc's path, its SHA-256, its line ending, each slice with its name,
   short name and `Status:` line, every `Plan: inspected` line, every line from the first ledger
   heading to the end (byte for byte, endings kept), and `templates.check`'s findings on it.
 - `ledger_view`: what `record-answer` checks against: the scope ledger's lines, then the poured
-  lines as `decided` and the deferred lines as `parked`.
+  lines as `decided` and the deferred lines as `parked` (a deferred line is a banked decision whose
+  door stays open, passed forward as parked).
 - `run_date`, `build_name`, and `target`: the existing build doc, or
   `<workspace>/docs/plans/<run_date>-<build_name>.md`.
 
@@ -143,7 +163,8 @@ Its fields: `answer_version` 1; `run_id` (this run's); `session_id` (the adapter
 `answer_fields.session_id`, never typed); `feature`, `title`, `intent`; `questions` (each `id`,
 `text`, `touches` (ledger ids), `answer`; a blank answer is unanswered); `lines` (each `text`,
 `tag` of `requirement`, `constraint` or `out-of-scope`, an optional `id` a slice names, and its
-`trace` of `kind` and `ref`); `criteria` (each `text`, `verify`, and the `id` a slice names);
+`trace` of `kind` and `ref`); `criteria` (each `text`, `verify` in one of the three forms below,
+and the `id` a slice names);
 `slices` (each `name`, `short`, `goal`, `requirements` and `criteria` (ids), `footprint`,
 `not_in_slice`, `depends_on`); `assumptions`; `open_questions`; `ceremony` (`needs_build_doc`
 and `why`); and `collapsed_gate` (`words`) only when the owner's invocation collapsed the gate.
@@ -155,22 +176,27 @@ least one constraint line.
 
 1. The schema: exit 4, the findings on stdout. A trace and a `verify` are optional in the schema
    so that a line with no trace and a criterion with no check reach the content check and are
-   refused by name; all five shared trace kinds are spelled so that `assumed` and `owner_words`
-   are refused as kinds this core does not allow.
+   refused by name; all five shared trace kinds are spelled so that `assumed` is refused as a kind
+   this core does not allow (assumptions have their own field). An `owner_words` trace's `ref` is
+   the owner's words quoted verbatim, and a blank one fails the schema.
 2. The shared refusals of E14-11, `station_core/answer.py`'s `check`, called once on a view of the
-   answer (its questions, and its lines each tagged `decided`, since a requirement, a constraint
-   and an out-of-scope line are what the doc asserts as settled) against `ledger_view`, with the
-   allowed kinds below. Its rules: a question that re-asks a decided line (by id, or by its text);
+   answer (its questions, and its lines each tagged by its own kind: a requirement and a
+   constraint `decided`, since they are what the doc asserts as settled; an out-of-scope line
+   `out-of-scope`, since carrying a parked scope line or a deferred architecture line forward as
+   out of scope is the pass-forward E14-11 names, never a resolution) against `ledger_view`, with
+   the allowed kinds below. Its rules: a question that re-asks a decided line (by id, or by its text);
    a question touching an id the ledger does not hold; an untraced line (no trace, a kind not
    allowed, a ledger id that names nothing, a path not in the workspace, a question not answered
-   in this run); a line tracing to a `parked` or `open` line that no answered question settled.
+   in this run, a blank quote); a requirement or constraint tracing to a `parked` or `open` line
+   that no answered question settled (`quietly-resolved`).
 3. This core's own checks, each a refusal in the same `{"rule", "message", ...}` shape:
 
 | Rule | Refuses |
 |---|---|
 | `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
 | `run-id-mismatch` | a `run_id` other than this run's |
-| `criterion-without-verify` | a criterion with no `verify` form, or a blank or multi-line one |
+| `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
+| `open-item-descoped` | an out-of-scope line whose trace is a scope `Open:` item that no answered question of this run touched: an open item is the owner's call, not a descoping |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |
@@ -179,7 +205,18 @@ least one constraint line.
 | `slices-without-build-doc` | `needs_build_doc` false with slices |
 | `feature-not-hunted` | a `feature` other than the name the build hunt ran with |
 
-Allowed trace kinds: `ledger`, `repo_path`, `question`.
+Allowed trace kinds: `ledger`, `repo_path`, `question`, `owner_words`.
+
+`owner_words` is the discussion before the run: a requirement, constraint or out-of-scope line the
+owner stated before the invocation carries his words, quoted verbatim, as its trace, so he is never
+asked it again (ruling R1 of round 2; the station's rule 1 lets a line trace to the discussion).
+`assumed` stays refused for these lines: what the executor decided alone is an `assumptions` item.
+
+Verify forms: `existing test`, `new test at <path>`, `manual: <steps>`.
+
+A `verify` is one of those three, on one line: `existing test` (optionally naming it),
+`new test at` a path, or `manual:` and the steps. The form is the build doc template's; any other
+text ("will be tested later", a bare `verify:`) is a criterion a grader could not check.
 
 Exit 5 lists every refusal of steps 2 and 3 at once. Only a clean answer is recorded, through
 `answer.record`, which writes `answer.json`.
@@ -200,13 +237,20 @@ Exit 5 lists every refusal of steps 2 and 3 at once. Only a clean answer is reco
   after the last slice and before the ledger sections, or replaces the slice of the same name
   where it stands; the answer's constraint, assumption and open-question texts not already in the
   `Constraints:` line are added to it, and its out-of-scope lines not already listed are added
-  under `Out of scope:` (a one-item inline label becomes a list). The doc's title and `Intent:` line
+  under `Out of scope:` (a one-item inline label becomes a list). Nothing the answer carries is
+  dropped: a doc with no `Constraints:` line gets one, inserted after its `Intent:` line (after the
+  title when it has none); and an item counts as already there only when it equals an item of the
+  line whole (the value cut at its `Assumed:` and `Open:` markers and at `; `), never when it is a
+  substring of the value. The doc's title and `Intent:` line
   are never rewritten from the answer. Every other byte stays as found, a heading the form does not
   know included, and the doc's line ending is kept. A revised slice's section is replaced whole.
-- **Refused before anything is written:** a proposed doc that would change, drop or add to any
-  line under the five ledger sections, any `Status:` line of an existing slice, or any
-  `Plan: inspected` line stops the run `write-refused`, the lines quoted (so revising a slice whose
-  `Status:` is anything but `not started` is refused). A doc whose bytes changed after `harvest`
+- **Refused before anything is written:** a revision of an existing slice whose status is
+  anything but `not started`, or that has no `Status:` line, stops the run `write-refused`, its
+  `Status:` line quoted (or the slice named), before anything is rendered; then a proposed doc that
+  would change, drop or add to any line under the five ledger sections, any `Status:` line of an
+  existing slice, or any `Plan: inspected` line stops the run `write-refused`, the lines quoted. A
+  `Status:` or `Plan: inspected` line is known by its label in any case and at any indent, so a
+  hand-typed `status: built` or ` Status: built` is protected as `Status: built` is. A doc whose bytes changed after `harvest`
   (edited by hand, or created by another run) stops `stale-harvest`. A target that is a link, or
   whose folder resolves outside the workspace, stops `unsafe-path`. A rendered doc that departs
   from its form (`templates.check`) beyond the findings the existing doc already had is a defect
@@ -261,7 +305,7 @@ lines, so what it would write is reported, not written.
 | Tag | When |
 |---|---|
 | `selection-several` | shared: a hunt found several candidates and no `choose` settled it; listed, never picked |
-| `ledger-refused` | shared: the scope doc holds a line the ledger reader cannot tag; quoted |
+| `ledger-refused` | shared: the scope doc holds a line the ledger reader cannot tag, or the architecture doc's poured-concrete or deferred section holds a line the reader cannot read (section 6); quoted |
 | `write-refused` | shared: the write would change a protected line (section 8); quoted, nothing written |
 | `no-build-doc` | own: the answer says this does not need a build doc; no file |
 | `stale-harvest` | own: the build doc's bytes changed after harvest; nothing written |

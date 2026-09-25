@@ -18,9 +18,11 @@ unfilled, and `observe.py` keeps it under `_lane_pending`.
         (one more slice, traced to a repo path of the case). `extended_in_place`: write exited 0
         with action `extended` on the build doc the hunt found, and no other file appeared under
         `docs/plans/`. `protected_lines_identical`: every `Status:` line of the doc before the
-        write is still there, in order, byte for byte; every `Plan: inspected` line is identical;
-        and every line from `## Build assumptions` to the end is identical (read here from the
-        bytes, not through the core's own guard). `importer_reads`: the records component's
+        write (its label in any case, at any indent) is still there, in order, byte for byte;
+        every `Plan: inspected` line is identical; and every line from `## Build assumptions` to
+        the end is identical. Read here from the doc's bytes after the drive in every branch, a
+        write that stopped or wrote nothing included, never set from an exit code nor through the
+        core's own guard. `importer_reads`: the records component's
         `import-legacy --dry-run`, reached through the resolver and the CLI only, on another scratch
         copy of the written workspace, answers with no ambiguity and one slice per slice heading.
 
@@ -144,11 +146,20 @@ def _record_facts(step, case_dir, neutral, facts, via, scratch):
             via["refusal_reason"] = "cli: blueprint.py record-answer, this core's own refusal rules"
 
 
+def _labelled(line, label):
+    return line.lstrip().casefold().startswith(label.casefold())
+
+
 def _status_and_stamps(text):
     lines = text.splitlines(True)
     start = next((i for i, l in enumerate(lines) if l.rstrip("\r\n") == "## Build assumptions"), len(lines))
-    return ([l for l in lines[:start] if l.startswith("Status:")],
-            [l for l in lines[:start] if l.startswith("Plan: inspected")], lines[start:])
+    return ([l for l in lines[:start] if _labelled(l, "Status:")],
+            [l for l in lines[:start] if _labelled(l, "Plan: inspected")], lines[start:])
+
+
+def _read(path):
+    with open(path, encoding="utf-8", newline="") as fh:
+        return fh.read()
 
 
 def _extension_answer(harvest, run_id, session):
@@ -182,20 +193,15 @@ def _write_facts(step, case_dir, neutral, facts, via, scratch):
     build = harvest.get("build")
     plans = os.path.join(workspace, "docs", "plans")
     listing = sorted(os.listdir(plans)) if os.path.isdir(plans) else []
-    before = None
-    if build:
-        with open(build["path"], encoding="utf-8", newline="") as fh:
-            before = fh.read()
+    before = _read(build["path"]) if build else None
     Drive.expect(drive.record(_extension_answer(harvest, run_id, drive.session)), 0)
     code, out = drive.cli(["write", "--run-dir", drive.run_dir])
     written = code == 0
     if written:
         Drive.expect(drive.cli(["report", "--run-dir", drive.run_dir]), 10)
     facts["_phases"].extend(dict(p, lane=True) for p in drive.phases)
-    after = None
-    if written and build:
-        with open(build["path"], encoding="utf-8", newline="") as fh:
-            after = fh.read()
+    # the doc's bytes after the drive, read in every branch: a write that stopped is measured too
+    after = _read(build["path"]) if build and os.path.isfile(build["path"]) else None
     names = step["pending"]
     if "extended_in_place" in names:
         facts["extended_in_place"] = bool(written and build and out.get("action") == "extended"
@@ -204,15 +210,15 @@ def _write_facts(step, case_dir, neutral, facts, via, scratch):
         via["extended_in_place"] = "cli: blueprint.py write on a scratch copy of the case workspace (exit %d)" % code
     if "protected_lines_identical" in names and before is not None:
         if after is None:
-            facts["protected_lines_identical"] = True
-            via["protected_lines_identical"] = "cli: write exit %d wrote nothing; the doc's bytes are as found" % code
+            facts["protected_lines_identical"] = False
         else:
             status_a, stamps_a, tail_a = _status_and_stamps(before)
             status_b, stamps_b, tail_b = _status_and_stamps(after)
             facts["protected_lines_identical"] = (status_b[:len(status_a)] == status_a and stamps_a == stamps_b
                                                   and tail_a == tail_b)
-            via["protected_lines_identical"] = "bytes of the doc before and after the cli write, compared here"
-    if "importer_reads" in names and after is not None:
+        via["protected_lines_identical"] = ("bytes of the doc before and after the cli write (exit %d), compared "
+                                            "here" % code)
+    if "importer_reads" in names and written and after is not None:
         facts["importer_reads"] = _importer_reads(workspace, build["path"], after, scratch)
         via["importer_reads"] = "records component CLI: import-legacy --dry-run on a scratch copy (resolver route)"
 

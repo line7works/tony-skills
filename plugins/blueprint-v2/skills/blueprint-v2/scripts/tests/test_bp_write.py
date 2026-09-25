@@ -162,6 +162,113 @@ class AnExistingDoc(_Write):
         self.assertEqual(testlib.sha256_file(self.path), before)
 
 
+class NothingTheAnswerCarriesIsDropped(_Write):
+    """R4 (CL1-4): on an extension the answer's constraints, assumptions and open questions reach the
+    doc: a `Constraints:` line is inserted after `Intent:` when the doc has none, and an item already
+    there is one equal to it whole, never a substring."""
+
+    def extend_with(self, doc, answer):
+        self.through_answer(bplib.base_files(build=doc), answer)
+        path = os.path.join(self.ws, bplib.BUILD_PATH)
+        code, out, err = self.run.write()
+        self.assertEqual(code, 0, (out, err))
+        return path, bplib.read(path)
+
+    def test_a_doc_with_no_constraints_line_gets_one_after_intent(self):
+        doc = bplib.BUILD_FILLED.replace("Constraints: Python 3.9 standard library; `python3 -m unittest`.\n", "")
+        answer = bplib.extension_answer()
+        answer["assumptions"] = ["the bench rig keeps one process per session"]
+        answer["open_questions"] = ["does reset persist across sessions"]
+        path, after = self.extend_with(doc, answer)
+        lines = after.split("\n")
+        at = lines.index("Intent: count turns for the owner's bench rig.")
+        self.assertEqual(lines[at + 1], "Constraints: Python 3.9 standard library. Assumed: the bench rig keeps one "
+                                        "process per session. Open: does reset persist across sessions.")
+        self.assertEqual(buildoc.protected_changes(doc, after), [])
+        self.assertEqual([f for f in templates.check("build-doc", after)], [])
+        code, out, err = self.run.report()
+        self.assertEqual(code, 10, err)
+        self.assertIn("Open: does reset persist across sessions", out["station_result"]["readback"])
+
+    def test_an_item_that_is_a_substring_of_the_existing_value_is_still_added(self):
+        answer = bplib.extension_answer()
+        answer["lines"][1]["text"] = "Python 3.9"
+        answer["open_questions"] = ["unittest"]
+        answer["assumptions"] = ["standard library"]
+        path, after = self.extend_with(bplib.BUILD_FILLED, answer)
+        line = next(l for l in after.split("\n") if l.startswith("Constraints:"))
+        self.assertEqual(line, "Constraints: Python 3.9 standard library; `python3 -m unittest`. Python 3.9. "
+                               "Assumed: standard library. Open: unittest.")
+
+    def test_an_item_already_there_whole_is_not_repeated(self):
+        answer = bplib.extension_answer()
+        answer["lines"][1]["text"] = "`python3 -m unittest`"
+        path, after = self.extend_with(bplib.BUILD_FILLED, answer)
+        line = next(l for l in after.split("\n") if l.startswith("Constraints:"))
+        self.assertEqual(line, "Constraints: Python 3.9 standard library; `python3 -m unittest`.")
+
+    def test_items_carried_by_an_earlier_run_are_not_repeated(self):
+        doc = bplib.BUILD_FILLED.replace(
+            "Constraints: Python 3.9 standard library; `python3 -m unittest`.\n",
+            "Constraints: Python 3.9 standard library. Assumed: one process per session. Open: does reset persist.\n")
+        answer = bplib.extension_answer()
+        answer["assumptions"] = ["one process per session"]
+        answer["open_questions"] = ["does reset persist"]
+        path, after = self.extend_with(doc, answer)
+        line = next(l for l in after.split("\n") if l.startswith("Constraints:"))
+        self.assertEqual(line, "Constraints: Python 3.9 standard library. Assumed: one process per session. "
+                               "Open: does reset persist.")
+
+
+class AStatusLineInAnyCase(_Write):
+    """R4 (CL1-5): a re-cased or indented `Status:` line is protected as an exact one is, and a slice
+    whose status is anything but `not started` (or that has no `Status:` line) is never revised."""
+
+    def revise_a(self, doc):
+        answer = bplib.extension_answer()
+        answer["slices"][0]["name"] = "A"
+        answer["slices"][0]["depends_on"] = []
+        self.through_answer(bplib.base_files(build=doc), answer)
+        path = os.path.join(self.ws, bplib.BUILD_PATH)
+        before = testlib.sha256_file(path)
+        code, out, err = self.run.write()
+        self.assertEqual(testlib.sha256_file(path), before)
+        return code, out, err
+
+    def test_each_shape_is_refused_with_the_line_quoted(self):
+        for status, quoted in (("status: built", "status: built"), (" Status: built", " Status: built"),
+                               ("STATUS: in progress", "STATUS: in progress"),
+                               ("  Status: not started", "  Status: not started"),
+                               ("status: not started", "status: not started"),
+                               (None, "slice A has no Status: line")):
+            testlib.rmtree(self.tmp)
+            os.makedirs(self.tmp)
+            if status is None:
+                doc = bplib.BUILD_FILLED.replace("Status: in progress\n", "")
+            else:
+                doc = bplib.BUILD_FILLED.replace("Status: in progress", status)
+            code, out, err = self.revise_a(doc)
+            self.assertEqual(code, 10, (status, err))
+            self.assertEqual(out["stop_tag"], "write-refused", status)
+            self.assertIn(quoted, out["reason"], status)
+            self.assertTrue(out["wrote_nothing"], status)
+
+    def test_a_re_cased_status_line_survives_an_extension_byte_for_byte(self):
+        doc = bplib.BUILD_FILLED.replace("Status: in progress", "status: built")
+        self.through_answer(bplib.base_files(build=doc), bplib.extension_answer())
+        code, out, err = self.run.write()
+        self.assertEqual(code, 0, (out, err))
+        after = bplib.read(os.path.join(self.ws, bplib.BUILD_PATH))
+        self.assertIn("\nstatus: built\n", after)
+        self.assertEqual(buildoc.protected_changes(doc, after), [])
+
+    def test_the_structure_reads_the_status_of_every_shape(self):
+        for line, value in (("status: built", "built"), ("  Status: in progress", "in progress"),
+                            ("Status: not started", "not started")):
+            st = buildoc.structure(bplib.BUILD_FILLED.replace("Status: in progress", line))
+            self.assertEqual((st["slices"][0]["status"], st["slices"][0]["status_line"]), (value, line))
+
+
 class TheProtectedLines(unittest.TestCase):
     """Each protected-line change is caught by the comparison `write` runs before it writes."""
 

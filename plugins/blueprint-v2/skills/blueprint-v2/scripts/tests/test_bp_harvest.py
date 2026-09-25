@@ -85,6 +85,57 @@ class TheArchitectureDoc(_Harvest):
         self.assertTrue(all(p["id"].startswith("defer-") for p in arch["deferred"]))
 
 
+class AMalformedArchitectureDoc(_Harvest):
+    """R4 (CL1-3): a poured-concrete or deferred section the reader cannot read whole is refused at
+    harvest (`ledger-refused`, the lines quoted), never dropped."""
+
+    POURED = "## Poured concrete (one-way doors)"
+    ITEM = "- language %s Python 3.9 %s every caller imports it" % (bplib.D, bplib.D)
+    DEFER = "- a web view %s the module has no I/O" % bplib.D
+
+    def harvest_arch(self, arch):
+        run = self.run_for(dict(bplib.base_files(), **{bplib.ARCH_PATH: arch}))
+        run.select_all()
+        return run, run.harvest()
+
+    def test_each_malformed_shape_stops_ledger_refused_quoting_it(self):
+        A = bplib.ARCH
+        shapes = [
+            ("re-cased poured heading", A.replace(self.POURED, "## poured concrete (one-way doors)"),
+             "## poured concrete (one-way doors)"),
+            ("poured heading without its suffix", A.replace(self.POURED, "## Poured concrete"), "## Poured concrete"),
+            ("indented poured item", A.replace(self.ITEM, "  " + self.ITEM), "  " + self.ITEM),
+            ("star poured item", A.replace(self.ITEM, "*" + self.ITEM[1:]), "*" + self.ITEM[1:]),
+            ("blank poured item", A.replace(self.ITEM + "\n", self.ITEM + "\n- \n"), "'- '"),
+            ("a poured line with no dash", A.replace(self.ITEM, self.ITEM[2:]), self.ITEM[2:]),
+            ("re-cased deferred heading", A.replace("## Deferred", "## deferred"), "## deferred"),
+            ("indented deferred item", A.replace(self.DEFER, "  " + self.DEFER), "  " + self.DEFER),
+        ]
+        for label, arch, quoted in shapes:
+            self.tmp_reset()
+            run, (code, out, err) = self.harvest_arch(arch)
+            self.assertEqual(code, 10, (label, out, err))
+            self.assertEqual((out["status"], out["stop_tag"]), ("stopped", "ledger-refused"), label)
+            self.assertIn(quoted, out["reason"], label)
+            self.assertIn(bplib.ARCH_PATH, out["reason"], label)
+            self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")), label)
+
+    def test_a_subheading_inside_the_poured_section_passes_and_its_items_are_read(self):
+        arch = bplib.ARCH.replace(self.POURED + "\n", self.POURED + "\n### the language\n")
+        run, (code, out, err) = self.harvest_arch(arch)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual([p["text"] for p in out["architecture"]["poured"]], [self.ITEM[2:]])
+
+    def test_the_well_formed_doc_is_read_with_nothing_refused(self):
+        run, (code, out, err) = self.harvest_arch(bplib.ARCH)
+        self.assertEqual(code, 0, (out, err))
+        self.assertNotIn("refused", out["architecture"])
+
+    def tmp_reset(self):
+        testlib.rmtree(self.tmp)
+        os.makedirs(self.tmp)
+
+
 class TheExistingBuildDoc(_Harvest):
 
     def test_protected_lines_are_captured_byte_for_byte(self):

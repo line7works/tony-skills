@@ -2,7 +2,10 @@
 
     selected(run_dir, hunt)      the hunt's selection as `select` (or the owner's `choose`) left it
     architecture_lines(text)     the architecture doc's poured-concrete and deferred lines, each
-                                 with a stable id, read through `templates.parse`
+                                 with a stable id, read through `templates.parse`, and `refused`:
+                                 every line of those two sections that is not a `- <text>` item, and
+                                 every `templates.check` finding that names either section (a
+                                 re-cased or renamed heading reads as missing), each quoted
     ledger_view(scope, arch)     the ledger `record-answer`'s shared refusals read: the scope doc's
                                  lines as the ledger reader emits them, then the architecture doc's
                                  poured-concrete lines as `decided` and its deferred lines as `parked`
@@ -10,7 +13,11 @@
                                  `Plan: inspected` lines and its five ledger sections, byte for byte
 
 A struck poured-concrete line (`~~...~~`) is superseded: it is listed, and it is not in the view,
-so a line cannot pass forward through it. Nothing here writes a file.
+so a line cannot pass forward through it. A poured-concrete or deferred line the reader cannot read
+is refused, never dropped: `harvest` stops `ledger-refused` quoting every refused line (round 2,
+R4), so a decision it could not see can never be re-asked or quietly resolved. A `### ` subheading
+inside either section is passed over (the section runs to the next `## ` heading, so it hides no
+item). Nothing here writes a file.
 """
 import hashlib
 import os
@@ -54,20 +61,30 @@ def _line_id(prefix, text, seen):
     return base if seen[base] == 1 else "%s-%d" % (base, seen[base])
 
 
+def _names_a_section(message):
+    folded = message.casefold()
+    return "poured concrete" in folded or "deferred" in folded
+
+
 def architecture_lines(text):
     parsed = templates.parse("architecture-doc", text)
     section = None
-    out = {"poured": [], "struck": [], "deferred": []}
+    out = {"poured": [], "struck": [], "deferred": [], "refused": []}
     seen = {}
+    fence = False
     for row in parsed["outline"]:
         raw = parsed["lines"][row["line"] - 1].rstrip("\r\n")
+        if row["role"] == "fence":
+            fence = not fence
         if row["role"] == "heading":
             section = row["key"]
             continue
-        if section not in (POURED, DEFERRED) or not raw.startswith("- "):
+        if section not in (POURED, DEFERRED) or not raw.strip() or row["role"] == "subheading":
             continue
-        item = raw[2:].strip()
-        if not item:
+        item = raw[2:].strip() if raw.startswith("- ") else ""
+        if fence or row["role"] == "fence" or not item:
+            out["refused"].append({"line": row["line"], "raw": raw,
+                                   "why": "not a '- <text>' item under %s" % section})
             continue
         if section == POURED:
             struck = item.startswith("~~") and item.endswith("~~")
@@ -75,6 +92,14 @@ def architecture_lines(text):
             out[bucket].append({"id": _line_id("arch", item, seen), "text": item, "line": row["line"]})
         else:
             out["deferred"].append({"id": _line_id("defer", item, seen), "text": item, "line": row["line"]})
+    for finding in templates.check("architecture-doc", text):
+        if _names_a_section(finding["message"]):
+            raw = parsed["lines"][finding["line"] - 1].rstrip("\r\n") if 0 < finding["line"] <= len(
+                parsed["lines"]) else ""
+            if not raw.startswith("## "):
+                # a section missing: the finding names the heading the doc does not hold
+                raw = "(no such heading in the doc)"
+            out["refused"].append({"line": finding["line"], "raw": raw, "why": finding["message"]})
     return out
 
 

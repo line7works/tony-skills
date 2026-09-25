@@ -20,14 +20,18 @@ contract every front core shares; `references/blueprint-v2-contract.md` is this 
 hunt table (below, with the tiers and why), its four lane phases and its one own command
 (`blueprint_core/phases.py`), its stop tags and its recorded answer.
 
-The hunts. `scope`: `docs/scope/{name}.md` and `docs/scope/*-{name}.md` and the older flat
-`docs/{name}-scope.md`, all in ONE tier (carried item C1-7): a scope doc in the newer folder and
-one at the flat name that both match are `several`, listed for the owner and never picked, as the
-station's step 1 says ("when more than one could match, list them and ask"). `architecture`: the
-folder `docs/architecture/` first, the flat `docs/{name}-architecture.md` second, since the
-hand-off table ranks the newer home first. `build` (the living doc, under the feature's name):
-`docs/plans/*-{name}.md` first, the flat `docs/{name}-build-plan.md` second, the station's step 4
-order, so an older flat doc is extended where it lies when no newer one exists.
+The hunts. A dated name is `<YYYY-MM-DD>-<topic>.md`, and a doc is matched by its topic, the part
+after the date, whole (`DATED`): `docs/plans/2026-09-22-big-turnstile.md` is another feature's doc
+and never `turnstile`'s. `scope`: `docs/scope/{name}.md` and `docs/scope/<date>-{name}.md` and the
+older flat `docs/{name}-scope.md`, all in ONE tier (carried item C1-7): a scope doc in the newer
+folder and one at the flat name that both match are `several`, listed for the owner and never
+picked, as the station's step 1 says ("when more than one could match, list them and ask").
+`architecture`: the folder `docs/architecture/` first, the flat `docs/{name}-architecture.md`
+second, since the hand-off table ranks the newer home first. `build` (the living doc, under the
+feature's name): `docs/plans/{name}.md` and `docs/plans/<date>-{name}.md` first (the folder's docs
+matched by their topic, as the scope and architecture folders are), the flat
+`docs/{name}-build-plan.md` second, the station's step 4 order, so an older flat doc is extended
+where it lies when no newer one exists.
 """
 import os
 import sys
@@ -40,18 +44,21 @@ from blueprint_core import phases  # noqa: E402
 
 STATION = "blueprint-v2"
 
+DATED = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md"
+
 HUNTS = {
     "architecture": [
         {"home": "repo-architecture", "root": "workspace",
-         "globs": ["docs/architecture/{name}.md", "docs/architecture/*-{name}.md"], "tier": 1},
+         "globs": ["docs/architecture/{name}.md", "docs/architecture/" + DATED], "tier": 1},
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-architecture.md"], "tier": 2},
     ],
     "build": [
-        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/*-{name}.md"], "tier": 1},
+        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/{name}.md", "docs/plans/" + DATED],
+         "tier": 1},
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-build-plan.md"], "tier": 2},
     ],
     "scope": [
-        {"home": "repo-scope", "root": "workspace", "globs": ["docs/scope/{name}.md", "docs/scope/*-{name}.md"],
+        {"home": "repo-scope", "root": "workspace", "globs": ["docs/scope/{name}.md", "docs/scope/" + DATED],
          "tier": 1},
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-scope.md"], "tier": 1},
     ],

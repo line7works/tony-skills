@@ -90,6 +90,16 @@ class TheContractAndTheCode(unittest.TestCase):
                         for home in homes for glob_ in home["globs"])
         self.assertEqual(stated, actual)
 
+    def test_the_verify_forms_are_the_checks(self):
+        block = section(self.contract, "7. The recorded answer")
+        line = next(l for l in block.split("\n") if l.startswith("Verify forms:"))
+        self.assertEqual(tuple(re.findall(r"`([^`]+)`", line)), checks.VERIFY_FORMS)
+
+    def test_the_readme_carries_no_stale_join_sentence(self):
+        readme = read(os.path.join(testlib.PLUGIN, "README.md"))
+        self.assertNotIn("still asserts", readme)
+        self.assertNotIn("phase-not-built", readme)
+
     def test_the_contract_says_records_are_never_opened(self):
         self.assertIn("never opens the records component", self.contract)
 

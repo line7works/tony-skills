@@ -31,7 +31,7 @@
           "given": true,
           "globs": [
             "docs/scope/{name}.md",
-            "docs/scope/*-{name}.md"
+            "docs/scope/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md"
           ],
           "home": "repo-scope",
           "root": "workspace",

@@ -90,10 +90,17 @@ class SharedRefusals(_Record):
         out = self.refused(doc, "untraced")
         self.assertIn("not one this core allows", " ".join(r["message"] for r in out["refusals"]))
 
-    def test_an_owner_words_trace_is_not_allowed_here(self):
+    def test_a_line_in_the_owners_words_quoted_is_accepted(self):
+        # R1 (CB-1): the owner's words quoted verbatim are a trace here, as the discussion is in the station
         doc = bplib.clean_answer()
-        doc["lines"][0]["trace"] = {"kind": "owner_words", "ref": "make it spin"}
-        self.refused(doc, "untraced")
+        doc["lines"][0]["trace"] = {"kind": "owner_words", "ref": "spin(n) gives back n plus one, nothing more"}
+        self.accepted(doc)
+
+    def test_blank_owners_words_are_refused_by_the_schema(self):
+        for words in ("", "   "):
+            doc = bplib.clean_answer()
+            doc["lines"][0]["trace"] = {"kind": "owner_words", "ref": words}
+            self.refused(doc, None, code=4)
 
     def test_a_question_not_answered_in_this_run(self):
         doc = bplib.clean_answer()
@@ -143,6 +150,91 @@ class SharedRefusals(_Record):
         doc = bplib.clean_answer()
         doc["lines"][2]["trace"] = {"kind": "ledger", "ref": harvest["architecture"]["poured"][0]["id"]}
         self.accepted(doc)
+
+
+class OutOfScopeLines(_Record):
+    """R2 (CL1-1): an out-of-scope line carries a parked or deferred item forward by its id; a scope
+    `Open:` item is the owner's call, carried as out of scope only when an answered question touched it."""
+
+    def harvested(self):
+        return testlib.load_json(os.path.join(self.run.run_dir, "harvest.json"))
+
+    def test_an_out_of_scope_line_carrying_a_deferred_item_forward_is_accepted(self):
+        deferred = self.harvested()["architecture"]["deferred"][0]
+        doc = bplib.clean_answer()
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "a web view %s deferred in the architecture "
+                           "doc: the module has no I/O" % bplib.D, "trace": {"kind": "ledger", "ref": deferred["id"]}}
+        self.accepted(doc)
+
+    def test_an_out_of_scope_line_carrying_a_parked_item_forward_is_accepted(self):
+        doc = bplib.clean_answer()
+        doc["questions"] = []
+        doc["lines"][1]["trace"] = {"kind": "repo_path", "ref": "src/turnstile.py"}
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "where the count is kept between sessions "
+                           "%s parked: needs research" % bplib.D,
+                           "trace": {"kind": "ledger", "ref": self.ids["Where the count is kept between sessions"]}}
+        self.accepted(doc)
+
+    def test_an_out_of_scope_line_carrying_an_open_item_is_refused(self):
+        doc = bplib.clean_answer()
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "how often the counter resets %s not now"
+                           % bplib.D, "trace": {"kind": "ledger", "ref": self.ids["how often the counter resets"]}}
+        out = self.refused(doc, "open-item-descoped")
+        self.assertIn("how often the counter resets", " ".join(r["message"] for r in out["refusals"]))
+
+    def test_an_open_item_an_answered_question_touched_may_be_carried_out_of_scope(self):
+        doc = bplib.clean_answer()
+        doc["questions"].append({"id": "Q2", "text": "Is the reset in this build?",
+                                 "touches": [self.ids["how often the counter resets"]],
+                                 "answer": "no, leave it out of this build"})
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "how often the counter resets %s the owner "
+                           "left it out" % bplib.D,
+                           "trace": {"kind": "ledger", "ref": self.ids["how often the counter resets"]}}
+        self.accepted(doc)
+
+    def test_an_open_item_touched_only_by_an_unanswered_question_is_still_refused(self):
+        doc = bplib.clean_answer()
+        doc["questions"].append({"id": "Q2", "text": "Is the reset in this build?",
+                                 "touches": [self.ids["how often the counter resets"]], "answer": ""})
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "how often the counter resets %s not now"
+                           % bplib.D, "trace": {"kind": "ledger", "ref": self.ids["how often the counter resets"]}}
+        self.refused(doc, "open-item-descoped")
+
+    def test_a_requirement_carrying_a_deferred_item_is_still_refused(self):
+        deferred = self.harvested()["architecture"]["deferred"][0]
+        doc = bplib.clean_answer()
+        doc["lines"][1]["trace"] = {"kind": "ledger", "ref": deferred["id"]}
+        self.refused(doc, "quietly-resolved")
+
+    def test_a_constraint_carrying_a_parked_item_is_still_refused(self):
+        doc = bplib.clean_answer()
+        doc["questions"] = []
+        doc["lines"][1]["trace"] = {"kind": "repo_path", "ref": "src/turnstile.py"}
+        doc["lines"][2]["trace"] = {"kind": "ledger", "ref": self.ids["Where the count is kept between sessions"]}
+        self.refused(doc, "quietly-resolved")
+
+
+class VerifyForms(_Record):
+    """R5 (CL1-6): a verify form is one of the template's three."""
+
+    def test_each_of_the_three_forms_is_accepted(self):
+        for index, verify in enumerate(("existing test", "existing test tests/test_turnstile.py::test_spin",
+                                        "new test at tests/test_turnstile.py",
+                                        "manual: run the bench script and read the count")):
+            run = bplib.Run(self.tmp, self.ws, run_id="run-v%d" % index, name="run-v%d" % index)
+            run.to_harvest()
+            doc = bplib.clean_answer(run_id=run.run_id)
+            doc["criteria"][0]["verify"] = verify
+            got, out, err = run.record(doc)
+            self.assertEqual(got, 0, (verify, out, err))
+
+    def test_a_verify_outside_the_three_forms_is_refused(self):
+        for verify in ("verify:", "will be tested later", "new test at", "manual:", "manual:   ", "tests pass",
+                       "New test at tests/x.py", "existing tests"):
+            doc = bplib.clean_answer()
+            doc["criteria"][0]["verify"] = verify
+            out = self.refused(doc, "criterion-without-verify")
+            self.assertIn("existing test", " ".join(r["message"] for r in out["refusals"]), verify)
 
 
 class OwnRefusals(_Record):

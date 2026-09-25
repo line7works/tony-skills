@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/station-v2/blueprint-v2/answer.schema.json",
   "title": "blueprint-v2 recorded answer",
-  "description": "The executor's one recorded answer of a blueprint-v2 run (references/blueprint-v2-contract.md section 7), checked by `record-answer`: this schema first (exit 4), then the shared refusals of station_core/answer.py with the trace kinds `ledger`, `repo_path` and `question` (exit 5), then blueprint's own content checks (exit 5). Closed at every level. A trace is optional here so an untraced line reaches the content check and is refused by rule, and every one of the five shared trace kinds is spelled here so `assumed` and `owner_words` are refused by the content check as kinds this core does not allow; a criterion's `verify` is optional here for the same reason. When `ceremony.needs_build_doc` is true the answer names its feature, title and intent and holds at least one constraint line.",
+  "description": "The executor's one recorded answer of a blueprint-v2 run (references/blueprint-v2-contract.md section 7), checked by `record-answer`: this schema first (exit 4), then the shared refusals of station_core/answer.py with the trace kinds `ledger`, `repo_path`, `question` and `owner_words` (exit 5), then blueprint's own content checks (exit 5). Closed at every level. A trace is optional here so an untraced line reaches the content check and is refused by rule, and every one of the five shared trace kinds is spelled here so `assumed` is refused by the content check as a kind this core does not allow (assumptions have their own field); an `owner_words` trace carries the owner's words quoted verbatim, never blank. A criterion's `verify` is optional here for the same reason as the trace: a missing one, or one that is none of the three forms, is refused by rule. When `ceremony.needs_build_doc` is true the answer names its feature, title and intent and holds at least one constraint line.",
   "type": "object",
   "additionalProperties": false,
   "required": ["answer_version", "run_id", "session_id", "questions", "lines", "criteria", "slices", "assumptions", "open_questions", "ceremony"],
@@ -61,9 +61,10 @@
       "additionalProperties": false,
       "required": ["kind", "ref"],
       "properties": {
-        "kind": {"type": "string", "enum": ["ledger", "repo_path", "question", "assumed", "owner_words"], "description": "blueprint-v2 allows ledger, repo_path and question; the other two are refused by record-answer"},
-        "ref": {"type": "string"}
-      }
+        "kind": {"type": "string", "enum": ["ledger", "repo_path", "question", "assumed", "owner_words"], "description": "blueprint-v2 allows ledger, repo_path, question and owner_words; assumed is refused by record-answer"},
+        "ref": {"type": "string", "description": "the ledger line id, the workspace path, the question id, or the owner's words quoted verbatim (owner_words: not blank)"}
+      },
+      "allOf": [{"if": {"required": ["kind"], "properties": {"kind": {"const": "owner_words"}}}, "then": {"properties": {"ref": {"pattern": "\\S"}}}}]
     },
     "line": {
       "type": "object",
@@ -83,7 +84,7 @@
       "properties": {
         "id": {"$ref": "#/$defs/id"},
         "text": {"$ref": "#/$defs/oneLine"},
-        "verify": {"type": "string", "description": "existing test | new test at <path> | manual: <steps>; missing or blank is refused by record-answer"}
+        "verify": {"type": "string", "description": "one of the template's three forms: existing test | new test at <path> | manual: <steps>; missing, blank or any other text is refused by record-answer (criterion-without-verify)"}
       }
     },
     "slice": {

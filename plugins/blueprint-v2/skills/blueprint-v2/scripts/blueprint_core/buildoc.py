@@ -8,15 +8,23 @@ The form is `references/templates/build-doc.md`, read and rendered through `stat
                              where the five ledger sections start; nothing inside a fence counts
     protected(text)          the lines a revision may never change: every slice's `Status:` lines
                              by slice, every `Plan: inspected` line in order, and every line from the
-                             first ledger heading to the end, each byte for byte with its ending
+                             first ledger heading to the end, each byte for byte with its ending. A
+                             `Status:` or `Plan: inspected` line is known by its label in any case
+                             and at any indent (round 2, R4): a hand-typed `status: built` is
+                             protected as `Status: built` is
     protected_changes(a, b)  every protected line of `a` that `b` would change, drop or add to
     slice_block(values, nl)  one slice section as `templates.render_build_doc` lays it out
     extend(text, ...)        the doc with new slices appended after the last slice (a slice of the
                              same name replaced where it lies), and the header's `Constraints:` and
-                             `Out of scope:` items the answer adds; nothing else moves
+                             `Out of scope:` items the answer adds; nothing else moves, and nothing
+                             the answer carries is dropped: a `Constraints:` line is inserted after
+                             `Intent:` when the doc has none, and an item counts as present only
+                             when it equals an item already there, whole (`items_of`)
 
 Every function takes and returns text; none writes a file. None judges what a doc says (E14-4).
 """
+import re
+
 from station_core import templates
 
 LEDGER = templates.LEDGER_SECTIONS
@@ -32,6 +40,20 @@ def newline_of(text):
 
 def _bare(line):
     return line.rstrip("\r\n")
+
+
+def is_status(bare):
+    """A `Status:` line, whatever its case or indent."""
+    return bare.lstrip().casefold().startswith(STATUS.casefold())
+
+
+def is_stamp(bare):
+    """A `Plan: inspected` line, whatever its case or indent."""
+    return bare.lstrip().casefold().startswith(STAMP.casefold())
+
+
+def status_value(bare):
+    return bare.lstrip()[len(STATUS):].strip()
 
 
 def structure(text):
@@ -62,16 +84,16 @@ def structure(text):
         match = SLICE.match(bare[start])
         chunk = {"start": start, "end": end, "slice": None}
         if match:
-            statuses = [i for i in range(start, end) if bare[i].startswith(STATUS) and not fenced[i]]
+            statuses = [i for i in range(start, end) if is_status(bare[i]) and not fenced[i]]
             sl = {"name": match.group(1), "short": match.group(2), "start": start, "end": end,
                   "status_indexes": statuses,
                   "status_index": statuses[0] if statuses else None,
                   "status_line": bare[statuses[0]] if statuses else None,
-                  "status": bare[statuses[0]][len(STATUS):].strip() if statuses else None}
+                  "status": status_value(bare[statuses[0]]) if statuses else None}
             chunk["slice"] = sl["name"]
             slices.append(sl)
         chunks.append(chunk)
-    stamps = [bare[i] for i in range(body_end) if bare[i].startswith(STAMP)]
+    stamps = [bare[i] for i in range(body_end) if is_stamp(bare[i])]
     return {"lines": lines, "bare": bare, "slices": slices, "chunks": chunks, "ledger_start": ledger_start,
             "header_end": header_end, "body_end": body_end, "stamps": stamps}
 
@@ -79,7 +101,7 @@ def structure(text):
 def protected(text):
     st = structure(text)
     return {"status": [(s["name"], [st["lines"][i] for i in s["status_indexes"]]) for s in st["slices"]],
-            "stamps": [st["lines"][i] for i in range(st["body_end"]) if st["bare"][i].startswith(STAMP)],
+            "stamps": [st["lines"][i] for i in range(st["body_end"]) if is_stamp(st["bare"][i])],
             "ledger": st["lines"][st["ledger_start"]:] if st["ledger_start"] is not None else []}
 
 
@@ -155,19 +177,50 @@ def constraints_value(constraints, assumptions, open_questions):
     return ". ".join(parts) + "." if parts else ""
 
 
+MARKERS = re.compile(r"(?:^|\. )(?:Assumed|Open): ")
+
+
+def items_of(value):
+    """The items a `Constraints:` value already holds, each whole: the value is cut at its
+    `Assumed:` and `Open:` markers (the form `constraints_value` renders) and every part at `; `,
+    each item stripped of its closing period. Nothing finer: an item is present only when it equals
+    one of these whole, so a shorter text inside a longer item is still added (a repeat is the
+    safe side; a drop never is)."""
+    out = set()
+    for part in MARKERS.split(value):
+        for item in part.split("; "):
+            item = item.strip().rstrip(".").strip()
+            if item:
+                out.add(item)
+    return out
+
+
+def _new_items(items, have):
+    return [x for x in items if x.strip().rstrip(".").strip() not in have]
+
+
 def _header_edit(lines, header_end, nl, constraints, assumptions, open_questions, out_of_scope):
     head = list(lines[:header_end])
     bare = [_bare(l) for l in head]
     ci = next((i for i, l in enumerate(bare) if l.startswith("Constraints:")), None)
-    if ci is not None:
-        value = bare[ci][len("Constraints:"):].strip()
-        add_c = [c for c in constraints if c.rstrip(".") not in value]
-        add_a = [a for a in assumptions if a.rstrip(".") not in value]
-        add_o = [q for q in open_questions if q.rstrip(".") not in value]
-        extra = constraints_value(add_c, add_a, add_o)
-        if extra:
-            joined = (value.rstrip(".") + ". " + extra) if value else extra
-            head[ci] = "Constraints: " + joined + nl
+    value = bare[ci][len("Constraints:"):].strip() if ci is not None else ""
+    have = items_of(value)
+    extra = constraints_value(_new_items(constraints, have), _new_items(assumptions, have),
+                              _new_items(open_questions, have))
+    if extra and ci is not None:
+        joined = (value.rstrip(".") + ". " + extra) if value else extra
+        head[ci] = "Constraints: " + joined + nl
+    elif extra:
+        # the doc has no Constraints: line: insert one after Intent: (or after the title), so
+        # nothing the answer carries is dropped (round 2, R4)
+        at = next((i + 1 for i, l in enumerate(bare) if l.startswith("Intent:")), None)
+        if at is None:
+            at = next((i + 1 for i, l in enumerate(bare) if l.startswith("# ")), 0)
+        if at > 0 and not head[at - 1].endswith("\n"):
+            head[at - 1] = head[at - 1] + nl
+        head[at:at] = ["Constraints: " + extra + nl]
+        bare[at:at] = ["Constraints: " + extra]
+        ci = at
     oi = next((i for i, l in enumerate(bare) if l.startswith("Out of scope:")), None)
     if out_of_scope:
         if oi is None:

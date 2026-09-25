@@ -15,9 +15,13 @@ recorded answer's schema and examples, the four lane phases (`harvest`, `record-
 `no-build-doc`, `stale-harvest` and `unsafe-path`, the station's sections of both adapter profiles,
 and `evals/seeded-cases/lane_observe.py` for the lane facts of L1 to L3. Records: none (E14-9).
 
-For the join: the shared `scripts/tests/test_driver.py` still asserts that the four lane phases
-stop as `phase-not-built`, which this core's built phases no longer do (lane L's report, shared-file
-request 1); the version and the marketplace entry are the control room's at close. Interface
+Lane L's second round: a line may trace to the owner's words quoted; an out-of-scope line carries a
+parked or deferred item forward and never an open one no answered question touched; dated names are
+matched by their whole topic; a malformed poured-concrete or deferred section stops `harvest`
+(`ledger-refused`); an extension drops nothing the answer carries; a `Status:` line in any case or
+indent is protected; a criterion's check is one of the template's three forms.
+
+For the join: the version and the marketplace entry are the control room's at close. Interface
 version 1, plugin version 0.1.0. Test counts are measured and filled in by the control room.
 
 ## Layout

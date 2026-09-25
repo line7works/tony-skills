@@ -5,13 +5,17 @@ from a real drive of this core's phases, and `observe.py` leaves no `_lane_pendi
 `_errors` for those cases. This suite states no outcome: it holds only that each fact exists, came
 from a drive (`_via` names it), and has the vocabulary's type.
 """
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import unittest
 
+import bplib
 import testlib
+
+sys.dont_write_bytecode = True
 
 SEEDED = os.path.join(testlib.PLUGIN, "evals", "seeded-cases")
 OBSERVE = os.path.join(SEEDED, "observe.py")
@@ -50,6 +54,50 @@ class LaneFacts(unittest.TestCase):
         subprocess.run([sys.executable, OBSERVE, "--out", tmp, "--case", "L2-02-inspected-and-filled"],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=testlib.base_env())
         self.assertEqual(before, testlib.tree_digest(SEEDED))
+
+
+class TheProtectedFactIsMeasured(unittest.TestCase):
+    """R6 (CL1-8): `protected_lines_identical` is read from the doc's bytes in every branch, a write
+    that did not write included; never set from an exit code."""
+
+    def load(self):
+        spec = importlib.util.spec_from_file_location("bp_lane_observe_under_test",
+                                                      os.path.join(SEEDED, "lane_observe.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def observe_with_a_write_that(self, changes_the_doc):
+        module = self.load()
+        tmp = testlib.make_scratch("bp-observe-bytes-")
+        self.addCleanup(testlib.rmtree, tmp)
+        ws = testlib.git_workspace(tmp, "ws", bplib.base_files(build=bplib.BUILD_FILLED))
+        real = module.Drive.cli
+
+        def cli(drive, args):
+            if args[0] != "write":
+                return real(drive, args)
+            if changes_the_doc:
+                doc = os.path.join(drive.workspace, bplib.BUILD_PATH)
+                testlib.write_text(doc, bplib.read(doc).replace("Status: in progress", "Status: not started"))
+            drive.phases.append({"phase": "write", "exit": 10})
+            return 10, {"status": "stopped", "stop_tag": "write-refused"}
+
+        module.Drive.cli = cli
+        facts, via = {"_phases": [], "_errors": []}, {}
+        module.observe_lane({"kind": "lane", "pending": ["protected_lines_identical"]}, tmp,
+                            {"case": "probe-case", "workspace": ws}, facts, via, os.path.join(tmp, "scratch"))
+        return facts, via
+
+    def test_a_write_that_stopped_and_left_the_doc_changed_is_measured_false(self):
+        facts, via = self.observe_with_a_write_that(changes_the_doc=True)
+        self.assertIs(facts["protected_lines_identical"], False)
+        self.assertIn("bytes", via["protected_lines_identical"])
+
+    def test_a_write_that_stopped_and_left_the_doc_as_found_is_measured_true(self):
+        facts, via = self.observe_with_a_write_that(changes_the_doc=False)
+        self.assertIs(facts["protected_lines_identical"], True)
+        self.assertIn("bytes", via["protected_lines_identical"])
 
 
 if __name__ == "__main__":
