@@ -125,6 +125,25 @@ class TheLaneHook(unittest.TestCase):
         self.assertEqual(sorted(e["error"].split("'")[1] for e in facts["_errors"]), ["selection_outcome", "unlisted_fact"])
         self.assertNotIn("other_listed", facts, "a listed name the observer did not fill stays unfilled (pending)")
 
+    def test_the_step_list_and_via_cannot_be_rewritten(self):
+        facts = {"_phases": [], "_errors": [], "selection_outcome": "one"}
+        module, tmp = self.hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                                "    step['pending'].append('selection_outcome')\n"
+                                "    step['pending'].remove('listed_fact')\n"
+                                "    facts['listed_fact'] = 'lane'\n"
+                                "    facts['selection_outcome'] = 'several'\n"
+                                "    via['selection_outcome'] = 'lane'\n"
+                                "    via['listed_fact'] = 'cli'\n")
+        via = {"selection_outcome": "cli"}
+        step = {"kind": "lane", "pending": ["listed_fact", "other_listed"]}
+        listed = module.lane_observe(step, tmp, {"workspace": tmp, "staging": tmp}, facts, via, tmp)
+        self.assertEqual(listed, ["listed_fact", "other_listed"], "the list as read before the call")
+        self.assertEqual(step["pending"], ["listed_fact", "other_listed"], "the caller's step untouched")
+        self.assertEqual(facts["selection_outcome"], "one")
+        self.assertEqual(facts["listed_fact"], "lane")
+        self.assertEqual(via, {"selection_outcome": "cli", "listed_fact": "cli"})
+        self.assertEqual(len(facts["_errors"]), 2, facts["_errors"])
+
     def test_a_system_exit_and_a_removed_errors_key_land_in_errors(self):
         facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
                               "    facts['listed_fact'] = 'lane'\n"

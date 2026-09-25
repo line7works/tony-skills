@@ -188,6 +188,14 @@ class UntracedLine(_Answer):
         doc["questions"] = [{"id": "Q9", "text": "Which storage?", "touches": [parked["id"]], "answer": "none"}]
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
+    def test_an_open_line_asserted_decided_by_text_under_an_unrelated_ledger_trace(self):
+        """CS-4 (lane L's round 2 checker): the open line's words traced to some OTHER ledger id."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        other = [row for row in self.ledger if row["tag"] == "decided"][0]
+        rules = self.refused_rule({"text": opened["text"], "tag": "decided",
+                                   "trace": {"kind": "ledger", "ref": other["id"]}})
+        self.assertEqual(rules, ["quietly-resolved"])
+
     def test_a_repo_path_that_names_the_workspace_itself_or_git(self):
         """CS observation (lane L's checker): `.`, `./` and anything under `.git` are not traces."""
         for ref in (".", "./", ".git", ".git/HEAD", "src/.."):

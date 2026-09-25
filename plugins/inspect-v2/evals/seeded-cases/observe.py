@@ -261,34 +261,49 @@ def step_v1scan(step, case_dir, neutral, facts, via, scratch):
 def lane_observe(step, case_dir, neutral, facts, via, scratch):
     """The lane's own observer, `lane_observe.py` beside this file, when the lane has written it.
 
-    The observer works on its own dict; only the names the step lists under `pending` that no
-    frame step already observed are taken from it. A name it fills that the step does not list,
-    or that the frame already observed, is recorded under `_errors` and never merged, so the
-    graded facts stay the frame's where the frame has one. Its `_phases` and `_errors` are
-    appended to the run's. Any error it raises, `SystemExit` included, lands in `_errors`."""
+    The observer works on its own dict, its own `via` and deep copies of the step and the neutral
+    input; the names its step lists under `pending` are read BEFORE the call and returned, so an
+    observer can neither extend nor empty that list. Only a listed name no frame step observed is
+    taken from it, with that name's `via` entry; every other name it fills (or `via` entry it
+    adds) is recorded under `_errors` and never merged. Its `_phases` and `_errors` are appended
+    to the run's. Any error it raises, `SystemExit` included, lands in `_errors`. Returns the
+    listed names as read before the call."""
+    listed = list(step.get("pending", []))
     path = os.path.join(HERE, "lane_observe.py")
     if not os.path.isfile(path):
-        return
+        return listed
+    import copy
     import importlib.util
     spec = importlib.util.spec_from_file_location("lane_observe", path)
     module = importlib.util.module_from_spec(spec)
     lane = {"_phases": [], "_errors": []}
+    lane_via = {}
     try:
         spec.loader.exec_module(module)
-        module.observe_lane(step, case_dir, neutral, lane, via, scratch)
+        module.observe_lane(copy.deepcopy(step), case_dir, copy.deepcopy(neutral), lane, lane_via, scratch)
     except BaseException as exc:  # noqa: BLE001  (a lane observer's error is a fact of the run)
         if isinstance(exc, KeyboardInterrupt):
             raise
         lane.setdefault("_errors", []).append({"step": "lane", "error": "%s: %s" % (type(exc).__name__, exc)})
-    facts["_phases"].extend(lane.pop("_phases", None) or [])
-    facts["_errors"].extend(lane.pop("_errors", None) or [])
-    listed = step.get("pending", [])
+    phases = lane.pop("_phases", None)
+    errors = lane.pop("_errors", None)
+    facts["_phases"].extend(phases if isinstance(phases, list) else [])
+    facts["_errors"].extend(errors if isinstance(errors, list) else [])
+    merged = []
     for name in sorted(lane):
         if name in listed and name not in facts:
             facts[name] = lane[name]
+            merged.append(name)
         else:
             facts["_errors"].append({"step": "lane", "error": "the lane observer filled %r, which its step does "
                                      "not list or the frame already observed; not merged" % name})
+    for name in sorted(lane_via):
+        if name in merged:
+            via[name] = lane_via[name]
+        else:
+            facts["_errors"].append({"step": "lane", "error": "the lane observer set a provenance for %r, which "
+                                     "it did not fill as a listed fact; not merged" % name})
+    return listed
 
 
 STEPS = {"select": step_select, "ledger": step_ledger, "answer": step_answer, "form": step_form,
@@ -310,8 +325,8 @@ def observe(family, case, out):
             if step["kind"] == "lane":
                 sub = os.path.join(scratch, "step-%d" % index)
                 os.makedirs(sub)
-                lane_observe(step, case_dir, neutral, facts, via, sub)
-                pending.extend(name for name in step.get("pending", []) if name not in facts)
+                listed = lane_observe(step, case_dir, neutral, facts, via, sub)
+                pending.extend(name for name in listed if name not in facts)
                 continue
             sub = os.path.join(scratch, "step-%d" % index)
             os.makedirs(sub)
