@@ -113,7 +113,9 @@ deliberately ill-formed; nothing in an answer or a `CASES.md` states an outcome.
 | `visual_rendered`, `published`, `artifact_line_unchanged` | architect's two actions |
 | `extended_in_place`, `protected_lines_identical`, `importer_reads` | blueprint's living doc |
 
-A list assertion is an exact list. A name the run has no fact for is omitted, never guessed.
+A list assertion is an exact list. A name the run has no fact for is omitted, never guessed. A location
+(`question_locations`, `raised_locations`) is `<file>:<line>` as the core writes it: the workspace-relative path
+of the document it names (`docs/plans/<date>-<topic>.md:10`), never a packet file name.
 
 ## Rules these cases were written under
 

@@ -166,6 +166,28 @@ class UntracedLine(_Answer):
                                             "trace": {"kind": "repo_path", "ref": "src/missing.py"}}),
                          ["untraced"])
 
+    def test_a_parked_or_open_line_asserted_decided_by_text_under_another_trace(self):
+        """CP1-1 (lane P's checker): the parked line's words as a decided line under owner_words or a repo
+        path, no question touching it: quietly-resolved, the same as by ledger id."""
+        allowed = ("ledger", "repo_path", "question", "owner_words")
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        parked = [row for row in self.ledger if row["tag"] == "parked"][0]
+        for trace in ({"kind": "owner_words", "ref": "he said so"}, {"kind": "repo_path", "ref": "src/widget.py"}):
+            rules = self.refused_rule({"text": "  " + opened["text"].upper() + " ", "tag": "decided", "trace": trace},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], trace)
+        # the parked line the same way, once no answered question of this run touches it
+        doc = self.clean()
+        doc["questions"] = []
+        doc["lines"] = [line for line in doc["lines"] if line["trace"]["kind"] != "question"
+                        and line["text"] != "The storage format"]
+        doc["lines"].append({"text": parked["text"], "tag": "decided", "trace": {"kind": "owner_words", "ref": "his words"}})
+        result = self.check(doc, allowed=allowed)
+        self.assertEqual([r["rule"] for r in result["refusals"]], ["quietly-resolved"])
+        # and settled by an answered question, it is accepted
+        doc["questions"] = [{"id": "Q9", "text": "Which storage?", "touches": [parked["id"]], "answer": "none"}]
+        self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
+
     def test_a_repo_path_that_names_the_workspace_itself_or_git(self):
         """CS observation (lane L's checker): `.`, `./` and anything under `.git` are not traces."""
         for ref in (".", "./", ".git", ".git/HEAD", "src/.."):
