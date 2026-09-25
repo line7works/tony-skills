@@ -4,34 +4,61 @@ Check a build doc before it is built: fresh inspectors read a packet built by sc
 
 ## Status
 
-The frame only (E14 slice 1). This plugin holds the shared station loop, its library, the load-
-bearing templates, the schemas and examples of the shared fields, the phase driver with
-`check-input`, `select`, `identity` and `skill-identity` working, the adapters and setups for Claude
-Code and Codex, and the seeded cases of its families. The station's own procedure (`harvest`,
-`record-answer`, `write`, `report` and the steps of `SKILL.md`) lands in its slice 2 lane (lane
-I); until then those four phases stop as `phase-not-built`. Interface version 1, plugin
-version 0.1.0. Test counts are measured and filled in by the control room at close.
+Built in E14 slice 2, lane I, on the frame of slice 1. The station's procedure is in `SKILL.md`
+(the ask, then gate and hunt, the lenses, verify and adjudicate, the verdict and the two writes, in
+v1 inspect's order and under its ten rules) and its behavior in
+`references/inspect-v2-contract.md`, which also states the review mechanics v1 took from signoff
+by reference. Every phase of the driver is built (`harvest`, `record-answer`, `write`, `report`),
+with four commands of the core's own (`named`, `choose`, `packet`, `request`); the recorded answer
+has its schema (`references/answer.schema.json`) and examples; the seeded families I1 to I4 have
+their lane facts through `evals/seeded-cases/lane_observe.py`; both adapter profiles are filled.
+Surviving findings are raised through the records component's CLI; the station clears nothing.
+
+Round 2 of the lane (the independent check's fourteen findings, under the control room's rulings
+R1 to R8): the outside raw copy is bannered at
+`record-answer`, before any triage, stopped runs included; `hunted_and_held` and `bottom_line` are
+required (v1 rule 10); an outside result the input never authorized is refused
+(`unauthorized-send`); a finding whose citation matches nothing is refuted whatever its severity;
+a doc the invocation names by path is taken with `named`; and the `mirrors` answer, the citation
+rules, the stamp placement and the blank station fields as the check's replacement text says.
+
+Round 5 (the outside reviewer's lane look, under the control room's rulings R1 to R4): a verified
+finding whose citation holds survives only with the executor's adjudication, which alone gives
+CONFIRMED or PLAUSIBLE (`missing-adjudication`); a recorded fleet holds one result per built call,
+and a missing call is `lane-down`; `write` reads the records head before any write, a clean stamp
+included, and stops `records-refused` when it moved; and an incomplete ledger refuses questions and
+asserted lines (`ledger-incomplete`) while a findings-only answer is still recorded.
+
+What stays for the join (slice 3): the full suites on the joined tree, the seven-station install
+proof with inspect-v2 resolving blueprint-v2 by route 3b beside the real blueprint-v2 core (in this
+lane route 3a finds the frame's skeleton `SKILL.md` of lane L), the end-to-end replay across the
+front of the loop, the interface document for this plugin, and the owner's rulings on the open
+points of the contract's section 15. Interface version 1, plugin version 0.1.0. Test counts are
+measured and filled in by the control room at close.
 
 ## Layout
 
 ```text
 .claude-plugin/plugin.json           name inspect-v2, version 0.1.0
 skills/inspect-v2/
-  SKILL.md                           the portable procedure (a skeleton until slice 2)
-  agents/openai.yaml                 the Codex sidecar
+  SKILL.md                           the portable procedure
+  agents/openai.yaml                 the Codex sidecar (manual-only)
   references/
+    inspect-v2-contract.md           this core's contract: phases, commands, mandates, verify, writes, stops
+    inspect-mandate.md               v1's outside mandate, byte for byte, filled by `request`
     station-loop.md                  the contract the four front cores share
     shared-files.txt                 the files identical in the four cores
     templates/                       the load-bearing forms, v1's byte for byte
-    input.schema.json, result.schema.json, examples/
+    input.schema.json, answer.schema.json, result.schema.json, examples/
   scripts/
-    inspect_v2.py                     the phase driver
+    inspect_v2.py                    the phase driver and this core's own commands
+    inspect_core/                    this core's library: gate, packet, request, verify, answering, writing, reporting
     station_core/                    the shared library
     validate-examples.py, validate-result.py
     tests/                           the unittest suites (standard library)
-  adapters/                          README.md, claude-code/, codex/
+  adapters/                          README.md, claude-code/, codex/ (each with its profile and tests)
 setups/                              install, verify, negative tests and launch per harness
-evals/seeded-cases/                  the seeded cases of this core's families
+evals/seeded-cases/                  the seeded cases of this core's families, and lane_observe.py
 ```
 
 ## Tests

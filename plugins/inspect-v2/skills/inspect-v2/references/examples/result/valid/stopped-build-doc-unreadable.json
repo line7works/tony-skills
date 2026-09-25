@@ -1,0 +1,31 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the build doc /tmp/widget-workspace/docs/plans/2026-09-22-widget.md cannot be read as UTF-8 text: report and stop",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "inspect-v2",
+  "station_result": {
+    "chat": "INSPECT: /tmp/widget-workspace/docs/plans/2026-09-22-widget.md\nStopped: build-doc-unreadable\nReason: the build doc /tmp/widget-workspace/docs/plans/2026-09-22-widget.md cannot be read as UTF-8 text: report and stop\nStamp: none written\nNext: read the reason.\n",
+    "stamp": null,
+    "stamp_written": false
+  },
+  "status": "stopped",
+  "stop_tag": "build-doc-unreadable",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/checkpoint.json",
+      "sha256_after": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

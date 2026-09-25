@@ -1,0 +1,38 @@
+{
+  "adjudications": [],
+  "answer_version": 1,
+  "hunted_and_held": "every requirement traced to a decided scope line; every criterion names its verify form; the paths the doc names exist",
+  "lanes": [
+    "traceability",
+    "code-book",
+    "repo-reality"
+  ],
+  "lines": [],
+  "questions": [],
+  "results": [
+    {
+      "call_id": "run-0001-traceability",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    },
+    {
+      "call_id": "run-0001-code-book",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    },
+    {
+      "call_id": "run-0001-repo-reality",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    }
+  ],
+  "row": "claude-session",
+  "run_id": "run-0001",
+  "session_id": "session-example-1"
+}

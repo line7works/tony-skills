@@ -1,0 +1,36 @@
+{
+  "answer_version": 1,
+  "bottom_line": "The plan holds one real defect. Fix it, then build.",
+  "hunted_and_held": "the slice order and the ledger scaffold held",
+  "lanes": [
+    "traceability"
+  ],
+  "lines": [],
+  "questions": [
+    {
+      "answer": "yes",
+      "id": "Q1",
+      "text": "",
+      "touches": []
+    }
+  ],
+  "results": [
+    {
+      "call_id": "run-0003-traceability",
+      "effective_model": "claude-example-model",
+      "findings": [
+        {
+          "claim": "R1 traces to nothing in the record",
+          "confidence": "medium",
+          "location": "build-doc.md:10",
+          "scenario": "the builder builds an invented rule",
+          "severity": "BLOCKER"
+        }
+      ],
+      "row": "claude-session"
+    }
+  ],
+  "row": "claude-session",
+  "run_id": "run-0003",
+  "session_id": null
+}

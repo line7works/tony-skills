@@ -1,0 +1,25 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "owner_word": {
+    "rows": [
+      "gpt-astra"
+    ],
+    "words": "send it to gpt-astra"
+  },
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "staging": "/tmp/widget-staging",
+  "station": {
+    "displayed_model": "gpt-example-model",
+    "row": "gpt-astra",
+    "session_model": "claude-example-model"
+  },
+  "workspace": "/tmp/widget-workspace"
+}

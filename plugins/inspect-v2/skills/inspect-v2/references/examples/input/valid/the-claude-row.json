@@ -1,0 +1,18 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "staging": "/tmp/widget-staging",
+  "station": {
+    "row": "claude-session",
+    "session_model": "claude-example-model"
+  },
+  "workspace": "/tmp/widget-workspace"
+}
