@@ -174,6 +174,22 @@ class TheLaneHook(unittest.TestCase):
             self.assertIn("_errors is not a list", texts, errors_value)
             self.assertIn("_phases is not a list", texts, errors_value)
 
+    def test_a_wrong_shaped_errors_entry_and_a_non_string_key_are_recorded_and_never_crash(self):
+        """The seam 11 reader (CS11-6): a non-mapping _errors entry merged as it was; a non-string key beside a
+        string key crashed the frame's sort."""
+        facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
+                              "    facts['listed_fact'] = 'lane'\n"
+                              "    via['listed_fact'] = 'cli'\n"
+                              "    facts[5] = 1\n"
+                              "    via[7] = 'x'\n"
+                              "    facts['_errors'] = [1, 'x', {'error': 'real'}]\n", {"_phases": [], "_errors": []})
+        self.assertEqual(facts["listed_fact"], "lane")
+        self.assertTrue(all(isinstance(e, dict) and isinstance(e.get("error"), str) for e in facts["_errors"]), facts["_errors"])
+        texts = " ".join(e["error"] for e in facts["_errors"])
+        self.assertEqual(texts.count("not a mapping with an error"), 2, texts)
+        self.assertEqual(texts.count("key that is not a string"), 2, texts)
+        self.assertIn("real", texts)
+
     def test_a_system_exit_and_a_removed_errors_key_land_in_errors(self):
         facts = self.run_hook("def observe_lane(step, case_dir, neutral, facts, via, scratch):\n"
                               "    facts['listed_fact'] = 'lane'\n"

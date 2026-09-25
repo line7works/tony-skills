@@ -56,53 +56,75 @@ def _refusal(rule, message, **where):
     return row
 
 
-_FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|\\|)\\s+")
+_FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|-|\\|)\\s+")
 # The decorations the four stations' forms put around a line's words (the class the quiet-upgrade rule must see
-# through; four escapes in slice 2, each behind one of these, and two false refusals in round 4 around item
-# labels): a list mark (`- `, `* `, `+ `, `• `, `– `, `> `, `# `, `1. `, `2) `, `(3) `, `a) `, `- [ ] `), a leading
-# item label (`R2`, `AC1:`, `C3.`, `Q4`, `(R2)`, `[R2]`, `R-2:`, `AC-1:`, `R2a:`, `R12.3`), a wrapping pair of
-# `**`, `*`, `_`, `~~`, backticks or quotes, a trailing `(waits on: ...)` / `[parked: ...]` / `(assumed: ...)`
-# parenthesis to any nesting, a trailing ` <dash> <tag> (...)` or ` <dash> <tag>: ...` ledger tail, trailing
-# punctuation, and invisible characters. The strips run until nothing changes, so two decorations at once (a
-# parenthesis, then a period) cannot escape.
-_BULLET = re.compile(u"^(?:- \\[[ xX]\\]|\\[[ xX]\\]|[-*+\u2022\u2013\u25e6\u2023>]|#{1,6}|\\d{1,3}[.)]|\\(\\d{1,3}\\)|[a-hj-z][.)]|[ivx]{1,4}[.)])\\s+")
+# through; four escapes in slice 2, each behind one of these, two false refusals in round 4 around item labels,
+# and the seam 11 reader's regressions): a list mark (`- `, `* `, `+ `, `• `, `– `, `> `, `# `, `1. `, `2) `, `(3) `,
+# `a) `, `- [ ] `, `[x] `, a check or arrow mark), a section label (`Open: `, `Constraint: `), a MARKED item label
+# (`R2:`, `C3.`, `(R2)`, `[R2]`, `R-2:`, `AC-1:`, `R2a:`, `R12.3:`, `R2 <dash> `, bold or italic around it: the form's
+# decoration on both sides), a BARE item label (`R2 `, `Q4 `: part of the words when both sides carry one), a
+# wrapping pair of `**`, `*`, `_`, `~~`, backticks, quotes, guillemets or brackets, a trailing `(waits on: ...)` /
+# `[parked: ...]` / `(assumed: ...)` parenthesis to any nesting, a trailing ` <dash> <tag> (...)` or ` <dash> <tag>:
+# ...` ledger tail, trailing punctuation (fullwidth included), and invisible characters. The strips run until
+# nothing changes, so two decorations at once cannot escape. Text is compared in NFC, so a composed and a
+# decomposed accent read the same; combining marks are visible characters (a Thai or Hebrew word keeps its marks).
+_BULLET = re.compile(u"^(?:- \\[[ xX]\\]|\\[[ xX]\\]|[-*+\u2022\u2013\u25e6\u2023>\u2713\u2714\u2192\u2705\u2611]|#{1,6}|\\d{1,3}[.)]|\\(\\d{1,3}\\)|[a-hj-z][.)]|[ivx]{1,4}[.)])\\s+")
+_SECTION = re.compile(r"^(?:constraints?|out of scope|out-of-scope|assumed|assumptions?|open|requirements?|decided|parked|"
+                      r"research|questions?|decisions?)\s*:\s+", re.IGNORECASE)
 # The item labels the station forms use (R<n> requirement, AC<n> criterion, C<n> constraint, Q<n> question,
-# O<n> open item, A<n> assumption, D<n> decision), with or without a hyphen, brackets, a dotted sub-number, a
-# letter suffix or a trailing mark; a label is stripped only when a separator or a mark follows it, or when it
-# is one of these known letters alone before a space, so a content token such as `S3`, `IPv6` or `H264` is never
-# a label. A label is part of the words when BOTH sides carry one (round 4, lanes L and A: `Q4 budget` is not
-# `Q3 budget`, and a line relabelled against a labelled row is a reworded line, the executor's and the reader's
-# to judge, E14-4); a line or field that is only a label has no words.
-_LABEL_CORE = r"(?:R|AC|C|Q|O|A|D)-?\d{1,4}(?:\.\d{1,3})*[a-z]?"
-_LABEL = re.compile(r"^(?:[(\[]" + _LABEL_CORE + r"[)\]][.:]?\s*"
-                    r"|" + _LABEL_CORE + r"(?:[.:)]\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+|\s+))"
-                    r"(?:\u00b7|\u2014|\u2013|--|-|:)?\s*")
-_LABEL_ALONE = re.compile(r"^[(\[]?" + _LABEL_CORE + r"[)\]]?[.:]?$")
+# O<n> open item, A<n> assumption, D<n> decision), with or without a hyphen, a dotted sub-number or a letter
+# suffix. MARKED (brackets, a trailing mark, or a following separator, any case): a decoration, stripped on both
+# sides as often as it appears (`R2: Q3 budget` still carries `Q3 budget`). BARE (the known letters in upper case
+# and digits, then a space, no mark; once): the label of the rule, part of the words when both sides carry one, so
+# `Q4 budget` is not `Q3 budget` and a relabelled bare token is a reworded line (E14-4), while a content token such
+# as `S3`, `IPv6` or `H264` is never a label. A text that is only a label has no words.
+_LABEL_CORE = r"(?:R|AC|C|Q|O|A|D)-?\d{1,5}(?:\.\d{1,3})*[a-z]?"
+_MARKED_LABEL = re.compile(r"^(?:[(\[]" + _LABEL_CORE + r"[)\]][.:]?\s*"
+                           r"|" + _LABEL_CORE + r"(?:[.:)](?!\d)\s*|\s+(?:\u00b7|\u2014|\u2013|--|-|:)\s+))"
+                           r"(?:\u00b7|\u2014|\u2013|--|-|:)?\s*", re.IGNORECASE)
+_BARE_LABEL = re.compile(r"^" + _LABEL_CORE + r"\s+")
+_LABEL_ALONE = re.compile(r"^[(\[]?" + _LABEL_CORE + r"[)\]]?[.:]?$", re.IGNORECASE)
+_BOLD_LABEL = re.compile(r"^(?:\*\*|\*|_|`|~~)(" + _LABEL_CORE + r")([.:)]?)(?:\*\*|\*|_|`|~~)[ \t]*", re.IGNORECASE)
 _PAREN_WORDS = re.compile(r"^(?:waits? on|waiting on|parked|assumed|decided|open|needs research|needs prototype|later)\b",
                           re.IGNORECASE)
 _TAG_TAIL = re.compile(u"(?:\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s*|\\s*(?:\u00b7|\u2014|\u2013|--)\\s*)(?:decided|assumed|parked|open)\\b.*$",
                        re.IGNORECASE)
 _WRAP = (("**", "**"), ("~~", "~~"), ("*", "*"), ("_", "_"), ("`", "`"), ('"', '"'), (u"\u201c", u"\u201d"),
-         ("'", "'"), (u"\u2018", u"\u2019"))
-_TRAILING = u" .;,:!?\u2026\u3002"
-_EXTRA_INVISIBLE = frozenset(u"\u3164\u2800\u034f\u115f\u1160\uffa0\x0b\x0c\u180b\u180c\u180d\u180e\u17b4\u17b5"
-                             + u"".join(chr(c) for c in range(0xfe00, 0xfe10)) + u"".join(chr(c) for c in range(0xe0100, 0xe01f0)))
+         ("'", "'"), (u"\u2018", u"\u2019"), (u"\u00ab", u"\u00bb"))
+_BRACKETS = (("(", ")"), ("[", "]"))
+_TRAILING = u" .;,:!?\u2026\u3002\uff0e\uff0c\uff1a\uff1b\uff01\uff1f"
+# The default-ignorable code points (Unicode's list, the unassigned ones included: Python 3.9's tables know
+# nothing of U+2065 or U+E0080), plus the letter-shaped fillers and two controls; every Cf, Zl, Zp and C0/C1
+# character other than tab, newline and carriage return is invisible too.
+_IGNORABLE = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+              (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x2800, 0x2800),
+              (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8),
+              (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF))
+_EXTRA_INVISIBLE = frozenset(u"\x0b\x0c")
 # A reading of a labelled ROW's words with its label dropped, and of an unlabelled LINE's words, carry this
 # mark, so that with plain set intersection a labelled line meets an unlabelled row (its words), an unlabelled
 # line meets a labelled row (the row's words), equal labels meet, and two different labels never do.
 _ROW_MARK = u"\x00"
 
 
+def _ignorable(ch):
+    code = ord(ch)
+    for low, high in _IGNORABLE:
+        if low <= code <= high:
+            return True
+    return False
+
+
 def _visible(text):
     """The text with every invisible character dropped: Unicode format characters (Cf: zero-width, BOM,
-    bidi marks, joiners), combining marks (Mn, Me: an accent reads the same composed or decomposed, and a
-    word of marks alone is no word), line and paragraph separators (Zl, Zp), the C0/C1 controls other than
-    tab, newline and carriage return, the variation selectors and the letter-shaped fillers (U+3164, U+2800, U+034F,
-    U+115F, U+1160, U+17B4, U+17B5, U+180B to U+180D, U+FFA0)."""
+    bidi marks, joiners), the default-ignorable code points (the variation selectors, the Mongolian and Khmer
+    selectors, the fillers U+3164, U+2800, U+115F, U+1160, U+FFA0, the tag characters, assigned or not), line
+    and paragraph separators (Zl, Zp), and the C0/C1 controls other than tab, newline and carriage return.
+    Combining marks are visible: they change what the reader sees."""
     out = []
     for ch in text:
         cat = unicodedata.category(ch)
-        if cat in ("Cf", "Zl", "Zp", "Mn", "Me") or ch in _EXTRA_INVISIBLE:
+        if cat in ("Cf", "Zl", "Zp") or ch in _EXTRA_INVISIBLE or _ignorable(ch):
             continue
         if cat == "Cc" and ch not in "\t\n\r":
             continue
@@ -111,13 +133,13 @@ def _visible(text):
 
 
 def _fields(text):
-    """The whole fields of a `·`-, dash- or pipe-separated line."""
+    """The whole fields of a `·`-, dash-, hyphen- or pipe-separated line."""
     return _FIELD_SPLIT.split(text)
 
 
 def _normalized(text):
-    """The text with invisibles dropped, its whitespace collapsed and its case folded, for the repeat check."""
-    return " ".join(_visible(text).split()).casefold()
+    """The text in NFC with invisibles dropped, its whitespace collapsed and its case folded."""
+    return " ".join(_visible(unicodedata.normalize("NFC", text)).split()).casefold()
 
 
 def _strip_paren_tail(text):
@@ -142,35 +164,49 @@ def _strip_paren_tail(text):
     return text
 
 
+def _label_key(text):
+    return re.sub(r"[^a-z0-9.]", "", text.casefold())
+
+
 def _split(text):
-    """(label, words): a line's or field's words with every known decoration stripped, the strips repeated
-    until nothing changes, and the item label it carried in front as a key of letters and digits ('' when
-    none). A text that is only a label has no words."""
-    out = _visible(text).strip()
+    """(label, words): a line's or field's words in NFC with every known decoration stripped, the strips
+    repeated until nothing changes, and the BARE item label it carried in front as a key of letters, digits and
+    dots ('' when none; a marked label is a decoration and leaves no key). A text that is only a label has no
+    words."""
+    out = _visible(unicodedata.normalize("NFC", text)).strip()
     label = ""
     while True:
         before = out
         out = _BULLET.sub("", out, count=1)
-        match = _LABEL.match(out)
-        if match and match.end() < len(out):
-            label = label or re.sub(r"[^a-z0-9]", "", match.group(0).casefold())
-            out = out[match.end():]
+        out = _BOLD_LABEL.sub(lambda m: m.group(1) + (m.group(2) or ":") + " ", out, count=1)
+        out = _SECTION.sub("", out, count=1)
+        marked = _MARKED_LABEL.match(out)
+        if marked and marked.end() < len(out):
+            out = out[marked.end():]
+        elif not label:
+            bare = _BARE_LABEL.match(out)
+            if bare and bare.end() < len(out):
+                label = _label_key(bare.group(0))
+                out = out[bare.end():]
         for left, right in _WRAP:
             if len(out) > len(left) + len(right) and out.startswith(left) and out.endswith(right):
                 out = out[len(left):-len(right)]
+        for left, right in _BRACKETS:
+            if len(out) > 2 and out.startswith(left) and out.endswith(right) and not any(c in out[1:-1] for c in "()[]"):
+                out = out[1:-1]
         out = _TAG_TAIL.sub("", out)
         out = _strip_paren_tail(out)
         out = out.strip().rstrip(_TRAILING).strip()
         if out == before:
             break
     if _LABEL_ALONE.match(out):
-        label = label or re.sub(r"[^a-z0-9]", "", out.casefold())
+        label = label or _label_key(out)
         out = ""
     return label, " ".join(out.split()).casefold()
 
 
 def _bare(text):
-    """The words of a line with every known decoration stripped (its label included)."""
+    """The words of a line with every known decoration stripped (its bare label included)."""
     return _split(text)[1]
 
 
