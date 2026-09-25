@@ -8,7 +8,9 @@ entry's own text, each ruling), against the harvested ledger, with the trace kin
 (`ALLOWED`). The doc's rendering (the `Who: ... Must be able to:` line, the `NEEDS CHECK:` prefix) is
 added after the check and is never the answer's words.
 Architect's own refusals follow, each `{"rule", "message", ...}`; then the proposed doc is built
-and held to the no-loss check against the harvested living doc. `plan` carries the proposed doc.
+and held to the no-loss check against the preservation baseline (`ctx["living_text"]`: the
+harvested living doc, or after the first write the first write's snapshot, round 7 R1). `plan`
+carries the proposed doc.
 
 Nothing here writes. The executor's judgment is never repaired: a refused answer is refused.
 """
@@ -37,11 +39,15 @@ def refusal(rule, message, **where):
     return row
 
 
-def context(harvest, living_text, session_id=None, takes=(), prior=None, run_id=None, requested=()):
-    """`requested` is the readers rows a `request` of this run built (for `failed_lanes`)."""
+def context(harvest, living_text, session_id=None, takes=(), prior=None, run_id=None, requested=(),
+            repeat_strike=False):
+    """`requested` is the readers rows a `request` of this run built (for `failed_lanes`).
+    `living_text` is the preservation baseline: the harvested doc, or after the first write the
+    first write's snapshot without the current run's block (round 7 R1), when `repeat_strike` is
+    set so a strike the first answer recorded may be repeated."""
     return {"harvest": harvest, "living_text": living_text, "session_id": session_id, "takes": list(takes),
             "prior": prior, "run_id": run_id if run_id is not None else harvest.get("run_id"),
-            "requested": list(requested)}
+            "requested": list(requested), "repeat_strike": bool(repeat_strike)}
 
 
 POURED_SPLIT = " %s " % docs.D
@@ -365,7 +371,7 @@ def evaluate(answer, ctx):
     refusals += candidate_refusals(answer)
     refusals += doors_refusals(answer)
     refusals += razor_refusals(answer)
-    prior_lines = docs.prior_line_refusals(answer, ctx["living_text"])
+    prior_lines = docs.prior_line_refusals(answer, ctx["living_text"], repeat_strike=ctx.get("repeat_strike"))
     refusals += [refusal(rule, message) for rule, message in prior_lines]
     if ctx.get("prior") is not None:
         refusals += amendment_refusals(answer, ctx["prior"])

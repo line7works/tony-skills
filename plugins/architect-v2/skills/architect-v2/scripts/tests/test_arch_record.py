@@ -252,6 +252,37 @@ class TheSchema(_Record):
         a["data_flow"] = "one\n## Run log"
         self.refused(a, None, code=4)
 
+    SEPARATOR = "answer text must contain no line separator"
+
+    def test_every_line_boundary_in_a_walkthrough_field_is_exit_4(self):
+        """Round 7 R2 (A2): a line boundary other than CR and LF (U+2028, U+0085, vertical tab, ...)
+        would render a heading inside a field; each one `str.splitlines` knows is exit 4, nothing
+        written, the finding at the field."""
+        for ch in "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029":
+            a = archlib.clean_answer()
+            a["walkthrough"]["who"] = "Sam%s## Deferred" % ch
+            doc = self.refused(a, None, code=4)
+            self.assertIn({"path": "/walkthrough/who", "message": self.SEPARATOR}, doc["errors"], repr(ch))
+
+    def test_a_line_boundary_at_any_depth_is_exit_4(self):
+        """Every string of the answer, at every depth, whatever its own pattern says."""
+        a = archlib.clean_answer()
+        a["questions"][1]["answer"] = "in memory\u2028## Run log"
+        a["poured_concrete"][0]["trace"]["ref"] = "dec\x85x"
+        a["walkthrough"]["must"][1] = "reset the count\u2029"
+        a["session_id"] = "session\vtest"
+        doc = self.refused(a, None, code=4)
+        paths = [e["path"] for e in doc["errors"] if e["message"] == self.SEPARATOR]
+        self.assertEqual(sorted(paths), ["/poured_concrete/0/trace/ref", "/questions/1/answer", "/session_id",
+                                         "/walkthrough/must/1"], doc["errors"])
+
+    def test_the_boundaries_are_exactly_the_ones_splitlines_knows(self):
+        testlib.add_scripts_to_path()
+        from architect_core import schema
+        known = set(ch for ch in map(chr, range(0x110000)) if len(("a%sb" % ch).splitlines()) > 1)
+        self.assertEqual(set(schema.LINE_BOUNDARIES), known)
+        self.assertEqual(schema.errors(archlib.clean_answer()), [])
+
 
 class Docless(unittest.TestCase):
 
@@ -360,6 +391,52 @@ class NoLoss(_Record):
     def test_a_carried_line_the_doc_does_not_hold(self):
         a = rerun_answer()
         a["deferred"].append({"carried": "a phone app %s door stays open because nothing needs it" % D})
+        self.refused(a, "unknown-prior-line")
+
+
+RUN99 = "### Run 99 %s 2026-09-20 %s trigger: list text" % (D, D)
+
+
+class AListItemShapedLikeARunHeading(_Record):
+    """Round 7 R3 (A3): harvest accepts a Deferred list item of the shape `### Run 99 ...` and keeps
+    it out of the run numbering; the answer carries or strikes it as plain one-line text, the
+    renderer supplies the list prefix, and dropping it stays a loss."""
+
+    FILES = {LIVING_REL: LIVING.replace("## Deferred\n", "## Deferred\n- ~~retired decision~~\n- %s\n" % RUN99)}
+
+    def test_it_is_carried(self):
+        a = rerun_answer()
+        a["deferred"] += [{"carried": "~~retired decision~~"}, {"carried": RUN99}]
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(doc["run"], 2)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        text = testlib.read_text(doc["doc"])
+        self.assertIn("\n- ~~retired decision~~\n- %s\n" % RUN99, text)
+        from station_core import runlog, templates
+        self.assertEqual([n for n, _ in runlog.runs(text)], [1, 2])
+        self.assertEqual(templates.check("architecture-doc", text), [])
+
+    def test_it_is_struck(self):
+        a = rerun_answer()
+        a["deferred"] += [{"carried": "~~retired decision~~"},
+                          {"strike": RUN99, "trace": {"kind": "question", "ref": "Q5"}}]
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("\n- ~~%s~~\n" % RUN99, testlib.read_text(doc["doc"]))
+
+    def test_dropping_it_is_still_a_loss(self):
+        a = rerun_answer()
+        a["deferred"] += [{"carried": "~~retired decision~~"}]
+        self.refused(a, "no-loss")
+
+    def test_a_carried_text_the_section_does_not_hold_is_still_refused(self):
+        a = rerun_answer()
+        a["deferred"] += [{"carried": "~~retired decision~~"}, {"carried": RUN99},
+                          {"carried": "### Run 98 %s 2026-09-20 %s trigger: never there" % (D, D)}]
         self.refused(a, "unknown-prior-line")
 
 

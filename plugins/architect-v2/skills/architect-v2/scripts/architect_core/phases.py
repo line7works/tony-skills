@@ -54,6 +54,36 @@ def _living_text(run):
         return fh.read()
 
 
+SNAPSHOT = "written-doc.md"
+
+
+def _snapshot_path(run):
+    return os.path.join(run.run_dir, SNAPSHOT)
+
+
+def _baseline(run, record):
+    """(the preservation baseline, whether it is the first write's snapshot). Before this run's
+    first write: the harvested living doc (None on a first run). After it (round 7 R1): the
+    immutable snapshot of that write (`written-doc.md` in the run directory, its bytes held to the
+    hash the receipt recorded), without the current run's block, which the amendment regenerates
+    with its review and rulings; everything else in it survives verbatim or struck."""
+    path = _snapshot_path(run)
+    if not os.path.isfile(path):
+        return _living_text(run), False
+    with open(path, "rb") as fh:
+        data = fh.read()
+    recorded = Receipt(run.run_dir).last_after(path)
+    if recorded is False or fsio.sha256_bytes(data) != recorded:
+        raise driver.Defect("the run directory's %s (the first write's snapshot, the amendment's baseline) is not "
+                            "the bytes this run wrote there (receipt %s, found %s); start a new run on the doc as "
+                            "it stands" % (SNAPSHOT, recorded or "no row", fsio.sha256_bytes(data)))
+    living = record.get("living_doc")
+    try:
+        return docs.without_run(data.decode("utf-8"), living["next_run"] if living else 1), True
+    except (UnicodeDecodeError, docs.DocRefused) as exc:
+        raise driver.Defect("the run directory's %s cannot serve as the amendment's baseline: %s" % (SNAPSHOT, exc))
+
+
 def _report_only(run):
     return bool(run.input.get("report_only"))
 
@@ -246,8 +276,10 @@ def harvest(ctx, args):
 def _context(run, prior=None):
     record = _load(run, "harvest.json")
     takes = _load(run, "takes.json") or []
-    return recording.context(record, _living_text(run), session_id=_session(run), takes=takes, prior=prior,
-                             run_id=run.checkpoint["run_id"], requested=_requested_rows(run))
+    baseline, snapshot = _baseline(run, record)
+    return recording.context(record, baseline, session_id=_session(run), takes=takes, prior=prior,
+                             run_id=run.checkpoint["run_id"], requested=_requested_rows(run),
+                             repeat_strike=snapshot)
 
 
 def record_answer(ctx, args):
@@ -322,7 +354,7 @@ def write(ctx, args):
     record = _load(run, "harvest.json")
     state = _state(run)
     receipt = Receipt(run.run_dir)
-    living_text = _living_text(run)
+    living_text, snapshot = _baseline(run, record)
     artifact = state.get("publish_url") or (record.get("living_doc") or {}).get("artifact_url")
     plan = recording.plan(answer, record, living_text, _load(run, "takes.json") or [], artifact)
     real = plan["doc_path"]
@@ -339,6 +371,9 @@ def write(ctx, args):
         return _stop(ctx, run, "document-changed", "%s. The living doc moved after this run read it; its bytes are "
                      "left as found. Start a new run on the doc as it stands." % exc,
                      _station_result(run, record, answer, None), receipt)
+    if not snapshot:
+        # round 7 R1: the first write's immutable snapshot, the amendment's preservation baseline
+        receipt.write(_snapshot_path(run), plan["doc_text"], expect=None)
     state.update(doc=target, real_doc=real, rendered=False, visual=None, published=None)
     run.checkpoint["phase"] = "written"
     run.save()

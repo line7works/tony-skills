@@ -183,9 +183,11 @@ def items_of(text, heading):
     return []
 
 
-def prior_line_refusals(answer, living_text):
+def prior_line_refusals(answer, living_text, repeat_strike=False):
     """Every carried or struck entry must name a line of the living doc's section (a struck one an
-    unstruck line); a first run has no prior line to name."""
+    unstruck line); a first run has no prior line to name. `repeat_strike` (the amendment, held to
+    the first write's snapshot, round 7 R1): a strike the first answer recorded may be repeated, so
+    a line the baseline holds struck may be named again, and stays struck once."""
     out = []
     for key, heading in (("poured_concrete", POURED), ("deferred", DEFERRED)):
         held = items_of(living_text, heading) if living_text is not None else []
@@ -193,10 +195,25 @@ def prior_line_refusals(answer, living_text):
             if "carried" in entry and entry["carried"] not in held:
                 out.append(("unknown-prior-line", "%s carries %r, which the living doc's %s section does not hold"
                             % (key, entry["carried"], heading[3:])))
-            if "strike" in entry and entry["strike"] not in held:
+            if "strike" in entry and entry["strike"] not in held and not (
+                    repeat_strike and entry_line(entry) in held):
                 out.append(("unknown-prior-line", "%s strikes %r, which is no unstruck line of the living doc's %s "
                             "section" % (key, entry["strike"], heading[3:])))
     return out
+
+
+def without_run(text, n):
+    """`text` without its run-log block `### Run <n>` (its heading through the line before the next
+    heading of any level), every other line kept: the base an amendment regenerates the current
+    run's block on (round 7 R1). DocRefused when the text holds no such block, or more than one."""
+    lines = text.split("\n")
+    starts = [i for i, line in enumerate(lines) for m in [runlog.RUN.match(line)] if m and int(m.group(1)) == n]
+    if len(starts) != 1:
+        raise DocRefused("unknown-prior-line", "the doc holds %d run-log blocks numbered %d, not one" % (len(starts), n))
+    end = starts[0] + 1
+    while end < len(lines) and not lines[end].startswith("#"):
+        end += 1
+    return "\n".join(lines[:starts[0]] + lines[end:])
 
 
 def _replace_label(body, label, new_line):

@@ -177,7 +177,11 @@ It needs both selections (or `station.scope_doc` in place of the scope one). The
 `references/answer.schema.json`, closed at every level, with accepted and rejected examples under
 `references/examples/answer/` (a name starting `content-<rule>` passes the schema and is refused by
 that content check; any other rejected name is refused by the schema). Every text the doc carries
-is one line: a line break would put a bare line, or a heading, inside a section of the form.
+is one line: a line break would put a bare line, or a heading, inside a section of the form. Every
+answer string excludes every line boundary recognized by Python str.splitlines, including vertical
+tab, form feed, U+001C through U+001E, U+0085, U+2028 and U+2029, as well as CR and LF;
+record-answer refuses these as validation errors before writing anything (exit 4, each finding at
+its field, at any depth, beside the schema's own findings).
 
 ### 6.1 The fields
 
@@ -194,7 +198,7 @@ is one line: a line break would put a bare line, or a heading, inside a section 
 | `components` | each `name` and `serves`, the walkthrough requirement it serves |
 | `data_flow`, `diagram` | the v0 drawing's two other lines (the diagram one line: an ASCII one-liner or a one-line mermaid) |
 | `doors` | `{settled}`, the one-way-door check (Step 3.3); null when the interview ended |
-| `poured_concrete`, `deferred` | the section in full, in order: a new line `{text, tag, trace}`, a prior line kept `{carried}`, a prior line superseded `{strike, trace}` |
+| `poured_concrete`, `deferred` | the section in full, in order: a new line `{text, tag, trace}`, a prior line kept `{carried}`, a prior line superseded `{strike, trace}`; `carried` and `strike` are plain one-line text, exactly a line the prior section holds (the renderer supplies the list prefix, so an item's own leading `#` or `- ` is its text, never a heading), a `strike` never already struck |
 | `lines` | the `NEEDS CHECK` lines, each `{text, tag, trace}`, rendered in the Deferred section |
 | `review` | `outcome`: `pending`, `declined` (with `date`), `failed` (with `date` and `reason`), `done` (with `spine`, what the takes agreed on, and optional `failed_lanes`, each lane that did not return: its `row` and the `reason` its `READERS:` line carried), or `not-offered` (a docless run only) |
 | `rulings` | the owner's ruling on each disagreement: `disagreement`, `ruling`, `reviewers`, `changes` (the answer fields the ruling changes), `trace` |
@@ -253,7 +257,7 @@ one implementation of the shared refusals.
 | `rulings-without-review` | rulings on a review that is not `done` |
 | `publish-against-input` | the answer publishes and the input's `station.publish` is false |
 | `republish-url` | the answer publishes and `publish_url` is not the living doc's recorded URL (or is set when the doc records none), or it does not publish and names a URL |
-| `unknown-prior-line` | a carried or struck entry names no line of the living doc's section (a struck one, no unstruck line) |
+| `unknown-prior-line` | a carried or struck entry names no line of the preservation baseline's section (a struck one, no unstruck line, except that an amendment may repeat a strike its first answer recorded, section 6.5) |
 | `amendment-outside-rulings` | an amended answer (section 6.5) changes a field no ruling names, or rewrites an earlier question |
 | `no-loss` | the proposed doc would drop a prior run-log block, a prior poured-concrete line, or any other prior line (section 7.3) |
 
@@ -277,6 +281,24 @@ write is held to the first answer exactly the same way, and replaces the amendme
 first answer. After the amendment's write, another `record-answer` is usage (exit 2, "one amended
 answer per run; start a new run for more"). The doc then changes only where a ruling says so.
 `write`, `render-visual` and `record-publish` run again, and only then `report`.
+
+After the first successful write, preserve an immutable snapshot of that written architecture
+document in the run directory. Both record-answer and write use this snapshot as the preservation
+baseline for the blind-review amendment, including on a first run with no harvested document.
+Preserve every earlier run block byte for byte. The current run's block may be regenerated with its
+review and rulings; this exception does not extend to the document's other sections. A ruling
+authorizes a changed decision, never deletion of the prior line: the prior line must remain verbatim
+or struck through. Carried and struck entries may name lines introduced by the first write of this
+run; repeating a previously recorded strike during the amendment is idempotent. Refuse a missing
+prior line as no-loss before writing answer.json or the document. A stored first-round answer is not
+a substitute for preserving the line in the living document.
+
+The snapshot is `<run_dir>/written-doc.md`, written once by the first `write` (recorded in the
+receipt) and never rewritten; `record-answer` and `write` check its bytes against the hash the
+receipt recorded, and a difference is a defect (exit 1, nothing written). The amended doc is
+continued from the snapshot, without its current run block, as a re-run continues a living doc
+(section 7.2): a walkthrough or v0 drawing line a ruling changed is struck and the new line goes
+below it, and the run block is rendered again from the amended answer.
 
 ## 7. The write
 
@@ -311,10 +333,11 @@ run log keeps every block byte for byte and gains `### Run <N>`, N one more than
 
 ### 7.3 The no-loss check
 
-Before `answer.json` is written, and again before the doc is: `runlog.losses` against the harvested
-doc (a prior run-log block dropped or changed, a prior poured-concrete line dropped) and, for every
-other non-blank line of the harvested doc outside the three header lines, that it survives as it was
-or struck through. A loss is `no-loss` at `record-answer` and stops `write-refused` at `write`; in
+Before `answer.json` is written, and again before the doc is: `runlog.losses` against the
+preservation baseline (a prior run-log block dropped or changed, a prior poured-concrete line
+dropped) and, for every other non-blank line of the baseline outside the three header lines, that it
+survives as it was or struck through. The baseline is the harvested doc until this run's first
+write, and the first write's snapshot, without the current run's block, after it (section 6.5). A loss is `no-loss` at `record-answer` and stops `write-refused` at `write`; in
 both, nothing is written.
 
 ### 7.4 The receipt

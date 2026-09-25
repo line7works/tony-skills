@@ -313,6 +313,165 @@ class OneAmendment(_Rulings):
         self.assertEqual(archlib.listing(self.run.run_dir), before_run)
 
 
+D = archlib.D
+STORAGE = "storage %s none in v0 %s nothing is remembered" % (D, D)
+LANGUAGE = "language %s Python 3.9 %s every bench script imports it" % (D, D)
+JSON_FILE = "storage %s a JSON file %s the count survives a restart" % (D, D)
+
+
+def ruled(answer, *changes):
+    answer["rulings"][0]["changes"] = list(changes)
+    return answer
+
+
+class TheFirstWriteIsTheBaseline(_Rulings):
+    """Round 7 R1 (A1): after the first write, the written doc is kept as an immutable snapshot in
+    the run directory, and the amendment is held to it, on a first run as on a re-run: a ruling
+    authorizes a changed decision, never the deletion of the line it changes, which stays verbatim
+    or struck; a missing line is `no-loss` before `answer.json` or the doc is written."""
+
+    def doc_path(self):
+        return os.path.join(self.ws, "docs", "architecture", "%s-turnstile.md" % archlib.TODAY)
+
+    def snapshot(self):
+        return os.path.join(self.run.run_dir, "written-doc.md")
+
+    def test_the_first_write_is_kept_once(self):
+        self.assertTrue(os.path.isfile(self.snapshot()))
+        first = testlib.read_text(self.snapshot())
+        self.assertIn("- %s\n" % STORAGE, first)
+        self.assertIn("### Run 1 %s" % D, first)
+        a = self.amended()
+        self.assertEqual(self.run.record(a)[0], 0)
+        self.assertEqual(self.run.write()[0], 0)
+        self.assertEqual(testlib.read_text(self.snapshot()), first, "the snapshot is never rewritten")
+
+    def test_a_ruling_never_deletes_a_first_written_line(self):
+        a = ruled(self.amended(), "poured_concrete")
+        a["poured_concrete"] = a["poured_concrete"][:1]
+        a["changed"] = "remove storage decision"
+        before_run = archlib.listing(self.run.run_dir)
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 5, out + err)
+        rules = [r["rule"] for r in doc["refusals"]]
+        self.assertIn("no-loss", rules, doc["refusals"])
+        self.assertTrue(any(STORAGE in r["message"] for r in doc["refusals"] if r["rule"] == "no-loss"))
+        self.assertEqual(archlib.listing(self.run.run_dir), before_run, "answer.json and the rest unchanged")
+        self.assertEqual(archlib.listing(self.ws), before_ws, "the doc unchanged")
+
+    def test_a_ruled_strike_keeps_the_line_struck(self):
+        a = ruled(self.amended(), "poured_concrete")
+        a["poured_concrete"] = [{"carried": LANGUAGE},
+                                {"strike": STORAGE, "trace": {"kind": "question", "ref": "Q5"}},
+                                {"text": JSON_FILE, "tag": "decided", "trace": {"kind": "question", "ref": "Q5"}}]
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        text = testlib.read_text(self.doc_path())
+        self.assertIn("- %s\n- ~~%s~~\n- %s\n" % (LANGUAGE, STORAGE, JSON_FILE), text)
+        from station_core import templates
+        self.assertEqual(templates.check("architecture-doc", text), [])
+
+    def test_a_ruled_drawing_change_strikes_the_first_written_line(self):
+        old = "Data flow: the fixture calls turnstile.py; reset() zeroes the count"
+        a = ruled(self.amended(data_flow="the fixture calls turnstile.py; reset() zeroes it on demand"), "data_flow")
+        self.assertEqual(self.run.record(a)[0], 0)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        text = testlib.read_text(self.doc_path())
+        self.assertIn("~~%s~~\nData flow: the fixture calls turnstile.py; reset() zeroes it on demand\n" % old, text)
+
+    def test_the_run_block_is_regenerated_with_its_rulings(self):
+        self.assertEqual(self.run.record(self.amended())[0], 0)
+        self.assertEqual(self.run.write()[0], 0)
+        text = testlib.read_text(self.doc_path())
+        from station_core import runlog
+        self.assertEqual([n for n, _ in runlog.runs(text)], [1])
+        self.assertIn("Rulings: blind review: agreed on a module, no server; 1 disagreement", text)
+        self.assertNotIn("Rulings: none yet", text)
+
+    def test_a_changed_snapshot_is_a_defect(self):
+        with open(self.snapshot(), "a", encoding="utf-8") as fh:
+            fh.write("- a line typed into the snapshot\n")
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = self.run.record(self.amended())
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("written-doc.md", err)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer-round-1.json")))
+        self.assertEqual(archlib.listing(self.ws), before_ws)
+
+
+class TheFirstWriteIsTheBaselineOnARerun(unittest.TestCase):
+    """R1 on a re-run: the lines the first write introduced are held as the harvested ones are, a
+    strike the first answer recorded may be repeated (idempotent), a line the first write
+    introduced may be struck, and every earlier run block stays byte for byte."""
+
+    def setUp(self):
+        from test_arch_record import LIVING, LIVING_REL, rerun_answer
+        self.tmp = testlib.make_scratch("arch-rulings-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.ws = archlib.repo_workspace(self.tmp, files={LIVING_REL: LIVING})
+        self.living = LIVING
+        self.doc = os.path.join(self.ws, LIVING_REL)
+        self.run = archlib.ArchRun(self.tmp, self.ws)
+        self.assertEqual(self.run.to_harvest()[0], 0)
+        self.first = rerun_answer()
+        for step in (lambda: self.run.record(self.first), self.run.write, self.run.render,
+                     lambda: self.run.publish("https://example.invalid/artifact/turnstile"),
+                     lambda: self.run.request("gpt-astra")):
+            code, doc, out, err = step()
+            self.assertEqual(code, 0, out + err)
+        take = os.path.join(self.tmp, "take.md")
+        testlib.write_text(take, "a module and a file, no server\n")
+        self.assertEqual(self.run.save_take("gpt-astra", take, model="gpt-model-x")[0], 0)
+
+    def amended(self, *changes):
+        from test_arch_record import rerun_answer
+        a = rerun_answer(review={"outcome": "done", "spine": "a module and a file"},
+                         rulings=[{"disagreement": "the take keeps the file", "ruling": "the file stays",
+                                   "reviewers": ["gpt"], "changes": list(changes),
+                                   "trace": {"kind": "question", "ref": "Q6"}}])
+        a["questions"].append({"id": "Q6", "text": "Keep the JSON file?", "touches": [], "answer": "not yet"})
+        return a
+
+    def test_dropping_a_line_the_first_write_introduced_is_no_loss(self):
+        a = self.amended("poured_concrete")
+        a["poured_concrete"] = a["poured_concrete"][:2]
+        before_run = archlib.listing(self.run.run_dir)
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 5, out + err)
+        self.assertTrue(any(r["rule"] == "no-loss" and JSON_FILE in r["message"] for r in doc["refusals"]),
+                        doc["refusals"])
+        self.assertEqual(archlib.listing(self.run.run_dir), before_run)
+        self.assertEqual(archlib.listing(self.ws), before_ws)
+
+    def test_a_repeated_strike_and_a_strike_of_a_first_written_line(self):
+        a = self.amended("poured_concrete")
+        a["poured_concrete"][2] = {"strike": JSON_FILE, "trace": {"kind": "question", "ref": "Q6"}}
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        text = testlib.read_text(self.doc)
+        self.assertIn("- %s\n- ~~%s~~\n- ~~%s~~\n" % (LANGUAGE, STORAGE, JSON_FILE), text)
+        self.assertEqual(text.count(STORAGE), 1)
+        from station_core import runlog, templates
+        self.assertEqual([n for n, _ in runlog.runs(text)], [1, 2])
+        self.assertEqual(runlog._blocks(text)[1], runlog._blocks(self.living)[1], "Run 1 byte for byte")
+        self.assertIn("Rulings: blind review: agreed on a module and a file; 1 disagreement", runlog._blocks(text)[2])
+        self.assertEqual(templates.check("architecture-doc", text), [])
+
+    def test_the_unchanged_amendment_keeps_every_line(self):
+        code, doc, out, err = self.run.record(self.amended())
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.run.write()[0], 0)
+        text = testlib.read_text(self.doc)
+        self.assertIn("- ~~%s~~\n- %s\n" % (STORAGE, JSON_FILE), text)
+
+
 class TakesAnswerRequests(unittest.TestCase):
     """CA1-13: `request` sends the scope doc harvest read, never another file under its name, and
     `save-take` saves a take only for a row this run requested."""
