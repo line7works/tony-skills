@@ -443,6 +443,70 @@ class ThePouredDecisionField(_Record):
         self.assertEqual(len([r for r in doc["refusals"] if r["rule"] == "untraced"]), 1, doc["refusals"])
 
 
+class TheAnswersOwnWords(_Record):
+    """Round 6 R1 (the outside reviewer's A1): the shared checker reads the walkthrough's values one by
+    one (`who`, `when`, each `must` item, each its own row, its place named) and each `lines` entry's
+    own text. The `Who: ... Must be able to:` formatting and the `NEEDS CHECK:` prefix are the doc's
+    rendering, added after the check, never the answer's words: an open ledger item asserted as a
+    walkthrough value or a `lines` entry is `quietly-resolved`, and write, render and report never
+    run on it."""
+
+    OPEN = "how often the counter resets"
+
+    def fields(self, doc, rule="quietly-resolved"):
+        return [r.get("field") for r in doc["refusals"] if r["rule"] == rule]
+
+    def test_a_must_item_holding_an_open_item(self):
+        a = archlib.clean_answer()
+        a["walkthrough"]["must"] = [self.OPEN]
+        a["components"] = [{"name": "counter", "serves": self.OPEN}]
+        doc = self.refused(a, "quietly-resolved")
+        self.assertEqual(self.fields(doc), ["walkthrough/must/0"], doc["refusals"])
+
+    def test_a_who_or_when_holding_an_open_item(self):
+        for key in ("who", "when"):
+            a = archlib.clean_answer()
+            a["walkthrough"][key] = self.OPEN
+            doc = self.refused(a, "quietly-resolved")
+            self.assertEqual(self.fields(doc), ["walkthrough/%s" % key], doc["refusals"])
+
+    def test_a_lines_entry_holding_an_open_item(self):
+        a = archlib.clean_answer()
+        a["lines"] = [{"text": self.OPEN, "tag": "decided", "trace": {"kind": "assumed", "ref": "executor"}}]
+        doc = self.refused(a, "quietly-resolved")
+        self.assertEqual(self.fields(doc), ["lines/0"], doc["refusals"])
+
+    def test_a_question_that_settled_it_lets_it_pass(self):
+        a = archlib.clean_answer()
+        a["questions"].append({"id": "Q9", "text": "How often does the counter reset?",
+                               "touches": [self.i["open"]], "answer": "at every session start"})
+        a["walkthrough"]["must"] = [self.OPEN, "count turns"]
+        a["components"] = [{"name": "counter", "serves": self.OPEN}, {"name": "turnstile.py", "serves": "count turns"}]
+        a["lines"] = [{"text": self.OPEN, "tag": "decided", "trace": {"kind": "question", "ref": "Q9"}}]
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+
+    def test_an_untraced_walkthrough_is_refused_once(self):
+        a = archlib.clean_answer()
+        del a["walkthrough"]["trace"]
+        doc = self.refused(a, "untraced")
+        self.assertEqual(self.fields(doc, "untraced"), ["walkthrough"], doc["refusals"])
+
+    def test_the_escaped_sequence_never_reaches_write_render_or_report(self):
+        """The outside reviewer's `paths.py` "escaped fields" sequence: 0, 0, 0, 10 before this round."""
+        a = archlib.clean_answer(review={"outcome": "declined", "date": "2026-09-25"}, publish=False)
+        a["walkthrough"]["must"] = [self.OPEN]
+        a["components"] = [{"name": "counter", "serves": self.OPEN}]
+        a["lines"] = [{"text": self.OPEN, "tag": "decided", "trace": {"kind": "assumed", "ref": "executor"}}]
+        doc = self.refused(a, "quietly-resolved")
+        self.assertEqual(sorted(self.fields(doc)), ["lines/0", "walkthrough/must/0"], doc["refusals"])
+        before_ws = archlib.listing(self.ws)
+        for step in (self.run.write, self.run.render, self.run.report):
+            code, doc, out, err = step()
+            self.assertEqual(code, 2, out + err)
+        self.assertEqual(archlib.listing(self.ws), before_ws)
+
+
 class TheAnswerIsNeverRepaired(_Record):
 
     def test_a_refused_then_corrected_answer(self):

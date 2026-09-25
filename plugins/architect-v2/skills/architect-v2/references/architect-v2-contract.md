@@ -99,7 +99,7 @@ against a run that ended is exit 2, except `report`, which prints the recorded r
 |---|---|---|---|
 | `render-visual` | `--run-dir D`, a run whose doc this run wrote | `<slug>-architecture.html` beside the doc (in the run's `preview/` on report-only), in the receipt; stdout `{visual, next}` | 0; 2 out of turn, or a folder on the way that leads outside the homes (section 7.4), nothing written |
 | `record-publish` | `--run-dir D`, `--url URL` (the https URL the executor's publish returned: a host of dot-separated labels, an optional port and path, no space; omitted when it returned none), after a render | the `Artifact:` line written once (section 11), `publish.json` in the run; stdout `{outcome, artifact_url, reason, next}` | 0; 2 out of turn, a URL that is no such URL, a URL on a `publish: false` answer, no URL after this run recorded a published URL for the same render, or a doc folder that leads outside the homes; 5 `artifact-url-changed` with nothing written; 10 `document-changed` |
-| `request` | `--run-dir D`, one `--row ROW` per reviewer the owner named, `--session-model ID` (the `claude-session` row only), `--model ROW=ID` (a typed id), `--roster FILE` (default: readers beside this core, route 3a then 3b) | one request per row under `requests/<call id>.json`; stdout `{requests: [{row, call_id, path, authorized}], mandate, next}` | 0; 2 out of turn, a docless run, no row, an unknown row, no roster, or a scope doc whose bytes are not the ones harvest read (its sha256), nothing written |
+| `request` | `--run-dir D`, one `--row ROW` per reviewer the owner named, `--session-model ID` (the `claude-session` row only), `--model ROW=ID` (a typed id), `--roster FILE` (default: readers beside this core, route 3a then 3b) | one request per row under `requests/<call id>.json`; stdout `{requests: [{row, call_id, path, authorized}], mandate, next}` | 0; 2 out of turn, a docless run, no row, an unknown row, no roster, or a scope doc whose bytes are not the ones harvest read (its sha256), nothing written; 5 `request-outside-run` when `requests/` (or a request's path) resolves outside the run directory, the containment check of the document and take writers (section 7.4), refused before the folder is read, nothing written, in report-only and otherwise |
 | `save-take` | `--run-dir D`, `--row`, `--take FILE` (the reply's raw text), `--model` (the effective model), `--isolation` (the isolation label), `--sidecar` (the readers sidecar path) | the take saved verbatim under the review home (the home harvest recorded for the doc) and copied under `takes/`, `takes.json`, both in the receipt; stdout `{path, copy, lane, next}` | 0; 2 out of turn, a docless run, an unreadable file, a row no `request` of this run built, or a review folder that leads outside the homes; 5 `take-empty` with nothing saved |
 
 ## 4. The input
@@ -209,8 +209,13 @@ the question he answered.
 
 `record-answer` validates the answer against the schema (exit 4, the findings on stdout, nothing
 written); then runs the shared refusals of rule E14-11 once, through `station_core/answer.check`,
-on the answer's neutral view (the questions, and each line that records a decision: the walkthrough
-target, each new or struck poured-concrete and deferred line, each `NEEDS CHECK` line, each ruling;
+on the answer's neutral view (the questions, and each line that records a decision: the walkthrough's
+values one by one, `who`, `when` and each `must` item as its own row with its place named
+(`walkthrough/who`, `walkthrough/must/0`), each new or struck poured-concrete and deferred line, each
+`lines` entry's own text, each ruling; the walkthrough line's `Who: ... Must be able to:` formatting
+and the `NEEDS CHECK:` prefix are the doc's rendering, added after the check and never the answer's
+words, so an unanswered `open` or `parked` item asserted as a walkthrough value or a `lines` entry is
+refused `quietly-resolved`, and an untraced walkthrough is one `untraced` refusal;
 a new poured-concrete line on its form, `<category> <dash> <decision> <dash> <why>`, gives a second
 row whose text is its decision field, everything between the first field and the last, with the
 category and the why beside it, so the shared text rule meets a `parked` or `open` line asserted

@@ -424,6 +424,16 @@ def _review_ready(run):
     return record
 
 
+def _request_outside(ctx, run, path, shown=None):
+    """None when a request write at `path` stays in the run directory; else the exit 5 refusal
+    (`request-outside-run`) naming `shown` (the path by default), with nothing written."""
+    if _contained(run, path):
+        return None
+    return driver.emit(ctx.envelope(accepted=False, refusals=[{"rule": "request-outside-run", "message":
+                                    "the request %s" % _outside(shown or path), "path": shown or path}],
+                                    reason="the requests were refused; nothing was written"), exits.REFUSED)
+
+
 def request(ctx, args):
     run = ctx.open_run(args.run_dir)
     record = _review_ready(run)
@@ -451,16 +461,25 @@ def request(ctx, args):
                            "doc as harvested; start a new run on the doc as it stands" % (scope["path"], scope["sha256"],
                                                                                         found or "no file"))
     folder = os.path.join(run.run_dir, "requests")
+    # round 6 R2: the requests folder is held to the containment check the document and take writers
+    # use, before it is read and before anything is written, in report-only and otherwise
+    refused = _request_outside(ctx, run, os.path.join(folder, "request.json"), folder)
+    if refused is not None:
+        return refused
     taken = [n[:-5] for n in os.listdir(folder)] if os.path.isdir(folder) else []
     try:
         built = review.requests(rows, run.input, roster, scope["path"], run.checkpoint["run_id"],
                                 session_model=args.session_model, models=models, taken=taken)
     except readers_request.RequestRefused as exc:
         raise driver.Usage(str(exc))
+    pending = [(call_id, req, os.path.join(folder, "%s.json" % call_id)) for call_id, req in built]
+    for call_id, req, path in pending:
+        refused = _request_outside(ctx, run, path)
+        if refused is not None:
+            return refused
     receipt = Receipt(run.run_dir)
     out = []
-    for call_id, req in built:
-        path = os.path.join(folder, "%s.json" % call_id)
+    for call_id, req, path in pending:
         receipt.write_json(path, req)
         out.append({"row": req["row"], "call_id": call_id, "path": path, "authorized": req.get("authorized") is True})
     return driver.emit(ctx.envelope(next="save-take", requests=out, mandate=review.MANDATE,

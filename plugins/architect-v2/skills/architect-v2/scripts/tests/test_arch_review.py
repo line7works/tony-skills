@@ -355,6 +355,65 @@ class TakesAnswerRequests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "requests")))
 
 
+class ASymlinkedRequestsFolder(unittest.TestCase):
+    """Round 6 R2 (the outside reviewer's A4): `request` writes through the same containment check the
+    document and take writers use. A `<run>/requests` that resolves outside the run directory (here a
+    symlink into the workspace) is refused, exit 5, with nothing written, in report-only and
+    otherwise; a plain run still writes its requests."""
+
+    def run_to_write(self, **extra):
+        tmp = testlib.make_scratch("arch-request-link-")
+        self.addCleanup(testlib.rmtree, tmp)
+        ws = archlib.repo_workspace(tmp)
+        run = archlib.ArchRun(tmp, ws, **extra)
+        code, doc, out, err = run.to_harvest()
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(run.record(archlib.clean_answer())[0], 0)
+        self.assertEqual(run.write()[0], 0)
+        return tmp, ws, run
+
+    def linked(self, **extra):
+        tmp, ws, run = self.run_to_write(**extra)
+        leak = os.path.join(ws, "requests-leak")
+        os.symlink(leak, os.path.join(run.run_dir, "requests"))
+        before_ws = archlib.listing(ws)
+        before_run = archlib.listing(run.run_dir)
+        code, doc, out, err = run.request("gpt-astra")
+        self.assertEqual(code, 5, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertFalse(doc["accepted"])
+        self.assertEqual([r["rule"] for r in doc["refusals"]], ["request-outside-run"], doc["refusals"])
+        self.assertFalse(os.path.lexists(leak), "nothing created where the link leads")
+        self.assertEqual(archlib.listing(ws), before_ws)
+        self.assertEqual(archlib.listing(run.run_dir), before_run)
+        return run
+
+    def test_refused_under_report_only(self):
+        self.linked(report_only=True)
+
+    def test_refused_otherwise(self):
+        self.linked()
+
+    def test_a_link_to_an_existing_folder_is_refused_too(self):
+        tmp, ws, run = self.run_to_write(report_only=True)
+        leak = os.path.join(ws, "requests-leak")
+        os.makedirs(leak)
+        os.symlink(leak, os.path.join(run.run_dir, "requests"))
+        code, doc, out, err = run.request("gpt-astra")
+        self.assertEqual(code, 5, out + err)
+        self.assertEqual(os.listdir(leak), [])
+
+    def test_a_plain_run_writes_its_requests(self):
+        for extra in ({}, {"report_only": True}):
+            tmp, ws, run = self.run_to_write(**extra)
+            code, doc, out, err = run.request("gpt-astra", "gemini")
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(len(doc["requests"]), 2)
+            for entry in doc["requests"]:
+                self.assertTrue(os.path.isfile(entry["path"]))
+                self.assertEqual(os.path.dirname(entry["path"]), os.path.join(run.run_dir, "requests"))
+
+
 class ASymlinkedReviewHome(unittest.TestCase):
     """CA1-3: `docs/reviews` a symlink to a folder outside the workspace: `save-take` is usage,
     never a crash, and nothing lands outside."""

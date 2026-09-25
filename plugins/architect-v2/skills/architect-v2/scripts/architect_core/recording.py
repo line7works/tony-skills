@@ -3,8 +3,10 @@
 `evaluate(answer, ctx)` -> (refusals, plan). The answer has passed its schema already. The shared
 refusals of rule E14-11 are `station_core/answer.check`'s, run once on the neutral view of the
 answer (`view`): its questions, and every line that records a decision with its trace (the
-walkthrough target, each new or struck poured-concrete and deferred line, each `NEEDS CHECK` line,
-each ruling), against the harvested ledger, with the trace kinds this core admits (`ALLOWED`).
+walkthrough's values one by one, each new or struck poured-concrete and deferred line, each `lines`
+entry's own text, each ruling), against the harvested ledger, with the trace kinds this core admits
+(`ALLOWED`). The doc's rendering (the `Who: ... Must be able to:` line, the `NEEDS CHECK:` prefix) is
+added after the check and is never the answer's words.
 Architect's own refusals follow, each `{"rule", "message", ...}`; then the proposed doc is built
 and held to the no-loss check against the harvested living doc. `plan` carries the proposed doc.
 
@@ -58,13 +60,28 @@ def poured_fields(text):
 def view(answer):
     """The neutral view `station_core/answer.py` reads: the questions, and each asserted line.
 
+    The walkthrough gives one row per value (round 6 R1): `who`, `when` and each `must` item, each its
+    own text with its place named (`walkthrough/who`, `walkthrough/must/0`), never the formatted
+    walkthrough line; each `lines` entry gives its own text, never the `NEEDS CHECK:` the doc renders
+    before it. The formatting is the doc's rendering, added after the check, so an unanswered open
+    or parked item asserted as a walkthrough value or a `lines` entry meets the shared text rule.
+
     A new poured-concrete line on its form gives two rows (round 3 R4, CS-1's lane half): the whole
     line, and its DECISION field as the row's text with the `category` and the `why` beside it, so
     the shared text rule meets a parked or open line re-asserted as the decision alone as well as
     the whole line, even where the decision holds the form's dash. Both rows name the same place,
-    and `shared_refusals` reports a refusal of that place once."""
-    lines = [{"text": docs.walkthrough_line(answer["walkthrough"]), "tag": "decided",
-              "trace": answer["walkthrough"].get("trace"), "where": "walkthrough"}]
+    and `shared_refusals` reports a refusal of that place once.
+
+    Returns (neutral, places): `places[i]` is `(where, unit)` for the i-th line, `unit` the place a
+    missing or empty trace is reported against once (the walkthrough carries one trace for its
+    values, so an untraced walkthrough is one refusal)."""
+    walk = answer["walkthrough"]
+    lines = []
+    values = [("who", walk["who"]), ("when", walk["when"])]
+    values += [("must/%d" % index, text) for index, text in enumerate(walk["must"])]
+    for field, text in values:
+        lines.append({"text": text, "tag": "decided", "trace": walk.get("trace"),
+                      "where": "walkthrough/%s" % field, "unit": "walkthrough"})
     for key in ("poured_concrete", "deferred"):
         for index, entry in enumerate(answer[key]):
             if "carried" in entry:
@@ -80,28 +97,31 @@ def view(answer):
                 lines.append({"text": fields[1], "category": fields[0], "why": fields[2], "tag": entry["tag"],
                               "trace": entry.get("trace"), "where": where})
     for index, line in enumerate(answer["lines"]):
-        lines.append({"text": "NEEDS CHECK: %s" % line["text"], "tag": line["tag"], "trace": line.get("trace"),
+        lines.append({"text": line["text"], "tag": line["tag"], "trace": line.get("trace"),
                       "where": "lines/%d" % index})
     for index, ruling in enumerate(answer["rulings"]):
         lines.append({"text": "%s: %s" % (ruling["disagreement"], ruling["ruling"]), "tag": "ruling",
                       "trace": ruling.get("trace"), "where": "rulings/%d" % index})
-    neutral = [dict((k, v) for k, v in row.items() if k != "where" and v is not None) for row in lines]
+    neutral = [dict((k, v) for k, v in row.items() if k not in ("where", "unit") and v is not None) for row in lines]
     return {"questions": [{"id": q["id"], "text": q["text"], "touches": q["touches"], "answer": q["answer"]}
                           for q in answer["questions"]],
-            "lines": neutral}, [row["where"] for row in lines]
+            "lines": neutral}, [(row["where"], row.get("unit", row["where"])) for row in lines]
 
 
 def shared_refusals(answer, ctx):
-    neutral, wheres = view(answer)
+    neutral, places = view(answer)
     result = shared.check(neutral, ctx["harvest"]["ledger"], workspace=ctx["harvest"]["workspace"], allowed=ALLOWED)
     out = []
     seen = set()
     for row in result["refusals"]:
         row = dict(row)
-        if "line" in row and isinstance(row["line"], int) and row["line"] < len(wheres):
-            row["field"] = wheres[row["line"]]
+        if "line" in row and isinstance(row["line"], int) and row["line"] < len(places):
+            where, unit = places[row["line"]]
+            # an untraced walkthrough is one refusal (its values share one trace); every other rule names
+            # the value it met, and the decision row of a poured line is folded into its whole line
+            row["field"] = unit if row["rule"] == "untraced" else where
             if (row["rule"], row["field"]) in seen:
-                continue  # the decision row of a poured line already refused through its whole line
+                continue
             seen.add((row["rule"], row["field"]))
         out.append(row)
     return out
