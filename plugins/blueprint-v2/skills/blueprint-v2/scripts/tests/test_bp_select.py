@@ -111,13 +111,28 @@ class DatedNames(_Select):
         run = self.run_with({"README.md": "x\n", "docs/plans/v2-turnstile.md": "# a\n"})
         self.assertEqual(run.select("build", "turnstile")[1]["outcome"], "none")
 
-    def test_an_undated_doc_named_by_the_topic_is_one(self):
+    def test_an_undated_doc_in_a_folder_is_no_home(self):
+        # round 3, R6 (CL2-4): the folders' v1 home is the dated name only; an undated `<topic>.md` is none
         for hunt, rel in (("build", "docs/plans/turnstile.md"), ("scope", "docs/scope/turnstile.md"),
                           ("architecture", "docs/architecture/turnstile.md")):
-            run = self.run_with({"README.md": "x\n", rel: "# a\n"})
-            code, out, err = run.select(hunt, "turnstile")
-            self.assertEqual((out["outcome"], [os.path.relpath(c["path"], run.ws) for c in out["candidates"]]),
-                             ("one", [rel]), hunt)
+            for name in ("turnstile", None):
+                run = self.run_with({"README.md": "x\n", rel: "# a\n"})
+                code, out, err = run.select(hunt, name)
+                self.assertEqual(code, 0, err)
+                self.assertEqual((out["outcome"], out["candidates"]), ("none", []), (hunt, name))
+
+    def test_the_hunt_table_holds_the_v1_homes_only(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("blueprint_driver_homes", testlib.DRIVER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        dated = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md"
+        self.assertEqual(sorted((hunt, g, home["tier"]) for hunt, homes in module.HUNTS.items()
+                                for home in homes for g in home["globs"]),
+                         sorted([("architecture", "docs/architecture/" + dated, 1),
+                                 ("architecture", "docs/{name}-architecture.md", 2),
+                                 ("build", "docs/plans/" + dated, 1), ("build", "docs/{name}-build-plan.md", 2),
+                                 ("scope", "docs/scope/" + dated, 1), ("scope", "docs/{name}-scope.md", 1)]))
 
     def test_with_no_name_every_dated_doc_is_a_candidate(self):
         run = self.run_with({"README.md": "x\n", bplib.SCOPE_PATH: bplib.SCOPE,

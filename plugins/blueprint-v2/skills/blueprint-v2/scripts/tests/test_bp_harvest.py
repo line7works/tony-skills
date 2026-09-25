@@ -131,6 +131,24 @@ class AMalformedArchitectureDoc(_Harvest):
         self.assertEqual(code, 0, (out, err))
         self.assertNotIn("refused", out["architecture"])
 
+    def test_an_unrelated_section_is_passed_over_whatever_its_words(self):
+        # round 3, R5 (CL2-3): the two sections are known by their exact heading text, never by a word
+        for heading in ("## Why we deferred the cache", "## Notes", "## Poured concrete notes",
+                        "## Deferred decisions, a history"):
+            self.tmp_reset()
+            arch = bplib.ARCH.replace("## Run log\n", "%s\n- a line of prose about it\n\n## Run log\n" % heading)
+            run, (code, out, err) = self.harvest_arch(arch)
+            self.assertEqual(code, 0, (heading, out, err))
+            self.assertEqual([p["text"] for p in out["architecture"]["poured"]], [self.ITEM[2:]], heading)
+            self.assertEqual([p["text"] for p in out["architecture"]["deferred"]], [self.DEFER[2:]], heading)
+
+    def test_a_missing_section_quotes_the_near_miss_heading(self):
+        self.tmp_reset()
+        run, (code, out, err) = self.harvest_arch(bplib.ARCH.replace("## Deferred\n", "## deferred\n"))
+        self.assertEqual((code, out["stop_tag"]), (10, "ledger-refused"), out)
+        self.assertIn("'## deferred'", out["reason"])
+        self.assertIn("missing the section '## Deferred'", out["reason"])
+
     def tmp_reset(self):
         testlib.rmtree(self.tmp)
         os.makedirs(self.tmp)

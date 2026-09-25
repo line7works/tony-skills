@@ -115,10 +115,12 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
   question's id>}` or `{"kind": "owner_words", "ref": "<his words from the discussion, verbatim>"}`.
   Nothing else traces a line here; what you decided alone is an assumption, never a line's trace.
   An out-of-scope line may carry a parked scope line or a deferred architecture line forward by its
-  id; a scope `Open:` item is his call, so it goes out of scope only after he answered a question
-  touching it, and otherwise stays an open question.
-- `criteria`: one measurable end state each, with its `verify` form, exactly one of `existing test`,
-  `new test at <path>`, `manual: <steps>`; anything else is refused.
+  id; a scope `Open:` item is his call, so it goes out of scope (by its id or in its words, under
+  any trace) only after he answered a question touching it, and otherwise stays an open question.
+- `criteria`: one measurable end state each, with its `verify` form, exactly one of `existing test
+  <name>` (the test named, one token), `new test at <path>` (a path with a `/` or a file extension,
+  no spaces), `manual: <steps>` (at least two words); a placeholder (`TBD`, `n/a`, `later`) or any
+  other text is refused.
 - `slices`: each `name` (A, B, ...), `short`, `goal`, the requirement and criterion ids it carries,
   `footprint` (the files expected to change), `not_in_slice`, `depends_on`. Reuse an existing
   slice's name only to revise a slice whose status is `not started`.

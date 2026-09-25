@@ -214,12 +214,122 @@ class OutOfScopeLines(_Record):
         self.refused(doc, "quietly-resolved")
 
 
+
+class TheViewCarriesTheWordsWithoutTheirLabel(_Record):
+    """Round 3, R2 (CL2-1): the shared text rule compares a line's words with the ledger's, so the view it
+    reads carries a requirement's text without its `R<n>` prefix, and a constraint's or out-of-scope
+    line's without a label; the doc still renders the prefix. An open, parked or deferred item's words
+    written as `R2 <dash> ...` under the owner's words, a repo path, or a question that touched something
+    else are refused `quietly-resolved`; the same with an answered question touching the item is
+    accepted."""
+
+    def harvested(self):
+        return testlib.load_json(os.path.join(self.run.run_dir, "harvest.json"))
+
+    def answer_with(self, text, trace, tag="requirement", settle=None):
+        doc = bplib.clean_answer()
+        doc["questions"] = [{"id": "Q1", "text": "Does the bench script print the count itself?", "touches": [],
+                             "answer": "yes"}]
+        if settle:
+            doc["questions"].append({"id": "Q2", "text": "Is this one settled for the build?", "touches": [settle],
+                                     "answer": "yes, settle it as written"})
+        line = doc["lines"][1] if tag == "requirement" else doc["lines"][2]
+        line["text"] = text
+        line["trace"] = trace
+        return doc
+
+    def items(self):
+        deferred = self.harvested()["architecture"]["deferred"][0]
+        return (("open", "how often the counter resets", self.ids["how often the counter resets"]),
+                ("parked", "Where the count is kept between sessions",
+                 self.ids["Where the count is kept between sessions"]),
+                ("deferred", deferred["text"], deferred["id"]))
+
+    def traces(self):
+        return ({"kind": "owner_words", "ref": "the owner said so in the discussion"},
+                {"kind": "repo_path", "ref": "README.md"},
+                {"kind": "question", "ref": "Q1"})
+
+    def test_an_item_written_as_a_numbered_requirement_is_refused_under_every_trace(self):
+        for label, text, ident in self.items():
+            for trace in self.traces():
+                for words in ("R2 %s %s" % (bplib.D, text), "R2 %s  %s" % (bplib.D, text.upper()),
+                              "R12: %s" % text):
+                    out = self.refused(self.answer_with(words, trace), "quietly-resolved")
+                    self.assertIn(ident, " ".join(r["message"] for r in out["refusals"]), (label, trace, words))
+
+    def test_a_labelled_constraint_carrying_an_item_is_refused(self):
+        for label, text, ident in self.items():
+            for words in ("Constraint: %s" % text, "Constraints: %s" % text, "- %s" % text):
+                self.refused(self.answer_with(words, {"kind": "repo_path", "ref": "README.md"}, tag="constraint"),
+                             "quietly-resolved")
+
+    def test_with_an_answered_question_touching_the_item_it_is_accepted(self):
+        for label, text, ident in self.items():
+            testlib.rmtree(self.run.run_dir)
+            self.run.to_harvest()
+            self.accepted(self.answer_with("R2 %s %s" % (bplib.D, text), {"kind": "question", "ref": "Q2"},
+                                           settle=ident))
+
+    def test_the_doc_still_renders_the_prefix(self):
+        from blueprint_core import checks
+        doc = bplib.clean_answer()
+        self.assertEqual(checks.view(doc)["lines"][0]["text"], "`spin(n)` returns `n + 1`")
+        self.assertEqual(doc["lines"][0]["text"], "R1 %s `spin(n)` returns `n + 1`" % bplib.D)
+
+
+class AnOpenItemUnderAnotherTrace(_Record):
+    """Round 3, R3 (CL2-2): `open-item-descoped` fires by the item's words as well as by its id: an
+    out-of-scope line whose words (whole, or the item before its reason) are a scope `Open:` item is
+    refused unless an answered question of this run touched that item, whatever the line's trace."""
+
+    OPEN = "how often the counter resets"
+
+    def answer_with(self, text, trace, settle=False):
+        doc = bplib.clean_answer()
+        doc["questions"].append({"id": "Q2", "text": "Does the bench script print the count itself?",
+                                 "touches": [], "answer": "yes"})
+        if settle:
+            doc["questions"].append({"id": "Q3", "text": "Is the reset in this build?",
+                                     "touches": [self.ids[self.OPEN]], "answer": "no, leave it out"})
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": text, "trace": trace}
+        return doc
+
+    def shapes(self):
+        dashboard = self.ids["a web dashboard %s the owner declined it" % bplib.D]
+        traces = ({"kind": "repo_path", "ref": "README.md"},
+                  {"kind": "owner_words", "ref": "leave the reset out"},
+                  {"kind": "question", "ref": "Q2"},
+                  {"kind": "ledger", "ref": dashboard})
+        texts = (self.OPEN, "How  often the counter RESETS", "%s %s later" % (self.OPEN, bplib.D),
+                 "%s: later" % self.OPEN, "Out of scope: %s" % self.OPEN, "- %s (later)" % self.OPEN)
+        return [(t, tr) for t in texts for tr in traces]
+
+    def test_the_open_items_words_under_every_other_trace_are_refused(self):
+        for text, trace in self.shapes():
+            out = self.refused(self.answer_with(text, trace), "open-item-descoped")
+            self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), (text, trace))
+
+    def test_with_an_answered_question_touching_the_item_they_are_accepted(self):
+        for index, (text, trace) in enumerate(self.shapes()):
+            testlib.rmtree(self.run.run_dir)
+            self.run.to_harvest()
+            self.accepted(self.answer_with(text, trace, settle=True))
+
+    def test_other_words_are_not_the_open_item(self):
+        self.accepted(self.answer_with("how often the counter resets its display %s later" % bplib.D,
+                                       {"kind": "repo_path", "ref": "README.md"}))
+
 class VerifyForms(_Record):
     """R5 (CL1-6): a verify form is one of the template's three."""
 
     def test_each_of_the_three_forms_is_accepted(self):
-        for index, verify in enumerate(("existing test", "existing test tests/test_turnstile.py::test_spin",
+        for index, verify in enumerate(("existing test tests/test_turnstile.py::test_spin",
+                                        "existing test test_turnstile.TurnCounter.test_spin",
+                                        "existing test test_spin_returns_one_more",
                                         "new test at tests/test_turnstile.py",
+                                        "new test at tests/turnstile/",
+                                        "new test at test_turnstile.py",
                                         "manual: run the bench script and read the count")):
             run = bplib.Run(self.tmp, self.ws, run_id="run-v%d" % index, name="run-v%d" % index)
             run.to_harvest()
@@ -230,7 +340,11 @@ class VerifyForms(_Record):
 
     def test_a_verify_outside_the_three_forms_is_refused(self):
         for verify in ("verify:", "will be tested later", "new test at", "manual:", "manual:   ", "tests pass",
-                       "New test at tests/x.py", "existing tests"):
+                       "New test at tests/x.py", "existing tests",
+                       # round 3, R4 (CL1-6): free text one step to the side of each form
+                       "new test at some point", "new test at TBD", "manual: TBD", "existing test will cover it",
+                       "existing test", "existing test TBD", "new test at tests/test turnstile.py",
+                       "new test at n/a", "manual: later", "existing test n/a", "new test at TBD.py"):
             doc = bplib.clean_answer()
             doc["criteria"][0]["verify"] = verify
             out = self.refused(doc, "criterion-without-verify")

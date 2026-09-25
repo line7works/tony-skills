@@ -197,7 +197,8 @@ class NothingTheAnswerCarriesIsDropped(_Write):
         answer["assumptions"] = ["standard library"]
         path, after = self.extend_with(bplib.BUILD_FILLED, answer)
         line = next(l for l in after.split("\n") if l.startswith("Constraints:"))
-        self.assertEqual(line, "Constraints: Python 3.9 standard library; `python3 -m unittest`. Python 3.9. "
+        # round 3, R1: a new constraint joins the constraints' run, so it is never read as another kind
+        self.assertEqual(line, "Constraints: Python 3.9 standard library; `python3 -m unittest`; Python 3.9. "
                                "Assumed: standard library. Open: unittest.")
 
     def test_an_item_already_there_whole_is_not_repeated(self):
@@ -219,6 +220,86 @@ class NothingTheAnswerCarriesIsDropped(_Write):
         self.assertEqual(line, "Constraints: Python 3.9 standard library. Assumed: one process per session. "
                                "Open: does reset persist.")
 
+
+
+def kinds_of(value):
+    """The `Constraints:` value's items by kind, read here and not through the code under test: the
+    run before the first `Assumed:` or `Open:` marker is the constraints, each marker's run its own
+    kind; items are cut at `; ` and lose their closing period."""
+    import re
+    out = {"constraint": [], "Assumed": [], "Open": []}
+    kind, runs = "constraint", re.split(r"(?:^|\. )(Assumed|Open): ", value)
+    for index, run in enumerate(runs):
+        if index % 2:
+            kind = run
+            continue
+        out[kind] += [i.strip().rstrip(".").strip() for i in run.split("; ") if i.strip().rstrip(".").strip()]
+    return out
+
+
+class EachKindKeepsItsOwnItems(_Write):
+    """Round 3, R1 (CL1-4): an item counts as already in the `Constraints:` line only when it is there
+    under its OWN kind (a constraint, `Assumed:` or `Open:`). An open question already carried as an
+    assumption or a constraint is still added as open, and every other pair of kinds likewise, so the
+    doc and the read-back agree; the same item under the same kind is never repeated. Every pair of
+    kinds is tried through `buildoc.extend`, and the checker's three p4b shapes through the CLI."""
+
+    ITEM = "zero persists across sessions"
+    KINDS = ("constraint", "Assumed", "Open")
+    LINE = "Constraints: Python 3.9 standard library; `python3 -m unittest`.\n"
+
+    def doc_with(self, kind):
+        value = {"constraint": "Python 3.9 standard library; %s." % self.ITEM,
+                 "Assumed": "Python 3.9 standard library. Assumed: %s." % self.ITEM,
+                 "Open": "Python 3.9 standard library. Open: %s." % self.ITEM}[kind]
+        return bplib.BUILD_FILLED.replace(self.LINE, "Constraints: %s\n" % value)
+
+    @staticmethod
+    def value_of(text):
+        return next(l for l in text.split("\n") if l.startswith("Constraints:"))[len("Constraints:"):].strip()
+
+    def test_every_pair_of_kinds(self):
+        for have in self.KINDS:
+            for want in self.KINDS:
+                doc = self.doc_with(have)
+                args = {"constraints": [], "assumptions": [], "open_questions": []}
+                args[{"constraint": "constraints", "Assumed": "assumptions", "Open": "open_questions"}[want]] = [
+                    self.ITEM]
+                after = buildoc.extend(doc, [], **args)
+                got = kinds_of(self.value_of(after))
+                self.assertEqual(got[want].count(self.ITEM), 1, (have, want, self.value_of(after)))
+                self.assertEqual(got[have].count(self.ITEM), 1, (have, want, self.value_of(after)))
+                self.assertIn("Python 3.9 standard library", got["constraint"], (have, want))
+                self.assertEqual(buildoc.protected_changes(doc, after), [], (have, want))
+
+    def test_a_new_constraint_joins_the_constraints_and_not_the_last_marker(self):
+        doc = self.doc_with("Open")
+        after = buildoc.extend(doc, [], constraints=["no network"], assumptions=["one process per session"])
+        got = kinds_of(self.value_of(after))
+        self.assertEqual(got, {"constraint": ["Python 3.9 standard library", "no network"],
+                               "Assumed": ["one process per session"], "Open": [self.ITEM]}, self.value_of(after))
+
+    def test_the_checkers_three_shapes_through_the_cli(self):
+        shapes = (("Assumed", "open_questions", "Open"), ("constraint", "open_questions", "Open"),
+                  ("Open", "assumptions", "Assumed"))
+        for index, (have, field, want) in enumerate(shapes):
+            testlib.rmtree(self.tmp)
+            os.makedirs(self.tmp)
+            answer = bplib.extension_answer()
+            answer[field] = [self.ITEM]
+            self.through_answer(bplib.base_files(build=self.doc_with(have)), answer)
+            code, out, err = self.run.write()
+            self.assertEqual(code, 0, (out, err))
+            after = bplib.read(os.path.join(self.ws, bplib.BUILD_PATH))
+            got = kinds_of(self.value_of(after))
+            self.assertIn(self.ITEM, got[want], (have, want, self.value_of(after)))
+            code, out, err = self.run.report()
+            self.assertEqual(code, 10, err)
+            self.assertIn("%s: %s" % (want, self.ITEM), out["station_result"]["readback"])
+            readback_items = [l.split(": ", 1)[1] for l in out["station_result"]["readback"].split("\n")
+                              if l.startswith(want + ": ")]
+            for item in readback_items:
+                self.assertIn(item, got[want], (have, want))
 
 class AStatusLineInAnyCase(_Write):
     """R4 (CL1-5): a re-cased or indented `Status:` line is protected as an exact one is, and a slice

@@ -19,7 +19,8 @@ The form is `references/templates/build-doc.md`, read and rendered through `stat
                              `Out of scope:` items the answer adds; nothing else moves, and nothing
                              the answer carries is dropped: a `Constraints:` line is inserted after
                              `Intent:` when the doc has none, and an item counts as present only
-                             when it equals an item already there, whole (`items_of`)
+                             when it equals an item already there under its OWN kind, whole
+                             (`items_by_kind`, round 3 R1); a new item joins its own kind's run
 
 Every function takes and returns text; none writes a file. None judges what a doc says (E14-4).
 """
@@ -177,26 +178,73 @@ def constraints_value(constraints, assumptions, open_questions):
     return ". ".join(parts) + "." if parts else ""
 
 
-MARKERS = re.compile(r"(?:^|\. )(?:Assumed|Open): ")
+KINDED = re.compile(r"(?:^|\. )(Assumed|Open): ")
+KINDS = ("constraint", "Assumed", "Open")
 
 
-def items_of(value):
-    """The items a `Constraints:` value already holds, each whole: the value is cut at its
-    `Assumed:` and `Open:` markers (the form `constraints_value` renders) and every part at `; `,
-    each item stripped of its closing period. Nothing finer: an item is present only when it equals
-    one of these whole, so a shorter text inside a longer item is still added (a repeat is the
-    safe side; a drop never is)."""
-    out = set()
-    for part in MARKERS.split(value):
-        for item in part.split("; "):
-            item = item.strip().rstrip(".").strip()
-            if item:
-                out.add(item)
+def _item(text):
+    return text.strip().rstrip(".").strip()
+
+
+def runs_of(value):
+    """[(kind, start, end)]: the spans of a `Constraints:` value's runs, the form `constraints_value`
+    renders: the constraints before the first `Assumed:` or `Open:` marker, then each marker's run to
+    the next marker (or the value's end, its closing period left out)."""
+    marks = list(KINDED.finditer(value))
+    end = len(value.rstrip())
+    if end and value[end - 1] == ".":
+        end -= 1
+    out = [("constraint", 0, marks[0].start() if marks else end)]
+    for position, mark in enumerate(marks):
+        stop = marks[position + 1].start() if position + 1 < len(marks) else end
+        out.append((mark.group(1), mark.end(), max(stop, mark.end())))
+    return out
+
+
+def items_by_kind(value):
+    """{kind: set of items}: what a `Constraints:` value already holds, by KIND (round 3, R1). Each run
+    is cut at `; `, each item stripped of its closing period; an item is present for a kind only when
+    it equals one of that kind's items whole, so an open question already written as an assumption or a
+    constraint is still added as open, and a shorter text inside a longer item is still added."""
+    out = dict((kind, set()) for kind in KINDS)
+    for kind, start, end in runs_of(value):
+        for item in value[start:end].split("; "):
+            if _item(item):
+                out[kind].add(_item(item))
     return out
 
 
 def _new_items(items, have):
-    return [x for x in items if x.strip().rstrip(".").strip() not in have]
+    return [x for x in items if _item(x) not in have]
+
+
+def _insert(value, kind, items):
+    """`value` with `items` added to the run of their kind, never to another kind's run: a new
+    constraint goes before the first marker, a new assumption into the `Assumed:` run (or a new one
+    before `Open:`), a new open question into the `Open:` run (or a new one at the end)."""
+    text = "; ".join(_item(x) for x in items)
+    runs = runs_of(value)
+    same = [r for r in runs if r[0] == kind and value[r[1]:r[2]].strip()]
+    if same:
+        at = same[-1][2]
+        return value[:at] + "; " + text + value[at:]
+    end = runs[-1][2] if len(runs) > 1 else runs[0][2]
+    if kind == "constraint":
+        if not value.strip():
+            return text + "."
+        return text + ". " + value
+    label = "%s: %s" % (kind, text)
+    if kind == "Assumed":
+        opened = next((r for r in runs if r[0] == "Open"), None)
+        if opened is not None:
+            mark = next(m for m in KINDED.finditer(value) if m.end() == opened[1])
+            if mark.start() == 0:
+                return label + ". " + value
+            return value[:mark.start()] + ". " + label + value[mark.start():]
+    if not value.strip():
+        return label + "."
+    tail = value[end:] if value[end:].strip() else "."
+    return value[:end] + ". " + label + tail
 
 
 def _header_edit(lines, header_end, nl, constraints, assumptions, open_questions, out_of_scope):
@@ -204,11 +252,16 @@ def _header_edit(lines, header_end, nl, constraints, assumptions, open_questions
     bare = [_bare(l) for l in head]
     ci = next((i for i, l in enumerate(bare) if l.startswith("Constraints:")), None)
     value = bare[ci][len("Constraints:"):].strip() if ci is not None else ""
-    have = items_of(value)
-    extra = constraints_value(_new_items(constraints, have), _new_items(assumptions, have),
-                              _new_items(open_questions, have))
+    have = items_by_kind(value)
+    new = {"constraint": _new_items(constraints, have["constraint"]),
+           "Assumed": _new_items(assumptions, have["Assumed"]),
+           "Open": _new_items(open_questions, have["Open"])}
+    extra = constraints_value(new["constraint"], new["Assumed"], new["Open"])
     if extra and ci is not None:
-        joined = (value.rstrip(".") + ". " + extra) if value else extra
+        joined = value
+        for kind in KINDS:
+            if new[kind]:
+                joined = _insert(joined, kind, new[kind])
         head[ci] = "Constraints: " + joined + nl
     elif extra:
         # the doc has no Constraints: line: insert one after Intent: (or after the title), so

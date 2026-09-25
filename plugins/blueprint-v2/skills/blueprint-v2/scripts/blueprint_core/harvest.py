@@ -4,8 +4,8 @@
     architecture_lines(text)     the architecture doc's poured-concrete and deferred lines, each
                                  with a stable id, read through `templates.parse`, and `refused`:
                                  every line of those two sections that is not a `- <text>` item, and
-                                 every `templates.check` finding that names either section (a
-                                 re-cased or renamed heading reads as missing), each quoted
+                                 either section missing by its exact heading text (a re-cased or
+                                 renamed heading reads as missing, and is quoted), each quoted
     ledger_view(scope, arch)     the ledger `record-answer`'s shared refusals read: the scope doc's
                                  lines as the ledger reader emits them, then the architecture doc's
                                  poured-concrete lines as `decided` and its deferred lines as `parked`
@@ -61,9 +61,27 @@ def _line_id(prefix, text, seen):
     return base if seen[base] == 1 else "%s-%d" % (base, seen[base])
 
 
+SECTION_MISSING = tuple("missing the section '%s'" % heading for heading in (POURED, DEFERRED))
+
+
 def _names_a_section(message):
-    folded = message.casefold()
-    return "poured concrete" in folded or "deferred" in folded
+    """A `templates.check` finding that one of the two sections is missing, known by its exact heading
+    text as the template writes it (round 3, R5); an unrelated section whose heading merely holds the
+    word (`## Why we deferred the cache`, `## Notes`) is passed over."""
+    return message in SECTION_MISSING
+
+
+def _near_miss(parsed, message):
+    """The doc's own heading nearest the missing one (re-cased, or without its suffix), quoted."""
+    wanted = POURED if POURED in message else DEFERRED
+    stem = wanted.casefold() if wanted == DEFERRED else "## poured concrete"
+    for row in parsed["outline"]:
+        raw = parsed["lines"][row["line"] - 1].rstrip("\r\n")
+        if row["role"] == "heading" and raw != wanted and (
+                raw.strip().casefold() == stem or raw.strip().casefold().startswith(stem + " ")
+                or raw.strip().casefold() == wanted.casefold()):
+            return row["line"], raw
+    return None
 
 
 def architecture_lines(text):
@@ -94,12 +112,13 @@ def architecture_lines(text):
             out["deferred"].append({"id": _line_id("defer", item, seen), "text": item, "line": row["line"]})
     for finding in templates.check("architecture-doc", text):
         if _names_a_section(finding["message"]):
-            raw = parsed["lines"][finding["line"] - 1].rstrip("\r\n") if 0 < finding["line"] <= len(
-                parsed["lines"]) else ""
-            if not raw.startswith("## "):
-                # a section missing: the finding names the heading the doc does not hold
-                raw = "(no such heading in the doc)"
-            out["refused"].append({"line": finding["line"], "raw": raw, "why": finding["message"]})
+            near = _near_miss(parsed, finding["message"])
+            if near is not None:
+                out["refused"].append({"line": near[0], "raw": near[1], "why": "%s; the doc's heading here is not "
+                                       "it, whole" % finding["message"]})
+            else:
+                out["refused"].append({"line": finding["line"], "raw": "(no such heading in the doc)",
+                                       "why": finding["message"]})
     return out
 
 

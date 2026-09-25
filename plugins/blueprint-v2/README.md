@@ -21,6 +21,14 @@ matched by their whole topic; a malformed poured-concrete or deferred section st
 (`ledger-refused`); an extension drops nothing the answer carries; a `Status:` line in any case or
 indent is protected; a criterion's check is one of the template's three forms.
 
+Lane L's third round: the `Constraints:` line's items are compared per kind, so an open question
+already written as an assumption or a constraint is still added as open; the view the shared
+refusals read carries a requirement's words without their `R<n>` prefix and a line's without its
+label; an open item carried out of scope in its own words, under any trace, is refused like one
+carried by its id; a verify form names its test, its path or two words of steps; the architecture
+doc's two sections are known by their exact headings; the hunts hold the v1 homes only (no undated
+`<topic>.md` in a folder).
+
 For the join: the version and the marketplace entry are the control room's at close. Interface
 version 1, plugin version 0.1.0. Test counts are measured and filled in by the control room.
 

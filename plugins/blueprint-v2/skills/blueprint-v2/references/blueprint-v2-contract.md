@@ -98,23 +98,25 @@ the slot reads `*`.
 
 | Hunt | Glob | Tier | Home |
 |---|---|---|---|
-| `scope` | `docs/scope/{name}.md` | 1 | the repo doc kit's scope folder |
-| `scope` | `docs/scope/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the same folder, dated names |
+| `scope` | `docs/scope/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the scope folder, dated names |
 | `scope` | `docs/{name}-scope.md` | 1 | the older flat name |
-| `architecture` | `docs/architecture/{name}.md` | 1 | the architecture folder |
-| `architecture` | `docs/architecture/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the same folder, dated names |
+| `architecture` | `docs/architecture/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the architecture folder, dated names |
 | `architecture` | `docs/{name}-architecture.md` | 2 | the older flat name |
-| `build` | `docs/plans/{name}.md` | 1 | the plans folder |
-| `build` | `docs/plans/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the same folder, dated names |
+| `build` | `docs/plans/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the plans folder, dated names |
 | `build` | `docs/{name}-build-plan.md` | 2 | the older flat name |
 
 Why the dated globs. A doc in a dated home is named `<YYYY-MM-DD>-<topic>.md` and is matched by its
 topic, the part after the date, whole, as the station's step 4 says ("matched by its topic"): a
 `*-{name}.md` glob would take `2026-09-22-big-turnstile.md` or `2026-09-20-reverse-turnstile.md` as
 the `turnstile` feature's doc, and `write` would then extend another feature's living doc. With no
-name the slot reads `*`, so every dated doc of the folder is a candidate. Each of the three folders
-also takes the undated `<topic>.md`, the same topic matched whole; `write` itself always names a new
-doc with its date.
+name the slot reads `*`, so every dated doc of the folder is a candidate.
+
+Why the v1 homes only (round 3, R6). The homes are the v1 stations' own, never guessed (E14-10): in
+each folder the dated name, which the scope, architecture and build stations write and the later
+stations read, and the older flat names v1 still reads. An undated `<topic>.md` in a folder is no
+such home: no station writes one (`write` always names a new doc with its date), and the inspect and
+build stations' own hunts would not find it by that name, so a doc found there would be extended
+where no later station looks. It is never a candidate here.
 
 Why the tiers. The scope homes share ONE tier (carried item C1-7): the station's step 1 says that
 when more than one scope doc could match the feature they are listed and the owner is asked, so a
@@ -141,11 +143,15 @@ listing every candidate.
   `defer-` id). An id is twelve hex digits of the SHA-256 of the line's text, so it follows the
   line, not its position. A line of those two sections the reader cannot read is refused, never
   dropped: every non-blank line under `## Poured concrete (one-way doors)` or `## Deferred` that
-  is not a `- <text>` item (an indented or `*` item, a blank `- `, a line in a fence), and every
-  `templates.check` finding that names either section (a re-cased heading, or one without its
-  suffix, reads as the section missing), stops the run `ledger-refused`, each quoted with its line
-  number. A `### ` subheading inside either section is passed over: the section runs to the next
-  `## ` heading, so it hides no item.
+  is not a `- <text>` item (an indented or `*` item, a blank `- `, a line in a fence), and either
+  section missing (`templates.check`'s finding `missing the section '<heading>'`), stops the run
+  `ledger-refused`, each quoted with its line number; a missing section quotes the doc's near-miss
+  heading when it has one (a re-cased heading, one without its suffix or with a trailing space). The
+  two sections are known by their exact heading text as the template writes them, `## Poured
+  concrete (one-way doors)` and `## Deferred`, never by a word inside a heading (round 3, R5): an
+  unrelated section such as `## Why we deferred the cache` or `## Notes` is passed over. A `### `
+  subheading inside either section is passed over: the section runs to the next `## ` heading, so
+  it hides no item.
 - `build`: an existing build doc's path, its SHA-256, its line ending, each slice with its name,
   short name and `Status:` line, every `Plan: inspected` line, every line from the first ledger
   heading to the end (byte for byte, endings kept), and `templates.check`'s findings on it.
@@ -180,7 +186,11 @@ least one constraint line.
    this core does not allow (assumptions have their own field). An `owner_words` trace's `ref` is
    the owner's words quoted verbatim, and a blank one fails the schema.
 2. The shared refusals of E14-11, `station_core/answer.py`'s `check`, called once on a view of the
-   answer (its questions, and its lines each tagged by its own kind: a requirement and a
+   answer (its questions, and its lines, each line's words as the ledger would hold them: a
+   requirement's text without its `R<n>` prefix, a constraint's or out-of-scope line's without a
+   leading list mark or label (`Constraint:`, `Out of scope:`, `Assumed:`, `Open:`), so the shared
+   text rule meets an open, parked or deferred item written in the doc's own form (round 3, R2); the
+   answer keeps the prefix and the doc renders it. Each line is tagged by its own kind: a requirement and a
    constraint `decided`, since they are what the doc asserts as settled; an out-of-scope line
    `out-of-scope`, since carrying a parked scope line or a deferred architecture line forward as
    out of scope is the pass-forward E14-11 names, never a resolution) against `ledger_view`, with
@@ -196,7 +206,7 @@ least one constraint line.
 | `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
 | `run-id-mismatch` | a `run_id` other than this run's |
 | `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
-| `open-item-descoped` | an out-of-scope line whose trace is a scope `Open:` item that no answered question of this run touched: an open item is the owner's call, not a descoping |
+| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its trace (a ledger trace to the item) or by its words, whatever the trace (round 3, R3): the line's words, whole or the item before its reason (cut at the first dash, colon, semicolon or parenthesis), with the list mark and label left out, whitespace collapsed and case folded, equal to the open item's. An open item is the owner's call, not a descoping |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |
@@ -212,11 +222,21 @@ owner stated before the invocation carries his words, quoted verbatim, as its tr
 asked it again (ruling R1 of round 2; the station's rule 1 lets a line trace to the discussion).
 `assumed` stays refused for these lines: what the executor decided alone is an `assumptions` item.
 
-Verify forms: `existing test`, `new test at <path>`, `manual: <steps>`.
+Verify forms: `existing test <name>`, `new test at <path>`, `manual: <steps>`.
 
-A `verify` is one of those three, on one line: `existing test` (optionally naming it),
-`new test at` a path, or `manual:` and the steps. The form is the build doc template's; any other
-text ("will be tested later", a bare `verify:`) is a criterion a grader could not check.
+A `verify` is exactly one of those three, on one line (round 3, R4):
+
+- `existing test <name>`: the test named, one token with no space (`tests/test_x.py::test_zero`,
+  `test_x.Counter.test_zero`, `test_zero_on_start`). `existing test` alone is not a form.
+- `new test at <path>`: a path that looks like one, one token with no space holding at least one
+  `/` or ending in a file extension (`tests/test_x.py`, `tests/counter/`).
+- `manual: <steps>`: the steps, at least two words.
+
+A placeholder (`TBD`, `TBA`, `TODO`, `n/a`, `none`, `later`, `pending` and the like), whole or as a
+part of the path, names nothing and is none of the forms. The forms are the build doc template's;
+any other text ("will be tested later", a bare `verify:`, `new test at some point`, `new test at
+TBD`, `manual: TBD`, `existing test will cover it`) is a criterion a grader could not check, refused
+`criterion-without-verify`.
 
 Exit 5 lists every refusal of steps 2 and 3 at once. Only a clean answer is recorded, through
 `answer.record`, which writes `answer.json`.
@@ -239,9 +259,14 @@ Exit 5 lists every refusal of steps 2 and 3 at once. Only a clean answer is reco
   `Constraints:` line are added to it, and its out-of-scope lines not already listed are added
   under `Out of scope:` (a one-item inline label becomes a list). Nothing the answer carries is
   dropped: a doc with no `Constraints:` line gets one, inserted after its `Intent:` line (after the
-  title when it has none); and an item counts as already there only when it equals an item of the
-  line whole (the value cut at its `Assumed:` and `Open:` markers and at `; `), never when it is a
-  substring of the value. The doc's title and `Intent:` line
+  title when it has none); and an item counts as already there only when it equals, whole, an item
+  of its OWN kind in the line (round 3, R1): the value is read in runs, the constraints before the
+  first `Assumed:` or `Open:` marker and each marker's run to the next, each run cut at `; `. An
+  open question already written as an assumption or a constraint is still added as open, and every
+  other pair of kinds likewise, so the doc and the read-back agree; a substring of an item is never
+  an item. A new item joins its own kind's run: a constraint before the first marker, an assumption
+  in the `Assumed:` run (a new one before `Open:`), an open question in the `Open:` run (a new one
+  at the end). The doc's title and `Intent:` line
   are never rewritten from the answer. Every other byte stays as found, a heading the form does not
   know included, and the doc's line ending is kept. A revised slice's section is replaced whole.
 - **Refused before anything is written:** a revision of an existing slice whose status is
