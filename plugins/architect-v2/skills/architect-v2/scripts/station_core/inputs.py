@@ -14,6 +14,7 @@ so a caller reads one list.
 """
 import json
 import os
+import re
 
 from . import fsio, validate
 
@@ -44,6 +45,9 @@ def with_defaults(doc):
     return out
 
 
+_VISIBLE = re.compile(u"[\u200b\u200c\u200d\u2060\ufeff\u00ad\u3164\u2800\u2028\u2029\u0085\x0b\x0c]")
+
+
 def path_rules(doc):
     errors = []
     workspace = doc.get("workspace")
@@ -68,6 +72,12 @@ def path_rules(doc):
                     errors.append({"path": "/run_dir",
                                    "message": "the run directory lies outside the %s; %s is inside %s"
                                               % (label, run_dir, home)})
+    owner_word = doc.get("owner_word")
+    if isinstance(owner_word, dict):
+        words = owner_word.get("words")
+        if isinstance(words, str) and not _VISIBLE.sub("", words).strip():
+            errors.append({"path": "/owner_word/words", "message": "the owner's words are not blank, whitespace "
+                                                                    "or invisible characters only"})
     return errors
 
 
