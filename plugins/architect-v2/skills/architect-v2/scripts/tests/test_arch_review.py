@@ -378,6 +378,26 @@ class ASymlinkedReviewHome(unittest.TestCase):
         self.assertNotIn("Traceback", err)
         self.assertEqual(os.listdir(outside), [])
 
+    def test_a_link_into_the_run_directory_is_usage(self):
+        """CA2-3: `docs/reviews` linked to a folder inside the run directory."""
+        tmp = testlib.make_scratch("arch-take-link-")
+        self.addCleanup(testlib.rmtree, tmp)
+        ws = archlib.repo_workspace(tmp)
+        run = archlib.ArchRun(tmp, ws)
+        run.to_harvest()
+        inner = os.path.join(run.run_dir, "inner")
+        os.makedirs(inner)
+        os.symlink(inner, os.path.join(ws, "docs", "reviews"))
+        run.record(archlib.clean_answer())
+        self.assertEqual(run.write()[0], 0)
+        self.assertEqual(run.request("gpt-astra")[0], 0)
+        take = os.path.join(tmp, "take.md")
+        testlib.write_text(take, "a take\n")
+        code, doc, out, err = run.save_take("gpt-astra", take)
+        self.assertEqual(code, 2, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(os.listdir(inner), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,14 +20,14 @@ requires them) is not driven; `_via` says so. `refusal_reason` is the rule name 
 sorted and joined with ", ", or null when nothing is refused.
 
 A4 (the two actions): `visual_rendered`, `published`, `artifact_line_unchanged`, `terminal_status`,
-from a REAL drive of this core's CLI (`scripts/architect.py`) in a copy of the case (its workspace
-and staging home copied under the observer's scratch, so the case's own tree is not written):
-`check-input`, `select --hunt scope`, `select --hunt architecture --name <slug>`, `harvest`,
+from a REAL drive of this core's CLI (`scripts/architect.py`) in the case's own tree (the workspace
+and staging home `observe.py` built fresh for this case; only the run directory lies under the
+observer's scratch), so the frame's `writes_none` measures the drive (round 3 R2): `check-input`, `select --hunt scope`, `select --hunt architecture --name <slug>`, `harvest`,
 `record-answer`, `write`, `render-visual`, `record-publish` and `report`, each phase with its exit
 under `_phases`. The facts are what the drive printed and left: `visual_rendered` is
 `render-visual` exiting 0 with its file on disk, `published` and `terminal_status` are the
 `report` result's `station_result.published` and `status`, and `artifact_line_unchanged` compares
-the copied doc's `Artifact:` lines before the drive and after it.
+the case doc's `Artifact:` lines before the drive and after it.
 
 The translation into this core's answer. A renaming of the case where the case says it: the
 answer's `publish` (false as well when the neutral input carries `station_publish: false`, which
@@ -44,13 +44,14 @@ carried. Translation CHOICES, facts of no case: the review is declined by the ow
 date (v1 allows declining; the A4 cases record no blind-review outcome, and `report` stops
 `review-pending` on none); each candidate's one-way-door category is `structure:<its name>` (the
 doc's form records no category per candidate); a component the doc lists without `(serves: ...)`
-serves the walkthrough's first requirement; the trigger is `re-render and publish` and the change
-line `nothing changed; the visual re-rendered and its publish recorded`.
+serves the walkthrough's first requirement; each candidate's `assumes` and `later_cost` is the
+placeholder `not recorded by the doc's form` (the form records neither); the trigger is
+`re-render and publish` and the change line `nothing changed; the visual re-rendered and its
+publish recorded`.
 """
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 
@@ -68,6 +69,7 @@ DRIVER = os.path.join(SCRIPTS, "architect.py")
 
 A2 = ("answer_refused", "refusal_reason")
 A4 = ("visual_rendered", "published", "artifact_line_unchanged", "terminal_status")
+NOT_RECORDED = "not recorded by the doc's form"
 
 
 class LaneObserveError(RuntimeError):
@@ -185,8 +187,8 @@ def translate(doc_text, doc_rel, case_answer, publish, today):
         "exit_ramp": {"continued": continued, "why": ramp},
         "walkthrough": {"who": parts.group(1), "when": parts.group(2), "must": must,
                         "trace": {"kind": "repo_path", "ref": doc_rel}},
-        "candidates": [{"name": n, "categories": ["structure:%s" % n], "assumes": "as the living doc records it",
-                        "later_cost": "as the living doc records it"} for n in names] if continued else [],
+        "candidates": [{"name": n, "categories": ["structure:%s" % n], "assumes": NOT_RECORDED,
+                        "later_cost": NOT_RECORDED} for n in names] if continued else [],
         "pick": pick if continued else None, "rejected": rejected if continued else [],
         "components": components,
         "data_flow": _label(body[docs.DRAWING], "Data flow:"), "diagram": _label(body[docs.DRAWING], "Diagram:"),
@@ -200,11 +202,7 @@ def translate(doc_text, doc_rel, case_answer, publish, today):
 
 def observe_a4(step, case_dir, neutral, facts, via, scratch):
     case_answer = _answer(case_dir, neutral)
-    copy = os.path.join(scratch, "case-copy")
-    ws = os.path.join(copy, "workspace")
-    staging = os.path.join(copy, "staging")
-    shutil.copytree(neutral["workspace"], ws, symlinks=True)
-    shutil.copytree(neutral["staging"], staging, symlinks=True)
+    ws, staging = neutral["workspace"], neutral["staging"]
     run_dir = os.path.join(scratch, "run")
     input_publish = neutral.get("station_publish", True) is not False
     doc = {"input_version": 1, "run_id": re.sub(r"[^A-Za-z0-9._-]", "-", neutral["case"]), "workspace": ws,
@@ -229,7 +227,7 @@ def observe_a4(step, case_dir, neutral, facts, via, scratch):
     code, out, text = _cli(["harvest", "--run-dir", run_dir], scratch, facts, "harvest")
     _must(code, 0, "harvest", text)
     if not out.get("living_doc"):
-        raise LaneObserveError("the harvest found no living doc in the case's copy")
+        raise LaneObserveError("the harvest found no living doc in the case's tree")
     doc_path = out["living_doc"]["path"]
     with open(doc_path, encoding="utf-8", newline="") as fh:
         before = fh.read()
@@ -259,7 +257,7 @@ def observe_a4(step, case_dir, neutral, facts, via, scratch):
     with open(doc_path, encoding="utf-8", newline="") as fh:
         after = fh.read()
     how = ("cli: a real drive of check-input, select (scope, architecture), harvest, record-answer, write, "
-           "render-visual, record-publish and report on a copy of the case (the translation and its choices are "
+           "render-visual, record-publish and report in the case's own tree (the translation and its choices are "
            "this module's docstring)")
     _fill(step, facts, via, {"visual_rendered": rendered,
                              "published": result["station_result"]["published"],

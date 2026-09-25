@@ -23,7 +23,7 @@ EX = os.path.join(testlib.EX, "answer")
 REQUIRED_CONTENT = ("re-asked-decided", "untraced-poured-line", "untraced-deferred-line", "untraced-walkthrough",
                     "candidates-fewer-than-two", "candidates-not-distinct", "razor-serves-nothing",
                     "razor-serves-no-requirement", "rejected-without-why", "docless-without-reason",
-                    "no-loss-run-block", "no-loss-poured-line")
+                    "no-loss-run-block", "no-loss-poured-line", "docless-reason-mismatch")
 REQUIRED_SCHEMA = ("walkthrough-without-who", "walkthrough-without-when", "walkthrough-without-must")
 
 
@@ -59,7 +59,8 @@ class _Examples(unittest.TestCase):
             testlib.write_text(living_path, living_text)
         harvest = harvesting.describe(ws, staging, conf["today"], conf["slug"], scope_path, scope_text,
                                       living_path, living_text, run_id=conf["run_id"],
-                                      input_publish=conf.get("input_publish", True))
+                                      input_publish=conf.get("input_publish", True),
+                                      docless_reason=conf.get("docless_reason"))
         return recording.context(harvest, living_text, session_id=conf["session_id"], takes=conf.get("takes", []))
 
 

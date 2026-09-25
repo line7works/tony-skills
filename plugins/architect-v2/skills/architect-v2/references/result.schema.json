@@ -40,14 +40,20 @@
     },
     "selection": {
       "type": "object",
-      "description": "the hunt results the run used, by hunt name, as `select` printed them",
+      "description": "the hunt results the run used, by hunt name, as `select` printed them; a scope hunt whose single hit the input set aside (`station.docless`) also carries `set_aside`, the hit's path and the input's reason",
       "additionalProperties": {
         "type": "object",
         "required": ["outcome", "candidates", "searched"],
         "properties": {
           "outcome": {"type": "string", "enum": ["none", "one", "several"]},
           "candidates": {"type": "array"},
-          "searched": {"type": "array"}
+          "searched": {"type": "array"},
+          "set_aside": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "reason"],
+            "properties": {"path": {"type": "string", "pattern": "^/"}, "reason": {"type": "string", "minLength": 1}}
+          }
         }
       }
     },

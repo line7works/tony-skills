@@ -2,7 +2,7 @@
 
 `evals/seeded-cases/lane_observe.py` fills every name the families' `lane` steps list, from a
 real drive (A2: the library functions `record-answer` calls; A4: the CLI itself, `check-input` to
-`report`, on a copy of the case, each phase with its exit under `_phases`), with no
+`report`, in the case's own built tree, each phase with its exit under `_phases`), with no
 `_lane_pending` and no `_errors` left in any `observed.json`. The test reads facts only; what a fact should be is the
 answer key's, never this suite's.
 """
@@ -53,6 +53,45 @@ class LaneObserve(unittest.TestCase):
                                       "render-visual", "record-publish", "report"], row["case"])
             self.assertEqual(observed["_phases"][-1]["exit"], 10, row["case"])
             self.assertIn("cli", observed["_via"]["terminal_status"], row["case"])
+            # R2 (CA2-2): the drive runs in the case's OWN built tree, never a copy, so the frame's
+            # writes_none measures the real run; the visual the drive rendered is in that tree
+            self.assertIn("the case's own tree", observed["_via"]["visual_rendered"], row["case"])
+            self.assertNotIn("copy", observed["_via"]["visual_rendered"], row["case"])
+            neutral = testlib.load_json(os.path.join(os.path.dirname(row["observed"]), "input.json"))
+            visuals = [os.path.join(base, n) for base, _, names in os.walk(neutral["workspace"])
+                       for n in names if n.endswith("-architecture.html")]
+            self.assertEqual(len(visuals), 1, (row["case"], visuals))
+
+
+DOC = ("# Turnstile %(D)s architecture (2026-09-21)\n\n"
+       "Scope doc: docs/scope/2026-09-20-turnstile.md\nBlind review: declined 2026-09-21\n\n"
+       "## Walkthrough target\nWho: Sam Bench  %(M)s  When: 2026-10-01  %(M)s  Must be able to: count turns\n\n"
+       "## v0 drawing\nComponents: turnstile.py (serves: count turns)\nData flow: the fixture calls it\n"
+       "Diagram: fixture -> turnstile.py\n\n## Poured concrete (one-way doors)\n\n## Deferred\n\n## Run log\n"
+       "### Run 1 %(D)s 2026-09-21 %(D)s trigger: first run\nExit ramp: system %(D)s the interview continued; yes\n"
+       "Step 3.1 (walkthrough target): Sam Bench\n"
+       "Step 3.2 (candidates): module (platform:library); service (platform:server); chosen: module; "
+       "rejected: service %(D)s the bench imports\n"
+       "Step 3.3 (one-way doors): platform\nRulings: declined\nChanged this run: first run\n") % {"D": "\u2014",
+                                                                                                "M": "\u00b7"}
+
+
+class TheTranslationChoices(unittest.TestCase):
+    """CA2-8: every translation choice is stated in the docstring as a choice; the candidates'
+    `assumes` and `later_cost`, which the doc's form does not record, are a named placeholder."""
+
+    def test_the_placeholder_is_stated_and_used(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("lane_observe_under_test", os.path.join(SEEDED, "lane_observe.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        words = "not recorded by the doc's form"
+        self.assertIn(words, " ".join(module.__doc__.split()))
+        answer = module.translate(DOC, "docs/architecture/2026-09-21-turnstile.md", {"questions": []}, True,
+                                  "2026-09-25")
+        self.assertTrue(answer["candidates"])
+        for c in answer["candidates"]:
+            self.assertEqual((c["assumes"], c["later_cost"]), (words, words))
 
 
 if __name__ == "__main__":

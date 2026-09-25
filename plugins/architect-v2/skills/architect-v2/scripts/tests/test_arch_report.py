@@ -113,6 +113,29 @@ class Report(unittest.TestCase):
         self.assertEqual(result["station_result"]["review_failed_lanes"],
                          [{"row": "gemini", "reason": "transport-failed: timed out"}])
 
+    def test_failed_lanes_rows_are_checked(self):
+        """CA2-5: each failed lane is a row a request of this run built, with no saved take, once."""
+        for step in (self.run.record(archlib.clean_answer()), self.run.write(), self.run.render(),
+                     self.run.publish(URL), self.run.request("gpt-astra", "gemini")):
+            self.assertEqual(step[0], 0, step[2] + step[3])
+        take = os.path.join(self.tmp, "take.md")
+        testlib.write_text(take, "a module, no server\n")
+        self.assertEqual(self.run.save_take("gpt-astra", take)[0], 0)
+        for lanes in ([{"row": "gpt-astra", "reason": "timed out"}],
+                      [{"row": "qwen", "reason": "timed out"}],
+                      [{"row": "nobody", "reason": "timed out"}],
+                      [{"row": "gemini", "reason": "timed out"}, {"row": "gemini", "reason": "timed out again"}]):
+            a = archlib.clean_answer(review={"outcome": "done", "spine": "a module", "failed_lanes": lanes})
+            before = archlib.listing(self.run.run_dir)
+            code, doc, out, err = self.run.record(a)
+            self.assertEqual(code, 5, (lanes, out + err))
+            self.assertIn("review-fields", [r["rule"] for r in doc["refusals"]], lanes)
+            self.assertEqual(archlib.listing(self.run.run_dir), before)
+        a = archlib.clean_answer(review={"outcome": "done", "spine": "a module",
+                                         "failed_lanes": [{"row": "gemini", "reason": "timed out"}]})
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+
     def test_failed_lanes_on_a_review_that_is_not_done_is_refused(self):
         a = archlib.clean_answer(review={"outcome": "declined", "date": archlib.TODAY,
                                          "failed_lanes": [{"row": "gemini", "reason": "timed out"}]})

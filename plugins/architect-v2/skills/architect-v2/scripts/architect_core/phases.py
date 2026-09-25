@@ -85,24 +85,36 @@ def _need(run, *phases):
         raise driver.Usage("this run is at phase %r; this command runs at %s" % (phase, " or ".join(phases)))
 
 
+def _named_under(path, root):
+    """Whether `path` lies under `root` by its name (the root as given, or its real path)."""
+    target = os.path.abspath(path)
+    for base in (os.path.abspath(root), os.path.realpath(root)):
+        if target.startswith(base.rstrip(os.sep) + os.sep):
+            return True
+    return False
+
+
 def _contained(run, path):
-    """Whether a document write at `path` stays in this run's homes: the real path of the target's
-    nearest existing parent folder (a symlink counts as existing, and is followed) lies inside the
-    workspace, the staging home or the run directory (R2). A symlinked folder that leads outside
-    them is refused before anything is written."""
-    roots = [run.input["workspace"], run.input.get("staging"), run.run_dir]
+    """Whether a document write at `path` stays in the home it is named under: the real path of the
+    target's nearest existing parent folder (a symlink counts as existing, and is followed) lies
+    inside the workspace, the staging home or the run directory that the target's own path names
+    (R2; round 3 CA2-3). A symlinked folder that leads anywhere else (outside every home, or from
+    the workspace into the run directory or the staging home) is refused before anything is
+    written, so a workspace path is never written into another home."""
+    roots = [r for r in (run.input["workspace"], run.input.get("staging"), run.run_dir) if r]
+    named = [r for r in roots if _named_under(path, r)]
     folder = os.path.dirname(os.path.abspath(path))
     while not os.path.lexists(folder):
         parent = os.path.dirname(folder)
         if parent == folder:
             break
         folder = parent
-    return any(root and inside(folder, root) for root in roots)
+    return any(inside(folder, root) for root in named)
 
 
 def _outside(path):
-    return ("%s would land outside the workspace, the staging home and the run directory (a folder on its way is "
-            "a symlink that leads elsewhere); nothing was written" % path)
+    return ("%s would land outside the home its path names (the workspace, the staging home or the run directory): "
+            "a folder on its way is a symlink that leads elsewhere; nothing was written" % path)
 
 
 def _session(run):
@@ -129,6 +141,10 @@ def harvest(ctx, args):
                            "doc's idea, or on a docless run the working name the gate discussion settled)")
     receipt = Receipt(run.run_dir)
     scope_path = station.get("scope_doc")
+    docless = station.get("docless") is True
+    set_aside = None
+    if docless and (scope_path or not station.get("docless_reason", "").strip()):
+        raise driver.Usage("station.docless carries station.docless_reason and excludes station.scope_doc")
     if scope_path:
         if not os.path.isfile(scope_path):
             raise driver.Usage("the scope doc the input names is not a file: %s" % scope_path)
@@ -144,6 +160,11 @@ def harvest(ctx, args):
                      "the scope hunt found %d scope docs (%s); they are listed for the owner and never picked: put "
                      "the list to him and start a new run whose input names his pick in `station.scope_doc`"
                      % (len(scope_sel["candidates"]), ", ".join(c["path"] for c in scope_sel["candidates"])), sr, receipt)
+    elif scope_sel["outcome"] == "one" and docless:
+        # R1 (CA2-1): the single hit is another project's scope doc and the owner said none exists
+        # for this one; it is set aside, recorded in the scope selection, and the docless gate opens
+        set_aside = {"path": scope_sel["candidates"][0]["path"], "reason": station["docless_reason"]}
+        receipt.write_json(os.path.join(run.run_dir, "selection-scope.json"), dict(scope_sel, set_aside=set_aside))
     elif scope_sel["outcome"] == "one":
         scope_path = scope_sel["candidates"][0]["path"]
     if scope_path:
@@ -152,8 +173,12 @@ def harvest(ctx, args):
             raise driver.Usage("the scope doc's name %s gives no slug (one path segment of lowercase letters, "
                                "digits, '.', '_' and '-')" % os.path.basename(scope_path))
         if arch_sel.get("name") != slug:
+            other = "" if station.get("scope_doc") else (
+                ". When this scope doc is another project's (its Intent: line) and the owner said no scope doc "
+                "exists for his, start a new run whose input carries station.docless: true and "
+                "station.docless_reason instead")
             raise driver.Usage("the architecture hunt ran with --name %r; this scope doc's slug is %r. Run "
-                               "`select --hunt architecture --name %s`" % (arch_sel.get("name"), slug, slug))
+                               "`select --hunt architecture --name %s`%s" % (arch_sel.get("name"), slug, slug, other))
     else:
         slug = arch_sel.get("name")
         if not slug:
@@ -171,7 +196,8 @@ def harvest(ctx, args):
     living_text = read_text(living_path) if living_path else None
     try:
         record = harvesting.describe(ws, staging, today(), slug, scope_path, scope_text, living_path, living_text,
-                                     run_id=run.checkpoint["run_id"], input_publish=station.get("publish", True))
+                                     run_id=run.checkpoint["run_id"], input_publish=station.get("publish", True),
+                                     set_aside=set_aside, docless_reason=station.get("docless_reason") if docless else None)
     except ledger.LedgerRefused as exc:
         sr = dict(results.empty_station_result(), slug=slug, scope_doc=scope_path)
         return _stop(ctx, run, "ledger-refused", "the scope doc's ledger holds line(s) the reader cannot tag, quoted "
@@ -190,13 +216,19 @@ def harvest(ctx, args):
     run.checkpoint["phase"] = "harvested"
     _state(run)
     run.save()
-    reason = ("docless: no scope doc was found; ask the owner once whether one exists where the glob cannot see "
-              "(a question `about: scope-doc`), then the docless gate: the answer records its reason"
-              if record["docless"] else "the scope doc's ledger is harvested; its decided lines pass forward and "
-              "are never asked again")
+    if set_aside:
+        reason = ("docless: the scope hunt's one hit, %s, is set aside by the input (`station.docless`): it is not "
+                  "this project's scope doc and the owner said none exists; the answer records the gate's question "
+                  "(`about: scope-doc`) and `docless.reason` equal to the input's `station.docless_reason`"
+                  % set_aside["path"])
+    elif record["docless"]:
+        reason = ("docless: no scope doc was found; ask the owner once whether one exists where the glob cannot see "
+                  "(a question `about: scope-doc`), then the docless gate: the answer records its reason")
+    else:
+        reason = "the scope doc's ledger is harvested; its decided lines pass forward and are never asked again"
     return driver.emit(ctx.envelope(
         next="record-answer", run_id=run.checkpoint["run_id"], reason=reason, docless=record["docless"],
-        slug=slug, scope_doc=scope_path, target=record["target"]["path"],
+        set_aside=set_aside, slug=slug, scope_doc=scope_path, target=record["target"]["path"],
         living_doc=None if not living else {"path": living["path"], "runs": living["runs"],
                                             "next_run": living["next_run"], "artifact_url": living["artifact_url"]},
         ledger=[{"id": r["id"], "tag": r["tag"], "text": r["text"], "source": r["source"]} for r in record["ledger"]],
@@ -209,7 +241,7 @@ def _context(run, prior=None):
     record = _load(run, "harvest.json")
     takes = _load(run, "takes.json") or []
     return recording.context(record, _living_text(run), session_id=_session(run), takes=takes, prior=prior,
-                             run_id=run.checkpoint["run_id"])
+                             run_id=run.checkpoint["run_id"], requested=_requested_rows(run))
 
 
 def record_answer(ctx, args):
@@ -345,9 +377,12 @@ def record_publish(ctx, args):
     if args.url is not None and not URL.match(args.url):
         raise driver.Usage("--url is the https URL the publish returned (a host, an optional port and path, no "
                            "space): %r" % args.url)
-    if answer["publish"] and args.url is None and state.get("publish_url"):
-        raise driver.Usage("this run recorded the publish to %s; a record without --url would unsay it. Record the "
-                           "republish with --url %s, the same URL" % (state["publish_url"], state["publish_url"]))
+    if answer["publish"] and args.url is None and state.get("published") == "published":
+        # keyed on the CURRENT render (render-visual resets `published`): a no-URL record after a
+        # published one of the same render would unsay it; after a re-render, an honest "the
+        # republish returned no URL" is recorded as rendered-not-published (round 3 CA2-7)
+        raise driver.Usage("this render's publish was recorded to %s; a record without --url would unsay it. Record "
+                           "the republish with --url %s, the same URL" % (state["publish_url"], state["publish_url"]))
     with open(state["doc"], "r", encoding="utf-8", newline="") as fh:
         text = fh.read()
     decision = publishing.decide(text, answer["publish"], args.url)

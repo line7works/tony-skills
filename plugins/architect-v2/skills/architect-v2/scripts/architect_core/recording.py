@@ -20,7 +20,7 @@ from .common import ALLOWED_TRACES, blank, display
 ALLOWED = ALLOWED_TRACES
 SHARED_RULES = ("shape", "re-asked-decided", "unknown-line", "untraced", "quietly-resolved")
 OWN_RULES = ("session-mismatch", "run-mismatch", "docless-without-reason", "docless-with-scope-doc",
-             "docless-unasked", "docless-home", "exit-ramp-ended-with-candidates", "candidates-fewer-than-two",
+             "docless-unasked", "docless-home", "docless-reason-mismatch", "exit-ramp-ended-with-candidates", "candidates-fewer-than-two",
              "candidates-more-than-three", "candidate-names-repeat", "candidates-not-distinct",
              "pick-not-a-candidate", "rejected-mismatch", "rejected-without-why", "doors-missing", "razor",
              "review-offer", "review-fields", "review-no-take", "rulings-without-review", "publish-against-input",
@@ -35,13 +35,34 @@ def refusal(rule, message, **where):
     return row
 
 
-def context(harvest, living_text, session_id=None, takes=(), prior=None, run_id=None):
+def context(harvest, living_text, session_id=None, takes=(), prior=None, run_id=None, requested=()):
+    """`requested` is the readers rows a `request` of this run built (for `failed_lanes`)."""
     return {"harvest": harvest, "living_text": living_text, "session_id": session_id, "takes": list(takes),
-            "prior": prior, "run_id": run_id if run_id is not None else harvest.get("run_id")}
+            "prior": prior, "run_id": run_id if run_id is not None else harvest.get("run_id"),
+            "requested": list(requested)}
+
+
+POURED_SPLIT = " %s " % docs.D
+
+
+def poured_fields(text):
+    """(category, decision, why) of a poured-concrete line on its form, `<category> <dash> <decision>
+    <dash> <why>` (the decision everything between the first field and the last, so a decision that
+    itself holds the dash stays whole), or None when the line has fewer than three fields."""
+    parts = text.split(POURED_SPLIT)
+    if len(parts) < 3:
+        return None
+    return parts[0], POURED_SPLIT.join(parts[1:-1]), parts[-1]
 
 
 def view(answer):
-    """The neutral view `station_core/answer.py` reads: the questions, and each asserted line."""
+    """The neutral view `station_core/answer.py` reads: the questions, and each asserted line.
+
+    A new poured-concrete line on its form gives two rows (round 3 R4, CS-1's lane half): the whole
+    line, and its DECISION field as the row's text with the `category` and the `why` beside it, so
+    the shared text rule meets a parked or open line re-asserted as the decision alone as well as
+    the whole line, even where the decision holds the form's dash. Both rows name the same place,
+    and `shared_refusals` reports a refusal of that place once."""
     lines = [{"text": docs.walkthrough_line(answer["walkthrough"]), "tag": "decided",
               "trace": answer["walkthrough"].get("trace"), "where": "walkthrough"}]
     for key in ("poured_concrete", "deferred"):
@@ -51,9 +72,13 @@ def view(answer):
             if "strike" in entry:
                 lines.append({"text": entry["strike"], "tag": "struck", "trace": entry.get("trace"),
                               "where": "%s/%d (struck)" % (key, index)})
-            else:
-                lines.append({"text": entry["text"], "tag": entry["tag"], "trace": entry.get("trace"),
-                              "where": "%s/%d" % (key, index)})
+                continue
+            where = "%s/%d" % (key, index)
+            lines.append({"text": entry["text"], "tag": entry["tag"], "trace": entry.get("trace"), "where": where})
+            fields = poured_fields(entry["text"]) if key == "poured_concrete" else None
+            if fields:
+                lines.append({"text": fields[1], "category": fields[0], "why": fields[2], "tag": entry["tag"],
+                              "trace": entry.get("trace"), "where": where})
     for index, line in enumerate(answer["lines"]):
         lines.append({"text": "NEEDS CHECK: %s" % line["text"], "tag": line["tag"], "trace": line.get("trace"),
                       "where": "lines/%d" % index})
@@ -70,10 +95,14 @@ def shared_refusals(answer, ctx):
     neutral, wheres = view(answer)
     result = shared.check(neutral, ctx["harvest"]["ledger"], workspace=ctx["harvest"]["workspace"], allowed=ALLOWED)
     out = []
+    seen = set()
     for row in result["refusals"]:
         row = dict(row)
         if "line" in row and isinstance(row["line"], int) and row["line"] < len(wheres):
             row["field"] = wheres[row["line"]]
+            if (row["rule"], row["field"]) in seen:
+                continue  # the decision row of a poured line already refused through its whole line
+            seen.add((row["rule"], row["field"]))
         out.append(row)
     return out
 
@@ -93,10 +122,12 @@ def categories(candidate):
 
 
 def differ(a, b):
-    """The one-way-door categories both candidates name in which their choices differ. A category
-    only one of them names is no difference: padding a candidate distinguishes nothing (R4)."""
+    """The one-way-door categories both candidates name in which they share no choice. A category
+    only one of them names is no difference, and neither is a second choice padded into a category
+    both name while they share the first: padding a candidate distinguishes nothing (R4; round 3
+    CA2-4)."""
     ca, cb = categories(a), categories(b)
-    return sorted(name for name in set(ca) & set(cb) if ca[name] != cb[name])
+    return sorted(name for name in set(ca) & set(cb) if not (ca[name] & cb[name]))
 
 
 def candidate_refusals(answer):
@@ -173,6 +204,11 @@ def gate_refusals(answer, ctx):
                                "the gate discussion landed on (`docless.reason`); it lands in the doc's header"))
         elif docless["home"] == "staging" and not harvest.get("staging"):
             out.append(refusal("docless-home", "the docless doc's home is the staging home, and the input names none"))
+        stated = harvest.get("docless_reason")
+        if docless and not blank(docless.get("reason")) and stated and _norm(docless["reason"]) != _norm(stated):
+            out.append(refusal("docless-reason-mismatch", "the input opened the docless gate with the reason %r "
+                               "(`station.docless_reason`); the answer's `docless.reason` is that reason, the one the "
+                               "doc's Docless: header carries (%r)" % (stated, docless["reason"])))
         asked = [q for q in answer["questions"] if q.get("about") == "scope-doc" and not blank(q["answer"])]
         if not asked:
             out.append(refusal("docless-unasked", "the hunt found no scope doc; the owner is asked once whether one "
@@ -195,6 +231,18 @@ def gate_refusals(answer, ctx):
     if "failed_lanes" in review and review["outcome"] != "done":
         out.append(refusal("review-fields", "`failed_lanes` names the lanes that did not return beside a done review; "
                            "a %s review carries none (a review whose every lane failed is `failed`)" % review["outcome"]))
+    elif "failed_lanes" in review:
+        # round 3 CA2-5: each failed lane is a row a request of this run built, with no saved take, once
+        rows = [f["row"] for f in review["failed_lanes"]]
+        saved = set(t["row"] for t in ctx["takes"])
+        requested = ctx.get("requested") or []
+        bad = [r for r in rows if r not in requested or r in saved]
+        repeated = sorted(set(r for r in rows if rows.count(r) > 1))
+        if bad or repeated:
+            out.append(refusal("review-fields", "`failed_lanes` names %s: each failed lane is a row a `request` of "
+                               "this run built (%s), with no saved take (%s), named once"
+                               % (", ".join(bad + repeated), ", ".join(requested) or "none",
+                                  ", ".join(sorted(saved)) or "none")))
     if review["outcome"] == "done" and not ctx["takes"]:
         out.append(refusal("review-no-take", "the review is `done`, and no take was saved in this run (`save-take`); "
                            "a review counts as done when at least one take was saved"))

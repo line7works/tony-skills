@@ -41,6 +41,11 @@
       "pattern": "^(?![^\\n\\r]*·)[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
       "description": "one field of the walkthrough line: one line, non-blank, never holding the line's separator (the middle dot), which would forge a second field"
     },
+    "walk_item": {
+      "type": "string",
+      "pattern": "^(?![^\\n\\r]*(·|; ))[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+      "description": "one item of the walkthrough's `must` list: one line, non-blank, never holding the line's separator (the middle dot) or the list's (`; `), which would forge a second field or a second requirement"
+    },
     "free": {
       "type": "string",
       "pattern": "^[^\\n\\r]*(?![\\s\\S])",
@@ -270,7 +275,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/walk_field"
+            "$ref": "#/$defs/walk_item"
           }
         },
         "trace": {

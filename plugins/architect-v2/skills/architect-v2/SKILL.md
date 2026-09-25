@@ -62,7 +62,10 @@ is the contract of every command; `references/answer.schema.json` is your answer
    run, and his pick goes into a new run's `station.scope_doc`. `none`: ask him once, in plain text, whether a
    scope doc exists somewhere the glob cannot see, and take the path he gives (a new run, with it
    as `station.scope_doc`). Only his "none" opens the docless gate: discuss why the station runs
-   without a scope doc until the talk lands on a reason and a working name.
+   without a scope doc until the talk lands on a reason and a working name. When the hunt's `one`
+   was another project's doc, `harvest` would take it: on his "none", start a new run whose input
+   carries `station.docless: true` and `station.docless_reason` (that reason, word for word); it
+   sets the hit aside, and your answer's `docless.reason` is the same reason.
 4. Run `select --run-dir D --hunt architecture --name <slug>`: the slug is the scope doc's idea
    (the `<idea>` of `docs/scope/<date>-<idea>.md` or `<idea>-scope.md`), or the working name on a
    docless run.
@@ -93,7 +96,7 @@ answers plus the sorted scope; when a thread runs long, record what is settled a
 
 1. **The walkthrough target.** A named real person (never "users"), the date of the session where
    they use it, and what they must be able to do, as a short list. All three fields filled; `n/a` is
-   a value, a blank is not.
+   a value, a blank is not. Each `must` item is one requirement, with no `; ` inside it.
 2. **The candidates and the razor.** Two or three structures, distinct in at least one one-way-door
    category (write each as `category:choice`), each with what it assumes and what it makes
    expensive later. Grill each against the walkthrough: every component names the requirement it

@@ -130,6 +130,15 @@ class ArchitectsOwnRefusals(_Record):
         a["candidates"][1]["categories"] = ["platform:library", "storage:none"]
         self.refused(a, "candidates-not-distinct")
 
+    def test_a_second_choice_padded_into_a_shared_category_is_no_difference(self):
+        """CA2-4: a category differs only when the two candidates share no choice in it."""
+        for first, second in ((["platform:library", "platform:server"], ["platform:library"]),
+                              (["platform:library", "storage:csv"], ["platform:library", "storage:csv", "storage:none"])):
+            a = archlib.clean_answer()
+            a["candidates"][0]["categories"] = first
+            a["candidates"][1]["categories"] = second
+            self.refused(a, "candidates-not-distinct")
+
     def test_a_component_serving_nothing(self):
         a = archlib.clean_answer()
         a["components"].append({"name": "metrics exporter", "serves": ""})
@@ -222,6 +231,16 @@ class TheSchema(_Record):
         a = archlib.clean_answer()
         a["walkthrough"]["who"] = "Sam %s Bench" % M
         self.refused(a, None, code=4)
+
+    def test_a_must_item_holding_the_list_separator_is_exit_4(self):
+        """CA2-6: `must` renders joined with `; `; an item holding it would read as two requirements."""
+        a = archlib.clean_answer()
+        a["walkthrough"]["must"] = ["count turns; reset the count"]
+        self.refused(a, None, code=4)
+        a = archlib.clean_answer()
+        a["walkthrough"]["must"] = ["count turns;", "reset the count"]
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 5, out + err)  # held by the razor, not the schema: no `; ` in the item
 
     def test_an_unknown_key_is_exit_4(self):
         a = archlib.clean_answer()
@@ -365,6 +384,63 @@ class ARunBlockUnderDeferred(unittest.TestCase):
         self.assertEqual(doc["stop_tag"], "living-doc-malformed")
         self.assertIn("### Run 1", doc["reason"])
         self.assertEqual(archlib.sha(os.path.join(ws, LIVING_REL)), before)
+
+
+DASHED = archlib.SCOPE.replace(
+    "- Where the count is kept between sessions %s parked: needs research\n" % D,
+    "- Where the count is kept between sessions %s parked: needs research\n"
+    "- counts kept on the bench %s or on the rig server %s parked: waiting on the rig budget\n" % (D, D, D))
+
+
+class ThePouredDecisionField(_Record):
+    """Round 3 R4 (CS-1, the lane's half): the neutral view gives a poured-concrete line's DECISION
+    field (`<category> <dash> <decision> <dash> <why>`: everything between the first field and the
+    last) as a row's text, with the category and the why beside it, beside the whole line; so the
+    shared text rule meets a parked or open line re-asserted as the decision alone, and as the
+    whole line, even where the decision itself holds the dash."""
+
+    FILES = {archlib.SCOPE_REL: DASHED}
+
+    def parked(self, text):
+        from station_core import ledger
+        return next(r for r in ledger.read(DASHED) if r["tag"] == "parked" and r["text"] == text)
+
+    def poured(self, text, trace=None):
+        a = archlib.clean_answer()
+        for q in a["questions"]:
+            q["touches"] = []  # no question of this run settles a parked line here
+        a["poured_concrete"].append({"text": text, "tag": "decided",
+                                     "trace": trace or {"kind": "assumed", "ref": "it seemed settled"}})
+        return a
+
+    def test_the_whole_line_whose_decision_holds_the_dash_is_quietly_resolved(self):
+        words = "counts kept on the bench %s or on the rig server" % D
+        self.parked(words)
+        doc = self.refused(self.poured("storage %s %s %s one-way" % (D, words, D)), "quietly-resolved")
+        self.assertEqual(len([r for r in doc["refusals"] if r["rule"] == "quietly-resolved"]), 1, doc["refusals"])
+
+    def test_the_decision_alone_is_quietly_resolved(self):
+        words = "counts kept on the bench %s or on the rig server" % D
+        self.refused(self.poured(words), "quietly-resolved")
+        self.refused(self.poured("Where the count is kept between sessions"), "quietly-resolved")
+
+    def test_the_whole_line_of_a_plain_decision_is_quietly_resolved(self):
+        self.refused(self.poured("storage %s Where the count is kept between sessions %s one-way" % (D, D)),
+                     "quietly-resolved")
+
+    def test_a_question_that_settled_it_lets_it_pass(self):
+        words = "counts kept on the bench %s or on the rig server" % D
+        a = self.poured("storage %s %s %s one-way" % (D, words, D), trace={"kind": "question", "ref": "Q9"})
+        a["questions"].append({"id": "Q9", "text": "Where are the counts kept?", "touches": [self.parked(words)["id"]],
+                               "answer": "on the bench"})
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 0, out + err)
+
+    def test_an_untraced_form_line_is_refused_once(self):
+        a = archlib.clean_answer()
+        a["poured_concrete"].append({"text": "platform %s macOS %s the bench is a Mac" % (D, D), "tag": "decided"})
+        doc = self.refused(a, "untraced")
+        self.assertEqual(len([r for r in doc["refusals"] if r["rule"] == "untraced"]), 1, doc["refusals"])
 
 
 class TheAnswerIsNeverRepaired(_Record):

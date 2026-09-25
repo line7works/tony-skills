@@ -98,7 +98,7 @@ against a run that ended is exit 2, except `report`, which prints the recorded r
 | Command | Input | Output | Exits |
 |---|---|---|---|
 | `render-visual` | `--run-dir D`, a run whose doc this run wrote | `<slug>-architecture.html` beside the doc (in the run's `preview/` on report-only), in the receipt; stdout `{visual, next}` | 0; 2 out of turn, or a folder on the way that leads outside the homes (section 7.4), nothing written |
-| `record-publish` | `--run-dir D`, `--url URL` (the https URL the executor's publish returned: a host of dot-separated labels, an optional port and path, no space; omitted when it returned none), after a render | the `Artifact:` line written once (section 11), `publish.json` in the run; stdout `{outcome, artifact_url, reason, next}` | 0; 2 out of turn, a URL that is no such URL, a URL on a `publish: false` answer, no URL after this run recorded a published one, or a doc folder that leads outside the homes; 5 `artifact-url-changed` with nothing written; 10 `document-changed` |
+| `record-publish` | `--run-dir D`, `--url URL` (the https URL the executor's publish returned: a host of dot-separated labels, an optional port and path, no space; omitted when it returned none), after a render | the `Artifact:` line written once (section 11), `publish.json` in the run; stdout `{outcome, artifact_url, reason, next}` | 0; 2 out of turn, a URL that is no such URL, a URL on a `publish: false` answer, no URL after this run recorded a published URL for the same render, or a doc folder that leads outside the homes; 5 `artifact-url-changed` with nothing written; 10 `document-changed` |
 | `request` | `--run-dir D`, one `--row ROW` per reviewer the owner named, `--session-model ID` (the `claude-session` row only), `--model ROW=ID` (a typed id), `--roster FILE` (default: readers beside this core, route 3a then 3b) | one request per row under `requests/<call id>.json`; stdout `{requests: [{row, call_id, path, authorized}], mandate, next}` | 0; 2 out of turn, a docless run, no row, an unknown row, no roster, or a scope doc whose bytes are not the ones harvest read (its sha256), nothing written |
 | `save-take` | `--run-dir D`, `--row`, `--take FILE` (the reply's raw text), `--model` (the effective model), `--isolation` (the isolation label), `--sidecar` (the readers sidecar path) | the take saved verbatim under the review home (the home harvest recorded for the doc) and copied under `takes/`, `takes.json`, both in the receipt; stdout `{path, copy, lane, next}` | 0; 2 out of turn, a docless run, an unreadable file, a row no `request` of this run built, or a review folder that leads outside the homes; 5 `take-empty` with nothing saved |
 
@@ -110,6 +110,8 @@ The shared input (`station-loop.md` section 4), plus `station`, each field optio
 |---|---|
 | `station.scope_doc` | the scope doc the owner named: in his invocation (v1's first place to look), or his pick after a `selection-several` stop. An absolute path inside the workspace or the staging home; taken over the scope hunt |
 | `station.publish` | `false` when the owner said not to publish the visual in this run (E14-6); the answer then cannot publish (`publish-against-input`). Default `true`, v1's default |
+| `station.docless` | `true` when the scope hunt's single hit is not this project's scope doc (its `Intent:` line names another project) and the owner, asked once, said no scope doc exists for his: the hit is set aside and the docless gate opens (section 5.2). Requires `station.docless_reason`; excludes `station.scope_doc`. Default `false`. `several` still stops and asks |
+| `station.docless_reason` | the reason the executor states for the docless run, one line, only with `station.docless: true`: recorded with the set-aside hit, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason (`docless-reason-mismatch`) |
 
 `owner_word` is the one source of a review request's `authorized` flag (section 10). The run's date
 is the machine's local calendar date, read once per command; under `ARCHITECT_V2_TEST=1` the hook
@@ -141,6 +143,12 @@ It needs both selections (or `station.scope_doc` in place of the scope one). The
   else exit 2); else the scope hunt: `one` is taken; `several` stops the run `selection-several` with
   every candidate listed, never picked (the owner's pick arrives as `station.scope_doc` in a new
   run); `none` is the docless path: harvest continues, and the answer must carry the gate (section 6).
+  With `station.docless: true`, a `one` is set aside: the scope selection (`selection-scope.json`,
+  and so the result's `selection.scope`) gains `set_aside` (the hit's path and the input's
+  `station.docless_reason`), `harvest.json` and harvest's output carry it, the run is docless, and
+  the architecture hunt's `--name` is the working name, never refused against the hit's slug (v1's
+  gate: a single hit whose `Intent:` is another project matches nothing, and the owner's "none"
+  opens the docless gate). `several` stops `selection-several` whatever the flag says.
 - **The slug.** The scope doc's idea: the `<idea>` of `docs/scope/<YYYY-MM-DD>-<idea>.md`, of a flat
   `<idea>-scope.md`, or a dateless `docs/scope/<idea>.md`, never the date. The architecture hunt must
   have run with `--name` equal to it (exit 2 naming the slug otherwise). On a docless run the slug is
@@ -176,9 +184,9 @@ is one line: a line break would put a bare line, or a heading, inside a section 
 | `answer_version`, `run_id`, `session_id` | `1`; this run's id (`run-mismatch` otherwise); the executor's session, the adapter's `answer_fields.session_id`, equal to the input's `invocation.session_id` (`session-mismatch` otherwise) |
 | `project`, `trigger`, `changed` | the title's project; the run log's trigger; its `Changed this run:` (`first run` on the first) |
 | `questions` | every question put to the owner in this run: `id`, `text`, `touches` (the ledger line ids it touches), `answer` (blank: unanswered), optional `about` (`scope-doc` marks the input gate's one question) |
-| `docless` | only when no scope doc was found: `reason` (the doc's `Docless:` header) and `home` (`staging` or `workspace`) |
+| `docless` | only when no scope doc was found (or the input set the hunt's hit aside): `reason` (the doc's `Docless:` header; with `station.docless`, the input's `station.docless_reason`) and `home` (`staging` or `workspace`) |
 | `exit_ramp` | `continued` (true: a system, the interview went on) and `why` |
-| `walkthrough` | `who`, `when`, `must` (a list), all present and non-blank (`n/a` is a value, blank is not), none holding the line's separator (the middle dot), and its `trace` |
+| `walkthrough` | `who`, `when`, `must` (a list), all present and non-blank (`n/a` is a value, blank is not), none holding the line's separator (the middle dot), no `must` item holding the list's separator (`; `, which the doc joins the items with), and its `trace` |
 | `candidates` | each `name`, `categories` (`<one-way-door category>:<choice>`, such as `platform:library`), `assumes`, `later_cost` |
 | `pick`, `rejected` | the picked candidate's name (null when the interview ended); each other candidate's `name` and one-line `why` |
 | `components` | each `name` and `serves`, the walkthrough requirement it serves |
@@ -200,7 +208,11 @@ the question he answered.
 `record-answer` validates the answer against the schema (exit 4, the findings on stdout, nothing
 written); then runs the shared refusals of rule E14-11 once, through `station_core/answer.check`,
 on the answer's neutral view (the questions, and each line that records a decision: the walkthrough
-target, each new or struck poured-concrete and deferred line, each `NEEDS CHECK` line, each ruling),
+target, each new or struck poured-concrete and deferred line, each `NEEDS CHECK` line, each ruling;
+a new poured-concrete line on its form, `<category> <dash> <decision> <dash> <why>`, gives a second
+row whose text is its decision field, everything between the first field and the last, with the
+category and the why beside it, so the shared text rule meets a `parked` or `open` line asserted
+as the decision alone or as the whole line; a refusal of one line is reported once),
 with the trace kinds above; then this core's own checks; then renders the proposed doc and holds it
 to the no-loss check. Any refusal is exit 5 with every refusal on stdout, each `{"rule", "message",
 ...}`, and nothing written; the run stays where it was, so a corrected answer can be recorded.
@@ -218,17 +230,18 @@ one implementation of the shared refusals.
 | `docless-unasked` | no scope doc was found and no answered question `about: scope-doc` asked whether one exists where the glob cannot see |
 | `docless-with-scope-doc` | a `docless` block on a run that has a scope doc |
 | `docless-home` | the docless doc's home is the staging home and the input names none |
+| `docless-reason-mismatch` | the input carries `station.docless_reason` and the answer's `docless.reason` is another reason (compared whitespace-normalized) |
 | `exit-ramp-ended-with-candidates` | the interview ended at the exit ramp and the answer still carries candidates, a pick or a rejected list |
 | `candidates-fewer-than-two`, `candidates-more-than-three` | the interview continued with fewer than two candidates, or more than three |
 | `candidate-names-repeat` | two candidates share a name |
-| `candidates-not-distinct` | two candidates differ in no one-way-door category (their `categories` read as category and choice, each casefolded and whitespace-normalized; a difference counts only in a category both of them name) |
+| `candidates-not-distinct` | two candidates differ in no one-way-door category (their `categories` read as category and choice, each casefolded and whitespace-normalized; a difference counts only in a category both of them name, and only when they share no choice in it, so a second choice padded into a shared category is no difference) |
 | `pick-not-a-candidate` | the pick is null or names no candidate |
 | `rejected-mismatch` | the rejected list is not exactly the candidates not picked, once each |
 | `rejected-without-why` | a rejected candidate's why is blank |
 | `doors-missing` | the interview continued and `doors` is null |
 | `razor` | a component serves nothing (blank), or serves something that is not one of the walkthrough's `must` items |
 | `review-offer` | a scope-doc run whose review is `not-offered`, or a docless run whose review is anything else |
-| `review-fields` | a declined or failed review with no date, a failed one with no reason, a done one with no spine, `failed_lanes` on a review that is not done |
+| `review-fields` | a declined or failed review with no date, a failed one with no reason, a done one with no spine, `failed_lanes` on a review that is not done, or a `failed_lanes` row that is no row a `request` of this run built, a row whose take was saved, or a row named twice |
 | `review-no-take` | the review is `done` and no take was saved in this run |
 | `rulings-without-review` | rulings on a review that is not `done` |
 | `publish-against-input` | the answer publishes and the input's `station.publish` is false |
@@ -303,9 +316,11 @@ Every write of the run is in `<run_dir>/receipt.json` in order: `path`, `kind` (
 the run directory, `run_artifact` inside it), `sha256_before`, `sha256_after`. A document is written
 through a temporary file in its folder and a rename. Before any document write (`write`,
 `render-visual`, `save-take`, `record-publish`), the real path of the target's nearest existing
-folder must lie inside the workspace, the staging home or the run directory: a symlinked folder that
-leads elsewhere stops `write` `write-refused` and makes the own commands usage, with nothing
-written, so the result never lists a write at a path it did not write. Then the bytes on disk are
+folder must lie inside the home the target's own path names (the workspace, the staging home or
+the run directory): a symlinked folder that leads anywhere else, outside every home or from the
+workspace into the run directory or the staging home, stops `write` `write-refused` and makes the
+own commands usage, with nothing written, so the result never lists a write at a path it did not
+write. Then the bytes on disk are
 compared with what the run expects there (the harvested hash, or the hash this run last wrote): a
 difference stops the run `document-changed` with the bytes left as found. A new doc's path must hold
 no file.
@@ -404,9 +419,11 @@ re-run). `record-publish` records what it returned:
 | `publish: true`, `--url` and the doc records none | `published` | written once, below `Blind review:` |
 | `publish: true`, `--url` equal to the recorded URL | `published` | unchanged |
 | `publish: true`, `--url` another URL | refused, `artifact-url-changed`, exit 5 | untouched |
-| `publish: true`, no `--url` after this run recorded a published URL | usage, exit 2: the republish is recorded with the same URL | untouched |
+| `publish: true`, no `--url` after this run recorded a published URL for the same render | usage, exit 2: the republish is recorded with the same URL | untouched |
 
-A run that re-renders after the rulings records the republish before `report`.
+A run that re-renders after the rulings records the republish before `report`; when that
+republish returned no URL, the record without `--url` is taken (`rendered-not-published`, the
+line as it stands) and `report` says the doc was rendered and not published.
 
 ## 12. Records, report-only, the gate
 
@@ -440,7 +457,7 @@ answer key's, outside this repository's lane.
 | A1 no re-interview | a decided ledger line re-asked; a poured-concrete line with no trace; a trace that names nothing; a clean answer | `answer_refused`, `refusal_rules`, `answer_written` (the shared refusals on the case's answer) |
 | A2 candidates and the razor | one candidate; two in one category; a component serving nothing; a clean answer | `answer_refused`, `refusal_reason` (this core's candidate and razor checks, the ones `record-answer` runs) |
 | A3 the living doc | a proposed doc dropping the run-log blocks; deleting a poured-concrete line; a wrong run number; a clean re-run | `next_run`, `losses_count`, `runlog_refused`, `form_holds`, `round_trip_identical` |
-| A4 two actions | `publish: false`; a publish that returned no URL; a clean publish to the recorded URL | `visual_rendered`, `published`, `artifact_line_unchanged`, `terminal_status` (a real drive of this core's CLI, `check-input` to `report`, on a copy of the case; the translation's choices are stated in `lane_observe.py`) |
+| A4 two actions | `publish: false`; a publish that returned no URL; a clean publish to the recorded URL | `visual_rendered`, `published`, `artifact_line_unchanged`, `terminal_status` (a real drive of this core's CLI, `check-input` to `report`, in the case's own built tree, so the frame's `writes_none` measures the drive; the translation's choices are stated in `lane_observe.py`) |
 
 ## 15. Open points
 

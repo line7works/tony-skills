@@ -1,5 +1,10 @@
 {
   "cases": {
+    "invalid/content-docless-reason-mismatch.json": {
+      "docless": true,
+      "docless_reason": "an experiment the owner wants drawn before any precon",
+      "slug": "bench-counter"
+    },
     "invalid/content-docless-unasked.json": {
       "docless": true,
       "slug": "bench-counter"
@@ -13,6 +18,11 @@
     },
     "invalid/content-no-loss-run-block.json": {
       "living_doc": "living-doc-run-block-misplaced.md"
+    },
+    "valid/docless-set-aside.json": {
+      "docless": true,
+      "docless_reason": "an experiment the owner wants drawn before any precon",
+      "slug": "bench-counter"
     },
     "valid/docless.json": {
       "docless": true,

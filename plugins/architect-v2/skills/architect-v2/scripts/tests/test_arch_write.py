@@ -230,6 +230,54 @@ class ASymlinkedDocHome(unittest.TestCase):
         self.assertEqual(code, 2, out + err)
         self.assertEqual(archlib.listing(self.outside), before)
 
+    def test_a_link_into_the_run_directory_is_refused_and_report_holds(self):
+        """CA2-3: a workspace folder linked to a folder INSIDE the run directory is held to the
+        workspace it lies under by name: `write` stops `write-refused`, never a traceback, and
+        `report` prints a result that validates."""
+        self.run.to_harvest()
+        inner = os.path.join(self.run.run_dir, "inner")
+        os.makedirs(inner)
+        os.symlink(inner, os.path.join(self.ws, "docs", "architecture"))
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 10, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(doc["stop_tag"], "write-refused")
+        self.assertEqual(os.listdir(inner), [])
+        code, doc, out, err = self.run.report()
+        self.assertEqual(code, 10, out + err)
+        path = os.path.join(self.run.run_dir, "result.json")
+        code, out, err = testlib.run_script("validate-result.py", [path], cwd=self.run.cwd)
+        self.assertEqual(code, 0, out + err)
+
+    def test_a_link_into_the_staging_home_is_refused(self):
+        """CA2-3: a workspace folder linked into the staging home would write there under a
+        workspace path; it is refused the same way."""
+        staging = os.path.join(self.tmp, "staging")
+        os.makedirs(os.path.join(staging, "elsewhere"))
+        os.symlink(os.path.join(staging, "elsewhere"), os.path.join(self.ws, "docs", "architecture"))
+        run = archlib.ArchRun(self.tmp, self.ws, staging, name="run-staged")
+        self.assertEqual(run.to_harvest()[0], 0)
+        self.assertEqual(run.record(archlib.clean_answer())[0], 0)
+        code, doc, out, err = run.write()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "write-refused")
+        self.assertEqual(os.listdir(os.path.join(staging, "elsewhere")), [])
+
+    def test_render_into_a_link_into_the_run_directory_is_usage(self):
+        self.run.to_harvest()
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        self.assertEqual(self.run.write()[0], 0)
+        folder = os.path.join(self.ws, "docs", "architecture")
+        moved = os.path.join(self.run.run_dir, "moved")
+        os.rename(folder, moved)
+        os.symlink(moved, folder)
+        before = archlib.listing(moved)
+        code, doc, out, err = self.run.render()
+        self.assertEqual(code, 2, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(archlib.listing(moved), before)
+
 
 class ReportOnly(_Write):
 

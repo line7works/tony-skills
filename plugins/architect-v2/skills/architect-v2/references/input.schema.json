@@ -92,8 +92,28 @@
       "type": "object",
       "additionalProperties": false,
       "default": {},
-      "description": "architect-v2's own input fields (references/architect-v2-contract.md section 4), each optional.",
+      "description": "architect-v2's own input fields (references/architect-v2-contract.md section 4), each optional. `docless: true` carries `docless_reason` and excludes `scope_doc`; `docless_reason` comes only with `docless: true`.",
+      "allOf": [
+        {
+          "if": {"properties": {"docless": {"const": true}}, "required": ["docless"]},
+          "then": {"required": ["docless_reason"], "not": {"required": ["scope_doc"]}}
+        },
+        {
+          "if": {"required": ["docless_reason"]},
+          "then": {"properties": {"docless": {"const": true}}, "required": ["docless"]}
+        }
+      ],
       "properties": {
+        "docless": {
+          "type": "boolean",
+          "default": false,
+          "description": "true when the scope hunt's single hit is not this project's scope doc (its `Intent:` line is another project's) and the owner, asked once, said no scope doc exists for it: `harvest` sets the hit aside (the scope selection's `set_aside`) and the docless gate opens; `several` still stops and asks"
+        },
+        "docless_reason": {
+          "type": "string",
+          "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+          "description": "the reason the executor states for the docless run, one line: recorded with the set-aside hit, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason"
+        },
         "scope_doc": {
           "type": "string",
           "minLength": 2,

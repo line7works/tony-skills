@@ -82,8 +82,10 @@ def living_findings(text):
 
 
 def describe(workspace, staging, today, slug, scope_path, scope_text, living_path, living_text, run_id=None,
-             input_publish=True):
-    """The harvest record. Raises `station_core.ledger.LedgerRefused` on a ledger it cannot tag."""
+             input_publish=True, set_aside=None, docless_reason=None):
+    """The harvest record. Raises `station_core.ledger.LedgerRefused` on a ledger it cannot tag.
+    `set_aside` is the scope hunt's single hit the input set aside (`{path, reason}`) and
+    `docless_reason` the input's `station.docless_reason`, which the answer's docless reason must be."""
     rows = ledger.read(scope_text) if scope_text is not None else []
     scope = None
     if scope_path is not None:
@@ -110,4 +112,4 @@ def describe(workspace, staging, today, slug, scope_path, scope_text, living_pat
     return {"harvest_version": 1, "run_id": run_id, "today": today, "workspace": workspace, "staging": staging,
             "slug": slug, "docless": scope is None, "scope_doc": scope, "ledger": rows,
             "ledger_counts": ledger.counts(rows), "living_doc": living, "target": target,
-            "input_publish": bool(input_publish)}
+            "input_publish": bool(input_publish), "set_aside": set_aside, "docless_reason": docless_reason}

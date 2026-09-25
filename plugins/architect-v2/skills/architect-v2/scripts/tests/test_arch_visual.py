@@ -159,6 +159,32 @@ class RecordPublish(_Visual):
         sr = testlib.load_json(os.path.join(run.run_dir, "result.json"))["station_result"]
         self.assertEqual((sr["publish_outcome"], sr["published"], sr["artifact_url"]), ("published", True, URL))
 
+    def test_an_honest_no_url_republish_after_a_re_render_is_recorded(self):
+        """CA2-7: published, then the amendment's write and render, then the republish returned no
+        URL: the no-URL record keys on the CURRENT render, so it is recorded and reported as
+        rendered and not published, never a dead end."""
+        run, path = self.written()
+        self.assertEqual(run.render()[0], 0)
+        self.assertEqual(run.publish(URL)[0], 0)
+        amended = archlib.clean_answer(review={"outcome": "declined", "date": archlib.TODAY})
+        code, doc, out, err = run.record(amended)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(run.write()[0], 0)
+        self.assertEqual(run.render()[0], 0)
+        before = archlib.sha(path)
+        code, doc, out, err = run.publish()
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(doc["outcome"], "rendered-not-published")
+        self.assertEqual(archlib.sha(path), before)
+        code, doc, out, err = run.publish()
+        self.assertEqual(code, 0, out + err)
+        code, doc, out, err = run.report()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["status"], "completed")
+        sr = doc["station_result"]
+        self.assertEqual((sr["publish_outcome"], sr["published"]), ("rendered-not-published", False))
+        self.assertIn("rendered, not published", doc["chat"])
+
     def test_publish_before_render_is_usage(self):
         run, path = self.written()
         self.assertEqual(run.publish(URL)[0], 2)
