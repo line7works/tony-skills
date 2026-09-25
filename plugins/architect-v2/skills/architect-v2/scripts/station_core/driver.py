@@ -22,6 +22,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -256,7 +257,9 @@ SIDE_EFFECTS = """Side effects:
   check-input     creates the run directory; writes input.json and checkpoint.json in it
   select          writes selection-<hunt>.json and rewrites checkpoint.json in the run directory
   harvest, record-answer, write, report
-                  the lane's (station-loop.md section 3); until built, they write nothing
+                  the lane's (station-loop.md section 3): the run directory, and the documents `write`
+                  renders, each listed in the receipt; a phase the lane has not built writes nothing
+  own commands    the lane contract's (station-loop.md section 3.8)
   identity, skill-identity
                   none
   Nothing is written outside the run directory by the frame. No network, no model call, no harness.
@@ -312,24 +315,61 @@ def build_parser(station, hunts, commands=None):
 SHARED_COMMANDS = ("check-input", "select", "identity", "skill-identity") + LANE_PHASES
 
 
+COMMON_FLAGS = ("--skill-root", "--records-root", "-h", "--help")
+OWN_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
 def check_commands(commands):
-    """A core's own commands, checked for shape and for a name that collides with a shared one."""
+    """A core's own commands, checked for shape: every field present, a callable handler, a name of
+    lowercase letters, digits and hyphens that is neither a shared command's nor another own command's,
+    and no flag that collides with a common option or is not a flag at all."""
     out = []
     for own in commands or ():
         for key in ("name", "help", "arguments", "handler"):
             if key not in own:
                 raise ValueError("a core's own command is missing %r: %r" % (key, own))
-        if own["name"] in SHARED_COMMANDS or any(own["name"] == c["name"] for c in out):
-            raise ValueError("a core's own command may not reuse the name %r" % own["name"])
+        name = own["name"]
+        if not isinstance(name, str) or not OWN_NAME.match(name):
+            raise ValueError("a core's own command needs a name of lowercase letters, digits and hyphens: %r" % (name,))
+        if name in SHARED_COMMANDS or any(name == c["name"] for c in out):
+            raise ValueError("a core's own command may not reuse the name %r" % name)
+        if not callable(own["handler"]):
+            raise ValueError("the handler of %r is not callable" % name)
+        if not isinstance(own["arguments"], (list, tuple)):
+            raise ValueError("the arguments of %r are not a list" % name)
         for argument in own["arguments"]:
-            if "flags" not in argument:
-                raise ValueError("an argument of %r has no flags: %r" % (own["name"], argument))
+            if not isinstance(argument, dict):
+                raise ValueError("an argument of %r is not a mapping: %r" % (name, argument))
+            flags = argument.get("flags")
+            if not flags or not isinstance(flags, (list, tuple)):
+                raise ValueError("an argument of %r has no flags: %r" % (name, argument))
+            for flag in flags:
+                if not isinstance(flag, str) or not flag.startswith("-"):
+                    raise ValueError("an argument flag of %r is not a flag: %r" % (name, flag))
+                if flag in COMMON_FLAGS:
+                    raise ValueError("an argument of %r reuses the common option %r" % (name, flag))
+            dest = argument.get("dest") or [f for f in flags if f.startswith("--")][:1] or [flags[0]]
+            dest = (dest if isinstance(dest, str) else dest[0]).lstrip("-").replace("-", "_")
+            if dest in RESERVED_DESTS:
+                raise ValueError("an argument of %r would fill the reserved destination %r" % (name, dest))
         out.append(own)
     return out
 
 
+RESERVED_DESTS = ("command", "skill_root", "records_root", "help")
+
+
+def check_handlers(handlers):
+    """A core's `HANDLERS` name lane phases only; a key outside them (a misspelling) is a defect."""
+    for phase in handlers or {}:
+        if phase not in LANE_PHASES:
+            raise ValueError("HANDLERS names %r, which is no lane phase (%s)" % (phase, ", ".join(LANE_PHASES)))
+    return handlers or {}
+
+
 def main(station, hunts, handlers, argv=None, commands=None):
     commands = check_commands(commands)
+    handlers = check_handlers(handlers)
     parser = build_parser(station, hunts, commands)
     args = parser.parse_args(argv)
     if not args.command:

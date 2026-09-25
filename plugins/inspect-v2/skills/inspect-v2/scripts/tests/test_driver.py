@@ -299,16 +299,40 @@ class OwnCommands(_Cli):
     def test_a_shared_name_or_a_missing_field_is_a_defect_of_the_script(self):
         for source in ("[{'name': 'select', 'help': 'h', 'arguments': [], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--skill-root']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['thing']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [], 'handler': 'show'}]",
+                       "[{'name': '', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'two words', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'Thing', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': None, 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--command']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['-c'], 'dest': 'skill_root'}], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)
             self.assertIn("ValueError", err, source)
 
     def test_no_own_commands_lists_none(self):
-        code, out, err = self.cli(["--help"])
+        path = self.own_driver("[]")
+        code, out, err = self.run_own(path, ["--help"])
         self.assertEqual(code, 0, err)
         self.assertIn("Commands of this core", out)
+        self.assertIn("  (none)", out)
+        self.assertIn("own commands    the lane contract's", out)
+
+    def test_a_handlers_key_outside_the_lane_phases_is_a_defect(self):
+        path = os.path.join(self.tmp, "bad.py")
+        testlib.write_text(path, "\n".join([
+            "import os, sys",
+            "sys.dont_write_bytecode = True",
+            "sys.path.insert(0, %r)" % testlib.SCRIPTS,
+            "from station_core import driver",
+            "sys.exit(driver.main(%r, {}, {'harvst': lambda ctx, args: 0}))" % testlib.CORE]))
+        code, out, err = self.run_own(path, ["--help"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("harvst", err)
 
 
 class Validators(_Cli):
