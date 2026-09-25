@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 from . import exits, fsio, hunt as huntmod, inputs, validate
 from .records_client import ComponentUnavailable
@@ -251,7 +252,7 @@ EXIT_HELP = """Exit codes:
   2   usage: a bad argument, a file that is not there or not JSON, the wrong phase, an unknown hunt
   3   missing dependency: jsonschema, or (inspect-v2) the records component. One line on stderr
   4   validation: a supplied file failed its schema; nothing is written
-  5   the recorded answer was refused on its content (E14-11); nothing is written
+  5   refused: the recorded answer on its content (E14-11), or an input, a path or a run artifact a core's own rule refuses; nothing is written
   10  the run reached a terminal status (a completion or a stop)
 """
 
@@ -403,42 +404,91 @@ def check_handlers(handlers):
 DIAGNOSTIC_EXITS = (exits.GENERAL, exits.USAGE, exits.MISSING_DEPENDENCY)
 
 
+class _Capture(io.StringIO):
+    """A handler's sys.stdout: a handler that closes it does not take the check down with it."""
+
+    def close(self):
+        pass
+
+
+def _strict_constant(name):
+    raise ValueError("%s is not JSON" % name)
+
+
+def _unique_keys(pairs):
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError("a key repeats in one object")
+    return dict(pairs)
+
+
+def _flush_real_stdout():
+    real = sys.__stdout__
+    if real is not None and not real.closed:
+        real.flush()
+
+
 def checked_dispatch(handler, ctx, args):
     """Every command's exit code and stdout are checked before either leaves the process (the fifteenth seam
-    fix: the outside reviewer's L-3, P-4, A3 and I F7). The handler runs with stdout captured. It may return
-    only an exit code the interface documents (`exits.ALL`); on a diagnostic exit (1, 2, 3) it has written
-    nothing to stdout; on every other exit its stdout is exactly one JSON object carrying this run's envelope
-    (interface_version, plugin_version, station); a SystemExit inside it is allowed only as a diagnostic exit
-    with nothing on stdout (the frame's missing-dependency path). Anything else is a
-    Defect: exit 1 with the sentence on stderr and nothing released to stdout. A Terminal raised inside is
-    emitted as before and then checked the same way; a Usage raised inside propagates as usage. The frame's
-    own commands, the lane phases and a core's own commands all pass through here: one rule."""
-    captured = io.StringIO()
+    fix: the outside reviewer's L-3, P-4, A3 and I F7). The handler runs with stdout captured twice: its
+    sys.stdout is a buffer, and the process's file descriptor 1 (what `sys.__stdout__`, `os.write(1, ...)` and
+    a child process that inherits stdout reach) points at a temporary file; a byte that lands there is a
+    defect. It may return only an exit code the interface documents (`exits.ALL`); on a diagnostic exit (1, 2,
+    3) it has written nothing to stdout; on every other exit its stdout is exactly one strict JSON object (no
+    NaN or Infinity, no repeated key) carrying this run's envelope (interface_version, plugin_version,
+    station, each of the envelope's own type); a SystemExit inside it is allowed only as a diagnostic exit
+    with nothing on stdout (the frame's missing-dependency path). Anything else is a Defect: exit 1 with the
+    sentence on stderr and nothing released to stdout. A Terminal raised inside is emitted as before and then
+    checked the same way; a Usage raised inside propagates as usage. The frame's own commands, the lane
+    phases and a core's own commands all pass through here: one rule."""
+    captured = _Capture()
+    raised = None
+    sys.stdout.flush()
+    _flush_real_stdout()
     try:
-        with contextlib.redirect_stdout(captured):
-            try:
-                code = handler(ctx, args)
-            except Terminal as terminal:
-                code = emit(terminal.document, exits.TERMINAL)
-    except SystemExit as exc:
+        saved = os.dup(1)
+    except OSError:
+        saved = None
+    with tempfile.TemporaryFile() as leak:
+        if saved is not None:
+            os.dup2(leak.fileno(), 1)
+        try:
+            with contextlib.redirect_stdout(captured):
+                try:
+                    code = handler(ctx, args)
+                except Terminal as terminal:
+                    code = emit(terminal.document, exits.TERMINAL)
+        except SystemExit as exc:
+            raised = exc
+        finally:
+            _flush_real_stdout()
+            if saved is not None:
+                os.dup2(saved, 1)
+                os.close(saved)
+        leak.seek(0)
+        if leak.read(1):
+            raise Defect("a command handler wrote to the process's stdout outside the driver's capture")
+    output = captured.getvalue()
+    if raised is not None:
         # the frame's own missing-dependency path exits 3 through SystemExit with nothing on stdout; that is a
         # diagnostic exit like any other; every other SystemExit is a defect
-        if type(exc.code) is int and exc.code in DIAGNOSTIC_EXITS and not captured.getvalue().strip():
-            return exc.code
-        raise Defect("a command handler raised SystemExit: %r" % (exc.code,))
+        if type(raised.code) is int and raised.code in DIAGNOSTIC_EXITS and not output.strip():
+            return raised.code
+        raise Defect("a command handler raised SystemExit: %r" % (raised.code,))
     if type(code) is not int or code not in exits.ALL:
         raise Defect("a command handler returned an exit code the interface does not document: %r" % (code,))
-    output = captured.getvalue()
     if code in DIAGNOSTIC_EXITS:
         if output.strip():
             raise Defect("a command handler wrote to stdout on a diagnostic exit %d" % code)
         return code
     try:
-        document = json.loads(output)
+        document = json.loads(output, parse_constant=_strict_constant, object_pairs_hook=_unique_keys)
     except ValueError:
         raise Defect("a command handler did not emit exactly one JSON document on exit %d" % code)
     expected = ctx.envelope()
-    if not isinstance(document, dict) or any(document.get(key) != value for key, value in expected.items()):
+    if not isinstance(document, dict) or any(
+            type(document.get(key)) is not type(value) or document.get(key) != value
+            for key, value in expected.items()):
         raise Defect("a command handler emitted a document without this run's envelope")
     sys.stdout.write(output)
     sys.stdout.flush()
