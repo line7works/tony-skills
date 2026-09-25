@@ -335,7 +335,11 @@ def check_commands(commands):
             raise ValueError("a core's own command may not reuse the name %r" % name)
         if not callable(own["handler"]):
             raise ValueError("the handler of %r is not callable" % name)
+        if not isinstance(own["arguments"], (list, tuple)):
+            raise ValueError("the arguments of %r are not a list" % name)
         for argument in own["arguments"]:
+            if not isinstance(argument, dict):
+                raise ValueError("an argument of %r is not a mapping: %r" % (name, argument))
             flags = argument.get("flags")
             if not flags or not isinstance(flags, (list, tuple)):
                 raise ValueError("an argument of %r has no flags: %r" % (name, argument))
@@ -344,12 +348,28 @@ def check_commands(commands):
                     raise ValueError("an argument flag of %r is not a flag: %r" % (name, flag))
                 if flag in COMMON_FLAGS:
                     raise ValueError("an argument of %r reuses the common option %r" % (name, flag))
+            dest = argument.get("dest") or [f for f in flags if f.startswith("--")][:1] or [flags[0]]
+            dest = (dest if isinstance(dest, str) else dest[0]).lstrip("-").replace("-", "_")
+            if dest in RESERVED_DESTS:
+                raise ValueError("an argument of %r would fill the reserved destination %r" % (name, dest))
         out.append(own)
     return out
 
 
+RESERVED_DESTS = ("command", "skill_root", "records_root", "help")
+
+
+def check_handlers(handlers):
+    """A core's `HANDLERS` name lane phases only; a key outside them (a misspelling) is a defect."""
+    for phase in handlers or {}:
+        if phase not in LANE_PHASES:
+            raise ValueError("HANDLERS names %r, which is no lane phase (%s)" % (phase, ", ".join(LANE_PHASES)))
+    return handlers or {}
+
+
 def main(station, hunts, handlers, argv=None, commands=None):
     commands = check_commands(commands)
+    handlers = check_handlers(handlers)
     parser = build_parser(station, hunts, commands)
     args = parser.parse_args(argv)
     if not args.command:
