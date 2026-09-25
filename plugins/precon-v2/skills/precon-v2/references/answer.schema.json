@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/station-v2/precon-v2/answer.schema.json",
+  "title": "precon-v2 recorded answer",
+  "description": "The executor's one recorded answer for a precon-v2 run (references/precon-v2-contract.md section 5), handed to `record-answer`. Closed at every level. This schema holds the SHAPE only: every content rule (a decided line with no source, an assumed line with no why, a parked line without one of the three reasons, a quietly resolved line, a needs-research question resolved, a missing or blank gate line) is a refusal of record-answer, exit 5 with the rule named, so fields those rules read are optional here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "answer_version",
+    "run_id",
+    "session_id",
+    "triage",
+    "questions",
+    "lines",
+    "sitting"
+  ],
+  "properties": {
+    "answer_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "this run's id; equal to the input's run_id"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the executor's session, the adapter's answer_fields.session_id; equal to the input's invocation.session_id"
+    },
+    "triage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tier",
+        "why"
+      ],
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": [
+            "napkin",
+            "bounded",
+            "architectural"
+          ]
+        },
+        "why": {
+          "type": "string",
+          "description": "the one-line reason for the tier, as said aloud"
+        },
+        "no_scope_doc": {
+          "type": "boolean",
+          "description": "napkin only: the owner took 'no scope doc, straight to /blueprint'; the run then carries no line and writes no file"
+        }
+      }
+    },
+    "doc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "intent"
+      ],
+      "description": "a NEW doc only: its title (the <Idea> of the title line) and its Intent line",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "string"
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "description": "every question put to the owner in this run",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "touches"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "touches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "the ledger line ids the question touches"
+          },
+          "answer": {
+            "type": "string",
+            "description": "the owner's answer, verbatim; absent or blank when unanswered"
+          },
+          "needs_research": {
+            "type": "boolean",
+            "description": "the question needs outside research: it is parked as needs research and never resolved in the run"
+          }
+        }
+      }
+    },
+    "lines": {
+      "type": "array",
+      "description": "every line the executor asserts: new Decisions lines, lines settled, lines passed forward, and open calls",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "tag"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string",
+            "enum": [
+              "decided",
+              "assumed",
+              "parked",
+              "open"
+            ]
+          },
+          "trace": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "description": "where the line comes from. `ledger`: a ledger line id of the scope doc this run read (the line passed forward, or settled); `question`: the id of a question of this run the owner answered; `owner_words`: the owner's words, quoted; `repo_path`: a path in the workspace; `assumed`: the executor's why (assumed lines only). Checked by station_core/answer.py and precon's own rules, never by this schema alone.",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            }
+          },
+          "reason": {
+            "type": "string",
+            "description": "a parked line: needs research, needs prototype, or waiting on <x>"
+          },
+          "waits_on": {
+            "type": "string",
+            "description": "an open line: the owner's call it waits on"
+          }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "description": "what the owner ruled out, each with its reason and its trace",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "reason"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "trace": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "description": "where the line comes from. `ledger`: a ledger line id of the scope doc this run read (the line passed forward, or settled); `question`: the id of a question of this run the owner answered; `owner_words`: the owner's words, quoted; `repo_path`: a path in the workspace; `assumed`: the executor's why (assumed lines only). Checked by station_core/answer.py and precon's own rules, never by this schema alone.",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "research": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "paths or links to research the owner did himself"
+    },
+    "open_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "unresolved threads for the next sitting, written under Open:"
+    },
+    "exit_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the cold read. In the run that built requests: `rows`, the rows named (their results are read from readers' sidecars). In a later run: `cold_read_doc`, `summary` and `dispositions`.",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cold_read_doc": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "dispositions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "row",
+              "item",
+              "disposition"
+            ],
+            "properties": {
+              "row": {
+                "type": "string"
+              },
+              "item": {
+                "type": "string"
+              },
+              "disposition": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sitting": {
+      "type": "string",
+      "enum": [
+        "continues",
+        "ends"
+      ],
+      "description": "`ends` on the sitting's last run (the read-back and the full stop); `continues` on a round that hands on to the next"
+    },
+    "gate": {
+      "type": "string",
+      "description": "the one-line justification that every branch was visited or parked (on a round that continues: what this run visited and what it leaves open). Required by record-answer's rule gate-missing, not by this schema"
+    }
+  }
+}

@@ -16,7 +16,8 @@ E14). There is no invocation helper for it, so the input cannot be built with it
 schema requires `invocation.harness`, `caller` and `mode`, and an input without them is refused at
 `check-input` with exit 4. Say so and stop; never type the block by hand.
 
-Every profile carries the E9 seam's twelve sections in the same order; a section the frame cannot
-answer yet says which lane fills it. The helpers are the E13 cores' own (`_common.py` byte for
+Every profile carries the E9 seam's twelve sections in the same order, each answered (the frame's,
+and the station's own, filled in its slice 2 lane); `tests/test_profile.py` in each adapter holds
+the order and the station's values to the core. The helpers are the E13 cores' own (`_common.py` byte for
 byte), run under Python 3.9 with the standard library only, and are resolved from this directory,
 never from a checkout or a cache. `precon-v2` itself is `precon-v2`.

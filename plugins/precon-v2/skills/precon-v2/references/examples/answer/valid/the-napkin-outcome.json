@@ -1,0 +1,14 @@
+{
+  "answer_version": 1,
+  "gate": "napkin: nothing to branch; the owner took no scope doc",
+  "lines": [],
+  "questions": [],
+  "run_id": "run-0003",
+  "session_id": null,
+  "sitting": "ends",
+  "triage": {
+    "no_scope_doc": true,
+    "tier": "napkin",
+    "why": "describable in one sentence"
+  }
+}

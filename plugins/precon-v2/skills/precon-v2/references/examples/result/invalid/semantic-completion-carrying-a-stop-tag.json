@@ -12,6 +12,28 @@
   "run_dir": "/tmp/station-runs/run-0001",
   "run_id": "run-0001",
   "station": "precon-v2",
+  "station_result": {
+    "board": "decided 2 · assumed 1 · parked 1 · open your-calls 1",
+    "chat_block": "PRECON: turnstile\nDoc: /tmp/widget-workspace/docs/scope/2026-09-20-widget.md\nCounts: decided 2 · assumed 1 · parked 1 · out of scope 1\nParked: Where the count is kept between sessions \u2014 parked: needs research\nGate: every branch was visited or parked\nNext: /blueprint when ready.",
+    "counts": {
+      "assumed": 1,
+      "decided": 2,
+      "out_of_scope": 1,
+      "parked": 1
+    },
+    "doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+    "exit_test": null,
+    "gate": "every branch was visited or parked",
+    "home": "repo",
+    "idea": "turnstile",
+    "parked": [
+      "Where the count is kept between sessions \u2014 parked: needs research"
+    ],
+    "planned": [],
+    "sitting": "ends",
+    "tier": "bounded",
+    "triage_why": "a normal feature with known edges"
+  },
   "status": "completed",
   "stop_tag": "selection-none",
   "writes": [

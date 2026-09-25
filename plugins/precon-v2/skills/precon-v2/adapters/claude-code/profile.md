@@ -2,8 +2,8 @@
 
 The precon-v2 adapter for Claude Code (E14 slice 1, the frame; the E9 seam's profile, twelve sections
 in order, E13's build-v2 and signoff-v2 adapters as the pattern). Read this after `../README.md`
-and before running `check-input`. A section the frame can answer is answered here; a section the
-station's own behavior decides is marked for its slice 2 lane. Labels follow E9-11
+and before running `check-input`. The frame answered the sections it could; lane P (slice 2)
+answered the ones the station's own behavior decides. Labels follow E9-11
 (`harness-enforced`, `helper-derived`, `instruction-bound`); a claim with no record is not made.
 
 **What the executor types and what it never types.** Run `invocation.py` and copy its `invocation`
@@ -17,14 +17,24 @@ schema). `--caller NAME` only when a calling station's payload names one.
 
 `invocation.harness` is `claude-code`, this adapter's own name (`helper-derived`). The version, the
 entry and the sandbox are measurement only, read by the helper the E13 way (`_common.py`, byte for
-byte the E13 cores' file). Measured values for this core's installed package: (lane P fills this), and the
-control room's install proofs at the hand-back.
+byte the E13 cores' file). Measured values for this core's installed package, by lane P on
+2026-09-25 with claude 2.1.282 (the first token of `claude --version`): `setups/claude-code/install.sh`
+into a fresh isolated home installed `precon-v2` 0.1.0 and `readers` 1.0.1 as `plugin` entries under
+that home's `config/plugins/cache/precon-v2-setup/`, exit 0 and no failed command;
+`verify-install.sh` then found the installed copy equal to this checkout (a diff of 0 lines), the
+frontmatter equal, no symlink in the installed package, and the same skill-identity
+`content_sha256` from both copies. The control room's install proofs at the hand-back stay the
+record.
 
 ## 2. Model and floor
 
 Does not apply to the input: `invocation` carries no model. `measurement.model_id` records the
-session's model for the record only (`helper-derived`). Whether this station names a model floor
-for a reader it summons is the station's own rule (lane P fills this); a reader's floor is readers' roster's.
+session's model for the record only (`helper-derived`). This station names no model floor for a
+reader: the exit test's requests carry no `floor` (v1 names none), so a reader's model is readers'
+roster default or the id the owner typed against that row (`request --model ROW=ID`); the
+`session_model` of a `claude-session` request is the id this session reports for itself
+(`request --session-model`, `instruction-bound`). A reader's floor, where one applies, is readers'
+roster's.
 
 ## 3. Run id and directory
 
@@ -38,8 +48,11 @@ run (`references/station-loop.md` sections 3.1 and 4).
 The owner's word for an outside reader is the input's `owner_word` field (the rows his words name
 and the words verbatim), the one source of a request's `authorized` flag
 (`references/station-loop.md` section 8, rule 5). No turn reference is recorded in the frame, so no
-`turns.py` ships. How the executor quotes the owner's words, and whether a turn map is needed,
-(lane P fills this).
+`turns.py` ships. The executor copies the owner's words verbatim into `owner_word.words` and the
+rows those words name into `owner_word.rows` (`instruction-bound`: no helper reads a turn); they
+are his answer to the cold-read question, and they go into the NEXT run's input, the exit-test
+run (`references/precon-v2-contract.md` section 7). A recorded answer's `owner_words` trace quotes
+him the same way. No turn map is needed: nothing in this station's result points at a turn.
 
 ## 5. `session_wrote_fix`
 
@@ -50,19 +63,32 @@ the session's own id, found through the harness's `CLAUDE_CODE_SESSION_ID` and b
 
 ## 6. Run date
 
-Does not apply to the adapter: a document's date is rendered by the core (lane P fills this).
+Does not apply to the adapter: a document's date is rendered by the core. It is the input's
+`station.date` (`YYYY-MM-DD`, `instruction-bound`), or, when the input carries none, the machine's
+local calendar date, which `harvest` reads and records in `harvest.json` (`helper-derived`). A new
+scope doc's name and title and a cold-read doc's name carry it.
 
 ## 7. The verifier capability
 
 The station summons no verifier of its own. Readers, where it uses them (the exit test, the blind review, the lenses), are
 summoned through `/readers` with the request `station_core/readers_request.py` builds; the
-transport, the model and the containment are readers' roster's. Which readers and mandates
-(lane P fills this).
+transport, the model and the containment are readers' roster's. This station's readers are the
+exit test's: one request per row the owner named (`request --row`), `profile: starved`, the scope
+doc as the single document, the cold-reader mandate v1 states (quoted once in
+`references/precon-v2-contract.md` section 7), and `authorized` only on an outside row the input's
+`owner_word` names, never on an anthropic row (`helper-derived`: `station_core/readers_request.py`
+decides it, and `request` refuses an outside row the word does not name). On this harness the
+Claude row is `claude-session`, a host row the executor runs through readers' `compose` and
+`record` (the Agent or Workflow tool), with `--session-model`. readers' roster is found beside
+this plugin; measured on the installed package, route 3b resolved `readers` 1.0.1's roster in the
+isolated home.
 
 ## 8. Delivery
 
 Not measured in the frame. The delivery probe for this core is `setups/claude-code/prompts/`; its
-measurement on the installed package (lane P fills this), and the control room's proof at the hand-back.
+measurement on the installed package is not lane P's either: a probe needs a live session, which
+is outside this lane's boundary (no harness launch beyond the install scripts' plugin commands).
+It is the control room's proof at the hand-back.
 
 ## 9. Sidecars and invocation restrictions
 
@@ -71,8 +97,16 @@ measurement on the installed package (lane P fills this), and the control room's
 ## 10. Negative tests
 
 `setups/claude-code/negative-tests.sh` runs the E13 nine cases on this core's package, each in its
-own throwaway home; the free half always runs, the live half is behind `--live`. The observed rows
-(lane P fills this).
+own throwaway home; the free half always runs, the live half is behind `--live`. The rows lane P
+observed on 2026-09-25 (claude 2.1.282, the free half only; `claude plugin validate` exited 0 on
+every mutated package it was asked about):
+
+| Case | Observed |
+|---|---|
+| malformed-sidecar, missing-sidecar, missing-name, broken-delimiter, duplicate-name | installed as mutated; activation is the live half's question |
+| missing-resource | installed; the harness does not notice the missing resource; the core refuses (exit 2) |
+| symlink-file, symlink-directory | the installer dropped the skill from the cache silently, but a session loads this marketplace's plugin from its source path: activation is the live half's question |
+| update-copy-symlink | every installed copy is a real copy; the symlinked `SKILL.md` was dropped at the symlink stage |
 
 ## 11. Installed-package verification
 
@@ -91,4 +125,9 @@ checkout. A snapshot at the moment it runs; equality with this checkout, not cor
 | Report who asked (`invocation.caller`, `invocation.mode`) | `instruction-bound` | `--caller` from a calling station's payload, else `user` / `direct` |
 | Identify the executor's session (the answer's `session_id`) | `helper-derived` reading of an `instruction-bound` record | section 5 |
 | Keep the station out of automatic invocation | measured in the install proofs | section 9 |
-| The station's own capabilities | (lane P fills this) | |
+| Count the board from the doc as it stands (`state`) | `helper-derived` | the ledger reader over the doc; `scripts/tests/test_state.py` |
+| Refuse a line with no source, a quietly resolved line, a re-asked decided line | `helper-derived` | `record-answer`: the shared refusals and precon's own; `scripts/tests/test_record_answer.py` |
+| Keep every prior line of a continued doc byte for byte | `helper-derived` | `write`'s plan and its no-loss check; `scripts/tests/test_write.py` |
+| Authorize an outside reader only on the owner's word in the run | `helper-derived` from the `instruction-bound` `owner_word` | `request`; `scripts/tests/test_exit_test.py` |
+| Stay on the property: no web, no research | `instruction-bound` for the executor; the script has no network | `SKILL.md` step 1 |
+| Stop at the gate | `instruction-bound`; a run with no gate line is not complete (`helper-derived`) | `SKILL.md` step 6; `gate-missing` |

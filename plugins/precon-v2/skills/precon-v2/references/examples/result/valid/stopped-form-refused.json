@@ -1,0 +1,38 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the scope doc departs from the form, so nothing can be placed in it: line 1: the header: missing the label 'Research:'",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "precon-v2",
+  "station_result": {
+    "doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+    "form_findings": [
+      {
+        "line": 1,
+        "message": "the header: missing the label 'Research:'"
+      }
+    ],
+    "gate": null,
+    "home": "repo",
+    "idea": "turnstile"
+  },
+  "status": "stopped",
+  "stop_tag": "form-refused",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

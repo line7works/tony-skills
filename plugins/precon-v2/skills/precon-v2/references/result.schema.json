@@ -5,21 +5,80 @@
   "description": "The one result document of a front core's run (station-loop.md section 5), written to `<run_dir>/result.json` by `report` after it validates against this schema and the semantic checks of scripts/validate-result.py (S1 to S4). Every run ends in a terminal status, every stop included. Each core's lane fills `station_result` and adds its own stop tags to the `stop_tag` description, never to another field.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["interface_version", "plugin_version", "station", "run_id", "run_dir", "status", "reason", "report_only", "wrote_nothing", "writes", "invocation"],
+  "required": [
+    "interface_version",
+    "plugin_version",
+    "station",
+    "run_id",
+    "run_dir",
+    "status",
+    "reason",
+    "report_only",
+    "wrote_nothing",
+    "writes",
+    "invocation"
+  ],
   "properties": {
-    "interface_version": {"type": "integer", "const": 1},
-    "plugin_version": {"type": "string", "minLength": 1},
-    "station": {"type": "string", "enum": ["precon-v2", "architect-v2", "blueprint-v2", "inspect-v2"]},
-    "run_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-    "run_dir": {"type": "string", "minLength": 2, "pattern": "^/"},
-    "status": {"type": "string", "enum": ["completed", "stopped"]},
-    "stop_tag": {
-      "type": ["string", "null"],
-      "enum": [null, "phase-not-built", "selection-none", "selection-several", "ledger-refused", "write-refused", "records-refused"],
-      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`. A lane adds its own tags here and in the enum, never reusing a shared one for another meaning."
+    "interface_version": {
+      "type": "integer",
+      "const": 1
     },
-    "reason": {"type": "string", "minLength": 1},
-    "report_only": {"type": "boolean"},
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "station": {
+      "type": "string",
+      "enum": [
+        "precon-v2",
+        "architect-v2",
+        "blueprint-v2",
+        "inspect-v2"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "stopped"
+      ]
+    },
+    "stop_tag": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "phase-not-built",
+        "selection-none",
+        "selection-several",
+        "ledger-refused",
+        "write-refused",
+        "records-refused",
+        "no-scope-doc",
+        "form-refused",
+        "doc-changed"
+      ],
+      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`. precon-v2's own tags (references/precon-v2-contract.md section 12): `no-scope-doc` (the napkin outcome: the owner took no scope doc, nothing was written), `form-refused` (the scope doc departs from the form, so nothing can be placed in it), and `doc-changed` (a document changed after harvest; nothing was written and every byte is as found). precon-v2 emits `selection-several`, `ledger-refused` and its three own tags, and no other."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_only": {
+      "type": "boolean"
+    },
     "wrote_nothing": {
       "type": "boolean",
       "description": "true exactly when no write lies outside the run directory (S3)"
@@ -29,12 +88,40 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "kind", "sha256_before", "sha256_after"],
+        "required": [
+          "path",
+          "kind",
+          "sha256_before",
+          "sha256_after"
+        ],
         "properties": {
-          "path": {"type": "string", "minLength": 2, "pattern": "^/"},
-          "kind": {"type": "string", "enum": ["run_artifact", "document", "records_log"]},
-          "sha256_before": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-          "sha256_after": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          "path": {
+            "type": "string",
+            "minLength": 2,
+            "pattern": "^/"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "run_artifact",
+              "document",
+              "records_log"
+            ]
+          },
+          "sha256_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sha256_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          }
         }
       }
     },
@@ -43,30 +130,361 @@
       "description": "the hunt results the run used, by hunt name, as `select` printed them",
       "additionalProperties": {
         "type": "object",
-        "required": ["outcome", "candidates", "searched"],
+        "required": [
+          "outcome",
+          "candidates",
+          "searched"
+        ],
         "properties": {
-          "outcome": {"type": "string", "enum": ["none", "one", "several"]},
-          "candidates": {"type": "array"},
-          "searched": {"type": "array"}
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "none",
+              "one",
+              "several"
+            ]
+          },
+          "candidates": {
+            "type": "array"
+          },
+          "searched": {
+            "type": "array"
+          }
         }
       }
     },
     "invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["harness", "caller", "mode"],
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
       "properties": {
-        "harness": {"type": ["string", "null"]},
-        "caller": {"type": "string", "minLength": 1},
-        "mode": {"type": "string", "enum": ["direct", "station"]},
-        "session_id": {"type": ["string", "null"]}
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "station_result": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
-      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+      "description": "precon-v2's own result fields (references/precon-v2-contract.md section 10); the gate is the last field. A `completed` result carries a gate line (the if/then below).",
+      "properties": {
+        "idea": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the idea's slug, the scope hunt's --name"
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the scope doc as the run leaves it (its path), or null when there is none"
+        },
+        "home": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "repo",
+            "staging",
+            null
+          ]
+        },
+        "tier": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "napkin",
+            "bounded",
+            "architectural",
+            null
+          ]
+        },
+        "triage_why": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "counts": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "decided",
+            "assumed",
+            "parked",
+            "out_of_scope"
+          ],
+          "properties": {
+            "decided": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "assumed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "parked": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "out_of_scope": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "description": "v1's report counts, read from the doc as the run leaves it"
+        },
+        "board": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "decided N · assumed N · parked N · open your-calls N, counted from the doc"
+        },
+        "parked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exit_test": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "calls",
+            "cold_read_doc"
+          ],
+          "properties": {
+            "calls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "row",
+                  "call_id",
+                  "status",
+                  "reason",
+                  "effective_model",
+                  "section"
+                ],
+                "properties": {
+                  "row": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "call_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "effective_model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "section": {
+                    "type": "boolean",
+                    "description": "true exactly when the call is ok and its raw text has a section in the cold-read doc"
+                  }
+                }
+              }
+            },
+            "cold_read_doc": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "planned": {
+          "type": "array",
+          "description": "report-only: the documents the run would have written, each previewed in the run directory",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "kind",
+              "preview",
+              "sha256_before"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^/"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "document"
+                ]
+              },
+              "preview": {
+                "type": "string",
+                "pattern": "^/"
+              },
+              "sha256_before": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "candidates": {
+          "type": "array",
+          "description": "selection-several: the candidates, listed for the owner"
+        },
+        "ledger_refused": {
+          "type": "array",
+          "description": "ledger-refused: the lines the reader could not tag, quoted",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "line",
+              "raw",
+              "why"
+            ],
+            "properties": {
+              "line": {
+                "type": "integer"
+              },
+              "raw": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "form_findings": {
+          "type": "array",
+          "description": "form-refused: how the doc departs from the form",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "line",
+              "message"
+            ],
+            "properties": {
+              "line": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "sitting": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "continues",
+            "ends",
+            null
+          ]
+        },
+        "chat_block": {
+          "type": "string",
+          "description": "v1's read-back, rendered from this result"
+        },
+        "gate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the one-line justification that every branch was visited or parked; the last field"
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "station_result"
+        ],
+        "properties": {
+          "station_result": {
+            "required": [
+              "gate",
+              "chat_block"
+            ],
+            "properties": {
+              "gate": {
+                "type": "string",
+                "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*$"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

@@ -1,0 +1,19 @@
+{
+  "answer_version": 1,
+  "exit_test": {
+    "rows": [
+      "claude-session",
+      "gpt-astra"
+    ]
+  },
+  "gate": "the frontier is empty; the cold read's raw text lands before any triage",
+  "lines": [],
+  "questions": [],
+  "run_id": "run-0004",
+  "session_id": "session-example-1",
+  "sitting": "ends",
+  "triage": {
+    "tier": "bounded",
+    "why": "a normal feature with known edges"
+  }
+}
