@@ -230,6 +230,13 @@ class UntracedLine(_Answer):
                      # CS11-4: a second label behind a marked one, a re-cased marked label, a relabel with marks
                      "R2: %s" % words, "AC1: %s" % words, "r2: %s" % words, u"r2 \u2014 %s" % words, "D1: %s" % words,
                      u"R7 \u2014 %s" % words, "R7: %s" % words,
+                     # the seam 12 reader (CS12-1, CS12-2): wrappers, labels, marks, section labels and tails by category
+                     u"\u201e%s\u201c" % words, u"\u300c%s\u300d" % words, u"\uff08%s\uff09" % words, u"\u2039%s\u203a" % words,
+                     "__R2__ %s" % words, "***R2*** %s" % words, "%s (R2)" % words, u"\u2610 %s" % words, u"\u2717 %s" % words,
+                     u"\u21d2 %s" % words, u"\u2014 %s" % words, ">> %s" % words, "(a) %s" % words, "A. %s" % words, "1.1. %s" % words,
+                     u"\u25cf %s" % words, "Deferred: %s" % words, "Poured concrete: %s" % words, "Not in this slice: %s" % words,
+                     u"%s\u3001" % words, u"%s \u2014" % words, u"%s\u2014later" % words, "%s (deferred)" % words,
+                     u"%s\uff08waits on: x\uff09" % words,
                      "%s (waits on: the bench call (see (Q2) first))" % words]:
             rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
                                       allowed=allowed)
@@ -280,6 +287,14 @@ class UntracedLine(_Answer):
         for text in (u"re\u0301sume\u0301 storage", "C1: A4 paper labels", "Q3 budget."):
             doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
             self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], repr(text))
+        self.ledger.append({"id": "prk-12", "tag": "parked", "section": "Decisions", "text": "keep the tally in memory"})
+        self.ledger.append({"id": "prk-13", "tag": "parked", "section": "Decisions", "text": "use init hooks"})
+        for text in ("**keep the tally** in memory", "keep the *tally* in memory", "keep the `tally` in memory"):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"], repr(text))
+        doc = self.clean(); doc["lines"].append({"text": "use __init__ hooks", "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+        self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], "an underscored name keeps its underscores")
+        del self.ledger[-2:]
         for text in (u"\u0e01\u0e35\u0e19", u"n\u0303", "R21 storage", u"%s\u0301" % words):
             doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
             self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], repr(text))
