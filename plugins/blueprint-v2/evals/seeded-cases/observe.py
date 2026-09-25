@@ -23,8 +23,11 @@ are run, in order:
     request   `station_core/readers_request.py` for each named row, against readers' roster
     v1scan    the no-v1-import scan (`scripts/tests/test_no_v1_import.py`) on a scratch copy of
               this core's skill, with the case's plant placed in it when there is one
-    lane      nothing: the facts the case names are the lane's to produce (slice 2); they are
-              listed under `_lane_pending` and never guessed
+    lane      the lane's own facts: when `lane_observe.py` sits beside this file (the core's own,
+              written in its slice 2 lane, never shared), its `observe_lane(step, case_dir,
+              neutral, facts, via, scratch)` is called and the names it fills are the lane's
+              facts; any name the step lists under `pending` that it did not fill stays under
+              `_lane_pending` and is never guessed. Without that module every name stays pending.
 
 The library steps drive the shared code the lanes' phases will call; `_via` names which facts came
 from the CLI and which from the library. `writes_none` is measured, not read: a digest over the
@@ -255,6 +258,21 @@ def step_v1scan(step, case_dir, neutral, facts, via, scratch):
     via["v1_findings_present"] = "library"
 
 
+def lane_observe(step, case_dir, neutral, facts, via, scratch):
+    """The lane's own observer, `lane_observe.py` beside this file, when the lane has written it."""
+    path = os.path.join(HERE, "lane_observe.py")
+    if not os.path.isfile(path):
+        return
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("lane_observe", path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        module.observe_lane(step, case_dir, neutral, facts, via, scratch)
+    except Exception as exc:  # noqa: BLE001  (a lane observer's error is a fact of the run)
+        facts["_errors"].append({"step": "lane", "error": "%s: %s" % (type(exc).__name__, exc)})
+
+
 STEPS = {"select": step_select, "ledger": step_ledger, "answer": step_answer, "form": step_form,
          "runlog": step_runlog, "request": step_request, "v1scan": step_v1scan}
 
@@ -272,7 +290,10 @@ def observe(family, case, out):
     try:
         for index, step in enumerate(drive["steps"]):
             if step["kind"] == "lane":
-                pending.extend(step.get("pending", []))
+                sub = os.path.join(scratch, "step-%d" % index)
+                os.makedirs(sub)
+                lane_observe(step, case_dir, neutral, facts, via, sub)
+                pending.extend(name for name in step.get("pending", []) if name not in facts)
                 continue
             sub = os.path.join(scratch, "step-%d" % index)
             os.makedirs(sub)

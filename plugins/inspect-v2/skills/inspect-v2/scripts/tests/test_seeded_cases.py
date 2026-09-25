@@ -75,8 +75,12 @@ class TheObserver(unittest.TestCase):
             self.assertNotIn("_errors", observed, row["case"])
             self.assertIn("writes_none", observed, row["case"])
             drive = testlib.load_json(os.path.join(os.path.dirname(row["observed"]), "drive.json"))
-            if any(step["kind"] == "lane" for step in drive["steps"]):
-                self.assertTrue(observed.get("_lane_pending"), row["case"])
+            for step in drive["steps"]:
+                if step["kind"] != "lane":
+                    continue
+                for name in step.get("pending", []):
+                    self.assertTrue(name in observed or name in observed.get("_lane_pending", []),
+                                    "%s: the lane fact %s is neither observed nor pending" % (row["case"], name))
 
 
 if __name__ == "__main__":

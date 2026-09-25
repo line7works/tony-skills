@@ -10,6 +10,8 @@ import glob
 import importlib.util
 import json
 import os
+import subprocess
+import sys
 import unittest
 
 import testlib
@@ -211,6 +213,60 @@ class NotBuilt(_Cli):
             self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "phase-not-built"), args)
             self.assertIn(args[0], doc["reason"])
         self.assertEqual(sorted(os.listdir(self.run_dir)), before, "nothing written")
+
+
+class OwnCommands(_Cli):
+    """The seam of station-loop.md 3.8: a core's own commands through `main(..., commands=)`."""
+
+    def own_driver(self, commands_source):
+        path = os.path.join(self.tmp, "own.py")
+        testlib.write_text(path, "\n".join([
+            "import os, sys",
+            "sys.dont_write_bytecode = True",
+            "sys.path.insert(0, %r)" % testlib.SCRIPTS,
+            "from station_core import driver",
+            "def show(ctx, args):",
+            "    return driver.emit(ctx.envelope(ok=True, shown=args.thing, run_dir=args.run_dir))",
+            "COMMANDS = %s" % commands_source,
+            "sys.exit(driver.main('%s', {'scope': [{'home': 'repo-scope', 'root': 'workspace',"
+            " 'globs': ['docs/scope/*-{name}.md'], 'tier': 1}]}, {}, commands=COMMANDS))" % testlib.CORE,
+        ]))
+        return path
+
+    def run_own(self, path, args):
+        env = testlib.base_env()
+        proc = subprocess.run([sys.executable, path] + args + ["--skill-root", testlib.SKILL],
+                              cwd=self.cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return proc.returncode, proc.stdout.decode(), proc.stderr.decode()
+
+    def test_an_own_command_is_listed_and_dispatched(self):
+        path = self.own_driver("[{'name': 'show-thing', 'help': 'show the thing',"
+                               " 'arguments': [{'flags': ['--run-dir'], 'metavar': 'D', 'required': True},"
+                               " {'flags': ['--thing'], 'default': 'x'}], 'handler': show}]")
+        code, out, err = self.run_own(path, ["--help"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("Commands of this core", out)
+        self.assertIn("show-thing", out)
+        code, out, err = self.run_own(path, ["show-thing", "--run-dir", self.run_dir, "--thing", "y"])
+        self.assertEqual(code, 0, err)
+        doc = self.json_out(out)
+        self.assertEqual((doc["ok"], doc["shown"], doc["run_dir"]), (True, "y", self.run_dir))
+        code, out, err = self.run_own(path, ["show-thing"])
+        self.assertEqual(code, 2, "a missing required argument is usage")
+
+    def test_a_shared_name_or_a_missing_field_is_a_defect_of_the_script(self):
+        for source in ("[{'name': 'select', 'help': 'h', 'arguments': [], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'metavar': 'X'}], 'handler': show}]"):
+            path = self.own_driver(source)
+            code, out, err = self.run_own(path, ["--help"])
+            self.assertNotEqual(code, 0, source)
+            self.assertIn("ValueError", err, source)
+
+    def test_no_own_commands_lists_none(self):
+        code, out, err = self.cli(["--help"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("Commands of this core", out)
 
 
 class Validators(_Cli):
