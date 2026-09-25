@@ -10,6 +10,12 @@ A handler is `handler(ctx, args) -> exit code`; `ctx` carries the station, the p
 root, `envelope(**fields)`, `open_run(run_dir)` and `emit(document, code)`. A handler may raise
 `Usage` (exit 2), `Defect` (exit 1), `Terminal(document)` (exit 10) or let
 `records_client.ComponentUnavailable` through (exit 3).
+
+A core's own commands (station-loop.md section 3.8) come through `commands`: a list of
+`{"name", "help", "arguments", "handler"}`, each `arguments` entry `{"flags": [...], ...argparse
+keyword arguments}`. The driver adds each as a subcommand with the common options, lists it under
+"Commands of this core" in `--help`, and dispatches it exactly as a phase. A name that collides with
+a shared command, or an entry missing a field, is a defect of the calling script (`ValueError`).
 """
 import argparse
 import datetime
@@ -257,17 +263,20 @@ SIDE_EFFECTS = """Side effects:
 """
 
 
-def build_parser(station, hunts):
+def build_parser(station, hunts, commands=None):
     prog = script_name(station)
+    commands = check_commands(commands)
     hunt_lines = "\n".join("  %-14s %s" % (name, "; ".join(
         "%s(%s) %s" % (h["home"], h["root"], ", ".join(h["globs"])) for h in homes))
                            for name, homes in sorted(hunts.items()))
+    own_lines = "\n".join("  %-16s %s" % (c["name"], c["help"]) for c in commands) or "  (none)"
     epilog = ("The phases, in order: check-input, select, harvest, record-answer, write, report.\n"
               "identity and skill-identity answer at any time.\n\n"
-              "Hunts of this core (select --hunt NAME):\n%s\n\n%s\n%s\n"
+              "Hunts of this core (select --hunt NAME):\n%s\n\n"
+              "Commands of this core (station-loop.md section 3.8; its lane contract says what each does):\n%s\n\n%s\n%s\n"
               "Example:\n  uv run %s check-input /tmp/run-0001/input.json\n"
               "  uv run %s select --run-dir /tmp/run-0001 --hunt %s --name widget\n"
-              % (hunt_lines, EXIT_HELP, SIDE_EFFECTS, prog, prog, sorted(hunts)[0] if hunts else "NAME"))
+              % (hunt_lines, own_lines, EXIT_HELP, SIDE_EFFECTS, prog, prog, sorted(hunts)[0] if hunts else "NAME"))
     parser = argparse.ArgumentParser(prog=prog, description="The phase driver of %s." % station,
                                      epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
     skill_help = "test only: load the references from DIR instead of this script's skill root"
@@ -292,11 +301,36 @@ def build_parser(station, hunts):
     ident = sub.add_parser("identity", parents=[common], help="the workspace as this station sees it")
     ident.add_argument("workspace", help="a directory")
     sub.add_parser("skill-identity", parents=[common], help="name, version, commit and content hash")
+    for own in commands:
+        cmd = sub.add_parser(own["name"], parents=[common], help=own["help"])
+        for argument in own["arguments"]:
+            keywords = dict(argument)
+            cmd.add_argument(*keywords.pop("flags"), **keywords)
     return parser
 
 
-def main(station, hunts, handlers, argv=None):
-    parser = build_parser(station, hunts)
+SHARED_COMMANDS = ("check-input", "select", "identity", "skill-identity") + LANE_PHASES
+
+
+def check_commands(commands):
+    """A core's own commands, checked for shape and for a name that collides with a shared one."""
+    out = []
+    for own in commands or ():
+        for key in ("name", "help", "arguments", "handler"):
+            if key not in own:
+                raise ValueError("a core's own command is missing %r: %r" % (key, own))
+        if own["name"] in SHARED_COMMANDS or any(own["name"] == c["name"] for c in out):
+            raise ValueError("a core's own command may not reuse the name %r" % own["name"])
+        for argument in own["arguments"]:
+            if "flags" not in argument:
+                raise ValueError("an argument of %r has no flags: %r" % (own["name"], argument))
+        out.append(own)
+    return out
+
+
+def main(station, hunts, handlers, argv=None, commands=None):
+    commands = check_commands(commands)
+    parser = build_parser(station, hunts, commands)
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help(sys.stderr)
@@ -307,12 +341,14 @@ def main(station, hunts, handlers, argv=None):
         sys.stderr.write("%s\n" % exc)
         return exits.USAGE
     ctx = Context(station, hunts, skill_root)
-    commands = {"check-input": command_check_input, "select": command_select,
-                "identity": command_identity, "skill-identity": command_skill_identity}
+    commands_by_name = {"check-input": command_check_input, "select": command_select,
+                        "identity": command_identity, "skill-identity": command_skill_identity}
     for phase in LANE_PHASES:
-        commands[phase] = handlers.get(phase) or not_built(phase)
+        commands_by_name[phase] = handlers.get(phase) or not_built(phase)
+    for own in commands:
+        commands_by_name[own["name"]] = own["handler"]
     try:
-        return commands[args.command](ctx, args)
+        return commands_by_name[args.command](ctx, args)
     except Terminal as terminal:
         return emit(terminal.document, exits.TERMINAL)
     except Usage as exc:
