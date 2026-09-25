@@ -1,0 +1,541 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/station-v2/architect-v2/answer.schema.json",
+  "title": "architect-v2 recorded answer",
+  "description": "The executor's one recorded answer for an architect-v2 run (CR-8; references/architect-v2-contract.md section 6). Closed at every level: an unknown key is refused, never ignored. Every text the doc carries is one line (a line break would put a bare line, or a heading, inside a section of the load-bearing form); what a schema cannot state (the candidates and the razor, the traces, the docless gate, the review, the no-loss rule) is `record-answer`'s content checks, exit 5. A field a check needs is refused when missing, never defaulted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "answer_version",
+    "run_id",
+    "session_id",
+    "project",
+    "trigger",
+    "changed",
+    "questions",
+    "exit_ramp",
+    "walkthrough",
+    "candidates",
+    "pick",
+    "rejected",
+    "components",
+    "data_flow",
+    "diagram",
+    "doors",
+    "poured_concrete",
+    "deferred",
+    "lines",
+    "review",
+    "rulings",
+    "publish",
+    "publish_url"
+  ],
+  "$defs": {
+    "text": {
+      "type": "string",
+      "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+      "description": "one line of text with at least one non-space character. Every answer string excludes every line boundary recognized by Python str.splitlines, including vertical tab, form feed, U+001C through U+001E, U+0085, U+2028 and U+2029, as well as CR and LF; record-answer refuses these as validation errors before writing anything."
+    },
+    "walk_field": {
+      "type": "string",
+      "pattern": "^(?![^\\n\\r]*·)[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+      "description": "one field of the walkthrough line: one line, non-blank, never holding the line's separator (the middle dot), which would forge a second field"
+    },
+    "walk_item": {
+      "type": "string",
+      "pattern": "^(?![^\\n\\r]*(·|; ))[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+      "description": "one item of the walkthrough's `must` list: one line, non-blank, never holding the line's separator (the middle dot) or the list's (`; `), which would forge a second field or a second requirement"
+    },
+    "free": {
+      "type": "string",
+      "pattern": "^[^\\n\\r]*(?![\\s\\S])",
+      "description": "one line of text, possibly blank (a blank value is a content refusal, not a schema one)"
+    },
+    "line_text": {
+      "type": "string",
+      "pattern": "^(?!#|~~|- )[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+      "description": "a new list line's text, without its '- ': one line, non-blank, never opening with '#', '~~' or '- '"
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "description": "what the line traces to (station-loop.md section 8, rule 2): `ledger` a ledger line id of the scope doc, `repo_path` a path in the workspace, `question` an answered question of this run, `assumed` the executor's why. Any other kind, or a trace that names nothing, is refused at `record-answer` (rule `untraced`, exit 5).",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        }
+      }
+    },
+    "new_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "tag"
+      ],
+      "description": "a line this run adds, with its trace (a missing trace is refused at record-answer, rule `untraced`)",
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/line_text"
+        },
+        "tag": {
+          "type": "string",
+          "enum": [
+            "decided",
+            "assumed",
+            "deferred",
+            "parked",
+            "open"
+          ]
+        },
+        "trace": {
+          "$ref": "#/$defs/trace"
+        }
+      }
+    },
+    "carried": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "carried"
+      ],
+      "description": "a prior line of the living doc's section kept as it stands (its text without the '- ', struck or not): plain one-line text, checked at record-answer to be exactly a line the prior section holds; the renderer supplies the list prefix, so a leading '#' or '- ' is the item's own text, never a heading or a new outer item",
+      "properties": {
+        "carried": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "strike": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strike"
+      ],
+      "description": "a prior, unstruck line of the living doc's section this run supersedes: struck through, never deleted; the decision to strike carries its trace",
+      "properties": {
+        "strike": {
+          "type": "string",
+          "pattern": "^(?!~~)[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+          "description": "the prior line's text without the '- ': plain one-line text, not already struck; checked at record-answer to be exactly a line the prior section holds (the renderer supplies the list prefix and the strikethrough)"
+        },
+        "trace": {
+          "$ref": "#/$defs/trace"
+        }
+      }
+    },
+    "entry": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/new_line"
+        },
+        {
+          "$ref": "#/$defs/carried"
+        },
+        {
+          "$ref": "#/$defs/strike"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "answer_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this shape"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?![\\s\\S])",
+      "description": "this run's id; `record-answer` refuses another run's (rule `run-mismatch`)"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the executor's session, `answer_fields.session_id` from the adapter's helper, typed by no one; checked equal to the input's `invocation.session_id` (rule `session-mismatch`)"
+    },
+    "project": {
+      "$ref": "#/$defs/text",
+      "description": "the project's name, the doc title's `<Project>` on a first run"
+    },
+    "trigger": {
+      "$ref": "#/$defs/text",
+      "description": "the run log's `trigger:` (first run, idea blossomed, new precon, changed direction, ...)"
+    },
+    "changed": {
+      "$ref": "#/$defs/text",
+      "description": "the run log's `Changed this run:` (`first run` on the first)"
+    },
+    "questions": {
+      "type": "array",
+      "description": "every question put to the owner in this run, with the ledger line ids each touches and his answer (blank: unanswered)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "touches",
+          "answer"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?![\\s\\S])"
+          },
+          "text": {
+            "$ref": "#/$defs/text"
+          },
+          "touches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "answer": {
+            "$ref": "#/$defs/free"
+          },
+          "about": {
+            "type": "string",
+            "enum": [
+              "scope-doc",
+              "exit-ramp",
+              "walkthrough",
+              "pick",
+              "review"
+            ],
+            "description": "which step the question belongs to; `scope-doc` marks the input gate's one question on a docless run"
+          }
+        }
+      }
+    },
+    "docless": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "home"
+      ],
+      "description": "present only when harvest found no scope doc: the reason the gate discussion landed on (the doc's `Docless:` header) and the home the doc goes to",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/free"
+        },
+        "home": {
+          "type": "string",
+          "enum": [
+            "staging",
+            "workspace"
+          ]
+        }
+      }
+    },
+    "exit_ramp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "continued",
+        "why"
+      ],
+      "description": "the answer to 'is there a system here at all?': `continued` true for a system and the interview went on, false when it ended here",
+      "properties": {
+        "continued": {
+          "type": "boolean"
+        },
+        "why": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "walkthrough": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "who",
+        "when",
+        "must"
+      ],
+      "description": "the walkthrough target: all three fields present and non-blank (`n/a` is a value, blank is not), none holding the line's separator, with its trace",
+      "properties": {
+        "who": {
+          "$ref": "#/$defs/walk_field"
+        },
+        "when": {
+          "$ref": "#/$defs/walk_field"
+        },
+        "must": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/walk_item"
+          }
+        },
+        "trace": {
+          "$ref": "#/$defs/trace"
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "description": "the candidate structures put on the table (two or three when the interview continued; none when it ended)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "categories",
+          "assumes",
+          "later_cost"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/text"
+          },
+          "categories": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[^:\\n\\r]*\\S[^:\\n\\r]*:[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])"
+            },
+            "description": "`<one-way-door category>:<the candidate's choice>`, e.g. `platform:library`"
+          },
+          "assumes": {
+            "$ref": "#/$defs/text"
+          },
+          "later_cost": {
+            "$ref": "#/$defs/text"
+          }
+        }
+      }
+    },
+    "pick": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the candidate the owner picked in his own words, by name; null when the interview ended at the exit ramp"
+    },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "why"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/text"
+          },
+          "why": {
+            "$ref": "#/$defs/free"
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "serves"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/text"
+          },
+          "serves": {
+            "$ref": "#/$defs/free"
+          }
+        }
+      }
+    },
+    "data_flow": {
+      "$ref": "#/$defs/text",
+      "description": "the v0 drawing's `Data flow:`"
+    },
+    "diagram": {
+      "$ref": "#/$defs/text",
+      "description": "the v0 drawing's `Diagram:`, one line (an ASCII one-liner or a one-line mermaid)"
+    },
+    "doors": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "settled"
+          ],
+          "properties": {
+            "settled": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the one-way-door check: what was settled (the run log's Step 3.3); null when the interview ended at the exit ramp"
+    },
+    "poured_concrete": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      },
+      "description": "the poured-concrete section in full: new lines, prior lines carried, prior lines struck"
+    },
+    "deferred": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      },
+      "description": "the deferred section in full, the same way"
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/new_line"
+      },
+      "description": "the `NEEDS CHECK` lines of this run (an outside unknown not looked up), rendered in the Deferred section"
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "description": "the blind review: `pending` until its outcome is known, `declined` or `failed` with the date (and the failure's reason), `done` with the spine the takes agreed on (and `failed_lanes`, each lane that did not return), `not-offered` on a docless run only",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "declined",
+            "failed",
+            "done",
+            "not-offered"
+          ]
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(?![\\s\\S])"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "spine": {
+          "$ref": "#/$defs/text"
+        },
+        "failed_lanes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "a done review only: each lane that did not return (a `READERS:` status other than `ok`), its roster row and the status and reason the `READERS:` line carried; the read-back names each beside the saved takes",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "row",
+              "reason"
+            ],
+            "properties": {
+              "row": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*(?![\\s\\S])"
+              },
+              "reason": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          }
+        }
+      }
+    },
+    "rulings": {
+      "type": "array",
+      "description": "the owner's ruling on each disagreement between the doc and the takes, with the answer fields it changes",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disagreement",
+          "ruling",
+          "reviewers",
+          "changes"
+        ],
+        "properties": {
+          "disagreement": {
+            "$ref": "#/$defs/text"
+          },
+          "ruling": {
+            "$ref": "#/$defs/text"
+          },
+          "reviewers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "changes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "exit_ramp",
+                "walkthrough",
+                "candidates",
+                "pick",
+                "rejected",
+                "components",
+                "data_flow",
+                "diagram",
+                "doors",
+                "poured_concrete",
+                "deferred",
+                "lines"
+              ]
+            }
+          },
+          "trace": {
+            "$ref": "#/$defs/trace"
+          }
+        }
+      }
+    },
+    "publish": {
+      "type": "boolean",
+      "description": "whether this run publishes the visual (the v1 default is yes; the input's `station.publish: false` makes it no)"
+    },
+    "publish_url": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*(?::[0-9]{1,5})?(?:/\\S*)?(?![\\s\\S])"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the artifact this run republishes to: the living doc's recorded `Artifact:` URL (the same URL across runs), null on a first publish or when the run does not publish"
+    }
+  }
+}

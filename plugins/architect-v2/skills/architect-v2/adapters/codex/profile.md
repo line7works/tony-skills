@@ -17,14 +17,14 @@ schema). `--caller NAME` only when a calling station's payload names one.
 
 `invocation.harness` is `codex-cli`, this adapter's own name (`helper-derived`). The version, the
 entry and the sandbox are measurement only, read by the helper the E13 way (`_common.py`, byte for
-byte the E13 cores' file). Measured values for this core's installed package: (lane A fills this), and the
+byte the E13 cores' file). Measured values for this core's installed package: codex-cli 0.155.1 (`codex --version`); entry `plugin`, this setup's own marketplace `architect-v2-setup`, the installed copy at `<CODEX_HOME>/plugins/cache/architect-v2-setup/architect-v2/0.1.0/` beside `readers/1.0.1`; `install.sh` exit 0 (no credential written) and `verify-install.sh` exit 0 with no finding (lane A, 2026-09-25, an isolated home); the sandbox is not measured, since no session was started; and the
 control room's install proofs at the hand-back.
 
 ## 2. Model and floor
 
 Does not apply to the input: `invocation` carries no model. `measurement.model_id` records the
 session's model for the record only (`helper-derived`). Whether this station names a model floor
-for a reader it summons is the station's own rule (lane A fills this); a reader's floor is readers' roster's.
+for a reader it summons is the station's own rule: architect-v2 names none (v1 names none), so its blind-review requests carry no `floor`; each reviewer's model is its roster row's, or a model id the owner typed (`request --model ROW=ID`); the session's own model id rides only on the `claude-session` row as `session_model` (`request --session-model`, `instruction-bound`). A reader's floor is readers' roster's.
 
 ## 3. Run id and directory
 
@@ -38,8 +38,7 @@ run (`references/station-loop.md` sections 3.1 and 4).
 The owner's word for an outside reader is the input's `owner_word` field (the rows his words name
 and the words verbatim), the one source of a request's `authorized` flag
 (`references/station-loop.md` section 8, rule 5). No turn reference is recorded in the frame, so no
-`turns.py` ships. How the executor quotes the owner's words, and whether a turn map is needed,
-(lane A fills this).
+`turns.py` ships. The executor copies the owner's words verbatim into `owner_word.words`, and the rows they name into `owner_word.rows`, when the input is written (`instruction-bound`); his answers in the interview are the recorded answer's `questions[].answer`. No turn map is needed: nothing this station decides reads a turn reference, and `authorized` is the shared builder's, from `owner_word` alone. A reviewer the owner names only at the review's offer, after `check-input`, has no word in this run's input, and readers refuses it: the executor tells him so, runs `report` (it stops `review-pending`), and must start a new run on the same doc whose input carries his words verbatim in `owner_word` (`rows` the rows he named); that run's `request` carries `authorized`. Never the flag or the word added by hand (`references/architect-v2-contract.md` section 15, point 1).
 
 ## 5. `session_wrote_fix`
 
@@ -50,19 +49,18 @@ the executor's own thread: the rollout named by `CODEX_THREAD_ID` under the sess
 
 ## 6. Run date
 
-Does not apply to the adapter: a document's date is rendered by the core (lane A fills this).
+Does not apply to the adapter: a document's date is rendered by the core, the machine's local calendar date read by the script once per command (`scripts/architect_core/common.py`, `today`); the `ARCHITECT_V2_TEST_TODAY` hook pins it only under `ARCHITECT_V2_TEST=1` (`tests/test_profile_lane.py`).
 
 ## 7. The verifier capability
 
 The station summons no verifier of its own. Readers, where it uses them (the exit test, the blind review, the lenses), are
 summoned through `/readers` with the request `station_core/readers_request.py` builds; the
-transport, the model and the containment are readers' roster's. Which readers and mandates
-(lane A fills this).
+transport, the model and the containment are readers' roster's. Which readers and mandates: the blind review only (`references/architect-v2-contract.md` section 10), one request per reviewer the owner names, the scope doc its single document, `profile: starved`, the fixed mandate verbatim. On Codex the portable rows (`gpt-astra`, `gpt-sol`, `deepseek`, `qwen`, `claude-opus-cli`) dispatch through the readers runner; a host row (`claude-session`, `gemini`) requested through the shell entry is refused `lane-unavailable` by readers (its contract), so a Claude reviewer from Codex is the `claude-opus-cli` row (A12). `request` finds readers' roster beside this core (route 3a in a checkout, 3b in the installed cache).
 
 ## 8. Delivery
 
 Not measured in the frame. The delivery probe for this core is `setups/codex/prompts/`; its
-measurement on the installed package (lane A fills this), and the control room's proof at the hand-back.
+measurement on the installed package is not lane A's (the probe starts a session, which a lane builder does not do); measured on the package instead: its `SKILL.md` is 14,404 bytes (`wc -c` on the installed copy), above the 8,000-byte main-prompt truncation branch the guide records for Codex's Agent Plugins path; whether this installation takes that path, and whether the body arrives whole, is the delivery probe's question. The control room's proof at the hand-back.
 
 ## 9. Sidecars and invocation restrictions
 
@@ -71,8 +69,21 @@ measurement on the installed package (lane A fills this), and the control room's
 ## 10. Negative tests
 
 `setups/codex/negative-tests.sh` runs the E13 nine cases on this core's package, each in its
-own throwaway home; the free half always runs, the live half is behind `--live`. The observed rows
-(lane A fills this).
+own throwaway home; the free half always runs, the live half is behind `--live`. The observed rows:
+
+| Case | Observed (free half, lane A, 2026-09-25) |
+|---|---|
+| `malformed-sidecar` | installed as mutated (Codex has no plugin validate command) |
+| `missing-sidecar` | installed as mutated |
+| `missing-name` | installed as mutated |
+| `broken-delimiter` | installed as mutated |
+| `duplicate-name` | both plugins installed as mutated |
+| `missing-resource` | installed; the harness does not notice the missing schema; the installed core's `check-input` refuses it, exit 2 |
+| `symlink-file` | the installer dropped SKILL.md from the cache silently: activation prevented at install |
+| `symlink-directory` | the installer dropped the skill folder from the cache silently: activation prevented at install |
+| `update-copy-symlink` | every installed copy is a real copy; the symlinked SKILL.md of the 0.1.2 stage was dropped from the cache |
+
+The live half (`--live`) was not run: it starts sessions.
 
 ## 11. Installed-package verification
 
@@ -91,4 +102,7 @@ checkout. A snapshot at the moment it runs; equality with this checkout, not cor
 | Report who asked (`invocation.caller`, `invocation.mode`) | `instruction-bound` | `--caller` from a calling station's payload, else `user` / `direct` |
 | Identify the executor's session (the answer's `session_id`) | `helper-derived` reading of an `instruction-bound` record | section 5 |
 | Keep the station out of automatic invocation | measured in the install proofs | section 9 |
-| The station's own capabilities | (lane A fills this) | |
+| Render the doc from the answer and refuse a re-asked decided line, an untraced line, a lost line, a candidate set or a component the razor refuses | not a harness capability: the core's script decides it the same on every harness | `scripts/tests/` (`test_arch_record.py`, `test_arch_write.py`) |
+| Keep the owner's word to this run (`authorized` from the input's `owner_word` only) | not a harness capability: the shared builder's | `scripts/tests/test_arch_review.py` |
+| Publish the visual privately to the same URL across runs | `instruction-bound` (the executor's tool call); the URL it returned is checked by `record-publish` | `references/architect-v2-contract.md` section 11 |
+| Ask the exit ramp and the pick in the owner's words, questions in plain text | `instruction-bound` | `SKILL.md` Steps 2 and 3 |

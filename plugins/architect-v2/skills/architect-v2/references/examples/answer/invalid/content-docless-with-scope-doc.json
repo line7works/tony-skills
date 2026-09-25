@@ -1,0 +1,132 @@
+{
+  "answer_version": 1,
+  "candidates": [
+    {
+      "assumes": "the bench imports it",
+      "categories": [
+        "platform:library"
+      ],
+      "later_cost": "a CLI later wraps it",
+      "name": "module"
+    },
+    {
+      "assumes": "a network on the bench",
+      "categories": [
+        "platform:server",
+        "storage:database"
+      ],
+      "later_cost": "hosting",
+      "name": "service"
+    }
+  ],
+  "changed": "first run",
+  "components": [
+    {
+      "name": "turnstile.py",
+      "serves": "count turns"
+    },
+    {
+      "name": "reset()",
+      "serves": "reset the count"
+    }
+  ],
+  "data_flow": "the fixture calls turnstile.py; reset() zeroes the count",
+  "deferred": [
+    {
+      "tag": "deferred",
+      "text": "a web dashboard \u2014 door stays open because the module has no I/O",
+      "trace": {
+        "kind": "ledger",
+        "ref": "oos-7dcece4f03ba"
+      }
+    }
+  ],
+  "diagram": "fixture -> turnstile.py -> count",
+  "docless": {
+    "home": "staging",
+    "reason": "no precon"
+  },
+  "doors": {
+    "settled": "language, storage and platform settled for the full vision"
+  },
+  "exit_ramp": {
+    "continued": true,
+    "why": "the owner said yes, a system"
+  },
+  "lines": [],
+  "pick": "module",
+  "poured_concrete": [
+    {
+      "tag": "decided",
+      "text": "language \u2014 Python 3.9 \u2014 every bench script imports it",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "storage \u2014 none in v0 \u2014 nothing is remembered",
+      "trace": {
+        "kind": "question",
+        "ref": "Q2"
+      }
+    }
+  ],
+  "project": "Turnstile",
+  "publish": true,
+  "publish_url": null,
+  "questions": [
+    {
+      "answer": "yes, a system",
+      "id": "Q1",
+      "text": "Is there a system here at all?",
+      "touches": []
+    },
+    {
+      "answer": "in memory for v0",
+      "id": "Q2",
+      "text": "Where is the count kept between sessions?",
+      "touches": [
+        "dec-e4907eb8a1ce"
+      ]
+    },
+    {
+      "answer": "Sam Bench, on 2026-10-01, counting and resetting",
+      "id": "Q3",
+      "text": "Who first touches it, and when?",
+      "touches": []
+    },
+    {
+      "answer": "the module",
+      "id": "Q4",
+      "text": "Which candidate?",
+      "touches": []
+    }
+  ],
+  "rejected": [
+    {
+      "name": "service",
+      "why": "the bench imports a module"
+    }
+  ],
+  "review": {
+    "outcome": "pending"
+  },
+  "rulings": [],
+  "run_id": "run-0001",
+  "session_id": "session-example-1",
+  "trigger": "first run",
+  "walkthrough": {
+    "must": [
+      "count turns",
+      "reset the count"
+    ],
+    "trace": {
+      "kind": "question",
+      "ref": "Q3"
+    },
+    "when": "2026-10-01",
+    "who": "Sam Bench"
+  }
+}

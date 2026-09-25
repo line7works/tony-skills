@@ -4,34 +4,41 @@ One interview after precon that writes the one living architecture doc and rende
 
 ## Status
 
-The frame only (E14 slice 1). This plugin holds the shared station loop, its library, the load-
-bearing templates, the schemas and examples of the shared fields, the phase driver with
-`check-input`, `select`, `identity` and `skill-identity` working, the adapters and setups for Claude
-Code and Codex, and the seeded cases of its families. The station's own procedure (`harvest`,
-`record-answer`, `write`, `report` and the steps of `SKILL.md`) lands in its slice 2 lane (lane
-A); until then those four phases stop as `phase-not-built`. Interface version 1, plugin
-version 0.1.0. Test counts are measured and filled in by the control room at close.
+The frame (E14 slice 1) and the architect core (E14 slice 2, lane A). Built in lane A: the
+station's procedure in `SKILL.md` (v1's six steps and eleven rules, each step naming its command);
+its lane contract `references/architect-v2-contract.md`; the recorded answer's schema
+`references/answer.schema.json` with accepted and rejected examples; the four phases `harvest`,
+`record-answer`, `write` and `report` and four own commands, `render-visual`, `record-publish`,
+`request` and `save-take` (`scripts/architect_core/`); the result's `station_result` and three own
+stop tags (`living-doc-malformed`, `document-changed`, `review-pending`); the lane observer
+`evals/seeded-cases/lane_observe.py` for the A2 and A4 lane steps; the adapter profiles' lane
+sections. It writes no event and never opens the records component (ruling E14-9). For the join:
+the marketplace entry, the measured test counts below, and the version bump. Interface version 1,
+plugin version 0.1.0.
 
 ## Layout
 
 ```text
 .claude-plugin/plugin.json           name architect-v2, version 0.1.0
 skills/architect-v2/
-  SKILL.md                           the portable procedure (a skeleton until slice 2)
-  agents/openai.yaml                 the Codex sidecar
+  SKILL.md                           the portable procedure
+  agents/openai.yaml                 the Codex sidecar (manual-only)
   references/
+    architect-v2-contract.md         this core's contract: commands, answer, refusals, stops
     station-loop.md                  the contract the four front cores share
     shared-files.txt                 the files identical in the four cores
     templates/                       the load-bearing forms, v1's byte for byte
-    input.schema.json, result.schema.json, examples/
+    input.schema.json, result.schema.json, answer.schema.json
+    examples/                        input/, result/, answer/ (valid and invalid, answer's context)
   scripts/
-    architect.py                      the phase driver
+    architect.py                     the phase driver: its hunts, phases and own commands
+    architect_core/                  this core's library (phases, answer checks, doc, visual, review)
     station_core/                    the shared library
     validate-examples.py, validate-result.py
     tests/                           the unittest suites (standard library)
   adapters/                          README.md, claude-code/, codex/
 setups/                              install, verify, negative tests and launch per harness
-evals/seeded-cases/                  the seeded cases of this core's families
+evals/seeded-cases/                  the seeded cases of this core's families, and lane_observe.py
 ```
 
 ## Tests
