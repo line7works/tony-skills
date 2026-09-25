@@ -200,19 +200,59 @@ class Select(_Cli):
 
 
 class NotBuilt(_Cli):
+    """The placeholder stop of a phase the lane has not built, keyed to what the driver declares built
+    (`HANDLERS`): a built phase never answers `phase-not-built`, and on a run that has only been
+    checked it is usage (exit 2, `select` first) or a refusal, never a write."""
 
-    def test_the_four_lane_phases_stop_as_phase_not_built(self):
+    def test_the_lane_phases_not_in_handlers_stop_as_phase_not_built(self):
+        built = set(getattr(station_module(), "HANDLERS", {}) or {})
         self.checked()
         before = sorted(os.listdir(self.run_dir))
         answer = os.path.join(self.tmp, "answer.json")
         testlib.write_json(answer, {"questions": [], "lines": []})
         for args in (["harvest"], ["record-answer", "--answer", answer], ["write"], ["report"]):
             code, out, err = self.cli(args + ["--run-dir", self.run_dir])
+            if args[0] in built:
+                self.assertNotIn("phase-not-built", out, args)
+                self.assertIn(code, (2, 4, 5, 10), (args, out, err))
+                if code == 10:
+                    doc = self.json_out(out)
+                    self.assertEqual(doc["status"], "stopped", args)
+                    self.assertNotEqual(doc.get("stop_tag"), "phase-not-built", args)
+                continue
             self.assertEqual(code, 10, args)
             doc = self.json_out(out)
             self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "phase-not-built"), args)
             self.assertIn(args[0], doc["reason"])
         self.assertEqual(sorted(os.listdir(self.run_dir)), before, "nothing written")
+
+    def test_the_placeholder_itself(self):
+        """`driver.not_built(phase)` in-process: the document shape every core's unbuilt phase answers with."""
+        testlib.add_scripts_to_path()
+        from station_core import driver as drivermod
+        captured = {}
+
+        class Ctx(object):
+            station = testlib.CORE
+
+            def envelope(self, **fields):
+                fields.update({"interface_version": 1, "station": self.station})
+                return fields
+
+        class Args(object):
+            run_dir = "/tmp/never-opened"
+
+        real_emit = drivermod.emit
+        drivermod.emit = lambda document, code=0: captured.update(document=document, code=code) or code
+        try:
+            code = drivermod.not_built("write")(Ctx(), Args())
+        finally:
+            drivermod.emit = real_emit
+        self.assertEqual(code, 10)
+        doc = captured["document"]
+        self.assertEqual((doc["status"], doc["stop_tag"], doc["next"]), ("stopped", "phase-not-built", "done"))
+        self.assertIn("`write`", doc["reason"])
+        self.assertIn(testlib.CORE, doc["reason"])
 
 
 class OwnCommands(_Cli):
