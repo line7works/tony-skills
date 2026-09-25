@@ -111,6 +111,17 @@ def _norm(text):
     return " ".join(text.split()).casefold()
 
 
+def collapsed(text):
+    """The text with its runs of whitespace collapsed to one space and its ends trimmed, case kept: how the
+    docless reason is compared with the input's and how it lands in the doc's `Docless:` header (R2, CA3-3)."""
+    return " ".join(text.split())
+
+
+def visible(text):
+    """True when the text holds a character the frame's invisible rule keeps that is not whitespace (R2, CA3-2)."""
+    return isinstance(text, str) and bool(shared._visible(text).strip())
+
+
 def categories(candidate):
     """{category: {choices}}, each name and choice casefolded and whitespace-normalized (R4), so a
     re-cased or re-spaced pair is the same pair."""
@@ -199,16 +210,20 @@ def gate_refusals(answer, ctx):
     review = answer["review"]
     if harvest["docless"]:
         docless = answer.get("docless")
-        if not docless or blank(docless.get("reason")):
+        unstated = not docless or not visible(docless.get("reason"))
+        if unstated:
             out.append(refusal("docless-without-reason", "no scope doc was found, so the answer records the reason "
-                               "the gate discussion landed on (`docless.reason`); it lands in the doc's header"))
+                               "the gate discussion landed on (`docless.reason`, holding a visible character: "
+                               "whitespace, format and zero-width characters alone record nothing); it lands in "
+                               "the doc's header"))
         elif docless["home"] == "staging" and not harvest.get("staging"):
             out.append(refusal("docless-home", "the docless doc's home is the staging home, and the input names none"))
         stated = harvest.get("docless_reason")
-        if docless and not blank(docless.get("reason")) and stated and _norm(docless["reason"]) != _norm(stated):
+        if not unstated and stated and collapsed(docless["reason"]) != collapsed(stated):
             out.append(refusal("docless-reason-mismatch", "the input opened the docless gate with the reason %r "
-                               "(`station.docless_reason`); the answer's `docless.reason` is that reason, the one the "
-                               "doc's Docless: header carries (%r)" % (stated, docless["reason"])))
+                               "(`station.docless_reason`); the answer's `docless.reason` is that reason byte for "
+                               "byte once runs of whitespace are collapsed, case kept, the one the doc's Docless: "
+                               "header carries (%r)" % (stated, docless["reason"])))
         asked = [q for q in answer["questions"] if q.get("about") == "scope-doc" and not blank(q["answer"])]
         if not asked:
             out.append(refusal("docless-unasked", "the hunt found no scope doc; the owner is asked once whether one "
@@ -293,12 +308,17 @@ def target_path(answer, harvest):
     return new_doc_path(home, harvest["workspace"], harvest.get("staging"), harvest["today"], harvest["slug"])
 
 
+def _header_reason(answer):
+    reason = (answer.get("docless") or {}).get("reason")
+    return collapsed(reason) if isinstance(reason, str) else reason
+
+
 def build_values(answer, harvest, living_text, takes, artifact):
     living = harvest.get("living_doc")
     return {"n": living["next_run"] if living else 1, "date": harvest["today"], "ledger": harvest["ledger"],
             "takes": takes, "workspace": harvest["workspace"],
             "scope_display": harvest["scope_doc"]["display"] if harvest["scope_doc"] else None,
-            "docless_reason": (answer.get("docless") or {}).get("reason") if harvest["docless"] else None,
+            "docless_reason": _header_reason(answer) if harvest["docless"] else None,
             "artifact": artifact, "living_text": living_text}
 
 

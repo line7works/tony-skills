@@ -1,11 +1,20 @@
 {
   "cases": {
+    "invalid/content-docless-reason-mismatch-re-cased.json": {
+      "docless": true,
+      "docless_reason": "an experiment the owner wants drawn before any precon",
+      "slug": "bench-counter"
+    },
     "invalid/content-docless-reason-mismatch.json": {
       "docless": true,
       "docless_reason": "an experiment the owner wants drawn before any precon",
       "slug": "bench-counter"
     },
     "invalid/content-docless-unasked.json": {
+      "docless": true,
+      "slug": "bench-counter"
+    },
+    "invalid/content-docless-without-reason-invisible-only.json": {
       "docless": true,
       "slug": "bench-counter"
     },

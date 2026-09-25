@@ -143,7 +143,7 @@ def harvest(ctx, args):
     scope_path = station.get("scope_doc")
     docless = station.get("docless") is True
     set_aside = None
-    if docless and (scope_path or not station.get("docless_reason", "").strip()):
+    if docless and (scope_path or not recording.visible(station.get("docless_reason"))):
         raise driver.Usage("station.docless carries station.docless_reason and excludes station.scope_doc")
     if scope_path:
         if not os.path.isfile(scope_path):
@@ -154,17 +154,21 @@ def harvest(ctx, args):
     elif scope_sel is None:
         raise driver.Usage("run `select --hunt scope` before `harvest` (or name the scope doc in the input's "
                            "`station.scope_doc`)")
+    elif docless and scope_sel["outcome"] in ("one", "several"):
+        # R1 (CA2-1, CA3-1): v1's input gate matches candidates by their Intent: lines; no hit is
+        # this project's and the owner said none exists for it, so his "none" opens the docless gate
+        # however many files the glob found. Every hit is set aside, recorded in the scope selection.
+        set_aside = {"paths": [c["path"] for c in scope_sel["candidates"]], "reason": station["docless_reason"]}
+        receipt.write_json(os.path.join(run.run_dir, "selection-scope.json"), dict(scope_sel, set_aside=set_aside))
     elif scope_sel["outcome"] == "several":
         sr = results.empty_station_result()
         return _stop(ctx, run, "selection-several",
                      "the scope hunt found %d scope docs (%s); they are listed for the owner and never picked: put "
-                     "the list to him and start a new run whose input names his pick in `station.scope_doc`"
+                     "the list to him and start a new run whose input names his pick in `station.scope_doc`; when "
+                     "he says none of them is this project's, ask him once whether a scope doc exists where the glob "
+                     "cannot see, and on his \"none\" start a new run whose input carries `station.docless: true` "
+                     "and `station.docless_reason`"
                      % (len(scope_sel["candidates"]), ", ".join(c["path"] for c in scope_sel["candidates"])), sr, receipt)
-    elif scope_sel["outcome"] == "one" and docless:
-        # R1 (CA2-1): the single hit is another project's scope doc and the owner said none exists
-        # for this one; it is set aside, recorded in the scope selection, and the docless gate opens
-        set_aside = {"path": scope_sel["candidates"][0]["path"], "reason": station["docless_reason"]}
-        receipt.write_json(os.path.join(run.run_dir, "selection-scope.json"), dict(scope_sel, set_aside=set_aside))
     elif scope_sel["outcome"] == "one":
         scope_path = scope_sel["candidates"][0]["path"]
     if scope_path:
@@ -217,10 +221,12 @@ def harvest(ctx, args):
     _state(run)
     run.save()
     if set_aside:
-        reason = ("docless: the scope hunt's one hit, %s, is set aside by the input (`station.docless`): it is not "
-                  "this project's scope doc and the owner said none exists; the answer records the gate's question "
+        reason = ("docless: the scope hunt's %s, %s, %s set aside by the input (`station.docless`): %s not this "
+                  "project's scope doc and the owner said none exists; the answer records the gate's question "
                   "(`about: scope-doc`) and `docless.reason` equal to the input's `station.docless_reason`"
-                  % set_aside["path"])
+                  % ("one hit" if len(set_aside["paths"]) == 1 else "%d hits" % len(set_aside["paths"]),
+                     ", ".join(set_aside["paths"]), "is" if len(set_aside["paths"]) == 1 else "are",
+                     "it is" if len(set_aside["paths"]) == 1 else "none of them is"))
     elif record["docless"]:
         reason = ("docless: no scope doc was found; ask the owner once whether one exists where the glob cannot see "
                   "(a question `about: scope-doc`), then the docless gate: the answer records its reason")

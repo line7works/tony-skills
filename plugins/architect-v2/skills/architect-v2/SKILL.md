@@ -59,13 +59,15 @@ is the contract of every command; `references/answer.schema.json` is your answer
 3. Run `select --run-dir D --hunt scope`. `one`: read its `Intent:` line; when it is the project
    he is talking about, that is the scope doc; when it is not, treat the hunt as `none`. `several`:
    list them for the owner in a plain numbered question and never pick; `harvest` will stop the
-   run, and his pick goes into a new run's `station.scope_doc`. `none`: ask him once, in plain text, whether a
+   run, and his pick goes into a new run's `station.scope_doc`; when he says none of them is this
+   project's, the gate is the `none` path below. `none`: ask him once, in plain text, whether a
    scope doc exists somewhere the glob cannot see, and take the path he gives (a new run, with it
    as `station.scope_doc`). Only his "none" opens the docless gate: discuss why the station runs
-   without a scope doc until the talk lands on a reason and a working name. When the hunt's `one`
-   was another project's doc, `harvest` would take it: on his "none", start a new run whose input
-   carries `station.docless: true` and `station.docless_reason` (that reason, word for word); it
-   sets the hit aside, and your answer's `docless.reason` is the same reason.
+   without a scope doc until the talk lands on a reason and a working name. When the hunt found
+   scope docs and none is this project's (a `one` of another project, or a `several` he said none
+   of is his), `harvest` would take or stop on them: on his "none", start a new run whose input
+   carries `station.docless: true` and `station.docless_reason` (that reason, word for word, case
+   kept); it sets every hit aside, and your answer's `docless.reason` is the same reason.
 4. Run `select --run-dir D --hunt architecture --name <slug>`: the slug is the scope doc's idea
    (the `<idea>` of `docs/scope/<date>-<idea>.md` or `<idea>-scope.md`), or the working name on a
    docless run.

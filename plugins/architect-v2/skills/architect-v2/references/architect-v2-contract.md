@@ -35,7 +35,7 @@ in this core's own words; no v1 file is read, named as a place to read, or defer
 
 | v1 step | Where it lives now |
 |---|---|
-| 1. The input gate: the scope doc from the invocation's path, else a glob over precon's homes; several are asked, never picked; none asks once whether one exists where the glob cannot see, and only the owner's "none" opens the docless gate, whose reason lands in the doc's header | `select --hunt scope`, the input's `station.scope_doc`, `harvest` (section 5); the answer's `docless` block and its `scope-doc` question (section 6) |
+| 1. The input gate: the scope doc from the invocation's path, else a glob over precon's homes; several are asked, never picked; none (or none of the hits this project's, whether one or several) asks once whether one exists where the glob cannot see, and only the owner's "none" opens the docless gate, whose reason lands in the doc's header | `select --hunt scope`, the input's `station.scope_doc`, `harvest` (section 5); the answer's `docless` block and its `scope-doc` question (section 6) |
 | 2. The exit ramp: "is there a system here at all?" first, answered by the owner in words; a no ends the interview and still writes a tiny doc and renders the visual | the answer's `exit_ramp`; an ended interview carries no candidates (section 6) |
 | 3. The interview: the walkthrough target (a named person, a date, what they must do), two or three candidates distinct in a one-way-door category with what each assumes and makes expensive later, the razor, the pick in the owner's words, the one-way-door check at full-vision quality | the answer's `walkthrough`, `candidates`, `pick`, `rejected`, `components`, `doors`, `poured_concrete`, `deferred`; the content checks of section 6 |
 | 4. The architecture doc: one living doc per project, its fixed form, re-runs continue it with a new run block and strikethroughs, never a fork and never a rewrite | `write` through the shared templates and run log (section 7) |
@@ -110,8 +110,8 @@ The shared input (`station-loop.md` section 4), plus `station`, each field optio
 |---|---|
 | `station.scope_doc` | the scope doc the owner named: in his invocation (v1's first place to look), or his pick after a `selection-several` stop. An absolute path inside the workspace or the staging home; taken over the scope hunt |
 | `station.publish` | `false` when the owner said not to publish the visual in this run (E14-6); the answer then cannot publish (`publish-against-input`). Default `true`, v1's default |
-| `station.docless` | `true` when the scope hunt's single hit is not this project's scope doc (its `Intent:` line names another project) and the owner, asked once, said no scope doc exists for his: the hit is set aside and the docless gate opens (section 5.2). Requires `station.docless_reason`; excludes `station.scope_doc`. Default `false`. `several` still stops and asks |
-| `station.docless_reason` | the reason the executor states for the docless run, one line, only with `station.docless: true`: recorded with the set-aside hit, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason (`docless-reason-mismatch`) |
+| `station.docless` | `true` when no hit of the scope hunt (one or several) is this project's scope doc (each `Intent:` line names another project) and the owner, asked once, said no scope doc exists for his: every hit is set aside and the docless gate opens (section 5.2). Requires `station.docless_reason`; excludes `station.scope_doc`. Default `false`. Without it `several` stops and asks |
+| `station.docless_reason` | the reason the executor states for the docless run, one line, only with `station.docless: true`, holding at least one visible character (whitespace, format and zero-width characters alone are refused at `check-input`, exit 4): recorded with the set-aside hits, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason, byte for byte once runs of whitespace are collapsed to one space and the ends trimmed, case kept (`docless-reason-mismatch`) |
 
 `owner_word` is the one source of a review request's `authorized` flag (section 10). The run's date
 is the machine's local calendar date, read once per command; under `ARCHITECT_V2_TEST=1` the hook
@@ -142,13 +142,15 @@ It needs both selections (or `station.scope_doc` in place of the scope one). The
 - **The scope doc.** `station.scope_doc` when given (a file inside the workspace or the staging home,
   else exit 2); else the scope hunt: `one` is taken; `several` stops the run `selection-several` with
   every candidate listed, never picked (the owner's pick arrives as `station.scope_doc` in a new
-  run); `none` is the docless path: harvest continues, and the answer must carry the gate (section 6).
-  With `station.docless: true`, a `one` is set aside: the scope selection (`selection-scope.json`,
-  and so the result's `selection.scope`) gains `set_aside` (the hit's path and the input's
-  `station.docless_reason`), `harvest.json` and harvest's output carry it, the run is docless, and
-  the architecture hunt's `--name` is the working name, never refused against the hit's slug (v1's
-  gate: a single hit whose `Intent:` is another project matches nothing, and the owner's "none"
-  opens the docless gate). `several` stops `selection-several` whatever the flag says.
+  run), unless `station.docless` is set: the owner, shown the list in an earlier run, said none of
+  them is his project's; `none` is the docless path: harvest continues, and the answer must carry
+  the gate (section 6). With `station.docless: true`, every hit of a `one` or a `several` is set
+  aside: the scope selection (`selection-scope.json`, and so the result's `selection.scope`) gains
+  `set_aside` (`paths`, each hit's path, and `reason`, the input's `station.docless_reason`),
+  `harvest.json` and harvest's output carry it, the run is docless, and the architecture hunt's
+  `--name` is the working name, never refused against a hit's slug (v1's gate matches candidates by
+  their `Intent:` lines: when none matches, the hunt counts as zero plausible matches, the owner is
+  asked once, and his "none" opens the docless gate however many files the glob found).
 - **The slug.** The scope doc's idea: the `<idea>` of `docs/scope/<YYYY-MM-DD>-<idea>.md`, of a flat
   `<idea>-scope.md`, or a dateless `docs/scope/<idea>.md`, never the date. The architecture hunt must
   have run with `--name` equal to it (exit 2 naming the slug otherwise). On a docless run the slug is
@@ -184,7 +186,7 @@ is one line: a line break would put a bare line, or a heading, inside a section 
 | `answer_version`, `run_id`, `session_id` | `1`; this run's id (`run-mismatch` otherwise); the executor's session, the adapter's `answer_fields.session_id`, equal to the input's `invocation.session_id` (`session-mismatch` otherwise) |
 | `project`, `trigger`, `changed` | the title's project; the run log's trigger; its `Changed this run:` (`first run` on the first) |
 | `questions` | every question put to the owner in this run: `id`, `text`, `touches` (the ledger line ids it touches), `answer` (blank: unanswered), optional `about` (`scope-doc` marks the input gate's one question) |
-| `docless` | only when no scope doc was found (or the input set the hunt's hit aside): `reason` (the doc's `Docless:` header; with `station.docless`, the input's `station.docless_reason`) and `home` (`staging` or `workspace`) |
+| `docless` | only when no scope doc was found (or the input set the hunt's hits aside): `reason` (the doc's `Docless:` header; with `station.docless`, the input's `station.docless_reason`) and `home` (`staging` or `workspace`) |
 | `exit_ramp` | `continued` (true: a system, the interview went on) and `why` |
 | `walkthrough` | `who`, `when`, `must` (a list), all present and non-blank (`n/a` is a value, blank is not), none holding the line's separator (the middle dot), no `must` item holding the list's separator (`; `, which the doc joins the items with), and its `trace` |
 | `candidates` | each `name`, `categories` (`<one-way-door category>:<choice>`, such as `platform:library`), `assumes`, `later_cost` |
@@ -226,11 +228,11 @@ one implementation of the shared refusals.
 |---|---|
 | `re-asked-decided`, `unknown-line`, `untraced`, `quietly-resolved`, `shape` | the shared refusals (`station-loop.md` section 8, rule 2): a question touching, or repeating the text of, a `decided` ledger line; an id the ledger does not hold; a decision line with no trace, a kind not admitted, or a trace that names nothing; a line asserted `decided` over a `parked` or `open` line no answered question touched |
 | `session-mismatch`, `run-mismatch` | the answer's session or run is not this run's |
-| `docless-without-reason` | no scope doc was found and the answer records no reason (no `docless`, or a blank reason) |
+| `docless-without-reason` | no scope doc was found and the answer records no reason (no `docless`, or a reason of whitespace, format or zero-width characters only) |
 | `docless-unasked` | no scope doc was found and no answered question `about: scope-doc` asked whether one exists where the glob cannot see |
 | `docless-with-scope-doc` | a `docless` block on a run that has a scope doc |
 | `docless-home` | the docless doc's home is the staging home and the input names none |
-| `docless-reason-mismatch` | the input carries `station.docless_reason` and the answer's `docless.reason` is another reason (compared whitespace-normalized) |
+| `docless-reason-mismatch` | the input carries `station.docless_reason` and the answer's `docless.reason` is another reason: the two are compared byte for byte once each one's runs of whitespace are collapsed to one space and its ends trimmed, case kept (a re-cased reason, or one with an added invisible character, is another reason); the doc's `Docless:` header carries the reason so collapsed |
 | `exit-ramp-ended-with-candidates` | the interview ended at the exit ramp and the answer still carries candidates, a pick or a rejected list |
 | `candidates-fewer-than-two`, `candidates-more-than-three` | the interview continued with fewer than two candidates, or more than three |
 | `candidate-names-repeat` | two candidates share a name |

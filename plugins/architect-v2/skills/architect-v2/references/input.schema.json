@@ -107,12 +107,12 @@
         "docless": {
           "type": "boolean",
           "default": false,
-          "description": "true when the scope hunt's single hit is not this project's scope doc (its `Intent:` line is another project's) and the owner, asked once, said no scope doc exists for it: `harvest` sets the hit aside (the scope selection's `set_aside`) and the docless gate opens; `several` still stops and asks"
+          "description": "true when no hit of the scope hunt (one or several) is this project's scope doc (each `Intent:` line is another project's) and the owner, asked once, said no scope doc exists for it: `harvest` sets every hit aside (the scope selection's `set_aside`) and the docless gate opens; without it `several` stops and asks"
         },
         "docless_reason": {
           "type": "string",
-          "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
-          "description": "the reason the executor states for the docless run, one line: recorded with the set-aside hit, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason"
+          "pattern": "^[^\\n\\r]*[^\\u0000-\\u0020\\u007f-\\u00a0\\u00ad\\u034f\\u0600-\\u0605\\u061c\\u06dd\\u070f\\u08e2\\u115f\\u1160\\u1680\\u180e\\u2000-\\u200f\\u2028-\\u202f\\u205f-\\u2064\\u2066-\\u206f\\u2800\\u3000\\u3164\\ufe00-\\ufe0f\\ufeff\\uffa0\\ufff9-\\ufffb\\U000110bd\\U000110cd\\U00013430-\\U00013438\\U0001bca0-\\U0001bca3\\U0001d173-\\U0001d17a\\U000e0001\\U000e0020-\\U000e007f\\U000e0100-\\U000e01ef][^\\n\\r]*(?![\\s\\S])",
+          "description": "the reason the executor states for the docless run, one line holding at least one visible character (the pattern's class is every character the frame's `answer._visible` drops or `str.strip` removes: whitespace, format and zero-width characters, the letter-shaped fillers; a test holds it to them code point by code point): recorded with the set-aside hit, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason"
         },
         "scope_doc": {
           "type": "string",

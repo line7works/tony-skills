@@ -60,7 +60,7 @@ transport, the model and the containment are readers' roster's. Which readers an
 ## 8. Delivery
 
 Not measured in the frame. The delivery probe for this core is `setups/codex/prompts/`; its
-measurement on the installed package is not lane A's (the probe starts a session, which a lane builder does not do); measured on the package instead: its `SKILL.md` is 14,214 bytes (`wc -c` on the installed copy), above the 8,000-byte main-prompt truncation branch the guide records for Codex's Agent Plugins path; whether this installation takes that path, and whether the body arrives whole, is the delivery probe's question. The control room's proof at the hand-back.
+measurement on the installed package is not lane A's (the probe starts a session, which a lane builder does not do); measured on the package instead: its `SKILL.md` is 14,404 bytes (`wc -c` on the installed copy), above the 8,000-byte main-prompt truncation branch the guide records for Codex's Agent Plugins path; whether this installation takes that path, and whether the body arrives whole, is the delivery probe's question. The control room's proof at the hand-back.
 
 ## 9. Sidecars and invocation restrictions
 
