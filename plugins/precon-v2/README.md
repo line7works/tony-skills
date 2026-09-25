@@ -4,34 +4,42 @@ Harvest an idea discussion into a fixed-format scope doc, every decided, assumed
 
 ## Status
 
-The frame only (E14 slice 1). This plugin holds the shared station loop, its library, the load-
-bearing templates, the schemas and examples of the shared fields, the phase driver with
-`check-input`, `select`, `identity` and `skill-identity` working, the adapters and setups for Claude
-Code and Codex, and the seeded cases of its families. The station's own procedure (`harvest`,
-`record-answer`, `write`, `report` and the steps of `SKILL.md`) lands in its slice 2 lane (lane
-P); until then those four phases stop as `phase-not-built`. Interface version 1, plugin
-version 0.1.0. Test counts are measured and filled in by the control room at close.
+The frame (E14 slice 1) and the precon core (E14 slice 2, lane P). Built in lane P: the station's
+procedure in `SKILL.md` (v1 precon's six steps and nine rules, each step naming the command it
+runs); its lane contract, `references/precon-v2-contract.md`; its answer schema with valid and
+invalid examples; the four phases the frame left as `phase-not-built` (`harvest`,
+`record-answer`, `write`, `report`) and two commands of its own (`state`, the counted board;
+`request`, the exit test's readers requests), in `scripts/precon_core/`; the input's `station`
+fields (`home`, `date`) and the result's `station_result` with the core's four stop tags; the
+lane's observer of the seeded cases, `evals/seeded-cases/lane_observe.py`; and both adapter
+profiles filled. What stays for the join (slice 3): the four cores merged and the shared files
+held equal across them, the end-to-end replay across the front of the loop, the interface-document
+test, the version bump, and the marketplace entry. Interface version 1, plugin version 0.1.0.
+Test counts are measured and filled in by the control room at close.
 
 ## Layout
 
 ```text
 .claude-plugin/plugin.json           name precon-v2, version 0.1.0
 skills/precon-v2/
-  SKILL.md                           the portable procedure (a skeleton until slice 2)
-  agents/openai.yaml                 the Codex sidecar
+  SKILL.md                           the portable procedure
+  agents/openai.yaml                 the Codex sidecar (manual-only)
   references/
+    precon-v2-contract.md            this station's own contract (lane P)
     station-loop.md                  the contract the four front cores share
     shared-files.txt                 the files identical in the four cores
     templates/                       the load-bearing forms, v1's byte for byte
-    input.schema.json, result.schema.json, examples/
+    input.schema.json, answer.schema.json, result.schema.json
+    examples/                        input/, answer/, result/: valid and invalid
   scripts/
-    precon.py                         the phase driver
+    precon.py                        the phase driver: its hunts, phases and own commands
+    precon_core/                     this station's library (phases, scope doc, rules, exit test, run)
     station_core/                    the shared library
     validate-examples.py, validate-result.py
     tests/                           the unittest suites (standard library)
-  adapters/                          README.md, claude-code/, codex/
+  adapters/                          README.md, claude-code/, codex/ (each with its profile and tests)
 setups/                              install, verify, negative tests and launch per harness
-evals/seeded-cases/                  the seeded cases of this core's families
+evals/seeded-cases/                  the seeded cases of this core's families, and lane_observe.py
 ```
 
 ## Tests

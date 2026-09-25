@@ -7,10 +7,36 @@
     "session_id": "session-example-1"
   },
   "plugin_version": "0.1.0",
-  "reason": "x",
-  "report_only": true,
+  "reason": "the scope doc was written",
+  "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",
   "run_id": "run-0001",
+  "selection": {
+    "scope": {
+      "candidates": [
+        {
+          "home": "repo-scope",
+          "path": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+          "tier": 1
+        }
+      ],
+      "outcome": "one",
+      "searched": [
+        {
+          "found": [
+            "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md"
+          ],
+          "given": true,
+          "globs": [
+            "docs/scope/*-{name}.md"
+          ],
+          "home": "repo-scope",
+          "root": "workspace",
+          "tier": 1
+        }
+      ]
+    }
+  },
   "station": "precon-v2",
   "station_result": {
     "board": "decided 2 · assumed 1 · parked 1 · open your-calls 1",
@@ -23,7 +49,6 @@
     },
     "doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
     "exit_test": null,
-    "gate": "every branch was visited or parked",
     "home": "repo",
     "idea": "turnstile",
     "parked": [
@@ -35,6 +60,7 @@
     "triage_why": "a normal feature with known edges"
   },
   "status": "completed",
+  "stop_tag": null,
   "writes": [
     {
       "kind": "document",

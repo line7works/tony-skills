@@ -1,0 +1,46 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "napkin: the owner took no scope doc, straight to /blueprint; the run wrote no file",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "precon-v2",
+  "station_result": {
+    "board": "decided 0 · assumed 0 · parked 0 · open your-calls 0",
+    "chat_block": "PRECON: turnstile\nDoc: none \u2014 napkin, straight to /blueprint\nCounts: decided 0 · assumed 0 · parked 0 · out of scope 0\nParked: none\nGate: napkin: nothing to branch\nNext: /blueprint when ready.",
+    "counts": {
+      "assumed": 0,
+      "decided": 0,
+      "out_of_scope": 0,
+      "parked": 0
+    },
+    "doc": null,
+    "exit_test": null,
+    "gate": "napkin: nothing to branch",
+    "home": null,
+    "idea": "turnstile",
+    "parked": [],
+    "planned": [],
+    "sitting": "ends",
+    "tier": "napkin",
+    "triage_why": "describable in one sentence"
+  },
+  "status": "stopped",
+  "stop_tag": "no-scope-doc",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

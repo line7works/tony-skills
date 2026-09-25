@@ -2,10 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/station-v2/input.schema.json",
   "title": "front core input (shared base)",
-  "description": "The one validated input document of a front core's run (station-loop.md section 4). The shared base the four front cores start from; each core's lane adds its own fields under `station`, and nothing else. Every object is closed: an unknown key is refused, never ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code (station_core/inputs.py): the workspace and the staging home are existing absolute directories, and the run directory is absolute and lies inside neither.",
+  "description": "The one validated input document of a front core's run (station-loop.md section 4). The shared base the four front cores start from; each core's lane adds its own fields under `station`, and nothing else; precon-v2's are `home` and `date` (references/precon-v2-contract.md section 4). Every object is closed: an unknown key is refused, never ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code (station_core/inputs.py): the workspace and the staging home are existing absolute directories, and the run directory is absolute and lies inside neither.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["input_version", "run_id", "workspace", "run_dir", "invocation"],
+  "required": [
+    "input_version",
+    "run_id",
+    "workspace",
+    "run_dir",
+    "invocation"
+  ],
   "properties": {
     "input_version": {
       "type": "integer",
@@ -45,30 +51,45 @@
     "owner_word": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rows", "words"],
+      "required": [
+        "rows",
+        "words"
+      ],
       "description": "the owner's word in this run, the one source of a reader request's `authorized` flag: the readers rows the owner named, and his words verbatim. Never carried over from another run.",
       "properties": {
         "rows": {
           "type": "array",
-          "items": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
           "uniqueItems": true,
           "description": "the readers roster row ids the owner's words name"
         },
         "words": {
           "type": "string",
           "minLength": 1,
-          "description": "the owner's words, verbatim"
+          "pattern": "[^\\s\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]",
+          "description": "the owner's words, verbatim: at least one character a reader can see, not whitespace, a line separator, a format or zero-width character, an invisible letter or a lone combining mark (such words name no row; `request` reads the words the same way for the marks a pattern cannot list)"
         }
       }
     },
     "invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["harness", "caller", "mode"],
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
       "description": "facts about the session this run happens in, filled by the adapter's invocation.py, never typed by the executor",
       "properties": {
         "harness": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "the harness this run is driven from"
         },
         "caller": {
@@ -78,11 +99,17 @@
         },
         "mode": {
           "type": "string",
-          "enum": ["direct", "station"],
+          "enum": [
+            "direct",
+            "station"
+          ],
           "description": "`direct` when a person asked, `station` when another station drove it"
         },
         "session_id": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1,
           "description": "the session this run happens in, as the adapter READ it from the harness's own record; the recorded answer names the same session"
         }
@@ -91,9 +118,50 @@
     "station": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
+      "properties": {
+        "home": {
+          "type": "string",
+          "enum": [
+            "repo",
+            "staging"
+          ],
+          "default": "repo",
+          "description": "where a NEW scope doc goes: `repo` (the default), `<workspace>/docs/scope/<date>-<idea>.md`, the workspace a git work tree root; `staging`, `<staging>/<idea>-scope.md`, when no repository owns the idea (the input then carries `staging`). An existing doc is continued where `select` found it, whatever this says."
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+          "description": "the date a new doc and a cold-read doc are named and titled with, YYYY-MM-DD; absent, `harvest` takes the machine's local calendar date and records it in harvest.json"
+        }
+      },
       "default": {},
-      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+      "description": "precon-v2's own fields (lane P): `home` and `date`. Closed."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "station": {
+            "properties": {
+              "home": {
+                "const": "staging"
+              }
+            },
+            "required": [
+              "home"
+            ]
+          }
+        },
+        "required": [
+          "station"
+        ]
+      },
+      "then": {
+        "required": [
+          "staging"
+        ]
+      }
+    }
+  ]
 }

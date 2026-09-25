@@ -1,0 +1,47 @@
+{
+  "answer_version": 1,
+  "exit_test": {
+    "cold_read_doc": "/tmp/widget-workspace/docs/reviews/2026-09-20-precon-cold-read-turnstile.md",
+    "dispositions": [
+      {
+        "disposition": "surfaced",
+        "item": "What resets the counter?",
+        "note": "x",
+        "row": "claude-session"
+      },
+      {
+        "disposition": "left downstream",
+        "item": "who owns the bench log",
+        "row": "gpt-astra",
+        "why": "blueprint-altitude: an ownership line for the build doc"
+      }
+    ],
+    "summary": "took the reset question; left the log owner downstream"
+  },
+  "gate": "the cold read's confusions visited: one surfaced and settled, one left downstream",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "A power cycle resets the counter",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "a power cycle",
+      "id": "Q1",
+      "text": "What resets the counter?",
+      "touches": []
+    }
+  ],
+  "run_id": "run-0005",
+  "session_id": "session-example-1",
+  "sitting": "ends",
+  "triage": {
+    "tier": "bounded",
+    "why": "a normal feature with known edges"
+  }
+}
