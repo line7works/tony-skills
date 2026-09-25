@@ -57,7 +57,8 @@ Mine what already exists before asking anything.
 2. **The documents.** Name the feature's slug (lowercase letters, digits, `-`, `.`, `_`), then run
    `select` three times: `select --run-dir D --hunt scope`, `select --run-dir D --hunt architecture`
    (add `--name <slug>` to narrow either to the feature), and `select --run-dir D --hunt build
-   --name <feature>` (the name is required: the living doc is looked for under it). An outcome
+   --name <feature>` (the name is required: the living doc is looked for under it, dated or undated
+   in `docs/plans/`, then the flat `docs/<feature>-build-plan.md`). An outcome
    `several` is listed for the owner and never picked by you or the script: put the candidates to
    him, and record his pick with `choose --run-dir D --hunt <hunt> --path <the candidate> --words
    "<his words, verbatim>"`. Only `several` takes a choice. `none` is not a stop: no scope doc is an
@@ -108,7 +109,8 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
 - `session_id`: the adapter helper's `answer_fields.session_id`, never typed; `run_id`: this run's.
 - `feature` (the build hunt's name), `title`, `intent`: the why the builder needs.
 - `lines`: every requirement (`tag: requirement`, with the `id` its slice names; its text is
-  rendered verbatim, so write it as the doc should read, `R1 <dash> ...`), constraint (stack,
+  rendered verbatim, so write it as the doc should read, `R1 <dash> ...`; a bare label such as `R4 `
+  is part of its words, so `R4 x` is not a parked `R3 x`), constraint (stack,
   conventions, test command, hard requirements) and out-of-scope line (the deferred item and the
   reason it was deferred). Each carries its `trace`: `{"kind": "ledger", "ref": <line id>}`,
   `{"kind": "repo_path", "ref": <a path that exists>}`, `{"kind": "question", "ref": <an answered
@@ -140,8 +142,9 @@ the owner, and record it again.
    `docs/plans/<date>-<feature>.md`, or the living doc extended where it lies), the last five
    sections scaffolded empty and never pre-filled, and refuses before anything is written any
    change to a ledger-section line, a `Status:` line or a `Plan: inspected` line, or a revision
-   of a slice whose status is not `not started` (`write-refused`), a doc edited after harvest (`stale-harvest`), or a path that leaves the
-   workspace (`unsafe-path`). With `needs_build_doc: false` it writes nothing and stops
+   of a slice whose status is not `not started`, or a proposed doc that fails its form, the existing
+   doc's own findings included (`write-refused`: the owner fixes the doc's form by hand first), a doc
+   edited after harvest (`stale-harvest`), or a path that leaves the workspace (`unsafe-path`). With `needs_build_doc: false` it writes nothing and stops
    `no-build-doc`.
 2. Run `report --run-dir D`. It validates and writes `result.json` and prints it.
 3. **Read back.** Post `station_result.readback` in chat as it is: the `BLUEPRINT:` block with the

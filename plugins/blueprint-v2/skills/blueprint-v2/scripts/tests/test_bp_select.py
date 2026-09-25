@@ -111,10 +111,10 @@ class DatedNames(_Select):
         run = self.run_with({"README.md": "x\n", "docs/plans/v2-turnstile.md": "# a\n"})
         self.assertEqual(run.select("build", "turnstile")[1]["outcome"], "none")
 
-    def test_an_undated_doc_in_a_folder_is_no_home(self):
-        # round 3, R6 (CL2-4): the folders' v1 home is the dated name only; an undated `<topic>.md` is none
-        for hunt, rel in (("build", "docs/plans/turnstile.md"), ("scope", "docs/scope/turnstile.md"),
-                          ("architecture", "docs/architecture/turnstile.md")):
+    def test_an_undated_doc_in_the_scope_or_architecture_folder_is_no_home(self):
+        # round 3, R6 (CL2-4): those folders' v1 home is the dated name only; an undated `<topic>.md` is none
+        # (the build hunt's plans folder takes one since round 5, R2: `UndatedPlans`)
+        for hunt, rel in (("scope", "docs/scope/turnstile.md"), ("architecture", "docs/architecture/turnstile.md")):
             for name in ("turnstile", None):
                 run = self.run_with({"README.md": "x\n", rel: "# a\n"})
                 code, out, err = run.select(hunt, name)
@@ -131,7 +131,8 @@ class DatedNames(_Select):
                                 for home in homes for g in home["globs"]),
                          sorted([("architecture", "docs/architecture/" + dated, 1),
                                  ("architecture", "docs/{name}-architecture.md", 2),
-                                 ("build", "docs/plans/" + dated, 1), ("build", "docs/{name}-build-plan.md", 2),
+                                 ("build", "docs/plans/" + dated, 1), ("build", "docs/plans/{name}.md", 1),
+                                 ("build", "docs/{name}-build-plan.md", 2),
                                  ("scope", "docs/scope/" + dated, 1), ("scope", "docs/{name}-scope.md", 1)]))
 
     def test_with_no_name_every_dated_doc_is_a_candidate(self):
@@ -191,6 +192,64 @@ class Choose(_Select):
         self.assertEqual(run.harvest()[0], 0)
         code, out, err = self.choose(run, os.path.join(run.ws, bplib.SCOPE_PATH))
         self.assertEqual(code, 2, err)
+
+
+class UndatedPlans(_Select):
+    """Round 5, R2 (the outside reviewer's L-5): the build hunt's first tier matches both
+    `docs/plans/<date>-<topic>.md` and `docs/plans/<topic>.md` (contract section 11: `select` over
+    `docs/plans/*.md` by topic, then the flat name); several first-tier matches are listed, never picked;
+    the flat `docs/<topic>-build-plan.md` stays second."""
+
+    UNDATED = "docs/plans/turnstile.md"
+    FLAT = "docs/turnstile-build-plan.md"
+
+    def found(self, files):
+        run = self.run_with(dict({"README.md": "x\n"}, **files))
+        code, out, err = run.select("build", "turnstile")
+        self.assertEqual(code, 0, err)
+        return out["outcome"], sorted((os.path.relpath(c["path"], run.ws), c["tier"]) for c in out["candidates"])
+
+    def test_an_existing_undated_plan_alone_is_one(self):
+        self.assertEqual(self.found({self.UNDATED: bplib.BUILD_FILLED}), ("one", [(self.UNDATED, 1)]))
+
+    def test_an_undated_plan_and_its_dated_twin_are_several_both_listed(self):
+        self.assertEqual(self.found({self.UNDATED: bplib.BUILD_FILLED, bplib.BUILD_PATH: bplib.BUILD_FILLED}),
+                         ("several", [(bplib.BUILD_PATH, 1), (self.UNDATED, 1)]))
+
+    def test_the_flat_build_plan_is_still_second(self):
+        self.assertEqual(self.found({self.FLAT: bplib.BUILD_FILLED}), ("one", [(self.FLAT, 2)]))
+        self.assertEqual(self.found({self.FLAT: bplib.BUILD_FILLED, self.UNDATED: bplib.BUILD_FILLED}),
+                         ("one", [(self.UNDATED, 1)]))
+
+    def test_another_features_undated_plan_is_not_this_one(self):
+        # (a re-cased `Turnstile.md` is left out: on a case-insensitive file system it IS `turnstile.md`)
+        for rel in ("docs/plans/big-turnstile.md", "docs/plans/turnstile-v2.md", "docs/plans/v2-turnstile.md",
+                    "docs/plans/turnstile.md.bak", "docs/plans/sub/turnstile.md"):
+            self.assertEqual(self.found({rel: "# a\n"}), ("none", []), rel)
+
+    def test_the_undated_plan_is_extended_where_it_lies_and_never_forked(self):
+        ws = testlib.git_workspace(self.tmp, "ws-extend", dict(bplib.base_files(), **{self.UNDATED: bplib.BUILD_FILLED}))
+        run = bplib.Run(self.tmp, ws, name="run-extend")
+        harvest = run.to_harvest()
+        target = os.path.join(ws, self.UNDATED)
+        self.assertEqual(harvest["target"], target)
+        code, out, err = run.record(bplib.extension_answer())
+        self.assertEqual(code, 0, (out, err))
+        code, out, err = run.write()
+        self.assertEqual((code, out["doc"], out["action"]), (0, target, "extended"), (out, err))
+        self.assertEqual(sorted(os.listdir(os.path.join(ws, "docs", "plans"))), ["turnstile.md"])
+        self.assertIn("## Slice B", bplib.read(target))
+
+    def test_an_undated_plan_and_its_dated_twin_stop_harvest_unpicked(self):
+        ws = testlib.git_workspace(self.tmp, "ws-twin", dict(bplib.base_files(build=bplib.BUILD_FILLED),
+                                                             **{self.UNDATED: bplib.BUILD_FILLED}))
+        run = bplib.Run(self.tmp, ws, name="run-twin")
+        run.check_input()
+        run.select_all()
+        code, out, err = run.harvest()
+        self.assertEqual((code, out["stop_tag"]), (10, "selection-several"), (out, err))
+        self.assertIn(self.UNDATED, out["reason"])
+        self.assertIn(bplib.BUILD_PATH, out["reason"])
 
 
 if __name__ == "__main__":

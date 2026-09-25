@@ -335,11 +335,17 @@ class AStatusLineInAnyCase(_Write):
             self.assertTrue(out["wrote_nothing"], status)
 
     def test_a_re_cased_status_line_survives_an_extension_byte_for_byte(self):
+        # round 5, R1: a doc whose `Status:` line is re-cased fails its form (`missing the label 'Status:'`),
+        # so an extension is refused whole and the doc stays byte for byte as found; the extension logic
+        # itself still keeps the line (`buildoc.extend`, no protected change)
         doc = bplib.BUILD_FILLED.replace("Status: in progress", "status: built")
         self.through_answer(bplib.base_files(build=doc), bplib.extension_answer())
+        path = os.path.join(self.ws, bplib.BUILD_PATH)
         code, out, err = self.run.write()
-        self.assertEqual(code, 0, (out, err))
-        after = bplib.read(os.path.join(self.ws, bplib.BUILD_PATH))
+        self.assertEqual((code, out["stop_tag"]), (10, "write-refused"), (out, err))
+        self.assertIn("missing the label 'Status:'", out["reason"])
+        self.assertEqual(bplib.read(path), doc)
+        after = buildoc.extend(doc, [("B", buildoc.slice_block(TheStructureEdges().blocks("B")))])
         self.assertIn("\nstatus: built\n", after)
         self.assertEqual(buildoc.protected_changes(doc, after), [])
 
@@ -443,6 +449,52 @@ class Phases(_Write):
         run = self.through_answer(bplib.base_files(), bplib.clean_answer())
         self.assertEqual(run.write()[0], 0)
         self.assertEqual(run.write()[0], 2)
+
+
+class EveryRenderedDocValidates(_Write):
+    """Round 5, R1 (the outside reviewer's L-4): a proposed build doc that fails its form is never written.
+    On an extension the existing doc's own form findings are no exemption: `write` stops `write-refused`
+    naming every finding of `templates.check("build-doc", <the proposed text>)`, writes an empty receipt and
+    nothing else, in report-only mode as in a writing run."""
+
+    SHAPES = (("a changed label", ("Acceptance criteria:", "Acceptance:")),
+              ("a malformed stamp", ("0 MINOR\n", "0 MINORS\n")))
+
+    def malformed(self, change):
+        return bplib.BUILD_FILLED.replace(change[0], change[1], 1)
+
+    def test_each_malformed_existing_doc_is_refused_with_every_finding_named(self):
+        for label, change in self.SHAPES:
+            for report_only in (False, True):
+                with self.subTest(shape=label, report_only=report_only):
+                    doc = self.malformed(change)
+                    self.assertTrue(templates.check("build-doc", doc), label)
+                    tmp = testlib.make_scratch("bp-write-form-")
+                    self.addCleanup(testlib.rmtree, tmp)
+                    self.tmp = tmp
+                    run = self.through_answer(bplib.base_files(build=doc), bplib.extension_answer(),
+                                              report_only=report_only)
+                    path = os.path.join(self.ws, bplib.BUILD_PATH)
+                    before = testlib.tree_digest(self.ws)
+                    code, out, err = run.write()
+                    self.assertEqual(code, 10, (out, err))
+                    self.assertEqual(out["stop_tag"], "write-refused", out["reason"])
+                    self.assertEqual(testlib.tree_digest(self.ws), before)
+                    self.assertEqual(bplib.read(path), doc)
+                    self.assertTrue(out["wrote_nothing"])
+                    receipt = testlib.load_json(os.path.join(run.run_dir, "receipt.json"))
+                    self.assertEqual(receipt, {"receipt_version": 1, "writes": []})
+                    self.assertFalse(os.path.exists(os.path.join(run.run_dir, "proposed-build-doc.md")))
+                    for finding in templates.check("build-doc", doc):
+                        self.assertIn(finding["message"], out["reason"], label)
+                    self.assertEqual(sorted(os.listdir(os.path.join(self.ws, "docs", "plans"))),
+                                     [os.path.basename(bplib.BUILD_PATH)])
+
+    def test_a_valid_existing_doc_still_extends(self):
+        run = self.through_answer(bplib.base_files(build=bplib.BUILD_FILLED), bplib.extension_answer())
+        code, out, err = run.write()
+        self.assertEqual((code, out["action"]), (0, "extended"), (out, err))
+        self.assertEqual(templates.check("build-doc", bplib.read(os.path.join(self.ws, bplib.BUILD_PATH))), [])
 
 
 if __name__ == "__main__":

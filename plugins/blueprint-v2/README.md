@@ -27,7 +27,13 @@ refusals read carries a requirement's words without their `R<n>` prefix and a li
 label; an open item carried out of scope in its own words, under any trace, is refused like one
 carried by its id; a verify form names its test, its path or two words of steps; the architecture
 doc's two sections are known by their exact headings; the hunts hold the v1 homes only (no undated
-`<topic>.md` in a folder).
+`<topic>.md` in the scope or architecture folder).
+
+Lane L's fifth round (after the outside reviewer's lane look): every rendered build doc validates, so
+an extension of a doc that fails its form stops `write-refused` with every finding named and nothing
+written; the build hunt's first tier holds the undated `docs/plans/<topic>.md` beside the dated name
+(an existing undated plan is extended where it lies, never forked); the shared refusals read each
+answer line's original text, so a bare item label is part of the words when both sides carry one.
 
 For the join: the version and the marketplace entry are the control room's at close. Interface
 version 1, plugin version 0.1.0. Test counts are measured and filled in by the control room.

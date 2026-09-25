@@ -103,6 +103,7 @@ the slot reads `*`.
 | `architecture` | `docs/architecture/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the architecture folder, dated names |
 | `architecture` | `docs/{name}-architecture.md` | 2 | the older flat name |
 | `build` | `docs/plans/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md` | 1 | the plans folder, dated names |
+| `build` | `docs/plans/{name}.md` | 1 | the plans folder, the topic undated (round 5, R2) |
 | `build` | `docs/{name}-build-plan.md` | 2 | the older flat name |
 
 Why the dated globs. A doc in a dated home is named `<YYYY-MM-DD>-<topic>.md` and is matched by its
@@ -113,16 +114,23 @@ name the slot reads `*`, so every dated doc of the folder is a candidate.
 
 Why the v1 homes only (round 3, R6). The homes are the v1 stations' own, never guessed (E14-10): in
 each folder the dated name, which the scope, architecture and build stations write and the later
-stations read, and the older flat names v1 still reads. An undated `<topic>.md` in a folder is no
-such home: no station writes one (`write` always names a new doc with its date), and the inspect and
-build stations' own hunts would not find it by that name, so a doc found there would be extended
-where no later station looks. It is never a candidate here.
+stations read, and the older flat names v1 still reads. An undated `<topic>.md` in the scope or the
+architecture folder is no such home and never a candidate.
+
+Why the plans folder's undated name (round 5, R2). The station selects over `docs/plans/*.md` by topic,
+then the flat name (E14 contract, section 11), so the build hunt matches both
+`docs/plans/<date>-<topic>.md` and `docs/plans/<topic>.md` at the first tier, then
+`docs/<topic>-build-plan.md` at the second. Several first-tier matches (an undated plan and a dated
+twin) are listed for the owner, never selected silently. An existing plan is extended where it lies:
+its missing date prefix is no permission to fork a dated second plan beside it. `write` still names a
+NEW doc with its date. The name is matched whole: `docs/plans/big-turnstile.md` or
+`docs/plans/turnstile-v2.md` is another feature's plan.
 
 Why the tiers. The scope homes share ONE tier (carried item C1-7): the station's step 1 says that
 when more than one scope doc could match the feature they are listed and the owner is asked, so a
 doc in the newer folder never hides a flat one; both are `several`. The architecture and build
-homes keep the newer home first, the order the hand-off table and step 4 give, so an older flat
-build doc is extended where it lies only when no newer one exists.
+homes keep the plans folder (or the architecture folder) first, the order the hand-off table and step 4
+give, so an older flat build doc is extended where it lies only when no plan in the folder exists.
 
 The outcomes. `none` is never a stop here: no scope doc means an empty ledger, no architecture
 doc means no architecture lines, no build doc means a new one. `several` is listed for the owner
@@ -186,11 +194,12 @@ least one constraint line.
    this core does not allow (assumptions have their own field). An `owner_words` trace's `ref` is
    the owner's words quoted verbatim, and a blank one fails the schema.
 2. The shared refusals of E14-11, `station_core/answer.py`'s `check`, called once on a view of the
-   answer (its questions, and its lines, each line's words as the ledger would hold them: a
-   requirement's text without its `R<n>` prefix, a constraint's or out-of-scope line's without a
-   leading list mark or label (`Constraint:`, `Out of scope:`, `Assumed:`, `Open:`), so the shared
-   text rule meets an open, parked or deferred item written in the doc's own form (round 3, R2); the
-   answer keeps the prefix and the doc renders it. Each line is tagged by its own kind: a requirement and a
+   answer (its questions, and its lines, each with its ORIGINAL text (round 5, R3): the shared forms
+   own every decoration, a marked label such as `R2 <dash> ` or `R12: ` and a section label such as
+   `Constraint:` included, and a BARE item label (`R4 `, `R12.3 `) is part of the words whenever both
+   sides carry one, so `R4 budget approval` is not the parked `R3 budget approval` and `R21 storage`
+   is not the parked `R2.1 storage`, while `R12.3 W` is the parked `W` and a plain `budget approval`
+   is the parked `R3 budget approval`; the doc renders the text as written. Each line is tagged by its own kind: a requirement and a
    constraint `decided`, since they are what the doc asserts as settled; an out-of-scope line
    `out-of-scope`, since carrying a parked scope line or a deferred architecture line forward as
    out of scope is the pass-forward E14-11 names, never a resolution) against `ledger_view`, with
@@ -206,7 +215,7 @@ least one constraint line.
 | `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
 | `run-id-mismatch` | a `run_id` other than this run's |
 | `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
-| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its trace (a ledger trace to the item) or by its words, whatever the trace (round 3, R3). The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without an `Out of scope:` label, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis) equal to any reading of the open row (`row_forms`), so a trailing period, a label, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
+| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its trace (a ledger trace to the item) or by its words, whatever the trace (round 3, R3). The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without a leading list mark or section label such as `Out of scope:`, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis from those words and from the line's bare words with its bare item label put back in front) equal to any reading of the open row (`row_forms`), so a trailing period, a marked label, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. A bare item label is kept in every reading (round 5, R3): no reading of a labelled line is label-free, so `R4 sensor calibration: not now` is not the open `R3 sensor calibration`, and `sensor calibration: not now` is. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |
@@ -280,9 +289,13 @@ Exit 5 lists every refusal of steps 2 and 3 at once. Only a clean answer is reco
   `Status:` or `Plan: inspected` line is known by its label in any case and at any indent, so a
   hand-typed `status: built` or ` Status: built` is protected as `Status: built` is. A doc whose bytes changed after `harvest`
   (edited by hand, or created by another run) stops `stale-harvest`. A target that is a link, or
-  whose folder resolves outside the workspace, stops `unsafe-path`. A rendered doc that departs
-  from its form (`templates.check`) beyond the findings the existing doc already had is a defect
-  of the script, exit 1.
+  whose folder resolves outside the workspace, stops `unsafe-path`. Every rendered document
+  validates (round 5, R1): the proposed doc must pass `templates.check("build-doc", text)` before
+  any document write, and the existing doc's own form findings are no exemption (they are never
+  subtracted). A proposed doc with any finding stops the run `write-refused`, every finding named in
+  the reason, an empty receipt written and nothing else (no document, no report-only proposal); the
+  doc stays byte for byte as found. An existing doc that fails its form (a changed label, a
+  malformed stamp, a re-cased `Status:` line) is fixed by hand before a run extends it.
 - **The receipt:** `receipt.json` in the run directory names every write (`path`, `kind`,
   `sha256_before`, `sha256_after`); the doc is written through a temporary file and a rename.
 
@@ -334,7 +347,7 @@ lines, so what it would write is reported, not written.
 |---|---|
 | `selection-several` | shared: a hunt found several candidates and no `choose` settled it; listed, never picked |
 | `ledger-refused` | shared: the scope doc holds a line the ledger reader cannot tag, or the architecture doc's poured-concrete or deferred section holds a line the reader cannot read (section 6); quoted |
-| `write-refused` | shared: the write would change a protected line (section 8); quoted, nothing written |
+| `write-refused` | shared: the write would change a protected line, or the proposed doc fails its form (section 8); quoted, nothing written |
 | `no-build-doc` | own: the answer says this does not need a build doc; no file |
 | `stale-harvest` | own: the build doc's bytes changed after harvest; nothing written |
 | `unsafe-path` | own: the build doc's path is a link or leaves the workspace; nothing written |

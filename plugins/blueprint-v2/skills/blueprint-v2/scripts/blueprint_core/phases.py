@@ -397,12 +397,15 @@ def phase_write(ctx, args):
                          "nothing was written" % (len(changes), os.path.relpath(target, workspace), quoted),
                          harvest=harvest, answer=answer, receipt=empty,
                          refused_lines=[c["line"] for c in changes])
-        old = set(f["message"] for f in harvest["build"]["form_findings"])
-        new = [f for f in templates.check("build-doc", text) if f["message"] not in old]
-    else:
-        new = templates.check("build-doc", text)
-    if new:
-        raise driver.Defect("the rendered build doc departs from its form: %s" % json.dumps(new[:4]))
+    # every rendered document validates (round 5, R1): the existing doc's own form findings are no
+    # exemption, so an extension of a doc that fails its form is refused, never written
+    findings = templates.check("build-doc", text)
+    if findings:
+        fsio.write_json(_path(run, "receipt.json"), empty)
+        return _stop(ctx, run, "write-refused", "the proposed build doc fails its form (%d finding(s): %s); nothing "
+                     "was written. Fix the doc's form by hand, then start a new run"
+                     % (len(findings), "; ".join(f["message"] for f in findings)),
+                     harvest=harvest, answer=answer, receipt=empty)
     data = text.encode("utf-8")
     if _report_only(run):
         fsio.atomic_write(_path(run, PROPOSED), data)

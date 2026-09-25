@@ -11,18 +11,19 @@ call and not a descoping: an out-of-scope line that carries one forward with no 
 of this run touching it is this core's own refusal, `open-item-descoped`, by the item's id and by
 its words alike (round 3, R3), whatever the line's trace. The words are compared through the frame's
 own readings (round 4, R1; E14-3): the line through `station_core.answer.forms`, the row through
-`row_forms`, so every decoration the frame knows (a trailing period, a label, a list mark, an
+`row_forms`, so every decoration the frame knows (a trailing period, a marked label, a list mark, an
 invisible character, a ledger tail, the row decorated) is seen through the same way the shared
-`quietly-resolved` rule sees through it. This core adds only what the frame has no reading for: an
-out-of-scope label (`Out of scope:`), and the item before its reason (cut at the first dash, colon,
-semicolon, comma or parenthesis).
+`quietly-resolved` rule sees through it. This core adds only what the frame has no reading for: the
+item before its reason (cut at the first dash, colon, semicolon, comma or parenthesis, after a
+leading list mark and section label such as `Out of scope:`).
 
-The view carries each line's words as the ledger would hold them (round 3, R2): a requirement's
-text without its `R<n>` prefix (the doc renders `R2 <dash> ...`, and the shared text rule compares
-whole words), and a constraint's or out-of-scope line's without a leading list mark or label
-(`Constraint:`, `Out of scope:`, `Assumed:`, `Open:`), so an open, parked or deferred item's words
-written in the doc's own form still meet the shared `quietly-resolved` rule. The answer itself keeps
-the prefix: the doc renders the text as written.
+The view carries each line's ORIGINAL text (round 5, R3): the shared forms own every decoration, a
+marked label such as `R2 <dash> ` or `R12: ` included, and a BARE item label (`R4 `, `R12.3 `) is part
+of the words when both sides carry one (the frame's rule): `R4 budget approval` is not the parked
+`R3 budget approval`, `R12.3 W` is the parked `W`, and a plain `budget approval` is the parked
+`R3 budget approval`. This core's own readings keep the label too: the reason cut is taken from the
+line as written and from its bare words with the line's bare label put back in front, never from a
+label-free reading of a labelled line.
 
 The trace kinds this core allows (ruling R1 of round 2, the owner's words as a trace): `ledger`,
 `repo_path`, `question` and `owner_words` (the owner's words quoted verbatim, not blank: the schema
@@ -47,6 +48,7 @@ in the shared shape, one per finding:
     feature-not-hunted        the answer's feature is not the name the build hunt ran with
 """
 import re
+import unicodedata
 
 from station_core import answer as shared
 
@@ -67,13 +69,16 @@ MANUAL = re.compile(r"^manual: (\S+(?:\s+\S+)+)$")
 EXTENSION = re.compile(r"\.[A-Za-z0-9]+$")
 PLACEHOLDERS = frozenset(("tbd", "tba", "tbc", "todo", "na", "none", "null", "nil", "later", "soon", "unknown",
                           "pending", "fixme", "wip", "xxx", "somewhere", "sometime", "whatever", "etc"))
-# a requirement's `R<n>` prefix, and a list mark or a label, which the view leaves out (round 3, R2)
-REQUIREMENT_PREFIX = re.compile(r"^R\d+(?:\s*[\u2014\u2013:.\-]+\s*|\s+)")
+# a leading list mark or section label, left out before the reason cut (the item label is kept: round 5, R3)
 LIST_MARK = re.compile(r"^[-*+]\s+")
 LABEL = re.compile(r"^(?:constraints?|out of scope|out-of-scope|assumed|assumption|open|requirement)\s*:\s*",
                    re.I)
 # where an out-of-scope line's item ends and its reason begins (round 3, R3; round 4, R1 adds the comma)
 REASON = re.compile(r"\s+[\u2014\u2013]\s+|\s+--?\s+|:\s+|;\s+|,\s+|\s+\(")
+# a bare item label as the station forms write one (the frame's label letters; round 5, R3), and two labels
+# no line of a real answer carries, used to ask the frame's own rule whether a line carries a bare label
+ITEM_LABEL = re.compile(r"^(?:R|AC|C|Q|O|A|D)-?\d{1,5}(?:\.\d{1,3})*[a-z]?$")
+PROBE_LABELS = ("D99999", "A99998")
 
 
 def _refusal(rule, message, **where):
@@ -83,7 +88,8 @@ def _refusal(rule, message, **where):
 
 
 def words(text):
-    """A line's words as the ledger would hold them: no leading list mark, label or `R<n>` prefix."""
+    """A line without its leading list mark or section label (`Out of scope:`, `Constraint:`), so the
+    reason cut finds the item's own separator; its item label (`R4 `) is kept (round 5, R3)."""
     if not isinstance(text, str):
         return text
     out = text.strip()
@@ -91,22 +97,43 @@ def words(text):
         before = out
         out = LIST_MARK.sub("", out, count=1)
         out = LABEL.sub("", out, count=1)
-        out = REQUIREMENT_PREFIX.sub("", out, count=1)
         out = out.strip()
         if out == before:
             break
     return out or text
 
 
+def _labelled_bare(text):
+    """The line's bare words (`station_core.answer.bare`) with its bare item label put back in front, so a
+    reading taken from them keeps the label (round 5, R3); the bare words alone for an unlabelled line;
+    None when the line carries a bare label this core cannot place (then no reading is taken from them).
+    Whether the line carries one is the frame's own rule, asked through the public forms: an unlabelled
+    line meets a row of its words under any label, a labelled line meets only its own label's."""
+    bare = shared.bare(text)
+    if not bare:
+        return None
+    line = shared.forms(text)
+    if all(line & shared.row_forms(probe + " " + bare) for probe in PROBE_LABELS):
+        return bare
+    for token in text.split():
+        token = "".join(ch for ch in token if unicodedata.category(ch) != "Cf")
+        if ITEM_LABEL.match(token) and line & shared.row_forms(token + " " + bare):
+            return token + " " + bare
+    return None
+
+
 def line_forms(text):
     """Every reading of an out-of-scope line's words, all of them the frame's (`station_core.answer.forms`):
-    the line as written, the line without this core's labels (`words`), and the item before its reason,
-    cut from the words and from their bare form. Compared with `station_core.answer.row_forms` of a row."""
+    the line as written, the line without a leading list mark or section label (`words`), and the item
+    before its reason, cut from those words and from the bare words with the line's bare label kept
+    (`_labelled_bare`). Compared with `station_core.answer.row_forms` of a row."""
     if not isinstance(text, str):
         return set()
     stripped = words(text)
     out = set(shared.forms(text)) | set(shared.forms(stripped))
-    for base in (stripped, shared.bare(stripped)):
+    for base in (stripped, _labelled_bare(stripped)):
+        if not base:
+            continue
         cut = REASON.search(base)
         if cut and base[:cut.start()].strip():
             out |= shared.forms(base[:cut.start()])
@@ -116,10 +143,11 @@ def line_forms(text):
 
 def view(answer):
     """The answer as the shared refusals read it: its questions, and its lines tagged by `VIEW_TAGS`,
-    each line's text its `words` (no `R<n>` prefix, no label)."""
+    each line's ORIGINAL text (round 5, R3: the shared forms own the decorations, and a bare label is
+    part of the words when both sides carry one)."""
     lines = []
     for line in answer.get("lines") or []:
-        row = {"text": words(line.get("text")), "tag": VIEW_TAGS.get(line.get("tag"), "decided")}
+        row = {"text": line.get("text"), "tag": VIEW_TAGS.get(line.get("tag"), "decided")}
         if "trace" in line:
             row["trace"] = line["trace"]
         lines.append(row)

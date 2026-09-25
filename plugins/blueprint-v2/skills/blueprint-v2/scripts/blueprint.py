@@ -21,17 +21,19 @@ hunt table (below, with the tiers and why), its four lane phases and its one own
 (`blueprint_core/phases.py`), its stop tags and its recorded answer.
 
 The hunts hold the v1 homes only (round 3, R6): each folder's dated name `<YYYY-MM-DD>-<topic>.md`,
-matched by its topic, the part after the date, whole (`DATED`), and v1's older flat names. An undated
-`<topic>.md` in a folder is no v1 home (no station writes one, and the later stations' own hunts
-would not find it), so it is never a candidate. `docs/plans/2026-09-22-big-turnstile.md` is another
-feature's doc and never `turnstile`'s. `scope`: `docs/scope/<date>-{name}.md` and the older flat
-`docs/{name}-scope.md` in ONE tier (carried item C1-7): a scope doc in the newer folder and one at
-the flat name that both match are `several`, listed for the owner and never picked, as the station's
-step 1 says ("when more than one could match, list them and ask"). `architecture`: the folder's
-dated name first, the flat `docs/{name}-architecture.md` second, since the hand-off table ranks the
-newer home first. `build` (the living doc, under the feature's name): `docs/plans/<date>-{name}.md`
-first, the flat `docs/{name}-build-plan.md` second, the station's step 4 order, so an older flat doc
-is extended where it lies when no newer one exists.
+matched by its topic, the part after the date, whole (`DATED`), and v1's older flat names.
+`docs/plans/2026-09-22-big-turnstile.md` is another feature's doc and never `turnstile`'s. `scope`:
+`docs/scope/<date>-{name}.md` and the older flat `docs/{name}-scope.md` in ONE tier (carried item
+C1-7): a scope doc in the newer folder and one at the flat name that both match are `several`, listed
+for the owner and never picked, as the station's step 1 says ("when more than one could match, list
+them and ask"); an undated `docs/scope/<topic>.md` is no home. `architecture`: the folder's dated name
+first, the flat `docs/{name}-architecture.md` second, since the hand-off table ranks the newer home
+first; an undated `docs/architecture/<topic>.md` is no home. `build` (the living doc, under the
+feature's name): `docs/plans/<date>-{name}.md` AND `docs/plans/{name}.md` first (round 5, R2: the
+contract's `select` over `docs/plans/*.md` by topic; an existing undated plan is extended where it
+lies, never forked into a dated twin, and the two together are `several`), the flat
+`docs/{name}-build-plan.md` second, the station's step 4 order, so an older flat doc is extended where
+it lies when no plan in the folder exists.
 """
 import os
 import sys
@@ -52,7 +54,8 @@ HUNTS = {
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-architecture.md"], "tier": 2},
     ],
     "build": [
-        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/" + DATED], "tier": 1},
+        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/" + DATED, "docs/plans/{name}.md"],
+         "tier": 1},
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-build-plan.md"], "tier": 2},
     ],
     "scope": [

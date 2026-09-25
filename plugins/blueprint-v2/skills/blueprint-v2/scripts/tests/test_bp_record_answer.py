@@ -271,10 +271,12 @@ class TheViewCarriesTheWordsWithoutTheirLabel(_Record):
             self.accepted(self.answer_with("R2 %s %s" % (bplib.D, text), {"kind": "question", "ref": "Q2"},
                                            settle=ident))
 
-    def test_the_doc_still_renders_the_prefix(self):
+    def test_the_view_carries_each_lines_original_text(self):
+        # round 5, R3: the shared forms read each line as written (a bare `R<n>` label is part of the words
+        # when both sides carry one); the marked `R1 <dash> ` is the frame's decoration, seen through there
         from blueprint_core import checks
         doc = bplib.clean_answer()
-        self.assertEqual(checks.view(doc)["lines"][0]["text"], "`spin(n)` returns `n + 1`")
+        self.assertEqual([l["text"] for l in checks.view(doc)["lines"]], [l["text"] for l in doc["lines"]])
         self.assertEqual(doc["lines"][0]["text"], "R1 %s `spin(n)` returns `n + 1`" % bplib.D)
 
 
@@ -565,6 +567,70 @@ class SchemaRefusals(_Record):
         run.check_input()
         run.select_all()
         self.assertEqual(run.record(bplib.clean_answer(run_id="run-0002"))[0], 2)
+
+
+class ALabelIsPartOfTheWords(_Record):
+    """Round 5, R3 (the lane half of the outside reviewer's L-2): each line's ORIGINAL text reaches the shared
+    `forms` and `row_forms`, so a bare `R<n>` label is part of the words when both sides carry one, and this
+    core's own reason cut keeps it. `R4 budget approval` is not the parked `R3 budget approval`; `R12.3 W` is
+    the parked `W`; `R21 storage` is not the parked `R2.1 storage`; a plain `budget approval` is still the
+    parked `R3 budget approval`. The same for an open item carried out of scope."""
+
+    PARKED = ("R3 budget approval", "W", "R2.1 storage")
+    OPEN = "R3 sensor calibration"
+    SCOPE = bplib.SCOPE.replace(
+        "- Where the count is kept between sessions",
+        "".join("- %s %s parked: needs research\n" % (t, bplib.D) for t in PARKED)
+        + "- Where the count is kept between sessions").replace(
+        "- how often the counter resets\n", "- how often the counter resets\n- %s\n" % OPEN)
+    files = dict(bplib.base_files(arch=True), **{bplib.SCOPE_PATH: SCOPE})
+
+    def setUp(self):
+        super(ALabelIsPartOfTheWords, self).setUp()
+        self.ids = bplib.ledger_ids(self.SCOPE)
+
+    def fresh(self):
+        testlib.rmtree(self.run.run_dir)
+        self.run.to_harvest()
+
+    def requirement(self, text):
+        doc = bplib.clean_answer()
+        doc["lines"][1]["text"] = text
+        doc["lines"][1]["trace"] = {"kind": "repo_path", "ref": "README.md"}
+        return doc
+
+    def out_of_scope(self, text):
+        doc = bplib.clean_answer()
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": text,
+                           "trace": {"kind": "repo_path", "ref": "README.md"}}
+        return doc
+
+    def test_a_different_label_is_a_different_line(self):
+        for text in ("R4 budget approval", "R21 storage", "R4 budget approval.", "R2.2 storage"):
+            self.fresh()
+            self.accepted(self.requirement(text))
+
+    def test_the_same_words_with_the_same_label_or_one_side_bare_are_refused(self):
+        for text, row in (("R12.3 W", "W"), ("budget approval", "R3 budget approval"),
+                          ("R3 budget approval", "R3 budget approval"), ("R3: budget approval", "R3 budget approval"),
+                          ("R2.1 storage", "R2.1 storage"), ("W", "W")):
+            self.fresh()
+            out = self.refused(self.requirement(text), "quietly-resolved")
+            self.assertIn(self.ids[row], " ".join(r["message"] for r in out["refusals"]), text)
+
+    def test_an_open_item_under_another_label_is_not_the_item(self):
+        for text in ("R4 sensor calibration", "R4 sensor calibration, later", "R4 sensor calibration: not now",
+                     "Out of scope: R4 sensor calibration (not now)", "- R4 sensor calibration; later"):
+            self.fresh()
+            self.accepted(self.out_of_scope(text))
+
+    def test_an_open_item_with_its_label_or_none_is_refused(self):
+        for text in ("sensor calibration", "R3 sensor calibration", "sensor calibration, later",
+                     "R3 sensor calibration: not now", "Out of scope: sensor calibration (not now)",
+                     "- R3 sensor calibration; later", "R3: sensor calibration"):
+            self.fresh()
+            out = self.refused(self.out_of_scope(text), "open-item-descoped")
+            self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), text)
 
 
 if __name__ == "__main__":
