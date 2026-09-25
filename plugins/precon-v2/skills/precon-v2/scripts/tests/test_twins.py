@@ -19,10 +19,16 @@ from preconlib import D
 WAITS = "the owner's call on logging"
 OPEN = "Whether resets are logged"
 PARKED = "Where the count is kept between sessions"
+ASSUMED = "One module, no package"
+CGJ = chr(0x34F)      # COMBINING GRAPHEME JOINER, default-ignorable (the frame's invisibles drop it)
+VS16 = chr(0xFE0F)    # VARIATION SELECTOR-16, the same
 
 
 class _Born(unittest.TestCase):
-    """Run 1 births the doc with a decided line, a parked line and one open line (waits-on set)."""
+    """Run 1 births the doc with a decided line, an assumed line, a parked line and one open line
+    (waits-on set)."""
+
+    WAITS = WAITS
 
     def setUp(self):
         self.tmp = testlib.make_scratch("twins-")
@@ -33,16 +39,18 @@ class _Born(unittest.TestCase):
         self.assertEqual(run.harvest()[0], 0)
         code, doc, err = run.record(preconlib.answer(run, doc=preconlib.new_doc_fields(), lines=[
             preconlib.owner_line("Python 3.9 standard library only", "no dependencies on the bench"),
+            {"text": ASSUMED, "tag": "assumed", "trace": {"kind": "assumed", "ref": "small and reversible"}},
             {"text": PARKED, "tag": "parked", "reason": "needs research",
              "trace": {"kind": "owner_words", "ref": "I need to look into storage"}},
-            {"text": OPEN, "tag": "open", "waits_on": WAITS, "trace": {"kind": "owner_words", "ref": "ask me later"}}],
+            {"text": OPEN, "tag": "open", "waits_on": self.WAITS,
+             "trace": {"kind": "owner_words", "ref": "ask me later"}}],
             sitting="continues"))
         self.assertEqual(code, 0, json.dumps(doc))
         self.assertEqual(run.write()[0], 0)
         self.assertEqual(run.report()[0], 10)
         self.path = os.path.join(self.fx.ws, preconlib.SCOPE_REL)
         self.text = preconlib.read(self.path)
-        self.item = "%s (waits on: %s)" % (OPEN, WAITS)
+        self.item = "%s (waits on: %s)" % (OPEN, self.WAITS)
         self.assertIn("Open: %s\n" % self.item, self.text, "precon-v2 wrote its open line with the suffix")
         self.ids = preconlib.ids(self.text)
         self.run_ = self.fx.new_run()
@@ -52,9 +60,11 @@ class _Born(unittest.TestCase):
     def refused(self, answer, rule="retagged"):
         digest = testlib.tree_digest(self.fx.ws)
         code, doc, err = self.run_.record(answer)
-        self.assertEqual(code, 5, "%s %s" % (json.dumps(doc, ensure_ascii=False), err))
+        self.assertEqual(code, 5, "%s %s %s" % (json.dumps([line["text"] for line in answer["lines"]]),
+                                                json.dumps(doc, ensure_ascii=False), err))
         rules = sorted(set(r["rule"] for r in doc["refusals"]))
-        self.assertIn(rule, rules, json.dumps(doc["refusals"], ensure_ascii=False))
+        if rule is not None:
+            self.assertIn(rule, rules, json.dumps(doc["refusals"], ensure_ascii=False))
         self.assertEqual(testlib.tree_digest(self.fx.ws), digest)
         self.assertFalse(os.path.exists(self.run_.run_file("answer.json")))
         return rules
@@ -113,6 +123,64 @@ class TheOwnOpenLine(_Born):
         self.assertEqual(preconlib.read(self.path), self.text)
 
 
+class _Traces(object):
+    """The three traces of the round 3 checker's matrix: the owner's words, a repo path, and an
+    unrelated answered question."""
+
+    def under_each_trace(self, text):
+        q = {"id": "Q1", "text": "Where does the counter print?", "touches": [], "answer": "stdout"}
+        for extra, trace in (({}, {"kind": "owner_words", "ref": "he said so"}),
+                             ({}, {"kind": "repo_path", "ref": "src/turnstile.py"}),
+                             ({"questions": [q]}, {"kind": "question", "ref": "Q1"})):
+            self.refused(self.answer(lines=[{"text": text, "tag": "decided", "trace": trace}], **extra),
+                         rule=None)
+
+
+class TheAssumedRow(_Born, _Traces):
+    """CP1-1 (round 4, R1): the assumed row's words behind a decoration the frame strips (a period, a
+    label, a bullet, a parenthesis), under every trace, are its twin (retagged); precon reads the
+    words through the frame's own readings, so no decoration the frame sees through escapes here."""
+
+    FORMS = (ASSUMED + ".", "R2 " + ASSUMED, "- " + ASSUMED, ASSUMED + " (parked: x)", ASSUMED + ";",
+             "R2 %s." % ASSUMED, "- %s." % ASSUMED, ASSUMED + " (assumed: small)")
+
+    def test_every_decoration_under_every_trace_is_refused(self):
+        for text in self.FORMS:
+            self.under_each_trace(text)
+
+
+class TheOpenRowWithAnInvisible(_Born, _Traces):
+    """CP1-1 (round 4, R1): the open row's words with a default-ignorable the frame drops (U+034F
+    inside, U+FE0F at the end), bare and with its own suffix, under every trace, are refused; and
+    the parked row the same."""
+
+    def test_the_open_row(self):
+        for words in (OPEN.replace(" ", " " + CGJ, 1), OPEN + VS16):
+            for text in (words, "%s (waits on: %s)" % (words, self.WAITS)):
+                self.under_each_trace(text)
+
+    def test_the_parked_row(self):
+        for text in (PARKED.replace(" ", CGJ + " ", 1), PARKED + VS16, "%s (waits on: x)." % PARKED):
+            self.under_each_trace(text)
+
+    def test_an_item_carrying_one_is_unrenderable(self):
+        for text in ("Colour" + CGJ + " of the case", "Colour of the case" + VS16):
+            rules = self.refused(self.answer(lines=[preconlib.owner_line(text, "blue")]), rule="unrenderable")
+            self.assertEqual(rules, ["unrenderable"])
+
+
+class TheOwnSuffixTheFrameCannotRead(_Born, _Traces):
+    """R1: precon's own ` (waits on: <call>)` with a call the frame's parenthesis rule cannot strip
+    (a parenthesis two deep): `without_waits` stays for this suffix only."""
+
+    WAITS = "the bench call (see (Q2) first)"
+
+    def test_the_bare_words_are_refused(self):
+        self.assertIn("Open: %s\n" % self.item, self.text)
+        for text in (OPEN, OPEN + ".", "- " + OPEN):
+            self.under_each_trace(text)
+
+
 class OneAnswer(_Born):
     """CP2-2: two lines of one answer with the same words (any tags) are refused."""
 
@@ -145,6 +213,45 @@ class OneAnswer(_Born):
             preconlib.owner_line("Sensor accuracy", "the cheap one")]))
 
 
+class OneAnswerDecorated(_Born):
+    """CP2-2 (round 4, R2): two entries of one answer whose frame readings meet are twins, whatever
+    decoration one carries (the round 3 checker's section 2 rows)."""
+
+    def colour(self, second):
+        return self.answer(lines=[preconlib.owner_line("Colour", "blue"), second])
+
+    def test_a_decided_line_and_a_decorated_parked_twin(self):
+        for text in ("Colour.", "R2 Colour", "Colour" + CGJ, "- Colour"):
+            self.refused(self.colour({"text": text, "tag": "parked", "reason": "needs prototype",
+                                      "trace": {"kind": "owner_words", "ref": "try one"}}), rule=None)
+
+    def test_a_line_and_a_decorated_out_of_scope_or_open_item(self):
+        self.refused(self.answer(lines=[preconlib.owner_line("Colour", "blue")], out_of_scope=[
+            {"text": "Colour.", "reason": "declined", "trace": {"kind": "owner_words", "ref": "no colour"}}]))
+        self.refused(self.answer(lines=[preconlib.owner_line("Colour", "blue")], open_items=["Colour."]))
+
+    def test_a_needs_research_park_and_a_decorated_decided_twin(self):
+        q = {"id": "Q1", "text": "Which sensor is accurate enough?", "touches": [], "answer": "park it",
+             "needs_research": True}
+        self.refused(self.answer(questions=[q], lines=[
+            {"text": "Sensor accuracy", "tag": "parked", "reason": "needs research",
+             "trace": {"kind": "question", "ref": "Q1"}},
+            preconlib.owner_line("Sensor accuracy.", "the cheap one")]))
+
+
+class OutOfScopeDecorated(_Born):
+    """CP2-3 (round 4, R2): an out-of-scope item whose frame readings meet a parked, open or assumed
+    row's, behind any decoration, is refused unless an answered question of this run touched it."""
+
+    def oos(self, text):
+        return [{"text": text, "reason": "the owner ruled it out", "trace": {"kind": "owner_words", "ref": "drop it"}}]
+
+    def test_every_decoration_is_refused(self):
+        for text in (PARKED + ".", "- " + PARKED, "R2 " + PARKED, PARKED.replace(" ", CGJ + " ", 1),
+                     PARKED + " (parked: needs research)", OPEN + ".", OPEN + VS16, ASSUMED + "."):
+            self.refused(self.answer(out_of_scope=self.oos(text)), rule=None)
+
+
 class OutOfScope(_Born):
     """CP2-3: an out-of-scope item repeating a parked or open line's words, unless an answered
     question of this run touched that line."""
@@ -170,6 +277,58 @@ class OutOfScope(_Born):
                   {"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]],
                    "answer": "park it", "needs_research": True}):
             self.refused(self.answer(questions=[q], out_of_scope=self.oos(PARKED)))
+
+
+class RuledOutAfterAQuestion(_Born):
+    """CP3-2 (round 4, R4): an answered question of this run settles a parked, open or assumed row and
+    the answer records that item as out of scope: the write removes the row, the doc holds the
+    out-of-scope line and not the row, and the report and the next board count it once, under out of
+    scope (the round 3 checker's probes/31 shapes)."""
+
+    def rule_out(self, row_text, words):
+        before = self.run_.state()[1]["counts"]
+        q = {"id": "Q1", "text": "Keep this one?", "touches": [self.ids[row_text]], "answer": "no, drop it"}
+        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=[
+            {"text": words, "reason": "the owner dropped it", "trace": {"kind": "question", "ref": "Q1"}}]))
+        self.assertEqual(code, 0, json.dumps(doc, ensure_ascii=False))
+        code, doc, err = self.run_.write()
+        self.assertEqual(code, 0, err)
+        after = preconlib.read(self.path)
+        ruled = "- %s %s the owner dropped it\n" % (words, D)
+        self.assertEqual(after.count(ruled), 1, after)
+        self.assertEqual(after.split("Out of scope:")[1].split("Research:")[0].count(ruled), 1, after)
+        self.assertNotIn(row_text, after.replace(ruled, ""), after)
+        code, result, err = self.run_.report()
+        self.assertEqual(code, 10, err)
+        counts = result["station_result"]["counts"]
+        self.assertEqual(counts["out_of_scope"], 1)
+        nxt = self.fx.new_run()
+        nxt.select()
+        code, harvest, err = nxt.harvest()
+        self.assertEqual(code, 0, err)
+        oos = "%s %s the owner dropped it" % (words, D)
+        rows = [row for row in harvest["ledger"] if row["text"] in (row_text, oos)]
+        self.assertEqual([(row["tag"], row["text"]) for row in rows], [("out-of-scope", oos)])
+        now = nxt.state()[1]["counts"]
+        self.assertEqual(now["out-of-scope"], before["out-of-scope"] + 1)
+        return before, now
+
+    def test_the_parked_row(self):
+        before, now = self.rule_out(PARKED, PARKED)
+        self.assertEqual(now["parked"], before["parked"] - 1)
+
+    def test_the_open_row(self):
+        before, now = self.rule_out(self.item, OPEN)
+        self.assertEqual(now["open"], before["open"] - 1)
+        self.assertIn("\nOpen:\nNext:", preconlib.read(self.path))
+
+    def test_the_assumed_row(self):
+        before, now = self.rule_out(ASSUMED, ASSUMED)
+        self.assertEqual(now["assumed"], before["assumed"] - 1)
+
+    def test_the_row_with_a_decoration(self):
+        before, now = self.rule_out(PARKED, PARKED + ".")
+        self.assertEqual(now["parked"], before["parked"] - 1)
 
 
 if __name__ == "__main__":

@@ -300,6 +300,20 @@ class TheComment(_Write):
         self.assertIn("<!-- precon-v2 triage: architectural -->\n", after)
 
 
+class TheCommentInAnyHand(unittest.TestCase):
+    """CP1-6 (round 4, R3): `render_continued` adds no comment when the text holds any match, a comment
+    split over lines or spelled another way included."""
+
+    def test_no_second_comment(self):
+        testlib.add_scripts_to_path()
+        from precon_core import scopedoc
+        parts = {"decisions": [], "rewrites": {}, "removals": set(), "out_of_scope": [], "research": [], "open": []}
+        for comment in ("<!--\nprecon-v2 triage: bounded -->", "<!-- precon-v2triage: bounded -->",
+                        "<!-- precon\u2011v2 triage: bounded -->"):
+            text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n%s\n\nIntent:" % comment, 1)
+            self.assertEqual(scopedoc.render_continued(text, "napkin", parts), text, repr(comment))
+
+
 class ReadsBackWhatWasWritten(unittest.TestCase):
     """CP2-4 (ruling R4): a planned doc that would read back more items than the plan wrote is
     refused, whatever character made the reader see a second item."""

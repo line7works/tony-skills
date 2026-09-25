@@ -117,11 +117,12 @@ At the end of each round, write ONE answer file (`references/answer.schema.json`
   call of his it waits on. A parked or open line of the doc becomes `decided` only when a question
   of this run he answered touches it; trace such a line to its ledger id. A line of the doc is
   passed forward or settled by its id only: its words repeated under any other trace, with or
-  without an open line's `(waits on: ...)`, are refused (`retagged`), and so are two lines of one
-  answer with the same words, so the doc never holds a line and its twin.
+  without an open line's `(waits on: ...)` or any other decoration, are refused (`retagged`), and so
+  are two entries of one answer with the same words, so the doc never holds a line and its twin.
 - `out_of_scope`: what he ruled out, each with its reason and its trace (blueprint's descope
-  evidence); `research`: paths to research he did himself; `open_items`: threads for the next
-  sitting.
+  evidence); ruling out a parked, open or assumed line of the doc takes an answered question of
+  this run touching it, and the write then removes that line; `research`: paths to research he
+  did himself; `open_items`: threads for the next sitting.
 - `doc` (a new doc only): the title and the intent (the why blueprint needs).
 - `sitting` (`continues` or `ends`) and `gate` (step 6).
 

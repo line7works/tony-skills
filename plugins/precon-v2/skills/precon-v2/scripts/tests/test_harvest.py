@@ -235,6 +235,29 @@ class Refused(_Harvest):
             self.assertEqual(doc["stop_tag"], "form-refused", repr(comment))
             self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [2], repr(comment))
 
+    def test_a_triage_comment_in_any_hand_across_lines_is_recognized(self):
+        # CP1-6 (round 4, R3): recognized over the whole text, across lines, invisibles dropped; a match that
+        # is not exactly the form on its own line is off its form
+        for comment in ("<!-- precon-v2triage: bounded -->", "<!--\nprecon-v2 triage: bounded -->",
+                        "<!-- precon\u2011v2 triage: bounded -->", "<!-- precon-\u200bv2 triage: bounded -->",
+                        "<!-- precon-v2 triage: bounded", "<!-- precon_v2 triage: bounded -->",
+                        "<!-- precon_v2_triage: bounded -->"):
+            tmp = testlib.make_scratch("harvest-")
+            self.addCleanup(testlib.rmtree, tmp)
+            self.fx = preconlib.Fixture(tmp)
+            text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n%s\n\nIntent:" % comment, 1)
+            run, doc = self.stop(text)
+            self.assertEqual(doc["stop_tag"], "form-refused", repr(comment))
+            self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [2], repr(comment))
+
+    def test_every_match_counts(self):
+        # a well-formed comment and a second one in another hand: the second is off its form
+        text = preconlib.SCOPE_DOC.replace(
+            "\n\nIntent:", "\n<!-- precon-v2 triage: bounded -->\n<!-- precon-v2triage: napkin -->\n\nIntent:", 1)
+        run, doc = self.stop(text)
+        self.assertEqual(doc["stop_tag"], "form-refused")
+        self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [3])
+
     def test_two_triage_comments_are_form_refused(self):
         text = preconlib.SCOPE_DOC.replace(
             "\n\nIntent:", "\n<!-- precon-v2 triage: bounded -->\n<!-- precon-v2 triage: napkin -->\n\nIntent:", 1)

@@ -9,9 +9,10 @@ The forms are the shared templates' (`station_core/templates.py`, E14-12): a new
 changed only by insertions at the tail of its sections, the one comment line when it has none,
 and the lines this run's answer settled (a parked or assumed Decisions line rewritten in place as
 decided, under the same ledger id; an Open item removed, its decided line appended to
-`Decisions:`; an Open item written inline on the label line leaves the label alone, `Open:`, the
-form's line for zero items). Every other prior line is kept byte for byte, and the plan checks
-that it is.
+`Decisions:`; a parked, open or assumed row an answered question settled and the answer rules out
+removed, its out-of-scope line appended to `Out of scope:`; an Open item written inline on the
+label line leaves the label alone, `Open:`, the form's line for zero items). Every other prior
+line is kept byte for byte, and the plan checks that it is.
 """
 import os
 import re
@@ -25,9 +26,12 @@ M = templates.M
 TIERS = ("napkin", "bounded", "architectural")
 TIER_COMMENT = "<!-- precon-v2 triage: %s -->"
 TIER_LINE = re.compile(r"^<!-- precon-v2 triage: (napkin|bounded|architectural) -->$")
-# a triage comment as a hand may have typed it: any spacing, any case, a leading byte-order mark or
-# invisible; one that is not exactly TIER_LINE is off its form (CP1-6)
-TIER_ANY = re.compile(r"<!--\s*precon[-_ ]?v2\s+triage\b", re.IGNORECASE)
+# a triage comment as a hand may have typed it, recognized over the whole text with invisibles dropped:
+# any spacing or none, any case, any separator between `precon`, `v2` and `triage` (an underscore or a
+# non-breaking hyphen included), across lines, unterminated; every match counts, and one that is not
+# exactly TIER_LINE alone on its line is off its form (CP1-6)
+TIER_ANY = re.compile(r"<!--(?:(?!-->).)*?precon[\W_]*v2[\W_]*triage(?:(?!-->).)*?(?:-->|$)",
+                      re.IGNORECASE | re.DOTALL)
 OPEN_LABEL = "Open:"
 TITLE = re.compile(r"^# (?P<title>.+) %s scope doc \((?P<date>.+)\)$" % D)
 PARKED_REASONS = ("needs research", "needs prototype")
@@ -64,24 +68,38 @@ def header(text):
     return out
 
 
-def is_comment(line):
-    """Whether a line carries a triage comment, in any hand's spelling."""
-    return bool(TIER_ANY.search("".join(c for c in line if not textmod.invisible(c))))
+def comments(text):
+    """[(line number, exact)] for every triage comment in the text, in any hand's spelling, across lines:
+    the match is read on the text with invisibles dropped, and `exact` says it is TIER_LINE standing
+    alone on its line of the text as written (no invisible, no other character beside it)."""
+    visible, where = [], []
+    for index, char in enumerate(text):
+        if not textmod.invisible(char):
+            visible.append(char)
+            where.append(index)
+    visible = "".join(visible)
+    out = []
+    for match in TIER_ANY.finditer(visible):
+        start = where[match.start()]
+        end = where[match.end() - 1] + 1
+        line_start = text.rfind("\n", 0, start) + 1
+        line_end = text.find("\n", start)
+        line = text[line_start:len(text) if line_end < 0 else line_end].rstrip("\r")
+        exact = bool(TIER_LINE.match(line)) and text[start:end] == line
+        out.append((text.count("\n", 0, start) + 1, exact, line))
+    return out
 
 
 def comment_findings(text):
     """[{line, message}] for a triage comment off its form (a tier outside the three, another
-    spelling, other spacing) or a second comment: a doc carries one comment, as this core writes it,
-    or none."""
-    out, seen = [], 0
-    for number, raw in enumerate(text.splitlines(True), 1):
-        line = raw.rstrip("\r\n")
-        if not is_comment(line):
-            continue
-        seen += 1
-        if not TIER_LINE.match(line):
+    spelling, other spacing, split over lines) or a second comment: a doc carries one comment, as
+    this core writes it, or none."""
+    out = []
+    for seen, (number, exact, line) in enumerate(comments(text), 1):
+        if not exact:
             out.append({"line": number, "message": "the triage comment %r is not %r with a tier of napkin, bounded "
-                                                   "or architectural" % (line, TIER_COMMENT % "<tier>")})
+                                                   "or architectural, alone on its line"
+                                                   % (line, TIER_COMMENT % "<tier>")})
         elif seen > 1:
             out.append({"line": number, "message": "a second triage comment %r: a doc carries one" % line})
     return out
@@ -104,6 +122,17 @@ def final_counts(tag_counts):
 
 def parked_lines(rows):
     return ["%s %s parked: %s" % (row["text"], D, row["source"]) for row in rows if row["tag"] == "parked"]
+
+
+def twins(value, rows, own=None):
+    """Every `Decisions:` or `Open:` ledger row whose words `value` repeats, other than the row `own` a
+    ledger trace names: the frame's readings of the line against the frame's readings of each row
+    (`answer.forms(line) & answer.row_forms(row)`, through `text.readings` and `text.row_readings`)."""
+    forms = textmod.readings(value)
+    if not forms:
+        return []
+    return [row for row in rows if row["section"] in ("Decisions", "Open") and row["id"] != own
+            and forms & textmod.row_readings(row["text"])]
 
 
 def valid_parked(reason):
@@ -213,6 +242,13 @@ def classify(answer, ledger_rows, run_id):
         if one_line(item.get("text"), "an out-of-scope item", problems, where) and \
                 one_line(item.get("reason"), "an out-of-scope reason", problems, where):
             out_of_scope.append("%s %s %s" % (item["text"], D, item["reason"]))
+            # R4 (CP3-2): the item rules out a parked, open or assumed row an answered question of this run
+            # settled, so that row leaves the doc in the same write (the removal path of a settled Open item,
+            # a Decisions line too): the doc never holds the out-of-scope line and its twin
+            for row in twins(item["text"], ledger_rows):
+                if row["tag"] in ("parked", "open", "assumed") and answered_touching(answer, row["id"]) \
+                        and row["line"] not in rewrites:
+                    removals.add(row["line"])
     research = []
     for index, item in enumerate(answer.get("research") or []):
         if one_line(item, "a research item", problems, {"research": index}):
@@ -286,7 +322,7 @@ def render_continued(text, tier, parts):
                 raise PlanError([{"message": "a section ends the file; the form puts 'Next:' last"}])
             before.setdefault(at, []).extend("- %s%s" % (item, nl) for item in items)
 
-    has_comment = any(is_comment(raw) for raw in lines)
+    has_comment = bool(comments(text))
     title_at = next((i for i, raw in enumerate(lines) if raw.strip()), 0)
     if not has_comment:
         before.setdefault(title_at + 1, []).append(TIER_COMMENT % tier + nl)

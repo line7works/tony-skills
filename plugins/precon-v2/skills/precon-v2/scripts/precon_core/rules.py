@@ -22,12 +22,13 @@ The rules, each named once:
     retagged                a line traced to a ledger line under another tag, other than a parked,
                             open or assumed line settled as decided; a line or a new open item
                             that repeats the words of a Decisions or Open ledger line under any
-                            trace but that line's id (every reading of `text.readings`: whole,
-                            without a trailing `(waits on: ...)`, each field of a dashed line); an
-                            out-of-scope item that does, unless an answered question of this run
-                            (not one marked needs research) touched that parked, open or assumed
-                            line; two lines or items of one answer with the same words: each a
-                            twin the doc would hold beside the line it repeats
+                            trace but that line's id (`scopedoc.twins`: the frame's readings of
+                            the line against the frame's readings of the row, `forms(line) &
+                            row_forms(row)`); an out-of-scope item that does, unless an answered
+                            question of this run (not one marked needs research) touched that
+                            parked, open or assumed line (the write then removes that row); two
+                            entries of one answer whose readings meet (`forms(a) & forms(b)`):
+                            each a twin the doc would hold beside the line it repeats
     research-resolved       a question marked needs research that a line or an out-of-scope item
                             of this run resolves, or that leaves a parked line of another reason
     research-not-parked     a question marked needs research that leaves no parked line
@@ -84,19 +85,6 @@ def check(answer, run_input, harvest, requests, run_dir):
     return out
 
 
-def _twin(value, rows, own=None):
-    """The Decisions or Open ledger row whose words `value` repeats (any reading of either), other
-    than the row `own` a ledger trace names."""
-    if not isinstance(value, str):
-        return None
-    forms = text.readings(value)
-    for row in rows:
-        if row["section"] in ("Decisions", "Open") and row["id"] != own and \
-                forms & text.readings(row["text"], fields=False):
-            return row
-    return None
-
-
 def _settling(answer, ident):
     """The answered questions of this run, none marked needs research, that touch ledger line `ident`."""
     return [q["id"] for q in answer.get("questions") or []
@@ -104,17 +92,17 @@ def _settling(answer, ident):
 
 
 def _one_answer(answer):
-    """Two lines or items of one answer with the same words, under any tags (CP2-2): the doc would hold
-    both."""
+    """Two entries of one answer (lines, out-of-scope items, open items, in any mix) whose frame
+    readings meet (`forms(a) & forms(b)`), under any tags (CP2-2): the doc would hold both."""
     out, seen = [], []
     entries = [("line %d" % i, line.get("text"), {"line": i}) for i, line in enumerate(answer.get("lines") or [])]
     entries += [("out-of-scope item %d" % i, item.get("text"), {"out_of_scope": i})
                 for i, item in enumerate(answer.get("out_of_scope") or [])]
     entries += [("open item %d" % i, item, {"open_items": i}) for i, item in enumerate(answer.get("open_items") or [])]
     for label, value, where in entries:
-        if not isinstance(value, str):
+        forms = text.readings(value)
+        if not forms:
             continue
-        forms = text.readings(value, fields=False)
         prior = next((name for name, earlier in seen if forms & earlier), None)
         if prior is not None:
             out.append(refusal("retagged", "the answer asserts %r twice (%s and %s): one line per item, or the doc "
@@ -133,7 +121,7 @@ def _lines(answer, harvest):
         tag = line.get("tag")
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
         kind, ref = trace.get("kind"), trace.get("ref")
-        twin = _twin(line.get("text"), rows, own=ref if kind == "ledger" else None)
+        twin = next(iter(scopedoc.twins(line.get("text"), rows, own=ref if kind == "ledger" else None)), None)
         if twin is not None:
             # the shared quietly-resolved covers a parked or open line's words asserted as decided with no
             # question touching it; this covers every twin, under every trace kind, a ledger trace to
@@ -207,15 +195,17 @@ def _items(answer, harvest):
             out.append(refusal("source-kind", "the out-of-scope item %r carries a %s trace: what the owner ruled out "
                                               "traces to his words or a question he answered" % (item.get("text"), kind),
                                out_of_scope=index))
-        twin = _twin(item.get("text"), rows)
-        if twin is not None and not (twin["tag"] in ("parked", "open", "assumed") and _settling(answer, twin["id"])):
+        twin = next((row for row in scopedoc.twins(item.get("text"), rows)
+                     if not (row["tag"] in ("parked", "open", "assumed") and _settling(answer, row["id"]))), None)
+        if twin is not None:
             # CP2-3: ruling out a parked or open line is settling it, so only an answered question of this run
-            # that touches it opens the way; a decided line is never ruled out by its words
+            # that touches it opens the way (and the write then removes the row, R4); a decided line is never
+            # ruled out by its words
             out.append(refusal("retagged", "the out-of-scope item %r repeats the %s ledger line %s, which no answered "
                                            "question of this run touched: the doc would hold the line and its twin"
                                % (item.get("text"), twin["tag"], twin["id"]), out_of_scope=index))
     for index, item in enumerate(answer.get("open_items") or []):
-        twin = _twin(item, rows)
+        twin = next(iter(scopedoc.twins(item, rows)), None)
         if twin is not None:
             out.append(refusal("retagged", "the open item %r repeats the %s ledger line %s: the doc would hold the "
                                            "line and its twin" % (item, twin["tag"], twin["id"]), open_items=index))

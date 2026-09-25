@@ -162,13 +162,13 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `parked-without-reason` | a parked line whose reason is none of the three: `needs research`, `needs prototype`, `waiting on <x>` (with what it waits on named) |
 | `open-without-call` | an open line that does not say which of the owner's calls it waits on |
 | `source-kind` | a new parked or open line, or an out-of-scope item, traced to anything but the owner's words or a question he answered (an assumption is no source, and what he ruled out is his ruling) |
-| `retagged` | a line traced to a ledger line under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line, or a new open item, whose words repeat a `Decisions:` or `Open:` ledger line's under any trace but that line's id (a ledger trace to another line included), whatever its tag and whether or not a question touched the line; an out-of-scope item whose words repeat one, unless the line is parked, open or assumed and an answered question of this run, not marked `needs_research`, touched it; two lines or items of one answer with the same words, under any tags: each time the doc would hold the line and its twin. The words are compared in every reading (`precon_core/text.py`): whitespace collapsed, case folded, invisibles dropped, a trailing ` (waits on: <call>)` removed from either side, and each whole field of the asserted line when it is `·`- or dash-separated |
+| `retagged` | a line traced to a ledger line under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line, or a new open item, whose words repeat a `Decisions:` or `Open:` ledger line's under any trace but that line's id (a ledger trace to another line included), whatever its tag and whether or not a question touched the line; an out-of-scope item whose words repeat one, unless the line is parked, open or assumed and an answered question of this run, not marked `needs_research`, touched it (and then `write` removes that line, section 6); two entries of one answer (lines, out-of-scope items, open items, in any mix) whose words meet, under any tags: each time the doc would hold the line and its twin. precon-v2 has no normalizer of its own (E14-3): the words are compared in the frame's readings (`station_core/answer.py`), a line's `forms` against a row's `row_forms` (the whole text, the words bare of every decoration the frame knows, each whole field of a `·`- or dash-separated line on the line's side and the first field on the row's, invisibles dropped by the frame's one set, whitespace collapsed, case folded), and two entries of one answer by `forms(a) & forms(b)`; `precon_core/text.py` adds only precon's own ` (waits on: <call>)` suffix, read on either side, for a call the frame's parenthesis rule does not strip (one holding a parenthesis two deep) |
 | `research-resolved` | a line resolving a question marked `needs_research`, a parked line of another reason or an out-of-scope item traced to one, or a parked or open ledger line whose only touching questions are marked `needs_research` asserted as decided |
 | `research-not-parked` | a question marked `needs_research` that leaves no parked `needs research` line traced to it and touches none |
 | `napkin-outcome` | `no_scope_doc` outside the napkin tier, with any line, item, doc field or exit test, over an existing doc, or with a `sitting` other than `ends` (the napkin outcome ends the sitting) |
 | `doc-fields` | a new doc with a settled line and no title or intent; doc fields on an existing doc (its title and intent are kept as found) |
-| `gate-missing` | no gate, a blank one (nothing a reader can see: whitespace, format characters such as a zero-width space or a byte-order mark, the invisible letters U+115F, U+1160, U+3164, U+FFA0, U+2800, lone combining marks), or one that is not one line: broken where a line reader breaks (a line feed or carriage return, VT, FF, U+001C to U+001E, NEL, U+2028, U+2029) or holding a format character or an invisible letter anywhere |
-| `unrenderable` | a value the documents cannot carry and read back: a text, item, reason, call, title or intent that is not one line by the gate's own test (one normalizer, `precon_core/text.py`, for the refusals and the plan), a blank item, a source holding the form's own separator, a planned doc the ledger reader or the form check would refuse, or one that would read back another number of items than the plan wrote |
+| `gate-missing` | no gate, a blank one (nothing a reader can see: whitespace, lone combining marks, and the frame's invisibles, `station_core/answer.py`'s one set: format characters such as a zero-width space or a byte-order mark, U+034F, the variation selectors, the letter-shaped fillers U+115F, U+1160, U+3164, U+FFA0, U+2800), or one that is not one line: broken where a line reader breaks (a line feed or carriage return, VT, FF, U+001C to U+001E, NEL, U+2028, U+2029) or holding one of those invisibles anywhere |
+| `unrenderable` | a value the documents cannot carry and read back: a text, item, reason, call, title or intent that is not one line by the gate's own test (`precon_core/text.py`'s `one_line`, over the frame's one invisible set, for the refusals and the plan: an item text carrying U+034F or U+FE0F is refused, so no reading of it differs from the frame's), a blank item, a source holding the form's own separator, a planned doc the ledger reader or the form check would refuse, or one that would read back another number of items than the plan wrote |
 | `exit-test-rows` | an exit test whose rows are not the rows this run built requests for; requests built and no exit test recorded |
 | `exit-test-unrecorded` | a built request with no result readers recorded (no sidecar, or one naming another call) |
 | `disposition-before-raw` | dispositions in the run that writes the readers' raw text |
@@ -183,7 +183,11 @@ the twin case: a ledger line's words asserted under any trace but its id (an ass
 decided line's, or a parked or open line's after a question touched it; an `Open:` line this core
 wrote, which always carries its ` (waits on: <call>)`, named by its bare words) are refused, so a
 line is settled only in place, by its id, and the doc never holds a line and its twin. Both
-refusals are computed and listed together.
+refusals are computed and listed together. The one twin the rule lets through is the ruling-out
+of a line a question settled: an answered question of this run touches a parked, open or assumed
+line and the answer records that item as out of scope. `write` then removes the settled line in
+the same write (section 6), so the doc holds the out-of-scope line and not the line, and the
+report and the next board count the item once, under out of scope.
 
 **A needs-research question.** Its `answer` is the owner's words parking it (the shared
 `untraced` needs an answered question behind the parked line that traces to it); the script
@@ -210,7 +214,11 @@ in place, under the same text and so the same ledger id: `- <text> <dash> decide
 is appended to `Decisions:`; an item written inline on the label line (`Open: <item>`, the form
 `render_scope_doc` writes for one item, this core's own new docs included) leaves the label alone,
 `Open:`, the form's line for zero items, and the no-loss check counts that label line as rewritten,
-never dropped. A new line renders through `templates.render_ledger_line`: decided
+never dropped. A parked, open or assumed line that an answered question of this run touched and
+that the answer rules out (an out-of-scope item whose words meet the line's, section 5) is removed
+in the same write, by the same path, a `Decisions:` line included: its out-of-scope line lands at
+the tail of `Out of scope:`, and the no-loss check counts the removal as one the plan names, never
+a line lost. A new line renders through `templates.render_ledger_line`: decided
 with its source from its trace (`the owner's words: "<quote>"`, `answer to <Q> (run <run id>):
 <answer>`, `the repo: <path>`), assumed with its why, parked with its reason. An open line lands in
 `Open:` as `<text> (waits on: <call>)`; an out-of-scope item as `<text> <dash> <reason>`.
@@ -367,7 +375,7 @@ shared meanings only, and its own:
 |---|---|---|
 | `selection-several` | `harvest` | the idea's scope doc is in more than one home; the candidates are listed |
 | `ledger-refused` | `harvest` | the doc holds a line the ledger reader cannot tag; each is quoted with its line number |
-| `form-refused` | `harvest` | the doc departs from the form (a label missing or out of order, a section the form has not, a triage comment off its form or a second one), so nothing can be placed in it; the findings are listed |
+| `form-refused` | `harvest` | the doc departs from the form (a label missing or out of order, a section the form has not, a triage comment off its form or a second one: the comment is recognized over the whole text with the frame's invisibles dropped, in any spelling, spacing or separator, across lines, and every match that is not exactly `<!-- precon-v2 triage: <tier> -->` alone on its line is off its form), so nothing can be placed in it; the findings are listed |
 | `doc-changed` | `write` | a target changed after harvest (the doc edited by hand, a file appeared at the new doc's path, a cold-read doc changed); nothing was written |
 | `no-scope-doc` | `report` | the napkin outcome: the owner took no scope doc; nothing was written. It is `stopped`, not `completed`, because the run produced no document |
 
