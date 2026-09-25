@@ -78,17 +78,25 @@ def shared_refusals(answer, ctx):
     return out
 
 
+def _norm(text):
+    return " ".join(text.split()).casefold()
+
+
 def categories(candidate):
+    """{category: {choices}}, each name and choice casefolded and whitespace-normalized (R4), so a
+    re-cased or re-spaced pair is the same pair."""
     out = {}
     for item in candidate["categories"]:
         name, choice = item.split(":", 1)
-        out.setdefault(name.strip(), set()).add(choice.strip())
+        out.setdefault(_norm(name), set()).add(_norm(choice))
     return out
 
 
 def differ(a, b):
+    """The one-way-door categories both candidates name in which their choices differ. A category
+    only one of them names is no difference: padding a candidate distinguishes nothing (R4)."""
     ca, cb = categories(a), categories(b)
-    return sorted(name for name in set(ca) | set(cb) if ca.get(name) != cb.get(name))
+    return sorted(name for name in set(ca) & set(cb) if ca[name] != cb[name])
 
 
 def candidate_refusals(answer):
@@ -184,6 +192,9 @@ def gate_refusals(answer, ctx):
     missing = [f for f in need if f not in review]
     if missing:
         out.append(refusal("review-fields", "a %s review records its %s" % (review["outcome"], " and ".join(missing))))
+    if "failed_lanes" in review and review["outcome"] != "done":
+        out.append(refusal("review-fields", "`failed_lanes` names the lanes that did not return beside a done review; "
+                           "a %s review carries none (a review whose every lane failed is `failed`)" % review["outcome"]))
     if review["outcome"] == "done" and not ctx["takes"]:
         out.append(refusal("review-no-take", "the review is `done`, and no take was saved in this run (`save-take`); "
                            "a review counts as done when at least one take was saved"))

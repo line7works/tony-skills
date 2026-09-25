@@ -9,6 +9,9 @@ D = "\u2014"     # the dash of the v1 forms: carried by the renderers, never typ
 M = "·"     # the middle dot of the walkthrough line and the read-back
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+# the URL a publish returns: https, a host of dot-separated labels, an optional port and path, no space
+LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+URL = re.compile(r"^https://%s(?:\.%s)*(?::[0-9]{1,5})?(?:/\S*)?\Z" % (LABEL, LABEL))
 ALLOWED_TRACES = ("ledger", "repo_path", "question", "assumed")
 HEADER_LABELS = ("Scope doc:", "Docless:", "Blind review:", "Artifact:")
 

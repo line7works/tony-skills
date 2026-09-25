@@ -60,6 +60,7 @@
     "published": true,
     "review": "pending",
     "review_files": [],
+    "review_failed_lanes": [],
     "review_reason": null,
     "rulings_count": 0,
     "run_number": 1,

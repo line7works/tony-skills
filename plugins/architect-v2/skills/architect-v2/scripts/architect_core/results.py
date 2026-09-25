@@ -11,6 +11,7 @@ import os
 from station_core import fsio, validate
 
 from .common import D, M, PREFIX
+from .review import lane_of
 
 NEXT = ("Next: point /sunrise at the doc to provision exactly what it lists, and /blueprint-v2 at it to "
         "slice with the user-touchable slice up front.")
@@ -24,7 +25,7 @@ def empty_station_result():
     return {"doc_path": None, "run_number": None, "visual_path": None, "published": False, "artifact_url": None,
             "publish_outcome": "not-reached", "project": None, "slug": None, "scope_doc": None, "docless": None,
             "candidates": [], "pick": None, "rulings_count": 0, "review": None, "review_reason": None, "review_files": [],
-            "passed_forward": [], "counts": None}
+            "review_failed_lanes": [], "passed_forward": [], "counts": None}
 
 
 def selections(run_dir):
@@ -87,7 +88,10 @@ def chat(result):
                      % (c.get("components", 0), M, c.get("poured", 0), M, c.get("deferred", 0)))
         review = sr.get("review")
         if review == "done":
-            lines.append("Review: done at %s" % ", ".join(sr["review_files"]))
+            # v1's words: `done at <files>, with <lane> failed <dash> <reason>` after any lane that did not return
+            failed = "".join(", with %s failed %s %s" % (lane_of(f["row"]), D, f["reason"])
+                             for f in sr.get("review_failed_lanes") or [])
+            lines.append("Review: done at %s%s" % (", ".join(sr["review_files"]), failed))
         elif review == "not-offered":
             lines.append("Review: not offered %s docless" % D)
         elif review == "failed":

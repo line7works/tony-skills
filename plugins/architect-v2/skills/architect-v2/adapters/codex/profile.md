@@ -38,7 +38,7 @@ run (`references/station-loop.md` sections 3.1 and 4).
 The owner's word for an outside reader is the input's `owner_word` field (the rows his words name
 and the words verbatim), the one source of a request's `authorized` flag
 (`references/station-loop.md` section 8, rule 5). No turn reference is recorded in the frame, so no
-`turns.py` ships. The executor copies the owner's words verbatim into `owner_word.words`, and the rows they name into `owner_word.rows`, when the input is written (`instruction-bound`); his answers in the interview are the recorded answer's `questions[].answer`. No turn map is needed: nothing this station decides reads a turn reference, and `authorized` is the shared builder's, from `owner_word` alone. A reviewer the owner names only at the review's offer, after `check-input`, has no word in this run's input (`references/architect-v2-contract.md` section 15, point 1).
+`turns.py` ships. The executor copies the owner's words verbatim into `owner_word.words`, and the rows they name into `owner_word.rows`, when the input is written (`instruction-bound`); his answers in the interview are the recorded answer's `questions[].answer`. No turn map is needed: nothing this station decides reads a turn reference, and `authorized` is the shared builder's, from `owner_word` alone. A reviewer the owner names only at the review's offer, after `check-input`, has no word in this run's input, and readers refuses it: the executor tells him so, runs `report` (it stops `review-pending`), and must start a new run on the same doc whose input carries his words verbatim in `owner_word` (`rows` the rows he named); that run's `request` carries `authorized`. Never the flag or the word added by hand (`references/architect-v2-contract.md` section 15, point 1).
 
 ## 5. `session_wrote_fix`
 
@@ -60,7 +60,7 @@ transport, the model and the containment are readers' roster's. Which readers an
 ## 8. Delivery
 
 Not measured in the frame. The delivery probe for this core is `setups/codex/prompts/`; its
-measurement on the installed package is not lane A's (the probe starts a session, which a lane builder does not do); measured on the package instead: its `SKILL.md` is 12,820 bytes (`wc -c` on the installed copy), above the 8,000-byte main-prompt truncation branch the guide records for Codex's Agent Plugins path; whether this installation takes that path, and whether the body arrives whole, is the delivery probe's question. The control room's proof at the hand-back.
+measurement on the installed package is not lane A's (the probe starts a session, which a lane builder does not do); measured on the package instead: its `SKILL.md` is 13,858 bytes (`wc -c` on the installed copy), above the 8,000-byte main-prompt truncation branch the guide records for Codex's Agent Plugins path; whether this installation takes that path, and whether the body arrives whole, is the delivery probe's question. The control room's proof at the hand-back.
 
 ## 9. Sidecars and invocation restrictions
 

@@ -13,9 +13,8 @@ its lane contract `references/architect-v2-contract.md`; the recorded answer's s
 stop tags (`living-doc-malformed`, `document-changed`, `review-pending`); the lane observer
 `evals/seeded-cases/lane_observe.py` for the A2 and A4 lane steps; the adapter profiles' lane
 sections. It writes no event and never opens the records component (ruling E14-9). For the join:
-the shared driver test that expects the four phases unbuilt (a shared-file request in the lane's
-report), the marketplace entry, the measured test counts below, and the version bump. Interface
-version 1, plugin version 0.1.0.
+the marketplace entry, the measured test counts below, and the version bump. Interface version 1,
+plugin version 0.1.0.
 
 ## Layout
 

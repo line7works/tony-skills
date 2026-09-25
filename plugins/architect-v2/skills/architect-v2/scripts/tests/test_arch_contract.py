@@ -83,5 +83,45 @@ class TheProse(unittest.TestCase):
         self.assertIn("disable-model-invocation: true", text)
 
 
+class TheRulingsInTheWords(unittest.TestCase):
+    """R5, R6, R7: the control room's rulings stand in the procedure, the contract and the profiles."""
+
+    NEW_RUN = "start a new run on the same doc whose input carries his words verbatim in `owner_word`"
+
+    def text(self, *rel):
+        return read(os.path.join(testlib.SKILL, *rel))
+
+    def test_a_reviewer_named_at_the_offer_means_a_new_run(self):
+        skill = " ".join(self.text("SKILL.md").split())
+        self.assertIn(self.NEW_RUN, skill)
+        self.assertIn("Never add the flag or the word by hand.", skill)
+        contract = " ".join(read(CONTRACT).split())
+        self.assertIn("ruled: the executor ends this run and starts a new one whose input carries the word; "
+                      "this core does not widen the source", contract)
+        self.assertNotIn("needs the control room's ruling on a second source", contract)
+        for harness in ("claude-code", "codex"):
+            profile = " ".join(self.text("adapters", harness, "profile.md").split())
+            self.assertIn(self.NEW_RUN, profile, harness)
+
+    def test_the_three_step_6_rules_are_back(self):
+        skill = " ".join(self.text("SKILL.md").split())
+        self.assertIn("a call the harness backgrounds past its foreground limit is not a failure: wait for its "
+                      "notification and judge what arrives", skill)
+        self.assertIn("unescape HTML entities (`&amp;`, `&lt;`, `&gt;`) in the raw text before `save-take`; it is "
+                      "the only transformation", skill)
+        self.assertIn("failed_lanes", skill)
+
+    def test_a_single_hit_is_matched_by_its_intent_line(self):
+        skill = " ".join(self.text("SKILL.md").split())
+        self.assertIn("`one`: read its `Intent:` line; when it is the project he is talking about, that is the "
+                      "scope doc; when it is not, treat the hunt as `none`.", skill)
+
+    def test_the_readme_and_the_driver_carry_no_stale_words(self):
+        readme = read(os.path.join(testlib.PLUGIN, "README.md"))
+        self.assertNotIn("the shared driver test that expects the four phases unbuilt", readme)
+        driver = read(testlib.DRIVER)
+        self.assertEqual(len(re.findall(r"(?m)^import os$", driver)), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

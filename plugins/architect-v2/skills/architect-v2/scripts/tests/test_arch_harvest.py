@@ -185,6 +185,33 @@ class AnExistingArchitectureDoc(_Harvest):
         self.assertEqual(code, 10, out + err)
         self.assertEqual(doc["stop_tag"], "living-doc-malformed")
 
+    def test_a_free_line_under_poured_or_deferred_stops_the_run_naming_it(self):
+        """CA1-11: a line the owner typed under Poured concrete or Deferred that is not a list line
+        can be neither carried nor struck, so the run stops at harvest naming it, before any ask."""
+        cases = (("## Deferred\n", "## Deferred\nthe owner's note on the dashboard\n"),
+                 ("## Poured concrete (one-way doors)\n", "## Poured concrete (one-way doors)\n### a heading he added\n"))
+        for index, (old, new) in enumerate(cases):
+            ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md":
+                                                        self.DOC.replace(old, new)}, name="ws-%d" % index)
+            run = archlib.ArchRun(self.tmp, ws, self.staging, name="run-%d" % index)
+            code, doc, out, err = run.to_harvest()
+            self.assertEqual(code, 10, out + err)
+            self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+            self.assertIn(new.split("\n")[1], doc["reason"])
+            self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+
+    def test_a_hand_added_header_line_stops_the_run_naming_it(self):
+        """The same dead end in the head: the header lines are this run's (Scope doc or Docless,
+        Blind review, Artifact), so a line the owner added there could never be carried."""
+        ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md": self.DOC.replace(
+            "Blind review: declined 2026-09-21\n", "Blind review: declined 2026-09-21\nOwner: Sam Bench\n")},
+            name="ws-head")
+        run = archlib.ArchRun(self.tmp, ws, self.staging, name="run-head")
+        code, doc, out, err = run.to_harvest()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+        self.assertIn("Owner: Sam Bench", doc["reason"])
+
     def test_two_living_docs_are_several(self):
         ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md": self.DOC,
                                                     "docs/architecture/2026-09-22-turnstile.md": self.DOC})

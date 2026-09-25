@@ -23,7 +23,7 @@ import re
 from station_core import driver, exits, fsio, ledger, readers_request
 
 from . import docs, harvesting, publishing, recording, results, review, schema, visual
-from .common import blank, display, inside, read_text, today
+from .common import URL, blank, display, inside, read_text, today
 from .receipt import Changed, Receipt
 
 A = "architect"
@@ -83,6 +83,26 @@ def _need(run, *phases):
                            "anything more" % phase)
     if phase not in phases:
         raise driver.Usage("this run is at phase %r; this command runs at %s" % (phase, " or ".join(phases)))
+
+
+def _contained(run, path):
+    """Whether a document write at `path` stays in this run's homes: the real path of the target's
+    nearest existing parent folder (a symlink counts as existing, and is followed) lies inside the
+    workspace, the staging home or the run directory (R2). A symlinked folder that leads outside
+    them is refused before anything is written."""
+    roots = [run.input["workspace"], run.input.get("staging"), run.run_dir]
+    folder = os.path.dirname(os.path.abspath(path))
+    while not os.path.lexists(folder):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            break
+        folder = parent
+    return any(root and inside(folder, root) for root in roots)
+
+
+def _outside(path):
+    return ("%s would land outside the workspace, the staging home and the run directory (a folder on its way is "
+            "a symlink that leads elsewhere); nothing was written" % path)
 
 
 def _session(run):
@@ -197,6 +217,11 @@ def record_answer(ctx, args):
     if _phase(run) in ("checked", "selected"):
         raise driver.Usage("run `harvest` before `record-answer`: the ledger is read before anything is asked")
     _need(run, "harvested", "answered", "written")
+    state = _state(run)
+    amending = _phase(run) == "written"
+    if amending and state["round"] >= 2:
+        raise driver.Usage("one amended answer per run; start a new run for more (this run already took its "
+                           "amendment, and its doc was written from it)")
     try:
         answer = fsio.read_json(args.answer)
     except (OSError, ValueError) as exc:
@@ -206,7 +231,14 @@ def record_answer(ctx, args):
         return driver.emit(ctx.envelope(ok=False, accepted=False, error="invalid", errors=errors,
                                         reason="the answer does not hold its schema (references/answer.schema.json): "
                                                "%d finding(s); nothing was written" % len(errors)), exits.VALIDATION)
-    prior = _load(run, "answer.json") if _phase(run) == "written" else None
+    if amending:
+        prior = _load(run, "answer.json")
+    elif state.get("doc"):
+        # the amendment recorded again before its write: held to the first answer exactly as the
+        # amendment was (R1); it replaces the amendment, never the first answer
+        prior = _load(run, "answer-round-%d.json" % (state["round"] - 1))
+    else:
+        prior = None
     refusals, plan = recording.evaluate(answer, _context(run, prior))
     if refusals:
         return driver.emit(ctx.envelope(accepted=False, refusals=refusals,
@@ -214,11 +246,10 @@ def record_answer(ctx, args):
                                                "nothing was written, and a corrected answer can be recorded"
                                                % len(refusals)), exits.REFUSED)
     receipt = Receipt(run.run_dir)
-    state = _state(run)
-    if prior is not None:
+    if amending:
         receipt.write_json(os.path.join(run.run_dir, "answer-round-%d.json" % state["round"]), prior)
     row = receipt.write_json(os.path.join(run.run_dir, "answer.json"), answer)
-    if prior is not None or state["round"] == 0:
+    if amending or state["round"] == 0:
         state["round"] += 1
     run.checkpoint["phase"] = "answered"
     run.save()
@@ -261,6 +292,9 @@ def write(ctx, args):
     if plan["losses"]:
         return _stop(ctx, run, "write-refused", "the write would drop a protected line, so nothing was written: %s"
                      % "; ".join(plan["losses"]), _station_result(run, record, answer, None), receipt)
+    if not _contained(run, target):
+        return _stop(ctx, run, "write-refused", "the doc %s" % _outside(target),
+                     _station_result(run, record, answer, None), receipt)
     try:
         receipt.write(target, plan["doc_text"], expect=_expected(run, receipt, target, record))
     except Changed as exc:
@@ -288,6 +322,8 @@ def render_visual(ctx, args):
     with open(state["doc"], "r", encoding="utf-8", newline="") as fh:
         text = fh.read()
     html_path = os.path.join(os.path.dirname(state["doc"]), "%s-architecture.html" % record["slug"])
+    if not _contained(run, html_path):
+        raise driver.Usage("the visual %s" % _outside(html_path))
     receipt = Receipt(run.run_dir)
     receipt.write(html_path, visual.render(text))
     state.update(rendered=True, visual=html_path, published=None)
@@ -306,8 +342,12 @@ def record_publish(ctx, args):
     answer = _load(run, "answer.json")
     if args.url is not None and not answer["publish"]:
         raise driver.Usage("the answer says publish: false, so no URL is recorded")
-    if args.url is not None and (blank(args.url) or not args.url.startswith("https://") or len(args.url.split()) != 1):
-        raise driver.Usage("--url is the https URL the publish returned, one token: %r" % args.url)
+    if args.url is not None and not URL.match(args.url):
+        raise driver.Usage("--url is the https URL the publish returned (a host, an optional port and path, no "
+                           "space): %r" % args.url)
+    if answer["publish"] and args.url is None and state.get("publish_url"):
+        raise driver.Usage("this run recorded the publish to %s; a record without --url would unsay it. Record the "
+                           "republish with --url %s, the same URL" % (state["publish_url"], state["publish_url"]))
     with open(state["doc"], "r", encoding="utf-8", newline="") as fh:
         text = fh.read()
     decision = publishing.decide(text, answer["publish"], args.url)
@@ -316,6 +356,8 @@ def record_publish(ctx, args):
                                         reason="the publish record was refused; nothing was written"), exits.REFUSED)
     receipt = Receipt(run.run_dir)
     if decision["changed"]:
+        if not _contained(run, state["doc"]):
+            raise driver.Usage("the doc %s" % _outside(state["doc"]))
         record = _load(run, "harvest.json")
         try:
             receipt.write(state["doc"], decision["text"], expect=_expected(run, receipt, state["doc"], record))
@@ -361,10 +403,16 @@ def request(ctx, args):
         roster = readers_request.load_roster(roster_path)
     except (review.RosterMissing, OSError, ValueError) as exc:
         raise driver.Usage(str(exc))
+    scope = record["scope_doc"]
+    found = fsio.sha256_file_or_none(scope["path"]) if os.path.isfile(scope["path"]) else None
+    if found != scope["sha256"]:
+        raise driver.Usage("the scope doc %s is not the one harvest read (sha256 %s, now %s): the packet is the scope "
+                           "doc as harvested; start a new run on the doc as it stands" % (scope["path"], scope["sha256"],
+                                                                                        found or "no file"))
     folder = os.path.join(run.run_dir, "requests")
     taken = [n[:-5] for n in os.listdir(folder)] if os.path.isdir(folder) else []
     try:
-        built = review.requests(rows, run.input, roster, record["scope_doc"]["path"], run.checkpoint["run_id"],
+        built = review.requests(rows, run.input, roster, scope["path"], run.checkpoint["run_id"],
                                 session_model=args.session_model, models=models, taken=taken)
     except readers_request.RequestRefused as exc:
         raise driver.Usage(str(exc))
@@ -377,6 +425,18 @@ def request(ctx, args):
     return driver.emit(ctx.envelope(next="save-take", requests=out, mandate=review.MANDATE,
                                     reason="one readers request per named reviewer, the scope doc its single "
                                            "document; summon /readers with each, and save each take with save-take"))
+
+
+def _requested_rows(run):
+    folder = os.path.join(run.run_dir, "requests")
+    rows = []
+    if os.path.isdir(folder):
+        for name in sorted(os.listdir(folder)):
+            if name.endswith(".json"):
+                row = fsio.read_json(os.path.join(folder, name)).get("row")
+                if row not in rows:
+                    rows.append(row)
+    return rows
 
 
 def save_take(ctx, args):
@@ -397,8 +457,11 @@ def save_take(ctx, args):
         return driver.emit(ctx.envelope(accepted=False, refusals=[{"rule": "take-empty", "message":
                                         "the take is empty; an empty reply is a failed review for that lane, and "
                                         "nothing is saved for it"}], reason="nothing was saved"), exits.REFUSED)
-    real_doc = state.get("real_doc") or record["target"]["path"]
-    home = "workspace" if inside(real_doc, run.input["workspace"]) else "staging"
+    requested = _requested_rows(run)
+    if args.row not in requested:
+        raise driver.Usage("the row %r was never requested in this run (requested: %s); a take answers a request "
+                           "`request` built" % (args.row, ", ".join(requested) or "none"))
+    home = record["target"]["home"]
     if _report_only(run):
         folder = os.path.join(run.run_dir, "reviews")
     elif home == "workspace":
@@ -409,10 +472,13 @@ def save_take(ctx, args):
     date = today()
     name = review.take_name(home, record["slug"], lane, date, folder)
     path = os.path.join(folder, name)
+    copy = os.path.join(run.run_dir, "takes", name)
+    for target in (path, copy):
+        if not _contained(run, target):
+            raise driver.Usage("the take %s" % _outside(target))
     text = review.take_text(args.row, args.model, args.isolation, args.sidecar, body)
     receipt = Receipt(run.run_dir)
     receipt.write(path, text, expect=None)
-    copy = os.path.join(run.run_dir, "takes", name)
     if copy != path:
         receipt.write(copy, text)
     takes = _load(run, "takes.json") or []
@@ -436,6 +502,8 @@ def _station_result(run, record, answer, state):
         sr.update(project=answer["project"], candidates=[c["name"] for c in answer["candidates"]],
                   pick=answer["pick"], rulings_count=len(answer["rulings"]), review=answer["review"]["outcome"],
                   review_reason=answer["review"].get("reason"),
+                  review_failed_lanes=[{"row": f["row"], "reason": f["reason"]}
+                                       for f in answer["review"].get("failed_lanes") or []],
                   passed_forward=[r["id"] for r in docs.passed_forward(record["ledger"], answer)] if record else [])
     if state and state.get("doc"):
         with open(state["doc"], "r", encoding="utf-8", newline="") as fh:

@@ -36,6 +36,11 @@
       "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
       "description": "one line of text with at least one non-space character"
     },
+    "walk_field": {
+      "type": "string",
+      "pattern": "^(?![^\\n\\r]*·)[^\\n\\r]*\\S[^\\n\\r]*(?![\\s\\S])",
+      "description": "one field of the walkthrough line: one line, non-blank, never holding the line's separator (the middle dot), which would forge a second field"
+    },
     "free": {
       "type": "string",
       "pattern": "^[^\\n\\r]*(?![\\s\\S])",
@@ -253,19 +258,19 @@
         "when",
         "must"
       ],
-      "description": "the walkthrough target: all three fields present and non-blank (`n/a` is a value, blank is not), with its trace",
+      "description": "the walkthrough target: all three fields present and non-blank (`n/a` is a value, blank is not), none holding the line's separator, with its trace",
       "properties": {
         "who": {
-          "$ref": "#/$defs/text"
+          "$ref": "#/$defs/walk_field"
         },
         "when": {
-          "$ref": "#/$defs/text"
+          "$ref": "#/$defs/walk_field"
         },
         "must": {
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/text"
+            "$ref": "#/$defs/walk_field"
           }
         },
         "trace": {
@@ -411,7 +416,7 @@
       "required": [
         "outcome"
       ],
-      "description": "the blind review: `pending` until its outcome is known, `declined` or `failed` with the date (and the failure's reason), `done` with the spine the takes agreed on, `not-offered` on a docless run only",
+      "description": "the blind review: `pending` until its outcome is known, `declined` or `failed` with the date (and the failure's reason), `done` with the spine the takes agreed on (and `failed_lanes`, each lane that did not return), `not-offered` on a docless run only",
       "properties": {
         "outcome": {
           "type": "string",
@@ -432,6 +437,28 @@
         },
         "spine": {
           "$ref": "#/$defs/text"
+        },
+        "failed_lanes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "a done review only: each lane that did not return (a `READERS:` status other than `ok`), its roster row and the status and reason the `READERS:` line carried; the read-back names each beside the saved takes",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "row",
+              "reason"
+            ],
+            "properties": {
+              "row": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*(?![\\s\\S])"
+              },
+              "reason": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          }
         }
       }
     },
@@ -496,7 +523,7 @@
       "anyOf": [
         {
           "type": "string",
-          "pattern": "^https://\\S+(?![\\s\\S])"
+          "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*(?::[0-9]{1,5})?(?:/\\S*)?(?![\\s\\S])"
         },
         {
           "type": "null"

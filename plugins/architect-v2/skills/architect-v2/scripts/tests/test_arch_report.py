@@ -91,6 +91,35 @@ class Report(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertIn("Review: failed %s transport-failed: the lane timed out" % archlib.D, doc["chat"])
 
+    def test_a_done_review_names_each_failed_lane(self):
+        """R6 (CA1-7): a lane that did not return is named beside the done review, in v1's words."""
+        for step in (self.run.record(archlib.clean_answer()), self.run.write(), self.run.render(),
+                     self.run.publish(URL), self.run.request("gpt-astra", "gemini")):
+            self.assertEqual(step[0], 0, step[2] + step[3])
+        take = os.path.join(self.tmp, "take.md")
+        testlib.write_text(take, "a module, no server\n")
+        code, doc, out, err = self.run.save_take("gpt-astra", take)
+        self.assertEqual(code, 0, out + err)
+        rel = os.path.relpath(doc["path"], self.ws)
+        a = archlib.clean_answer(review={"outcome": "done", "spine": "a module, no server",
+                                         "failed_lanes": [{"row": "gemini", "reason": "transport-failed: timed out"}]})
+        for step in (self.run.record(a), self.run.write(), self.run.render(), self.run.publish(URL)):
+            self.assertEqual(step[0], 0, step[2] + step[3])
+        code, doc, out, err = self.run.report()
+        self.assertEqual(code, 10, out + err)
+        self.assertIn("Review: done at %s, with gemini failed %s transport-failed: timed out\n" % (rel, archlib.D),
+                      doc["chat"])
+        result = self.validated()
+        self.assertEqual(result["station_result"]["review_failed_lanes"],
+                         [{"row": "gemini", "reason": "transport-failed: timed out"}])
+
+    def test_failed_lanes_on_a_review_that_is_not_done_is_refused(self):
+        a = archlib.clean_answer(review={"outcome": "declined", "date": archlib.TODAY,
+                                         "failed_lanes": [{"row": "gemini", "reason": "timed out"}]})
+        code, doc, out, err = self.run.record(a)
+        self.assertEqual(code, 5, out + err)
+        self.assertIn("review-fields", [r["rule"] for r in doc["refusals"]])
+
     def test_report_twice_prints_the_same_result(self):
         self.finish(archlib.clean_answer(review={"outcome": "declined", "date": archlib.TODAY}))
         first = testlib.read_text(os.path.join(self.run.run_dir, "result.json"))

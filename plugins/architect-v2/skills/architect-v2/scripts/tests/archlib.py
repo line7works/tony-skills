@@ -189,8 +189,8 @@ class ArchRun(object):
         args = ["request", "--run-dir", self.run_dir]
         for row in rows:
             args += ["--row", row]
-        if kw.get("roster"):
-            args += ["--roster", kw["roster"]]
+        roster = kw.get("roster") or write_roster(self.tmp)
+        args += ["--roster", roster]
         if kw.get("session_model"):
             args += ["--session-model", kw["session_model"]]
         return self.cli(*args)
@@ -209,6 +209,17 @@ class ArchRun(object):
             steps.append(self.publish(url))
         steps.append(self.report())
         return steps
+
+
+def write_roster(tmp):
+    """A synthetic readers roster (the three rows the review offers), for runs where readers is
+    not installed beside this core; `request --roster` reads it."""
+    path = os.path.join(tmp, "roster-fixture.json")
+    if not os.path.isfile(path):
+        testlib.write_json(path, {"rows": [{"id": "gpt-astra", "provider": "openai"},
+                                           {"id": "gemini", "provider": "google"},
+                                           {"id": "claude-session", "provider": "anthropic"}]})
+    return path
 
 
 def repo_workspace(tmp, files=None, name="ws"):

@@ -8,7 +8,7 @@ import re
 
 from station_core import fsio, ledger, runlog, templates
 
-from .common import SLUG, display, inside
+from .common import HEADER_LABELS, SLUG, display, inside
 from . import docs
 
 DATED = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
@@ -45,9 +45,37 @@ def new_doc_path(home, workspace, staging, today, slug):
     return os.path.join(staging, "%s-architecture.md" % slug)
 
 
+LISTED = (docs.POURED, docs.DEFERRED)
+
+
+def free_lines(text):
+    """The non-blank lines under `## Poured concrete (one-way doors)` or `## Deferred` that are no
+    `- ` list line, and the lines of the head (after the title) that are none of its header
+    lines. An answer carries or strikes list lines only, and the header lines are each run's own,
+    so such a line (a note or a heading the owner typed there) could be neither kept nor struck by
+    any re-run: the run stops at harvest naming it, and the owner fixes the doc (CA1-11)."""
+    out = []
+    heading = None
+    for number, line in enumerate(text.split("\n"), 1):
+        if line.startswith("## "):
+            heading = line
+            continue
+        if heading is None and number > 1 and line.strip() and not line.startswith(HEADER_LABELS):
+            out.append({"line": number, "message": "%r in the doc's head is none of its header lines (Scope doc or "
+                        "Docless, Blind review, Artifact), which each run renders anew, so no re-run could keep it; "
+                        "move it into a section by hand, then start a new run" % line})
+        if heading in LISTED and line.strip() and not line.startswith("- "):
+            out.append({"line": number, "message": "%r under %s is no '- ' list line, so no answer can carry or strike "
+                        "it; make it a list line or move it out of the section by hand, then start a new run"
+                        % (line, heading[3:])})
+    return out
+
+
 def living_findings(text):
-    """Why the living doc cannot be continued: its form's findings, and CR line endings."""
+    """Why the living doc cannot be continued: its form's findings, a free line under a listed
+    section, and CR line endings."""
     findings = [dict(f) for f in templates.check("architecture-doc", text)]
+    findings += free_lines(text)
     if "\r" in text:
         findings.append({"line": 1, "message": "the doc has CR line endings; this core continues LF documents only"})
     return findings

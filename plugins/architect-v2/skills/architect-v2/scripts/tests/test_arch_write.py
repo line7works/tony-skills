@@ -184,6 +184,53 @@ class AReRun(_Write):
                                       "Artifact: https://example.invalid/artifact/turnstile"])
 
 
+class ASymlinkedDocHome(unittest.TestCase):
+    """R2 (CA1-3): every document write checks that the real path of the target's existing parent
+    folder lies inside the workspace, the staging home or the run directory. `write` stops
+    `write-refused`; `render-visual` and `record-publish` are usage; nothing lands outside, and
+    the result lists no write it did not make where it says."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("arch-write-link-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.ws = archlib.repo_workspace(self.tmp)
+        self.outside = os.path.join(self.tmp, "outside")
+        os.makedirs(self.outside)
+        self.run = archlib.ArchRun(self.tmp, self.ws)
+
+    def test_write_is_refused(self):
+        os.symlink(self.outside, os.path.join(self.ws, "docs", "architecture"))
+        self.run.to_harvest()
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "write-refused")
+        self.assertEqual(os.listdir(self.outside), [])
+        self.assertEqual([w for w in doc["writes"] if w["kind"] == "document"], [])
+
+    def test_render_and_publish_are_usage(self):
+        self.run.to_harvest()
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        self.assertEqual(self.run.write()[0], 0)
+        folder = os.path.join(self.ws, "docs", "architecture")
+        moved = os.path.join(self.outside, "architecture")
+        os.rename(folder, moved)
+        os.symlink(moved, folder)
+        before = archlib.listing(self.outside)
+        code, doc, out, err = self.run.render()
+        self.assertEqual(code, 2, out + err)
+        self.assertEqual(archlib.listing(self.outside), before)
+        os.remove(folder)
+        os.rename(moved, folder)
+        self.assertEqual(self.run.render()[0], 0)
+        os.rename(folder, moved)
+        os.symlink(moved, folder)
+        before = archlib.listing(self.outside)
+        code, doc, out, err = self.run.publish("https://example.invalid/artifact/turnstile")
+        self.assertEqual(code, 2, out + err)
+        self.assertEqual(archlib.listing(self.outside), before)
+
+
 class ReportOnly(_Write):
 
     EXTRA = {"report_only": True}
@@ -195,12 +242,11 @@ class ReportOnly(_Write):
         steps = [self.run.write(), self.run.render(), self.run.publish("https://example.invalid/artifact/new")]
         take = os.path.join(self.tmp, "take.md")
         testlib.write_text(take, "a take\n")
+        steps.append(self.run.request("gpt-astra", roster=testlib.readers_roster()))
         steps.append(self.run.save_take("gpt-astra", take))
-        if testlib.readers_roster():
-            steps.append(self.run.request("gpt-astra", roster=testlib.readers_roster()))
         for code, doc, out, err in steps:
             self.assertEqual(code, 0, out + err)
-        self.assertTrue(steps[3][1]["path"].startswith(self.run.run_dir + os.sep), steps[3][1])
+        self.assertTrue(steps[4][1]["path"].startswith(self.run.run_dir + os.sep), steps[4][1])
         code, doc, out, err = self.run.report()
         self.assertIn(code, (10,), out + err)
         self.assertEqual(archlib.listing(self.ws), before_ws)

@@ -56,9 +56,10 @@ is the contract of every command; `references/answer.schema.json` is your answer
    home, `station.scope_doc` when the owner named a scope doc's path, `station.publish: false` when
    he said not to publish, and `owner_word` when his invocation already names reviewers (his
    words verbatim). Run `check-input <input.json>`.
-3. Run `select --run-dir D --hunt scope`. `one`: that is the scope doc. `several`: list them for
-   the owner in a plain numbered question and never pick; `harvest` will stop the run, and his
-   pick goes into a new run's `station.scope_doc`. `none`: ask him once, in plain text, whether a
+3. Run `select --run-dir D --hunt scope`. `one`: read its `Intent:` line; when it is the project
+   he is talking about, that is the scope doc; when it is not, treat the hunt as `none`. `several`:
+   list them for the owner in a plain numbered question and never pick; `harvest` will stop the
+   run, and his pick goes into a new run's `station.scope_doc`. `none`: ask him once, in plain text, whether a
    scope doc exists somewhere the glob cannot see, and take the path he gives (a new run, with it
    as `station.scope_doc`). Only his "none" opens the docless gate: discuss why the station runs
    without a scope doc until the talk lands on a reason and a working name.
@@ -139,20 +140,31 @@ On his word in this run, and only then:
 1. Run `request --run-dir D --row <row>` once per reviewer he named (`--session-model` for the
    `claude-session` row). Each request sends the scope doc ONLY, never your doc, never this
    conversation, with the fixed instruction the contract quotes, `profile: starved`. `authorized`
-   rides only on an outside row his word in this run's input names; a row he names only now has no
-   word in the input (the contract's open point 1): say so, and do not add it by hand.
-2. Summon `/readers` with each request. A `READERS:` status other than `ok` is a failed review for
-   that lane: nothing is saved; a retry happens only on his word.
-3. Run `save-take --run-dir D --row <row> --take <raw text file> --model <effective model>
-   --isolation <label> --sidecar <sidecar path>` for each take, before any triage. The file is
-   never edited afterwards.
+   rides only on an outside row his word in this run's input names; a row he names only at this
+   offer has no word in this run's input, and readers refuses it. Tell him so, run `report` (it
+   stops `review-pending`), and start a new run on the same doc whose input carries his words
+   verbatim in `owner_word` (`rows` the rows he named); that run's `request` carries `authorized`.
+   Never add the flag or the word by hand.
+2. Summon `/readers` with each request; a call the harness backgrounds past its foreground limit is
+   not a failure: wait for its notification and judge what arrives. A `READERS:` status other than
+   `ok` is a failed review for that lane: nothing is saved for it, the other lanes still run, and a
+   retry happens only on his word. The review is done when at least one take was saved (each lane
+   that failed goes in the amended answer's `review.failed_lanes`, its row and the `READERS:`
+   reason), and `failed` when none was.
+3. Where the harness delivers the reply with entities in it, unescape HTML entities (`&amp;`,
+   `&lt;`, `&gt;`) in the raw text before `save-take`; it is the only transformation the file ever
+   gets. Then run `save-take --run-dir D --row <row> --take <raw text file> --model <effective
+   model> --isolation <label> --sidecar <sidecar path>` for each take, before any triage. The file
+   is never edited afterwards.
 4. Walk him through every disagreement between the doc and the takes, one at a time; he rules
    each. Nothing merges silently.
 
-Then record the amended answer (`record-answer` again): the review's outcome (`declined` with the
-date, `failed` with the date and reason, or `done` with what the takes agreed on) and one ruling per
-disagreement with the fields it changes. The doc changes only where a ruling says so. Run `write`,
-`render-visual` and `record-publish` again, so the picture never lags the doc.
+Then record the amended answer (`record-answer` again), once per run: the review's outcome
+(`declined` with the date, `failed` with the date and reason, or `done` with what the takes agreed
+on and any `failed_lanes`) and one ruling per disagreement with the fields it changes. The doc
+changes only where a ruling says so. Run `write`, `render-visual` and `record-publish` again (the
+same URL), so the picture never lags the doc. A second amendment is refused: more rulings need a
+new run.
 
 ## The gate
 

@@ -111,6 +111,25 @@ class ArchitectsOwnRefusals(_Record):
         a["candidates"][1]["categories"] = ["platform:library"]
         self.refused(a, "candidates-not-distinct")
 
+    def test_re_cased_or_re_spaced_categories_are_not_distinct(self):
+        """R4 (CA1-5): category names and choices compare casefolded and whitespace-normalized."""
+        for first, second in ((["platform:library"], ["Platform:library"]),
+                              (["platform:library"], ["platform:Library"]),
+                              (["platform:library"], [" platform :  library "]),
+                              (["storage:flat  file"], ["STORAGE:Flat File"])):
+            a = archlib.clean_answer()
+            a["candidates"][0]["categories"] = first
+            a["candidates"][1]["categories"] = second
+            self.refused(a, "candidates-not-distinct")
+
+    def test_a_category_only_one_candidate_names_is_no_difference(self):
+        """R4: padding one candidate with a category the other does not name differs in nothing
+        both name; a difference counts only in a category both candidates name."""
+        a = archlib.clean_answer()
+        a["candidates"][0]["categories"] = ["platform:library"]
+        a["candidates"][1]["categories"] = ["platform:library", "storage:none"]
+        self.refused(a, "candidates-not-distinct")
+
     def test_a_component_serving_nothing(self):
         a = archlib.clean_answer()
         a["components"].append({"name": "metrics exporter", "serves": ""})
@@ -192,6 +211,17 @@ class TheSchema(_Record):
             a = archlib.clean_answer()
             a["walkthrough"][field] = [" "] if field == "must" else "  "
             self.refused(a, None, code=4)
+
+    def test_a_walkthrough_field_holding_the_separator_is_exit_4(self):
+        """CA1-8: a field that carries the walkthrough line's separator would forge a second field."""
+        forged = "Sam  %s  When: never  %s  Must be able to: nothing" % (M, M)
+        for field in ("who", "when", "must"):
+            a = archlib.clean_answer()
+            a["walkthrough"][field] = [forged] if field == "must" else forged
+            self.refused(a, None, code=4)
+        a = archlib.clean_answer()
+        a["walkthrough"]["who"] = "Sam %s Bench" % M
+        self.refused(a, None, code=4)
 
     def test_an_unknown_key_is_exit_4(self):
         a = archlib.clean_answer()
@@ -314,20 +344,27 @@ class NoLoss(_Record):
         self.refused(a, "unknown-prior-line")
 
 
-class NoLossOfARunBlock(_Record):
+class ARunBlockUnderDeferred(unittest.TestCase):
     """A hand-edited living doc whose Run 1 block sits under Deferred: the re-render, which draws
-    the Deferred section from the answer, would drop it; the no-loss check refuses first."""
+    the Deferred section from the answer, would drop it. Its lines are no list lines, so the run
+    stops at harvest `living-doc-malformed`, quoting the block's heading, before anything is asked
+    (CA1-11); the no-loss check of such a drop is held at the library by the answer example
+    `content-no-loss-run-block`."""
 
-    FILES = {LIVING_REL: LIVING.replace(
-        "## Run log\n### Run 1",
-        "### Run 1 %s 2026-09-20 %s trigger: first run\nExit ramp: system\nChanged this run: first run\n\n"
-        "## Run log\n### Run 2" % (D, D))}
-
-    def test_the_dropped_block_is_refused_before_any_write(self):
-        before = archlib.sha(os.path.join(self.ws, LIVING_REL))
-        doc = self.refused(rerun_answer(), "no-loss")
-        self.assertTrue(any("Run 1" in r["message"] for r in doc["refusals"]), doc["refusals"])
-        self.assertEqual(archlib.sha(os.path.join(self.ws, LIVING_REL)), before)
+    def test_harvest_stops_quoting_the_block(self):
+        tmp = testlib.make_scratch("arch-record-")
+        self.addCleanup(testlib.rmtree, tmp)
+        ws = archlib.repo_workspace(tmp, files={LIVING_REL: LIVING.replace(
+            "## Run log\n### Run 1",
+            "### Run 1 %s 2026-09-20 %s trigger: first run\nExit ramp: system\nChanged this run: first run\n\n"
+            "## Run log\n### Run 2" % (D, D))})
+        before = archlib.sha(os.path.join(ws, LIVING_REL))
+        run = archlib.ArchRun(tmp, ws)
+        code, doc, out, err = run.to_harvest()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+        self.assertIn("### Run 1", doc["reason"])
+        self.assertEqual(archlib.sha(os.path.join(ws, LIVING_REL)), before)
 
 
 class TheAnswerIsNeverRepaired(_Record):

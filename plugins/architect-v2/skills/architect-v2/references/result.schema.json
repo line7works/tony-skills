@@ -82,6 +82,7 @@
         "review",
         "review_reason",
         "review_files",
+        "review_failed_lanes",
         "passed_forward",
         "counts"
       ],
@@ -200,6 +201,26 @@
             "type": "string"
           },
           "description": "the takes saved verbatim in this run, as the doc's Blind review line names them"
+        },
+        "review_failed_lanes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "row",
+              "reason"
+            ],
+            "properties": {
+              "row": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "beside a done review, each lane that did not return: its roster row and the reason its READERS: line carried (the read-back names each)"
         },
         "passed_forward": {
           "type": "array",

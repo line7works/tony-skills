@@ -135,6 +135,8 @@ class SaveTake(unittest.TestCase):
         self.run.to_harvest()
         self.run.record(archlib.clean_answer())
         self.assertEqual(self.run.write()[0], 0)
+        code, doc, out, err = self.run.request("gpt-astra", "gemini", "claude-session", session_model="model-x")
+        self.assertEqual(code, 0, out + err)
 
     def take(self, text, name="take.md"):
         path = os.path.join(self.tmp, name)
@@ -191,9 +193,8 @@ class SaveTake(unittest.TestCase):
         self.assertTrue(doc["path"].endswith("-architect-review-turnstile-gemini.md"), doc["path"])
 
 
-class TheRulingsRound(unittest.TestCase):
-    """After the takes: an amended answer carries the review's outcome and its rulings; the doc
-    changes only where a ruling says so, and the visual and the publish are redone before report."""
+class _Rulings(unittest.TestCase):
+    """A run with its doc written, the visual rendered, the publish recorded and one take saved."""
 
     def setUp(self):
         self.tmp = testlib.make_scratch("arch-rulings-")
@@ -206,6 +207,7 @@ class TheRulingsRound(unittest.TestCase):
         self.assertEqual(self.run.write()[0], 0)
         self.assertEqual(self.run.render()[0], 0)
         self.assertEqual(self.run.publish("https://example.invalid/artifact/turnstile")[0], 0)
+        self.assertEqual(self.run.request("gpt-astra")[0], 0)
         take = os.path.join(self.tmp, "take.md")
         testlib.write_text(take, "a module and a reset, no server\n")
         code, doc, out, err = self.run.save_take("gpt-astra", take, model="gpt-model-x")
@@ -220,6 +222,11 @@ class TheRulingsRound(unittest.TestCase):
         a["questions"].append({"id": "Q5", "text": "Keep reset()?", "touches": [], "answer": "yes, it stays"})
         a.update(over)
         return a
+
+
+class TheRulingsRound(_Rulings):
+    """After the takes: an amended answer carries the review's outcome and its rulings; the doc
+    changes only where a ruling says so, and the visual and the publish are redone before report."""
 
     def test_the_second_round_lands_and_report_completes(self):
         code, doc, out, err = self.run.record(self.amended())
@@ -250,6 +257,126 @@ class TheRulingsRound(unittest.TestCase):
         a["rulings"][0]["changes"] = ["data_flow"]
         code, doc, out, err = self.run.record(a)
         self.assertEqual(code, 0, out + err)
+
+
+class OneAmendment(_Rulings):
+    """R1 (CA1-1, CA1-2): one recorded answer and ONE amendment per run. A second `record-answer`
+    before the next `write` is held to the first answer exactly as the amendment is; a second
+    amendment after the rewrite is usage, never a quiet replacement of the owner's rulings."""
+
+    def smuggling(self):
+        a = self.amended()
+        a["candidates"].append({"name": "cli", "categories": ["platform:command line"], "assumes": "a shell",
+                                "later_cost": "argument parsing"})
+        a["rejected"].append({"name": "cli", "why": "the bench imports"})
+        a["components"].append({"name": "logger", "serves": "count turns"})
+        a["poured_concrete"].append({"text": "platform %s macOS %s bench" % (archlib.D, archlib.D), "tag": "decided",
+                                     "trace": {"kind": "question", "ref": "Q5"}})
+        return a
+
+    def test_a_re_record_before_write_is_held_to_the_first_answer(self):
+        code, doc, out, err = self.run.record(self.amended())
+        self.assertEqual(code, 0, out + err)
+        first = archlib.sha(os.path.join(self.run.run_dir, "answer-round-1.json"))
+        before_run = archlib.listing(self.run.run_dir)
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = self.run.record(self.smuggling())
+        self.assertEqual(code, 5, out + err)
+        self.assertIn("amendment-outside-rulings", [r["rule"] for r in doc["refusals"]])
+        self.assertEqual(archlib.listing(self.run.run_dir), before_run)
+        self.assertEqual(archlib.listing(self.ws), before_ws)
+        self.assertEqual(archlib.sha(os.path.join(self.run.run_dir, "answer-round-1.json")), first)
+
+    def test_a_corrected_amendment_before_write_replaces_the_amendment_only(self):
+        self.assertEqual(self.run.record(self.amended())[0], 0)
+        first = testlib.load_json(os.path.join(self.run.run_dir, "answer-round-1.json"))
+        corrected = self.amended()
+        corrected["rulings"][0]["ruling"] = "reset() stays, documented"
+        code, doc, out, err = self.run.record(corrected)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual((doc["round"], doc["amendment"]), (2, True))
+        self.assertEqual(testlib.load_json(os.path.join(self.run.run_dir, "answer-round-1.json")), first)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer-round-2.json")))
+
+    def test_a_second_amendment_is_usage(self):
+        self.assertEqual(self.run.record(self.amended())[0], 0)
+        self.assertEqual(self.run.write()[0], 0)
+        self.assertEqual(self.run.render()[0], 0)
+        self.assertEqual(self.run.publish("https://example.invalid/artifact/turnstile")[0], 0)
+        before_run = archlib.listing(self.run.run_dir)
+        again = self.amended()
+        again["rulings"] = [{"disagreement": "the take keeps a server", "ruling": "no server", "reviewers": ["gpt"],
+                             "changes": [], "trace": {"kind": "question", "ref": "Q5"}}]
+        code, doc, out, err = self.run.record(again)
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("one amended answer per run; start a new run for more", err)
+        self.assertEqual(archlib.listing(self.run.run_dir), before_run)
+
+
+class TakesAnswerRequests(unittest.TestCase):
+    """CA1-13: `request` sends the scope doc harvest read, never another file under its name, and
+    `save-take` saves a take only for a row this run requested."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("arch-requests-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.ws = archlib.repo_workspace(self.tmp)
+        self.run = archlib.ArchRun(self.tmp, self.ws)
+        self.run.to_harvest()
+        self.run.record(archlib.clean_answer())
+        self.assertEqual(self.run.write()[0], 0)
+        self.take = os.path.join(self.tmp, "take.md")
+        testlib.write_text(self.take, "a take\n")
+
+    def test_a_row_never_requested_is_usage(self):
+        self.assertEqual(self.run.request("gpt-astra")[0], 0)
+        before = archlib.listing(self.ws)
+        code, doc, out, err = self.run.save_take("gemini", self.take)
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("gemini", err)
+        self.assertEqual(archlib.listing(self.ws), before)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "takes")))
+
+    def test_a_scope_doc_changed_since_harvest_is_usage(self):
+        path = os.path.join(self.ws, archlib.SCOPE_REL)
+        testlib.write_text(path, archlib.SCOPE + "- a line added after the harvest\n")
+        code, doc, out, err = self.run.request("gpt-astra")
+        self.assertEqual(code, 2, out + err)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "requests")))
+
+    def test_a_harvest_record_naming_another_file_is_usage(self):
+        record_path = os.path.join(self.run.run_dir, "harvest.json")
+        record = testlib.load_json(record_path)
+        record["scope_doc"]["path"] = os.path.join(self.ws, "docs", "architecture",
+                                                   "%s-turnstile.md" % archlib.TODAY)
+        testlib.write_json(record_path, record)
+        code, doc, out, err = self.run.request("gpt-astra")
+        self.assertEqual(code, 2, out + err)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "requests")))
+
+
+class ASymlinkedReviewHome(unittest.TestCase):
+    """CA1-3: `docs/reviews` a symlink to a folder outside the workspace: `save-take` is usage,
+    never a crash, and nothing lands outside."""
+
+    def test_usage_and_nothing_outside(self):
+        tmp = testlib.make_scratch("arch-take-link-")
+        self.addCleanup(testlib.rmtree, tmp)
+        ws = archlib.repo_workspace(tmp)
+        outside = os.path.join(tmp, "outside")
+        os.makedirs(outside)
+        os.symlink(outside, os.path.join(ws, "docs", "reviews"))
+        run = archlib.ArchRun(tmp, ws)
+        run.to_harvest()
+        run.record(archlib.clean_answer())
+        self.assertEqual(run.write()[0], 0)
+        self.assertEqual(run.request("gpt-astra")[0], 0)
+        take = os.path.join(tmp, "take.md")
+        testlib.write_text(take, "a take\n")
+        code, doc, out, err = run.save_take("gpt-astra", take)
+        self.assertEqual(code, 2, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(os.listdir(outside), [])
 
 
 if __name__ == "__main__":

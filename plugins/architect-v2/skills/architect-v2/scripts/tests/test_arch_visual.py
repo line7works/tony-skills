@@ -132,6 +132,33 @@ class RecordPublish(_Visual):
         self.assertIn("rendered and not published", doc["reason"])
         self.assertEqual(archlib.sha(path), before)
 
+    def test_a_url_that_is_no_https_url_is_usage(self):
+        """CA1-9: `--url` is the URL the publish returned: a scheme, a host, an optional path."""
+        run, path = self.written()
+        run.render()
+        before = archlib.sha(path)
+        for url in ("https://", "https:///artifact", "https://exa mple.invalid/a", "http://example.invalid/a",
+                    "https://example.invalid/a b", "https://-/"):
+            code, doc, out, err = run.publish(url)
+            self.assertEqual(code, 2, (url, out + err))
+        self.assertEqual(archlib.sha(path), before)
+        self.assertEqual(run.publish(URL)[0], 0)
+
+    def test_a_no_url_record_after_a_published_one_is_usage(self):
+        """CA1-12: once this run recorded a published URL, a record without one would unsay it."""
+        run, path = self.written()
+        run.render()
+        self.assertEqual(run.publish(URL)[0], 0)
+        before = archlib.sha(path)
+        code, doc, out, err = run.publish()
+        self.assertEqual(code, 2, out + err)
+        self.assertIn(URL, err)
+        self.assertEqual(archlib.sha(path), before)
+        code, doc, out, err = run.report()
+        self.assertEqual(code, 10, out + err)
+        sr = testlib.load_json(os.path.join(run.run_dir, "result.json"))["station_result"]
+        self.assertEqual((sr["publish_outcome"], sr["published"], sr["artifact_url"]), ("published", True, URL))
+
     def test_publish_before_render_is_usage(self):
         run, path = self.written()
         self.assertEqual(run.publish(URL)[0], 2)

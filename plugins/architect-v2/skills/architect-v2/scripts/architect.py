@@ -32,7 +32,6 @@ under the scope doc's slug): `docs/architecture/*-<slug>.md`, then the older fla
 `docs/<slug>-architecture.md`, then the staging home's `<slug>-architecture.md`, in that order.
 """
 import os
-import os
 import sys
 
 sys.dont_write_bytecode = True
