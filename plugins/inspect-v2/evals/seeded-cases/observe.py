@@ -287,10 +287,13 @@ def lane_observe(step, case_dir, neutral, facts, via, scratch):
         lane.setdefault("_errors", []).append({"step": "lane", "error": "%s: %s" % (type(exc).__name__, exc)})
     phases = lane.pop("_phases", None)
     errors = lane.pop("_errors", None)
-    facts["_phases"].extend(phases if isinstance(phases, list) else [])
+    if isinstance(phases, list):
+        facts["_phases"].extend(phases)
+    elif phases is not None:
+        facts["_errors"].append({"step": "lane", "error": "the lane observer's _phases is not a list: %r" % (phases,)})
     if isinstance(errors, list):
         facts["_errors"].extend(errors)
-    elif errors:
+    elif errors is not None:
         facts["_errors"].append({"step": "lane", "error": "the lane observer's _errors is not a list: %r" % (errors,)})
     merged = []
     for name in sorted(lane):
@@ -301,8 +304,12 @@ def lane_observe(step, case_dir, neutral, facts, via, scratch):
             facts["_errors"].append({"step": "lane", "error": "the lane observer filled %r, which its step does "
                                      "not list or the frame already observed; not merged" % name})
     for name in sorted(lane_via):
-        if name in merged:
+        if name in merged and isinstance(lane_via[name], str) and lane_via[name].strip():
             via[name] = lane_via[name]
+        elif name in merged:
+            facts["_errors"].append({"step": "lane", "error": "the lane observer's via for %r is not a non-empty "
+                                     "string: %r; not merged" % (name, lane_via[name])})
+            del lane_via[name]
         else:
             facts["_errors"].append({"step": "lane", "error": "the lane observer set a provenance for %r, which "
                                      "it did not fill as a listed fact; not merged" % name})
