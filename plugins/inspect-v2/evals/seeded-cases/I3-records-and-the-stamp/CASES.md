@@ -10,7 +10,7 @@ LANE CASES (verify, the records append and the stamp are lane I's). The workspac
 
 ## I3-01-clean (lane)
 
-One MAJOR at `build-doc.md:10`, which is the doc's `AC1` line.
+One MAJOR at `build-doc.md:10`, which is the doc's `R1` line (the claim names AC1, which is line 12).
 
 Recorded answer: `answers/I3-01-clean.json`.
 
