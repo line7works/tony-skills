@@ -49,7 +49,7 @@ nothing else; stderr carries diagnostics. Every response carries `interface_vers
 | 2 | usage: a missing or malformed argument, a file that is not there or not JSON, a phase command against the wrong phase, an unknown hunt or a malformed name |
 | 3 | missing dependency: `jsonschema` did not import, or (inspect-v2 only) the records component is missing or speaks another interface version. One line on stderr, nothing on stdout |
 | 4 | validation: a supplied file failed its schema (`check-input`, and the lane's own `record-answer` schema). Nothing is written and the run stays where it was |
-| 5 | the recorded answer was refused on its content (rule E14-11, section 8). Nothing is written and the run stays where it was, so a corrected answer can be recorded |
+| 5 | refused: the recorded answer on its content (rule E14-11, section 8), or an input, a path or a run artifact a core's own rule refuses (a file outside its home, a run artifact outside the run). Nothing is written and the run stays where it was, so a corrected answer or input can be offered |
 | 10 | the run reached a terminal status, a completion or a stop alike |
 
 `--help` and every argument check work without `jsonschema`. Test hooks are honored only when
