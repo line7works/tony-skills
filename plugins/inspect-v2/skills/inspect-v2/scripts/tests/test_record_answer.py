@@ -331,6 +331,131 @@ class WhereACitationMayPoint(_Rec):
         self.assertEqual((len(tri["survivors"]), tri["counts"]["refuted"]), (3, 0))
 
 
+class TheDocumentAPacketFileStandsFor(_Rec):
+    """Round 3, R2 (CI1-5's class): every packet file the packet can hold (`build-doc.md`, `scope-doc.md`,
+    `no-record.md`, `code-book.md`) maps to the document it stands for; a citation of `no-record.md`
+    becomes a QUESTION note naming the scope doc's absence, never a packet file name in the build doc;
+    a citation of a packet file the packet does not hold, or of any other name, is refuted."""
+
+    HARVEST = {"build_doc": {"rel": ilib.BUILD_REL}, "scope_doc": {"label": ilib.SCOPE_REL}}
+
+    def where(self, name, line=3):
+        return {"kind": "packet", "file": name, "start": line, "end": line}
+
+    def test_translate_maps_each_packet_file(self):
+        self.assertEqual(verify.translate(self.where("build-doc.md"), self.HARVEST), ilib.BUILD_REL + ":3")
+        self.assertEqual(verify.translate(self.where("scope-doc.md"), self.HARVEST), ilib.SCOPE_REL + ":3")
+        self.assertEqual(verify.translate(self.where("code-book.md"), self.HARVEST), "skills/blueprint-v2/SKILL.md:3")
+        no_scope = {"build_doc": {"rel": ilib.BUILD_REL}, "scope_doc": None}
+        self.assertEqual(verify.translate(self.where("no-record.md", 1), no_scope), verify.NO_SCOPE_DOC + ":1")
+        self.assertNotIn("no-record.md", verify.NO_SCOPE_DOC)
+
+    def test_translate_names_nothing_for_a_file_the_packet_does_not_hold_or_an_unknown(self):
+        no_scope = {"build_doc": {"rel": ilib.BUILD_REL}, "scope_doc": None}
+        self.assertIsNone(verify.translate(self.where("scope-doc.md"), no_scope))
+        self.assertIsNone(verify.translate(self.where("no-record.md", 1), self.HARVEST))
+        self.assertIsNone(verify.translate(self.where("packet.md"), self.HARVEST))
+        self.assertIsNone(verify.translate(self.where("summary.md"), self.HARVEST))
+
+    def test_a_no_record_citation_is_a_question_naming_the_scope_docs_absence(self):
+        fleet = ilib.claude_fleet(R, traceability=[ilib.finding("no-record.md:1", severity="BLOCKER",
+                                                               claim="R1 traces to nothing in the record")])
+        code, doc, out, err = self.record(fleet, scope=None)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["counts"]["refuted"]), ([], 0))
+        self.assertEqual(len(tri["questions"]), 1)
+        q = tri["questions"][0]
+        self.assertEqual(q["location"], verify.NO_SCOPE_DOC + ":1")
+        self.assertIn("no scope doc", q["what"])
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 0, out + err)
+        text = testlib.read_text(os.path.join(self.run.ws, ilib.BUILD_REL))
+        self.assertNotIn("no-record.md", text)
+        lines = [l for l in text.splitlines() if l.startswith("QUESTION")]
+        self.assertEqual(len(lines), 1, text)
+        self.assertIn(verify.NO_SCOPE_DOC + ":1", lines[0])
+
+    def test_an_outside_no_record_citation_of_any_lens_is_a_question(self):
+        word = {"rows": ["gpt-astra"], "words": "send it"}
+        fleet = [ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", findings=[
+            ilib.finding("no-record.md:1", severity="MAJOR", claim="the plan names no record", lens="code-book")]),
+            ilib.reader_result("%s-repo-reality" % R)]
+        code, doc, out, err = self.record(fleet, scope=None, row="gpt-astra", input_extra={"owner_word": word},
+                                          owner_word=word)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], [q["location"] for q in tri["questions"]]),
+                         ([], [verify.NO_SCOPE_DOC + ":1"]))
+
+    def test_a_packet_file_the_packet_does_not_hold_is_refuted(self):
+        # no scope doc: the packet holds no-record.md, so scope-doc.md matches nothing, for every lens,
+        # repo reality included, even when the workspace happens to hold a file of that name
+        fleet = ilib.claude_fleet(R, traceability=[ilib.finding("scope-doc.md:1", claim="c1")],
+                                  repo_reality=[ilib.finding("scope-doc.md:1", claim="c2", severity="MINOR")])
+        ws = ilib.workspace(self.tmp, scope=None, extra={"scope-doc.md": "a file of the repo\n"})
+        self.run = ilib.Runner(self.tmp, ws)
+        self.run.upto("request")
+        code, doc, out, err = self._record(ilib.answer(R, fleet))
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["questions"], tri["counts"]["refuted"]), ([], [], 2))
+
+    def test_no_record_md_in_a_run_with_a_scope_doc_is_refuted(self):
+        fleet = ilib.claude_fleet(R, traceability=[ilib.finding("no-record.md:1", claim="c1")])
+        code, doc, out, err = self.record(fleet)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["questions"], tri["counts"]["refuted"]), ([], [], 1))
+
+    def test_an_unknown_packet_name_is_refuted(self):
+        word = {"rows": ["gpt-astra"], "words": "send it"}
+        fleet = [ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", findings=[
+            ilib.finding("packet.md:3", claim="c1", severity="MINOR")]), ilib.reader_result("%s-repo-reality" % R)]
+        code, doc, out, err = self.record(fleet, row="gpt-astra", input_extra={"owner_word": word}, owner_word=word)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["counts"]["refuted"]), ([], 1))
+
+
+class ALinkToTheRecordsLog(_Rec):
+    """Round 3, R3 (CI1-7): a file symlink or a hard link to the records log is caught as the folder link
+    is: the log is read through the component only, never opened by a citation check."""
+
+    def test_a_file_link_and_a_hard_link_to_the_log_are_refuted(self):
+        ws = ilib.workspace(self.tmp)
+        event = {"v": 1, "kind": "finding_raised", "at": "2026-09-25T11:00:00Z", "ledger_doc": ilib.BUILD_REL,
+                 "slice": "A", "severity": "MINOR",
+                 "location": {"raw": ilib.BUILD_REL + ":8", "file": ilib.BUILD_REL, "line": 8, "line_end": None,
+                              "tag": None, "more": [], "resolved": True},
+                 "claim": "an earlier finding", "scenario": "it is in the log", "raised_by": "someone",
+                 "actor": {"station": "another-station", "run_id": "other-run", "harness": None},
+                 "origin": {"kind": "native"}, "source": {"known": False}}
+        events = os.path.join(self.tmp, "events.json")
+        testlib.write_json(events, [event])
+        code, body, err = ilib.records_cli(["append", "--workspace", ws, "--doc", ilib.BUILD_REL, "--events", events,
+                                            "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+        log = os.path.join(ws, body["log"])
+        os.symlink(log, os.path.join(ws, "log-link.jsonl"))
+        os.makedirs(os.path.join(ws, "deep"))
+        os.symlink(os.path.relpath(log, os.path.join(ws, "deep")), os.path.join(ws, "deep", "x.txt"))
+        os.link(log, os.path.join(ws, "hard-copy.jsonl"))
+        self.run = ilib.Runner(self.tmp, ws)
+        self.run.upto("request")
+        fleet = ilib.claude_fleet(R, repo_reality=[
+            ilib.finding("log-link.jsonl:1", claim="c1", quote="finding_raised"),
+            ilib.finding("deep/x.txt:1", claim="c2", quote="finding_raised"),
+            ilib.finding("hard-copy.jsonl:1", claim="c3", quote="finding_raised"),
+            ilib.finding("src/turnstile.py:2", claim="c4", quote="return n + 1")])
+        code, doc, out, err = self._record(ilib.answer(R, fleet))
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual([s["location"] for s in tri["survivors"]], ["src/turnstile.py:2"])
+        self.assertEqual(tri["counts"]["refuted"], 3)
+        self.assertTrue(all("records log" in r["why"] for r in tri["refuted"]), tri["refuted"])
+
+
 class Stops(_Rec):
 
     def test_a_null_effective_model_is_a_stop_with_no_stamp(self):

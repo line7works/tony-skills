@@ -20,6 +20,9 @@ The script never judges a finding (ruling E14-4). What it does is mechanical and
 - **The no-record rule**: with no scope doc, every finding of the traceability lens (and every
   paper-call finding the reply marks `lens: traceability`) becomes a QUESTION note, never a
   BLOCKER; so does any finding of severity QUESTION, and any the executor adjudicates `question`.
+  A finding citing `no-record.md` (the NO RECORD line itself) is a QUESTION whatever its lens,
+  written `no-scope-doc:<line>`: every packet file maps to the document it stands for (`translate`),
+  and one that stands for none (a file the packet does not hold, an unknown name) is refuted.
 - **Dedupe** on location and claim (whitespace collapsed, case folded): one finding, the highest
   severity, the call ids that converged on it listed once.
 - **The verdict** is arithmetic over the surviving severities (v1's mapping, signoff-v2's
@@ -33,6 +36,11 @@ from station_core import fsio
 
 from . import common
 
+# every file a lens packet can hold, each standing for one document (round 3, R2); `no-record.md` stands
+# for the scope doc's absence, written `no-scope-doc:<line>`, never a packet file name
+PACKET_FILES = ("build-doc.md", "scope-doc.md", "no-record.md", "code-book.md")
+NO_SCOPE_DOC = "no-scope-doc"
+CODE_BOOK_AS_WRITTEN = "skills/blueprint-v2/SKILL.md"
 LOCATION = re.compile(r"^(?P<file>[^:\s][^:]*?):(?P<start>\d+)(?:\s*[-\u2013]\s*(?P<end>\d+))?$")
 ORDER = {"BLOCKER": 3, "MAJOR": 2, "MINOR": 1, "QUESTION": 0}
 LABEL_ORDER = {"CONFIRMED": 2, "PLAUSIBLE": 1, "UNVERIFIED": 0}
@@ -91,13 +99,35 @@ def workspace_lines(workspace, rel):
     return dict((i, l.rstrip("\r")) for i, l in enumerate(lines, 1))
 
 
+def _is_a_records_file(target, records):
+    """Whether `target` is, by real path or by file identity, a file under the records folder: a file
+    symlink resolves into it, a hard link shares a file's inode (round 3, R3, CI1-7)."""
+    if not os.path.exists(target):
+        return False
+    if fsio.inside(os.path.realpath(target), os.path.realpath(records)):
+        return True
+    if not os.path.isfile(target):
+        return False
+    for base, _dirs, files in os.walk(records):
+        for name in files:
+            try:
+                if os.path.samefile(target, os.path.join(base, name)):
+                    return True
+            except OSError:
+                continue
+    return False
+
+
 def in_records(workspace, rel):
     """Whether a workspace-relative path lies in the records component's folder (`docs/records/`),
-    however it is spelled (`./`, a link, another letter case): the log is read through the component's
-    CLI only, never opened by a citation check (contract section 12)."""
+    however it is spelled or reached (`./`, a folder link, another letter case, a file symlink, a hard
+    link): the log is read through the component's CLI only, never opened by a citation check
+    (contract section 12)."""
     records = os.path.join(workspace, "docs", "records")
     if not os.path.isdir(records):
         return False
+    if _is_a_records_file(os.path.normpath(os.path.join(workspace, rel)), records):
+        return True
     here = os.path.dirname(os.path.normpath(os.path.join(workspace, rel)))
     while fsio.inside(here, workspace):
         if os.path.exists(here) and os.path.samefile(here, records):
@@ -117,6 +147,10 @@ def check_citation(finding, lens_dir, lens, workspace, documents=None):
     if loc is None:
         return False, "the location %r names no <file>:<line>" % finding.get("location"), None
     names = sorted(os.listdir(lens_dir)) if lens_dir and os.path.isdir(lens_dir) else []
+    if loc["file"] in PACKET_FILES and loc["file"] not in names:
+        # a packet file this packet does not hold (`scope-doc.md` in a no-record run, `no-record.md`
+        # beside a scope doc) matches nothing, for every lens, repo reality included (round 3, R2)
+        return False, "the packet holds no %s (it holds %s)" % (loc["file"], ", ".join(names)), None
     if loc["file"] in names and documents is not None and loc["file"] not in documents:
         return False, "%s is not among the documents the %s request carried (%s)" % (
             loc["file"], lens, ", ".join(documents)), None
@@ -156,16 +190,25 @@ def carried(call):
 
 
 def translate(where, harvest):
-    """A packet or repo location as the document it names: `build-doc.md:12` -> `<build doc>:12`."""
+    """A packet or repo location as the document it names (round 3, R2), or None when the packet file
+    stands for no document of this run: `build-doc.md` -> the build doc's workspace path;
+    `scope-doc.md` -> the scope doc's label (None in a no-record run); `no-record.md` -> `no-scope-doc`,
+    the scope doc's absence (None beside a scope doc); `code-book.md` -> `skills/blueprint-v2/SKILL.md`;
+    any other packet name -> None. A repo location is the workspace path it already is."""
     span = "%d" % where["start"] if where["start"] == where["end"] else "%d-%d" % (where["start"], where["end"])
     name = where["file"]
     if where["kind"] == "packet":
+        scope = harvest.get("scope_doc")
         if name == "build-doc.md":
             name = harvest["build_doc"]["rel"]
-        elif name == "scope-doc.md" and harvest.get("scope_doc"):
-            name = harvest["scope_doc"]["label"]
+        elif name == "scope-doc.md" and scope:
+            name = scope["label"]
+        elif name == "no-record.md" and not scope:
+            name = NO_SCOPE_DOC
         elif name == "code-book.md":
-            name = "skills/blueprint-v2/SKILL.md"
+            name = CODE_BOOK_AS_WRITTEN
+        else:
+            return None
     return "%s:%s" % (name, span)
 
 
@@ -211,18 +254,31 @@ def triage(answer, requests, harvest, packet, workspace):
                 refuted.append({"call_id": call_id, "finding": fid, "location": f["location"], "why": why})
                 continue
             location = translate(where, harvest)
+            if location is None:
+                refuted.append({"call_id": call_id, "finding": fid, "location": f["location"],
+                                "why": "%s stands for no document of this run" % where["file"]})
+                continue
             model = result["effective_model"]
+            absent = where["kind"] == "packet" and where["file"] == "no-record.md"
             if adj is not None and adj["decision"] == "refuted":
                 refuted.append({"call_id": call_id, "finding": fid, "location": location,
                                 "why": "the executor refuted it: %s" % adj["why"]})
                 continue
-            to_question = f["severity"] == "QUESTION" or (adj is not None and adj["decision"] == "question") or \
+            to_question = absent or f["severity"] == "QUESTION" or \
+                (adj is not None and adj["decision"] == "question") or \
                 (no_record and (lens == "traceability" or (lens == "paper" and f.get("lens") == "traceability")))
             if to_question:
-                why = adj["why"] if adj is not None and adj["decision"] == "question" else (
-                    "the no-record rule: unverifiable, needs confirmation" if no_record and f["severity"] != "QUESTION"
-                    else "unverifiable against a missing or silent record")
-                questions.append({"location": location, "what": f["claim"], "model": model, "call_id": call_id,
+                if absent:
+                    # the finding cites the NO RECORD line itself: a question naming the scope doc's absence,
+                    # whatever its lens or severity, never raised, never a packet file name (round 3, R2)
+                    why = "the no-record rule: the finding cites the NO RECORD line, not a place in a document"
+                    what = "no scope doc exists for this feature: %s" % f["claim"]
+                else:
+                    why = adj["why"] if adj is not None and adj["decision"] == "question" else (
+                        "the no-record rule: unverifiable, needs confirmation" if no_record and
+                        f["severity"] != "QUESTION" else "unverifiable against a missing or silent record")
+                    what = f["claim"]
+                questions.append({"location": location, "what": what, "model": model, "call_id": call_id,
                                   "why": why})
                 continue
             if not checked:

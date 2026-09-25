@@ -13,6 +13,7 @@ SKILL.md, a v2 sibling by route 3a then 3b), confirms the records component at i
 (exit 3 otherwise), pins the log's head, and keeps a copy of each source in the run directory so
 the packet is the record exactly as harvested.
 """
+import argparse
 import glob
 import json
 import os
@@ -43,6 +44,10 @@ def _inside_a_build_home(ws, folder):
 def named(ctx, args):
     """`named --run-dir D --path P`: the build doc the invocation names, taken as the build hunt's one."""
     run = common.open_run(ctx, args.run_dir, ("checked", "selected"), "named")
+    if common.has(run, "selection-scope.json"):
+        raise driver.Usage("run `named` before `select --hunt scope`: the scope hunt of a doc named outside every "
+                           "build home adds that doc's own directory's homes, so this run's scope hunt already ran "
+                           "without them. Start a fresh run: check-input, named, then select --hunt scope")
     ws = common.workspace(run)
     given = args.path
     path = given if os.path.isabs(given) else os.path.join(ws, given)
@@ -82,12 +87,7 @@ def hunts_for_run(hunts, argv):
     argv = list(argv or [])
     if not argv or argv[0] != "select":
         return hunts
-    run_dir = None
-    for index, item in enumerate(argv):
-        if item == "--run-dir" and index + 1 < len(argv):
-            run_dir = argv[index + 1]
-        elif item.startswith("--run-dir="):
-            run_dir = item.split("=", 1)[1]
+    run_dir = _select_run_dir(argv[1:])
     if not run_dir:
         return hunts
     try:
@@ -109,6 +109,44 @@ def hunts_for_run(hunts, argv):
         {"home": "named-dir-scope", "root": "workspace", "globs": [prefix + "scope/*.md"], "tier": 1},
         {"home": "named-dir-flat", "root": "workspace", "globs": [prefix + "*-scope.md"], "tier": 1}]
     return out
+
+
+class _Unparsed(Exception):
+    pass
+
+
+class _Mirror(argparse.ArgumentParser):
+    def error(self, message):
+        raise _Unparsed(message)
+
+
+def _select_run_dir(args):
+    """`--run-dir` of a `select` argv, read the way the shared driver's parser reads it (round 3, R3,
+    CI2-1): the same options, so an abbreviation argparse accepts (`--run D`, `--run-d=D`) is accepted
+    here too, and one it refuses (`--r`, ambiguous with `--records-root`) is refused here too. None
+    when the argv does not parse; the driver then reports it itself."""
+    mirror = _Mirror(add_help=False)
+    for flag in ("--skill-root", "--records-root", "--run-dir", "--hunt", "--name"):
+        mirror.add_argument(flag, default=None)
+    try:
+        known, _ = mirror.parse_known_args(args)
+    except _Unparsed:
+        return None
+    return known.run_dir
+
+
+def _named_scope_homes_missed(run):
+    """Whether this run's build doc was `named` outside every build home and the scope selection
+    `harvest` would take never searched that doc's own directory's homes (round 3, R3, CI2-1)."""
+    chosen = run.checkpoint.get("named") or {}
+    if chosen.get("scope_dir") is None:
+        return False
+    build = common.read(run, "selection-build.json") if common.has(run, "selection-build.json") else {}
+    if [c.get("home") for c in build.get("candidates") or []] != ["named"]:
+        return False
+    scope = common.read(run, "selection-scope.json") if common.has(run, "selection-scope.json") else {}
+    homes = set(r.get("home") for r in scope.get("searched") or [])
+    return not {"named-dir-scope", "named-dir-flat"} <= homes
 
 
 def _selection(run, hunt):
@@ -205,6 +243,10 @@ def harvest(ctx, args):
     ws = common.workspace(run)
     build_path, build_how = _settled(ctx, run, "build")
     _selection(run, "scope")
+    if _named_scope_homes_missed(run):
+        raise driver.Usage("the build doc was named outside every build home, and this run's scope selection "
+                           "never searched its own directory's scope/*.md and *-scope.md: run `select --hunt scope` "
+                           "again, then harvest (the no-record rule applies only when every home came up empty)")
     scope_path, scope_how = _settled(ctx, run, "scope")
     try:
         build_bytes, build_text = _read(build_path)

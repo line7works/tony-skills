@@ -160,7 +160,7 @@ data in this run's input, the ask comes before `check-input` (section 15, point 
 
 | Command | Input | Output | Exits |
 |---|---|---|---|
-| `named` | `--run-dir D --path P`, after `check-input`, instead of `select --hunt build`: the build doc the invocation names (absolute, or relative to the workspace) | `selection-build.json` as the hunt's `one` (candidate home `named`, tier 0), the named doc and its scope directory in `checkpoint.json`; `harvest` then takes it | 0; 2 when the path is not an existing `.md` file, lies outside the workspace by its real path (a link out included), or the run is past `select` |
+| `named` | `--run-dir D --path P`, after `check-input`, instead of `select --hunt build`: the build doc the invocation names (absolute, or relative to the workspace) | `selection-build.json` as the hunt's `one` (candidate home `named`, tier 0), the named doc and its scope directory in `checkpoint.json`; `harvest` then takes it | 0; 2 when the path is not an existing `.md` file, lies outside the workspace by its real path (a link out included), the run is past `select`, or `select --hunt scope` already ran (run `named` first) |
 | `choose` | `--run-dir D --hunt build\|scope --path P --by intent\|owner [--words TEXT]`, after `select`, at a hunt whose outcome was `several` | the choice recorded in `checkpoint.json` (`path`, `by`, the owner's words); `harvest` then takes it | 0; 2 when the hunt was not `several`, the path is not one of the listed candidates, or an owner's pick carries no words |
 | `packet` | `--run-dir D [--readers-root DIR]`, after `harvest` | `packet/<lens>/` for each lens of the named row's lane, each holding exactly `build-doc.md`, `scope-doc.md` or `no-record.md`, and `code-book.md`, numbered `N: `; `packet.json` with each file's hash | 0; 2 no `station.row`, a row not in the roster, a packet already built; 3 readers not found |
 | `request` | `--run-dir D [--suggest FILE] [--readers-root DIR]`, after `packet` | one request per lens under `requests/`, `requests.json`; for an outside row the filled mandate `outside/<call id>/packet.md` | 0; 2 a displayed model and no `--suggest`; 3 readers not found; 5 the packet refused (the file named, nothing built); 10 `model-changed` |
@@ -192,8 +192,12 @@ by their `Intent:` lines and records the match with `choose --by intent`: a file
 Intent match, and when two tiers match by filename the lower tier's doc is taken and the chat block's
 `Selected:` line names it, how it was taken, and every doc another tier matched. A doc `named` lies
 outside every build home when its directory is none of `docs/plans`, `docs` and `plan`; the two
-named-dir scope homes are added by `scripts/inspect_v2.py` for that run alone (`gate.hunts_for_run`)
-and are listed in `searched`. `several` is listed and never picked: the executor
+named-dir scope homes are recorded in the run's checkpoint by `named` and added by
+`scripts/inspect_v2.py` for that run alone (`gate.hunts_for_run`, which reads `--run-dir` the way the
+driver's parser does, abbreviations included), and are listed in `searched`. `named` after
+`select --hunt scope` is usage (exit 2, "run `named` before `select --hunt scope`"), and `harvest`
+refuses (exit 2) a scope selection of a named doc outside the build homes that never searched them,
+so a scope doc beside the named doc is never lost into the no-record rule. `several` is listed and never picked: the executor
 matches a scope doc by its `Intent:` line or puts the list to the owner, and records the result
 with `choose`. Only a `none` from the scope hunt applies the no-record rule; a `none` from the
 build hunt stops the run (`selection-none`: a plan that lives only in the conversation is not
@@ -308,10 +312,14 @@ Three layers, in order: the schema (exit 4); the shared E14-11 refusals through
 | `unauthorized-send` | a status-`ok` result of an outside row's paper call whose request was built without `authorized` (the input's `owner_word` names no such row): readers sends nothing for an outside row until the owner names it, so such a result was never sent under the rule, and nothing of it is raised or stamped under that row's name. The refusal names the call and the row. A result whose status is not `ok` (readers refused the unauthorized send) is not refused here: it ends the run `lane-down` |
 
 Once the answer is written and before anything is triaged, the banner goes on top of each outside
-raw copy readers filed at its request's `raw_path` (or readers' `-2`, `-3` variant) under
-`docs/reviews/`, once, and on nothing else (v1 Step 3); `banner.json` names each write with its
-hashes, `write`'s receipt opens with them, and a run that stops here names them in its result. Never
-in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
+raw copy readers filed at its request's `raw_path` under `docs/reviews/`, once, and on nothing else
+(v1 Step 3). The request's own `raw_path` is the one source (recorded at `request`, in
+`requests.json`), never the result's optional field: the copy at that path is bannered whether the
+result names it, names none, or names a path elsewhere (a path elsewhere is left alone); readers'
+`-2`, `-3` variant of it is bannered when the result names it, and every existing variant is when
+the result names none of them. `banner.json` names each write with its hashes, `write`'s receipt
+opens with them, and a run that stops here or at any later tag names them in its result and leaves
+no bare copy. Never in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
 of refusing the answer: any result whose `status` is not
 `ok` (stop `lane-down`, its status and reason in the stop's sentence), and any result with a null
 `effective_model`, or paper calls that report more than one (stop `no-effective-model`, no stamp).
@@ -322,10 +330,12 @@ of refusing the answer: any result whose `status` is not
   call's lens, and only against the documents that call's request carried (traceability: the
   build doc and the record; code book: the code book and the build doc; repo reality: the build
   doc; the paper call's `packet.md` carries all three); a repo-reality finding may cite a regular
-  file inside the workspace, never one under `docs/records/` (the records log is read through the
+  file inside the workspace, never one under `docs/records/` however it is reached (a folder link,
+  a file symlink into it, a hard link to one of its files: the records log is read through the
   component's CLI only, never opened by a citation check). It matches nothing when the file is
-  none of those, a line is past the end, or every cited line is blank; and, when the finding quotes
-  the cited text (`quote`), when no cited line carries it.
+  none of those, a packet file this packet does not hold (`scope-doc.md` in a no-record run,
+  `no-record.md` beside a scope doc, for every lens), a line is past the end, or every cited line
+  is blank; and, when the finding quotes the cited text (`quote`), when no cited line carries it.
 - Every citation is checked, and one that matches nothing is refuted and counted, whatever the
   severity and whoever found it: every finding raised into the records log, and every QUESTION
   line, names a place in the workspace (ruling R5). Verified, in v1's sense: every outside finding
@@ -336,15 +346,21 @@ of refusing the answer: any result whose `status` is not
 - Labels: CONFIRMED when the quote was found or the executor adjudicated `confirmed`; PLAUSIBLE
   otherwise (the citation holds and no one confirmed the claim).
 - QUESTION notes: every finding of severity QUESTION; every finding the executor adjudicates
-  `question`; and under the no-record rule every finding of the traceability lens (and every
-  paper-call finding marked `lens: traceability`). A QUESTION is never raised and never gates.
+  `question`; under the no-record rule every finding of the traceability lens (and every
+  paper-call finding marked `lens: traceability`); and every finding, of any lens and severity,
+  that cites `no-record.md` (the NO RECORD line itself), written `no-scope-doc:<line>` with its
+  claim prefixed `no scope doc exists for this feature: `. A QUESTION is never raised and never
+  gates.
 - `refuted` by the executor: dropped and counted, with his why.
 - Dedupe on location and claim (whitespace collapsed, case folded): one finding at the highest
   severity, the converging call ids listed.
-- Locations are written as the documents they name: `build-doc.md:12` becomes the build doc's
-  workspace path, `:12`; `scope-doc.md` the scope doc's; `code-book.md` becomes
-  `skills/blueprint-v2/SKILL.md`. The slice is the `## Slice` section holding a cited build-doc
-  line, else `plan`.
+- Locations are written as the documents they name (`verify.translate`), every packet file the
+  packet can hold mapped: `build-doc.md:12` becomes the build doc's workspace path, `:12`;
+  `scope-doc.md` the scope doc's; `no-record.md` becomes `no-scope-doc:<line>`, naming the scope
+  doc's absence (never a packet file name in the build doc, the mirror or the result);
+  `code-book.md` becomes `skills/blueprint-v2/SKILL.md`. Any other packet name, or a packet file
+  the run's record does not match, stands for no document of this run and is refuted. The slice
+  is the `## Slice` section holding a cited build-doc line, else `plan`.
 - The verdict (section 2) over the survivors; `weaker` is true with no scope doc; the stamp's model
   is the paper calls' one effective model.
 
@@ -369,9 +385,11 @@ In this order, each step checked before the next (`inspect_core/writing.py`):
    text, then the station's QUESTION lines in the same block, or, with no finding and no question,
    the clean line; and the stamp `Plan: inspected <YYYY-MM-DD> by <model> · <counts>` (`· N
    QUESTION` when any; `clean` when no finding and no question), placed by v1's rule: directly
-   below the previous `Plan: inspected` line; else directly after the `Out of scope:` block (its
-   line and the `- ` lines continuing it); else directly above the first `## Slice` heading. A
-   prior stamp is never rewritten. The station writes no finding line of its own.
+   below the previous `Plan: inspected` line, looked for only where a stamp lives (above the first
+   `## Slice` heading, or, in a doc with no slice, above its ledger scaffold: never a line of a
+   slice's body or a ledger section that happens to start so); else directly after the
+   `Out of scope:` block (its line and the `- ` lines continuing it); else directly above the first
+   `## Slice` heading. A prior stamp is never rewritten. The station writes no finding line of its own.
 4. **The banner** is already on each outside raw copy: `record-answer` put it there before any
    triage (section 7); its writes open the receipt.
 5. **The verdict mirror** `docs/reviews/<YYYY-MM-DD>-inspect-<feature>.md` (`-2`, `-3` on a
@@ -404,7 +422,7 @@ INSPECT: <doc path>
 Selected: <its folder>/ (tier N, <home>), <how>[; also matched by filename, outranked by the lower tier: <docs>]
 Verdict: APPROVED | APPROVED WITH CONDITIONS | REJECTED
 Inspector: <row · effective model id · isolation label>  ·  Scope doc: <path | none — no-record rule applied>  ·  Refuted: N
-Raw: <the raw paths | n/a — Claude lane>
+Raw: <the raw paths the requests named | n/a — Claude lane>
 Findings: N BLOCKER · N MAJOR · N MINOR
 
 Bottom line: <the answer's bottom_line>
@@ -417,8 +435,10 @@ Hunted and held: <the answer's hunted_and_held>
 Next: <by the verdict>
 ```
 
-A stopped run's block names the stop, its sentence, that no stamp was written when none was, and
-what follows.
+`Raw:` lists the outside raw copies keyed on each request's own `raw_path`, as `record-answer`
+bannered them; `n/a` is for the Claude lane only, and an outside lane with no copy on disk says
+`none:` and why (report-only, or readers filed none at the request's path). A stopped run's block
+names the stop, its sentence, that no stamp was written when none was, and what follows.
 
 ## 10. Report-only
 
@@ -471,13 +491,13 @@ Facts each family proves, never outcomes (the outcomes are in an answer key no b
 | I1 primary evidence | a packet directory holding a summary, a prior verdict, a repo file, or only the three files, held to `request`'s three-file rule | `refused_at_request`, `packet_files` |
 | I2 the no-record rule | a traceability reader's answer against a doc with and without a scope doc | `question_locations`, `blocker_count`, `no_record_noted` |
 | I3 records and the stamp | an outside reader's answer: a citation inside the doc, one past its end, a result with no effective model | `raised_locations`, `refuted_count`, `stamp_written`, `stamp_model`, `terminal_status` |
+| I4 no v1 import | a planted v1 reference in a scratch copy of this core | the frame's `v1_findings_present` |
 
 Two translation choices of `lane_observe.py`, never facts of a case: a seeded replay carries no
 `hunted_and_held` and no `bottom_line`, so the translation supplies one neutral sentence for each;
 the I3 cases' neutral input carries no owner word while their answers come from `gpt-astra`, so the
 drive's input and answer carry an `owner_word` naming that row with a one-line quotation, as an
-owner's answer at the ask would.
-| I4 no v1 import | a planted v1 reference in a scratch copy of this core | the frame's `v1_findings_present` |
+owner's answer at the ask would. The facts' `_via` names the supplied owner word as that choice.
 
 ## 15. Open points
 

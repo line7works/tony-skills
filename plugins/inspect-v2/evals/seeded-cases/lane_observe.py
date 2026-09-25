@@ -81,6 +81,7 @@ class Drive(object):
         self.scratch = scratch
         self.run_dir = os.path.join(scratch, "run")
         self.trail = []
+        self.supplied_word = None   # the owner word this drive supplied, a translation choice
         station = {"row": row} if row else {}
         self.input = {"input_version": 1, "run_id": RUN_ID, "workspace": neutral["workspace"],
                       "run_dir": self.run_dir, "report_only": bool(neutral.get("report_only")),
@@ -93,6 +94,7 @@ class Drive(object):
             self.input["owner_word"] = neutral["owner_word"]
         elif owner_word:
             self.input["owner_word"] = owner_word
+            self.supplied_word = owner_word
 
     def step(self, name, *args):
         if name == "check-input":
@@ -122,7 +124,12 @@ class Drive(object):
         return _read_json(path) if os.path.isfile(path) else None
 
     def via(self, what):
-        """How the facts were observed: the phases this drive actually ran, in order."""
+        """How the facts were observed: the phases this drive actually ran, in order, and, when this
+        drive supplied the owner word (a translation choice, never a fact of the case), that word."""
+        if self.supplied_word:
+            what += "; translation choice: the owner word %r for the row %s, supplied by the translation " \
+                    "because the case's neutral input carries none" % (self.supplied_word["words"],
+                                                                        ", ".join(self.supplied_word["rows"]))
         return "cli: %s (%s)" % (", ".join(t["phase"] for t in self.trail), what)
 
 

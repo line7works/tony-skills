@@ -118,6 +118,23 @@ class TheContractAndTheCode(unittest.TestCase):
                      "unknown-finding", "refuted-citation", "unauthorized-send"):
             self.assertIn(rule, rules)
 
+    def test_the_family_table_is_whole_and_the_translation_paragraph_follows_it(self):
+        # round 3, R3 (CI2-3): one table, I1 to I4 on consecutive rows, the paragraph after it
+        lines = section("14. The seeded families").strip("\n").splitlines()
+        rows = [i for i, line in enumerate(lines) if line.startswith("|")]
+        self.assertEqual(rows, list(range(rows[0], rows[0] + len(rows))), "the table is broken by a non-table line")
+        families = [lines[i].split("|")[1].strip()[:2] for i in rows[2:]]
+        self.assertEqual(families, ["I1", "I2", "I3", "I4"])
+        after = "\n".join(lines[rows[-1] + 1:])
+        self.assertIn("Two translation choices of `lane_observe.py`", after)
+
+    def test_the_raw_copy_and_the_packet_files_are_stated_as_built(self):
+        # round 3, R1 and R2: the request's raw_path is the one source; every packet file maps
+        seven = " ".join(section("7. record-answer").split())
+        self.assertIn("The request's own `raw_path` is the one source", seven)
+        self.assertIn("`no-scope-doc:<line>`", seven)
+        self.assertIn("stands for no document of this run", seven)
+
 
 if __name__ == "__main__":
     unittest.main()

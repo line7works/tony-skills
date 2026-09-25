@@ -29,7 +29,6 @@ reported). Report-only computes all of it and writes none of it: `write.json` sa
 been written.
 """
 import os
-import re
 
 from station_core import driver, fsio, records_link, templates
 from station_core.records_client import RecordsRefusal
@@ -90,19 +89,28 @@ def _fenced(lines):
     return out
 
 
+LEDGER_HEADINGS = ("## Build assumptions", "## Deviations", "## Discovered", "## Handoffs", "## Punch list")
+
+
 def stamp_index(lines):
     """Where the stamp goes (v1's placement rule), as an index into `lines` to insert before: directly
     below the previous `Plan: inspected` line (any unfenced line that starts so, parsed strictly or
-    not, so history reads top to bottom); else directly after the `Out of scope:` block (its line
-    and the `- ` lines continuing it), looked for in every unfenced line above the first `## Slice`
-    heading, a header section's included; else directly above the first `## Slice` heading."""
+    not, so history reads top to bottom), looked for only where a stamp lives: above the first
+    `## Slice` heading (or, in a doc with no slice, above its ledger scaffold), never in a slice's
+    body or a ledger section (round 3, R3, CI2-2); else directly after the `Out of scope:` block (its
+    line and the `- ` lines continuing it), looked for in every unfenced line above the first
+    `## Slice` heading, a header section's included; else directly above the first `## Slice`
+    heading."""
     fenced = _fenced(lines)
     body = [l.rstrip("\r\n") for l in lines]
-    stamps = [i for i, l in enumerate(body) if not fenced[i] and l.startswith("Plan: inspected ")]
-    if stamps:
-        return stamps[-1] + 1
     first_slice = next((i for i, l in enumerate(body) if not fenced[i] and l.startswith("## Slice")), None)
     first_section = next((i for i, l in enumerate(body) if not fenced[i] and l.startswith("## ")), len(body))
+    first_ledger = next((i for i, l in enumerate(body) if not fenced[i] and l.rstrip() in LEDGER_HEADINGS),
+                        len(body))
+    home = first_slice if first_slice is not None else first_ledger
+    stamps = [i for i in range(home) if not fenced[i] and body[i].startswith("Plan: inspected ")]
+    if stamps:
+        return stamps[-1] + 1
     limit = first_slice if first_slice is not None else first_section
     oos = next((i for i in range(limit) if not fenced[i] and body[i].startswith("Out of scope:")), None)
     if oos is not None:
@@ -313,19 +321,11 @@ def banner_raw_copies(run):
 
 
 def _raw_copies(run, ws):
-    """The raw copies readers filed for this run's outside calls: a result's `raw_path` is taken only
-    when it is the path the call's request named, or readers' `-2`, `-3` variant of it, and the file
-    sits under `docs/reviews/`. Any other path is left alone: the banner goes on nothing else."""
-    answer = common.read(run, "answer.json")
-    named = dict((c["call_id"], c.get("raw_path")) for c in common.read(run, "requests.json")["calls"])
-    reviews = os.path.join(ws, "docs", "reviews")
-    out = []
-    for result in answer.get("results") or []:
-        path, want = result.get("raw_path"), named.get(result.get("call_id"))
-        if not path or not want or not os.path.isfile(path) or not fsio.inside(path, reviews):
-            continue
-        base, ext = os.path.splitext(want)
-        tail = path[len(base):-len(ext)] if path.startswith(base) and path.endswith(ext) else None
-        if path == want or (tail and re.match(r"^-[2-9][0-9]*$", tail)):
-            out.append(path)
-    return out
+    """The raw copies readers filed for this run's outside calls (round 3, R1): the request's own
+    `raw_path`, recorded at `request`, is the one source, never the result's optional field. For each
+    outside call whose request named a `raw_path`: the file at that path, and the file at readers'
+    `-2`, `-3` variant the result names when it names one; when the result names none of those (no
+    `raw_path`, or one pointing elsewhere), every `-N` variant of the request's path that exists too,
+    since readers may have filed there on a same-day repeat. Only files under `docs/reviews/`; a path
+    the result names that is none of these is left alone: the banner goes on nothing else."""
+    return common.raw_copies(run, ws)

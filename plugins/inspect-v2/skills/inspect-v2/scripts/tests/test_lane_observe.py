@@ -56,6 +56,13 @@ class TheLaneFacts(unittest.TestCase):
                     named = [p.strip() for p in named.split(",")]
                     windows = [ran[i:i + len(named)] for i in range(len(ran) - len(named) + 1)]
                     self.assertIn(named, windows, (row["case"], name, how, ran))
+                    # round 3, R5: a fact that rests on the owner word the translation supplied (I3's
+                    # outside row, no word in the neutral input) names that word as a translation choice
+                    if observed["_family"] == "I3-records-and-the-stamp":
+                        self.assertIn("translation choice: the owner word", how, (row["case"], name))
+                        self.assertIn("send it to gpt-astra", how, (row["case"], name))
+                    else:
+                        self.assertNotIn("owner word", how, (row["case"], name))
         self.assertEqual(seen, set(FAMILIES) - {"I4-no-v1-import"} | ({"I4-no-v1-import"} & seen))
 
 

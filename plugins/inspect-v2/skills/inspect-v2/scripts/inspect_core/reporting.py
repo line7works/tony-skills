@@ -103,11 +103,10 @@ def chat_block(run, result):
     model = _stamp_model(sr)
     isolation = _isolation(run, paper)
     scope = sr["scope_doc"] if sr.get("scope_doc") else "none %s no-record rule applied" % D
-    raw = _raw_paths(run)
     lines.append("Verdict: %s" % sr["verdict"])
     lines.append("Inspector: %s %s %s %s %s  %s  Scope doc: %s  %s  Refuted: %d"
                  % (row, M, model, M, isolation, M, scope, M, counts["refuted"]))
-    lines.append("Raw: %s" % (", ".join(raw) if raw else "n/a %s Claude lane" % D))
+    lines.append("Raw: %s" % _raw_line(run))
     lines.append("Findings: %d BLOCKER %s %d MAJOR %s %d MINOR" % (counts["blocker"], M, counts["major"], M,
                                                                     counts["minor"]))
     lines.append("")
@@ -182,8 +181,23 @@ def _isolation(run, paper):
 
 
 def _raw_paths(run):
-    answer = _artifact(run, "answer.json") or {}
-    return [r["raw_path"] for r in answer.get("results") or [] if r.get("raw_path")]
+    """The outside raw copies as `record-answer` bannered them: keyed on each request's own `raw_path`
+    (round 3, R1), never on the result's optional field."""
+    return common.raw_copies(run, run.input["workspace"])
+
+
+def _raw_line(run):
+    """`Raw:` of the chat block: the real raw paths for an outside lane; `n/a` only for the Claude lane."""
+    raw = _raw_paths(run)
+    if raw:
+        return ", ".join(raw)
+    packet = _artifact(run, "packet.json") or {}
+    if packet.get("provider") in (None, common.ANTHROPIC):
+        return "n/a %s Claude lane" % D
+    if common.report_only(run):
+        return "none: a report-only run files no raw copy"
+    wanted = [c["raw_path"] for c in (_artifact(run, "requests.json") or {}).get("calls") or [] if c.get("raw_path")]
+    return "none: readers filed no raw copy at %s" % (", ".join(wanted) or "the request's raw_path")
 
 
 def _next_after_stop(tag):

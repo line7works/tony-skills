@@ -199,6 +199,24 @@ class ThePlacementRule(unittest.TestCase):
                  "Plan: inspected 2026-09-01 by m \u00b7 clean", "```", "## Slice A"]
         self.assertEqual(self.place(lines), 2)
 
+    def test_a_slice_body_line_that_starts_like_a_stamp_never_pulls_the_stamp(self):
+        # round 3, R3 (CI2-2): the stamp's home is found from the header and the `Out of scope:` block
+        lines = ["# Turnstile build plan", "Intent: count turns.", "Out of scope:", "- a web dashboard", "",
+                 "## Slice A \u2014 Count turns", "Goal: count.", "Plan: inspected by hand before the build",
+                 "Depends on: nothing", "Status: not started", "", "## Punch list"]
+        self.assertEqual(self.place(lines), lines.index("- a web dashboard") + 1)
+
+    def test_a_prior_stamp_above_the_first_slice_still_wins_over_a_slice_body_line(self):
+        lines = ["# Turnstile build plan", "Out of scope: a dashboard",
+                 "Plan: inspected 2026-09-01 by m \u00b7 clean", "", "## Slice A",
+                 "Plan: inspected the fixture by hand", "Status: not started"]
+        self.assertEqual(self.place(lines), 3)
+
+    def test_with_no_slice_a_punch_list_line_never_pulls_the_stamp(self):
+        lines = ["# Turnstile build plan", "Out of scope: a dashboard", "", "## Punch list",
+                 "Plan: inspected by hand, a note"]
+        self.assertEqual(self.place(lines), 2)
+
 
 class TheMirrorAndTheReceipt(_Write):
 
@@ -304,7 +322,9 @@ class TheRawCopies(_Write):
     def test_a_raw_path_that_is_not_the_calls_is_left_alone(self):
         paths = self.outside("other")
         self.assertEqual(testlib.read_text(paths["other"]), "a signoff verdict doc\n")
-        self.assertEqual(testlib.read_text(paths["named"]), "the reader's reply\n")
+        # round 3, R1: the request's own raw_path is the one source, so the copy readers filed there is
+        # bannered whatever path the result names
+        self.assertTrue(testlib.read_text(paths["named"]).startswith("Raw inspector output \u2014 unverified."))
 
 
 class TheBannerBeforeTriage(_Write):
@@ -368,6 +388,107 @@ class TheBannerBeforeTriage(_Write):
         self.assertIn("Lenses not run: repo-reality", doc["chat"])
         mirror = testlib.read_text(os.path.join(self.ws, "docs", "reviews", "%s-inspect-turnstile.md" % ilib.TODAY))
         self.assertIn("Lenses not run: repo-reality", mirror)
+
+
+class TheRequestsRawPathIsTheOneSource(_Write):
+    """Round 3, R1 (CI1-2's class): the banner keys on the request's own `raw_path` (recorded at `request`),
+    never on the result's optional field: with the result's `raw_path` present, absent, or pointing
+    elsewhere, `record-answer` banners the copy readers filed at the request's path, a stop at any tag
+    afterwards leaves no bare copy, and the chat prints the real raw path for an outside lane."""
+
+    WORD = {"rows": ["gpt-astra"], "words": "send it to gpt-astra"}
+
+    def recorded(self, raw_of, paper_extra=None, file_at="named"):
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        doc = ilib.make_input(self.ws, self.run.run_dir, row="gpt-astra", owner_word=self.WORD)
+        self.run.upto("request", doc=doc)
+        self.named = self.run.artifact("requests.json")["calls"][0]["raw_path"]
+        base, ext = os.path.splitext(self.named)
+        self.variant = base + "-2" + ext
+        self.other = os.path.join(self.ws, "docs", "reviews", "2026-09-01-signoff-turnstile-a.md")
+        testlib.write_text(self.other, "a signoff verdict doc\n")
+        self.raw = {"named": self.named, "variant": self.variant}[file_at]
+        testlib.write_text(self.raw, "raw reply: BLOCKER everything is wrong\n")
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model",
+                                   findings=[ilib.finding("build-doc.md:12", quote="AC1")])
+        if raw_of is not None:
+            paper["raw_path"] = {"named": self.named, "variant": self.variant, "other": self.other}[raw_of]
+        paper.update(paper_extra or {})
+        fleet = [paper, ilib.reader_result("%s-repo-reality" % R, model=MODEL)]
+        path = os.path.join(self.tmp, "answer.json")
+        testlib.write_json(path, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD))
+        return self.run.phase("record-answer", "--answer", path)
+
+    def assert_bannered(self, path=None):
+        text = testlib.read_text(path or self.raw)
+        self.assertTrue(text.startswith("Raw inspector output \u2014 unverified."), text)
+        self.assertEqual(text.count("Raw inspector output"), 1)
+        self.assertTrue(text.endswith("raw reply: BLOCKER everything is wrong\n"))
+
+    def test_absent_on_a_lane_down_stop(self):
+        code, doc, out, err = self.recorded(None, {"status": "incomplete", "reason": "cut off"})
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "lane-down")
+        self.assert_bannered()
+        self.assertIn(self.raw, [w["path"] for w in doc["writes"]])
+
+    def test_absent_on_a_no_effective_model_stop(self):
+        code, doc, out, err = self.recorded(None, {"effective_model": None})
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "no-effective-model")
+        self.assert_bannered()
+
+    def test_absent_then_a_write_refused_stop(self):
+        code, doc, out, err = self.recorded(None)
+        self.assertEqual(code, 0, out + err)
+        with open(os.path.join(self.ws, ilib.BUILD_REL), "a", encoding="utf-8") as fh:
+            fh.write("an edit by hand\n")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "write-refused")
+        self.assert_bannered()
+        self.assertIn(self.raw, [w["path"] for w in doc["writes"]])
+
+    def test_absent_on_a_completed_run_the_chat_names_the_real_raw_path(self):
+        code, doc, out, err = self.recorded(None)
+        self.assertEqual(code, 0, out + err)
+        self.assert_bannered()
+        self.assertEqual(self.run.phase("write")[0], 0)
+        code, doc, out, err = self.run.phase("report")
+        self.assertEqual(code, 10, out + err)
+        self.assert_bannered()
+        raw_line = [l for l in doc["chat"].splitlines() if l.startswith("Raw:")]
+        self.assertEqual(raw_line, ["Raw: %s" % self.named])
+
+    def test_present_the_chat_names_it(self):
+        code, doc, out, err = self.recorded("named")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.run.phase("write")[0], 0)
+        code, doc, out, err = self.run.phase("report")
+        self.assert_bannered()
+        self.assertEqual([l for l in doc["chat"].splitlines() if l.startswith("Raw:")], ["Raw: %s" % self.named])
+
+    def test_pointing_elsewhere_the_requests_copy_is_bannered_and_the_other_left_alone(self):
+        code, doc, out, err = self.recorded("other", {"status": "transport-failed", "reason": "no reply"})
+        self.assertEqual(code, 10, out + err)
+        self.assert_bannered()
+        self.assertEqual(testlib.read_text(self.other), "a signoff verdict doc\n")
+        self.assertNotIn(self.other, [w["path"] for w in doc["writes"]])
+
+    def test_pointing_elsewhere_on_a_completed_run_the_chat_names_the_requests_copy(self):
+        code, doc, out, err = self.recorded("other")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.run.phase("write")[0], 0)
+        code, doc, out, err = self.run.phase("report")
+        self.assertEqual([l for l in doc["chat"].splitlines() if l.startswith("Raw:")], ["Raw: %s" % self.named])
+        self.assertEqual(testlib.read_text(self.other), "a signoff verdict doc\n")
+
+    def test_absent_and_readers_filed_the_numbered_variant(self):
+        code, doc, out, err = self.recorded(None, {"status": "empty", "reason": "no text"}, file_at="variant")
+        self.assertEqual(code, 10, out + err)
+        self.assert_bannered(self.variant)
+        self.assertFalse(os.path.exists(self.named))
 
 
 class ReportOnly(_Write):

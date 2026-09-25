@@ -210,5 +210,57 @@ class Named(_Select):
         self.assertIn("harvested", err)
 
 
+
+class NamedScopeHomesAreTheRuns(_Select):
+    """Round 3, R3 (CI2-1): `named`'s scope homes are recorded in the checkpoint, so neither argparse's
+    abbreviation of `--run-dir` nor the phase order loses them; `select --hunt scope` before `named` is
+    usage (exit 2, naming `named` first); harvest refuses a scope selection that missed them."""
+
+    DOC = "notes/turnstile/plan.md"
+    SCOPE = "notes/turnstile/scope/2026-09-20-turnstile.md"
+
+    def fixture(self):
+        run = self.runner({self.DOC: ilib.BUILD_DOC, self.SCOPE: ilib.SCOPE_DOC}, build=None)
+        code, doc, out, err = run.phase("named", "--path", self.DOC)
+        self.assertEqual(code, 0, out + err)
+        return run
+
+    def test_every_spelling_argparse_accepts_keeps_the_named_homes(self):
+        for spelling in (["--run", "{D}"], ["--run-d", "{D}"], ["--run={D}"], ["--run-di={D}"], ["--run-dir={D}"]):
+            with self.subTest(spelling=spelling):
+                self.tmp = testlib.make_scratch("select-")
+                self.addCleanup(testlib.rmtree, self.tmp)
+                self.staging = os.path.join(self.tmp, "staging")
+                os.makedirs(self.staging)
+                run = self.fixture()
+                args = ["select"] + [a.replace("{D}", run.run_dir) for a in spelling] + ["--hunt", "scope"]
+                code, doc, out, err = run.cli(args)
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual((doc["outcome"], self.rel(run, doc)), ("one", [self.SCOPE]))
+                self.assertIn("named-dir-scope", [r["home"] for r in doc["searched"]])
+
+    def test_the_scope_hunt_before_named_is_usage_naming_named_first(self):
+        run = self.runner({self.DOC: ilib.BUILD_DOC, self.SCOPE: ilib.SCOPE_DOC}, build=None)
+        self.select(run, "scope")
+        code, doc, out, err = run.phase("named", "--path", self.DOC)
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("`named`", err)
+        self.assertIn("before `select --hunt scope`", err)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "selection-build.json")))
+
+    def test_harvest_refuses_a_scope_selection_that_missed_the_named_homes(self):
+        run = self.fixture()
+        self.select(run, "scope")
+        path = os.path.join(run.run_dir, "selection-scope.json")
+        sel = testlib.load_json(path)
+        sel["searched"] = [r for r in sel["searched"] if not r["home"].startswith("named-dir")]
+        sel["outcome"], sel["candidates"] = "none", []
+        testlib.write_json(path, sel)
+        code, doc, out, err = run.phase("harvest")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("select --hunt scope", err)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+
+
 if __name__ == "__main__":
     unittest.main()

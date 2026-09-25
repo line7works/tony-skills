@@ -72,8 +72,8 @@ uv run scripts/inspect_v2.py check-input <input.json>
 ## Step 2: Gate and hunt
 
 A build doc the invocation names by path (an existing `.md` inside the workspace) is taken with
-`named` instead of the build hunt, before the scope hunt (a doc outside every build home adds its
-own directory's `scope/*.md` and `*-scope.md` to it); else the build hunt runs:
+`named` instead of the build hunt, and always before the scope hunt (a doc outside every build home
+adds its own directory's `scope/*.md` and `*-scope.md` to it); else the build hunt runs:
 
 ```sh
 uv run scripts/inspect_v2.py named --run-dir D --path <the doc>
@@ -122,9 +122,9 @@ file per lens; if it stops `model-changed`, show the owner the line and wait for
 Summon `/readers` with those request files, unchanged, as one fleet under the run id: in the Claude
 lane, the traceability, code-book and repo-reality calls; in an outside lane, the one paper call
 (its `authorized` set by the script from his word, never by you) and the repo-reality call. Keep
-each call's `READERS:` line and result JSON. An outside call's raw copy lands under
-`docs/reviews/`; `record-answer` prepends the banner to it before anything is triaged, on every run
-that records one, a stopped run included. Read it; never edit it.
+each call's `READERS:` line and result JSON. An outside call's raw copy lands at its request's
+`raw_path` under `docs/reviews/`; `record-answer` prepends the banner to it before anything is
+triaged, whether or not the result names it, a stopped run included. Read it; never edit it.
 
 **The lane-down rule.** A `READERS:` status other than `ok` on any call of the fleet means the lane
 cannot run: record the answer with that status and reason (the run stops `lane-down`, nothing

@@ -134,3 +134,48 @@ def feature_of(path):
 def lane_name(row):
     """The raw copy's lane label (v1): a `gpt-*` row files as `gpt`, any other row as its id."""
     return "gpt" if row.startswith("gpt-") else row
+
+
+def raw_variant(path, want):
+    """Whether `path` is the request's `raw_path` `want` or readers' `-2`, `-3` variant of it."""
+    if path == want:
+        return True
+    base, ext = os.path.splitext(want)
+    if not (path.startswith(base) and path.endswith(ext)) or len(path) <= len(base) + len(ext):
+        return False
+    return re.match(r"^-[2-9][0-9]*$", path[len(base):len(path) - len(ext)]) is not None
+
+
+def _variants(want):
+    base, ext = os.path.splitext(want)
+    folder = os.path.dirname(want)
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return []
+    return [os.path.join(folder, n) for n in names
+            if os.path.join(folder, n) != want and raw_variant(os.path.join(folder, n), want)]
+
+
+def raw_copies(run, ws):
+    """The raw copies of this run's outside calls, keyed on each request's own `raw_path` (round 3,
+    R1; `writing._raw_copies` states the rule). An answer not yet recorded names no path, so only
+    the request's path and its variants count then."""
+    reviews = os.path.join(ws, "docs", "reviews")
+    answer = read(run, "answer.json") if has(run, "answer.json") else {}
+    named = dict((r.get("call_id"), r.get("raw_path")) for r in answer.get("results") or [])
+    out = []
+    for call in read(run, "requests.json")["calls"] if has(run, "requests.json") else []:
+        want = call.get("raw_path")
+        if not want:
+            continue
+        given = named.get(call["call_id"])
+        picks = [want]
+        if given and given != want and raw_variant(given, want):
+            picks.append(given)
+        elif not given or not raw_variant(given, want):
+            picks.extend(_variants(want))
+        for path in picks:
+            if path not in out and os.path.isfile(path) and not os.path.islink(path) and fsio.inside(path, reviews):
+                out.append(path)
+    return out
