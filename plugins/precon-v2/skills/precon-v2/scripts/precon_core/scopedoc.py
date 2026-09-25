@@ -9,7 +9,9 @@ The forms are the shared templates' (`station_core/templates.py`, E14-12): a new
 changed only by insertions at the tail of its sections, the one comment line when it has none,
 and the lines this run's answer settled (a parked or assumed Decisions line rewritten in place as
 decided, under the same ledger id; an Open item removed, its decided line appended to
-`Decisions:`). Every other prior line is kept byte for byte, and the plan checks that it is.
+`Decisions:`; an Open item written inline on the label line leaves the label alone, `Open:`, the
+form's line for zero items). Every other prior line is kept byte for byte, and the plan checks
+that it is.
 """
 import os
 import re
@@ -21,6 +23,8 @@ M = templates.M
 TIERS = ("napkin", "bounded", "architectural")
 TIER_COMMENT = "<!-- precon-v2 triage: %s -->"
 TIER_LINE = re.compile(r"^<!-- precon-v2 triage: (napkin|bounded|architectural) -->$")
+TIER_PREFIX = "<!-- precon-v2 triage:"
+OPEN_LABEL = "Open:"
 TITLE = re.compile(r"^# (?P<title>.+) %s scope doc \((?P<date>.+)\)$" % D)
 PARKED_REASONS = ("needs research", "needs prototype")
 WAITING = "waiting on "
@@ -53,6 +57,23 @@ def header(text):
             continue
         if line.startswith("Intent:") and out["intent"] is None:
             out["intent"] = line[len("Intent:"):].strip()
+    return out
+
+
+def comment_findings(text):
+    """[{line, message}] for a triage comment off its form (a tier outside the three, another
+    spelling) or a second comment: a doc carries one comment, as this core writes it, or none."""
+    out, seen = [], 0
+    for number, raw in enumerate(text.splitlines(True), 1):
+        line = raw.rstrip("\r\n")
+        if not line.startswith(TIER_PREFIX):
+            continue
+        seen += 1
+        if not TIER_LINE.match(line):
+            out.append({"line": number, "message": "the triage comment %r is not %r with a tier of napkin, bounded "
+                                                   "or architectural" % (line, TIER_COMMENT % "<tier>")})
+        elif seen > 1:
+            out.append({"line": number, "message": "a second triage comment %r: a doc carries one" % line})
     return out
 
 
@@ -253,7 +274,7 @@ def render_continued(text, tier, parts):
                 raise PlanError([{"message": "a section ends the file; the form puts 'Next:' last"}])
             before.setdefault(at, []).extend("- %s%s" % (item, nl) for item in items)
 
-    has_comment = any(TIER_LINE.match(raw.rstrip("\r\n")) for raw in lines)
+    has_comment = any(raw.startswith(TIER_PREFIX) for raw in lines)
     title_at = next((i for i, raw in enumerate(lines) if raw.strip()), 0)
     if not has_comment:
         before.setdefault(title_at + 1, []).append(TIER_COMMENT % tier + nl)
@@ -262,22 +283,30 @@ def render_continued(text, tier, parts):
     insert(_tail(lines, labels, "Research:"), parts["research"])
     insert(_tail(lines, labels, "Open:"), parts["open"])
     out, kept_old, kept_new = [], [], []
+    relabelled = 0
     for index, raw in enumerate(lines):
         out.extend(before.get(index, []))
         number = index + 1
+        ending = raw[len(raw.rstrip("\r\n")):]
         if number in parts["removals"]:
+            if raw.startswith(OPEN_LABEL):
+                # the item sat inline on the label line: the label stays, alone, as the form writes zero items
+                out.append(OPEN_LABEL + ending)
+                relabelled += 1
             continue
         if number in parts["rewrites"]:
-            ending = raw[len(raw.rstrip("\r\n")):]
             out.append(parts["rewrites"][number] + ending)
             continue
         kept_old.append(raw)
         out.append(raw)
         kept_new.append(len(out) - 1)
     new = "".join(out)
-    # the no-loss check: every prior line this run did not settle is in the new doc, in order
-    if [out[i] for i in kept_new] != kept_old or len(kept_old) != len(lines) - len(parts["removals"]) - len(
-            parts["rewrites"]):
+    # the no-loss check: every prior line this run did not settle is in the new doc, in order; a settled
+    # inline Open item's label line is rewritten, not dropped, and counted as such
+    removed = len(parts["removals"]) - relabelled
+    if [out[i] for i in kept_new] != kept_old or \
+            len(kept_old) != len(lines) - removed - relabelled - len(parts["rewrites"]) or \
+            len(out) != len(lines) - removed + sum(len(v) for v in before.values()):
         raise PlanError([{"message": "the continued doc would drop or change a prior line"}])
     return new
 

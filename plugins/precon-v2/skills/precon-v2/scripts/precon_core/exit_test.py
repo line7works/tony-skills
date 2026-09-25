@@ -45,14 +45,11 @@ def _version_key(name):
     return tuple(int(p) for p in parts) if all(p.isdigit() for p in parts) else None
 
 
-def roster_path(plugin_root, explicit=None):
-    """readers' `roster.json`: an explicit file, else route 3a (the checkout sibling), else route 3b
-    (the installed shape, the highest version folder whose manifest names `readers` at that
-    version). The records component's two routes, applied to readers."""
-    if explicit:
-        if not os.path.isfile(explicit):
-            raise RosterMissing("--roster is not a file: %s" % explicit)
-        return explicit
+def roster_path(plugin_root):
+    """readers' `roster.json`: route 3a (the checkout sibling), else route 3b (the installed shape,
+    the highest version folder whose manifest names `readers` at that version). The records
+    component's two routes, applied to readers. There is no third route: a roster of the caller's
+    choosing could name a Claude row's provider as another and carry `authorized` onto it."""
     looked = []
     sibling = os.path.join(os.path.dirname(plugin_root), READERS)
     looked.append(sibling)
@@ -71,7 +68,7 @@ def roster_path(plugin_root, explicit=None):
                     best = (key, os.path.join(parent, name))
     if best:
         return os.path.join(best[1], "skills", READERS, "assets", "roster.json")
-    raise RosterMissing("readers is not installed beside this core (looked in %s); pass --roster FILE"
+    raise RosterMissing("readers is not installed beside this core (looked in %s): install readers with this core"
                         % ", ".join(looked))
 
 
@@ -164,13 +161,28 @@ def render_cold_read(existing, idea, date, scope_rel, run_id, calls):
     return existing + ("" if existing.endswith("\n") else "\n") + sections
 
 
+def _recorded_ok(path, row):
+    """Whether `path` is a sidecar readers recorded, `ok`, for `row`."""
+    if os.path.basename(path) != "sidecar.json" or not os.path.isfile(path):
+        return False
+    try:
+        body = fsio.read_json(path)
+    except (OSError, ValueError):
+        return False
+    return isinstance(body, dict) and body.get("row") == row and body.get("status") == "ok"
+
+
 def section_rows(text):
-    """The rows with a reader section: a `## <row> · <model>` heading followed by its `Sidecar:` line."""
+    """The rows with a reader section: a `## <row> · <model>` heading followed by its `Sidecar:` line,
+    that line naming a sidecar readers recorded, `ok`, for that row. A heading inside a reader's raw
+    text with no such sidecar behind it is text, never a section (CP1-8)."""
     lines = text.split("\n")
     rows = set()
     for index, line in enumerate(lines[:-1]):
         match = SECTION.match(line)
-        if match and lines[index + 1].startswith("Sidecar: "):
+        following = lines[index + 1]
+        if match and following.startswith("Sidecar: ") and \
+                _recorded_ok(following[len("Sidecar: "):].rstrip("\r"), match.group("row")):
             rows.add(match.group("row"))
     return rows
 

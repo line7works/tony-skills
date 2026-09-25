@@ -83,6 +83,20 @@ class TheContract(unittest.TestCase):
             self.assertIn("`%s" % command, skill, command)
         self.assertLess(len(skill.split("\n")), 250)
 
+    def test_the_round_header_is_stated_not_deferred(self):
+        # CP1-12: the procedure states the round header itself (v1's form, quoted byte for byte, the
+        # board as `state` printed it), never "as v1's header does"
+        skill = testlib.read_text(os.path.join(testlib.SKILL, "SKILL.md"))
+        header = "Round N %s <tier> %s board: decided N · assumed N · parked N · open your-calls N" % (
+            chr(0x2014), chr(0x2014))
+        self.assertIn("`%s`" % header, skill)
+        self.assertNotIn("as v1's", skill)
+
+    def test_the_panel_pointer_keeps_v1_s_words(self):
+        # CP1-13: the suggest-only pointer names the panel skill as v1 does
+        skill = testlib.read_text(os.path.join(testlib.SKILL, "SKILL.md"))
+        self.assertIn("this smells like a /jpb", skill)
+
     def test_the_quoted_mandate_is_the_code_s(self):
         text = testlib.read_text(CONTRACT)
         start = text.index("```mandate\n") + len("```mandate\n")

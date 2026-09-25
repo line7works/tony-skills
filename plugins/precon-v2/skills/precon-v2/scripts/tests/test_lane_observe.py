@@ -1,10 +1,14 @@
 """The lane's own observer, `evals/seeded-cases/lane_observe.py` (reading CR-7, required test 9).
 
 Every family of this core is built for real (its own `build.py`), and `observe_lane` is handed a
-`lane` step naming the neutral facts precon-v2 can produce; each name is filled from a drive of
-the REAL CLI on that case (`_via` says `cli`), a name it has no fact for stays unfilled, and the
-case's workspace and staging home are left as found. Then `observe.py --all` runs as the control
-room runs it and no case of this core carries `_lane_pending` or `_errors`.
+`lane` step naming the neutral facts precon-v2 can produce; each name it fills comes from a drive
+of the REAL CLI on that case (`_via` says `cli`); a name the drive gives no fact for stays
+unfilled, the P1 answer facts included (the neutral answer carries no triage and no gate, so
+precon-v2's own schema refuses it at exit 4 before any traceability rule runs); and the case's
+workspace and staging home are left as found. The frame's hook (`observe.py`'s `lane_observe`)
+is driven with the real observer too, wrapped to plant a name its step does not list. Then
+`observe.py --all` runs as the control room runs it and no case of this core carries
+`_lane_pending` or `_errors`.
 """
 import importlib.util
 import json
@@ -87,9 +91,13 @@ class P1(_Lane):
         self.assertIs(seen["P1-01-clean"]["ledger_refused"], False)
         self.assertEqual(seen["P1-01-clean"]["ledger_tags"]["parked"], 2)
         for case in ("P1-01-clean", "P1-02-no-source", "P1-03-parked-quietly-resolved"):
-            self.assertIn("answer_refused", seen[case])
-            self.assertIn("answer_written", seen[case])
-            self.assertEqual(seen[case]["answer_written"], not seen[case]["answer_refused"])
+            # CP1-14: the neutral answer carries no triage and no gate, so precon-v2's own schema refuses
+            # it (exit 4) before any traceability rule runs; that says nothing about traceability, so the
+            # answer facts stay unfilled (pending) rather than filled from a schema refusal
+            phases = [(p["phase"], p["exit"]) for p in seen[case]["_phases"]]
+            self.assertIn(("record-answer", 4), phases, case)
+            for name in ("answer_refused", "answer_written", "refusal_reason"):
+                self.assertNotIn(name, seen[case], (case, name))
 
     def test_a_name_it_has_no_fact_for_stays_unfilled(self):
         case, case_dir = build("P1-ledger-traceability", os.path.join(self.tmp, "cases"))[0]
@@ -115,6 +123,77 @@ class P3(_Lane):
         self.assertEqual(seen["P3-03-claude-row-named"]["authorized_rows"], [])
         self.assertEqual(seen["P3-02-outside-no-word"]["authorized_rows"], [])
         self.assertIn("gpt-astra", seen["P3-02-outside-no-word"]["refusal_reason"])
+
+
+WRAPPER = """import importlib.util
+def observe_lane(step, case_dir, neutral, facts, via, scratch):
+    spec = importlib.util.spec_from_file_location("lane_observe_real", %r)
+    real = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(real)
+    real.observe_lane(step, case_dir, neutral, facts, via, scratch)
+    facts["forged_name"] = "FORGED"
+"""
+
+
+class TheSeam(unittest.TestCase):
+    """Ruling R4: the frame's hook (`observe.py`'s `lane_observe`, the seam fix in the base) hands the
+    lane observer its own dict and merges only listed, unobserved names. Driven here through the
+    REAL lane observer (it drives the real CLI), wrapped to plant a name its step does not list: the
+    frame records that name under `_errors` and never merges it, keeps a name the frame already
+    observed as the frame observed it (and its `_via`), and merges the rest."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("seam-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+
+    def frame(self):
+        spec = importlib.util.spec_from_file_location("observe_under_test", os.path.join(SEEDED, "observe.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        here = os.path.join(self.tmp, "hook")
+        os.makedirs(here)
+        with open(os.path.join(here, "lane_observe.py"), "w", encoding="utf-8") as fh:
+            fh.write(WRAPPER % LANE)
+        module.HERE = here
+        return module
+
+    def test_an_unlisted_name_is_an_error_and_never_merged(self):
+        frame = self.frame()
+        case, case_dir = [c for c in build("P2-one-living-doc", os.path.join(self.tmp, "cases"))
+                          if c[0] == "P2-02-one-home"][0]
+        neutral = testlib.load_json(os.path.join(case_dir, "input.json"))
+        facts = {"_phases": [], "_errors": [], "selection_outcome": "as-the-frame-saw-it"}
+        via = {"selection_outcome": "cli"}
+        scratch = os.path.join(self.tmp, "scratch")
+        os.makedirs(scratch)
+        step = {"kind": "lane", "hunt": "scope", "name": "turnstile",
+                "pending": ["selection_outcome", "selection_candidates", "ledger_refused"]}
+        frame.lane_observe(step, case_dir, neutral, facts, via, scratch)
+        self.assertNotIn("forged_name", facts)
+        errors = " ".join(e["error"] for e in facts["_errors"])
+        self.assertIn("'forged_name'", errors)
+        self.assertIn("'selection_outcome'", errors)
+        self.assertEqual(len(facts["_errors"]), 2, facts["_errors"])
+        self.assertEqual(facts["selection_outcome"], "as-the-frame-saw-it")
+        self.assertEqual(via["selection_outcome"], "cli")
+        self.assertEqual(facts["selection_candidates"], ["workspace/docs/scope/2026-09-20-turnstile.md"])
+        self.assertIs(facts["ledger_refused"], False)
+        self.assertEqual((via["selection_candidates"], via["ledger_refused"]), ("cli", "cli"))
+        self.assertEqual([(p["phase"], p["exit"]) for p in facts["_phases"]],
+                         [("check-input", 0), ("select", 0), ("harvest", 0)], "the real CLI was driven")
+
+    def test_the_lane_observer_never_rewrites_the_frame_s_via(self):
+        # the observer is handed the live `_via`; a name the frame already observed keeps the frame's
+        frame = self.frame()
+        case, case_dir = build("P2-one-living-doc", os.path.join(self.tmp, "cases"))[0]
+        neutral = testlib.load_json(os.path.join(case_dir, "input.json"))
+        facts = {"_phases": [], "_errors": [], "selection_outcome": "none"}
+        via = {"selection_outcome": "library"}
+        scratch = os.path.join(self.tmp, "scratch")
+        os.makedirs(scratch)
+        frame.lane_observe({"kind": "lane", "hunt": "scope", "name": "turnstile",
+                            "pending": ["selection_outcome"]}, case_dir, neutral, facts, via, scratch)
+        self.assertEqual(via["selection_outcome"], "library")
 
 
 @unittest.skipIf(testlib.checkout_sibling("readers") is None,

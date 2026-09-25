@@ -48,9 +48,9 @@ The nine rules, and where each is held:
 |---|---|
 | 1. User-invoked only | `disable-model-invocation: true` in `SKILL.md` and the Codex sidecar's `allow_implicit_invocation: false` (pick P5) |
 | 2. Harvest before asking | `SKILL.md` step 1; `harvest` runs before `record-answer` accepts anything (exit 2 out of turn) |
-| 3. The property line is absolute: no web, no research, no research subagents; outside research is parked `needs research` | the script has no network and reads only the workspace, the staging home and the run directory; a question marked `needs_research` must leave a parked `needs research` line and is never resolved in the run (`research-not-parked`, `research-resolved`) |
+| 3. The property line is absolute: no web, no research, no research subagents; outside research is parked `needs research` | the script has no network and reads only the workspace, the staging home and the run directory (readers' roster and the sidecars a cold-read doc names excepted); a question marked `needs_research` must leave a parked `needs research` line and is never resolved in the run: no decided or assumed line, no out-of-scope item and no parked line of another reason traces to it (`research-not-parked`, `research-resolved`) |
 | 4. Facts are looked up, decisions are asked | `SKILL.md`; a line may trace to a repo path, which `record-answer` confirms exists in the workspace |
-| 5. Record, don't decide: every line traces to the owner's words or an answered question; unsettled means open or parked | the shared refusals (`untraced`, `quietly-resolved`) and precon's own (`decided-without-source`, `assumed-without-why`, `parked-without-reason`, `open-without-call`, `source-kind`, `retagged`) |
+| 5. Record, don't decide: every line traces to the owner's words or an answered question; unsettled means open or parked | the shared refusals (`untraced`, `quietly-resolved`) and precon's own (`decided-without-source`, `assumed-without-why`, `parked-without-reason`, `open-without-call`, `source-kind`, `retagged`, the last also refusing a ledger line's words repeated under another trace, so no line gains a twin) |
 | 6. Questions earn their slot; the rest is `assumed` with its why | the `assumed` trace kind carries the why; an assumed line without one is refused |
 | 7. Suggest only, never act; nothing external sends without the owner's word in the run | the script invokes nothing and sends nothing; `request` refuses an outside row the input's `owner_word` does not name, and `authorized` comes from that field alone |
 | 8. One living doc | the scope hunt's three homes at one tier: `several` stops the run and is listed, never picked; `one` is continued in place |
@@ -84,16 +84,22 @@ read-only and runs at any phase after `select`.
 **`harvest`** reads the scope selection (it needs `--name`: the idea's slug is what the doc is
 found and named by). On `several` it stops `selection-several` and lists the candidates. On `one`
 it reads the doc through the ledger reader (a line it cannot tag stops the run `ledger-refused`,
-quoted with its line number) and against the form (`form-refused` with the findings), then
+quoted with its line number) and against the form (`form-refused` with the findings; a triage
+comment off its form, `<!-- precon-v2 triage: <tier> -->` with one of the three tiers, or a second
+comment, is a finding too), then
 records the doc's header (title, date, intent, and the tier from the header comment when there
 is one), its sha256, its ledger (every line with its tag, source and stable id), its counts and
 its board, and keeps a copy of the bytes it read in the run directory. On `none` it records where
 a new doc would go (section 6); with `home` `repo` the workspace must be a git work tree root
-(exit 2 otherwise). A `cold-read` selection, when the run made one, is recorded with each
-candidate's sha256 and the rows that have a section in it. The folders a run would write into
-(the new doc's, the cold-read doc's) must resolve inside the workspace or the staging home: a
-symlinked folder that leaves them is exit 2, nothing written. Output: `harvest.json` in the run
-directory, printed.
+(exit 2 otherwise). Before either, an entry the scope globs match that the hunt did not take (a
+symlink leaving its home, a broken link, something that is not a file) is exit 2 naming it,
+nothing written: one living doc, so the run neither forks a second doc beside it nor continues it.
+A `cold-read` selection, when the run made one, is recorded with each candidate's sha256 and the
+rows that have a section in it (section 7). The new doc's folder must resolve inside the workspace
+or the staging home: a symlinked folder that leaves them is exit 2, nothing written; the cold-read
+doc's folder is checked the same way by `request`, the one run that builds a cold read, so a stray
+`docs/reviews` never blocks a run with no exit test. Output: `harvest.json` in the run directory,
+printed.
 
 **`state`** prints `{"doc", "counts", "board"}`: the scope doc this run left (the doc it wrote,
 else the one it selected) read through the ledger reader now, and the board
@@ -108,7 +114,7 @@ A doc the reader refuses prints `counts: null` and the refused lines.
 |---|---|
 | `station.home` | where a NEW scope doc goes: `repo` (the default), `<workspace>/docs/scope/<date>-<idea>.md`, the workspace a git work tree root; `staging`, `<staging>/<idea>-scope.md`, when no repository owns the idea (the input then carries `staging`, which the schema requires). An existing doc is continued where `select` found it |
 | `station.date` | the date a new doc and a cold-read doc are named and titled with, `YYYY-MM-DD`; absent, `harvest` takes the machine's local calendar date and records it |
-| `owner_word` | the owner's words in this run and the readers rows they name: the one source of a request's `authorized` (section 7) |
+| `owner_word` | the owner's words in this run and the readers rows they name: the one source of a request's `authorized` (section 7); `words` holds at least one character that is not whitespace (blank words name no row, exit 4 at `check-input`) |
 | `invocation.session_id` | the executor's session as the adapter read it; the answer's `session_id` must equal it |
 
 ## 5. The recorded answer
@@ -154,12 +160,12 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `parked-without-reason` | a parked line whose reason is none of the three: `needs research`, `needs prototype`, `waiting on <x>` (with what it waits on named) |
 | `open-without-call` | an open line that does not say which of the owner's calls it waits on |
 | `source-kind` | a new parked or open line, or an out-of-scope item, traced to anything but the owner's words or a question he answered (an assumption is no source, and what he ruled out is his ruling) |
-| `retagged` | a line traced to a ledger line under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason |
-| `research-resolved` | a line resolving a question marked `needs_research`, or a parked or open ledger line whose only touching questions are marked `needs_research` asserted as decided |
+| `retagged` | a line traced to a ledger line under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line whose text repeats a `Decisions:` or `Open:` ledger line's (whitespace collapsed, case folded) under any trace but that line's id, whatever its tag and whether or not a question touched the line: the doc would hold the line and its twin |
+| `research-resolved` | a line resolving a question marked `needs_research`, a parked line of another reason or an out-of-scope item traced to one, or a parked or open ledger line whose only touching questions are marked `needs_research` asserted as decided |
 | `research-not-parked` | a question marked `needs_research` that leaves no parked `needs research` line traced to it and touches none |
-| `napkin-outcome` | `no_scope_doc` outside the napkin tier, with any line, item, doc field or exit test, or over an existing doc |
+| `napkin-outcome` | `no_scope_doc` outside the napkin tier, with any line, item, doc field or exit test, over an existing doc, or with a `sitting` other than `ends` (the napkin outcome ends the sitting) |
 | `doc-fields` | a new doc with a settled line and no title or intent; doc fields on an existing doc (its title and intent are kept as found) |
-| `gate-missing` | no gate, a blank one, or one on more than one line |
+| `gate-missing` | no gate, a blank one (nothing but whitespace and format characters, a zero-width space or a byte-order mark among them), or one on more than one line |
 | `unrenderable` | a value the documents cannot carry and read back: a text or detail on two lines, a blank item, a source holding the form's own separator, a planned doc the ledger reader or the form check would refuse |
 | `exit-test-rows` | an exit test whose rows are not the rows this run built requests for; requests built and no exit test recorded |
 | `exit-test-unrecorded` | a built request with no result readers recorded (no sidecar, or one naming another call) |
@@ -168,8 +174,19 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `cold-read-doc` | dispositions for a cold-read doc this run did not select |
 
 The E14-11 rule on the precon side: a parked or open line is never rewritten as decided unless
-an answered question of this run touches it (the shared `quietly-resolved`), and a question that
-touches a decided line re-asks it (the shared `re-asked-decided`).
+an answered question of this run touches it (the shared `quietly-resolved`, which also catches
+the line's words asserted as decided under another trace kind), and a question that touches a
+decided line re-asks it (the shared `re-asked-decided`). Precon's `retagged` covers the rest of
+the twin case: a ledger line's words asserted under any trace but its id (an assumed line's, a
+decided line's, or a parked or open line's after a question touched it) are refused, so a line
+is settled only in place, by its id, and the doc never holds a line and its twin. Both refusals
+are computed and listed together.
+
+**A needs-research question.** Its `answer` is the owner's words parking it (the shared
+`untraced` needs an answered question behind the parked line that traces to it); the script
+cannot judge what those words say (E14-4), so it refuses every way the run could record a
+resolution instead: a decided or assumed line, an out-of-scope item, or a parked line of another
+reason traced to the question.
 
 ## 6. The write
 
@@ -187,7 +204,10 @@ a target whose folder has come to resolve outside the workspace and the staging 
 forward and writes nothing. A parked or assumed `Decisions:` line settled as decided is rewritten
 in place, under the same text and so the same ledger id: `- <text> <dash> decided (answer to <Q>
 (run <run id>): <the owner's answer>)`. A settled `Open:` item leaves `Open:` and its decided line
-is appended to `Decisions:`. A new line renders through `templates.render_ledger_line`: decided
+is appended to `Decisions:`; an item written inline on the label line (`Open: <item>`, the form
+`render_scope_doc` writes for one item, this core's own new docs included) leaves the label alone,
+`Open:`, the form's line for zero items, and the no-loss check counts that label line as rewritten,
+never dropped. A new line renders through `templates.render_ledger_line`: decided
 with its source from its trace (`the owner's words: "<quote>"`, `answer to <Q> (run <run id>):
 <answer>`, `the repo: <path>`), assumed with its why, parked with its reason. An open line lands in
 `Open:` as `<text> (waits on: <call>)`; an out-of-scope item as `<text> <dash> <reason>`.
@@ -202,8 +222,9 @@ after the title, the triage comment `<!-- precon-v2 triage: <tier> -->`, at
 
 **A continued doc** changes only by insertions at the tail of each section (new `Decisions:` lines
 after the last `Decisions:` item and so above `Out of scope:`, never below it; new items at the
-tail of `Out of scope:`, `Research:` and `Open:`), the one comment line when the doc has none, and
-the lines this answer settled. Every other prior line is byte-identical, and the plan checks it
+tail of `Out of scope:`, `Research:` and `Open:`), the one comment line when the doc has none (a
+doc that has one keeps it as found; one off its form stopped the run at `harvest`), and the
+lines this answer settled. Every other prior line is byte-identical, and the plan checks it
 before writing: a plan that would drop or change another line refuses at `record-answer`
 (`unrenderable`). The doc's line endings are kept. Its title and intent are never touched.
 
@@ -216,7 +237,7 @@ three options: a Claude reader, the default, needing no word; an outside row, na
 the owner's word in the run; decline). The owner's words that name an outside row go into the
 NEXT run's input as `owner_word`; that run is the exit test.
 
-**`request --run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID] [--roster FILE]`**
+**`request --run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID]`**
 builds one readers request per named row through `station_core/readers_request.build`:
 `protocol_version` 1, the run's id as `run_id` (the sitting's cold read runs under it),
 `call_id` `<run id>-<row>`, `row`, the scope doc as the single document, `profile: starved`,
@@ -232,12 +253,14 @@ read this scope doc — what's unclear, what would you ask before building this?
 
 Precon's rule on top of the shared builder: an outside row the owner's word does not name is not
 built. Every refusal of `request` (an unnamed outside row, an unknown row, no row, a row twice, no
-scope doc, a `--model` for a row not requested, readers not installed beside this core) is exit 2
-with the reasons on stderr and nothing written. On success the requests are written under
-`<run_dir>/exit-test/` with an index, `requests.json`, and printed. readers' roster is found the
-way the records component is: the readers plugin folder beside this plugin's (route 3a, a
-checkout), then the highest version folder of readers beside this plugin's own folder (route 3b,
-the installed shape), or the file `--roster` names.
+scope doc, a `--model` for a row not requested, readers not installed beside this core, a
+cold-read folder resolving outside the workspace or the staging home) is exit 2 with the reasons
+on stderr and nothing written. On success the requests are written under `<run_dir>/exit-test/`
+with an index, `requests.json`, and printed. readers' roster is found the way the records
+component is, and only so: the readers plugin folder beside this plugin's (route 3a, a checkout),
+then the highest version folder of readers beside this plugin's own folder (route 3b, the
+installed shape). No flag names another roster: a roster of the caller's choosing could relabel
+a Claude row's provider and carry `authorized` onto it.
 
 The executor summons `/readers` with each request (the script never does). readers records each
 call's result at `<run_dir>/readers/<call id>/sidecar.json`. The answer's `exit_test.rows` names
@@ -254,7 +277,10 @@ doc's `Research:` gains the pointer `cold read: <path relative to its home>`.
 **The dispositions** are a later run's: `select --hunt cold-read --name <idea>`, then an answer
 whose `exit_test` names the `cold_read_doc` (one of the candidates; `several` is the owner's to
 pick), a one-line `summary`, and `dispositions` (each `row`, `item`, `disposition`: `surfaced`,
-`absorbed`, `left downstream` with its `why`). `write` inserts one block,
+`absorbed`, `left downstream` with its `why`), each for a row with a section in that doc. A row
+has a section when a `## <row> · <model>` heading is followed by a `Sidecar:` line naming a
+`sidecar.json` that readers recorded, `ok`, for that row; a heading inside a reader's raw text
+with no such sidecar behind it is text, never a section. `write` inserts one block,
 `## Disposition (<date>, run <run id>)`, above the doc's first section; every byte below it is
 kept. The confusions the owner took reopen branches: that run's questions and lines are an
 ordinary round.
@@ -263,20 +289,24 @@ ordinary round.
 
 `report` assembles the result (section 10), validates it against `references/result.schema.json`
 and the shared semantic checks S1 to S4 before writing it (a result that does not validate is a
-defect, exit 1), writes `result.json`, and prints it (exit 10). A repeated `report` prints the
-same result and writes nothing.
+defect, exit 1, and the run stays at the phase it was, never ended without its `result.json`),
+writes `result.json`, and prints it (exit 10). A repeated `report` prints the same result and
+writes nothing. The doc, the counts, the board and the parked lines it reports are the ones `write`
+recorded in `receipt.json` from the text it wrote (or previewed, or found unchanged), never the
+doc on disk by the time `report` runs, which a hand may have changed since.
 
 - A run that wrote (or planned, under report-only): `completed`, with `station_result`.
 - A run that recorded the napkin outcome: `stopped`, `no-scope-doc`.
 - A run that has not written (only checked, selected or harvested, or answered and not written): the wrong phase, exit 2 on stderr naming the command to run next (`select`, `harvest`, `record-answer`, `write`), nothing written. An abandoned run is abandoned: it has no result.
 
-**The chat block** is v1's read-back, rendered from the result: `PRECON: <idea>`, `Doc: <path>`
-(the napkin line when there is none, `none (no settled line yet)` when nothing settled,
-`(report-only: not written)` under report-only), `Counts: decided N · assumed N · parked N · out
-of scope N` from the doc as the run left it, one `Parked:` line per parked line with its tag
-(`Parked: none` when there is none), one `Exit test:` line per call (`row · status · model` or
-the reason), the `Cold read:` doc, `Gate: <the gate line>`, and `Next: /blueprint when ready.`
-(or, on a round whose sitting continues, `Next: the next round (the sitting continues).`).
+**The chat block** is v1's read-back, rendered from the result, v1's lines first in v1's order:
+`PRECON: <idea>`, `Doc: <path>` (the napkin line when there is none, `none (no settled line yet)`
+when nothing settled, `(report-only: not written)` under report-only), `Counts: decided N ·
+assumed N · parked N · out of scope N` from the doc as the run left it, one `Parked:` line per
+parked line with its tag (`Parked: none` when there is none), and `Next: /blueprint when ready.`
+(or, on a round whose sitting continues, `Next: the next round (the sitting continues).`). Then a
+blank line and the lines this core adds: one `Exit test:` line per call (`row · status · model` or
+the reason), the `Cold read:` doc, and `Gate: <the gate line>`.
 
 ## 9. Report-only
 
@@ -329,7 +359,7 @@ shared meanings only, and its own:
 |---|---|---|
 | `selection-several` | `harvest` | the idea's scope doc is in more than one home; the candidates are listed |
 | `ledger-refused` | `harvest` | the doc holds a line the ledger reader cannot tag; each is quoted with its line number |
-| `form-refused` | `harvest` | the doc departs from the form (a label missing or out of order, a section the form has not), so nothing can be placed in it; the findings are listed |
+| `form-refused` | `harvest` | the doc departs from the form (a label missing or out of order, a section the form has not, a triage comment off its form or a second one), so nothing can be placed in it; the findings are listed |
 | `doc-changed` | `write` | a target changed after harvest (the doc edited by hand, a file appeared at the new doc's path, a cold-read doc changed); nothing was written |
 | `no-scope-doc` | `report` | the napkin outcome: the owner took no scope doc; nothing was written. It is `stopped`, not `completed`, because the run produced no document |
 
@@ -365,7 +395,11 @@ Facts each family exercises (the outcomes live in the control room's answer key)
 
 No step of these families is a `lane` step, so `evals/seeded-cases/lane_observe.py` fills no
 name in them; it drives the real CLI for any `lane` step naming the facts above (its own test,
-`scripts/tests/test_lane_observe.py`, drives it on every case of the three families).
+`scripts/tests/test_lane_observe.py`, drives it on every case of the three families, and through
+the frame's hook with a planted unlisted name). A name the drive gives no fact for stays pending:
+the P1 answer facts do, since the neutral answer carries no triage and no gate and precon-v2's
+schema refuses it (exit 4) before any traceability rule runs. It never sets a `_via` entry the
+frame already set.
 
 ## 16. Exit codes
 
@@ -392,7 +426,8 @@ name in them; it drives the real CLI for any `lane` step naming the facts above 
 - send a reader anything, summon a skill, or build a request for an outside row the owner's word
   does not name;
 - reach the network, call a model, launch a harness, or read anything outside the workspace, the
-  staging home and the run directory (readers' roster beside it excepted);
+  staging home and the run directory (readers' roster beside it, and the readers sidecars a
+  selected cold-read doc names, excepted);
 - open the records component;
 - relocate a doc: that is the owner's, or sunrise's when it adopts a staged doc.
 
@@ -406,6 +441,11 @@ name in them; it drives the real CLI for any `lane` step naming the facts above 
   v1 form has no comment line. The comment is one added line after the title, which the form
   check, the ledger reader and the round trip all pass over. A continued doc that has none gets
   one; one that has one keeps it as found, and the run's own tier is in the result.
+- **The answer of a needs-research question.** Section 5 keeps it as the owner's words parking
+  the question, since the shared `untraced` needs an answered question behind the parked line;
+  a rule refusing any answer on such a question would refuse every parked research line. What the
+  words say is the executor's (E14-4); the script refuses every way the run could record a
+  resolution.
 - **The neutral seeded answers carry no triage and no gate.** A real drive of `record-answer` on
   them refuses at the schema; the families' `answer` steps drive the shared library, which reads
   only `questions` and `lines`.
@@ -434,7 +474,7 @@ description; `SKILL.md` names every command it runs; the mandate above is the on
 | Command | Arguments | Exit codes |
 |---|---|---|
 | `state` | `--run-dir D` | 0, 1, 2 |
-| `request` | `--run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID] [--roster FILE]` | 0, 1, 2, 10 |
+| `request` | `--run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID]` | 0, 1, 2, 10 |
 
 ### Stop tags
 

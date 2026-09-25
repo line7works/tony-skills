@@ -5,6 +5,7 @@ prints, and its exits.
 """
 import datetime
 import functools
+import glob
 import json
 import os
 import subprocess
@@ -93,6 +94,12 @@ def harvest(ctx, args):
                            "the idea %r has a scope doc in several homes; they are listed for the owner and never "
                            "picked: %s" % (idea, ", ".join(c["path"] for c in sel["candidates"])),
                            dict(_base_result(out), candidates=sel["candidates"], gate=None))
+    untaken = _untaken(ctx, run, idea, sel)
+    if untaken:
+        raise driver.Usage("the idea %r matches %s in a scope home, which the hunt cannot take (a symlink leaving "
+                           "its home, a broken link, or not a file): one living doc, so this run neither forks a "
+                           "second doc beside it nor continues it; the owner resolves it. Nothing was written"
+                           % (idea, ", ".join(untaken)))
     if sel["outcome"] == "one":
         cand = sel["candidates"][0]
         text = _read_text(cand["path"])
@@ -103,7 +110,7 @@ def harvest(ctx, args):
             return runmod.stop(ctx, run, TAG_LEDGER_REFUSED,
                                "the scope doc holds line(s) the ledger reader cannot tag: %s" % quoted,
                                dict(_base_result(out), doc=cand["path"], ledger_refused=exc.lines, gate=None))
-        findings = templates.check("scope-doc", text)
+        findings = templates.check("scope-doc", text) + scopedoc.comment_findings(text)
         if findings:
             quoted = "; ".join("line %d: %s" % (f["line"], f["message"]) for f in findings)
             return runmod.stop(ctx, run, TAG_FORM_REFUSED,
@@ -120,12 +127,10 @@ def harvest(ctx, args):
                            % workspace)
     doc_home = (out["doc"] or {}).get("home") or home
     root = staging if doc_home == "staging" else workspace
-    targets = [out["new_doc"]] if out["doc"] is None else []
-    targets.append(exit_test.cold_read_path(doc_home, workspace, staging, date, idea))
-    for target in targets:
-        if root and not scopedoc.contained(target, root):
-            raise driver.Usage("the folder of %s resolves outside %s (a symlinked folder?): this station writes only "
-                               "inside the workspace and the staging home; nothing was written" % (target, root))
+    # the new doc's folder is checked here; the cold-read doc's only in the run that builds the cold read
+    # (`request`), so a stray docs/reviews never blocks a run that has no exit test (CP1-17)
+    if out["doc"] is None:
+        _contained_or_usage(out["new_doc"], root)
     out.update(_summary(scopedoc.counts(out["ledger"])))
     cold = _selection(run, "cold-read")
     if cold is not None:
@@ -139,6 +144,28 @@ def harvest(ctx, args):
     runmod.advance(run, "harvested")
     return runmod.emit(ctx.envelope(next="record-answer", run_id=run.checkpoint["run_id"],
                                     harvest=runmod.path(run, "harvest.json"), **out), exits.SUCCESS)
+
+
+def _contained_or_usage(target, root):
+    if root and not scopedoc.contained(target, root):
+        raise driver.Usage("the folder of %s resolves outside %s (a symlinked folder?): this station writes only "
+                           "inside the workspace and the staging home; nothing was written" % (target, root))
+
+
+def _untaken(ctx, run, idea, sel):
+    """Every entry the scope hunt's globs match that the hunt did not take as a candidate."""
+    roots = {"workspace": run.input.get("workspace"), "staging": run.input.get("staging")}
+    taken = set(os.path.normpath(c["path"]) for c in sel.get("candidates") or [])
+    out = []
+    for home in ctx.hunts.get("scope") or []:
+        root = roots.get(home["root"])
+        if not root:
+            continue
+        for pattern in home["globs"]:
+            for path in glob.glob(os.path.join(glob.escape(root), pattern.replace("{name}", idea))):
+                if os.path.lexists(path) and os.path.normpath(path) not in taken:
+                    out.append(os.path.normpath(path))
+    return sorted(set(out))
 
 
 # ---- state ---------------------------------------------------------------------------------------
@@ -188,8 +215,13 @@ def request(ctx, args):
     if not harvest_doc.get("doc"):
         raise driver.Usage("the exit test reads the scope doc, and this run has none: the cold read is offered when "
                            "the doc exists")
+    doc = harvest_doc["doc"]
+    workspace, staging = run.input["workspace"], run.input.get("staging")
+    _contained_or_usage(exit_test.cold_read_path(doc["home"], workspace, staging, harvest_doc["date"],
+                                                 harvest_doc["idea"]),
+                        scopedoc.root_of(doc["path"], doc["home"], workspace, staging))
     try:
-        roster = readers_request.load_roster(exit_test.roster_path(_plugin_root(ctx), args.roster))
+        roster = readers_request.load_roster(exit_test.roster_path(_plugin_root(ctx)))
     except (exit_test.RosterMissing, OSError, ValueError) as exc:
         raise driver.Usage("readers' roster cannot be read: %s" % exc)
     models = {}
@@ -394,6 +426,7 @@ def write(ctx, args):
     receipt = {"writes": [], "planned": [], "scope_doc": scope[0] if scope else None,
                "cold_read_doc": next((w["path"] for w in writes if w["role"] in ("cold-read", "disposition")), None),
                "calls": [dict((k, v) for k, v in c.items() if k != "raw_text") for c in calls]}
+    receipt.update(_left(run, harvest_doc, writes))
     if runmod.report_only(run):
         for number, item in enumerate(writes, 1):
             preview = runmod.path(run, runmod.PREVIEW_DIR, "%d-%s" % (number, os.path.basename(item["path"])))
@@ -415,6 +448,21 @@ def write(ctx, args):
                                     planned=receipt["planned"], reason=receipt["reason"]), exits.SUCCESS)
 
 
+def _left(run, harvest_doc, writes):
+    """The scope doc as this run leaves it, counted from the text the run wrote (or would write, under
+    report-only), or from the bytes harvest read when it writes none: `report` reports this, never the
+    doc on disk by the time it runs, which a hand may have changed since (CP1-5)."""
+    planned = [w for w in writes if w["role"] == "scope"]
+    if planned:
+        path, text = planned[0]["path"], planned[0]["text"]
+    elif harvest_doc.get("doc"):
+        path, text = harvest_doc["doc"]["path"], _read_text(runmod.path(run, "harvest-scope-doc.md"))
+    else:
+        return {"left_doc": None, "left_counts": scopedoc.counts([]), "left_parked": []}
+    rows = ledger.read(text)
+    return {"left_doc": path, "left_counts": scopedoc.counts(rows), "left_parked": scopedoc.parked_lines(rows)}
+
+
 def _write_reason(answer, harvest_doc, writes):
     if (answer.get("triage") or {}).get("no_scope_doc"):
         return "napkin: the owner took no scope doc; nothing was written"
@@ -427,32 +475,24 @@ def _write_reason(answer, harvest_doc, writes):
 
 # ---- report --------------------------------------------------------------------------------------
 
-def _doc_after(run, receipt, harvest_doc):
-    """(path, text) of the scope doc as the run leaves it (the preview under report-only)."""
-    for item in receipt.get("planned") or []:
-        if item["path"] == receipt.get("scope_doc"):
-            return item["path"], _read_text(item["preview"])
-    path = receipt.get("scope_doc") or ((harvest_doc.get("doc") or {}).get("path"))
-    if path and os.path.isfile(path):
-        return path, _read_text(path)
-    return None, None
-
-
 def _chat_block(idea, doc_line, counts, parked, calls, cold, gate, sitting):
+    """v1's read-back lines first, in v1's order (PRECON, Doc, Counts, Parked, Next); then, below a
+    blank line, the lines this core adds (Exit test, Cold read, Gate) (CP1-13)."""
     lines = ["PRECON: %s" % idea, "Doc: %s" % doc_line,
              "Counts: decided %d %s assumed %d %s parked %d %s out of scope %d" % (
                  counts["decided"], scopedoc.M, counts["assumed"], scopedoc.M, counts["parked"], scopedoc.M,
                  counts["out_of_scope"])]
     lines += ["Parked: %s" % p for p in parked] or ["Parked: none"]
+    lines.append("Next: /blueprint when ready." if sitting == "ends" else "Next: the next round (the sitting continues).")
+    added = []
     for call in calls:
-        lines.append("Exit test: %s %s %s %s %s" % (call["row"], scopedoc.M, call["status"], scopedoc.M,
+        added.append("Exit test: %s %s %s %s %s" % (call["row"], scopedoc.M, call["status"], scopedoc.M,
                                                     call["effective_model"] if call["status"] == "ok"
                                                     else (call["reason"] or "no reason given")))
     if cold:
-        lines.append("Cold read: %s" % cold)
-    lines.append("Gate: %s" % gate)
-    lines.append("Next: /blueprint when ready." if sitting == "ends" else "Next: the next round (the sitting continues).")
-    return "\n".join(lines)
+        added.append("Cold read: %s" % cold)
+    added.append("Gate: %s" % gate)
+    return "\n".join(lines) + "\n\n" + "\n".join(added)
 
 
 @handler
@@ -484,12 +524,11 @@ def report(ctx, args):
         base["gate"] = answer["gate"]
         return runmod.stop(ctx, run, TAG_NO_SCOPE_DOC, "napkin: the owner took no scope doc, straight to /blueprint; "
                                                        "the run wrote no file", base)
-    path, text = _doc_after(run, receipt, harvest_doc)
-    rows = ledger.read(text) if text is not None else []
-    tag_counts = scopedoc.counts(rows)
+    path = receipt.get("left_doc")
+    tag_counts = receipt.get("left_counts") or scopedoc.counts([])
     base.update(doc=path, home=((harvest_doc.get("doc") or {}).get("home") or harvest_doc.get("home")) if path else None,
                 counts=scopedoc.final_counts(tag_counts), board=scopedoc.board(tag_counts),
-                parked=scopedoc.parked_lines(rows))
+                parked=list(receipt.get("left_parked") or []))
     if path is None:
         doc_line = "none (no settled line yet)"
     elif runmod.report_only(run):

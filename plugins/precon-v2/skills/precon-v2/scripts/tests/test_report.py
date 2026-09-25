@@ -88,6 +88,65 @@ class Completed(_Report):
         self.assertEqual([w for w in result["writes"] if w["kind"] != "run_artifact"], [])
 
 
+class TheReadBack(_Report):
+    """CP1-13: v1's read-back lines first, in v1's order (PRECON, Doc, Counts, Parked, Next); the
+    lines this core adds (Exit test, Cold read, Gate) below a blank line."""
+
+    def test_v1_s_lines_first_then_the_additions(self):
+        run, result = self.full({"lines": [preconlib.owner_line("Counts print to stdout", "print it")]})
+        sr = result["station_result"]
+        v1, added = sr["chat_block"].split("\n\n")
+        v1 = v1.split("\n")
+        self.assertEqual(v1[:3], ["PRECON: turnstile", "Doc: %s" % sr["doc"],
+                                  "Counts: decided 2 · assumed 1 · parked 2 · out of scope 1"])
+        self.assertEqual(v1[3:-1], ["Parked: %s" % p for p in sr["parked"]])
+        self.assertEqual(v1[-1], "Next: /blueprint when ready.")
+        self.assertEqual(added.split("\n"), ["Gate: %s" % sr["gate"]])
+
+
+class AfterTheWrite(_Report):
+    """CP1-5 and CP1-16: `report` reports what the run wrote, whatever the doc says by the time it
+    runs, and a result that cannot be assembled leaves the run where it was, never `done` without
+    its result."""
+
+    def written(self):
+        preconlib.ensure_scope_doc(self.fx)
+        run = self.fx.new_run()
+        run.select()
+        self.assertEqual(run.harvest()[0], 0)
+        self.assertEqual(run.record(preconlib.answer(run, lines=[
+            preconlib.owner_line("Counts print to stdout", "print it")]))[0], 0)
+        self.assertEqual(run.write()[0], 0)
+        return run
+
+    def test_a_doc_hand_edited_after_write_is_reported_as_the_run_wrote_it(self):
+        run = self.written()
+        path = os.path.join(self.fx.ws, preconlib.SCOPE_REL)
+        text = preconlib.read(path)
+        testlib.write_text(path, text.replace("Decisions:\n", "Decisions:\n- a hand-typed line with no tag\n", 1))
+        code, result, err = run.report()
+        self.assertEqual(code, 10, err)
+        self.assertEqual(result["status"], "completed")
+        sr = result["station_result"]
+        self.assertEqual(sr["counts"], {"decided": 2, "assumed": 1, "parked": 2, "out_of_scope": 1})
+        self.assertEqual(sr["board"], "decided 2 · assumed 1 · parked 2 · open your-calls 1")
+        self.valid(run)
+
+    def test_a_result_that_does_not_validate_leaves_the_run_at_written(self):
+        run = self.written()
+        harvest = testlib.load_json(run.run_file("harvest.json"))
+        good = dict(harvest)
+        harvest["idea"] = 5          # the result schema takes a string or null: a defect, exit 1
+        testlib.write_json(run.run_file("harvest.json"), harvest)
+        code, out, err = run.report()
+        self.assertEqual(code, 1, "%s %s" % (out, err))
+        self.assertEqual(testlib.load_json(run.run_file("checkpoint.json"))["phase"], "written")
+        self.assertFalse(os.path.exists(run.run_file("result.json")))
+        testlib.write_json(run.run_file("harvest.json"), good)
+        code, result, err = run.report()
+        self.assertEqual((code, result["status"]), (10, "completed"), err)
+
+
 class Stopped(_Report):
 
     def wrong_phase(self, run, next_command):

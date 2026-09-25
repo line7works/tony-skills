@@ -120,8 +120,22 @@ def _selections(run):
 
 
 def finish(ctx, run, status, reason, station_result, stop_tag=None):
-    """Assemble, validate, write and print the result; the run is `done`. Exit 10."""
+    """Assemble, validate, write and print the result; the run is `done`. Exit 10.
+
+    The checkpoint says `done` before the result is assembled, so the result's writes list the
+    checkpoint as it ends; a result that does not validate (a defect) puts the checkpoint back at the
+    phase it was, so a run is never `done` without its `result.json` (CP1-16)."""
+    prior = run.checkpoint.get("phase")
     advance(run, "done")
+    try:
+        return _finish(ctx, run, status, reason, station_result, stop_tag)
+    except BaseException:
+        if not os.path.isfile(path(run, "result.json")):
+            advance(run, prior)
+        raise
+
+
+def _finish(ctx, run, status, reason, station_result, stop_tag):
     receipt = read_json(run, "receipt.json", {}) or {}
     writes = list(receipt.get("writes") or []) + _run_artifacts(run)
     writes.append({"path": path(run, "result.json"), "kind": "run_artifact", "sha256_before": None,

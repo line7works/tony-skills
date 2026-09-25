@@ -78,6 +78,58 @@ class Containment(_Harvest):
         self.assertEqual(os.listdir(os.path.join(outside, "scope")), [])
 
 
+class Symlinks(_Harvest):
+    """CP1-11 and CP1-17: an entry the scope hunt matches but cannot take (a symlink leaving the
+    workspace, a broken one) stops the run with exit 2 naming it, never a second doc born beside it;
+    a `docs/reviews` leaving the workspace blocks only the run that builds the cold read."""
+
+    def test_a_symlinked_scope_doc_is_named_never_forked(self):
+        outside = os.path.join(self.tmp, "outside.md")
+        testlib.write_text(outside, preconlib.SCOPE_DOC)
+        link = os.path.join(self.fx.ws, preconlib.SCOPE_REL)
+        os.makedirs(os.path.dirname(link))
+        os.symlink(outside, link)
+        run = self.fx.new_run(station={"date": "2026-09-25"})
+        self.assertEqual(run.select()["outcome"], "none")
+        before = testlib.tree_digest(self.fx.ws)
+        code, doc, err = run.harvest()
+        self.assertEqual(code, 2, "%s %s" % (doc, err))
+        self.assertIn(link, err)
+        self.assertEqual(testlib.tree_digest(self.fx.ws), before)
+        self.assertFalse(os.path.exists(run.run_file("harvest.json")))
+        self.assertEqual(sorted(os.listdir(os.path.dirname(link))), [os.path.basename(link)])
+
+    def test_a_broken_symlink_in_a_scope_home_is_named(self):
+        link = os.path.join(self.fx.staging, "turnstile-scope.md")
+        os.symlink(os.path.join(self.tmp, "nowhere.md"), link)
+        run = self.fx.new_run()
+        self.assertEqual(run.select()["outcome"], "none")
+        code, doc, err = run.harvest()
+        self.assertEqual(code, 2, "%s %s" % (doc, err))
+        self.assertIn(link, err)
+
+    def test_a_symlinked_reviews_folder_blocks_only_the_exit_test(self):
+        preconlib.ensure_scope_doc(self.fx)
+        outside = os.path.join(self.tmp, "outside-reviews")
+        os.makedirs(outside)
+        os.symlink(outside, os.path.join(self.fx.ws, "docs", "reviews"))
+        run = self.fx.new_run(owner_word={"rows": ["gpt-astra"], "words": "and gpt-astra"})
+        run.select()
+        code, doc, err = run.harvest()
+        self.assertEqual(code, 0, err)
+        code, out, err = run.phase("request", "--row", "claude-session")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("outside", err)
+        self.assertFalse(os.path.exists(run.run_file(os.path.join("exit-test", "requests.json"))))
+        code, doc, err = run.record(preconlib.answer(run, lines=[preconlib.owner_line("Counts print to stdout",
+                                                                                         "print it")]))
+        self.assertEqual(code, 0, json.dumps(doc))
+        self.assertEqual(run.write()[0], 0)
+        code, result, err = run.report()
+        self.assertEqual((code, result["status"]), (10, "completed"), err)
+        self.assertEqual(os.listdir(outside), [])
+
+
 class OneDoc(_Harvest):
 
     def test_the_ledger_the_counts_the_board_and_the_header(self):
@@ -153,6 +205,27 @@ class Refused(_Harvest):
         run, doc = self.stop(text)
         self.assertEqual(doc["stop_tag"], "form-refused")
         self.assertIn("Research:", doc["reason"])
+
+    def test_a_triage_comment_off_its_form_is_form_refused(self):
+        # CP1-6: a hand-edited comment is one comment, never a second one inserted beside it
+        for comment in ("<!-- precon-v2 triage: huge -->", "<!-- precon-v2 triage: Bounded -->",
+                        "<!-- precon-v2 triage:bounded -->"):
+            tmp = testlib.make_scratch("harvest-")
+            self.addCleanup(testlib.rmtree, tmp)
+            self.fx = preconlib.Fixture(tmp)
+            text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n%s\n\nIntent:" % comment, 1)
+            run, doc = self.stop(text)
+            self.assertEqual(doc["stop_tag"], "form-refused", comment)
+            self.assertIn(comment, doc["reason"])
+            findings = doc["station_result"]["form_findings"]
+            self.assertEqual([f["line"] for f in findings], [2])
+
+    def test_two_triage_comments_are_form_refused(self):
+        text = preconlib.SCOPE_DOC.replace(
+            "\n\nIntent:", "\n<!-- precon-v2 triage: bounded -->\n<!-- precon-v2 triage: napkin -->\n\nIntent:", 1)
+        run, doc = self.stop(text)
+        self.assertEqual(doc["stop_tag"], "form-refused")
+        self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [3])
 
     def test_a_slug_in_two_homes_is_listed_never_picked(self):
         preconlib.ensure_scope_doc(self.fx)

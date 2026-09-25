@@ -20,13 +20,19 @@ The rules, each named once:
     source-kind             a parked or open line, or an out-of-scope item, traced to anything but
                             the owner's words or a question he answered
     retagged                a line traced to a ledger line under another tag, other than a parked,
-                            open or assumed line settled as decided
-    research-resolved       a question marked needs research that a line of this run resolves
+                            open or assumed line settled as decided; or a line that repeats the
+                            text of a Decisions or Open ledger line (whitespace collapsed, case
+                            folded) under any trace but that line's id, a twin the doc would hold
+                            beside the line it repeats
+    research-resolved       a question marked needs research that a line or an out-of-scope item
+                            of this run resolves, or that leaves a parked line of another reason
     research-not-parked     a question marked needs research that leaves no parked line
-    napkin-outcome          "no scope doc" asked for outside napkin, with lines, or over a doc
+    napkin-outcome          "no scope doc" asked for outside napkin, with lines, over a doc, or with
+                            a sitting that continues
     doc-fields              a new doc without its title and intent, or those fields on an
                             existing doc
-    gate-missing            no gate line, a blank one, or one on more than one line
+    gate-missing            no gate line, a blank one (whitespace and format characters such as a
+                            zero-width space count as blank), or one on more than one line
     unrenderable            a value the scope doc or the cold-read doc cannot carry and read back
     exit-test-rows          the exit test's rows are not the rows this run built requests for
     exit-test-unrecorded    a built request with no result recorded by readers
@@ -35,6 +41,8 @@ The rules, each named once:
                             row with no section, or with no summary
     cold-read-doc           dispositions for a cold-read doc this run did not select
 """
+import unicodedata
+
 from . import exit_test, scopedoc
 
 # the trace kinds a parked or open line, and an out-of-scope item, may carry: the owner's words or
@@ -49,7 +57,15 @@ def refusal(rule, message, **where):
 
 
 def _blank(value):
-    return not isinstance(value, str) or not value.strip()
+    """Not a string, or nothing in it but whitespace and format characters (a zero-width space, a
+    byte-order mark, a word joiner: Unicode category Cf)."""
+    return not isinstance(value, str) or not any(not c.isspace() and unicodedata.category(c) != "Cf"
+                                                 for c in value)
+
+
+def _normalized(text):
+    """The text with its whitespace collapsed and its case folded (the shared repeat check's form)."""
+    return " ".join(text.split()).casefold()
 
 
 def check(answer, run_input, harvest, requests, run_dir):
@@ -73,15 +89,36 @@ def check(answer, run_input, harvest, requests, run_dir):
     return out
 
 
+def _twin(line, kind, rows):
+    """The Decisions or Open ledger row a line repeats by text under a trace other than its id."""
+    if kind == "ledger" or not isinstance(line.get("text"), str):
+        return None
+    norm = _normalized(line["text"])
+    for row in rows:
+        if row["section"] in ("Decisions", "Open") and _normalized(row["text"]) == norm:
+            return row
+    return None
+
+
 def _lines(answer, harvest):
     out = []
-    ledger = dict((row["id"], row) for row in harvest.get("ledger") or [])
+    rows = harvest.get("ledger") or []
+    ledger = dict((row["id"], row) for row in rows)
     research = set(q["id"] for q in answer.get("questions") or [] if q.get("needs_research"))
     for index, line in enumerate(answer.get("lines") or []):
         where = {"line": index, "text": line.get("text")}
         tag = line.get("tag")
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
         kind, ref = trace.get("kind"), trace.get("ref")
+        twin = _twin(line, kind, rows)
+        if twin is not None:
+            # the shared quietly-resolved covers a parked or open line's words asserted as decided with no
+            # question touching it; this covers every other twin (an assumed or decided line repeated, a
+            # parked or open line repeated even after a question touched it, any tag): the doc would hold
+            # the line and its twin, so the line is passed forward, or settled, by its id only (CP1-1)
+            out.append(refusal("retagged", "the line %r repeats the %s ledger line %s: pass it forward by its "
+                                           "id, and settle it only with an answered question that touches it"
+                               % (line.get("text"), twin["tag"], twin["id"]), **where))
         if kind == "ledger" and ref in ledger:
             row = ledger[ref]
             if tag == row["tag"]:
@@ -120,6 +157,11 @@ def _lines(answer, harvest):
             out.append(refusal("research-resolved", "the line %r resolves question %s, which is marked needs "
                                                     "research: it is a parked line, never resolved in the run"
                                % (line.get("text"), ref), **where))
+        if tag == "parked" and kind == "question" and ref in research and line.get("reason") != "needs research":
+            out.append(refusal("research-resolved", "the line %r parks question %s, which is marked needs research, "
+                                                    "as %r: what a needs-research question leaves is a parked "
+                                                    "needs research line" % (line.get("text"), ref, line.get("reason")),
+                               **where))
         if tag == "parked" and not scopedoc.valid_parked(line.get("reason")):
             out.append(refusal("parked-without-reason", "the parked line %r carries the reason %r: one of needs "
                                                         "research, needs prototype, waiting on <x>"
@@ -148,6 +190,13 @@ def _research(answer, harvest):
     for q in answer.get("questions") or []:
         if not q.get("needs_research"):
             continue
+        for index, item in enumerate(answer.get("out_of_scope") or []):
+            trace = item.get("trace") if isinstance(item.get("trace"), dict) else {}
+            if trace.get("kind") == "question" and trace.get("ref") == q.get("id"):
+                out.append(refusal("research-resolved", "the out-of-scope item %r is ruled out by question %s, "
+                                                        "which is marked needs research: it is parked, never "
+                                                        "resolved in the run" % (item.get("text"), q.get("id")),
+                                   out_of_scope=index, question=q.get("id")))
         parked = any(line.get("tag") == "parked" and line.get("reason") == "needs research"
                      and isinstance(line.get("trace"), dict) and line["trace"].get("kind") == "question"
                      and line["trace"].get("ref") == q.get("id") for line in answer.get("lines") or [])
@@ -172,6 +221,9 @@ def _triage(answer, harvest):
             why.append("'no scope doc' carries no line, no item and no exit test: the counts are zero")
         if doc is not None:
             why.append("the idea already has a scope doc (%s); 'no scope doc' cannot unwrite it" % doc["path"])
+        if answer.get("sitting") != "ends":
+            why.append("'no scope doc' ends the sitting: the answer's sitting is 'ends', not %r"
+                       % (answer.get("sitting"),))
         for sentence in why:
             out.append(refusal("napkin-outcome", sentence))
         return out

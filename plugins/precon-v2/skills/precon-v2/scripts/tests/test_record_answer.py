@@ -117,6 +117,55 @@ class TheLedgerRules(_Answer):
                      "source-kind")
 
 
+class Twins(_Answer):
+    """CP1-1 (ruling R1): a line that repeats a ledger line's text without its id. The shared
+    `quietly-resolved` refuses a parked or open line's words asserted as decided under any trace
+    kind unless a question of this run touched it; precon's `retagged` refuses every repeat of a
+    `Decisions:` or `Open:` line under a non-ledger trace (an assumed line included, and a parked or
+    open line a question did touch), so the doc never holds a line and its twin."""
+
+    PARKED = "Where the count is kept between sessions"
+    OPEN = "how often the counter resets"
+    ASSUMED = "One module, no package"
+
+    def rules(self, answer):
+        doc = self.refused(answer, "retagged")
+        return sorted(set(r["rule"] for r in doc["refusals"]))
+
+    def test_the_parked_open_and_assumed_twins_under_owner_words(self):
+        # the checker's probes/30 shape: each ledger line's text re-asserted as decided under owner_words
+        for text, shared in ((self.PARKED, True), (self.OPEN, True), (self.ASSUMED, False)):
+            rules = self.rules(self.answer(lines=[preconlib.owner_line(text, "we settled it")]))
+            if shared:
+                self.assertEqual(rules, ["quietly-resolved", "retagged"], text)
+            else:
+                self.assertEqual(rules, ["retagged"], text)
+
+    def test_a_twin_the_shared_rule_passes_is_still_refused(self):
+        # a question of this run touched the parked line, so the shared rule is satisfied; the twin is not
+        q = {"id": "Q1", "text": "Where is the count kept?", "touches": [preconlib.PARKED_RESEARCH_ID],
+             "answer": "in memory only"}
+        for trace in ({"kind": "owner_words", "ref": "in memory only"}, {"kind": "question", "ref": "Q1"},
+                      {"kind": "repo_path", "ref": "src/turnstile.py"}):
+            rules = self.rules(self.answer(questions=[q], lines=[
+                {"text": self.PARKED, "tag": "decided", "trace": trace}]))
+            self.assertEqual(rules, ["retagged"], trace)
+
+    def test_a_twin_by_case_and_whitespace_and_under_every_tag(self):
+        self.rules(self.answer(lines=[preconlib.owner_line("  where THE count is kept   between sessions ",
+                                                           "we settled it")]))
+        self.rules(self.answer(lines=[{"text": "Python 3.9 standard library only", "tag": "decided",
+                                       "trace": {"kind": "owner_words", "ref": "again"}}]))
+        self.rules(self.answer(lines=[{"text": self.OPEN, "tag": "parked", "reason": "needs prototype",
+                                       "trace": {"kind": "owner_words", "ref": "later"}}]))
+
+    def test_the_doc_never_holds_a_parked_line_and_a_decided_twin(self):
+        before = preconlib.read(os.path.join(self.fx.ws, preconlib.SCOPE_REL))
+        self.rules(self.answer(lines=[preconlib.owner_line(self.PARKED, "we settled it")]))
+        self.assertEqual(self.run_.write()[0], 2, "no accepted answer, nothing to write")
+        self.assertEqual(preconlib.read(os.path.join(self.fx.ws, preconlib.SCOPE_REL)), before)
+
+
 class TheResearchRule(_Answer):
 
     def research_q(self, answer="park it, I will look it up"):
@@ -138,6 +187,26 @@ class TheResearchRule(_Answer):
              "needs_research": True}
         self.refused(self.answer(questions=[q]), "research-not-parked")
 
+    def test_an_out_of_scope_item_traced_to_a_research_question(self):
+        # CP1-3: ruling an item out is settling it; a needs-research question settles nothing in the run
+        q = {"id": "Q1", "text": "Which encoder library fits?", "touches": [], "answer": "park it",
+             "needs_research": True}
+        line = {"text": "Which encoder library to use", "tag": "parked", "reason": "needs research",
+                "trace": {"kind": "question", "ref": "Q1"}}
+        self.refused(self.answer(questions=[q], lines=[line], out_of_scope=[
+            {"text": "a vendor encoder library", "reason": "the owner declined it",
+             "trace": {"kind": "question", "ref": "Q1"}}]), "research-resolved")
+
+    def test_a_research_question_parked_for_another_reason(self):
+        # CP1-3: what a needs-research question leaves is a `needs research` line, never another reason
+        q = {"id": "Q1", "text": "Which encoder library fits?", "touches": [], "answer": "park it",
+             "needs_research": True}
+        lines = [{"text": "Which encoder library to use", "tag": "parked", "reason": "needs research",
+                  "trace": {"kind": "question", "ref": "Q1"}},
+                 {"text": "An encoder mock", "tag": "parked", "reason": "needs prototype",
+                  "trace": {"kind": "question", "ref": "Q1"}}]
+        self.refused(self.answer(questions=[q], lines=lines), "research-resolved")
+
     def test_a_research_question_parked_is_accepted(self):
         q = {"id": "Q1", "text": "Which encoder library fits?", "touches": [], "answer": "no idea yet",
              "needs_research": True}
@@ -156,6 +225,11 @@ class TheGate(_Answer):
 
     def test_a_gate_blank_or_on_two_lines(self):
         for gate in ("", "   ", "every branch visited\nand parked"):
+            self.refused(self.answer(gate=gate), "gate-missing")
+
+    def test_a_gate_of_format_characters_only(self):
+        # CP1-4: a zero-width space, a byte-order mark and the like carry no justification
+        for gate in ("\u200b", " \u200b\ufeff ", "\u2060\u00a0"):
             self.refused(self.answer(gate=gate), "gate-missing")
 
 
@@ -210,6 +284,11 @@ class NoDoc(_Answer):
         self.refused(self.answer(triage={"tier": "napkin", "why": "one sentence", "no_scope_doc": True},
                                  lines=[preconlib.owner_line("Counts print to stdout", "print it")]),
                      "napkin-outcome")
+
+    def test_the_napkin_outcome_ends_the_sitting(self):
+        # CP1-10: "no scope doc" ends the sitting; a napkin outcome that says it continues is refused
+        self.refused(self.answer(triage={"tier": "napkin", "why": "one sentence", "no_scope_doc": True},
+                                 sitting="continues"), "napkin-outcome")
 
     def test_the_napkin_outcome_is_accepted(self):
         code, doc, err = self.run_.record(self.answer(

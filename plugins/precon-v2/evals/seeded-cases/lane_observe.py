@@ -6,9 +6,10 @@
 case's neutral input and recorded answer into precon-v2's own input and answer, by renaming only,
 drives the REAL phase driver (`scripts/precon.py`, as a subprocess, the way the control room's
 `select` step does), and fills, from what the driver did, exactly the names the step lists under
-`pending` that it has a fact for; `via[name]` is `cli` for each. A name it has no fact for is left
-out, so `observe.py` keeps it under `_lane_pending`; nothing is guessed and nothing is read from
-the answer file as an outcome.
+`pending` that it has a fact for; `via[name]` is `cli` for each, never over a `_via` entry the
+frame already set (the frame keeps what it observed). A name it has no fact for is left out, so
+`observe.py` keeps it under `_lane_pending`; nothing is guessed and nothing is read from the
+answer file as an outcome.
 
 The drives, each only when a pending name needs it:
 
@@ -19,7 +20,10 @@ The drives, each only when a pending name needs it:
     record-answer   after harvest, the case's answer renamed onto precon-v2's answer (`questions`
                     and `lines` as they are, `run_id` and `answer_version` bound to this run; no
                     field of the executor's judgment, a triage or a gate, is supplied)
-                    -> answer_refused, answer_written, refusal_rules (exit 5), refusal_reason
+                    -> answer_refused, answer_written, refusal_rules (exit 5), refusal_reason;
+                    when precon-v2's answer schema refuses the renamed answer (exit 4: the
+                    neutral answer carries no triage and no gate), no answer fact is filled, since
+                    that refusal says nothing about the answer's traceability
     request         after harvest, one `--row` per row of the step's `rows`
                     -> authorized_rows, request_documents, request_profiles, refusal_reason
 
@@ -142,7 +146,8 @@ def observe_lane(step, case_dir, neutral, facts, via, scratch):
         fill("writes_none", _digest(*roots) == before)
     for name, value in found.items():
         facts[name] = value
-        via[name] = "cli"
+        if name not in via:
+            via[name] = "cli"
 
 
 def _after_select(step, case_dir, neutral, run, run_dir, run_id, pending, fill):
@@ -185,10 +190,12 @@ def _after_select(step, case_dir, neutral, run, run_dir, run_id, pending, fill):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(answer, fh)
     code, out, err = run(["record-answer", "--run-dir", run_dir, "--answer", path])
-    if code in (0, 4, 5):
-        fill("answer_refused", code != 0)
-        fill("answer_written", os.path.isfile(os.path.join(run_dir, "answer.json")))
+    if code not in (0, 5):
+        # exit 4: the renamed answer fails precon-v2's own schema before any content rule runs; the
+        # answer facts stay pending rather than be filled from a refusal of the translation (CP1-14)
+        return
+    fill("answer_refused", code != 0)
+    fill("answer_written", os.path.isfile(os.path.join(run_dir, "answer.json")))
     if code == 5 and out:
         fill("refusal_rules", sorted(set(r["rule"] for r in out["refusals"])))
-    if code in (4, 5) and out:
         fill("refusal_reason", out.get("reason"))

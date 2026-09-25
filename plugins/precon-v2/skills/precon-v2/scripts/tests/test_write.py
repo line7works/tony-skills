@@ -217,6 +217,89 @@ class Continued(_Write):
         self.assertEqual(run.write()[0], 2)
 
 
+class InlineOpen(_Write):
+    """CP1-2 (ruling R2): a single `Open:` item written inline, the form `render_scope_doc` writes for
+    one item (precon-v2's own new docs included), settles: the label line stays as `Open:` alone,
+    the form's line for zero items, and the decided line lands at the tail of `Decisions:`."""
+
+    WAITS = "the owner's call on logging"
+
+    def born(self):
+        # run 1: precon-v2 births the doc with one open item (and one decided line, its first settled line)
+        run, code, doc, err = self.through_write({"doc": preconlib.new_doc_fields(), "lines": [
+            preconlib.owner_line("Python 3.9 standard library only", "no dependencies on the bench"),
+            {"text": "Whether resets are logged", "tag": "open", "waits_on": self.WAITS,
+             "trace": {"kind": "owner_words", "ref": "ask me later"}}]})
+        self.assertEqual(code, 0, err)
+        path = os.path.join(self.fx.ws, preconlib.SCOPE_REL)
+        text = preconlib.read(path)
+        item = "Whether resets are logged (waits on: %s)" % self.WAITS
+        self.assertIn("Open: %s\n" % item, text, "one open item is written inline")
+        return path, text, item
+
+    def settle(self, item, extra=None):
+        ident = preconlib.ids(preconlib.read(os.path.join(self.fx.ws, preconlib.SCOPE_REL)))[item]
+        q = {"id": "Q1", "text": "Are resets logged?", "touches": [ident], "answer": "yes, to the bench log"}
+        fields = {"questions": [q], "lines": [{"text": item, "tag": "decided",
+                                               "trace": {"kind": "ledger", "ref": ident}}]}
+        fields.update(extra or {})
+        return self.through_write(fields)
+
+    def test_a_single_inline_open_item_settles(self):
+        path, before, item = self.born()
+        run, code, doc, err = self.settle(item)
+        self.assertEqual(code, 0, "%s %s" % (json.dumps(doc), err))
+        after = preconlib.read(path)
+        lines = after.split("\n")
+        self.assertIn("Open:", lines, "the label line stays, empty, as the form writes zero items")
+        self.assertNotIn("Open: %s" % item, lines)
+        at = lines.index("Out of scope:")
+        self.assertEqual(lines[at - 1], "- %s %s decided (answer to Q1 (run %s): yes, to the bench log)"
+                         % (item, D, run.run_id))
+        self.assertEqual(templates.check("scope-doc", after), [])
+        self.assertEqual(templates.render(templates.parse("scope-doc", after)), after)
+        rows = ledger.read(after)
+        self.assertEqual([r["tag"] for r in rows if r["text"] == item], ["decided"])
+        # every other prior line is kept byte for byte, in order
+        old = [l for l in before.split("\n") if l != "Open: %s" % item]
+        self.assertEqual([l for l in lines if l in old], old)
+
+    def test_a_settled_inline_item_and_a_new_open_item_in_one_run(self):
+        path, before, item = self.born()
+        run, code, doc, err = self.settle(item, {"open_items": ["who owns the bench log"]})
+        self.assertEqual(code, 0, "%s %s" % (json.dumps(doc), err))
+        after = preconlib.read(path)
+        self.assertIn("Open:\n- who owns the bench log\nNext:", after)
+        self.assertEqual(templates.check("scope-doc", after), [])
+
+    def test_a_hand_written_inline_open_item_settles_and_line_endings_are_kept(self):
+        text = preconlib.SCOPE_DOC.replace("Open:\n- how often the counter resets\n",
+                                           "Open: how often the counter resets\n").replace("\n", "\r\n")
+        path = preconlib.ensure_scope_doc(self.fx, text=text)
+        with open(path, "wb") as fh:
+            fh.write(text.encode("utf-8"))
+        run, code, doc, err = self.settle("how often the counter resets")
+        self.assertEqual(code, 0, "%s %s" % (json.dumps(doc), err))
+        with open(path, "rb") as fh:
+            raw = fh.read().decode("utf-8")
+        self.assertIn("\r\nOpen:\r\nNext:", raw)
+        self.assertEqual(raw.count("\n"), raw.count("\r\n"), "no bare line feed")
+
+
+class TheComment(_Write):
+    """CP1-6: one triage comment, kept as found; a continued doc that has one never gains another."""
+
+    def test_a_doc_with_a_comment_keeps_it_and_gains_none(self):
+        text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n<!-- precon-v2 triage: architectural -->\n\nIntent:", 1)
+        path = preconlib.ensure_scope_doc(self.fx, text=text)
+        run, code, doc, err = self.through_write({"lines": [preconlib.owner_line("Counts print to stdout",
+                                                                                 "print it")]})
+        self.assertEqual(code, 0, err)
+        after = preconlib.read(path)
+        self.assertEqual(after.count("<!-- precon-v2 triage:"), 1)
+        self.assertIn("<!-- precon-v2 triage: architectural -->\n", after)
+
+
 class ReportOnly(_Write):
 
     def test_report_only_writes_nothing_outside_the_run_directory(self):

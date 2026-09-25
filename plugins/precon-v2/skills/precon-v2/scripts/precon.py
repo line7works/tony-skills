@@ -66,9 +66,7 @@ COMMANDS = [
                    {"flags": ["--model"], "metavar": "ROW=ID", "action": "append", "default": None,
                     "help": "a model id the owner typed against that row"},
                    {"flags": ["--session-model"], "metavar": "ID", "default": None,
-                    "help": "the model id this session reports for itself (claude-session only)"},
-                   {"flags": ["--roster"], "metavar": "FILE", "default": None,
-                    "help": "readers' roster.json (default: the readers plugin beside this one)"}],
+                    "help": "the model id this session reports for itself (claude-session only)"}],
      "handler": phases.request},
 ]
 

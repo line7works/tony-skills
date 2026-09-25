@@ -70,8 +70,10 @@ cold, listen first; do not open with an interrogation.
    open items: they are this sitting's agenda.
 
 The property line is absolute: no web, no research documents, no research subagents. A question
-that needs outside research is not asked and not answered: it is marked `needs_research` in your
-answer and lands as a `parked: needs research` line, the owner's break point.
+that needs outside research is not answered in the run: it is marked `needs_research` in your
+answer, its `answer` is the owner's words parking it, and it lands as a `parked: needs research`
+line, the owner's break point; nothing else of the run (a decided or assumed line, an out-of-scope
+item, a parked line of another reason) may trace to it.
 
 ## Step 2: Triage
 
@@ -79,8 +81,8 @@ Classify the idea aloud before round one; the owner can override the tier in a w
 
 - `napkin`: describable in a sentence or two. One short round, or none. "This doesn't need a
   scope doc, go straight to /blueprint" is a valid outcome; when the owner takes it, skip steps 3
-  to 5 and record `triage.no_scope_doc: true` with no line: the run ends `no-scope-doc` and
-  writes nothing.
+  to 5 and record `triage.no_scope_doc: true` with no line and `sitting: ends`: the run ends
+  `no-scope-doc` and writes nothing.
 - `bounded`: a normal feature with known edges. A few rounds.
 - `architectural`: spawns repos or systems, or changes how other things work. Full depth.
 
@@ -94,9 +96,9 @@ Interview in batched frontier rounds, a few questions each:
 - **Only if it differs:** spend a question only where his answer could differ from your
   recommendation; small reversible calls become `assumed` lines with the why.
 - **Facts vs decisions:** look facts up; ask decisions.
-- **The board:** open every round with `Round N`, the tier, then the board `state --run-dir D`
-  printed (`decided N · assumed N · parked N · open your-calls N`), copied as it printed, never
-  counted from memory. Join the three with the form's dashes, as v1's round header does.
+- **The board:** open every round with the header `Round N — <tier> — board: decided N · assumed N · parked N · open your-calls N`,
+  the tier welded in so it is never skipped, and the board part exactly as `state --run-dir D`
+  printed it, never counted from memory.
 - **No drip, no cap:** batches, never one question at a time; no fixed budget. Plain-text
   numbered questions, never a harness question widget.
 
@@ -113,7 +115,9 @@ At the end of each round, write ONE answer file (`references/answer.schema.json`
   `assumed` with the why it did not earn a question; `parked` with a `reason` of exactly
   `needs research`, `needs prototype` or `waiting on <the thing>`; `open` with `waits_on`, the
   call of his it waits on. A parked or open line of the doc becomes `decided` only when a question
-  of this run he answered touches it; trace such a line to its ledger id.
+  of this run he answered touches it; trace such a line to its ledger id. A line of the doc is
+  passed forward or settled by its id only: its words repeated under any other trace are refused
+  (`retagged`), so the doc never holds a line and its twin.
 - `out_of_scope`: what he ruled out, each with its reason and its trace (blueprint's descope
   evidence); `research`: paths to research he did himself; `open_items`: threads for the next
   sitting.
@@ -127,8 +131,9 @@ doc by hand. A `doc-changed` stop means the doc moved under the run: nothing was
 new run.
 
 **Suggest only, never act.** When the idea deserves an outside panel you may say, in one line,
-that it smells like a panel review; when a question needs something concrete, that a throwaway
-would help. That is the ceiling: no invoking, no building, no queuing.
+"this smells like a /jpb" (the owner's multi-model panel skill); when a question needs something
+concrete, "this would be easier with a throwaway to look at." That is the ceiling: no invoking, no
+building, no queuing.
 
 ## Step 5: The exit test
 
@@ -186,18 +191,22 @@ invocation; you never assume it; when he did, say so in the gate line in his wor
 
 ## Output
 
-`report`'s result carries `station_result.chat_block`, v1's read-back rendered from the result.
-Print it as it is:
+`report`'s result carries `station_result.chat_block`, v1's read-back rendered from the result,
+then, below a blank line, the lines this core adds. Print it as it is:
 
 ```text
 PRECON: <idea>
 Doc: <path>
 Counts: decided N · assumed N · parked N · out of scope N
 Parked: <one line each, with its tag>
-Exit test: <row · status · model or reason>, when one ran
-Gate: <the gate line>
 Next: /blueprint when ready.
+
+Exit test: <row · status · model or reason>, when one ran
+Cold read: <the cold-read doc>, when one was written
+Gate: <the gate line>
 ```
+
+On a round whose sitting continues, `Next:` says the next round follows.
 
 A napkin run prints the napkin line (`Doc: none`, the form's dash, `napkin, straight to
 /blueprint`) and zeroed counts. When running this skill required working around, reinterpreting
