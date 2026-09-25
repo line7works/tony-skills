@@ -223,7 +223,7 @@ situations and for nothing else:
 | `phase-not-built` | the frame's placeholder: the phase exists on the CLI and its station's lane has not built it |
 | `selection-none` | the core's rule makes an empty hunt a stop |
 | `selection-several` | the hunt found several candidates; they are listed for the owner, never picked |
-| `ledger-refused` | the scope doc holds a line the ledger reader cannot tag; the line is quoted |
+| `ledger-refused` | a harvested document (the scope doc, or an architecture doc's poured-concrete or deferred section) holds a line the reader cannot tag; the line is quoted |
 | `write-refused` | the write would drop or change a protected line; nothing was written |
 | `records-refused` | inspect-v2 only: the records component refused a call; its own sentence is carried |
 
