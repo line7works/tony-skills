@@ -312,7 +312,9 @@ class OwnCommands(_Cli):
                        "[{'name': 'Thing', 'help': 'h', 'arguments': [], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': None, 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--command']}], 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['-c'], 'dest': 'skill_root'}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['-c'], 'dest': 'skill_root'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a']}, {'flags': ['--a']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'colour': 'red'}], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)
