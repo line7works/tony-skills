@@ -292,9 +292,19 @@ def lane_observe(step, case_dir, neutral, facts, via, scratch):
     elif phases is not None:
         facts["_errors"].append({"step": "lane", "error": "the lane observer's _phases is not a list: %r" % (phases,)})
     if isinstance(errors, list):
-        facts["_errors"].extend(errors)
+        for entry in errors:
+            if isinstance(entry, dict) and isinstance(entry.get("error"), str):
+                facts["_errors"].append(entry)
+            else:
+                facts["_errors"].append({"step": "lane", "error": "a lane _errors entry is not a mapping with an "
+                                         "error: %r" % (entry,)})
     elif errors is not None:
         facts["_errors"].append({"step": "lane", "error": "the lane observer's _errors is not a list: %r" % (errors,)})
+    for bad in [key for key in list(lane) + list(lane_via) if not isinstance(key, str)]:
+        facts["_errors"].append({"step": "lane", "error": "the lane observer used a key that is not a string: %r; "
+                                 "not merged" % (bad,)})
+        lane.pop(bad, None)
+        lane_via.pop(bad, None)
     merged = []
     for name in sorted(lane):
         if name in listed and name not in facts:
