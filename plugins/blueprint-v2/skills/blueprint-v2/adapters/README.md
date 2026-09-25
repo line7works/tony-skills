@@ -1,4 +1,4 @@
-# Adapter index (E14 slice 1, the frame)
+# Adapter index (E14 slice 1, the frame; slice 2, lane L)
 
 The portable body (`../SKILL.md`) names no harness. This index maps the harness you run in to its
 adapter profile; the profile says how the `invocation` block of `../references/input.schema.json`
@@ -16,7 +16,7 @@ E14). There is no invocation helper for it, so the input cannot be built with it
 schema requires `invocation.harness`, `caller` and `mode`, and an input without them is refused at
 `check-input` with exit 4. Say so and stop; never type the block by hand.
 
-Every profile carries the E9 seam's twelve sections in the same order; a section the frame cannot
-answer yet says which lane fills it. The helpers are the E13 cores' own (`_common.py` byte for
+Every profile carries the E9 seam's twelve sections in the same order, each answered (the
+station's own sections by its slice 2 lane; `tests/test_profile.py` holds them). The helpers are the E13 cores' own (`_common.py` byte for
 byte), run under Python 3.9 with the standard library only, and are resolved from this directory,
 never from a checkout or a cache. `blueprint-v2` itself is `blueprint-v2`.

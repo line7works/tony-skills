@@ -1,0 +1,69 @@
+{
+  "answer_version": 1,
+  "assumptions": [],
+  "ceremony": {
+    "needs_build_doc": true,
+    "why": "two requirements across one slice"
+  },
+  "criteria": [
+    {
+      "id": "AC2",
+      "text": "AC2: `reset()` then `spin(0)` returns 1",
+      "verify": "new test at tests/test_turnstile.py"
+    }
+  ],
+  "feature": "turnstile",
+  "intent": "count turns for the owner's bench rig, so a bench session reports its turns.",
+  "lines": [
+    {
+      "id": "R3",
+      "tag": "requirement",
+      "text": "R3 — `reset()` returns 0",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "id": "C1",
+      "tag": "constraint",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    }
+  ],
+  "open_questions": [],
+  "questions": [
+    {
+      "answer": "no, it returns 0",
+      "id": "Q1",
+      "text": "Does reset return the old count?",
+      "touches": []
+    }
+  ],
+  "run_id": "run-0001",
+  "session_id": "session-example-1",
+  "slices": [
+    {
+      "criteria": [
+        "AC2"
+      ],
+      "depends_on": [
+        "A"
+      ],
+      "footprint": [
+        "src/turnstile.py"
+      ],
+      "goal": "`reset()` puts the count back to zero.",
+      "name": "B",
+      "not_in_slice": "persistence",
+      "requirements": [
+        "R3"
+      ],
+      "short": "Reset the count"
+    }
+  ],
+  "title": "Turnstile"
+}

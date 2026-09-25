@@ -13,7 +13,7 @@
   "run_id": "run-0001",
   "station": "blueprint-v2",
   "status": "completed",
-  "stop_tag": "selection-none",
+  "stop_tag": "selection-several",
   "writes": [
     {
       "kind": "run_artifact",

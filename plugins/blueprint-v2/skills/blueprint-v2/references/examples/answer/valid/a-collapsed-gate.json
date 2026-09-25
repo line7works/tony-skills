@@ -1,0 +1,96 @@
+{
+  "answer_version": 1,
+  "assumptions": [
+    "the bench script prints the count itself"
+  ],
+  "ceremony": {
+    "needs_build_doc": true,
+    "why": "two requirements across one slice"
+  },
+  "collapsed_gate": {
+    "words": "blueprint it and build slice A"
+  },
+  "criteria": [
+    {
+      "id": "AC1",
+      "text": "AC1: `spin(2)` returns 3",
+      "verify": "new test at tests/test_turnstile.py"
+    }
+  ],
+  "feature": "turnstile",
+  "intent": "count turns for the owner's bench rig, so a bench session reports its turns.",
+  "lines": [
+    {
+      "id": "R1",
+      "tag": "requirement",
+      "text": "R1 — `spin(n)` returns `n + 1`",
+      "trace": {
+        "kind": "repo_path",
+        "ref": "src/turnstile.py"
+      }
+    },
+    {
+      "id": "R2",
+      "tag": "requirement",
+      "text": "R2 — the count lives in memory only",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "id": "C1",
+      "tag": "constraint",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "id": "O1",
+      "tag": "out-of-scope",
+      "text": "a web dashboard — the owner declined it",
+      "trace": {
+        "kind": "ledger",
+        "ref": "oos-936fd940e2a6"
+      }
+    }
+  ],
+  "open_questions": [
+    "how often the counter resets"
+  ],
+  "questions": [
+    {
+      "answer": "in memory only for the first version",
+      "id": "Q1",
+      "text": "Where is the count kept between sessions?",
+      "touches": [
+        "dec-0c1d2e3f4a5b"
+      ]
+    }
+  ],
+  "run_id": "run-0001",
+  "session_id": "session-example-1",
+  "slices": [
+    {
+      "criteria": [
+        "AC1"
+      ],
+      "depends_on": [],
+      "footprint": [
+        "src/turnstile.py",
+        "tests/test_turnstile.py"
+      ],
+      "goal": "`spin()` returns the count after one more turn.",
+      "name": "A",
+      "not_in_slice": "the reset",
+      "requirements": [
+        "R1",
+        "R2"
+      ],
+      "short": "Count turns"
+    }
+  ],
+  "title": "Turnstile"
+}

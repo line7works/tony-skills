@@ -2,24 +2,80 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/station-v2/result.schema.json",
   "title": "front core result (shared base)",
-  "description": "The one result document of a front core's run (station-loop.md section 5), written to `<run_dir>/result.json` by `report` after it validates against this schema and the semantic checks of scripts/validate-result.py (S1 to S4). Every run ends in a terminal status, every stop included. Each core's lane fills `station_result` and adds its own stop tags to the `stop_tag` description, never to another field.",
+  "description": "The one result document of a front core's run (station-loop.md section 5), written to `<run_dir>/result.json` by `report` after it validates against this schema and the semantic checks of scripts/validate-result.py (S1 to S4). Every run ends in a terminal status, every stop included. blueprint-v2's lane fills `station_result` (references/blueprint-v2-contract.md section 10) and lists its stop tags in `stop_tag`.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["interface_version", "plugin_version", "station", "run_id", "run_dir", "status", "reason", "report_only", "wrote_nothing", "writes", "invocation"],
+  "required": [
+    "interface_version",
+    "plugin_version",
+    "station",
+    "run_id",
+    "run_dir",
+    "status",
+    "reason",
+    "report_only",
+    "wrote_nothing",
+    "writes",
+    "invocation"
+  ],
   "properties": {
-    "interface_version": {"type": "integer", "const": 1},
-    "plugin_version": {"type": "string", "minLength": 1},
-    "station": {"type": "string", "enum": ["precon-v2", "architect-v2", "blueprint-v2", "inspect-v2"]},
-    "run_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-    "run_dir": {"type": "string", "minLength": 2, "pattern": "^/"},
-    "status": {"type": "string", "enum": ["completed", "stopped"]},
-    "stop_tag": {
-      "type": ["string", "null"],
-      "enum": [null, "phase-not-built", "selection-none", "selection-several", "ledger-refused", "write-refused", "records-refused"],
-      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`. A lane adds its own tags here and in the enum, never reusing a shared one for another meaning."
+    "interface_version": {
+      "type": "integer",
+      "const": 1
     },
-    "reason": {"type": "string", "minLength": 1},
-    "report_only": {"type": "boolean"},
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "station": {
+      "type": "string",
+      "enum": [
+        "precon-v2",
+        "architect-v2",
+        "blueprint-v2",
+        "inspect-v2"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "stopped"
+      ]
+    },
+    "stop_tag": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "selection-several",
+        "ledger-refused",
+        "write-refused",
+        "no-build-doc",
+        "stale-harvest",
+        "unsafe-path"
+      ],
+      "description": "the stop tags blueprint-v2 can emit (references/blueprint-v2-contract.md section 12): the shared `selection-several`, `ledger-refused` and `write-refused` (station-loop.md section 7, each for its shared meaning only), and this core's own `no-build-doc` (the executor recorded that this does not need a build doc; no file), `stale-harvest` (the build doc changed after harvest; nothing written) and `unsafe-path` (the build doc's path leaves the workspace through a link, or is one; nothing written). blueprint-v2 never emits the shared phase-not-built, selection-none (an empty hunt is not a stop here) or records-refused (it never opens the records component)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_only": {
+      "type": "boolean"
+    },
     "wrote_nothing": {
       "type": "boolean",
       "description": "true exactly when no write lies outside the run directory (S3)"
@@ -29,12 +85,40 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "kind", "sha256_before", "sha256_after"],
+        "required": [
+          "path",
+          "kind",
+          "sha256_before",
+          "sha256_after"
+        ],
         "properties": {
-          "path": {"type": "string", "minLength": 2, "pattern": "^/"},
-          "kind": {"type": "string", "enum": ["run_artifact", "document", "records_log"]},
-          "sha256_before": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-          "sha256_after": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          "path": {
+            "type": "string",
+            "minLength": 2,
+            "pattern": "^/"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "run_artifact",
+              "document",
+              "records_log"
+            ]
+          },
+          "sha256_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sha256_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          }
         }
       }
     },
@@ -43,30 +127,168 @@
       "description": "the hunt results the run used, by hunt name, as `select` printed them",
       "additionalProperties": {
         "type": "object",
-        "required": ["outcome", "candidates", "searched"],
+        "required": [
+          "outcome",
+          "candidates",
+          "searched"
+        ],
         "properties": {
-          "outcome": {"type": "string", "enum": ["none", "one", "several"]},
-          "candidates": {"type": "array"},
-          "searched": {"type": "array"}
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "none",
+              "one",
+              "several"
+            ]
+          },
+          "candidates": {
+            "type": "array"
+          },
+          "searched": {
+            "type": "array"
+          }
         }
       }
     },
     "invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["harness", "caller", "mode"],
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
       "properties": {
-        "harness": {"type": ["string", "null"]},
-        "caller": {"type": "string", "minLength": 1},
-        "mode": {"type": "string", "enum": ["direct", "station"]},
-        "session_id": {"type": ["string", "null"]}
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "station_result": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
-      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+      "required": [
+        "doc_action",
+        "slices",
+        "open_questions",
+        "assumptions",
+        "readback"
+      ],
+      "description": "blueprint-v2's own result (references/blueprint-v2-contract.md section 10): the build doc and what the script counted in it, and the BLUEPRINT: read-back rendered from them",
+      "properties": {
+        "feature": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the feature's slug, from the answer or the build hunt's name"
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the build doc's absolute path (for report-only: where it would be written)"
+        },
+        "doc_action": {
+          "type": "string",
+          "enum": [
+            "created",
+            "extended",
+            "none"
+          ]
+        },
+        "slices": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "the slice sections the doc holds after the write, counted by the script"
+        },
+        "slice_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "new_slices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the slices this run added or revised"
+        },
+        "open_questions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "the answer's open questions, counted by the script"
+        },
+        "assumptions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "the answer's assumptions, counted by the script"
+        },
+        "questions_asked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scope_doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "architecture_doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "needs_build_doc": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "collapsed_gate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the owner's words when his invocation collapsed the gate; recorded, never acted on by the script"
+        },
+        "refused_lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "write-refused: the protected lines the write would have changed, quoted"
+        },
+        "readback": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^BLUEPRINT: ",
+          "description": "the BLUEPRINT: block, rendered from this result"
+        }
+      }
     }
   }
 }
