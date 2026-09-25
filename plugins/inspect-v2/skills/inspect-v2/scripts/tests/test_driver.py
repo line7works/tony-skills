@@ -339,6 +339,76 @@ class OwnCommands(_Cli):
             self.assertNotEqual(code, 0, source)
             self.assertIn("ValueError", err, source)
 
+    def contract_driver(self, handler_source):
+        """A driver whose one own command `thing` runs the handler defined by `handler_source` (a `def h(ctx, args)`)."""
+        path = os.path.join(self.tmp, "contract.py")
+        testlib.write_text(path, "\n".join([
+            "import os, sys, json",
+            "sys.dont_write_bytecode = True",
+            "sys.path.insert(0, %r)" % testlib.SCRIPTS,
+            "from station_core import driver, exits",
+            handler_source,
+            "COMMANDS = [{'name': 'thing', 'help': 'h', 'arguments': [], 'handler': h}]",
+            "sys.exit(driver.main('%s', {}, {}, commands=COMMANDS))" % testlib.CORE,
+        ]))
+        return path
+
+    def test_an_own_command_that_breaks_the_response_contract_is_a_defect(self):
+        """The seam 15 rule (the outside reviewer's L-3, P-4, A3 and I F7): the driver checks an own command's exit
+        code and stdout before either leaves the process. An undocumented exit, a document without this run's
+        envelope, stdout on a diagnostic exit, two documents, a SystemExit: each is a defect (exit 1, the sentence
+        on stderr, nothing on stdout)."""
+        bad = (
+            ("def h(ctx, args):\n    return 77", "77"),
+            ("def h(ctx, args):\n    return None", "None"),
+            ("def h(ctx, args):\n    return '0'", "'0'"),
+            ("def h(ctx, args):\n    sys.stdout.write(json.dumps({'arbitrary': True}) + '\\n'); return 0", "no envelope"),
+            ("def h(ctx, args):\n    return driver.emit({'status': 'done'}, exits.TERMINAL)", "terminal without the envelope"),
+            ("def h(ctx, args):\n    raise driver.Terminal({'status': 'done'})", "Terminal without the envelope"),
+            ("def h(ctx, args):\n    sys.stdout.write('progress\\n'); return 2", "stdout on a diagnostic exit"),
+            ("def h(ctx, args):\n    driver.emit(ctx.envelope(a=1)); return driver.emit(ctx.envelope(b=2))", "two documents"),
+            ("def h(ctx, args):\n    sys.stdout.write('not json\\n'); return 0", "not JSON"),
+            ("def h(ctx, args):\n    sys.exit(77)", "SystemExit with an undocumented code"),
+            ("def h(ctx, args):\n    sys.exit(0)", "SystemExit 0 without a document"),
+            ("def h(ctx, args):\n    sys.stdout.write('x\\n'); sys.exit(3)", "SystemExit 3 with stdout"),
+            ("def h(ctx, args):\n    doc = ctx.envelope(); doc['station'] = 'other'; return driver.emit(doc)", "a foreign station"),
+        )
+        for source, what in bad:
+            path = self.contract_driver(source)
+            code, out, err = self.run_own(path, ["thing"])
+            self.assertEqual(code, 1, (what, out, err))
+            self.assertEqual(out, "", what)
+            self.assertIn("command handler", err, what)
+
+    def test_an_own_command_that_keeps_the_contract_passes_through_unchanged(self):
+        good = (
+            ("def h(ctx, args):\n    return driver.emit(ctx.envelope(ok=True, extra=[1, 2]))", 0, {"ok": True, "extra": [1, 2]}),
+            ("def h(ctx, args):\n    return driver.emit(ctx.envelope(status='done'), exits.TERMINAL)", 10, {"status": "done"}),
+            ("def h(ctx, args):\n    raise driver.Terminal(ctx.envelope(status='stopped'))", 10, {"status": "stopped"}),
+            ("def h(ctx, args):\n    return driver.emit(ctx.envelope(refused=True), exits.REFUSED)", 5, {"refused": True}),
+            ("def h(ctx, args):\n    return driver.emit(ctx.envelope(bad=True), exits.VALIDATION)", 4, {"bad": True}),
+        )
+        for source, want, fields in good:
+            path = self.contract_driver(source)
+            code, out, err = self.run_own(path, ["thing"])
+            self.assertEqual(code, want, (source, err))
+            doc = self.json_out(out)
+            for k, v in fields.items():
+                self.assertEqual(doc[k], v, source)
+            self.assertEqual(doc["station"], testlib.CORE)
+            self.assertEqual(out, json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n", "stdout is the one document, unchanged")
+        # a diagnostic exit with nothing on stdout passes through; Usage raised inside is usage; stderr is free
+        for source, want in (("def h(ctx, args):\n    sys.stderr.write('why\\n'); return 2", 2),
+                             ("def h(ctx, args):\n    return 3", 3),
+                             ("def h(ctx, args):\n    sys.stderr.write('no jsonschema\\n'); sys.exit(3)", 3),
+                             ("def h(ctx, args):\n    raise driver.Usage('a usage slip')", 2),
+                             ("def h(ctx, args):\n    sys.stderr.write('note\\n'); return driver.emit(ctx.envelope(ok=True))", 0)):
+            path = self.contract_driver(source)
+            code, out, err = self.run_own(path, ["thing"])
+            self.assertEqual(code, want, (source, err))
+            if want != 0:
+                self.assertEqual(out, "", source)
+
     def test_no_own_commands_lists_none(self):
         path = self.own_driver("[]")
         code, out, err = self.run_own(path, ["--help"])
