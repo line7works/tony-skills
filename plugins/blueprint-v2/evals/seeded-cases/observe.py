@@ -259,18 +259,36 @@ def step_v1scan(step, case_dir, neutral, facts, via, scratch):
 
 
 def lane_observe(step, case_dir, neutral, facts, via, scratch):
-    """The lane's own observer, `lane_observe.py` beside this file, when the lane has written it."""
+    """The lane's own observer, `lane_observe.py` beside this file, when the lane has written it.
+
+    The observer works on its own dict; only the names the step lists under `pending` that no
+    frame step already observed are taken from it. A name it fills that the step does not list,
+    or that the frame already observed, is recorded under `_errors` and never merged, so the
+    graded facts stay the frame's where the frame has one. Its `_phases` and `_errors` are
+    appended to the run's. Any error it raises, `SystemExit` included, lands in `_errors`."""
     path = os.path.join(HERE, "lane_observe.py")
     if not os.path.isfile(path):
         return
     import importlib.util
     spec = importlib.util.spec_from_file_location("lane_observe", path)
     module = importlib.util.module_from_spec(spec)
+    lane = {"_phases": [], "_errors": []}
     try:
         spec.loader.exec_module(module)
-        module.observe_lane(step, case_dir, neutral, facts, via, scratch)
-    except Exception as exc:  # noqa: BLE001  (a lane observer's error is a fact of the run)
-        facts["_errors"].append({"step": "lane", "error": "%s: %s" % (type(exc).__name__, exc)})
+        module.observe_lane(step, case_dir, neutral, lane, via, scratch)
+    except BaseException as exc:  # noqa: BLE001  (a lane observer's error is a fact of the run)
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        lane.setdefault("_errors", []).append({"step": "lane", "error": "%s: %s" % (type(exc).__name__, exc)})
+    facts["_phases"].extend(lane.pop("_phases", None) or [])
+    facts["_errors"].extend(lane.pop("_errors", None) or [])
+    listed = step.get("pending", [])
+    for name in sorted(lane):
+        if name in listed and name not in facts:
+            facts[name] = lane[name]
+        else:
+            facts["_errors"].append({"step": "lane", "error": "the lane observer filled %r, which its step does "
+                                     "not list or the frame already observed; not merged" % name})
 
 
 STEPS = {"select": step_select, "ledger": step_ledger, "answer": step_answer, "form": step_form,
