@@ -4,34 +4,46 @@ Draft a build document in dependency-ordered, verifiable slices, every requireme
 
 ## Status
 
-The frame only (E14 slice 1). This plugin holds the shared station loop, its library, the load-
-bearing templates, the schemas and examples of the shared fields, the phase driver with
-`check-input`, `select`, `identity` and `skill-identity` working, the adapters and setups for Claude
-Code and Codex, and the seeded cases of its families. The station's own procedure (`harvest`,
-`record-answer`, `write`, `report` and the steps of `SKILL.md`) lands in its slice 2 lane (lane
-L); until then those four phases stop as `phase-not-built`. Interface version 1, plugin
-version 0.1.0. Test counts are measured and filled in by the control room at close.
+The frame (E14 slice 1) and the station's core (E14 slice 2, lane L). The frame holds the shared
+station loop, its library, the load-bearing templates, the shared schemas' base, the adapters and
+setups for Claude Code and Codex, and the seeded cases of this core's families. Lane L built the
+station on it: the portable procedure in `SKILL.md` (v1 blueprint's five steps and seven rules,
+each step naming its command), the lane contract `references/blueprint-v2-contract.md`, the
+recorded answer's schema and examples, the four lane phases (`harvest`, `record-answer`, `write`,
+`report`) and one own command (`choose`, the owner's pick among several candidates) in
+`scripts/blueprint_core/`, the scope hunt's homes in one tier (carried item C1-7), the stop tags
+`no-build-doc`, `stale-harvest` and `unsafe-path`, the station's sections of both adapter profiles,
+and `evals/seeded-cases/lane_observe.py` for the lane facts of L1 to L3. Records: none (E14-9).
+
+For the join: the shared `scripts/tests/test_driver.py` still asserts that the four lane phases
+stop as `phase-not-built`, which this core's built phases no longer do (lane L's report, shared-file
+request 1); the version and the marketplace entry are the control room's at close. Interface
+version 1, plugin version 0.1.0. Test counts are measured and filled in by the control room.
 
 ## Layout
 
 ```text
 .claude-plugin/plugin.json           name blueprint-v2, version 0.1.0
 skills/blueprint-v2/
-  SKILL.md                           the portable procedure (a skeleton until slice 2)
+  SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar
   references/
+    blueprint-v2-contract.md         this core's lane contract
     station-loop.md                  the contract the four front cores share
     shared-files.txt                 the files identical in the four cores
     templates/                       the load-bearing forms, v1's byte for byte
-    input.schema.json, result.schema.json, examples/
+    input.schema.json, result.schema.json, answer.schema.json
+    examples/                        input/, result/, answer/ (valid and invalid)
   scripts/
-    blueprint.py                      the phase driver
+    blueprint.py                     the phase driver: the hunt table, the phases, `choose`
+    blueprint_core/                  this core's library: phases, checks, buildoc, harvest, readback
     station_core/                    the shared library
     validate-examples.py, validate-result.py
-    tests/                           the unittest suites (standard library)
-  adapters/                          README.md, claude-code/, codex/
+    tests/                           the unittest suites (standard library; bplib.py, test_bp_*.py and
+                                     test_answer_examples.py are this core's own)
+  adapters/                          README.md, claude-code/, codex/ (each with tests/test_profile.py)
 setups/                              install, verify, negative tests and launch per harness
-evals/seeded-cases/                  the seeded cases of this core's families
+evals/seeded-cases/                  the seeded cases of this core's families, and lane_observe.py
 ```
 
 ## Tests

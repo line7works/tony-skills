@@ -7,7 +7,7 @@
     "session_id": "session-example-1"
   },
   "plugin_version": "0.1.0",
-  "reason": "the scope doc docs/scope/2026-09-20-widget.md holds 1 line(s) the ledger reader cannot tag: line 5 '- One module' (no tag)",
+  "reason": "x",
   "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",
   "run_id": "run-0001",
@@ -62,26 +62,14 @@
     "new_slices": [],
     "open_questions": 0,
     "questions_asked": 0,
-    "readback": "BLUEPRINT: widget\nStopped: ledger-refused\nthe scope doc docs/scope/2026-09-20-widget.md holds 1 line(s) the ledger reader cannot tag: line 5 '- One module' (no tag)",
+    "readback": "the chat block with no BLUEPRINT line",
     "scope_doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
     "slice_names": [],
     "slices": 0
   },
-  "status": "stopped",
-  "stop_tag": "ledger-refused",
+  "status": "completed",
+  "stop_tag": null,
   "writes": [
-    {
-      "kind": "run_artifact",
-      "path": "/tmp/station-runs/run-0001/checkpoint.json",
-      "sha256_after": null,
-      "sha256_before": null
-    },
-    {
-      "kind": "run_artifact",
-      "path": "/tmp/station-runs/run-0001/input.json",
-      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "sha256_before": null
-    },
     {
       "kind": "run_artifact",
       "path": "/tmp/station-runs/run-0001/result.json",

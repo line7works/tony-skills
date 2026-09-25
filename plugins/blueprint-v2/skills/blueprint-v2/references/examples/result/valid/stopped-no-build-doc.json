@@ -7,7 +7,7 @@
     "session_id": "session-example-1"
   },
   "plugin_version": "0.1.0",
-  "reason": "the scope doc docs/scope/2026-09-20-widget.md holds 1 line(s) the ledger reader cannot tag: line 5 '- One module' (no tag)",
+  "reason": "this does not need a build doc: a one-line change to the counter's default; nothing was written",
   "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",
   "run_id": "run-0001",
@@ -58,18 +58,24 @@
     "doc": null,
     "doc_action": "none",
     "feature": "widget",
-    "needs_build_doc": null,
+    "needs_build_doc": false,
     "new_slices": [],
-    "open_questions": 0,
+    "open_questions": 1,
     "questions_asked": 0,
-    "readback": "BLUEPRINT: widget\nStopped: ledger-refused\nthe scope doc docs/scope/2026-09-20-widget.md holds 1 line(s) the ledger reader cannot tag: line 5 '- One module' (no tag)",
+    "readback": "BLUEPRINT: widget\nNo build doc: a one-line change to the counter's default\nOpen: how often the counter resets",
     "scope_doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
     "slice_names": [],
     "slices": 0
   },
   "status": "stopped",
-  "stop_tag": "ledger-refused",
+  "stop_tag": "no-build-doc",
   "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/answer.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
     {
       "kind": "run_artifact",
       "path": "/tmp/station-runs/run-0001/checkpoint.json",
@@ -78,7 +84,19 @@
     },
     {
       "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/harvest.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
       "path": "/tmp/station-runs/run-0001/input.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/receipt.json",
       "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "sha256_before": null
     },

@@ -1,0 +1,24 @@
+{
+  "answer_version": 1,
+  "assumptions": [],
+  "ceremony": {
+    "needs_build_doc": false,
+    "why": "a one-line change to the counter's default"
+  },
+  "criteria": [],
+  "lines": [
+    {
+      "tag": "constraint",
+      "text": "Python 3.9 standard library",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    }
+  ],
+  "open_questions": [],
+  "questions": [],
+  "run_id": "run-0001",
+  "session_id": "session-example-1",
+  "slices": []
+}

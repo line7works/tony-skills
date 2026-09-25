@@ -1,0 +1,326 @@
+# The blueprint core contract, version 1
+
+What `blueprint-v2` does, what it writes, when it stops, and what every field of its answer and
+result means. This document, `station-loop.md` beside it (the contract the four front cores
+share), and the schemas under `references/` are the interface; everything under
+`scripts/blueprint_core/` and `scripts/station_core/` is internal.
+
+Written for E14 slice 2 (lane L) against the E14 lane contract, section 11. Where this document
+and that contract differ, the lane contract is the authority and this document is the defect.
+
+Contents: 1 The job · 2 What is kept · 3 The phases · 4 The input · 5 Selection · 6 Harvest ·
+7 The recorded answer · 8 Write · 9 Own commands · 10 Report and the read-back · 11 Report-only ·
+12 Stop tags · 13 Records · 14 Readers · 15 The gate · 16 Seeded families · 17 Exit codes ·
+18 What this core never does · 19 Open points.
+
+## 1. The job
+
+Turn a feature discussion into the sliced build doc the loop's later stations consume (build,
+signoff, recheck and the inspect station), written for a builder who was never in the room. The
+doc records what was decided; it does not decide. Every requirement, constraint and out-of-scope
+line carries its trace; every acceptance criterion carries its check.
+
+**The executor decides, the script records** (E14-4). The executor, the model running `SKILL.md`,
+talks to the owner, asks, slices and judges, and hands its judgment to the script once, as the
+recorded answer. `scripts/blueprint.py` finds the documents, reads the scope doc's ledger and the
+architecture doc's lines, checks the answer, renders the build doc through the shared templates,
+guards the doc's protected lines, writes, and reports. It never judges a plan.
+
+## 2. What is kept
+
+The station's five steps and seven rules are the behavior, unchanged (E14-1). Here is where each
+lives now.
+
+| Step | Where it lives |
+|---|---|
+| 1. Harvest what exists before asking | `select` (the scope doc, the architecture doc, the living build doc) and `harvest` (the ledger with ids, the architecture doc's poured-concrete and deferred lines, the build doc's protected lines). The discussion and the repository are the executor's to read |
+| 2. Interview load-bearing gaps only, one batched round with a recommendation each; small reversible gaps become recorded assumptions | the executor's; what it asked is the answer's `questions`, what it decided alone is `assumptions` |
+| 3. Slice: one build session per slice, dependency-ordered, ends wired in, independently verifiable, ceremony scaled | the executor's judgment; the script holds the checkable half: `depends-forward`, every requirement and criterion placed, a criterion with its check, `needs_build_doc` |
+| 4. Write the doc: extend the living doc in place, or save a new one under `docs/plans/`; the forms exact; the last five sections scaffolded empty | `write`, through `station_core/templates.py` (section 8) |
+| 5. Read back and stop | `report` renders the `BLUEPRINT:` block from the result (section 10); the executor posts it and stops (section 15) |
+
+The seven rules:
+
+1. **Record, never invent.** Every line traces to the scope doc's ledger, a repository path, or a
+   question the owner answered in this run; an untraced line is refused (section 7). An open
+   load-bearing question stays visibly open: it is rendered into the doc and counted in the
+   read-back.
+2. **Write for a builder who was not in the room.** The executor's; the doc carries real paths
+   and names, never a reference to the conversation.
+3. **Criteria are checkable.** A criterion with no `verify` form, or a blank one, is refused.
+4. **Requirements say what, slices say when, the builder decides how.** The executor's.
+5. **Descoping is recorded with reasons.** Out-of-scope lines are rendered under `Out of scope:`
+   with their trace, the written evidence signoff reads.
+6. **Tests are part of the plan.** Each criterion names its check; a slice with no runnable check
+   is the executor's to flag to the owner before the doc ships.
+7. **One living doc.** One build doc per feature, extended in place, never forked. The ledger
+   sections' lines, every `Status:` line and every `Plan: inspected` line are never changed by a
+   revision (section 8).
+
+## 3. The phases
+
+```text
+check-input <input.json>                            validate, create the run         (shared)
+select --run-dir D --hunt H [--name N]              find the documents               (shared)
+choose --run-dir D --hunt H --path P --words W      the owner's pick among several   (own, section 9)
+harvest --run-dir D                                 read before asking               (section 6)
+record-answer --run-dir D --answer FILE             check the one recorded answer    (section 7)
+write --run-dir D                                   render and write the build doc   (section 8)
+report --run-dir D                                  the result and the read-back     (section 10)
+identity <workspace> / skill-identity               at any time                      (shared)
+```
+
+The checkpoint moves `checked -> selected -> harvested -> answered -> written -> done`, and a
+command against the wrong phase is exit 2 naming what to run instead. A run that reached a
+terminal status (`done`) answers `choose`, `harvest`, `record-answer`, `write` and `report` with
+its recorded `result.json`, exit 10, and writes nothing. Every stop writes a validated
+`result.json` before it is printed, so every run ends in a result.
+
+## 4. The input
+
+`references/input.schema.json`, the shared base, unchanged: this core adds no field under
+`station`. The workspace is the repository the build doc lives in; `staging` is accepted and never
+read (the build doc's homes are all in the workspace). The run date is the machine's local
+calendar date when `harvest` runs, recorded in `harvest.json`; the executor types no date.
+
+## 5. Selection
+
+Every run hunts three times: `select --hunt scope [--name N]`, `select --hunt architecture
+[--name N]`, `select --hunt build --name <feature>`. `harvest` refuses a run that skipped one
+(exit 2), refuses a build hunt with no name (exit 2), and refuses a selected document that
+vanished or is not UTF-8 text (exit 2, nothing written): the living doc is looked for under the
+feature's name, so it is found, never forked. `{name}` narrows a hunt to one slug; with no name,
+the slot reads `*`.
+
+| Hunt | Glob | Tier | Home |
+|---|---|---|---|
+| `scope` | `docs/scope/{name}.md` | 1 | the repo doc kit's scope folder |
+| `scope` | `docs/scope/*-{name}.md` | 1 | the same folder, dated names |
+| `scope` | `docs/{name}-scope.md` | 1 | the older flat name |
+| `architecture` | `docs/architecture/{name}.md` | 1 | the architecture folder |
+| `architecture` | `docs/architecture/*-{name}.md` | 1 | the same folder, dated names |
+| `architecture` | `docs/{name}-architecture.md` | 2 | the older flat name |
+| `build` | `docs/plans/*-{name}.md` | 1 | the plans folder |
+| `build` | `docs/{name}-build-plan.md` | 2 | the older flat name |
+
+Why the tiers. The scope homes share ONE tier (carried item C1-7): the station's step 1 says that
+when more than one scope doc could match the feature they are listed and the owner is asked, so a
+doc in the newer folder never hides a flat one; both are `several`. The architecture and build
+homes keep the newer home first, the order the hand-off table and step 4 give, so an older flat
+build doc is extended where it lies only when no newer one exists.
+
+The outcomes. `none` is never a stop here: no scope doc means an empty ledger, no architecture
+doc means no architecture lines, no build doc means a new one. `several` is listed for the owner
+and never picked: the executor asks, and records his pick with `choose` (section 9) before
+`harvest`; a `several` that reaches `harvest` unresolved stops the run `selection-several`,
+listing every candidate.
+
+## 6. Harvest
+
+`harvest` writes `harvest.json` in the run directory and prints it:
+
+- `scope`: the scope doc's path and its ledger as `station_core/ledger.py` reads it, every line
+  with its id, tag, section, text, source and line number. A line the reader cannot tag stops the
+  run `ledger-refused`, every such line quoted with its number.
+- `architecture`: the architecture doc's path and, read through `templates.parse`, its
+  poured-concrete lines (`poured`, each with an `arch-` id), its struck ones (`struck`,
+  superseded, listed and never passed forward) and its deferred lines (`deferred`, each with a
+  `defer-` id). An id is twelve hex digits of the SHA-256 of the line's text, so it follows the
+  line, not its position.
+- `build`: an existing build doc's path, its SHA-256, its line ending, each slice with its name,
+  short name and `Status:` line, every `Plan: inspected` line, every line from the first ledger
+  heading to the end (byte for byte, endings kept), and `templates.check`'s findings on it.
+- `ledger_view`: what `record-answer` checks against: the scope ledger's lines, then the poured
+  lines as `decided` and the deferred lines as `parked`.
+- `run_date`, `build_name`, and `target`: the existing build doc, or
+  `<workspace>/docs/plans/<run_date>-<build_name>.md`.
+
+## 7. The recorded answer
+
+`references/answer.schema.json`, closed at every level, examples under
+`references/examples/answer/` (`valid/`, `invalid/`, each invalid one named for its one fault).
+Its fields: `answer_version` 1; `run_id` (this run's); `session_id` (the adapter's
+`answer_fields.session_id`, never typed); `feature`, `title`, `intent`; `questions` (each `id`,
+`text`, `touches` (ledger ids), `answer`; a blank answer is unanswered); `lines` (each `text`,
+`tag` of `requirement`, `constraint` or `out-of-scope`, an optional `id` a slice names, and its
+`trace` of `kind` and `ref`); `criteria` (each `text`, `verify`, and the `id` a slice names);
+`slices` (each `name`, `short`, `goal`, `requirements` and `criteria` (ids), `footprint`,
+`not_in_slice`, `depends_on`); `assumptions`; `open_questions`; `ceremony` (`needs_build_doc`
+and `why`); and `collapsed_gate` (`words`) only when the owner's invocation collapsed the gate.
+With `needs_build_doc` true the answer names its `feature`, `title` and `intent` and holds at
+least one constraint line.
+
+`record-answer` checks in this order, and on any failure writes nothing and leaves the run at
+`harvested`, so a corrected answer can be recorded:
+
+1. The schema: exit 4, the findings on stdout. A trace and a `verify` are optional in the schema
+   so that a line with no trace and a criterion with no check reach the content check and are
+   refused by name; all five shared trace kinds are spelled so that `assumed` and `owner_words`
+   are refused as kinds this core does not allow.
+2. The shared refusals of E14-11, `station_core/answer.py`'s `check`, called once on a view of the
+   answer (its questions, and its lines each tagged `decided`, since a requirement, a constraint
+   and an out-of-scope line are what the doc asserts as settled) against `ledger_view`, with the
+   allowed kinds below. Its rules: a question that re-asks a decided line (by id, or by its text);
+   a question touching an id the ledger does not hold; an untraced line (no trace, a kind not
+   allowed, a ledger id that names nothing, a path not in the workspace, a question not answered
+   in this run); a line tracing to a `parked` or `open` line that no answered question settled.
+3. This core's own checks, each a refusal in the same `{"rule", "message", ...}` shape:
+
+| Rule | Refuses |
+|---|---|
+| `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
+| `run-id-mismatch` | a `run_id` other than this run's |
+| `criterion-without-verify` | a criterion with no `verify` form, or a blank or multi-line one |
+| `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
+| `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
+| `depends-forward` | a slice depending on itself or on a slice after it |
+| `unplaced` | with a build doc: a requirement line or a criterion no slice carries |
+| `no-slice` | `needs_build_doc` true with no slice |
+| `slices-without-build-doc` | `needs_build_doc` false with slices |
+| `feature-not-hunted` | a `feature` other than the name the build hunt ran with |
+
+Allowed trace kinds: `ledger`, `repo_path`, `question`.
+
+Exit 5 lists every refusal of steps 2 and 3 at once. Only a clean answer is recorded, through
+`answer.record`, which writes `answer.json`.
+
+## 8. Write
+
+- **`needs_build_doc` false:** nothing is written and the run stops `no-build-doc`, the
+  executor's why carried (the station's "this does not need a build doc").
+- **A new doc:** `templates.render_build_doc` renders it from the answer: the title
+  (`<title>`, the run date), `Intent:`, `Constraints:`, `Out of scope:`, each slice's `Goal`,
+  `Requirements` (each requirement line's text, verbatim), `Acceptance criteria` (each criterion's
+  text and `verify:` form), `Footprint` (the list joined by `, `), `Not in this slice`, `Depends
+  on` (`nothing`, or `Slice X, Slice Y`) and `Status: not started`, then the five ledger sections
+  scaffolded EMPTY. The `Constraints:` value is the constraint lines joined by `; `, then
+  `Assumed: ...` and `Open: ...` when the answer holds assumptions and open questions: the build
+  doc's form has no other field for them, and there the builder and the inspector see them.
+- **An existing doc is extended in place** where it lies: each slice of the answer is appended
+  after the last slice and before the ledger sections, or replaces the slice of the same name
+  where it stands; the answer's constraint, assumption and open-question texts not already in the
+  `Constraints:` line are added to it, and its out-of-scope lines not already listed are added
+  under `Out of scope:` (a one-item inline label becomes a list). The doc's title and `Intent:` line
+  are never rewritten from the answer. Every other byte stays as found, a heading the form does not
+  know included, and the doc's line ending is kept. A revised slice's section is replaced whole.
+- **Refused before anything is written:** a proposed doc that would change, drop or add to any
+  line under the five ledger sections, any `Status:` line of an existing slice, or any
+  `Plan: inspected` line stops the run `write-refused`, the lines quoted (so revising a slice whose
+  `Status:` is anything but `not started` is refused). A doc whose bytes changed after `harvest`
+  (edited by hand, or created by another run) stops `stale-harvest`. A target that is a link, or
+  whose folder resolves outside the workspace, stops `unsafe-path`. A rendered doc that departs
+  from its form (`templates.check`) beyond the findings the existing doc already had is a defect
+  of the script, exit 1.
+- **The receipt:** `receipt.json` in the run directory names every write (`path`, `kind`,
+  `sha256_before`, `sha256_after`); the doc is written through a temporary file and a rename.
+
+## 9. Own commands
+
+| Command | Does |
+|---|---|
+| `choose` | records the owner's pick among a hunt's `several` candidates: `--hunt`, `--path` (one of the listed candidates, exactly), `--words` (his words, verbatim, one line). Only after `select` and before `harvest`, and only on a `several` outcome; anything else is exit 2 with nothing written. Writes `chosen: {path, by: "owner", words}` into `selection-<hunt>.json`; the outcome stays `several`, so the result shows a pick the owner made, never the script |
+
+## 10. Report and the read-back
+
+`report` builds `result.json`, validates it against `references/result.schema.json` and the
+semantic checks (S1 to S4) before writing it, and prints it. `writes` lists every run artifact
+and the receipt's document write. `station_result`: `feature`, `doc`, `doc_action` (`created`,
+`extended`, `none`), `slices` (the slice sections the doc holds after the write, counted by the
+script), `slice_names`, `new_slices`, `open_questions` and `assumptions` (counted by the script
+from the answer), `questions_asked`, `scope_doc`, `architecture_doc`, `needs_build_doc`,
+`collapsed_gate`, `refused_lines` (on `write-refused`) and `readback`.
+
+`readback` is the `BLUEPRINT:` block rendered from the result, the station's own form:
+
+```text
+BLUEPRINT: <feature>
+Doc: <path>  ·  Slices: N  ·  Open questions: N  ·  Assumptions: N
+
+Slice <name> <dash> <short name>      (one line per slice the doc holds)
+
+Open: <each open question, one line each>
+Assumed: <each assumption, one line each>
+Next: build-v2 slice <the first slice of this run> when ready.
+```
+
+A report-only run says so under the `Doc:` line; a collapsed gate adds `Gate collapsed by the
+owner's words: <words>`; a stop renders `Stopped: <tag>` and its reason, and `no-build-doc`
+renders `No build doc: <why>` with the open questions and assumptions. The `SKILL NOTE:` line
+stays the executor's to add in chat.
+
+## 11. Report-only
+
+Every phase and `choose` read `report_only` from the run's input. In that mode nothing is written
+outside the run directory: `write` keeps the proposed doc as `proposed-build-doc.md` in the run
+directory and its receipt names what it would have written (`would_write`); the result says
+`wrote_nothing: true`. The run still selects, harvests, checks the answer and guards the protected
+lines, so what it would write is reported, not written.
+
+## 12. Stop tags
+
+| Tag | When |
+|---|---|
+| `selection-several` | shared: a hunt found several candidates and no `choose` settled it; listed, never picked |
+| `ledger-refused` | shared: the scope doc holds a line the ledger reader cannot tag; quoted |
+| `write-refused` | shared: the write would change a protected line (section 8); quoted, nothing written |
+| `no-build-doc` | own: the answer says this does not need a build doc; no file |
+| `stale-harvest` | own: the build doc's bytes changed after harvest; nothing written |
+| `unsafe-path` | own: the build doc's path is a link or leaves the workspace; nothing written |
+
+This core never emits `phase-not-built`, `selection-none` or `records-refused`.
+
+## 13. Records
+
+Records: none (E14-9). A fresh or extended build doc carries no finding and no card move, so
+blueprint-v2 writes no event and never opens the records component. Its tests read the component
+once, through the resolver and the CLI only (`import-legacy --dry-run` on a scratch copy, which
+writes nothing), to prove the importer reads the rendered doc; the station itself never does.
+
+## 14. Readers
+
+None. The station summons no reader: it builds no `readers` request, so no `authorized` flag ever
+arises, and `owner_word` in its input is carried and never read.
+
+## 15. The gate
+
+`report` is the last command. The executor posts the read-back and stops; it never starts the
+build. A collapsed gate in the owner's invocation ("blueprint it and build slice A") is the
+executor's to act on; the answer's `collapsed_gate.words` records that it was collapsed and by
+which words, and the script acts on nothing.
+
+## 16. Seeded families
+
+Facts only; the outcomes are in the answer key.
+
+| Family | What it drives | The facts |
+|---|---|---|
+| L1 traceability | the recorded answers against the case's scope doc: the shared refusals through the library, and (lane case L1-03) the real `record-answer` on the answer translated by renaming | `answer_refused`, `refusal_rules`, `answer_written`; `refusal_reason` (this core's own rule names) |
+| L2 the forms | the build doc's form and round trip; (lane case L2-02) a full run on a scratch copy of the case with one more slice | `form_holds`, `round_trip_identical`; `extended_in_place`, `protected_lines_identical`, `importer_reads` |
+| L3 document selection | `select` through the real CLI | `selection_outcome`, `selection_candidates` |
+
+`evals/seeded-cases/lane_observe.py` produces the lane facts; its docstring states the
+translation.
+
+## 17. Exit codes
+
+Station-loop section 2's, unchanged: 0 a phase did its work; 1 a defect; 2 usage (a missing
+argument, a file that is not there or not JSON, the wrong phase, a hunt not run, a `choose` that
+does not fit); 3 `jsonschema` missing; 4 an answer that fails its schema; 5 an answer refused on
+its content; 10 a terminal status.
+
+## 18. What this core never does
+
+It never judges a plan, never asks the owner anything itself, never opens the records component,
+never builds a reader request, never reads a v1 station's files or defers to one, never writes
+outside the run directory except the one build doc, never changes a protected line, never picks
+among several candidates, never calls a model, never touches the network, and never starts
+another station.
+
+## 19. Open points
+
+- The build doc's `Footprint:` is the template's one-line form (`Footprint: a, b`); `build-v2`'s
+  reader reads named paths only from a bulleted list under a bare `Footprint:` label, so it reads
+  no named paths from this line. The form is E14-12's and does not move here; the seam is
+  reported for the control room.
+- Assumptions and open questions live in the `Constraints:` line (section 8), the form offering
+  no other field before the ledger sections.
