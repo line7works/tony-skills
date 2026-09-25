@@ -151,6 +151,17 @@ class CheckInput(_Cli):
             code, out, err = self.cli(["check-input", path])
             self.assertEqual(code, 4, out + err)
 
+    def test_a_blank_or_invisible_owner_word_is_refused(self):
+        """Inspect's round 2 checker (CS-3): whitespace or invisibles only never authorize a row."""
+        for words in ("   ", u"\u200b", u"\ufeff \u3164", "\t\n"):
+            path = os.path.join(self.tmp, "input.json")
+            testlib.write_json(path, testlib.make_input(self.ws, self.run_dir, staging=self.staging,
+                                                        owner_word={"rows": ["gpt-astra"], "words": words}))
+            code, out, err = self.cli(["check-input", path])
+            self.assertEqual(code, 4, (repr(words), out, err))
+            self.assertIn("/owner_word/words", out)
+            self.assertFalse(os.path.exists(self.run_dir), "nothing created")
+
     def test_a_run_directory_already_used(self):
         self.checked()
         path = os.path.join(self.tmp, "input.json")
@@ -312,7 +323,9 @@ class OwnCommands(_Cli):
                        "[{'name': 'Thing', 'help': 'h', 'arguments': [], 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': None, 'handler': show}]",
                        "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--command']}], 'handler': show}]",
-                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['-c'], 'dest': 'skill_root'}], 'handler': show}]"):
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['-c'], 'dest': 'skill_root'}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a']}, {'flags': ['--a']}], 'handler': show}]",
+                       "[{'name': 'thing', 'help': 'h', 'arguments': [{'flags': ['--a'], 'colour': 'red'}], 'handler': show}]"):
             path = self.own_driver(source)
             code, out, err = self.run_own(path, ["--help"])
             self.assertNotEqual(code, 0, source)

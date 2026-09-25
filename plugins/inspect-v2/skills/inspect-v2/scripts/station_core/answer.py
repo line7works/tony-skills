@@ -41,6 +41,7 @@ detect a paraphrase; whether a reworded question re-asks a decided line is the e
 judge and the reader's to check (E14-4), never this module's.
 """
 import os
+import re
 
 from . import exits, fsio
 
@@ -54,9 +55,51 @@ def _refusal(rule, message, **where):
     return row
 
 
+_FIELD_SPLIT = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--)\\s+")
+# The decorations the four stations' forms put around a line's words (the class the quiet-upgrade rule must see
+# through; four escapes in slice 2, each behind one of these): a leading item label (`R2`, `AC1:`, `C3.`, `Q4`), a
+# trailing `(waits on: ...)` / `(parked: ...)` / `(assumed: ...)` parenthesis, a trailing ` <dash> <tag> (...)` or
+# ` <dash> <tag>: ...` ledger tail, and list bullets.
+_BULLET = re.compile(r"^[-*]\s+")
+_LABEL = re.compile(r"^(?:[A-Za-z]{1,4}\d{1,3}[.:]?)\s*(?:\u00b7|\u2014|\u2013|--|-|:)?\s*")
+_PAREN_TAIL = re.compile(r"\s*\((?:waits on|parked|assumed|decided|open)\b[^)]*\)\s*$", re.IGNORECASE)
+_TAG_TAIL = re.compile(u"\\s+(?:\u00b7|\u2014|\u2013|--|-)\\s+(?:decided|assumed|parked|open)\\b.*$", re.IGNORECASE)
+_INVISIBLE = re.compile(u"[\u200b\u200c\u200d\u2060\ufeff\u00ad\u3164\u2800\u2028\u2029\u0085\x0b\x0c]")
+
+
+def _fields(text):
+    """The whole fields of a `·`- or dash-separated line."""
+    return _FIELD_SPLIT.split(text)
+
+
 def _normalized(text):
-    """The text with its whitespace collapsed and its case folded, for the repeat check."""
-    return " ".join(text.split()).casefold()
+    """The text with invisibles dropped, its whitespace collapsed and its case folded, for the repeat check."""
+    return " ".join(_INVISIBLE.sub("", text).split()).casefold()
+
+
+def _bare(text):
+    """The words of a line with every known decoration stripped: bullets and item labels in front, the tag tail
+    and the parenthesised call behind."""
+    out = _INVISIBLE.sub("", text).strip()
+    out = _BULLET.sub("", out, count=1)
+    label = _LABEL.match(out)
+    if label and label.end() < len(out):
+        out = out[label.end():]
+    out = _TAG_TAIL.sub("", out)
+    out = _PAREN_TAIL.sub("", out)
+    out = out.rstrip(" .;,")
+    return " ".join(out.split()).casefold()
+
+
+def _forms(text):
+    """Every reading of a line's words the quiet-upgrade rule compares: the whole line, its bare words, and each
+    whole field of a dashed line, bare too."""
+    out = set([_normalized(text), _bare(text)])
+    for field in _fields(text):
+        if field.strip():
+            out.add(_normalized(field))
+            out.add(_bare(field))
+    return out
 
 
 def _shape(answer):
@@ -118,9 +161,9 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
         if isinstance(question_text, str):
             # the decided text asked again with its id left out of `touches` (round 3, finding 2);
             # a question that names the line is refused below, once
-            normalized = _normalized(question_text)
+            forms = _forms(question_text)
             for row in ledger_lines:
-                if (row["tag"] == "decided" and normalized == _normalized(row["text"])
+                if (row["tag"] == "decided" and forms & _forms(row["text"])
                         and row["id"] not in q.get("touches", [])):
                     refusals.append(_refusal("re-asked-decided", "question %s repeats a decided line's text: "
                                              "%r (%s); a decided line passes forward and is never asked again"
@@ -170,9 +213,12 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             # the same evasion by text (lane P's checker, CP1-1; lane L's round 2 checker, CS-4): a parked or
             # open line's words asserted as decided under another trace kind, OR under a ledger trace to some
             # other line, with no question of this run touching the parked or open line
-            normalized = _normalized(line["text"])
+            # every reading of the line's words (whole, bare of decorations, and each field) against every
+            # reading of the parked or open row's words (the Board window's BF pattern note: four escapes,
+            # each behind one decoration; the class is closed here, not the instance)
+            candidates = _forms(line["text"])
             for row in ledger_lines:
-                if (row["tag"] in ("parked", "open") and normalized == _normalized(row["text"])
+                if (row["tag"] in ("parked", "open") and candidates & _forms(row["text"])
                         and row["id"] not in touched and not (kind == "ledger" and ref == row["id"])):
                     refusals.append(_refusal("quietly-resolved", "the line %r is asserted as decided under a %s "
                                              "trace, but it is the %s ledger line %s and no question of this "
