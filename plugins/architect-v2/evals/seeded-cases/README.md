@@ -115,7 +115,9 @@ deliberately ill-formed; nothing in an answer or a `CASES.md` states an outcome.
 
 A list assertion is an exact list. A name the run has no fact for is omitted, never guessed. A location
 (`question_locations`, `raised_locations`) is `<file>:<line>` as the core writes it: the workspace-relative path
-of the document it names (`docs/plans/<date>-<topic>.md:10`), never a packet file name.
+of the document it names (`docs/plans/<date>-<topic>.md:10`), never a packet file name; a document outside the
+workspace (inspect-v2's code book, a staging scope doc) is named by the path the core resolves it at, as the core
+writes it into the log.
 
 ## Rules these cases were written under
 

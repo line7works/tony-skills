@@ -337,10 +337,15 @@ def check_commands(commands):
             raise ValueError("the handler of %r is not callable" % name)
         if not isinstance(own["arguments"], (list, tuple)):
             raise ValueError("the arguments of %r are not a list" % name)
+        seen_flags = set()
         for argument in own["arguments"]:
             if not isinstance(argument, dict):
                 raise ValueError("an argument of %r is not a mapping: %r" % (name, argument))
             flags = argument.get("flags")
+            for flag in flags or ():
+                if flag in seen_flags:
+                    raise ValueError("an argument flag of %r repeats: %r" % (name, flag))
+                seen_flags.add(flag)
             if not flags or not isinstance(flags, (list, tuple)):
                 raise ValueError("an argument of %r has no flags: %r" % (name, argument))
             for flag in flags:
@@ -348,6 +353,9 @@ def check_commands(commands):
                     raise ValueError("an argument flag of %r is not a flag: %r" % (name, flag))
                 if flag in COMMON_FLAGS:
                     raise ValueError("an argument of %r reuses the common option %r" % (name, flag))
+            unknown = set(argument) - ARGPARSE_KEYS
+            if unknown:
+                raise ValueError("an argument of %r carries keys argparse does not take: %s" % (name, ", ".join(sorted(unknown))))
             dest = argument.get("dest") or [f for f in flags if f.startswith("--")][:1] or [flags[0]]
             dest = (dest if isinstance(dest, str) else dest[0]).lstrip("-").replace("-", "_")
             if dest in RESERVED_DESTS:
@@ -357,14 +365,23 @@ def check_commands(commands):
 
 
 RESERVED_DESTS = ("command", "skill_root", "records_root", "help")
+ARGPARSE_KEYS = {"flags", "action", "nargs", "const", "default", "type", "choices", "required", "help",
+                 "metavar", "dest"}
 
 
 def check_handlers(handlers):
-    """A core's `HANDLERS` name lane phases only; a key outside them (a misspelling) is a defect."""
-    for phase in handlers or {}:
+    """A core's `HANDLERS` is a mapping of lane phase to a callable; a key outside the four phases (a
+    misspelling), a non-mapping, or a value that is not callable is a defect of the calling script."""
+    if handlers is None:
+        return {}
+    if not isinstance(handlers, dict):
+        raise ValueError("HANDLERS is a mapping of lane phase to handler, not %r" % type(handlers).__name__)
+    for phase, handler in handlers.items():
         if phase not in LANE_PHASES:
             raise ValueError("HANDLERS names %r, which is no lane phase (%s)" % (phase, ", ".join(LANE_PHASES)))
-    return handlers or {}
+        if not callable(handler):
+            raise ValueError("the handler of %r is not callable" % phase)
+    return handlers
 
 
 def main(station, hunts, handlers, argv=None, commands=None):

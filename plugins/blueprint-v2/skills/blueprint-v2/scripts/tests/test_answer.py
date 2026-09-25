@@ -188,6 +188,41 @@ class UntracedLine(_Answer):
         doc["questions"] = [{"id": "Q9", "text": "Which storage?", "touches": [parked["id"]], "answer": "none"}]
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
+    def test_the_quiet_upgrade_rule_sees_through_every_known_decoration(self):
+        """The class, not the instance (four escapes in slice 2): a label in front, a waits-on or parked
+        parenthesis behind, a tag tail behind, a bullet, invisibles, and the row itself decorated."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        words = opened["text"]
+        shapes = [u"R2 \u2014 %s" % words, "AC1: %s" % words, "Q7 %s" % words, "- %s" % words,
+                  "%s (waits on: the owner's call)" % words, "%s (parked: needs research)" % words,
+                  u"%s \u2014 decided (his words)" % words, u"%s \u00b7 parked: needs prototype" % words,
+                  u"%s\u200b" % words, u"R3 \u2014 %s (waits on: x)" % words]
+        allowed = ("ledger", "repo_path", "question", "owner_words")
+        for text in shapes:
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        # and a plain line whose words are NOT a parked or open row is untouched by the rule
+        doc = self.clean(); doc["lines"].append({"text": "R9 \u2014 a brand new requirement", "tag": "decided",
+                                                "trace": {"kind": "owner_words", "ref": "he said"}})
+        self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
+
+    def test_an_open_line_asserted_decided_as_one_field_of_a_dashed_line(self):
+        """CS-1 (lane A's round 2 checker): the open line's words as the decision field of a three-part line."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        for text in (u"storage \u2014 %s \u2014 one-way" % opened["text"], u"storage \u00b7 %s \u00b7 why" % opened["text"]):
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "his words"}},
+                                      allowed=("ledger", "repo_path", "question", "owner_words"))
+            self.assertEqual(rules, ["quietly-resolved"], text)
+
+    def test_an_open_line_asserted_decided_by_text_under_an_unrelated_ledger_trace(self):
+        """CS-4 (lane L's round 2 checker): the open line's words traced to some OTHER ledger id."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        other = [row for row in self.ledger if row["tag"] == "decided"][0]
+        rules = self.refused_rule({"text": opened["text"], "tag": "decided",
+                                   "trace": {"kind": "ledger", "ref": other["id"]}})
+        self.assertEqual(rules, ["quietly-resolved"])
+
     def test_a_repo_path_that_names_the_workspace_itself_or_git(self):
         """CS observation (lane L's checker): `.`, `./` and anything under `.git` are not traces."""
         for ref in (".", "./", ".git", ".git/HEAD", "src/.."):
