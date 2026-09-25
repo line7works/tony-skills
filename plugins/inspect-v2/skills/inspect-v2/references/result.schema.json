@@ -72,7 +72,7 @@
         "lane-down",
         "no-effective-model"
       ],
-      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`; and inspect-v2's own (references/inspect-v2-contract.md section 11): `build-doc-unreadable` (the one build doc selected cannot be read), `code-book-missing` (blueprint-v2's SKILL.md resolves by neither route), `model-changed` (a later `suggest` shows another model than the one the ask displayed; the run waits for the owner), `lane-down` (a lens call did not answer `ok`; nothing is triaged and the ask is re-asked), `no-effective-model` (a result carries no effective model; no stamp). A lane never reuses a shared tag for another meaning."
+      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`; and inspect-v2's own (references/inspect-v2-contract.md section 11): `build-doc-unreadable` (the one build doc selected cannot be read), `code-book-missing` (blueprint-v2's SKILL.md resolves by neither route), `model-changed` (a later `suggest` shows another model than the one the ask displayed; the run waits for the owner), `lane-down` (a lens call did not answer `ok`, or a call `request` built has no result; nothing is triaged, raised or stamped and the ask is re-asked), `no-effective-model` (a result carries no effective model; no stamp). A lane never reuses a shared tag for another meaning."
     },
     "reason": {
       "type": "string",

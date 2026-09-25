@@ -43,7 +43,9 @@ class Report(unittest.TestCase):
             ilib.finding("build-doc.md:99", claim="line 99 says the reset is required"),
             ilib.finding(None, claim="the plan reads long"),
             ilib.finding("build-doc.md:14", severity="QUESTION", claim="was the reset deferred on purpose")])
-        code, doc, out, err = self.go(fleet, bottom_line="Fix the footprint first.", hunted_and_held="slice order held")
+        adj = [ilib.adjudication("%s-code-book#1" % R), ilib.adjudication("%s-code-book#2" % R, "plausible", "likely")]
+        code, doc, out, err = self.go(fleet, bottom_line="Fix the footprint first.", hunted_and_held="slice order held",
+                                      adjudications=adj)
         self.assertEqual(code, 10, out + err)
         result = self.validate()
         self.assertEqual((result["status"], result["stop_tag"]), ("completed", None))

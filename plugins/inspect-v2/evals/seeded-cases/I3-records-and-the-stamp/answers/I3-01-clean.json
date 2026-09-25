@@ -13,5 +13,12 @@
   ],
   "role": "reader",
   "row": "gpt-astra",
+  "seeded_adjudications": [
+    {
+      "decision": "confirmed",
+      "finding": "run-gpt-astra#1",
+      "reason": "the seeded executor read build-doc.md:10: AC1 names no failure case, and a partial counter cannot be told apart"
+    }
+  ],
   "seeded_answer": 1
 }

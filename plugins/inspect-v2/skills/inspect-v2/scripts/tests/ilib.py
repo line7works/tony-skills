@@ -185,6 +185,11 @@ def answer(run_id, results, row="claude-session", lanes=None, session_id="sessio
     return doc
 
 
+def adjudication(finding_id, decision="confirmed", why="the executor read the cited line and the claim holds"):
+    """One executor adjudication (round 5, R1): `<call id>#<n>`, the decision and its reason."""
+    return {"finding": finding_id, "decision": decision, "why": why}
+
+
 def claude_fleet(run_id, traceability=(), code_book=(), repo_reality=(), model="claude-test-model"):
     return [reader_result("%s-traceability" % run_id, model=model, findings=traceability),
             reader_result("%s-code-book" % run_id, model=model, findings=code_book),

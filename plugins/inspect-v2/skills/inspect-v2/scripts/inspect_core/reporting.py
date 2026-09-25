@@ -124,8 +124,6 @@ def chat_block(run, result):
                      "questions for the owner, never blockers (the no-record rule).")
     if sr.get("construction_started"):
         lines.append("Note: construction already started on slice %s." % ", ".join(sr["construction_started"]))
-    if sr.get("lenses_not_run"):
-        lines.append("Lenses not run: %s." % ", ".join(sr["lenses_not_run"]))
     lines.append("Hunted and held: %s" % sr["hunted_and_held"])
     if sr["verdict"] == "APPROVED":
         lines.append("Next: build-v2 when ready.")

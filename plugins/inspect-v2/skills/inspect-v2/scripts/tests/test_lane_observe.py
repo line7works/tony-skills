@@ -17,6 +17,7 @@ import testlib
 SEEDED = os.path.join(testlib.PLUGIN, "evals", "seeded-cases")
 OBSERVE = os.path.join(SEEDED, "observe.py")
 FAMILIES = ("I1-primary-evidence", "I2-the-no-record-rule", "I3-records-and-the-stamp", "I4-no-v1-import")
+I3 = os.path.join(SEEDED, "I3-records-and-the-stamp")
 
 
 @unittest.skipIf(testlib.checkout_sibling("readers") is None or testlib.records_root() is None or
@@ -64,6 +65,69 @@ class TheLaneFacts(unittest.TestCase):
                     else:
                         self.assertNotIn("owner word", how, (row["case"], name))
         self.assertEqual(seen, set(FAMILIES) - {"I4-no-v1-import"} | ({"I4-no-v1-import"} & seen))
+
+
+@unittest.skipIf(testlib.checkout_sibling("readers") is None or testlib.records_root() is None or
+                 testlib.checkout_sibling("blueprint-v2") is None,
+                 "the installed shape: the lane drive needs records, readers and blueprint-v2 beside this core")
+class ThePlantedAdjudications(unittest.TestCase):
+    """Round 5, the control room's ruling on question 1: a seeded replay's translation copies a planted
+    `seeded_adjudications` list into the executor's `adjudications` as given (`reason` renamed `why`), a
+    renaming of the fixture, never an invented judgment; a case whose planted answer holds none still
+    stops at `record-answer` (exit 5, missing-adjudication) with its names pending. The stop is driven on
+    a synthetic copy of I3-01-clean with the list taken out, built under a temporary directory."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("planted-adj-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+
+    def built(self):
+        proc = subprocess.run([sys.executable, os.path.join(I3, "build.py"), "--out", self.tmp, "--case", "I3-01-clean"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=testlib.base_env())
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode())
+        case_dir = os.path.join(self.tmp, "I3-01-clean")
+        neutral = testlib.load_json(os.path.join(case_dir, "input.json"))
+        step = [s for s in testlib.load_json(os.path.join(case_dir, "drive.json"))["steps"] if s["kind"] == "lane"][0]
+        return case_dir, neutral, step
+
+    def observe(self, case_dir, neutral, step):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("lane_observe_under_test", os.path.join(SEEDED, "lane_observe.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        facts, via = {"_phases": [], "_errors": []}, {}
+        scratch = os.path.join(self.tmp, "scratch")
+        os.makedirs(scratch)
+        module.observe_lane(step, case_dir, neutral, facts, via, scratch)
+        return module, facts, via
+
+    def test_the_translation_copies_the_planted_list_as_given(self):
+        case_dir, neutral, step = self.built()
+        module, facts, via = self.observe(case_dir, neutral, step)
+        self.assertEqual(facts["_errors"], [])
+        self.assertEqual([(p["phase"], p["exit"]) for p in facts["_phases"]][-3:],
+                         [("record-answer", 0), ("write", 0), ("report", 10)])
+        for name in step["pending"]:
+            self.assertIn(name, facts)
+            self.assertIn("translation choice", via[name])
+        reader = testlib.load_json(os.path.join(case_dir, neutral["answer"]))
+        doc = module.translate(reader, {"calls": [{"call_id": "run-gpt-astra", "lens": "paper", "row": "gpt-astra"}]},
+                               "s")
+        self.assertEqual(doc["adjudications"], [{"finding": a["finding"], "decision": a["decision"], "why": a["reason"]}
+                                                for a in reader["seeded_adjudications"]])
+        self.assertNotIn("seeded_adjudications", doc["results"][0])
+
+    def test_a_planted_answer_with_no_list_still_stops_at_record_answer(self):
+        case_dir, neutral, step = self.built()
+        path = os.path.join(case_dir, neutral["answer"])
+        reader = testlib.load_json(path)
+        del reader["seeded_adjudications"]
+        testlib.write_json(path, reader)
+        module, facts, via = self.observe(case_dir, neutral, step)
+        self.assertEqual(facts["_errors"], [])
+        self.assertEqual([(p["phase"], p["exit"]) for p in facts["_phases"]][-1], ("record-answer", 5))
+        self.assertEqual([n for n in step["pending"] if n in facts], [])
+        self.assertNotIn("adjudications", module.translate(reader, None, "s"))
 
 
 if __name__ == "__main__":

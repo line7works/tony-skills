@@ -146,7 +146,8 @@ class TheGates(_Rec):
 
     def test_the_same_result_with_the_word_is_accepted(self):
         code, doc, out, err = self.record(self.outside_fleet(), row="gpt-astra",
-                                          input_extra={"owner_word": WORD}, owner_word=WORD)
+                                          input_extra={"owner_word": WORD}, owner_word=WORD,
+                                          adjudications=[ilib.adjudication("%s-gpt-astra#1" % R)])
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.triage()["calls"][0]["authorized"], True)
 
@@ -182,20 +183,22 @@ class Verify(_Rec):
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.triage()["counts"]["refuted"], 1)
 
-    def test_a_quote_the_line_carries_is_confirmed_one_it_does_not_is_refuted(self):
+    def test_a_quote_the_line_does_not_carry_is_refuted_one_it_carries_is_the_executors_to_judge(self):
+        # round 5, R1: a quote the line carries shows only that the text exists; the label is the adjudication
         fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12", quote="AC1"),
                                                 ilib.finding("build-doc.md:10", claim="R2 is wrong", quote="AC1")])
-        code, doc, out, err = self.record(fleet)
+        code, doc, out, err = self.record(fleet, adjudications=[ilib.adjudication("%s-code-book#1" % R)])
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
         self.assertEqual([(s["label"], s["location"]) for s in tri["survivors"]],
                          [("CONFIRMED", ilib.BUILD_REL + ":12")])
         self.assertEqual(tri["counts"]["refuted"], 1)
 
-    def test_no_quote_is_plausible_until_the_executor_confirms(self):
+    def test_the_label_is_the_executors_adjudication(self):
         fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12"),
                                                 ilib.finding("build-doc.md:13", claim="footprint misses a file")])
-        adj = [{"finding": "%s-code-book#2" % R, "decision": "confirmed", "why": "the footprint names no test data"}]
+        adj = [{"finding": "%s-code-book#1" % R, "decision": "plausible", "why": "likely, not shown"},
+               {"finding": "%s-code-book#2" % R, "decision": "confirmed", "why": "the footprint names no test data"}]
         code, doc, out, err = self.record(fleet, adjudications=adj)
         self.assertEqual(code, 0, out + err)
         labels = dict((s["location"], s["label"]) for s in self.triage()["survivors"])
@@ -249,7 +252,7 @@ class Verify(_Rec):
     def test_with_a_scope_doc_the_same_finding_is_a_blocker(self):
         fleet = ilib.claude_fleet(R, traceability=[ilib.finding("build-doc.md:10", severity="BLOCKER",
                                                                claim="R1 traces to nothing in the record")])
-        code, doc, out, err = self.record(fleet)
+        code, doc, out, err = self.record(fleet, adjudications=[ilib.adjudication("%s-traceability#1" % R)])
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
         self.assertEqual((tri["counts"]["blocker"], tri["verdict"], tri["weaker"]), (1, "REJECTED", False))
@@ -264,7 +267,7 @@ class Verify(_Rec):
     def test_two_lenses_on_one_line_and_claim_merge(self):
         one = ilib.finding("build-doc.md:12", quote="AC1")
         fleet = ilib.claude_fleet(R, traceability=[dict(one, severity="MINOR")], code_book=[one])
-        code, doc, out, err = self.record(fleet)
+        code, doc, out, err = self.record(fleet, adjudications=[ilib.adjudication("%s-code-book#1" % R)])
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
         self.assertEqual(len(tri["survivors"]), 1)
@@ -325,7 +328,8 @@ class WhereACitationMayPoint(_Rec):
         fleet = [ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", findings=[
             ilib.finding("code-book.md:1", claim="c1"), ilib.finding("scope-doc.md:3", claim="c2"),
             ilib.finding("build-doc.md:12", claim="c3")]), ilib.reader_result("%s-repo-reality" % R)]
-        code, doc, out, err = self.record(fleet, row="gpt-astra", input_extra={"owner_word": word}, owner_word=word)
+        code, doc, out, err = self.record(fleet, row="gpt-astra", input_extra={"owner_word": word}, owner_word=word,
+                                          adjudications=[ilib.adjudication("%s-gpt-astra#%d" % (R, n)) for n in (1, 2, 3)])
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
         self.assertEqual((len(tri["survivors"]), tri["counts"]["refuted"]), (3, 0))
@@ -448,7 +452,8 @@ class ALinkToTheRecordsLog(_Rec):
             ilib.finding("deep/x.txt:1", claim="c2", quote="finding_raised"),
             ilib.finding("hard-copy.jsonl:1", claim="c3", quote="finding_raised"),
             ilib.finding("src/turnstile.py:2", claim="c4", quote="return n + 1")])
-        code, doc, out, err = self._record(ilib.answer(R, fleet))
+        code, doc, out, err = self._record(ilib.answer(R, fleet, adjudications=[
+            ilib.adjudication("%s-repo-reality#4" % R)]))
         self.assertEqual(code, 0, out + err)
         tri = self.triage()
         self.assertEqual([s["location"] for s in tri["survivors"]], ["src/turnstile.py:2"])
@@ -479,6 +484,159 @@ class Stops(_Rec):
         self.assertIn("lane-unavailable", doc["reason"])
         self.assertIn("Workflow tool absent", doc["reason"])
         self.assertIn("re-ask", doc["reason"])
+
+
+class EveryKeptFindingCarriesTheExecutorsJudgment(_Rec):
+    """Round 5, R1 (F1): a matching citation establishes only that the cited text exists. Every outside
+    finding and every Claude-lane BLOCKER or MAJOR whose citation holds carries the executor's
+    adjudication before it survives; `record-answer` refuses a missing one (exit 5,
+    `missing-adjudication`) before any write, and CONFIRMED and PLAUSIBLE come only from it. An invalid
+    citation is still refuted mechanically and counted, a locationless concern is still excluded, and
+    the no-record rule still turns a traceability item into a QUESTION note, none of them adjudicated."""
+
+    FALSE = dict(claim="AC1 has no verify clause", quote="verify: new test at tests/test_turnstile.py")
+
+    def assert_missing(self, outcome, *finding_ids):
+        self.assert_refused("missing-adjudication", outcome)
+        named = sorted(r["finding"] for r in outcome[1]["refusals"] if r["rule"] == "missing-adjudication")
+        self.assertEqual(named, sorted(finding_ids), outcome[1])
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "triage.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.run.ws, "docs", "records")))
+        self.assertEqual(self.run.phase("write")[0], 2, "a refused answer leaves the run where it was")
+
+    def test_a_false_claim_quoting_a_real_line_is_refused_unadjudicated(self):
+        fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12", severity="BLOCKER", **self.FALSE)])
+        self.assert_missing(self.record(fleet), "%s-code-book#1" % R)
+
+    def test_a_claude_major_with_no_quote_is_refused_unadjudicated(self):
+        fleet = ilib.claude_fleet(R, traceability=[ilib.finding("build-doc.md:10")])
+        self.assert_missing(self.record(fleet), "%s-traceability#1" % R)
+
+    def test_an_outside_finding_of_every_severity_is_refused_unadjudicated(self):
+        findings = [ilib.finding("build-doc.md:12", severity=s, claim="c-%s" % s, quote="AC1")
+                    for s in ("BLOCKER", "MAJOR", "MINOR", "QUESTION")]
+        fleet = [ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", findings=findings),
+                 ilib.reader_result("%s-repo-reality" % R)]
+        outcome = self.record(fleet, row="gpt-astra", input_extra={"owner_word": WORD}, owner_word=WORD)
+        self.assert_missing(outcome, *["%s-gpt-astra#%d" % (R, n) for n in (1, 2, 3, 4)])
+
+    def test_the_refusal_names_every_missing_one_and_only_those(self):
+        fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12"),
+                                                ilib.finding("build-doc.md:13", claim="c2"),
+                                                ilib.finding("build-doc.md:13", claim="c3", severity="MINOR")])
+        outcome = self.record(fleet, adjudications=[ilib.adjudication("%s-code-book#1" % R)])
+        self.assert_missing(outcome, "%s-code-book#2" % R)
+
+    def test_confirmed_and_plausible_come_only_from_the_adjudication(self):
+        fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12", quote="AC1"),
+                                                ilib.finding("build-doc.md:13", claim="c2")])
+        adj = [ilib.adjudication("%s-code-book#1" % R, "plausible", "the quote is there; the claim is unproven"),
+               ilib.adjudication("%s-code-book#2" % R, "confirmed", "the footprint names no test data")]
+        code, doc, out, err = self.record(fleet, adjudications=adj)
+        self.assertEqual(code, 0, out + err)
+        labels = dict((s["location"], s["label"]) for s in self.triage()["survivors"])
+        self.assertEqual(labels, {ilib.BUILD_REL + ":12": "PLAUSIBLE", ilib.BUILD_REL + ":13": "CONFIRMED"})
+
+    def test_a_refuted_adjudication_drops_the_false_claim_and_counts_it(self):
+        fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12", severity="BLOCKER", **self.FALSE)])
+        adj = [ilib.adjudication("%s-code-book#1" % R, "refuted", "line 12 carries its verify clause")]
+        code, doc, out, err = self.record(fleet, adjudications=adj)
+        self.assertEqual(code, 0, out + err)
+        tri = self.triage()
+        self.assertEqual((tri["survivors"], tri["counts"]["refuted"], tri["verdict"]), ([], 1, "APPROVED"))
+
+    def test_what_needs_no_adjudication(self):
+        # an invalid citation (refuted mechanically), a locationless concern (excluded), a Claude MINOR
+        # (unverified), a Claude QUESTION (a note), and, with no scope doc, a traceability BLOCKER (the
+        # no-record rule's QUESTION note)
+        fleet = ilib.claude_fleet(R, traceability=[ilib.finding("build-doc.md:10", severity="BLOCKER", claim="t1")],
+                                  code_book=[ilib.finding("build-doc.md:99", severity="BLOCKER", claim="c1"),
+                                             ilib.finding(None, severity="MAJOR", claim="c2"),
+                                             ilib.finding("build-doc.md:13", severity="MINOR", claim="c3"),
+                                             ilib.finding("build-doc.md:14", severity="QUESTION", claim="c4")])
+        code, doc, out, err = self.record(fleet, scope=None)
+        self.assertEqual(code, 0, out + err)
+        c = self.triage()["counts"]
+        self.assertEqual((c["refuted"], c["locationless"], c["unverified"], c["questions"], c["blocker"]),
+                         (1, 1, 1, 2, 0))
+
+
+class TheWholeFleet(_Rec):
+    """Round 5, R2 (F2): a recorded fleet holds exactly one result for every call `request` built. A
+    missing call ends the run `lane-down`, names the missing call ids and re-asks; nothing is triaged,
+    raised or stamped. `lanes` is compared with the lenses of the BUILT requests, never the results."""
+
+    def assert_lane_down(self, outcome, *missing):
+        code, doc, out, err = outcome
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "lane-down"))
+        for call_id in missing:
+            self.assertIn(call_id, doc["reason"])
+        self.assertIn("re-ask", doc["reason"])
+        self.assertIsNone(doc["station_result"]["stamp"])
+        self.assertFalse(doc["station_result"]["stamp_written"])
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "triage.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.run.ws, "docs", "records")))
+        self.assertEqual(self.run.phase("write")[0], 2, "a stopped run writes nothing")
+
+    def test_one_result_of_three_is_lane_down(self):
+        self.assert_lane_down(self.record([ilib.reader_result("%s-traceability" % R)]),
+                              "%s-code-book" % R, "%s-repo-reality" % R)
+
+    def test_one_result_of_three_with_every_lane_listed_is_lane_down(self):
+        outcome = self.record([ilib.reader_result("%s-traceability" % R)],
+                              lanes=["code-book", "repo-reality", "traceability"])
+        self.assert_lane_down(outcome, "%s-code-book" % R, "%s-repo-reality" % R)
+
+    def test_an_outside_fleet_without_its_repo_reality_call_is_lane_down(self):
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model")
+        outcome = self.record([paper], row="gpt-astra", input_extra={"owner_word": WORD}, owner_word=WORD)
+        self.assert_lane_down(outcome, "%s-repo-reality" % R)
+
+    def test_lanes_are_the_built_requests_lenses(self):
+        outcome = self.record(ilib.claude_fleet(R), lanes=["code-book", "traceability"])
+        self.assert_refused("lanes-mismatch", outcome)
+        refusal = [r for r in outcome[1]["refusals"] if r["rule"] == "lanes-mismatch"][0]
+        self.assertIn("built", refusal["message"])
+
+    def test_the_whole_fleet_is_accepted(self):
+        code, doc, out, err = self.record(ilib.claude_fleet(R))
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.triage()["lenses_not_run"], [])
+
+
+class AnIncompleteLedger(_Rec):
+    """Round 5, R4 (F6): an incomplete ledger is not an empty ledger. When `harvest` refused a scope-doc
+    row (`ledger.refused`), `record-answer` refuses any question or asserted line (exit 5,
+    `ledger-incomplete`) before the shared check runs on what is left; a findings-only answer is still
+    recorded, so a malformed plan stays inspectable."""
+
+    SCOPE = ("# Scope\nIntent: counter\nDecisions:\n- keep dependency free \u2014 decided (owner)\n"
+             "- future color theme \u2014 parked (later)\nOpen:\n- budget\n")
+
+    def test_the_harvest_records_the_refused_row(self):
+        code, doc, out, err = self.record(ilib.claude_fleet(R), scope=self.SCOPE)
+        self.assertEqual(code, 0, out + err)
+        ledger = self.run.artifact("harvest.json")["ledger"]
+        self.assertEqual((ledger["lines"], len(ledger["refused"])), ([], 1))
+
+    def test_a_question_that_re_asks_a_decided_row_is_refused(self):
+        questions = [{"id": "Q1", "text": "keep dependency free", "touches": [], "answer": "yes"}]
+        outcome = self.record(ilib.claude_fleet(R), scope=self.SCOPE, questions=questions)
+        self.assert_refused("ledger-incomplete", outcome)
+        refusal = [r for r in outcome[1]["refusals"] if r["rule"] == "ledger-incomplete"][0]
+        self.assertIn("future color theme", refusal["message"])
+
+    def test_an_asserted_line_is_refused(self):
+        lines = [{"text": "a new decided line", "tag": "decided", "trace": {"kind": "repo_path", "ref": "README.md"}}]
+        self.assert_refused("ledger-incomplete", self.record(ilib.claude_fleet(R), scope=self.SCOPE, lines=lines))
+
+    def test_a_findings_only_answer_is_recorded(self):
+        fleet = ilib.claude_fleet(R, code_book=[ilib.finding("build-doc.md:12")])
+        code, doc, out, err = self.record(fleet, scope=self.SCOPE,
+                                          adjudications=[ilib.adjudication("%s-code-book#1" % R)])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.triage()["counts"]["major"], 1)
 
 
 class TheVerdictRule(unittest.TestCase):

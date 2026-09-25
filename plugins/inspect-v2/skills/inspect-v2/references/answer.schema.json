@@ -160,11 +160,11 @@
           "paper"
         ]
       },
-      "description": "the lenses that ran: `traceability`, `code-book`, `repo-reality` (the Claude lane's three) or `paper` (an outside row's one call for the two paper lenses) and `repo-reality`; record-answer refuses a list that is not the lenses of `results`"
+      "description": "the lenses of the calls this run's `request` built, every one of them: `traceability`, `code-book`, `repo-reality` (the Claude lane's three) or `paper` (an outside row's one call for the two paper lenses) and `repo-reality`; record-answer refuses a list that is not the built requests' lenses (lanes-mismatch), and a fleet with no result for a built call ends the run lane-down"
     },
     "adjudications": {
       "type": "array",
-      "description": "the executor's verify pass, one entry per finding it adjudicated. A finding is named `<call id>#<n>`, n its 1-based position in that result's findings. `confirmed` and `plausible` keep it with that label; `refuted` drops it and counts it; `question` turns it into a QUESTION note. An entry cannot keep a finding whose citation matches nothing in the packet.",
+      "description": "the executor's verify pass, one entry per finding it adjudicated. A finding is named `<call id>#<n>`, n its 1-based position in that result's findings. `confirmed` and `plausible` keep it with that label (the only source of either label); `refuted` drops it and counts it; `question` turns it into a QUESTION note. Every outside finding and every Claude-lane BLOCKER and MAJOR whose citation holds needs an entry (record-answer refuses a missing one, missing-adjudication), unless the no-record rule makes it a QUESTION note by itself. An entry cannot keep a finding whose citation matches nothing in the packet.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -342,7 +342,7 @@
         "quote": {
           "type": "string",
           "minLength": 1,
-          "description": "the cited text, when the reply quotes it: a citation whose line carries it verifies CONFIRMED, one whose line does not is refuted",
+          "description": "the cited text, when the reply quotes it: a citation whose line does not carry it is refuted; one whose line carries it shows only that the text exists, and its label is still the executor's adjudication",
           "pattern": "\\S"
         }
       }

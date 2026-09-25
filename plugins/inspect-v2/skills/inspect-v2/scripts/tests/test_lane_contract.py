@@ -115,7 +115,9 @@ class TheContractAndTheCode(unittest.TestCase):
         rules = table_names(section("7. record-answer"))
         for rule in ("independence", "session-mismatch", "run-mismatch", "row-mismatch",
                      "owner-word-mismatch", "lanes-mismatch", "duplicate-call", "field-separator",
-                     "unknown-finding", "refuted-citation", "unauthorized-send"):
+                     "unknown-finding", "refuted-citation", "unauthorized-send",
+                     # round 5, R1 and R4
+                     "missing-adjudication", "ledger-incomplete"):
             self.assertIn(rule, rules)
 
     def test_the_family_table_is_whole_and_the_translation_paragraph_follows_it(self):
@@ -126,7 +128,7 @@ class TheContractAndTheCode(unittest.TestCase):
         families = [lines[i].split("|")[1].strip()[:2] for i in rows[2:]]
         self.assertEqual(families, ["I1", "I2", "I3", "I4"])
         after = "\n".join(lines[rows[-1] + 1:])
-        self.assertIn("Two translation choices of `lane_observe.py`", after)
+        self.assertIn("Three translation choices of `lane_observe.py`", after)
 
     def test_the_raw_copy_and_the_packet_files_are_stated_as_built(self):
         # round 3, R1 and R2: the request's raw_path is the one source; every packet file maps

@@ -4,12 +4,17 @@ In this order, each step checked before the next:
 
 1. **Checks before any write.** The build doc still holds the bytes `harvest` read (else stop
    `write-refused`, nothing written); the stamp, every QUESTION line and the clean line render
-   through `station_core/templates.py` and parse back to themselves (else `write-refused`).
+   through `station_core/templates.py` and parse back to themselves (else `write-refused`); and the
+   records head, read now through the component's CLI (`events`), is the head `harvest` pinned (round
+   5, R3), on every run, a clean run's stamp included: a head that moved means another writer
+   reviewed this doc since, so the stop is `records-refused` with no append, no stamp, no document
+   write and no mirror.
 2. **The records** (only when a finding survived): one `finding_raised` event per surviving
    finding, `raised_by` the effective model of the call that found it, `slice` the slice whose
    section holds the cited build-doc line (`plan` for any other line), `source` the workspace's
    identity as the component computes it; appended through `records.py append` with
-   `--expect-head` the head `harvest` pinned. A head that moved, or any other refusal, is the stop
+   `--expect-head` the head `harvest` pinned (kept beside step 1's read: the component checks it
+   again at the append itself). A head that moved, or any other refusal, is the stop
    `records-refused` with the component's own sentence. Then `records.py render --run-id` gives the
    block text. The station never writes a finding line of its own, and never a clear.
 3. **The build doc**, one atomic rewrite of insertions only: at the punch list's tail (the
@@ -196,9 +201,6 @@ def mirror_text(harvest, triage, date, render_text, own_lines, stamp):
                                 "none %s no-record rule applied" % D),
              "Refuted: %d" % triage["counts"]["refuted"],
              "Stamp: %s" % stamp]
-    if triage.get("lenses_not_run"):
-        lines.append("Lenses not run: %s (a short fleet: this run is weaker than a whole one)"
-                     % ", ".join(triage["lenses_not_run"]))
     body = "\n".join(lines) + "\n"
     if render_text:
         body += render_text
@@ -253,6 +255,7 @@ def handler(ctx, args):
                "head_after": harvest["records"]["head"], "appended": 0}
     render_text = ""
     progress = run.checkpoint.setdefault("write_progress", {})
+    _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records)
     if triage["findings"]:
         try:
             if not progress.get("appended"):
@@ -304,6 +307,30 @@ def handler(ctx, args):
     run.save()
     return ctx.emit(ctx.envelope(next="report", run_id=run.input["run_id"], stamp=stamp, records=records,
                                  mirror=mirror, questions=questions, clean_line=clean))
+
+
+def _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records):
+    """Round 5, R3: before any workspace write, on every run (a clean run's stamp included), read the
+    build doc's records head through the component's CLI and compare it with the head `harvest` pinned
+    (or, on a `write` resumed after this run's own append, the head that append reported). A head that
+    moved, or a refused read, ends the run `records-refused`: no append, no stamp, no document write,
+    no mirror."""
+    expected = progress["appended"]["head"] if progress.get("appended") else harvest["records"]["head"]
+    try:
+        now = client.events(ws, rel).get("head")
+    except RecordsRefusal as refusal:
+        common.write(run, "write.json", {"stamp": None, "stamp_written": False, "records": records,
+                                         "mirror": None, "refused": refusal.body})
+        reporting.finish(ctx, run, "stopped", "records-refused",
+                         records_link.refusal_sentence(refusal, "reading the records head before any write"))
+    if now != expected:
+        common.write(run, "write.json", {"stamp": None, "stamp_written": False, "records": records,
+                                         "mirror": None, "refused": {"head_pinned": expected, "head_now": now}})
+        reporting.finish(ctx, run, "stopped", "records-refused",
+                         "the records head of %s is %s, not the head %s this run pinned at harvest: another writer "
+                         "appended to the doc's log since (a conflict), so this inspection is stale. Nothing was "
+                         "written: no append, no stamp, no document, no mirror. Run inspect-v2 again on the doc "
+                         "and its log as they are now" % (rel, now, expected))
 
 
 def banner_raw_copies(run):

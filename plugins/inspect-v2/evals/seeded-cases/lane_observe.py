@@ -20,7 +20,8 @@ drive of this core did, never from what a case expects; `via` says how each fact
              before it builds anything, on the case's `packet/` directory as the station would hand
              it to `request`.
 
-Two translation choices, never facts of a case (the control room's rulings R3 and R4 of round 2):
+Three translation choices, never facts of a case (the control room's rulings R3 and R4 of round 2,
+and R2 of round 5):
 
     rule 10     the recorded answer requires `hunted_and_held` and `bottom_line` (v1's anti-rubber-stamp
                 line is mandatory, every run); a seeded replay carries neither, so `translate` supplies
@@ -30,6 +31,22 @@ Two translation choices, never facts of a case (the control room's rulings R3 an
                 outside row (`gpt-astra`), so the drive's input and answer carry an `owner_word` naming
                 that row with a one-line quotation (WORDS below), exactly as an owner's answer at the
                 ask would. A case whose neutral input carries its own `owner_word` keeps it unchanged.
+    the fleet   a recorded fleet holds one result for every call `request` built (round 5, R2); a
+                seeded replay carries one reader's result, so `translate` supplies each other built
+                call's result with no finding, the call's own id and row, and the replayed reader's
+                effective model (the stamp names the paper calls' one model, so the supplied paper
+                call carries the same). No fact is read from a supplied result: it adds nothing to
+                the findings, the questions or the stamp's model.
+
+Adjudications are copied, never supplied (round 5, R1 and the control room's ruling on the round's
+question 1). Every outside finding and every Claude-lane BLOCKER and MAJOR whose citation holds
+carries the executor's adjudication before it survives. A planted answer that holds a
+`seeded_adjudications` list has it copied into the executor's `adjudications` as given, each entry's
+`finding` and `decision` unchanged and its `reason` renamed `why` (a renaming of the fixture); the
+key never rides into the reader's result. A planted answer that holds none gets none, so a case
+whose answer holds such a finding is refused at `record-answer` (exit 5, `missing-adjudication`)
+and its lane names stay pending: the refusal is the fact, and a judgment the fixture does not carry
+is never invented.
 
 The fact names are the neutral vocabulary of `README.md`: `refused_at_request`, `packet_files`,
 `question_locations`, `blocker_count`, `no_record_noted`, `raised_locations`, `refuted_count`,
@@ -82,6 +99,8 @@ class Drive(object):
         self.run_dir = os.path.join(scratch, "run")
         self.trail = []
         self.supplied_word = None   # the owner word this drive supplied, a translation choice
+        self.supplied_calls = []    # the built calls whose results this drive supplied, a translation choice
+        self.copied_adjudications = []   # the planted adjudications this drive copied, by finding id
         station = {"row": row} if row else {}
         self.input = {"input_version": 1, "run_id": RUN_ID, "workspace": neutral["workspace"],
                       "run_dir": self.run_dir, "report_only": bool(neutral.get("report_only")),
@@ -125,7 +144,15 @@ class Drive(object):
 
     def via(self, what):
         """How the facts were observed: the phases this drive actually ran, in order, and, when this
-        drive supplied the owner word (a translation choice, never a fact of the case), that word."""
+        drive supplied the owner word or other calls' results (translation choices, never facts of the
+        case), which."""
+        if self.copied_adjudications:
+            what += "; translation choice: the planted seeded_adjudications (%s) copied as the executor's " \
+                    "adjudications, reason renamed why" % ", ".join(self.copied_adjudications)
+        if self.supplied_calls:
+            what += "; translation choice: the results of %s supplied with no finding, because a recorded " \
+                    "fleet holds one result per built call and the case replays one reader" \
+                    % ", ".join(self.supplied_calls)
         if self.supplied_word:
             what += "; translation choice: the owner word %r for the row %s, supplied by the translation " \
                     "because the case's neutral input carries none" % (self.supplied_word["words"],
@@ -156,19 +183,27 @@ def outside_word(row):
 
 
 def translate(reader, requests, session_id, owner_word=None):
-    """The neutral reader answer as this core's answer: a renaming, plus the two translation choices
-    of the module docstring (the rule 10 sentences, the owner word of an outside row)."""
-    lens_of = dict((c["call_id"], c["lens"]) for c in (requests or {}).get("calls", []))
+    """The neutral reader answer as this core's answer: a renaming, plus the three translation choices
+    of the module docstring (the rule 10 sentences, the owner word of an outside row, the other built
+    calls' results with no finding)."""
+    calls = (requests or {}).get("calls", [])
+    lens_of = dict((c["call_id"], c["lens"]) for c in calls)
     result = {"call_id": reader.get("call_id"), "row": reader.get("row"),
               "effective_model": reader.get("effective_model"),
               "findings": [dict((k, f.get(k)) for k in ("severity", "location", "claim", "scenario", "confidence"))
                            for f in reader.get("findings") or []]}
-    lanes = [lens_of[result["call_id"]]] if result["call_id"] in lens_of else []
+    results = [result] + [{"call_id": c["call_id"], "row": c["row"], "effective_model": reader.get("effective_model"),
+                           "findings": []} for c in calls if c["call_id"] != result["call_id"]]
+    lanes = sorted(set(lens_of[r["call_id"]] for r in results if r["call_id"] in lens_of))
     doc = {"answer_version": 1, "run_id": RUN_ID, "session_id": session_id, "questions": [], "lines": [],
-           "row": reader.get("row"), "lanes": lanes, "results": [result],
+           "row": reader.get("row"), "lanes": lanes, "results": results,
            "hunted_and_held": HUNTED, "bottom_line": BOTTOM}
     if owner_word:
         doc["owner_word"] = owner_word
+    planted = reader.get("seeded_adjudications")
+    if planted:
+        doc["adjudications"] = [{"finding": a.get("finding"), "decision": a.get("decision"), "why": a.get("reason")}
+                                for a in planted]
     return doc
 
 
@@ -210,6 +245,8 @@ def observe_run(step, case_dir, neutral, facts, via, scratch):
     if code == 0:
         answer = translate(reader, drive.artifact("requests.json"), drive.input["invocation"]["session_id"],
                            drive.input.get("owner_word"))
+        drive.supplied_calls = [r["call_id"] for r in answer["results"][1:]]
+        drive.copied_adjudications = [a["finding"] for a in answer.get("adjudications") or []]
         path = os.path.join(scratch, "answer.json")
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(answer, fh)

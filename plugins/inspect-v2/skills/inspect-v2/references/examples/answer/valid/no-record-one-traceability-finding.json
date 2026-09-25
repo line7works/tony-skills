@@ -3,6 +3,8 @@
   "bottom_line": "The plan holds one real defect. Fix it, then build.",
   "hunted_and_held": "the slice order and the ledger scaffold held",
   "lanes": [
+    "code-book",
+    "repo-reality",
     "traceability"
   ],
   "lines": [],
@@ -27,6 +29,18 @@
           "severity": "BLOCKER"
         }
       ],
+      "row": "claude-session"
+    },
+    {
+      "call_id": "run-0003-code-book",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session"
+    },
+    {
+      "call_id": "run-0003-repo-reality",
+      "effective_model": "claude-example-model",
+      "findings": [],
       "row": "claude-session"
     }
   ],

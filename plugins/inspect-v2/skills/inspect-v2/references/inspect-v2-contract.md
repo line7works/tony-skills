@@ -274,8 +274,10 @@ Inspect the build doc per the packet's instructions and report every finding.
 ```
 
 **The ask, the lane-down rule and a changed model.** One paper inspector per run; an answer naming
-several lanes is several runs, each with its own run id. A call whose result is not `ok` stops the
-run `lane-down` (section 7): nothing from the lane is triaged and the ask is re-asked; the lane the
+several lanes is several runs, each with its own run id. A call whose result is not `ok`, or a
+call `request` built that no result answers (round 5, R2: a recorded fleet holds exactly one result
+for every call built), stops the run `lane-down` (section 7): the stop names the down and missing
+call ids, nothing from the lane is triaged, raised or stamped, and the ask is re-asked; the lane the
 owner then names runs as a fresh run. When the ask displayed a model for the row
 (`station.displayed_model`), `request` needs this run's later `readers suggest` output
 (`--suggest`) and stops `model-changed` when it shows another model for that row: the send goes
@@ -288,9 +290,10 @@ out under the model the owner saw, or waits for his word.
 `reason`, `raw_path`, `isolation`, `parity`, and `findings`, each `severity`, `location`, `claim`,
 `scenario`, `confidence`, optional `lens` and `quote`). The executor's fields: the shared
 `answer_version`, `run_id`, `session_id`, `questions`, `lines`; then `row`, `owner_word` (only for
-an outside row), `lanes` (the lenses that ran), `adjudications` (per finding `<call id>#<n>`:
-`confirmed`, `plausible`, `refuted` or `question`, each with its why), `hunted_and_held` and
-`bottom_line`.
+an outside row), `lanes` (the lenses of the calls `request` built, every one of them),
+`adjudications` (per finding `<call id>#<n>`: `confirmed`, `plausible`, `refuted` or `question`,
+each with its why: the executor's verify pass, required for every verified finding whose citation
+holds, round 5, R1), `hunted_and_held` and `bottom_line`.
 
 Three layers, in order: the schema (exit 4); the shared E14-11 refusals through
 `station_core/answer.py` `check`, with the scope doc's ledger lines (exit 5); this core's own rules
@@ -305,10 +308,12 @@ Three layers, in order: the schema (exit 4); the shared E14-11 refusals through
 | `owner-word-mismatch` | an owner word on a Claude row, or one that differs from the input's |
 | `independence` | a result whose `call_id` is null (a finding with no reader call id has no reader), or a call id this run's `request` never built |
 | `duplicate-call` | two results for one call |
-| `lanes-mismatch` | `lanes` is not the set of lenses the results came from |
+| `lanes-mismatch` | `lanes` is not the set of lenses of the calls this run's `request` BUILT (round 5, R2: compared with the built requests, never with the results, so a short fleet cannot declare itself whole by listing fewer lenses). A fleet that misses a built call is not refused here: it is recorded and ends the run `lane-down` |
 | `field-separator` | a claim, scenario or location holding a line break or the ` · ` separator, or an effective model a stamp cannot carry |
 | `unknown-finding` | an adjudication naming no finding of the results, or one already adjudicated |
 | `refuted-citation` | an adjudication keeping (`confirmed`, `plausible`) a finding whose citation matches nothing |
+| `missing-adjudication` | a verified finding (every outside finding of every severity, every Claude-lane BLOCKER and MAJOR) whose citation holds and which the no-record rule does not itself make a QUESTION note carries no adjudication (round 5, R1). A matching citation establishes only that the cited text exists; the claim is the executor's to judge (E14-4), so the script never labels a finding by itself. Each refusal names the finding id. Not applied to a run that ends `lane-down` or `no-effective-model`, where nothing is triaged |
+| `ledger-incomplete` | `harvest` refused a scope-doc row (`ledger.refused`) and the answer carries any question or any asserted line (round 5, R4): an incomplete ledger is not an empty one, so the decided-line guard cannot vouch for either. The refusal quotes the refused rows. A findings-only answer (`questions` and `lines` both empty) is still recorded, so a plan with a malformed scope doc stays inspectable |
 | `unauthorized-send` | a status-`ok` result of an outside row's paper call whose request was built without `authorized` (the input's `owner_word` names no such row): readers sends nothing for an outside row until the owner names it, so such a result was never sent under the rule, and nothing of it is raised or stamped under that row's name. The refusal names the call and the row. A result whose status is not `ok` (readers refused the unauthorized send) is not refused here: it ends the run `lane-down` |
 
 Once the answer is written and before anything is triaged, the banner goes on top of each outside
@@ -322,8 +327,9 @@ sits at the base, and the banner is idempotent, so an earlier run's bannered cop
 is. `banner.json` names each write with its hashes, `write`'s receipt
 opens with them, and a run that stops here or at any later tag names them in its result and leaves
 no bare copy. Never in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
-of refusing the answer: any result whose `status` is not
-`ok` (stop `lane-down`, its status and reason in the stop's sentence), and any result with a null
+of refusing the answer: any result whose `status` is not `ok`, or any call `request` built with no
+result (stop `lane-down`: each down call's status and reason, and each missing call id, in the
+stop's sentence; nothing triaged, raised or stamped; the owner re-asked), and any result with a null
 `effective_model`, or paper calls that report more than one (stop `no-effective-model`, no stamp).
 
 **The mechanical pass** (`inspect_core/verify.py`), written to `triage.json`:
@@ -338,15 +344,21 @@ of refusing the answer: any result whose `status` is not
   none of those, a packet file this packet does not hold (`scope-doc.md` in a no-record run,
   `no-record.md` beside a scope doc, for every lens), a line is past the end, or every cited line
   is blank; and, when the finding quotes the cited text (`quote`), when no cited line carries it.
+  A citation that holds establishes only that the cited text exists, never that the claim is true
+  (round 5, R1).
 - Every citation is checked, and one that matches nothing is refuted and counted, whatever the
   severity and whoever found it: every finding raised into the records log, and every QUESTION
   line, names a place in the workspace (ruling R5). Verified, in v1's sense: every outside finding
   of every severity; every Claude-lane BLOCKER and MAJOR; any finding the executor keeps by
-  adjudication. A Claude-lane MINOR whose citation holds passes UNVERIFIED: its claim is nobody's to
-  confirm.
+  adjudication. A verified finding whose citation holds survives only with the executor's
+  adjudication (`record-answer` refuses a missing one, `missing-adjudication`), except where the
+  no-record rule makes it a QUESTION note by itself (nothing in a missing record can be verified).
+  A Claude-lane MINOR whose citation holds passes UNVERIFIED: its claim is nobody's to confirm.
 - A finding with a null location never reaches the result (`locationless`, counted).
-- Labels: CONFIRMED when the quote was found or the executor adjudicated `confirmed`; PLAUSIBLE
-  otherwise (the citation holds and no one confirmed the claim).
+- Labels: CONFIRMED when the executor adjudicated `confirmed`; PLAUSIBLE when he adjudicated
+  `plausible` (round 5, R1: the labels come from the adjudication and from nothing else; a quote
+  the cited line carries is never a confirmation); UNVERIFIED for a Claude-lane MINOR he did not
+  keep by adjudication.
 - QUESTION notes: every finding of severity QUESTION; every finding the executor adjudicates
   `question`; under the no-record rule every finding of the traceability lens (and every
   paper-call finding marked `lens: traceability`); and every finding, of any lens and severity,
@@ -373,12 +385,20 @@ In this order, each step checked before the next (`inspect_core/writing.py`):
 1. **Before any write.** The build doc still holds the bytes `harvest` read, else stop
    `write-refused` and nothing is written; the stamp, every QUESTION line and the clean line are
    rendered by `station_core/templates.py` (`render_stamp`, `render_question`, `render_clean`,
-   forms from `references/templates/inspect-lines.md`) and must parse back to themselves.
+   forms from `references/templates/inspect-lines.md`) and must parse back to themselves; and the
+   records head, read now through the component's CLI (`records.py events`), must be the head
+   `harvest` pinned (round 5, R3), on every run, a run with no surviving finding and a clean stamp
+   included. A head that moved means another writer appended to the doc's log since this run read
+   it, so the inspection is stale: the stop is `records-refused`, naming both heads, with no append,
+   no stamp, no document write and no mirror. (A read the component refuses is the same stop with
+   its sentence.) The raw copies' banner is the one earlier write, at `record-answer`, and it is not
+   held to this read: it marks an unverified reader's copy on every run, a stop included.
 2. **The records,** only when a finding survived: one `finding_raised` per surviving finding
    (`ledger_doc` the build doc, `slice`, `severity`, `location`, `claim`, `scenario`, `raised_by`
    the effective model of the call that found it, `actor.station` `inspect-v2`, `origin` native,
    `source` the workspace identity from `records.py identity`), appended in one batch through
-   `records.py append --expect-head <the head harvest pinned>`. A head that moved, or any refusal,
+   `records.py append --expect-head <the head harvest pinned>`, kept beside step 1's read so the
+   component checks the head again at the append itself. A head that moved there, or any refusal,
    is the stop `records-refused` carrying the component's own sentence; the build doc is left as
    found. Then `records.py render --run-id <run id>` gives the text of the review blocks, one per
    slice (`### <date> — review: Slice <X>`).
@@ -396,7 +416,7 @@ In this order, each step checked before the next (`inspect_core/writing.py`):
    triage (section 7); its writes open the receipt.
 5. **The verdict mirror** `docs/reviews/<YYYY-MM-DD>-inspect-<feature>.md` (`-2`, `-3` on a
    same-day repeat, never an overwrite): the verdict, the scope doc, the refuted count, the stamp,
-   the lenses not run on a short fleet (section 15, point 4), the block's bytes as rendered, the
+   the block's bytes as rendered, the
    station's lines, what was hunted and held, and the bottom line; then `records.py mirrors` is
    asked and its answer kept whole, verbatim, as `mirror.answer` (section 15, point 2).
 
@@ -415,7 +435,7 @@ documents, `authorized`), the calls with their effective models and statuses, th
 questions, the refutations, the stamp and whether it was written, the records (`log`,
 `head_before`, `head_after`, `appended`), the mirror (its path, whether `mirrors` lists it, and
 the component's answer whole), `hunted_and_held`, `bottom_line`, the slices already under
-construction, the lenses not run, and the chat block, v1's read-back, with one line added after
+construction, the lenses not run (empty on every completed run since a short fleet is `lane-down`), and the chat block, v1's read-back, with one line added after
 `INSPECT:`, `Selected:`, naming the doc taken, its home and tier, how it was taken, and any doc
 another tier matched by filename (v1: "the verdict says which doc it took"):
 
@@ -461,11 +481,11 @@ A stop is `status: stopped` with one tag. The shared tags keep their station-loo
 | `selection-several` | a hunt found several and no `choose` settled them |
 | `ledger-refused` | never: an untaggable scope-doc line is quoted under `ledger.refused` and the plan is still inspected (section 15, point 3) |
 | `write-refused` | the build doc changed after `harvest`, or a rendered line would not read back, or the composed doc would change a line; nothing is written to the doc |
-| `records-refused` | the records component refused (`events` at harvest, `identity`, `append`, `render` at write); its sentence carried |
+| `records-refused` | the records component refused (`events` at harvest or before any write, `identity`, `append`, `render` at write), its sentence carried; or the head `write` reads before any write is not the head `harvest` pinned (round 5, R3), both heads named: no append, no stamp, no document, no mirror |
 | `build-doc-unreadable` | the one build doc selected cannot be read as UTF-8 text |
 | `code-book-missing` | blueprint-v2's `SKILL.md` resolves by neither route |
 | `model-changed` | the later `suggest` shows another model for the row than the ask displayed |
-| `lane-down` | a lens call's result is not `ok`: nothing triaged, the ask re-asked |
+| `lane-down` | a lens call's result is not `ok`, or a call `request` built has no result (round 5, R2; the missing call ids named): nothing triaged, raised or stamped, the ask re-asked |
 | `no-effective-model` | a result carries no effective model, or the paper calls report more than one: nothing raised, no stamp |
 
 ## 12. The records
@@ -496,11 +516,18 @@ Facts each family proves, never outcomes (the outcomes are in an answer key no b
 | I3 records and the stamp | an outside reader's answer: a citation inside the doc, one past its end, a result with no effective model | `raised_locations`, `refuted_count`, `stamp_written`, `stamp_model`, `terminal_status` |
 | I4 no v1 import | a planted v1 reference in a scratch copy of this core | the frame's `v1_findings_present` |
 
-Two translation choices of `lane_observe.py`, never facts of a case: a seeded replay carries no
+Three translation choices of `lane_observe.py`, never facts of a case: a seeded replay carries no
 `hunted_and_held` and no `bottom_line`, so the translation supplies one neutral sentence for each;
 the I3 cases' neutral input carries no owner word while their answers come from `gpt-astra`, so the
 drive's input and answer carry an `owner_word` naming that row with a one-line quotation, as an
-owner's answer at the ask would. The facts' `_via` names the supplied owner word as that choice.
+owner's answer at the ask would; and a seeded replay carries one reader's result while a recorded
+fleet holds one per built call (round 5, R2), so the translation supplies each other built call's
+result with no finding, its own call id and row, and the replayed reader's effective model. The
+facts' `_via` names each supplied owner word and supplied call as that choice. The translation never
+invents an adjudication (round 5, R1): a planted `seeded_adjudications` list is copied into the
+executor's `adjudications` as given (`reason` renamed `why`, named in `_via`), and a case whose
+reader answer holds a verified finding with a holding citation and no planted list is refused at
+`record-answer` (`missing-adjudication`), its lane names staying pending, the refusal being the fact.
 
 ## 15. Open points
 
@@ -516,12 +543,20 @@ owner's answer at the ask would. The facts' `_via` names the supplied owner word
 3. **An untaggable scope-doc line does not stop the run.** Quoted, never dropped or guessed, under
    `harvest.json`'s `ledger.refused`; v1 inspects a plan whatever its record's form, and the
    traceability lens reads the scope doc's bytes.
-4. **A fleet recorded short completes, and says so.** `record-answer` refuses a `lanes` list that is
-   not the lenses of the results, but it does not refuse results that cover fewer lenses than
-   `request` built: the run completes, `lenses_not_run` names the missing lenses in the result and
-   the chat block. v1 treats a failed lens as a lane that is down (kept here as `lane-down`); a lens
-   whose result was never recorded is not a status readers reports. The seeded families' recorded
-   answers (I2, I3) carry one reader's result each, so refusing a short fleet would refuse every
-   seeded replay. Whether a short fleet should stop the run is the owner's call. A short fleet is
-   never silent: `lenses_not_run` names the missing lenses in the result, the chat block and the
-   verdict mirror (ruling R1 of round 2).
+4. **A fleet recorded short is `lane-down`** (round 5, R2, the control room's ruling on this point,
+   superseding round 2's R1). A recorded fleet holds exactly one result for every call `request`
+   built; a missing call ends the run `lane-down`, names the missing call ids and re-asks the owner,
+   and nothing is triaged, raised or stamped. `lanes` is compared with the built requests' lenses,
+   never with the results. A seeded single-reader replay supplies the other built calls' results
+   (section 14). `lenses_not_run` stays in the result's `station_result` and is empty on every run
+   that completes.
+5. **An incomplete ledger authorizes nothing** (round 5, R4). Point 3 keeps a malformed plan
+   inspectable; it does not make the refused rows vanish from the decided-line guard. With
+   `ledger.refused` non-empty, `record-answer` refuses any question or asserted line
+   (`ledger-incomplete`) and records a findings-only answer.
+6. **The executor adjudicates, the script counts** (round 5, R1). Before round 5 a quote the cited
+   line carried labelled a finding CONFIRMED by itself; that was the script judging a claim
+   (E14-4). Now every verified finding whose citation holds carries the executor's adjudication, and
+   the labels come from it. A seeded replay carries the adjudications its planted answer holds
+   (`seeded_adjudications`, copied as given); one that holds none is refused at `record-answer`, and
+   the translation never supplies one.

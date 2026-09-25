@@ -8,9 +8,15 @@ The script never judges a finding (ruling E14-4). What it does is mechanical and
   log is read through the component only). `<file>:<line>` or `<file>:<line>-<line>`; the file must be one
   the packet holds (or, for repo reality, a regular file inside the workspace), every cited line
   must exist, and at least one must carry text. A citation that matches nothing is a refutation,
-  counted, never raised. When the finding quotes the cited text (`quote`), a line that carries it
-  is CONFIRMED and one that does not is a refutation; with no quote the finding is PLAUSIBLE until
-  the executor's adjudication says `confirmed`.
+  counted, never raised. When the finding quotes the cited text (`quote`), a line that does not
+  carry it is a refutation. A citation that holds establishes only that the cited text exists,
+  never that the claim is true (round 5, R1).
+- **The executor's adjudication decides the label** (round 5, R1; ruling E14-4: the script does the
+  mechanics, the executor judges). Every finding that is verified (below) and whose citation holds
+  carries an adjudication (`confirmed`, `plausible`, `refuted` or `question`, with its why) before
+  it survives; `record-answer` refuses a missing one (`missing-adjudication`, `unadjudicated`
+  here). CONFIRMED and PLAUSIBLE come from that adjudication and from nothing else: a quote the
+  line carries is never a confirmation.
 - **Which findings are verified** (v1): every outside finding, every severity; every Claude-lane
   BLOCKER and MAJOR. A Claude-lane MINOR or QUESTION passes UNVERIFIED (v1: "Claude-lane MINORs
   pass through unverified"): its claim is nobody's to confirm, but its citation is still checked,
@@ -22,7 +28,9 @@ The script never judges a finding (ruling E14-4). What it does is mechanical and
   BLOCKER; so does any finding of severity QUESTION, and any the executor adjudicates `question`.
   A finding citing `no-record.md` (the NO RECORD line itself) is a QUESTION whatever its lens,
   written `no-scope-doc:<line>`: every packet file maps to the document it stands for (`translate`),
-  and one that stands for none (a file the packet does not hold, an unknown name) is refuted.
+  and one that stands for none (a file the packet does not hold, an unknown name) is refuted. The
+  rule's QUESTION notes (`mechanical_question`) need no adjudication: nothing in a missing record
+  can be verified, which is why the rule makes them questions.
 - **Dedupe** on location and claim (whitespace collapsed, case folded): one finding, the highest
   severity, the call ids that converged on it listed once.
 - **The verdict** is arithmetic over the surviving severities (v1's mapping, signoff-v2's
@@ -45,6 +53,10 @@ LOCATION = re.compile(r"^(?P<file>[^:\s][^:]*?):(?P<start>\d+)(?:\s*[-\u2013]\s*
 ORDER = {"BLOCKER": 3, "MAJOR": 2, "MINOR": 1, "QUESTION": 0}
 LABEL_ORDER = {"CONFIRMED": 2, "PLAUSIBLE": 1, "UNVERIFIED": 0}
 SEP = " · "
+
+
+class UnadjudicatedFinding(Exception):
+    """A verified finding reached triage without the executor's adjudication: a defect, never a label."""
 
 
 def verdict(findings):
@@ -181,6 +193,52 @@ def check_citation(finding, lens_dir, lens, workspace, documents=None):
     return True, None, where
 
 
+def outside_call(lens, packet):
+    """Whether a call is an outside row's (its paper call; its repo-reality call is a Claude lane)."""
+    return packet["provider"] != common.ANTHROPIC and lens == "paper"
+
+
+def verified(finding, lens, packet):
+    """v1's verify set: every outside finding of every severity, every Claude-lane BLOCKER and MAJOR."""
+    return outside_call(lens, packet) or finding["severity"] in ("BLOCKER", "MAJOR")
+
+
+def mechanical_question(finding, lens, where, no_record):
+    """Whether the no-record rule makes this finding a QUESTION note by itself: it cites the NO RECORD
+    line (`no-record.md`), or, with no scope doc, it is a traceability item."""
+    absent = where["kind"] == "packet" and where["file"] == "no-record.md"
+    return absent or (no_record and (lens == "traceability" or
+                                     (lens == "paper" and finding.get("lens") == "traceability")))
+
+
+def unadjudicated(answer, requests, harvest, packet, workspace):
+    """Round 5, R1: the ids (`<call id>#<n>`) of every finding that must carry the executor's
+    adjudication and carries none: a verified finding (`verified`) with a location whose citation holds
+    and names a document of this run, and which the no-record rule does not turn into a QUESTION note by
+    itself. An invalid citation (refuted mechanically) and a locationless concern (excluded) need none.
+    Only results of calls this run built are read."""
+    built = dict((c["call_id"], c) for c in requests["calls"])
+    dir_of = dict((d["lens"], d["dir"]) for d in packet["dirs"])
+    judged = set(a["finding"] for a in answer.get("adjudications") or [])
+    out = []
+    for result in answer["results"]:
+        call = built.get(result["call_id"])
+        if call is None:
+            continue
+        for index, f in enumerate(result["findings"], 1):
+            fid = "%s#%d" % (result["call_id"], index)
+            if fid in judged or not (f.get("location") or "").strip() or not verified(f, call["lens"], packet):
+                continue
+            ok, _, where = check_citation(f, dir_of.get(call["lens"]), call["lens"], workspace, carried(call))
+            if not ok or translate(where, harvest) is None:
+                continue
+            if mechanical_question(f, call["lens"], where, harvest["no_record"]):
+                continue
+            out.append({"finding": fid, "call_id": result["call_id"], "severity": f["severity"],
+                        "location": f["location"], "outside": outside_call(call["lens"], packet)})
+    return out
+
+
 def carried(call):
     """The packet files a call's request carried, or None for the paper call (its `packet.md` holds
     all three numbered documents)."""
@@ -226,7 +284,6 @@ def triage(answer, requests, harvest, packet, workspace):
     lens_of = dict((c["call_id"], c["lens"]) for c in requests["calls"])
     docs_of = dict((c["call_id"], carried(c)) for c in requests["calls"])
     dir_of = dict((d["lens"], d["dir"]) for d in packet["dirs"])
-    outside = packet["provider"] != common.ANTHROPIC
     adjudications = dict((a["finding"], a) for a in answer.get("adjudications") or [])
     no_record = harvest["no_record"]
     survivors, questions, refuted, locationless = [], [], [], []
@@ -244,9 +301,7 @@ def triage(answer, requests, harvest, packet, workspace):
                 # null or blank: a concern without location never reaches the result
                 locationless.append({"finding": fid, "claim": f["claim"]})
                 continue
-            outside_call = outside and lens == "paper"
-            checked = outside_call or f["severity"] in ("BLOCKER", "MAJOR") or \
-                (adj is not None and adj["decision"] in ("confirmed", "plausible"))
+            checked = verified(f, lens, packet) or (adj is not None and adj["decision"] in ("confirmed", "plausible"))
             ok, why, where = check_citation(f, dir_of.get(lens), lens, workspace, docs_of[call_id])
             if not ok:
                 # a citation that matches nothing is refuted and counted, whatever the severity: nothing
@@ -264,9 +319,8 @@ def triage(answer, requests, harvest, packet, workspace):
                 refuted.append({"call_id": call_id, "finding": fid, "location": location,
                                 "why": "the executor refuted it: %s" % adj["why"]})
                 continue
-            to_question = absent or f["severity"] == "QUESTION" or \
-                (adj is not None and adj["decision"] == "question") or \
-                (no_record and (lens == "traceability" or (lens == "paper" and f.get("lens") == "traceability")))
+            to_question = mechanical_question(f, lens, where, no_record) or f["severity"] == "QUESTION" or \
+                (adj is not None and adj["decision"] == "question")
             if to_question:
                 if absent:
                     # the finding cites the NO RECORD line itself: a question naming the scope doc's absence,
@@ -283,12 +337,12 @@ def triage(answer, requests, harvest, packet, workspace):
                 continue
             if not checked:
                 label = "UNVERIFIED"
-            elif adj is not None and adj["decision"] == "confirmed":
-                label = "CONFIRMED"
-            elif adj is not None and adj["decision"] == "plausible":
-                label = "PLAUSIBLE"
+            elif adj is not None and adj["decision"] in ("confirmed", "plausible"):
+                # round 5, R1: the label is the executor's adjudication, never a quote the line carries
+                label = adj["decision"].upper()
             else:
-                label = "CONFIRMED" if f.get("quote") is not None else "PLAUSIBLE"
+                raise UnadjudicatedFinding("%s reached triage verified and unadjudicated: record-answer refuses "
+                                           "that (missing-adjudication) before anything is triaged" % fid)
             survivors.append({"severity": f["severity"], "label": label, "location": location, "claim": f["claim"],
                               "scenario": f["scenario"], "slice": slice_of(where, harvest), "raised_by": model,
                               "call_id": call_id, "converged": [call_id], "finding_id": None})

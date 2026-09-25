@@ -26,6 +26,9 @@ NEEDS = testlib.checkout_sibling("blueprint-v2") is None or testlib.records_root
     testlib.checkout_sibling("readers") is None
 R = "run-0001"
 MODEL = "claude-test-model"
+# round 5, R1: a verified finding survives only with the executor's adjudication
+CB1 = [ilib.adjudication("%s-code-book#1" % R)]
+GPT1 = [ilib.adjudication("%s-gpt-astra#1" % R)]
 
 
 @unittest.skipIf(NEEDS, "the installed shape: no blueprint-v2, records or readers beside this core")
@@ -62,7 +65,7 @@ class TheRecords(_Write):
             ilib.finding("build-doc.md:12", quote="AC1"),
             ilib.finding("build-doc.md:5", severity="MINOR", claim="the dashboard reason is thin",
                          scenario="a later reader cannot tell why")])
-        code, doc, out, err = self.go(fleet)
+        code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         body = self.events()
         raised = [r["event"] for r in body["results"] if r["event"]["kind"] == "finding_raised"]
@@ -76,7 +79,7 @@ class TheRecords(_Write):
 
     def test_the_block_is_renders_text_at_the_punch_list_tail(self):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
-        code, doc, out, err = self.go(fleet)
+        code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         text = self.doc_text()
         rendered = self.render()["text"]
@@ -88,7 +91,7 @@ class TheRecords(_Write):
 
     def test_a_head_that_moved_since_harvest_is_records_refused(self):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
-        self.go(fleet, last="record-answer")
+        self.go(fleet, last="record-answer", adjudications=CB1)
         before = testlib.sha256_file(os.path.join(self.ws, ilib.BUILD_REL))
         other = {"v": 1, "kind": "finding_raised", "at": "2026-09-25T11:00:00Z", "ledger_doc": ilib.BUILD_REL,
                  "slice": "A", "severity": "MINOR",
@@ -105,10 +108,114 @@ class TheRecords(_Write):
         code, doc, out, err = self.run.phase("write")
         self.assertEqual(code, 10, out + err)
         self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "records-refused"))
-        self.assertIn("exit 7", doc["reason"])
+        # round 5, R3: the head read before any write refuses it first; the append's own --expect-head
+        # stays behind it (TheHeadIsReadBeforeAnyWrite)
+        self.assertIn(body["head"], doc["reason"])
+        self.assertIn("pinned at harvest", doc["reason"])
         self.assertIn("conflict", doc["reason"])
         self.assertEqual(testlib.sha256_file(os.path.join(self.ws, ilib.BUILD_REL)), before)
         self.assertFalse(doc["station_result"]["stamp_written"])
+
+
+class TheHeadIsReadBeforeAnyWrite(_Write):
+    """Round 5, R3 (F4): before any workspace write, a clean run's stamp included, `write` reads the
+    records head through the component's CLI and compares it with the head `harvest` pinned; a head
+    that moved ends the run `records-refused` with no stamp, no mirror, no document write and no
+    append. A finding run's append keeps `--expect-head` as well."""
+
+    OTHER = {"v": 1, "kind": "finding_raised", "at": "2026-09-25T11:00:00Z", "ledger_doc": ilib.BUILD_REL,
+             "slice": "A", "severity": "MINOR",
+             "location": {"raw": ilib.BUILD_REL + ":8", "file": ilib.BUILD_REL, "line": 8, "line_end": None,
+                          "tag": None, "more": [], "resolved": True},
+             "claim": "competing review", "scenario": "head advanced", "raised_by": "other-reader",
+             "actor": {"station": "other-station", "run_id": "other-run", "harness": None},
+             "origin": {"kind": "native"}, "source": {"known": False}}
+
+    def compete(self):
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [self.OTHER])
+        code, body, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                            "--events", events, "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+        return body["head"]
+
+    def assert_refused_whole(self, fleet, **extra):
+        self.assertEqual(self.go(fleet, last="record-answer", **extra)[0], 0)
+        pinned = self.run.artifact("harvest.json")["records"]["head"]
+        moved = self.compete()
+        digest = testlib.tree_digest(self.ws)
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "records-refused"))
+        self.assertIn(moved, doc["reason"])
+        self.assertIn(str(pinned), doc["reason"])
+        self.assertEqual(testlib.tree_digest(self.ws), digest, "no stamp, no mirror, no document, no append")
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "reviews")))
+        self.assertIsNone(doc["station_result"]["stamp"])
+        self.assertFalse(doc["station_result"]["stamp_written"])
+        self.assertEqual([w for w in doc["writes"] if w["kind"] != "run_artifact"], [])
+        return doc
+
+    def test_a_clean_run_whose_head_moved_writes_nothing(self):
+        self.assert_refused_whole(ilib.claude_fleet(R, model=MODEL))
+
+    def test_a_question_only_run_whose_head_moved_writes_nothing(self):
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:14", severity="QUESTION",
+                                                                          claim="was the reset deferred")])
+        self.assert_refused_whole(fleet)
+
+    def test_a_finding_run_whose_head_moved_appends_nothing(self):
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12")])
+        self.assert_refused_whole(fleet, adjudications=[ilib.adjudication("%s-code-book#1" % R)])
+        kinds = [(r["event"]["kind"], r["event"]["claim"]) for r in self.events()["results"]]
+        self.assertEqual(kinds, [("finding_raised", "competing review")])
+
+    def shim(self):
+        """A copy of this checkout's records component whose CLI logs its argv, then runs the real one."""
+        import shutil
+        root = os.path.join(self.tmp, "shim", "records")
+        shutil.copytree(testlib.records_root(), root,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "fixtures"))
+        scripts = os.path.join(root, "scripts")
+        os.rename(os.path.join(scripts, "records.py"), os.path.join(scripts, "records_real.py"))
+        testlib.write_text(os.path.join(scripts, "records.py"), "\n".join([
+            "import json, os, runpy, sys",
+            "sys.dont_write_bytecode = True",
+            "HERE = os.path.dirname(os.path.abspath(__file__))",
+            "with open(os.path.join(os.path.dirname(HERE), 'argv.log'), 'a') as fh:",
+            "    fh.write(json.dumps(sys.argv[1:]) + '\\n')",
+            "sys.argv[0] = os.path.join(HERE, 'records_real.py')",
+            "runpy.run_path(sys.argv[0], run_name='__main__')", ""]))
+        return root
+
+    def logged(self, root):
+        import json
+        with open(os.path.join(root, "argv.log"), encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def test_the_head_is_read_through_the_cli_and_the_append_keeps_expect_head(self):
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12")])
+        self.assertEqual(self.go(fleet, last="record-answer",
+                                 adjudications=[ilib.adjudication("%s-code-book#1" % R)])[0], 0)
+        pinned = self.run.artifact("harvest.json")["records"]["head"]
+        root = self.shim()
+        code, doc, out, err = self.run.phase("write", "--records-root", root)
+        self.assertEqual(code, 0, out + err)
+        calls = [argv[0] for argv in self.logged(root)]
+        self.assertIn("events", calls)
+        self.assertIn("append", calls)
+        self.assertLess(calls.index("events"), calls.index("append"), calls)
+        append = [argv for argv in self.logged(root) if argv[0] == "append"][0]
+        self.assertEqual(append[append.index("--expect-head") + 1], pinned)
+
+    def test_a_clean_run_reads_the_head_too(self):
+        self.assertEqual(self.go(ilib.claude_fleet(R, model=MODEL), last="record-answer")[0], 0)
+        root = self.shim()
+        code, doc, out, err = self.run.phase("write", "--records-root", root)
+        self.assertEqual(code, 0, out + err)
+        calls = [argv[0] for argv in self.logged(root)]
+        self.assertIn("events", calls)
+        self.assertNotIn("append", calls)
 
 
 class TheStationsOwnLines(_Write):
@@ -137,7 +244,7 @@ class TheStationsOwnLines(_Write):
         prior = "Plan: inspected 2026-09-01 by an-older-model · 1 BLOCKER · 0 MAJOR · 0 MINOR"
         build = ilib.BUILD_DOC.replace("declined in the scope doc\n", "declined in the scope doc\n%s\n" % prior)
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:14", quote="Footprint")])
-        code, doc, out, err = self.go(fleet, build=build)
+        code, doc, out, err = self.go(fleet, build=build, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         stamps = self.stamp_lines()
         self.assertEqual(stamps, [prior, "Plan: inspected %s by %s · 0 BLOCKER · 1 MAJOR · 0 MINOR"
@@ -167,7 +274,7 @@ class TheStationsOwnLines(_Write):
 
     def test_no_status_line_and_no_verdict_word_is_written(self):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", severity="BLOCKER", quote="AC1")])
-        code, doc, out, err = self.go(fleet)
+        code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         text = self.doc_text()
         self.assertEqual([l for l in text.splitlines() if l.startswith("Status:")], ["Status: not started"])
@@ -222,7 +329,7 @@ class TheMirrorAndTheReceipt(_Write):
 
     def test_the_mirror_holds_the_block_and_mirrors_is_asked(self):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
-        code, doc, out, err = self.go(fleet)
+        code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         mirror = os.path.join(self.ws, "docs", "reviews", "%s-inspect-turnstile.md" % ilib.TODAY)
         self.assertTrue(os.path.isfile(mirror))
@@ -236,7 +343,7 @@ class TheMirrorAndTheReceipt(_Write):
     def test_the_mirrors_answer_is_kept_verbatim(self):
         # CI1-6: the component's `mirrors` answer is kept whole, never only a derived word
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
-        code, doc, out, err = self.go(fleet)
+        code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         code, body, err = ilib.records_cli(["mirrors", "--workspace", self.ws, "--doc", ilib.BUILD_REL])
         self.assertEqual(code, 0, err)
@@ -260,7 +367,7 @@ class TheMirrorAndTheReceipt(_Write):
     def test_the_receipt_names_every_write_with_its_hashes(self):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
         before = hashlib.sha256(ilib.BUILD_DOC.encode("utf-8")).hexdigest()
-        code, doc, out, err = self.go(fleet)
+        code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
         writes = dict((w["path"], w) for w in self.run.artifact("receipt.json")["writes"])
         path = os.path.join(self.ws, ilib.BUILD_REL)
@@ -273,7 +380,7 @@ class TheMirrorAndTheReceipt(_Write):
 
     def test_a_doc_edited_after_harvest_is_write_refused_and_left_as_found(self):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
-        self.go(fleet, last="record-answer")
+        self.go(fleet, last="record-answer", adjudications=CB1)
         path = os.path.join(self.ws, ilib.BUILD_REL)
         testlib.write_text(path, testlib.read_text(path) + "an edit by hand\n")
         before = testlib.sha256_file(path)
@@ -345,7 +452,7 @@ class TheBannerBeforeTriage(_Write):
         paper.update(paper_extra or {})
         fleet = [paper] + ([ilib.reader_result("%s-repo-reality" % R, model=MODEL)] if with_repo else [])
         path = os.path.join(self.tmp, "answer.json")
-        testlib.write_json(path, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD))
+        testlib.write_json(path, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD, adjudications=GPT1))
         return self.run.phase("record-answer", "--answer", path)
 
     def assert_bannered(self):
@@ -378,16 +485,16 @@ class TheBannerBeforeTriage(_Write):
         self.assertEqual(doc["stop_tag"], "no-effective-model")
         self.assert_bannered()
 
-    def test_a_short_fleet_is_named_in_the_mirror_the_result_and_the_chat(self):
+    def test_a_short_fleet_is_lane_down_and_leaves_the_copy_bannered(self):
+        # round 5, R2: a recorded fleet holds one result per built call; a missing one is lane-down,
+        # nothing triaged, raised or stamped, and the raw copy keeps its banner
         code, doc, out, err = self.recorded(with_repo=False)
-        self.assertEqual(code, 0, out + err)
-        self.assertEqual(self.run.phase("write")[0], 0)
-        code, doc, out, err = self.run.phase("report")
         self.assertEqual(code, 10, out + err)
-        self.assertEqual(doc["station_result"]["lenses_not_run"], ["repo-reality"])
-        self.assertIn("Lenses not run: repo-reality", doc["chat"])
-        mirror = testlib.read_text(os.path.join(self.ws, "docs", "reviews", "%s-inspect-turnstile.md" % ilib.TODAY))
-        self.assertIn("Lenses not run: repo-reality", mirror)
+        self.assertEqual(doc["stop_tag"], "lane-down")
+        self.assertIn("%s-repo-reality" % R, doc["reason"])
+        self.assert_bannered()
+        self.assertFalse(doc["station_result"]["stamp_written"])
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "records")))
 
 
 class TheRequestsRawPathIsTheOneSource(_Write):
@@ -417,7 +524,7 @@ class TheRequestsRawPathIsTheOneSource(_Write):
         paper.update(paper_extra or {})
         fleet = [paper, ilib.reader_result("%s-repo-reality" % R, model=MODEL)]
         path = os.path.join(self.tmp, "answer.json")
-        testlib.write_json(path, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD))
+        testlib.write_json(path, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD, adjudications=GPT1))
         return self.run.phase("record-answer", "--answer", path)
 
     def assert_bannered(self, path=None):
@@ -544,7 +651,7 @@ class TheWholeFamilyIsBannered(_Write):
         paper.update(paper_extra or {})
         fleet = [paper, ilib.reader_result("%s-repo-reality" % R, model=MODEL)]
         answer = os.path.join(self.tmp, "answer.json")
-        testlib.write_json(answer, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD))
+        testlib.write_json(answer, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD, adjudications=GPT1))
         return self.run.phase("record-answer", "--answer", answer)
 
     def family(self, upto):
@@ -670,7 +777,7 @@ class ReportOnly(_Write):
         self.go(fleet, report_only=True, last="request")
         ws_digest = testlib.tree_digest(self.ws)
         path = os.path.join(self.tmp, "answer.json")
-        testlib.write_json(path, ilib.answer(R, fleet))
+        testlib.write_json(path, ilib.answer(R, fleet, adjudications=CB1))
         self.assertEqual(self.run.phase("record-answer", "--answer", path)[0], 0)
         code, doc, out, err = self.run.phase("write")
         self.assertEqual(code, 0, out + err)

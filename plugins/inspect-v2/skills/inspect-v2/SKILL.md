@@ -126,10 +126,10 @@ each call's `READERS:` line and result JSON. An outside call's raw copy lands at
 `raw_path` under `docs/reviews/`; `record-answer` prepends the banner to it before anything is
 triaged, whether or not the result names it, a stopped run included. Read it; never edit it.
 
-**The lane-down rule.** A `READERS:` status other than `ok` on any call of the fleet means the lane
-cannot run: record the answer with that status and reason (the run stops `lane-down`, nothing
-triaged), report it, and re-ask. The lane he names runs as a fresh run. Never substitute a lane,
-never retry without his word.
+**The lane-down rule.** A `READERS:` status other than `ok` on any call, or a built call with no
+result, means the lane cannot run: record the answer with every result you have (the run stops
+`lane-down`, naming the calls; nothing triaged, raised or stamped), report it, and re-ask. The lane
+he names runs as a fresh run. Never substitute a lane, never retry without his word.
 
 ## Step 4: Verify and adjudicate
 
@@ -141,19 +141,22 @@ uv run scripts/inspect_v2.py record-answer --run-dir D --answer <answer.json>
 ```
 
 It carries `session_id` (the adapter's `answer_fields.session_id`, typed by no one), `run_id`,
-`row` (and `owner_word` for an outside row, as the input carried it), `lanes`, `questions` you put
-to the owner this run (none re-asking a decided scope line), and `results`: one per call, copied
-from its `READERS:` line and reply: `call_id`, `row`, `effective_model`, `status`, `raw_path`,
-`isolation`, `parity`, and every finding the reader reported (`severity`, `location` as the
-reader cited it, `claim`, `scenario`, `confidence`, `quote` when the reader quoted the line, `lens`
-when an outside reply says which paper lens). A concern without a location goes in with a null
+`row` (and `owner_word` for an outside row, as the input carried it), `lanes` (every lens the script
+built a call for), `questions` you put to the owner this run (none re-asking a decided scope line;
+none at all, and no `lines`, when `harvest` refused a scope-doc row: `ledger-incomplete`), and
+`results`: one per call the script built, copied from its `READERS:` line and reply: `call_id`,
+`row`, `effective_model`, `status`, `raw_path`, `isolation`, `parity`, and every finding the reader
+reported (`severity`, `location` as the reader cited it, `claim`, `scenario`, `confidence`, `quote`
+when the reader quoted the line, `lens` when an outside reply says which paper lens). A concern without a location goes in with a null
 location; it never reaches the verdict.
 
 Verify every BLOCKER and MAJOR, and every outside finding of any severity, against the cited
 lines yourself, and record each verdict in `adjudications` (`<call id>#<n>`: `confirmed`,
-`plausible`, `refuted` or `question`, each with its why). The script refutes, mechanically, every
-citation that matches nothing in the numbered packet, and turns untraceable items into questions
-when there is no scope doc; it never keeps a refuted citation on your word. Dedupe is the
+`plausible`, `refuted` or `question`, each with its why). A holding citation shows only that the text
+exists: without your adjudication such a finding is refused (`missing-adjudication`, exit 5), and
+CONFIRMED and PLAUSIBLE are your words, never the script's. The script refutes every citation that
+matches nothing in the numbered packet, and turns untraceable items into questions when there is no
+scope doc; it never keeps a refuted citation on your word. Dedupe is the
 script's. Always add `hunted_and_held` (what the inspectors attacked that held up) and `bottom_line`
 (two or three sentences: the plan's state and what to do next): rule 10, every run; an answer
 without them is refused (exit 4). An outside row's result is accepted only when this run's input
@@ -169,8 +172,8 @@ uv run scripts/inspect_v2.py write --run-dir D
 uv run scripts/inspect_v2.py report --run-dir D
 ```
 
-`write` raises each surviving finding in the records component (`raised_by` the reader's effective
-model), places the component's rendered block at the punch list's tail with the station's QUESTION
+`write` stops `records-refused`, writing nothing, when the records head moved since `harvest`.
+Then it raises each surviving finding in the records component (`raised_by` the reader's effective model), places the component's rendered block at the punch list's tail with the station's QUESTION
 lines, or the clean line on a clean run, writes the stamp `Plan: inspected <date> by <model> ·
 <counts>` by v1's placement rule, and files the verdict mirror under `docs/reviews/`. `report`
 validates the result and prints the chat block. Print it, add nothing a script did not say, and stop.
