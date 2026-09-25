@@ -2,10 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://line7.works/schemas/station-v2/input.schema.json",
   "title": "front core input (shared base)",
-  "description": "The one validated input document of a front core's run (station-loop.md section 4). The shared base the four front cores start from; each core's lane adds its own fields under `station`, and nothing else. Every object is closed: an unknown key is refused, never ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code (station_core/inputs.py): the workspace and the staging home are existing absolute directories, and the run directory is absolute and lies inside neither.",
+  "description": "The one validated input document of a front core's run (station-loop.md section 4). The shared base the four front cores start from; each core's lane adds its own fields under `station`, and nothing else; inspect-v2's are `row`, `model`, `displayed_model` and `session_model`. Every object is closed: an unknown key is refused, never ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code (station_core/inputs.py): the workspace and the staging home are existing absolute directories, and the run directory is absolute and lies inside neither.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["input_version", "run_id", "workspace", "run_dir", "invocation"],
+  "required": [
+    "input_version",
+    "run_id",
+    "workspace",
+    "run_dir",
+    "invocation"
+  ],
   "properties": {
     "input_version": {
       "type": "integer",
@@ -45,12 +51,19 @@
     "owner_word": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rows", "words"],
+      "required": [
+        "rows",
+        "words"
+      ],
       "description": "the owner's word in this run, the one source of a reader request's `authorized` flag: the readers rows the owner named, and his words verbatim. Never carried over from another run.",
       "properties": {
         "rows": {
           "type": "array",
-          "items": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
           "uniqueItems": true,
           "description": "the readers roster row ids the owner's words name"
         },
@@ -64,11 +77,18 @@
     "invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["harness", "caller", "mode"],
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
       "description": "facts about the session this run happens in, filled by the adapter's invocation.py, never typed by the executor",
       "properties": {
         "harness": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "the harness this run is driven from"
         },
         "caller": {
@@ -78,11 +98,17 @@
         },
         "mode": {
           "type": "string",
-          "enum": ["direct", "station"],
+          "enum": [
+            "direct",
+            "station"
+          ],
           "description": "`direct` when a person asked, `station` when another station drove it"
         },
         "session_id": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1,
           "description": "the session this run happens in, as the adapter READ it from the harness's own record; the recorded answer names the same session"
         }
@@ -91,9 +117,31 @@
     "station": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
       "default": {},
-      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+      "description": "inspect-v2's own fields (references/inspect-v2-contract.md section 4). `row` is the readers row the owner named at the ask, which comes before `check-input` so that his word is data in this run's input; `packet` and `request` need it, `select` and `harvest` do not. Every field is optional to the schema: a run without `row` can select and harvest, and `packet` refuses it (exit 2).",
+      "properties": {
+        "row": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "the readers roster row the owner named for this run (one paper inspector per run)"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "a model id the owner typed against the row, sent as the paper call's `model`; absent, readers resolves the row's own"
+        },
+        "displayed_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the model the ask showed for the named row, from readers' `suggest`; `request --suggest` refuses to build when the later suggest shows another (stop `model-changed`)"
+        },
+        "session_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the model id the executor's session reports for itself, carried as `session_model` on every `claude-session` request"
+        }
+      }
     }
   }
 }

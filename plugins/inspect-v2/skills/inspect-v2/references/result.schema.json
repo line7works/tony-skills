@@ -5,21 +5,82 @@
   "description": "The one result document of a front core's run (station-loop.md section 5), written to `<run_dir>/result.json` by `report` after it validates against this schema and the semantic checks of scripts/validate-result.py (S1 to S4). Every run ends in a terminal status, every stop included. Each core's lane fills `station_result` and adds its own stop tags to the `stop_tag` description, never to another field.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["interface_version", "plugin_version", "station", "run_id", "run_dir", "status", "reason", "report_only", "wrote_nothing", "writes", "invocation"],
+  "required": [
+    "interface_version",
+    "plugin_version",
+    "station",
+    "run_id",
+    "run_dir",
+    "status",
+    "reason",
+    "report_only",
+    "wrote_nothing",
+    "writes",
+    "invocation"
+  ],
   "properties": {
-    "interface_version": {"type": "integer", "const": 1},
-    "plugin_version": {"type": "string", "minLength": 1},
-    "station": {"type": "string", "enum": ["precon-v2", "architect-v2", "blueprint-v2", "inspect-v2"]},
-    "run_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-    "run_dir": {"type": "string", "minLength": 2, "pattern": "^/"},
-    "status": {"type": "string", "enum": ["completed", "stopped"]},
-    "stop_tag": {
-      "type": ["string", "null"],
-      "enum": [null, "phase-not-built", "selection-none", "selection-several", "ledger-refused", "write-refused", "records-refused"],
-      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`. A lane adds its own tags here and in the enum, never reusing a shared one for another meaning."
+    "interface_version": {
+      "type": "integer",
+      "const": 1
     },
-    "reason": {"type": "string", "minLength": 1},
-    "report_only": {"type": "boolean"},
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "station": {
+      "type": "string",
+      "enum": [
+        "precon-v2",
+        "architect-v2",
+        "blueprint-v2",
+        "inspect-v2"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "stopped"
+      ]
+    },
+    "stop_tag": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "phase-not-built",
+        "selection-none",
+        "selection-several",
+        "ledger-refused",
+        "write-refused",
+        "records-refused",
+        "build-doc-unreadable",
+        "code-book-missing",
+        "model-changed",
+        "lane-down",
+        "no-effective-model"
+      ],
+      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`; and inspect-v2's own (references/inspect-v2-contract.md section 11): `build-doc-unreadable` (the one build doc selected cannot be read), `code-book-missing` (blueprint-v2's SKILL.md resolves by neither route), `model-changed` (a later `suggest` shows another model than the one the ask displayed; the run waits for the owner), `lane-down` (a lens call did not answer `ok`; nothing is triaged and the ask is re-asked), `no-effective-model` (a result carries no effective model; no stamp). A lane never reuses a shared tag for another meaning."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_only": {
+      "type": "boolean"
+    },
     "wrote_nothing": {
       "type": "boolean",
       "description": "true exactly when no write lies outside the run directory (S3)"
@@ -29,12 +90,40 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "kind", "sha256_before", "sha256_after"],
+        "required": [
+          "path",
+          "kind",
+          "sha256_before",
+          "sha256_after"
+        ],
         "properties": {
-          "path": {"type": "string", "minLength": 2, "pattern": "^/"},
-          "kind": {"type": "string", "enum": ["run_artifact", "document", "records_log"]},
-          "sha256_before": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-          "sha256_after": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          "path": {
+            "type": "string",
+            "minLength": 2,
+            "pattern": "^/"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "run_artifact",
+              "document",
+              "records_log"
+            ]
+          },
+          "sha256_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sha256_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          }
         }
       }
     },
@@ -43,30 +132,622 @@
       "description": "the hunt results the run used, by hunt name, as `select` printed them",
       "additionalProperties": {
         "type": "object",
-        "required": ["outcome", "candidates", "searched"],
+        "required": [
+          "outcome",
+          "candidates",
+          "searched"
+        ],
         "properties": {
-          "outcome": {"type": "string", "enum": ["none", "one", "several"]},
-          "candidates": {"type": "array"},
-          "searched": {"type": "array"}
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "none",
+              "one",
+              "several"
+            ]
+          },
+          "candidates": {
+            "type": "array"
+          },
+          "searched": {
+            "type": "array"
+          }
         }
       }
     },
     "invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["harness", "caller", "mode"],
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
       "properties": {
-        "harness": {"type": ["string", "null"]},
-        "caller": {"type": "string", "minLength": 1},
-        "mode": {"type": "string", "enum": ["direct", "station"]},
-        "session_id": {"type": ["string", "null"]}
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "station_result": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
-      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+      "required": [
+        "stamp",
+        "stamp_written",
+        "chat"
+      ],
+      "properties": {
+        "build_doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope_doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_record": {
+          "type": "boolean"
+        },
+        "weaker": {
+          "type": "boolean"
+        },
+        "code_book": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "route"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "route": {
+                  "type": "string",
+                  "enum": [
+                    "argument",
+                    "3a",
+                    "3b"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packet": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lens",
+              "dir",
+              "files"
+            ],
+            "properties": {
+              "lens": {
+                "type": "string",
+                "enum": [
+                  "traceability",
+                  "code-book",
+                  "repo-reality",
+                  "paper"
+                ]
+              },
+              "dir": {
+                "type": "string",
+                "minLength": 1
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lens",
+              "call_id",
+              "row",
+              "profile",
+              "documents",
+              "authorized"
+            ],
+            "properties": {
+              "lens": {
+                "type": "string",
+                "minLength": 1
+              },
+              "call_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "row": {
+                "type": "string",
+                "minLength": 1
+              },
+              "profile": {
+                "type": "string",
+                "minLength": 1
+              },
+              "documents": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "authorized": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "call_id",
+              "lens",
+              "row",
+              "effective_model",
+              "status",
+              "authorized"
+            ],
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "lens": {
+                "type": "string",
+                "minLength": 1
+              },
+              "row": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effective_model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "authorized": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "blocker",
+            "major",
+            "minor",
+            "confirmed",
+            "plausible",
+            "unverified",
+            "refuted",
+            "questions",
+            "locationless"
+          ],
+          "properties": {
+            "blocker": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "major": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minor": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "confirmed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "plausible": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unverified": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "refuted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "questions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "locationless": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "APPROVED",
+            "APPROVED WITH CONDITIONS",
+            "REJECTED"
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "severity",
+              "label",
+              "location",
+              "claim",
+              "scenario",
+              "slice",
+              "raised_by",
+              "call_id",
+              "converged",
+              "finding_id"
+            ],
+            "properties": {
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "BLOCKER",
+                  "MAJOR",
+                  "MINOR"
+                ]
+              },
+              "label": {
+                "type": "string",
+                "enum": [
+                  "CONFIRMED",
+                  "PLAUSIBLE",
+                  "UNVERIFIED"
+                ]
+              },
+              "location": {
+                "type": "string",
+                "minLength": 1
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scenario": {
+                "type": "string",
+                "minLength": 1
+              },
+              "slice": {
+                "type": "string",
+                "minLength": 1
+              },
+              "raised_by": {
+                "type": "string",
+                "minLength": 1
+              },
+              "call_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "converged": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "finding_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"
+              }
+            }
+          }
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "location",
+              "what",
+              "model",
+              "call_id",
+              "why"
+            ],
+            "properties": {
+              "location": {
+                "type": "string",
+                "minLength": 1
+              },
+              "what": {
+                "type": "string",
+                "minLength": 1
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "call_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "refuted": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "call_id",
+              "finding",
+              "location",
+              "why"
+            ],
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "finding": {
+                "type": "string",
+                "minLength": 1
+              },
+              "location": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "stamp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stamp_written": {
+          "type": "boolean"
+        },
+        "records": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "log",
+                "head_before",
+                "head_after",
+                "appended"
+              ],
+              "properties": {
+                "log": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "head_before": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "head_after": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "appended": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mirror": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "recognised",
+                "state"
+              ],
+              "properties": {
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "recognised": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hunted_and_held": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bottom_line": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "construction_started": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "lenses_not_run": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "chat": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "inspect-v2's own result (references/inspect-v2-contract.md section 9): the packet's file lists, the lens calls with their call ids and effective models, the counts (CONFIRMED, PLAUSIBLE, UNVERIFIED, refuted, questions, locationless, and the surviving severities), the verdict, the stamp and whether it was written, the records head after the append, the mirror, and the chat block rendered from all of it. A completed run carries every field a verdict needs (the conditional below)."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "station_result"
+        ],
+        "properties": {
+          "station_result": {
+            "required": [
+              "build_doc",
+              "scope_doc",
+              "no_record",
+              "weaker",
+              "code_book",
+              "packet",
+              "requests",
+              "calls",
+              "counts",
+              "verdict",
+              "findings",
+              "questions",
+              "refuted",
+              "stamp",
+              "stamp_written",
+              "records",
+              "mirror",
+              "hunted_and_held",
+              "bottom_line",
+              "construction_started",
+              "lenses_not_run",
+              "chat"
+            ],
+            "properties": {
+              "verdict": {
+                "type": "string"
+              },
+              "stamp": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

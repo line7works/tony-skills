@@ -1,0 +1,34 @@
+{
+  "answer_version": 1,
+  "lanes": [
+    "traceability"
+  ],
+  "lines": [],
+  "questions": [
+    {
+      "answer": "yes",
+      "id": "Q1",
+      "text": "",
+      "touches": []
+    }
+  ],
+  "results": [
+    {
+      "call_id": "run-0003-traceability",
+      "effective_model": "claude-example-model",
+      "findings": [
+        {
+          "claim": "R1 traces to nothing in the record",
+          "confidence": "medium",
+          "location": "build-doc.md:10",
+          "scenario": "the builder builds an invented rule",
+          "severity": "BLOCKER"
+        }
+      ],
+      "row": "claude-session"
+    }
+  ],
+  "row": "claude-session",
+  "run_id": "run-0003",
+  "session_id": null
+}
