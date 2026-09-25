@@ -1,0 +1,17 @@
+{
+  "case": "P1-03-parked-quietly-resolved",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "A second counting mode for reverse turns",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-95c8bc68ce67"
+      }
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

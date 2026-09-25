@@ -1,0 +1,35 @@
+{
+  "candidates": [
+    {
+      "assumes": "the bench imports it",
+      "categories": [
+        "platform:library"
+      ],
+      "later_cost": "none named",
+      "name": "module"
+    }
+  ],
+  "case": "A2-02-one-candidate",
+  "components": [
+    {
+      "name": "turnstile.py",
+      "serves": "count turns"
+    }
+  ],
+  "exit_ramp": "system",
+  "lines": [],
+  "pick": "module",
+  "questions": [],
+  "rejected": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session",
+  "walkthrough": {
+    "must": [
+      "count turns",
+      "reset the count"
+    ],
+    "when": "2026-10-01",
+    "who": "Sam Bench"
+  }
+}

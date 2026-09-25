@@ -1,0 +1,5 @@
+interface:
+  display_name: "Precon v2"
+  short_description: "Harvest an idea discussion into a traced, fixed-format scope doc"
+policy:
+  allow_implicit_invocation: false

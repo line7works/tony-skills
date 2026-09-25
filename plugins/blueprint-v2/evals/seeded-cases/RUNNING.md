@@ -1,0 +1,28 @@
+# Running the seeded cases against a front core
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 observe.py --all --out /tmp/observe
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --case <case id> --out /tmp/observe
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --list
+```
+
+Each case is built by its family's `build.py` into `--out/<family>/`, the steps of its
+`drive.json` are run, and `observed.json` is written beside the case. `observe.py` prints one JSON
+document naming every observation, and exits 1 when a step could not run (its `_errors` say why).
+
+`select` steps drive the REAL CLI (`check-input`, then `select`), so the interpreter needs
+`jsonschema` (the `uv run` form above supplies the pin). The other steps drive the shared library
+the lanes' phases call (`_via` in each observation says which). `request` steps read readers'
+roster beside this core (`plugins/readers/`), so they run in the checkout.
+
+## What `observed.json` holds
+
+The neutral vocabulary of `README.md`, only the names the run has a fact for; `_case`, `_family`,
+`_core`, `_phases`, `_via` and `_lane_pending` are the observer's own bookkeeping. A `lane` step
+produces no fact: the names it lists are the lane's to produce in slice 2, and the lane extends
+`observe.py` (through the control room, since the file is shared) when it builds them.
+
+## What is NOT here
+
+No expected value. The control room grades `observed.json` against the answer key and reports pass
+or fail per case with the assertion name that failed.

@@ -1,0 +1,10 @@
+{
+  "case": "A4-01-clean",
+  "lines": [],
+  "publish": true,
+  "publish_url": "https://example.invalid/artifact/turnstile",
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

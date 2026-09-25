@@ -1,0 +1,59 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the scope doc was written",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "selection": {
+    "scope": {
+      "candidates": [
+        {
+          "home": "repo-scope",
+          "path": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+          "tier": 1
+        }
+      ],
+      "outcome": "one",
+      "searched": [
+        {
+          "found": [
+            "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md"
+          ],
+          "given": true,
+          "globs": [
+            "docs/scope/*-{name}.md"
+          ],
+          "home": "repo-scope",
+          "root": "workspace",
+          "tier": 1
+        }
+      ]
+    }
+  },
+  "station": "inspect-v2",
+  "station_result": {},
+  "status": "completed",
+  "stop_tag": null,
+  "writes": [
+    {
+      "kind": "document",
+      "path": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+      "sha256_after": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": false
+}

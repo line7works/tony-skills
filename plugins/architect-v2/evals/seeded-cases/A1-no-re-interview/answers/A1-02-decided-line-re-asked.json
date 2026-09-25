@@ -1,0 +1,26 @@
+{
+  "case": "A1-02-decided-line-re-asked",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "language \u2014 Python 3.9 \u2014 every bench script imports it",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "Python",
+      "id": "Q1",
+      "text": "Python, or something with a package manager?",
+      "touches": [
+        "dec-4858c7412180"
+      ]
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,17 @@
+{
+  "call_id": "run-traceability",
+  "case": "I2-02-no-scope-doc",
+  "effective_model": "claude-seeded",
+  "findings": [
+    {
+      "claim": "R1 traces to nothing in the record",
+      "confidence": "medium",
+      "location": "build-doc.md:8",
+      "scenario": "the builder builds an invented rule",
+      "severity": "BLOCKER"
+    }
+  ],
+  "role": "reader",
+  "row": "claude-session",
+  "seeded_answer": 1
+}

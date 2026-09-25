@@ -1,0 +1,11 @@
+{
+  "name": "architect-v2",
+  "description": "One interview after precon that writes the one living architecture doc and renders its visual, with the scope doc's decided lines passed forward by script, never re-asked, and the run log continued, never rewritten. Strictly user-invoked. The portable architect core of the skills v2 rebuild; the -v2 suffix stays while v1 architect is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

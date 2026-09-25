@@ -333,6 +333,47 @@
       "quirks": "Pinned to the harness model name opus, not an API id. Eligible per wargame SKILL.md:12. Host lane (Slice C): same routes as claude-session with the model pinned by name in the Workflow script or the Agent call. Isolation labels for starved and packet-only inherited from claude-session's 2026-09-06 measurement: the same Workflow route and the same tool_uses count, with only the model name pinned.",
       "guide": "",
       "verified_at": "2026-09-06"
+    },
+    {
+      "id": "claude-opus-cli",
+      "provider": "anthropic",
+      "transport": "claude-cli",
+      "kind": "portable",
+      "model": "opus",
+      "effort_encoding": "flag",
+      "effort_default": "",
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "context_window": "unknown",
+      "max_output": "unknown",
+      "limits_source": "harness",
+      "timeout_s": 1800,
+      "credential_env": "",
+      "web_off": "--disallowedTools WebFetch,WebSearch on every claude -p run; no tool at all under starved and packet-only (--tools \"\"), the read-only Read, Glob and Grep under repo",
+      "parity": {
+        "starved": "tools: none (--tools \"\"); web tools denied (--disallowedTools WebFetch,WebSearch); no setting sources, no MCP server, no skill (--setting-sources \"\" --strict-mcp-config --disable-slash-commands); cwd = fresh empty dir",
+        "packet-only": "tools: none (--tools \"\"); web tools denied (--disallowedTools WebFetch,WebSearch); no setting sources, no MCP server, no skill (--setting-sources \"\" --strict-mcp-config --disable-slash-commands); cwd = packet dir only",
+        "repo": "tools: Read, Glob, Grep only (--tools Read,Glob,Grep; --add-dir workspace); web tools denied (--disallowedTools WebFetch,WebSearch); no setting sources, no MCP server, no skill (--setting-sources \"\" --strict-mcp-config --disable-slash-commands); cwd = workspace"
+      },
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo"
+      ],
+      "eligibility": "eligible",
+      "isolation": {
+        "starved": "unmeasured",
+        "packet-only": "unmeasured",
+        "repo": "unmeasured"
+      },
+      "available": true,
+      "reasoning": "n/a",
+      "quirks": "Portable Claude row (E14, A12): one headless claude -p run per call, dispatchable from any shell where the claude binary is on PATH, Codex included; the same Opus class as claude-opus, pinned to the harness model name opus. Command: claude -p --model <model> --output-format json --no-session-persistence --setting-sources \"\" --strict-mcp-config --disable-slash-commands [--effort <effort> when the request carries one] --tools \"\" (starved, packet-only) or --tools Read,Glob,Grep --add-dir <workspace> (repo) --disallowedTools WebFetch,WebSearch, every value an argv item, the prompt on stdin, cwd the profile's working directory, the child environment the fixed list; the reply is the JSON document's result field, verbatim. Flags checked against claude --help of Claude Code 2.1.282 on 2026-09-24. repo-with-tools is not offered: the route runs nothing. The isolation labels stay unmeasured until measured: what the harness injects on its own (the user's instruction files, any memory index) and the sentinel and write probes are measured only by the control room's one live smoke run, recorded in the readers README.",
+      "guide": "",
+      "verified_at": "2026-09-24"
     }
   ]
 }

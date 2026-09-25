@@ -1,0 +1,53 @@
+{
+  "candidates": [
+    {
+      "assumes": "the bench imports it",
+      "categories": [
+        "platform:library"
+      ],
+      "later_cost": "a CLI later wraps it",
+      "name": "module"
+    },
+    {
+      "assumes": "a network on the bench",
+      "categories": [
+        "platform:server",
+        "storage:database"
+      ],
+      "later_cost": "hosting",
+      "name": "service"
+    }
+  ],
+  "case": "A2-01-clean",
+  "components": [
+    {
+      "name": "turnstile.py",
+      "serves": "count turns"
+    },
+    {
+      "name": "reset()",
+      "serves": "reset the count"
+    }
+  ],
+  "exit_ramp": "system",
+  "lines": [],
+  "pick": "module",
+  "questions": [],
+  "rejected": [
+    {
+      "name": "service",
+      "why": "the bench imports a module"
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session",
+  "walkthrough": {
+    "must": [
+      "count turns",
+      "reset the count"
+    ],
+    "when": "2026-10-01",
+    "who": "Sam Bench"
+  }
+}

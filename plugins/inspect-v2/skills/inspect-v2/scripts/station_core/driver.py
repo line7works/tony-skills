@@ -1,0 +1,329 @@
+"""The phase driver every front core runs (station-loop.md sections 2 and 3).
+
+A library: `scripts/<station>.py` calls `main(station, hunts, handlers, argv)` with its own station
+name, its hunt table, and the phases its lane has built. This module owns the parser, the
+envelope, the run directory and its checkpoint, `check-input`, `select`, `identity`,
+`skill-identity`, the error mapping onto the exit codes, and the placeholder stop of a phase no
+lane has built yet (`phase-not-built`).
+
+A handler is `handler(ctx, args) -> exit code`; `ctx` carries the station, the prefix, the skill
+root, `envelope(**fields)`, `open_run(run_dir)` and `emit(document, code)`. A handler may raise
+`Usage` (exit 2), `Defect` (exit 1), `Terminal(document)` (exit 10) or let
+`records_client.ComponentUnavailable` through (exit 3).
+"""
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import subprocess
+import sys
+
+from . import exits, fsio, hunt as huntmod, inputs, validate
+from .records_client import ComponentUnavailable
+
+INTERFACE_VERSION = 1
+# A driver named for its station would shadow a standard-library module of the same name when the
+# scripts folder is first on the path (inspect.py shadows `inspect`, which jsonschema imports).
+SHADOWED = ("inspect",)
+LANE_PHASES = ("harvest", "record-answer", "write", "report")
+
+
+class Usage(RuntimeError):
+    """A usage slip: exit 2 with the sentence on stderr."""
+
+
+class Defect(RuntimeError):
+    """Anything else: exit 1."""
+
+
+class Terminal(RuntimeError):
+    """The run reached a terminal status; the document is already assembled."""
+
+    def __init__(self, document):
+        RuntimeError.__init__(self, document.get("status", "terminal"))
+        self.document = document
+
+
+def emit(document, code=exits.SUCCESS):
+    sys.stdout.write(json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+    return code
+
+
+def now_utc():
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+class Context(object):
+    """What a handler needs from the driver."""
+
+    def __init__(self, station, hunts, skill_root):
+        self.station = station
+        self.hunts = hunts
+        self.skill_root = skill_root
+        self.prefix = validate.prefix_of(station)
+
+    def envelope(self, **fields):
+        out = {"interface_version": INTERFACE_VERSION,
+               "plugin_version": validate.plugin_version(self.skill_root), "station": self.station}
+        out.update(fields)
+        return out
+
+    def emit(self, document, code=exits.SUCCESS):
+        return emit(document, code)
+
+    def open_run(self, run_dir):
+        return Run.open(run_dir)
+
+
+class Run(object):
+    """One run directory: `input.json` and `checkpoint.json`, written through a rename."""
+
+    def __init__(self, run_dir, checkpoint):
+        self.run_dir = run_dir
+        self.checkpoint = checkpoint
+
+    @classmethod
+    def create(cls, run_dir, doc):
+        if os.path.exists(os.path.join(run_dir, "checkpoint.json")):
+            raise Usage("the run directory %s already holds a run: this run id has been used. Use "
+                        "another run id and run directory." % run_dir)
+        os.makedirs(run_dir, exist_ok=True)
+        at = now_utc()
+        fsio.write_json(os.path.join(run_dir, "input.json"), doc)
+        checkpoint = {"checkpoint_version": 1, "run_id": doc["run_id"], "phase": "checked",
+                      "input_sha256": inputs.input_digest(doc), "at": at, "selections": {}}
+        fsio.write_json(os.path.join(run_dir, "checkpoint.json"), checkpoint)
+        return cls(run_dir, checkpoint)
+
+    @classmethod
+    def open(cls, run_dir):
+        path = os.path.join(run_dir or "", "checkpoint.json")
+        if not run_dir or not os.path.isfile(path):
+            raise Usage("no run at %s: its checkpoint.json is not there. Run `check-input` first." % run_dir)
+        try:
+            checkpoint = fsio.read_json(path)
+            doc = fsio.read_json(os.path.join(run_dir, "input.json"))
+        except (OSError, ValueError) as exc:
+            raise Defect("the run at %s cannot be read: %s" % (run_dir, exc))
+        if checkpoint.get("input_sha256") != inputs.input_digest(doc):
+            raise Usage("the run at %s cannot be continued: its input.json no longer matches the "
+                        "input the run checked" % run_dir)
+        run = cls(run_dir, checkpoint)
+        run.input = doc
+        return run
+
+    def save(self):
+        fsio.write_json(os.path.join(self.run_dir, "checkpoint.json"), self.checkpoint)
+
+
+# ---- the commands ------------------------------------------------------------------------------
+
+def command_check_input(ctx, args):
+    """Validate the input, create the run, and write the resolved input."""
+    schema = validate.load_schema("input", ctx.prefix, ctx.skill_root)
+    try:
+        doc = inputs.read(args.input)
+    except inputs.InputUnreadable as exc:
+        raise Usage(str(exc))
+    doc = inputs.with_defaults(doc)
+    errors = inputs.validate_input(doc, schema, ctx.prefix)
+    if errors:
+        return emit(ctx.envelope(ok=False, error="invalid",
+                                 reason="the input does not validate: %d finding(s); nothing was "
+                                        "written and no run was created" % len(errors),
+                                 errors=errors), exits.VALIDATION)
+    run = Run.create(doc["run_dir"], doc)
+    return emit(ctx.envelope(next="select", run_id=doc["run_id"], run_dir=doc["run_dir"],
+                             workspace=doc["workspace"], staging=doc.get("staging"),
+                             report_only=bool(doc.get("report_only")),
+                             input=os.path.join(run.run_dir, "input.json")))
+
+
+def command_select(ctx, args):
+    """The hunt, over the homes this core's table names (E14-10)."""
+    run = Run.open(args.run_dir)
+    if run.checkpoint.get("phase") not in ("checked", "selected"):
+        raise Usage("this run is at phase %r; `select` runs after `check-input` and before `harvest`"
+                    % run.checkpoint.get("phase"))
+    names = sorted(ctx.hunts)
+    hunt_name = args.hunt or (names[0] if len(names) == 1 else None)
+    if hunt_name is None:
+        raise Usage("this core has several hunts (%s): name one with --hunt" % ", ".join(names))
+    if hunt_name not in ctx.hunts:
+        raise Usage("no hunt %r in this core (its hunts: %s)" % (hunt_name, ", ".join(names)))
+    roots = {"workspace": run.input.get("workspace"), "staging": run.input.get("staging")}
+    try:
+        result = huntmod.hunt(ctx.hunts[hunt_name], roots, name=args.name)
+    except huntmod.HuntRefused as exc:
+        raise Usage(str(exc))
+    result = dict(result, hunt=hunt_name, name=args.name)
+    fsio.write_json(os.path.join(run.run_dir, "selection-%s.json" % hunt_name), result)
+    run.checkpoint["phase"] = "selected"
+    run.checkpoint.setdefault("selections", {})[hunt_name] = result["outcome"]
+    run.save()
+    return emit(ctx.envelope(next="harvest", run_id=run.checkpoint["run_id"], **result))
+
+
+def command_identity(ctx, args):
+    """The workspace as this station sees it, without the records component."""
+    path = os.path.abspath(args.workspace)
+    if not os.path.isdir(path):
+        raise Usage("the workspace is not a directory: %s" % path)
+    head = None
+    kind = "directory"
+    try:
+        proc = subprocess.run(["git", "-C", path, "rev-parse", "--show-toplevel", "HEAD"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out = proc.stdout.decode("utf-8", "replace").split()
+        if proc.returncode == 0 and len(out) == 2 and os.path.realpath(out[0]) == os.path.realpath(path):
+            kind, head = "git", out[1]
+    except OSError:
+        pass
+    return emit(ctx.envelope(ok=True, workspace=os.path.realpath(path), kind=kind, head=head))
+
+
+def command_skill_identity(ctx, args):
+    """Name, version, the commit the skill sits in, and its content hash."""
+    root = validate.skill_root(ctx.skill_root)
+    plugin = os.path.dirname(os.path.dirname(root))
+    name, version = ctx.station, "unknown"
+    try:
+        body = fsio.read_json(os.path.join(plugin, ".claude-plugin", "plugin.json"))
+        name, version = body.get("name", name), body.get("version", version)
+    except (OSError, ValueError):
+        pass
+    commit = None
+    try:
+        proc = subprocess.run(["git", "-C", plugin, "rev-parse", "HEAD"], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+        if proc.returncode == 0:
+            commit = proc.stdout.decode("utf-8", "replace").strip() or None
+    except OSError:
+        pass
+    digest = hashlib.sha256()
+    for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+        for entry in sorted(files):
+            if entry.endswith(".pyc") or entry == ".DS_Store":
+                continue
+            full = os.path.join(base, entry)
+            digest.update(os.path.relpath(full, root).encode("utf-8"))
+            digest.update(b"\0")
+            with open(full, "rb") as fh:
+                digest.update(fh.read())
+            digest.update(b"\n")
+    return emit(ctx.envelope(ok=True, name=name, version=version, commit=commit or "unversioned",
+                             content_sha256=digest.hexdigest()))
+
+
+def not_built(phase):
+    def handler(ctx, args):
+        reason = ("the `%s` phase of %s is not built yet: the frame fixes its command line, and the "
+                  "station's slice 2 lane builds what it does. Nothing was read or written."
+                  % (phase, ctx.station))
+        return emit(ctx.envelope(next="done", status="stopped", stop_tag="phase-not-built",
+                                 reason=reason, run_dir=getattr(args, "run_dir", None)), exits.TERMINAL)
+    return handler
+
+
+def script_name(station):
+    """`precon.py` for precon-v2; `inspect_v2.py` for inspect-v2 (see SHADOWED)."""
+    base = station.split("-")[0]
+    return "%s%s" % (base, "_v2.py" if base in SHADOWED else ".py")
+
+
+# ---- the parser --------------------------------------------------------------------------------
+
+EXIT_HELP = """Exit codes:
+  0   the command did its work; an intermediate phase has more to do
+  1   anything else: a defect of the script, an unreadable run directory
+  2   usage: a bad argument, a file that is not there or not JSON, the wrong phase, an unknown hunt
+  3   missing dependency: jsonschema, or (inspect-v2) the records component. One line on stderr
+  4   validation: a supplied file failed its schema; nothing is written
+  5   the recorded answer was refused on its content (E14-11); nothing is written
+  10  the run reached a terminal status (a completion or a stop)
+"""
+
+SIDE_EFFECTS = """Side effects:
+  check-input     creates the run directory; writes input.json and checkpoint.json in it
+  select          writes selection-<hunt>.json and rewrites checkpoint.json in the run directory
+  harvest, record-answer, write, report
+                  the lane's (station-loop.md section 3); until built, they write nothing
+  identity, skill-identity
+                  none
+  Nothing is written outside the run directory by the frame. No network, no model call, no harness.
+"""
+
+
+def build_parser(station, hunts):
+    prog = script_name(station)
+    hunt_lines = "\n".join("  %-14s %s" % (name, "; ".join(
+        "%s(%s) %s" % (h["home"], h["root"], ", ".join(h["globs"])) for h in homes))
+                           for name, homes in sorted(hunts.items()))
+    epilog = ("The phases, in order: check-input, select, harvest, record-answer, write, report.\n"
+              "identity and skill-identity answer at any time.\n\n"
+              "Hunts of this core (select --hunt NAME):\n%s\n\n%s\n%s\n"
+              "Example:\n  uv run %s check-input /tmp/run-0001/input.json\n"
+              "  uv run %s select --run-dir /tmp/run-0001 --hunt %s --name widget\n"
+              % (hunt_lines, EXIT_HELP, SIDE_EFFECTS, prog, prog, sorted(hunts)[0] if hunts else "NAME"))
+    parser = argparse.ArgumentParser(prog=prog, description="The phase driver of %s." % station,
+                                     epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
+    skill_help = "test only: load the references from DIR instead of this script's skill root"
+    records_help = ("the records component's root (inspect-v2); without it the component's four "
+                    "lookups are used")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--skill-root", metavar="DIR", default=None, help=skill_help)
+    common.add_argument("--records-root", metavar="DIR", default=None, help=records_help)
+    sub = parser.add_subparsers(dest="command")
+    one = sub.add_parser("check-input", parents=[common], help="validate the input and create the run")
+    one.add_argument("input", metavar="input.json", help="the input document (references/input.schema.json)")
+    sel = sub.add_parser("select", parents=[common], help="find the documents this core reads (E14-10)")
+    sel.add_argument("--run-dir", metavar="D", required=True, help="the run directory")
+    sel.add_argument("--hunt", metavar="NAME", default=None, help="one of this core's hunts")
+    sel.add_argument("--name", metavar="NAME", default=None,
+                     help="fills {name} in the hunt's globs (default: every name, '*')")
+    for phase in LANE_PHASES:
+        cmd = sub.add_parser(phase, parents=[common], help="the %s phase (the lane's)" % phase)
+        cmd.add_argument("--run-dir", metavar="D", required=True, help="the run directory")
+        if phase == "record-answer":
+            cmd.add_argument("--answer", metavar="FILE", required=True, help="the recorded answer")
+    ident = sub.add_parser("identity", parents=[common], help="the workspace as this station sees it")
+    ident.add_argument("workspace", help="a directory")
+    sub.add_parser("skill-identity", parents=[common], help="name, version, commit and content hash")
+    return parser
+
+
+def main(station, hunts, handlers, argv=None):
+    parser = build_parser(station, hunts)
+    args = parser.parse_args(argv)
+    if not args.command:
+        parser.print_help(sys.stderr)
+        return exits.USAGE
+    try:
+        skill_root = validate.skill_root(args.skill_root)
+    except validate.SkillRootMissing as exc:
+        sys.stderr.write("%s\n" % exc)
+        return exits.USAGE
+    ctx = Context(station, hunts, skill_root)
+    commands = {"check-input": command_check_input, "select": command_select,
+                "identity": command_identity, "skill-identity": command_skill_identity}
+    for phase in LANE_PHASES:
+        commands[phase] = handlers.get(phase) or not_built(phase)
+    try:
+        return commands[args.command](ctx, args)
+    except Terminal as terminal:
+        return emit(terminal.document, exits.TERMINAL)
+    except Usage as exc:
+        sys.stderr.write("%s\n" % exc)
+        return exits.USAGE
+    except validate.ReferenceUnavailable as exc:
+        sys.stderr.write("%s\n" % exc)
+        return exits.USAGE
+    except ComponentUnavailable as exc:
+        sys.stderr.write("%s\n" % exc)
+        return exits.MISSING_DEPENDENCY
+    except Defect as exc:
+        sys.stderr.write("%s\n" % exc)
+        return exits.GENERAL

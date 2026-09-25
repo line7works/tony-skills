@@ -1,0 +1,11 @@
+{
+  "name": "inspect-v2",
+  "description": "Check a build doc before it is built: fresh inspectors read a packet built by script from the build doc, the scope doc and the code book alone; surviving findings are raised in the shared records and the plan is stamped with the model that inspected it. Strictly user-invoked. The portable inspect core of the skills v2 rebuild; the -v2 suffix stays while v1 inspect is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

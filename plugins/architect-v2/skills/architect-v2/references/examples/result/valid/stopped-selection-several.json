@@ -1,0 +1,26 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "two scope docs match; they are listed for the owner, never picked",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "architect-v2",
+  "status": "stopped",
+  "stop_tag": "selection-several",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

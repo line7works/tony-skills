@@ -1,0 +1,42 @@
+{
+  "case": "A1-01-clean",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "language \u2014 Python 3.9 \u2014 every bench script imports it",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "storage \u2014 none in v0 \u2014 nothing is remembered",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "tag": "deferred",
+      "text": "a web dashboard \u2014 door stays open",
+      "trace": {
+        "kind": "ledger",
+        "ref": "oos-936fd940e2a6"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "in memory for v0",
+      "id": "Q1",
+      "text": "Where is the count kept between sessions?",
+      "touches": [
+        "dec-e4907eb8a1ce"
+      ]
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

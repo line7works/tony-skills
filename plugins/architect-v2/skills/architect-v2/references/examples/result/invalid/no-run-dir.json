@@ -1,0 +1,17 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "x",
+  "report_only": false,
+  "run_id": "run-0001",
+  "station": "architect-v2",
+  "status": "completed",
+  "writes": [],
+  "wrote_nothing": true
+}

@@ -1,0 +1,21 @@
+{
+  "case": "P1-02-no-source",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "Counts are written to the bench log"
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

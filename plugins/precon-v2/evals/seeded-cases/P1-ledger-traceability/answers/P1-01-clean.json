@@ -1,0 +1,58 @@
+{
+  "case": "P1-01-clean",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "Where the count is kept between sessions",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-e4907eb8a1ce"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "The count is kept in memory only",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "The counter lives in src/turnstile.py",
+      "trace": {
+        "kind": "repo_path",
+        "ref": "src/turnstile.py"
+      }
+    },
+    {
+      "tag": "assumed",
+      "text": "Tests use unittest",
+      "trace": {
+        "kind": "assumed",
+        "ref": "the standard library already has it"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "in memory only",
+      "id": "Q1",
+      "text": "Where is the count kept between sessions?",
+      "touches": [
+        "dec-e4907eb8a1ce"
+      ]
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

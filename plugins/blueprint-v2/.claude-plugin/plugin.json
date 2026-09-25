@@ -1,0 +1,11 @@
+{
+  "name": "blueprint-v2",
+  "description": "Draft a build document in dependency-ordered, verifiable slices, every requirement traced and the load-bearing forms rendered by script, so build, signoff and recheck read what they read today. The portable blueprint core of the skills v2 rebuild; the -v2 suffix stays while v1 blueprint is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

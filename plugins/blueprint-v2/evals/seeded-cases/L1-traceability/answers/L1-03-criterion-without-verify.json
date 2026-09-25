@@ -1,0 +1,22 @@
+{
+  "case": "L1-03-criterion-without-verify",
+  "criteria": [
+    {
+      "text": "AC1: the counter works correctly"
+    }
+  ],
+  "lines": [
+    {
+      "tag": "constraint",
+      "text": "Python 3.9 standard library",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

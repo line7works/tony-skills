@@ -1,0 +1,10 @@
+{
+  "case": "A4-02-publish-false",
+  "lines": [],
+  "publish": false,
+  "publish_url": null,
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Inspect v2"
+  short_description: "Check a build doc against its record, its code book and the repo before building"
+policy:
+  allow_implicit_invocation: false
