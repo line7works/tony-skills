@@ -75,6 +75,9 @@ def _shape(answer):
             continue
         if not isinstance(q.get("touches", []), list):
             problems.append("question %s: 'touches' is a list of ledger line ids" % q["id"])
+        if not isinstance(q.get("text"), str) or not q["text"].strip():
+            # a question with no text would skip the decided-text match (C3-1, round 4)
+            problems.append("question %s carries no text" % q["id"])
         ids.append(q["id"])
     if len(ids) != len(set(ids)):
         problems.append("two questions share an id")

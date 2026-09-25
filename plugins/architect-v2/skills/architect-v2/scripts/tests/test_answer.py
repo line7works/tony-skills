@@ -250,5 +250,47 @@ class ShapeRefusals(_Answer):
             self.assertTrue(result["refusals"], bad)
 
 
+class QuestionWithoutText(_Answer):
+    """C3-1 (the round 3 checker): a question with no text, a text that is not a string, or a blank
+    text would skip the decided-text match; it is a shape refusal, exit 5 and nothing written."""
+
+    def test_a_question_without_usable_text_is_exit_5_and_nothing_written(self):
+        for label, text in (("absent", None), ("an integer", 42), ("whitespace only", " \t\n ")):
+            with self.subTest(text=label):
+                q = {"id": "Q9", "touches": [], "answer": "yes"}
+                if text is not None:
+                    q["text"] = text
+                doc = self.clean()
+                doc["questions"].append(q)
+                code, report = self.record(doc)
+                self.assertEqual(code, 5, (label, report))
+                self.assertEqual(os.listdir(self.run_dir), [], "nothing written: %s" % label)
+                self.assertEqual([(r["rule"], r["message"]) for r in report["refusals"]],
+                                 [("shape", "question Q9 carries no text")], label)
+
+    def test_the_clean_question_is_still_accepted(self):
+        code, report = self.record(self.clean())
+        self.assertEqual(code, 0, report)
+        self.assertTrue(os.path.isfile(os.path.join(self.run_dir, "answer.json")))
+
+    def test_every_seeded_recorded_answer_still_passes_the_shape_check(self):
+        root = os.path.join(testlib.PLUGIN, "evals", "seeded-cases")
+        seen = 0
+        for family in sorted(os.listdir(root)):
+            folder = os.path.join(root, family, "answers")
+            if not os.path.isdir(folder):
+                continue
+            for name in sorted(os.listdir(folder)):
+                if not name.endswith(".json"):
+                    continue
+                doc = testlib.load_json(os.path.join(folder, name))
+                seen += 1
+                if "questions" not in doc:
+                    continue
+                view = {"questions": doc["questions"], "lines": doc.get("lines", [])}
+                self.assertEqual(answer._shape(view), [], name)
+        self.assertTrue(seen, "this core ships seeded recorded answers")
+
+
 if __name__ == "__main__":
     unittest.main()
