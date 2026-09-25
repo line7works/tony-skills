@@ -206,7 +206,7 @@ least one constraint line.
 | `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
 | `run-id-mismatch` | a `run_id` other than this run's |
 | `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
-| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its trace (a ledger trace to the item) or by its words, whatever the trace (round 3, R3): the line's words, whole or the item before its reason (cut at the first dash, colon, semicolon or parenthesis), with the list mark and label left out, whitespace collapsed and case folded, equal to the open item's. An open item is the owner's call, not a descoping |
+| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its trace (a ledger trace to the item) or by its words, whatever the trace (round 3, R3). The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without an `Out of scope:` label, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis) equal to any reading of the open row (`row_forms`), so a trailing period, a label, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |
@@ -231,6 +231,9 @@ A `verify` is exactly one of those three, on one line (round 3, R4):
 - `new test at <path>`: a path that looks like one, one token with no space holding at least one
   `/` or ending in a file extension (`tests/test_x.py`, `tests/counter/`).
 - `manual: <steps>`: the steps, at least two words.
+
+After the form's prefix the rest must hold at least one letter or digit (round 4, R2): a token of
+punctuation alone names nothing (`existing test ?`, `new test at /`, `manual: - -` are refused).
 
 A placeholder (`TBD`, `TBA`, `TODO`, `n/a`, `none`, `later`, `pending` and the like), whole or as a
 part of the path, names nothing and is none of the forms. The forms are the build doc template's;

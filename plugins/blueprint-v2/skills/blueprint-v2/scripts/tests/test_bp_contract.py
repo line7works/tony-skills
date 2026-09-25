@@ -95,6 +95,12 @@ class TheContractAndTheCode(unittest.TestCase):
         line = next(l for l in block.split("\n") if l.startswith("Verify forms:"))
         self.assertEqual(tuple(re.findall(r"`([^`]+)`", line)), checks.VERIFY_FORMS)
 
+    def test_the_verify_token_rule_is_stated_beside_the_forms(self):
+        # round 4, R2 (CL1-6): after the form's prefix the rest holds at least one letter or digit
+        block = section(self.contract, "7. The recorded answer")
+        after = block[block.index("Verify forms:"):]
+        self.assertIn("at least one letter or digit", " ".join(after[:1500].split()))
+
     def test_the_readme_carries_no_stale_join_sentence(self):
         readme = read(os.path.join(testlib.PLUGIN, "README.md"))
         self.assertNotIn("still asserts", readme)

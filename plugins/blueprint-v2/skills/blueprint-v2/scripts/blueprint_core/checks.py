@@ -9,7 +9,13 @@ settled, so they are `decided` there and a line of either kind that traces to a 
 of scope is the pass-forward E14-11 names, not a resolution. A scope `Open:` item is the owner's
 call and not a descoping: an out-of-scope line that carries one forward with no answered question
 of this run touching it is this core's own refusal, `open-item-descoped`, by the item's id and by
-its words alike (round 3, R3), whatever the line's trace.
+its words alike (round 3, R3), whatever the line's trace. The words are compared through the frame's
+own readings (round 4, R1; E14-3): the line through `station_core.answer.forms`, the row through
+`row_forms`, so every decoration the frame knows (a trailing period, a label, a list mark, an
+invisible character, a ledger tail, the row decorated) is seen through the same way the shared
+`quietly-resolved` rule sees through it. This core adds only what the frame has no reading for: an
+out-of-scope label (`Out of scope:`), and the item before its reason (cut at the first dash, colon,
+semicolon, comma or parenthesis).
 
 The view carries each line's words as the ledger would hold them (round 3, R2): a requirement's
 text without its `R<n>` prefix (the doc renders `R2 <dash> ...`, and the shared text rule compares
@@ -28,7 +34,8 @@ in the shared shape, one per finding:
     session-mismatch          the answer's session_id is not the input's invocation.session_id
     run-id-mismatch           the answer's run_id is not this run's
     criterion-without-verify  a criterion with no `verify` form, or one that is none of the three forms
-                              (`VERIFY_FORMS`, round 3 R4: a named test, a path, steps of two words)
+                              (`VERIFY_FORMS`, round 3 R4: a named test, a path, steps of two words;
+                              round 4 R2: the rest after the prefix holds a letter or digit)
     open-item-descoped        an out-of-scope line carrying a scope `Open:` item, by its id or by its
                               words, that no answered question of this run touched
     duplicate-id              two lines, two criteria or two slices sharing an id or a name
@@ -41,6 +48,8 @@ in the shared shape, one per finding:
 """
 import re
 
+from station_core import answer as shared
+
 ALLOWED_TRACES = ("ledger", "repo_path", "question", "owner_words")
 RULES = ("session-mismatch", "run-id-mismatch", "criterion-without-verify", "open-item-descoped",
          "duplicate-id", "unknown-id", "depends-forward", "unplaced", "no-slice", "slices-without-build-doc",
@@ -50,7 +59,7 @@ VIEW_TAGS = {"requirement": "decided", "constraint": "decided", "out-of-scope": 
 # the build doc template's three verify forms, and what each must hold (round 3, R4): `existing test`
 # names the test, one token; `new test at` a path that looks like one, one token holding a `/` or a
 # file extension; `manual:` steps of at least two words. A placeholder (`TBD`, `n/a`, `later`) is
-# none of them.
+# none of them, and neither is a token with no letter or digit (`?`, `/`, `- -`; round 4, R2).
 VERIFY_FORMS = ("existing test <name>", "new test at <path>", "manual: <steps>")
 EXISTING = re.compile(r"^existing test (\S+)$")
 NEW = re.compile(r"^new test at (\S+)$")
@@ -63,8 +72,8 @@ REQUIREMENT_PREFIX = re.compile(r"^R\d+(?:\s*[\u2014\u2013:.\-]+\s*|\s+)")
 LIST_MARK = re.compile(r"^[-*+]\s+")
 LABEL = re.compile(r"^(?:constraints?|out of scope|out-of-scope|assumed|assumption|open|requirement)\s*:\s*",
                    re.I)
-# where an out-of-scope line's item ends and its reason begins (round 3, R3)
-REASON = re.compile(r"\s+[\u2014\u2013]\s+|\s+--?\s+|:\s+|;\s+|\s+\(")
+# where an out-of-scope line's item ends and its reason begins (round 3, R3; round 4, R1 adds the comma)
+REASON = re.compile(r"\s+[\u2014\u2013]\s+|\s+--?\s+|:\s+|;\s+|,\s+|\s+\(")
 
 
 def _refusal(rule, message, **where):
@@ -89,21 +98,20 @@ def words(text):
     return out or text
 
 
-def _normalized(text):
-    """Whitespace collapsed and case folded, the shared rule's own comparison."""
-    return " ".join(text.split()).casefold()
-
-
-def _item_forms(text):
-    """The normalized words an out-of-scope line could carry an item by: the whole line, and the item
-    before its reason (cut at the first dash, colon, semicolon or parenthesis)."""
-    bare = words(text) if isinstance(text, str) else ""
-    forms = set([_normalized(bare)])
-    match = REASON.search(bare)
-    if match and bare[:match.start()].strip():
-        forms.add(_normalized(bare[:match.start()]))
-    forms.discard("")
-    return forms
+def line_forms(text):
+    """Every reading of an out-of-scope line's words, all of them the frame's (`station_core.answer.forms`):
+    the line as written, the line without this core's labels (`words`), and the item before its reason,
+    cut from the words and from their bare form. Compared with `station_core.answer.row_forms` of a row."""
+    if not isinstance(text, str):
+        return set()
+    stripped = words(text)
+    out = set(shared.forms(text)) | set(shared.forms(stripped))
+    for base in (stripped, shared.bare(stripped)):
+        cut = REASON.search(base)
+        if cut and base[:cut.start()].strip():
+            out |= shared.forms(base[:cut.start()])
+    out.discard("")
+    return out
 
 
 def view(answer):
@@ -119,7 +127,10 @@ def view(answer):
 
 
 def _placeholder(token):
-    """A token that names nothing: a placeholder, whole or as any one of its path parts."""
+    """A token that names nothing: one with no letter or digit (round 4, R2), or a placeholder, whole or
+    as any one of its path parts."""
+    if not any(ch.isalnum() for ch in token):
+        return True
     for part in [token] + re.split(r"[/\\]", token):
         if re.sub(r"[^a-z0-9]", "", EXTENSION.sub("", part).casefold()) in PLACEHOLDERS:
             return True
@@ -182,14 +193,15 @@ def own(answer, run_input, harvest):
             continue
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
         ref = trace.get("ref")
-        # by its id (a ledger trace to the open item) or by its words (round 3, R3), whatever the trace
-        carried = None
+        # by its id (a ledger trace to the open item) or by its words (round 3, R3), whatever the trace,
+        # the words read through the frame's own readings on both sides (round 4, R1)
+        carried = []
         if trace.get("kind") == "ledger" and ref in ledger and ledger[ref].get("tag") == "open":
-            carried = ledger[ref]
-        else:
-            forms = _item_forms(line.get("text"))
-            carried = next((row for row in open_rows if _normalized(row["text"]) in forms), None)
-        if carried is not None and carried["id"] not in settled:
+            carried.append(ledger[ref])
+        forms = line_forms(line.get("text"))
+        carried.extend(row for row in open_rows if forms & shared.row_forms(row["text"]))
+        carried = next((row for row in carried if row["id"] not in settled), None)
+        if carried is not None:
             refusals.append(_refusal("open-item-descoped", "the out-of-scope line %r carries the scope doc's open "
                                      "item %r (%s) forward as out of scope, and no answered question of this run "
                                      "touched it: an open item is the owner's call, not a descoping; ask him, or "

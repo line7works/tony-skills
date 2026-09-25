@@ -320,6 +320,77 @@ class AnOpenItemUnderAnotherTrace(_Record):
         self.accepted(self.answer_with("how often the counter resets its display %s later" % bplib.D,
                                        {"kind": "repo_path", "ref": "README.md"}))
 
+
+class AnOpenItemUnderAnyDecoration(_Record):
+    """Round 4, R1 (CL2-2, its last round): `open-item-descoped` reads the line and the row through the
+    frame's own readings (`station_core.answer.forms` for the line, `row_forms` for the row), never a
+    comparison of this core's own, so an open item carried out of scope under any trace and any decoration
+    the frame knows is refused: a trailing period, a label, a zero-width space, a tail, the row decorated.
+    A genuinely new out-of-scope line that shares a word with an open item is accepted."""
+
+    OPEN = "how often the counter resets"
+    PERIOD_ROW = "whether readings persist across sessions."
+    TAIL_ROW = "sync to the cloud %s later" % bplib.D
+    SCOPE = bplib.SCOPE.replace("- %s\n" % OPEN, "- %s\n- %s\n- %s\n" % (OPEN, PERIOD_ROW, TAIL_ROW))
+    files = dict(bplib.base_files(arch=True), **{bplib.SCOPE_PATH: SCOPE})
+
+    def setUp(self):
+        super(AnOpenItemUnderAnyDecoration, self).setUp()
+        self.ids = bplib.ledger_ids(self.SCOPE)
+
+    def answer_with(self, text, settle=None, trace=None):
+        doc = bplib.clean_answer()
+        if settle:
+            doc["questions"].append({"id": "Q3", "text": "Is this one in this build?", "touches": [self.ids[settle]],
+                                     "answer": "no, leave it out"})
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": text,
+                           "trace": trace or {"kind": "repo_path", "ref": "README.md"}}
+        return doc
+
+    def shapes(self):
+        o = self.OPEN
+        return ((o + ".", o), ("O1: " + o, o), ("OOS2 %s %s" % (bplib.D, o), o),
+                (u"​" + o, o), (o + u"​", o), (u"how often the​ counter resets", o),
+                ("%s %s parked: needs prototype" % (o, bplib.M), o), (o + ", later", o),
+                ("1. " + o, o), ("**%s**" % o, o), ("R2 %s %s." % (bplib.D, o), o),
+                ("%s (not now)." % o, o), (u"﻿- %s;" % o, o),
+                ("whether readings persist across sessions", self.PERIOD_ROW),
+                ("Whether readings persist across sessions %s later" % bplib.D, self.PERIOD_ROW),
+                ("sync to the cloud", self.TAIL_ROW), ("sync to the cloud.", self.TAIL_ROW),
+                ("sync to the cloud %s later" % bplib.D, self.TAIL_ROW))
+
+    def test_each_decoration_is_refused(self):
+        for text, row in self.shapes():
+            out = self.refused(self.answer_with(text), "open-item-descoped")
+            self.assertIn(self.ids[row], " ".join(r["message"] for r in out["refusals"]), text)
+
+    def test_each_decoration_is_refused_under_every_trace(self):
+        dashboard = self.ids["a web dashboard %s the owner declined it" % bplib.D]
+        for trace in ({"kind": "owner_words", "ref": "leave it out"}, {"kind": "question", "ref": "Q1"},
+                      {"kind": "ledger", "ref": dashboard}):
+            for text, row in self.shapes():
+                self.refused(self.answer_with(text, trace=trace), "open-item-descoped")
+
+    def test_with_an_answered_question_touching_the_item_they_are_accepted(self):
+        for text, row in self.shapes():
+            testlib.rmtree(self.run.run_dir)
+            self.run.to_harvest()
+            self.accepted(self.answer_with(text, settle=row))
+
+    def test_a_new_line_sharing_a_word_with_an_open_item_is_accepted(self):
+        for text in ("how often the display refreshes %s later" % bplib.D, "the counter resets on power loss",
+                     "sync to the display", "whether readings are signed %s later" % bplib.D,
+                     "later %s how often" % bplib.D, "a cloud backup of the readings."):
+            testlib.rmtree(self.run.run_dir)
+            self.run.to_harvest()
+            self.accepted(self.answer_with(text))
+
+    def test_the_match_is_the_frames_own(self):
+        from blueprint_core import checks
+        for own in ("_normalized", "_item_forms"):
+            self.assertFalse(hasattr(checks, own), own)
+
+
 class VerifyForms(_Record):
     """R5 (CL1-6): a verify form is one of the template's three."""
 
@@ -349,6 +420,25 @@ class VerifyForms(_Record):
             doc["criteria"][0]["verify"] = verify
             out = self.refused(doc, "criterion-without-verify")
             self.assertIn("existing test", " ".join(r["message"] for r in out["refusals"]), verify)
+
+    def test_a_token_with_no_letter_or_digit_names_nothing(self):
+        # round 4, R2 (CL1-6): after the form's prefix the rest holds at least one letter or digit
+        for verify in ("existing test ?", "existing test -", "existing test .", "existing test _",
+                       "new test at /", "new test at ./", "new test at ../", "new test at /.",
+                       "manual: - -", "manual: ? ?", "manual: ... ---"):
+            doc = bplib.clean_answer()
+            doc["criteria"][0]["verify"] = verify
+            self.refused(doc, "criterion-without-verify")
+
+    def test_a_token_holding_a_letter_or_digit_is_still_a_form(self):
+        for index, verify in enumerate(("existing test t1", "new test at tests/9.py", "manual: - run it",
+                                        "new test at ./tests/")):
+            run = bplib.Run(self.tmp, self.ws, run_id="run-w%d" % index, name="run-w%d" % index)
+            run.to_harvest()
+            doc = bplib.clean_answer(run_id=run.run_id)
+            doc["criteria"][0]["verify"] = verify
+            got, out, err = run.record(doc)
+            self.assertEqual(got, 0, (verify, out, err))
 
 
 class OwnRefusals(_Record):

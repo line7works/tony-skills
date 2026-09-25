@@ -119,8 +119,8 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
   any trace) only after he answered a question touching it, and otherwise stays an open question.
 - `criteria`: one measurable end state each, with its `verify` form, exactly one of `existing test
   <name>` (the test named, one token), `new test at <path>` (a path with a `/` or a file extension,
-  no spaces), `manual: <steps>` (at least two words); a placeholder (`TBD`, `n/a`, `later`) or any
-  other text is refused.
+  no spaces), `manual: <steps>` (at least two words), the rest after the prefix holding a letter or
+  digit; a placeholder (`TBD`, `n/a`, `later`), punctuation alone or any other text is refused.
 - `slices`: each `name` (A, B, ...), `short`, `goal`, the requirement and criterion ids it carries,
   `footprint` (the files expected to change), `not_in_slice`, `depends_on`. Reuse an existing
   slice's name only to revise a slice whose status is `not started`.
