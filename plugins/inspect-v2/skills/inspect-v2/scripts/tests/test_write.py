@@ -491,6 +491,178 @@ class TheRequestsRawPathIsTheOneSource(_Write):
         self.assertFalse(os.path.exists(self.named))
 
 
+class TheVariantFamilyNumbering(unittest.TestCase):
+    """Round 4, R1: `common.raw_variant` accepts every member of readers' same-day family, `-2` to `-9`
+    and `-10` onwards, and nothing else."""
+
+    WANT = "/w/docs/reviews/2026-09-25-inspect-turnstile-gpt.md"
+
+    def member(self, tail):
+        from inspect_core import common
+        return common.raw_variant("/w/docs/reviews/2026-09-25-inspect-turnstile-gpt%s.md" % tail, self.WANT)
+
+    def test_every_member_of_the_family(self):
+        for tail in ("", "-2", "-3", "-9", "-10", "-11", "-19", "-20", "-99", "-100", "-123"):
+            self.assertTrue(self.member(tail), tail)
+
+    def test_nothing_else(self):
+        for tail in ("-0", "-1", "-01", "-02", "-010", "-2a", "-", "--2", "-2-3", "2", "-x", "-10.5"):
+            self.assertFalse(self.member(tail), tail)
+
+
+class TheWholeFamilyIsBannered(_Write):
+    """Round 4, R1 (CI1-2's fourth round): the raw copy's banner never depends on what the result names.
+    `record-answer` banners the request's own `raw_path` and every existing `-N` variant of it; the chat's
+    `Raw:` prints the member the result names when it exists in the family, else every member. A same-day
+    repeat files this run's copy at a variant while an earlier run's copy sits at the base."""
+
+    WORD = {"rows": ["gpt-astra"], "words": "send it to gpt-astra"}
+    PRIOR = ("Raw inspector output \u2014 unverified. Findings absent from the chat verdict were refuted or "
+             "could not be verified. Nothing in this file has standing.\n\nan earlier run's reply\n")
+    MINE = "raw reply: this run's own copy\n"
+
+    def path(self, n):
+        base, ext = os.path.splitext(self.want)
+        return self.want if n == 1 else "%s-%d%s" % (base, n, ext)
+
+    def repeat(self, earlier, mine, names, paper_extra=None):
+        """Earlier runs filed copies 1 (the base) to `earlier`, bannered; this run's copy is at `mine`;
+        the result names `names` (a member number, or None for no `raw_path`)."""
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        doc = ilib.make_input(self.ws, self.run.run_dir, row="gpt-astra", owner_word=self.WORD)
+        self.assertEqual(self.run.upto("request", doc=doc)[0], 0)
+        self.want = self.run.artifact("requests.json")["calls"][0]["raw_path"]
+        for n in range(1, earlier + 1):
+            testlib.write_text(self.path(n), self.PRIOR)
+        self.mine = self.path(mine)
+        testlib.write_text(self.mine, self.MINE)
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model",
+                                   findings=[ilib.finding("build-doc.md:12", quote="AC1")])
+        if names is not None:
+            paper["raw_path"] = self.path(names)
+        paper.update(paper_extra or {})
+        fleet = [paper, ilib.reader_result("%s-repo-reality" % R, model=MODEL)]
+        answer = os.path.join(self.tmp, "answer.json")
+        testlib.write_json(answer, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD))
+        return self.run.phase("record-answer", "--answer", answer)
+
+    def family(self, upto):
+        return [self.path(n) for n in range(1, upto + 1)]
+
+    def assert_no_bare_copy(self, upto):
+        for p in self.family(upto):
+            text = testlib.read_text(p)
+            self.assertTrue(text.startswith("Raw inspector output \u2014 unverified."), p)
+            self.assertEqual(text.count("Raw inspector output"), 1, p)
+        self.assertTrue(testlib.read_text(self.mine).endswith(self.MINE))
+
+    def raw_line(self):
+        self.assertEqual(self.run.phase("write")[0], 0)
+        code, doc, out, err = self.run.phase("report")
+        self.assertEqual(code, 10, out + err)
+        return [l for l in doc["chat"].splitlines() if l.startswith("Raw:")]
+
+    # H: a same-day repeat, the earlier copy at the base, this run's at -2
+    def test_h_the_result_names_the_requests_own_path(self):
+        code, doc, out, err = self.repeat(1, 2, 1)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(2)
+        self.assertIn(self.mine, [w["path"] for w in self.run.artifact("banner.json")["writes"]])
+        # the result names an existing member: the chat prints that one, never an unnamed earlier copy
+        self.assertEqual(self.raw_line(), ["Raw: %s" % self.want])
+        self.assert_no_bare_copy(2)
+
+    def test_h_the_result_names_a_variant_that_does_not_exist(self):
+        code, doc, out, err = self.repeat(1, 2, 3)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(2)
+        self.assertFalse(os.path.exists(self.path(3)))
+        self.assertEqual(self.raw_line(), ["Raw: %s, %s" % (self.want, self.mine)])
+
+    def test_h_the_result_names_this_runs_copy(self):
+        code, doc, out, err = self.repeat(1, 2, 2)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(2)
+        self.assertEqual(self.raw_line(), ["Raw: %s" % self.mine])
+
+    def test_h_the_result_names_nothing(self):
+        code, doc, out, err = self.repeat(1, 2, None)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(2)
+        self.assertEqual(self.raw_line(), ["Raw: %s, %s" % (self.want, self.mine)])
+
+    # I: the base and -2 to -9 filed by earlier runs, this run's copy at -10 (and the same for -11)
+    def test_i_the_tenth_copy_named(self):
+        code, doc, out, err = self.repeat(9, 10, 10)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(10)
+        self.assertEqual(self.raw_line(), ["Raw: %s" % self.mine])
+
+    def test_i_the_tenth_copy_named_by_nothing(self):
+        code, doc, out, err = self.repeat(9, 10, None)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(10)
+        self.assertEqual(self.raw_line(), ["Raw: %s" % ", ".join(self.family(10))])
+
+    def test_i_the_eleventh_copy_named(self):
+        code, doc, out, err = self.repeat(10, 11, 11)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(11)
+        self.assertEqual(self.raw_line(), ["Raw: %s" % self.mine])
+
+    def test_i_the_eleventh_copy_named_by_nothing(self):
+        code, doc, out, err = self.repeat(10, 11, None)
+        self.assertEqual(code, 0, out + err)
+        self.assert_no_bare_copy(11)
+
+    # a stop at each tag after record-answer leaves no bare copy (this run at -2, the result naming the base)
+    def test_stop_lane_down(self):
+        code, doc, out, err = self.repeat(1, 2, 1, {"status": "incomplete", "reason": "cut off"})
+        self.assertEqual((code, doc["stop_tag"]), (10, "lane-down"), out + err)
+        self.assert_no_bare_copy(2)
+        self.assertIn(self.mine, [w["path"] for w in doc["writes"]])
+
+    def test_stop_no_effective_model(self):
+        code, doc, out, err = self.repeat(1, 2, 1, {"effective_model": None})
+        self.assertEqual((code, doc["stop_tag"]), (10, "no-effective-model"), out + err)
+        self.assert_no_bare_copy(2)
+        self.assertIn(self.mine, [w["path"] for w in doc["writes"]])
+
+    def test_stop_write_refused(self):
+        self.assertEqual(self.repeat(1, 2, 1)[0], 0)
+        with open(os.path.join(self.ws, ilib.BUILD_REL), "a", encoding="utf-8") as fh:
+            fh.write("an edit by hand\n")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "write-refused"), out + err)
+        self.assert_no_bare_copy(2)
+        self.assertIn(self.mine, [w["path"] for w in doc["writes"]])
+
+    def test_stop_records_refused(self):
+        self.assertEqual(self.repeat(1, 2, 1)[0], 0)
+        other = {"v": 1, "kind": "finding_raised", "at": "2026-09-25T11:00:00Z", "ledger_doc": ilib.BUILD_REL,
+                 "slice": "A", "severity": "MINOR",
+                 "location": {"raw": ilib.BUILD_REL + ":8", "file": ilib.BUILD_REL, "line": 8, "line_end": None,
+                              "tag": None, "more": [], "resolved": True},
+                 "claim": "another writer", "scenario": "it moved the head", "raised_by": "someone",
+                 "actor": {"station": "another-station", "run_id": "other-run", "harness": None},
+                 "origin": {"kind": "native"}, "source": {"known": False}}
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [other])
+        code, body, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                            "--events", events, "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        self.assert_no_bare_copy(2)
+        self.assertIn(self.mine, [w["path"] for w in doc["writes"]])
+
+    def test_completed(self):
+        self.assertEqual(self.repeat(1, 2, 1)[0], 0)
+        self.raw_line()
+        self.assert_no_bare_copy(2)
+
+
 class ReportOnly(_Write):
 
     def test_report_only_appends_nothing_stamps_nothing_mirrors_nothing(self):

@@ -321,11 +321,11 @@ def banner_raw_copies(run):
 
 
 def _raw_copies(run, ws):
-    """The raw copies readers filed for this run's outside calls (round 3, R1): the request's own
-    `raw_path`, recorded at `request`, is the one source, never the result's optional field. For each
-    outside call whose request named a `raw_path`: the file at that path, and the file at readers'
-    `-2`, `-3` variant the result names when it names one; when the result names none of those (no
-    `raw_path`, or one pointing elsewhere), every `-N` variant of the request's path that exists too,
-    since readers may have filed there on a same-day repeat. Only files under `docs/reviews/`; a path
-    the result names that is none of these is left alone: the banner goes on nothing else."""
+    """The raw copies the banner goes on (round 4, R1): for each outside call whose request named a
+    `raw_path` (recorded at `request`), the file at that path and every existing `-N` variant of it
+    (readers' same-day family, `-2` to `-9` and `-10` onwards), whatever the result names: a same-day
+    repeat files this run's copy at a variant while an earlier run's copy sits at the base, and a
+    result may name either, or neither. The banner is idempotent, so an earlier run's bannered copy is
+    left as it is. Only plain files under `docs/reviews/`; a path the result names outside the family
+    is left alone: the banner goes on nothing else."""
     return common.raw_copies(run, ws)

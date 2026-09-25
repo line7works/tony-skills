@@ -315,9 +315,11 @@ Once the answer is written and before anything is triaged, the banner goes on to
 raw copy readers filed at its request's `raw_path` under `docs/reviews/`, once, and on nothing else
 (v1 Step 3). The request's own `raw_path` is the one source (recorded at `request`, in
 `requests.json`), never the result's optional field: the copy at that path is bannered whether the
-result names it, names none, or names a path elsewhere (a path elsewhere is left alone); readers'
-`-2`, `-3` variant of it is bannered when the result names it, and every existing variant is when
-the result names none of them. `banner.json` names each write with its hashes, `write`'s receipt
+result names it, names none, or names a path elsewhere (a path elsewhere is left alone), and so is
+every existing member of readers' same-day family of it (`-2` to `-9`, `-10` and onwards), whatever
+the result names: a same-day repeat files this run's copy at a variant while an earlier run's copy
+sits at the base, and the banner is idempotent, so an earlier run's bannered copy is left as it
+is. `banner.json` names each write with its hashes, `write`'s receipt
 opens with them, and a run that stops here or at any later tag names them in its result and leaves
 no bare copy. Never in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
 of refusing the answer: any result whose `status` is not
@@ -435,8 +437,9 @@ Hunted and held: <the answer's hunted_and_held>
 Next: <by the verdict>
 ```
 
-`Raw:` lists the outside raw copies keyed on each request's own `raw_path`, as `record-answer`
-bannered them; `n/a` is for the Claude lane only, and an outside lane with no copy on disk says
+`Raw:` names, per outside call, the member of the request's same-day family the result names when
+that member exists, else every existing member (so an earlier run's copy is never listed as this
+run's when the result names this run's); `n/a` is for the Claude lane only, and an outside lane with no copy on disk says
 `none:` and why (report-only, or readers filed none at the request's path). A stopped run's block
 names the stop, its sentence, that no stamp was written when none was, and what follows.
 

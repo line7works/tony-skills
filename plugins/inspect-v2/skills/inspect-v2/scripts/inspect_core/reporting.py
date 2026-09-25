@@ -181,9 +181,17 @@ def _isolation(run, paper):
 
 
 def _raw_paths(run):
-    """The outside raw copies as `record-answer` bannered them: keyed on each request's own `raw_path`
-    (round 3, R1), never on the result's optional field."""
-    return common.raw_copies(run, run.input["workspace"])
+    """The outside raw copies the chat names (round 4, R1): per outside call, the member of the request's
+    same-day family the result names when that member exists, else every existing member, so an earlier
+    run's copy is never listed as this run's when the result names this run's."""
+    out = []
+    for family in common.raw_families(run, run.input["workspace"]):
+        members = family["members"]
+        picks = [family["named"]] if family["named"] in members else members
+        for path in picks:
+            if path not in out:
+                out.append(path)
+    return out
 
 
 def _raw_line(run):
