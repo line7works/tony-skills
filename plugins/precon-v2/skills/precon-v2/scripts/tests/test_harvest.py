@@ -220,6 +220,21 @@ class Refused(_Harvest):
             findings = doc["station_result"]["form_findings"]
             self.assertEqual([f["line"] for f in findings], [2])
 
+    def test_a_triage_comment_with_any_spacing_or_case_is_recognized(self):
+        # CP1-6 (round 3): a leading space or tab, no inner spaces, extra spaces, another case: each is
+        # the triage comment off its form, never a line beside which a second comment is inserted
+        for comment in (" <!-- precon-v2 triage: huge -->", "<!--precon-v2 triage: huge-->",
+                        "\t<!-- precon-v2 triage: bounded -->", "<!--  precon-v2   triage: bounded  -->",
+                        "<!-- PRECON-V2 triage: bounded -->", "<!-- precon-v2 triage: bounded --> ",
+                        "\ufeff<!-- precon-v2 triage: bounded -->", "<!-- precon-v2  triage : bounded -->"):
+            tmp = testlib.make_scratch("harvest-")
+            self.addCleanup(testlib.rmtree, tmp)
+            self.fx = preconlib.Fixture(tmp)
+            text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n%s\n\nIntent:" % comment, 1)
+            run, doc = self.stop(text)
+            self.assertEqual(doc["stop_tag"], "form-refused", repr(comment))
+            self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [2], repr(comment))
+
     def test_two_triage_comments_are_form_refused(self):
         text = preconlib.SCOPE_DOC.replace(
             "\n\nIntent:", "\n<!-- precon-v2 triage: bounded -->\n<!-- precon-v2 triage: napkin -->\n\nIntent:", 1)

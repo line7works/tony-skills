@@ -300,6 +300,21 @@ class TheComment(_Write):
         self.assertIn("<!-- precon-v2 triage: architectural -->\n", after)
 
 
+class ReadsBackWhatWasWritten(unittest.TestCase):
+    """CP2-4 (ruling R4): a planned doc that would read back more items than the plan wrote is
+    refused, whatever character made the reader see a second item."""
+
+    def test_the_item_count_is_checked(self):
+        testlib.add_scripts_to_path()
+        from precon_core import scopedoc
+        text = templates.render_scope_doc("Turnstile", preconlib.DATE, "a counter", ["Counts print %s decided "
+                                          "(the owner's words: \"print it\")" % D], open_items=["a", "b"])
+        self.assertEqual(scopedoc.check_rendered(text, items=3), [])
+        problems = scopedoc.check_rendered(text, items=2)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("3 items", problems[0]["message"])
+
+
 class ReportOnly(_Write):
 
     def test_report_only_writes_nothing_outside_the_run_directory(self):

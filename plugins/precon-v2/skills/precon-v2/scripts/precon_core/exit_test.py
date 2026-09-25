@@ -161,28 +161,64 @@ def render_cold_read(existing, idea, date, scope_rel, run_id, calls):
     return existing + ("" if existing.endswith("\n") else "\n") + sections
 
 
-def _recorded_ok(path, row):
-    """Whether `path` is a sidecar readers recorded, `ok`, for `row`."""
-    if os.path.basename(path) != "sidecar.json" or not os.path.isfile(path):
+def _inside(path, root):
+    if not root:
+        return False
+    real, base = os.path.realpath(path), os.path.realpath(root)
+    return real == base or real.startswith(base.rstrip(os.sep) + os.sep)
+
+
+def _recorded_ok(path, row, model, text, roots=()):
+    """Whether `path` is readers' own sidecar, `ok`, for a call of `row`, and the section it heads is
+    that sidecar's rendering (CP1-8, round 3). readers' own place is `<run dir>/readers/<call id>/
+    sidecar.json`, where the run directory holds a precon run's checkpoint for the sidecar's run id
+    and that run built a request for the call (`exit-test/requests.json`), and it lies outside the
+    workspace and the staging home (a run directory always does). The call id is `<run id>-<row>`,
+    the raw text is not blank, and `## <row> · <model>`, the `Sidecar:` line and the raw text stand in
+    the doc exactly as `render_sections` writes them from that sidecar."""
+    if os.path.basename(path) != "sidecar.json" or not os.path.isabs(path) or os.path.islink(path) or \
+            not os.path.isfile(path) or any(_inside(path, root) for root in roots):
+        return False
+    call_dir = os.path.dirname(path)
+    readers_dir = os.path.dirname(call_dir)
+    run_dir = os.path.dirname(readers_dir)
+    if os.path.basename(readers_dir) != READERS:
         return False
     try:
         body = fsio.read_json(path)
+        checkpoint = fsio.read_json(os.path.join(run_dir, "checkpoint.json"))
+        index = fsio.read_json(os.path.join(run_dir, "exit-test", "requests.json"))
     except (OSError, ValueError):
         return False
-    return isinstance(body, dict) and body.get("row") == row and body.get("status") == "ok"
+    if not (isinstance(body, dict) and isinstance(checkpoint, dict) and isinstance(index, dict)):
+        return False
+    run_id = body.get("run_id")
+    call_id = "%s-%s" % (run_id, row)
+    if not (body.get("row") == row and body.get("status") == "ok" and body.get("call_id") == call_id
+            and os.path.basename(call_dir) == call_id and checkpoint.get("run_id") == run_id
+            and isinstance(body.get("raw_text"), str) and body["raw_text"].strip()):
+        return False
+    listed = [r for r in index.get("requests") or [] if isinstance(r, dict)]
+    if not any(r.get("row") == row and r.get("call_id") == call_id for r in listed):
+        return False
+    call = {"row": row, "status": "ok", "effective_model": body.get("effective_model"), "raw_text": body["raw_text"],
+            "sidecar": path}
+    return (body.get("effective_model") or "unknown") == model and render_sections([call]) in text
 
 
-def section_rows(text):
+def section_rows(text, roots=()):
     """The rows with a reader section: a `## <row> · <model>` heading followed by its `Sidecar:` line,
-    that line naming a sidecar readers recorded, `ok`, for that row. A heading inside a reader's raw
-    text with no such sidecar behind it is text, never a section (CP1-8)."""
+    that line naming readers' own sidecar, `ok`, for that row's call, and the section standing as that
+    sidecar renders (`_recorded_ok`). A heading inside a reader's raw text with no such sidecar behind
+    it is text, never a section (CP1-8)."""
     lines = text.split("\n")
     rows = set()
     for index, line in enumerate(lines[:-1]):
         match = SECTION.match(line)
         following = lines[index + 1]
         if match and following.startswith("Sidecar: ") and \
-                _recorded_ok(following[len("Sidecar: "):].rstrip("\r"), match.group("row")):
+                _recorded_ok(following[len("Sidecar: "):].rstrip("\r"), match.group("row"), match.group("model"),
+                             text, roots):
             rows.add(match.group("row"))
     return rows
 

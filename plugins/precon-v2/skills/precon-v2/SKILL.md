@@ -116,8 +116,9 @@ At the end of each round, write ONE answer file (`references/answer.schema.json`
   `needs research`, `needs prototype` or `waiting on <the thing>`; `open` with `waits_on`, the
   call of his it waits on. A parked or open line of the doc becomes `decided` only when a question
   of this run he answered touches it; trace such a line to its ledger id. A line of the doc is
-  passed forward or settled by its id only: its words repeated under any other trace are refused
-  (`retagged`), so the doc never holds a line and its twin.
+  passed forward or settled by its id only: its words repeated under any other trace, with or
+  without an open line's `(waits on: ...)`, are refused (`retagged`), and so are two lines of one
+  answer with the same words, so the doc never holds a line and its twin.
 - `out_of_scope`: what he ruled out, each with its reason and its trace (blueprint's descope
   evidence); `research`: paths to research he did himself; `open_items`: threads for the next
   sitting.

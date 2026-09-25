@@ -232,6 +232,20 @@ class TheGate(_Answer):
         for gate in ("\u200b", " \u200b\ufeff ", "\u2060\u00a0"):
             self.refused(self.answer(gate=gate), "gate-missing")
 
+    def test_a_gate_broken_by_a_line_separator_or_holding_an_invisible_letter(self):
+        # CP2-5 (ruling R4): what Python and a chat renderer break a line at is a second line, and an
+        # invisible letter or a lone combining mark carries no justification
+        for sep in ("\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c", "\r"):
+            self.refused(self.answer(gate="every branch visited%sand parked" % sep), "gate-missing")
+        for gate in ("\u3164", "\u2800", "\u0301", "\uffa0", "\u115f\u1160", "\u20dd",
+                     "every branch visited\u200b", "\ufeffevery branch visited", "every \u3164branch visited"):
+            self.refused(self.answer(gate=gate), "gate-missing")
+
+    def test_a_gate_with_an_accent_or_a_no_break_space_is_one_line(self):
+        code, doc, err = self.run_.record(self.answer(gate="every branch visited, the caf\u00e9 and the "
+                                                           "cafe\u0301 parked,\u00a0all of it"))
+        self.assertEqual(code, 0, json.dumps(doc))
+
 
 class TheRun(_Answer):
 
@@ -254,6 +268,24 @@ class TheRun(_Answer):
         self.refused(self.answer(lines=[{"text": "Reverse %s parked: needs research" % D, "tag": "parked",
                                          "reason": "needs prototype",
                                          "trace": {"kind": "owner_words", "ref": "later"}}]), "unrenderable")
+
+    def test_a_line_separator_or_an_invisible_letter_in_any_written_value_is_unrenderable(self):
+        # CP2-4 (ruling R4): a doc never reads back more items than were written, and never an item a
+        # reader cannot see; one normalizer for every value the documents carry
+        for bad in ("a \u2028 injected", "a\u2029b", "a\x85b", "a\x0bb", "a\x0cb", "a\x1eb",
+                    "a\u200bb", "a\ufeff", "\u3164", "a\u2800b", "\uffa0"):
+            self.refused(self.answer(open_items=[bad]), "unrenderable")
+            self.refused(self.answer(research=[bad]), "unrenderable")
+            self.refused(self.answer(lines=[preconlib.owner_line(bad, "print it")]), "unrenderable")
+            self.refused(self.answer(lines=[{"text": "Whether resets are logged", "tag": "open", "waits_on": bad,
+                                             "trace": {"kind": "owner_words", "ref": "ask me later"}}]),
+                         "open-without-call" if bad in ("\u3164", "\uffa0") else "unrenderable")
+            self.refused(self.answer(out_of_scope=[{"text": bad, "reason": "declined",
+                                                    "trace": {"kind": "owner_words", "ref": "no"}}]),
+                         "unrenderable")
+            self.refused(self.answer(out_of_scope=[{"text": "a phone app", "reason": bad,
+                                                    "trace": {"kind": "owner_words", "ref": "no"}}]),
+                         "unrenderable")
 
     def test_doc_fields_on_an_existing_doc(self):
         self.refused(self.answer(doc=preconlib.new_doc_fields(),

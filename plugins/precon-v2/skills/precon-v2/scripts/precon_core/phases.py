@@ -39,6 +39,14 @@ def _plugin_root(ctx):
     return os.path.dirname(os.path.dirname(ctx.skill_root))
 
 
+def _own_plugin_root(ctx):
+    """This script's own install, never a `--skill-root` of the caller's choosing: the roster found from
+    it decides where `authorized` may land (CP1-7). Only the test hook, `PRECON_V2_TEST=1`, moves it."""
+    if os.environ.get("PRECON_V2_TEST") == "1":
+        return _plugin_root(ctx)
+    return os.path.dirname(os.path.dirname(validate.skill_root()))
+
+
 def _is_git_root(path):
     try:
         proc = subprocess.run(["git", "-C", path, "rev-parse", "--show-toplevel"], stdout=subprocess.PIPE,
@@ -138,7 +146,7 @@ def harvest(ctx, args):
         for cand in cold["candidates"]:
             text = _read_text(cand["path"])
             candidates.append({"path": cand["path"], "home": cand["home"], "sha256": fsio.sha256_bytes(text.encode("utf-8")),
-                               "rows": sorted(exit_test.section_rows(text))})
+                               "rows": sorted(exit_test.section_rows(text, roots=(workspace, staging)))})
         out["cold_read"] = {"outcome": cold["outcome"], "candidates": candidates}
     runmod.write_json(run, "harvest.json", out)
     runmod.advance(run, "harvested")
@@ -221,7 +229,7 @@ def request(ctx, args):
                                                  harvest_doc["idea"]),
                         scopedoc.root_of(doc["path"], doc["home"], workspace, staging))
     try:
-        roster = readers_request.load_roster(exit_test.roster_path(_plugin_root(ctx)))
+        roster = readers_request.load_roster(exit_test.roster_path(_own_plugin_root(ctx)))
     except (exit_test.RosterMissing, OSError, ValueError) as exc:
         raise driver.Usage("readers' roster cannot be read: %s" % exc)
     models = {}
@@ -231,7 +239,12 @@ def request(ctx, args):
             raise driver.Usage("--model takes ROW=ID, not %r" % item)
         models[row] = model
     rows = list(args.row or [])
-    built, refusals = exit_test.plan_requests(rows, run.input, roster, run.checkpoint["run_id"], run.run_dir,
+    input_doc = run.input
+    if rules.blank((input_doc.get("owner_word") or {}).get("words")):
+        # the owner's words read with the gate's own notion of blank (CP1-9): words a reader cannot see name
+        # no row, so the request is built as if there were no word
+        input_doc = dict((k, v) for k, v in input_doc.items() if k != "owner_word")
+    built, refusals = exit_test.plan_requests(rows, input_doc, roster, run.checkpoint["run_id"], run.run_dir,
                                               harvest_doc["doc"]["path"], session_model=args.session_model,
                                               models=models)
     if refusals:
@@ -305,9 +318,13 @@ def plan(run, harvest_doc, answer, requests):
         if text != before:
             writes.insert(0, {"path": doc["path"], "kind": "document", "role": "scope", "sha256_before": doc["sha256"],
                               "text": text})
+    # a doc never reads back more (or fewer) items than the plan wrote (CP2-4): the prior ledger, less the
+    # Open items settled out of it, plus every item this run adds
+    added = sum(len(parts[key]) for key in ("decisions", "out_of_scope", "research", "open"))
+    items = len(harvest_doc.get("ledger") or []) - len(parts["removals"]) + added if doc is not None else added
     for item in writes:
         if item["role"] == "scope":
-            problems = scopedoc.check_rendered(item["text"])
+            problems = scopedoc.check_rendered(item["text"], items=items)
             if problems:
                 raise scopedoc.PlanError(problems)
     if et.get("dispositions") is not None:

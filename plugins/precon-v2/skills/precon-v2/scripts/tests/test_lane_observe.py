@@ -173,7 +173,10 @@ class TheSeam(unittest.TestCase):
         errors = " ".join(e["error"] for e in facts["_errors"])
         self.assertIn("'forged_name'", errors)
         self.assertIn("'selection_outcome'", errors)
-        self.assertEqual(len(facts["_errors"]), 2, facts["_errors"])
+        # the frame of the ninth seam fix hands the observer a fresh dict, so it cannot see what the frame
+        # observed: the fill of the name the frame already has and its provenance are two errors, neither merged
+        self.assertEqual(len(facts["_errors"]), 3, facts["_errors"])
+        self.assertIn("provenance for 'selection_outcome'", errors)
         self.assertEqual(facts["selection_outcome"], "as-the-frame-saw-it")
         self.assertEqual(via["selection_outcome"], "cli")
         self.assertEqual(facts["selection_candidates"], ["workspace/docs/scope/2026-09-20-turnstile.md"])

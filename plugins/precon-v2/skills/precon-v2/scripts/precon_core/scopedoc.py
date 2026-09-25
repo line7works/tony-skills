@@ -18,12 +18,16 @@ import re
 
 from station_core import ledger, templates
 
+from . import text as textmod
+
 D = templates.D
 M = templates.M
 TIERS = ("napkin", "bounded", "architectural")
 TIER_COMMENT = "<!-- precon-v2 triage: %s -->"
 TIER_LINE = re.compile(r"^<!-- precon-v2 triage: (napkin|bounded|architectural) -->$")
-TIER_PREFIX = "<!-- precon-v2 triage:"
+# a triage comment as a hand may have typed it: any spacing, any case, a leading byte-order mark or
+# invisible; one that is not exactly TIER_LINE is off its form (CP1-6)
+TIER_ANY = re.compile(r"<!--\s*precon[-_ ]?v2\s+triage\b", re.IGNORECASE)
 OPEN_LABEL = "Open:"
 TITLE = re.compile(r"^# (?P<title>.+) %s scope doc \((?P<date>.+)\)$" % D)
 PARKED_REASONS = ("needs research", "needs prototype")
@@ -60,13 +64,19 @@ def header(text):
     return out
 
 
+def is_comment(line):
+    """Whether a line carries a triage comment, in any hand's spelling."""
+    return bool(TIER_ANY.search("".join(c for c in line if not textmod.invisible(c))))
+
+
 def comment_findings(text):
     """[{line, message}] for a triage comment off its form (a tier outside the three, another
-    spelling) or a second comment: a doc carries one comment, as this core writes it, or none."""
+    spelling, other spacing) or a second comment: a doc carries one comment, as this core writes it,
+    or none."""
     out, seen = [], 0
     for number, raw in enumerate(text.splitlines(True), 1):
         line = raw.rstrip("\r\n")
-        if not line.startswith(TIER_PREFIX):
+        if not is_comment(line):
             continue
         seen += 1
         if not TIER_LINE.match(line):
@@ -104,8 +114,10 @@ def valid_parked(reason):
 # ---- the lines an answer adds ----------------------------------------------------------------------
 
 def one_line(value, what, problems, where=None):
-    if not isinstance(value, str) or not value.strip() or "\n" in value or "\r" in value:
-        problem = {"message": "%s is one line of text, not blank" % what}
+    """`text.one_line`, the check the refusals use too: no line separator, no invisible letter."""
+    if not textmod.one_line(value):
+        problem = {"message": "%s is one line of visible text, not blank, with no line separator or invisible "
+                              "character" % what}
         if where:
             problem.update(where)
         problems.append(problem)
@@ -274,7 +286,7 @@ def render_continued(text, tier, parts):
                 raise PlanError([{"message": "a section ends the file; the form puts 'Next:' last"}])
             before.setdefault(at, []).extend("- %s%s" % (item, nl) for item in items)
 
-    has_comment = any(raw.startswith(TIER_PREFIX) for raw in lines)
+    has_comment = any(is_comment(raw) for raw in lines)
     title_at = next((i for i, raw in enumerate(lines) if raw.strip()), 0)
     if not has_comment:
         before.setdefault(title_at + 1, []).append(TIER_COMMENT % tier + nl)
@@ -313,15 +325,19 @@ def render_continued(text, tier, parts):
 
 # ---- the checks every planned scope doc passes ----------------------------------------------------------
 
-def check_rendered(text):
-    """[{message}] when the planned doc would not read back through the ledger reader or the form."""
+def check_rendered(text, items=None):
+    """[{message}] when the planned doc would not read back through the ledger reader or the form, or
+    (given `items`, the count the plan wrote) would read back another number of items (CP2-4)."""
     problems = []
     try:
-        ledger.read(text)
+        rows = ledger.read(text)
     except ledger.LedgerRefused as exc:
+        rows = None
         for row in exc.lines:
             problems.append({"message": "the planned doc's line %d would not read back: %r (%s)"
                                         % (row["line"], row["raw"], row["why"])})
+    if rows is not None and items is not None and len(rows) != items:
+        problems.append({"message": "the planned doc would read back %d items; the plan wrote %d" % (len(rows), items)})
     for finding in templates.check("scope-doc", text):
         problems.append({"message": "the planned doc departs from the form at line %d: %s"
                                     % (finding["line"], finding["message"])})

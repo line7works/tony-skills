@@ -70,8 +70,8 @@
         "words": {
           "type": "string",
           "minLength": 1,
-          "pattern": "\\S",
-          "description": "the owner's words, verbatim: at least one character that is not whitespace (blank words name no row)"
+          "pattern": "[^\\s\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]",
+          "description": "the owner's words, verbatim: at least one character a reader can see, not whitespace, a line separator, a format or zero-width character, an invisible letter or a lone combining mark (such words name no row; `request` reads the words the same way for the marks a pattern cannot list)"
         }
       }
     },

@@ -20,10 +20,14 @@ The rules, each named once:
     source-kind             a parked or open line, or an out-of-scope item, traced to anything but
                             the owner's words or a question he answered
     retagged                a line traced to a ledger line under another tag, other than a parked,
-                            open or assumed line settled as decided; or a line that repeats the
-                            text of a Decisions or Open ledger line (whitespace collapsed, case
-                            folded) under any trace but that line's id, a twin the doc would hold
-                            beside the line it repeats
+                            open or assumed line settled as decided; a line or a new open item
+                            that repeats the words of a Decisions or Open ledger line under any
+                            trace but that line's id (every reading of `text.readings`: whole,
+                            without a trailing `(waits on: ...)`, each field of a dashed line); an
+                            out-of-scope item that does, unless an answered question of this run
+                            (not one marked needs research) touched that parked, open or assumed
+                            line; two lines or items of one answer with the same words: each a
+                            twin the doc would hold beside the line it repeats
     research-resolved       a question marked needs research that a line or an out-of-scope item
                             of this run resolves, or that leaves a parked line of another reason
     research-not-parked     a question marked needs research that leaves no parked line
@@ -31,8 +35,9 @@ The rules, each named once:
                             a sitting that continues
     doc-fields              a new doc without its title and intent, or those fields on an
                             existing doc
-    gate-missing            no gate line, a blank one (whitespace and format characters such as a
-                            zero-width space count as blank), or one on more than one line
+    gate-missing            no gate line, a blank one, or one that is not one line (`text.blank` and
+                            `text.one_line`: a line separator, a format character or an invisible
+                            letter anywhere in it refuses it)
     unrenderable            a value the scope doc or the cold-read doc cannot carry and read back
     exit-test-rows          the exit test's rows are not the rows this run built requests for
     exit-test-unrecorded    a built request with no result recorded by readers
@@ -41,9 +46,7 @@ The rules, each named once:
                             row with no section, or with no summary
     cold-read-doc           dispositions for a cold-read doc this run did not select
 """
-import unicodedata
-
-from . import exit_test, scopedoc
+from . import exit_test, scopedoc, text
 
 # the trace kinds a parked or open line, and an out-of-scope item, may carry: the owner's words or
 # a question he answered (a line passed forward by its ledger id is checked as a pass-forward)
@@ -56,16 +59,7 @@ def refusal(rule, message, **where):
     return row
 
 
-def _blank(value):
-    """Not a string, or nothing in it but whitespace and format characters (a zero-width space, a
-    byte-order mark, a word joiner: Unicode category Cf)."""
-    return not isinstance(value, str) or not any(not c.isspace() and unicodedata.category(c) != "Cf"
-                                                 for c in value)
-
-
-def _normalized(text):
-    """The text with its whitespace collapsed and its case folded (the shared repeat check's form)."""
-    return " ".join(text.split()).casefold()
+_blank = blank = text.blank
 
 
 def check(answer, run_input, harvest, requests, run_dir):
@@ -78,26 +72,55 @@ def check(answer, run_input, harvest, requests, run_dir):
         out.append(refusal("session-mismatch", "the answer names session %r; the input's invocation, read by the "
                                                "adapter, names %r" % (answer.get("session_id"), expected)))
     gate = answer.get("gate")
-    if _blank(gate) or "\n" in gate or "\r" in gate:
+    if not text.one_line(gate):
         out.append(refusal("gate-missing", "the answer carries no gate line: one line justifying that every branch "
                                            "was visited or parked"))
+    out += _one_answer(answer)
     out += _lines(answer, harvest)
-    out += _items(answer)
+    out += _items(answer, harvest)
     out += _research(answer, harvest)
     out += _triage(answer, harvest)
     out += _exit_test(answer, harvest, requests, run_dir)
     return out
 
 
-def _twin(line, kind, rows):
-    """The Decisions or Open ledger row a line repeats by text under a trace other than its id."""
-    if kind == "ledger" or not isinstance(line.get("text"), str):
+def _twin(value, rows, own=None):
+    """The Decisions or Open ledger row whose words `value` repeats (any reading of either), other
+    than the row `own` a ledger trace names."""
+    if not isinstance(value, str):
         return None
-    norm = _normalized(line["text"])
+    forms = text.readings(value)
     for row in rows:
-        if row["section"] in ("Decisions", "Open") and _normalized(row["text"]) == norm:
+        if row["section"] in ("Decisions", "Open") and row["id"] != own and \
+                forms & text.readings(row["text"], fields=False):
             return row
     return None
+
+
+def _settling(answer, ident):
+    """The answered questions of this run, none marked needs research, that touch ledger line `ident`."""
+    return [q["id"] for q in answer.get("questions") or []
+            if ident in (q.get("touches") or []) and not _blank(q.get("answer")) and not q.get("needs_research")]
+
+
+def _one_answer(answer):
+    """Two lines or items of one answer with the same words, under any tags (CP2-2): the doc would hold
+    both."""
+    out, seen = [], []
+    entries = [("line %d" % i, line.get("text"), {"line": i}) for i, line in enumerate(answer.get("lines") or [])]
+    entries += [("out-of-scope item %d" % i, item.get("text"), {"out_of_scope": i})
+                for i, item in enumerate(answer.get("out_of_scope") or [])]
+    entries += [("open item %d" % i, item, {"open_items": i}) for i, item in enumerate(answer.get("open_items") or [])]
+    for label, value, where in entries:
+        if not isinstance(value, str):
+            continue
+        forms = text.readings(value, fields=False)
+        prior = next((name for name, earlier in seen if forms & earlier), None)
+        if prior is not None:
+            out.append(refusal("retagged", "the answer asserts %r twice (%s and %s): one line per item, or the doc "
+                                           "holds an item and its twin" % (value, prior, label), **where))
+        seen.append((label, forms))
+    return out
 
 
 def _lines(answer, harvest):
@@ -110,12 +133,14 @@ def _lines(answer, harvest):
         tag = line.get("tag")
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
         kind, ref = trace.get("kind"), trace.get("ref")
-        twin = _twin(line, kind, rows)
+        twin = _twin(line.get("text"), rows, own=ref if kind == "ledger" else None)
         if twin is not None:
             # the shared quietly-resolved covers a parked or open line's words asserted as decided with no
-            # question touching it; this covers every other twin (an assumed or decided line repeated, a
-            # parked or open line repeated even after a question touched it, any tag): the doc would hold
-            # the line and its twin, so the line is passed forward, or settled, by its id only (CP1-1)
+            # question touching it; this covers every twin, under every trace kind, a ledger trace to
+            # another line included (an assumed or decided line repeated, a parked or open line repeated
+            # even after a question touched it, an Open line this core wrote with its `(waits on: ...)`
+            # named by its bare words, any tag): the doc would hold the line and its twin, so the line is
+            # passed forward, or settled, by its id only (CP1-1)
             out.append(refusal("retagged", "the line %r repeats the %s ledger line %s: pass it forward by its "
                                            "id, and settle it only with an answered question that touches it"
                                % (line.get("text"), twin["tag"], twin["id"]), **where))
@@ -172,8 +197,9 @@ def _lines(answer, harvest):
     return out
 
 
-def _items(answer):
+def _items(answer, harvest):
     out = []
+    rows = harvest.get("ledger") or []
     for index, item in enumerate(answer.get("out_of_scope") or []):
         trace = item.get("trace") if isinstance(item.get("trace"), dict) else {}
         kind = trace.get("kind")
@@ -181,6 +207,18 @@ def _items(answer):
             out.append(refusal("source-kind", "the out-of-scope item %r carries a %s trace: what the owner ruled out "
                                               "traces to his words or a question he answered" % (item.get("text"), kind),
                                out_of_scope=index))
+        twin = _twin(item.get("text"), rows)
+        if twin is not None and not (twin["tag"] in ("parked", "open", "assumed") and _settling(answer, twin["id"])):
+            # CP2-3: ruling out a parked or open line is settling it, so only an answered question of this run
+            # that touches it opens the way; a decided line is never ruled out by its words
+            out.append(refusal("retagged", "the out-of-scope item %r repeats the %s ledger line %s, which no answered "
+                                           "question of this run touched: the doc would hold the line and its twin"
+                               % (item.get("text"), twin["tag"], twin["id"]), out_of_scope=index))
+    for index, item in enumerate(answer.get("open_items") or []):
+        twin = _twin(item, rows)
+        if twin is not None:
+            out.append(refusal("retagged", "the open item %r repeats the %s ledger line %s: the doc would hold the "
+                                           "line and its twin" % (item, twin["tag"], twin["id"]), open_items=index))
     return out
 
 
@@ -274,7 +312,7 @@ def _exit_test(answer, harvest, requests, run_dir):
                                             "(select --hunt cold-read --name <idea>)" % (target,)))
         return out
     sections = set(candidates[target].get("rows") or [])
-    if _blank(et.get("summary")) or "\n" in (et.get("summary") or ""):
+    if not text.one_line(et.get("summary")):
         out.append(refusal("disposition", "the dispositions carry a one-line summary of what was taken and what was "
                                           "left behind"))
     items = et.get("dispositions") or []
@@ -291,6 +329,6 @@ def _exit_test(answer, harvest, requests, run_dir):
             out.append(refusal("disposition", "the row %r has no section in %s" % (item.get("row"), target), **where))
         for key in ("item", "why"):
             value = item.get(key)
-            if value is not None and ("\n" in value or (key == "item" and _blank(value))):
+            if (key == "item" or not _blank(value)) and not text.one_line(value):
                 out.append(refusal("disposition", "a disposition's %s is one line of text" % key, **where))
     return out
