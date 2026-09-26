@@ -607,10 +607,11 @@ class TheRowId(_Answer):
         self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [])
 
     def test_a_decided_row_is_never_moved_back(self):
-        """C3, as the control room narrowed it: a line naming a `decided` row as `parked` or `open` is a re-ask;
-        any other tag is the core's own pass-forward vocabulary and is not judged by the frame."""
+        """C3, as the control room narrowed it and C3A-2 widened it: a line naming a `decided` row as `parked`, `open`
+        or `deferred` (architect's deferred list, which blueprint's ledger view reads as parked) is a re-ask; any other
+        tag is the core's own pass-forward vocabulary and is not judged by the frame."""
         decided = self.ids["Python 3.9 standard library only"]
-        for tag in ("open", "parked"):
+        for tag in ("open", "parked", "deferred"):
             for line in ({"text": "Python 3.9 standard library only", "tag": tag, "row": decided,
                           "trace": {"kind": "owner_words", "ref": "he said"}},
                          {"text": "Python 3.9 standard library only", "tag": tag,
@@ -619,7 +620,7 @@ class TheRowId(_Answer):
                 refusals = self.check(doc, allowed=self.allowed)["refusals"]
                 self.assertEqual([(r["rule"], r.get("line_id")) for r in refusals], [("re-asked-decided", decided)],
                                  (tag, line))
-        for tag in ("decided", "assumed", "constraint", "requirement", "struck", "carried"):
+        for tag in ("decided", "assumed", "constraint", "requirement", "poured", "struck", "carried"):
             for line in ({"text": "Python 3.9 standard library only", "tag": tag, "row": decided,
                           "trace": {"kind": "ledger", "ref": decided}},
                          {"text": "Python 3.9 standard library only", "tag": tag,
@@ -649,7 +650,6 @@ class TheRowId(_Answer):
                 for value in node:
                     walk(value)
         walk(schema)
-        self.assertTrue(rows, "this core's answer schema holds the row property")
         cls = jsonschema.validators.validator_for(schema)
         good = "arch-0123456789ab"
         bad = ("ARCH-0123456789ab", "arch_0123456789ab", "0123456789ab")

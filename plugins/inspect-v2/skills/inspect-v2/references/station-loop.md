@@ -115,15 +115,16 @@ command against a run at the wrong phase is exit 2 with the command to run inste
   passed forward as `decided` with no question of this run that settled it). On 4 and 5 nothing is
   written and the refusals are listed on stdout, each with the line or question it names.
 - The row id (ruling A5(4)): every answer line that decides, settles, passes forward or moves a
-  ledger row names that row by its id, in the line's `row` field (every core's answer schema holds
-  it; a line whose trace is `ledger` names that trace's row, and `row` may repeat it, never differ
-  from it). A line that names its row is judged by the id alone, never by its words: settled as
-  `decided` only when an answered question of this run touches that row; a `decided` row named
-  as `parked` or `open` is refused as a re-ask (any other tag is the core's own pass-forward
-  vocabulary, which the frame does not judge). The words are compared only as a guard on the id-less
-  path: a line asserted as `decided` whose words restate a `parked` or `open` row it does not name
-  is refused, and the refusal says to name the row's id. In that comparison an item label, bare
-  (`R2 `) or marked (`AC1:`, `(R2)`, `[R2]`, `**R2:**`), is part of the words on both sides.
+  ledger row names that row by its id, in the line's `row` field (a core's answer schema holds it on
+  exactly the lines its view hands the frame; a line whose trace is `ledger` names that trace's row,
+  and `row` may repeat it, never differ from it). A line that names its row is judged by the id
+  alone, never by its words: settled as `decided` only when an answered question of this run touches
+  that row; a `decided` row named as `parked`, `open` or `deferred` is refused as a re-ask (any
+  other tag is the core's own pass-forward vocabulary, which the frame does not judge). The words
+  are compared only as a guard on the id-less path: a line asserted as `decided` whose words restate
+  a `parked` or `open` row it does not name is refused, and the refusal says to name the row's id.
+  In that comparison an item label, bare (`R2 `) or marked (`AC1:`, `(R2)`, `[R2]`, `**R2:**`), is
+  part of the words on both sides.
 - Stop tags: none; a refusal leaves the run where it was.
 - In the frame this phase exits 10 with `phase-not-built` until the lane fills it. The refusal
   logic already exists and is tested (`scripts/tests/test_answer.py`).
@@ -258,11 +259,12 @@ The result schema's `stop_tag` description publishes the full list a core can em
    `assumed` with its why, or the owner's words quoted); a line with no trace, or a trace that
    names nothing, is refused the same way. `parked` and `open` lines pass forward as `parked` and
    `open`; one asserted as `decided` is refused unless an answered question of this run touches it.
-   A line that decides, settles, passes forward or moves a ledger row names the row by its id (`row`,
-   or its `ledger` trace) and is judged by the id alone; a `decided` row is never named as `parked`
-   or `open`. The text match is only the guard on the id-less path: a `decided` line whose words restate a
-   `parked` or `open` row it does not name is refused with "name the row's id", an item label (bare
-   or marked, `R2 ` or `AC1:`) being part of the words on both sides (section 3.4).
+   A line that decides, settles, passes forward or moves a ledger row names the row by its id
+   (`row`, or its `ledger` trace) and is judged by the id alone; a `decided` row is never named as
+   `parked`, `open` or `deferred`. The text match is only the guard on the id-less path: a `decided`
+   line whose words restate a `parked` or `open` row it does not name is refused with "name the
+   row's id", an item label (bare or marked, `R2 ` or `AC1:`) being part of the words on both sides
+   (section 3.4).
 3. **Documents are rendered, never typed.** Every load-bearing form (the scope doc, the
    architecture doc, the build doc, the stamp and the station's own block lines) is rendered and
    parsed by `station_core/templates.py` from `references/templates/`, whose forms are v1's byte

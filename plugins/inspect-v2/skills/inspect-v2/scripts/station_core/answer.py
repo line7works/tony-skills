@@ -30,9 +30,10 @@ lines. The refusals, each `{"rule", "message", ...}` naming the question or line
                        a line whose `row` and `ledger` trace differ is one
     re-asked-decided   a question touches a `decided` ledger line, or its text is a `decided`
                        line's text (every known decoration seen through) whatever it touches;
-                       or a line names a `decided` row under the tag `parked` or `open` (a
-                       decided line passes forward and is never moved back; any other tag is the
-                       core's own pass-forward vocabulary, not judged here)
+                       or a line names a `decided` row under the tag `parked`, `open` or `deferred`
+                       (architect's deferred list, which blueprint reads as parked): a decided line
+                       passes forward and is never moved back; any other tag is the core's own
+                       pass-forward vocabulary, not judged here
     unknown-line       a question touches an id the ledger does not hold, or a line's `row`
                        names one
     untraced           a line with no trace, a trace kind the core does not allow, or a trace
@@ -433,6 +434,11 @@ def _in_workspace(workspace, rel):
     return os.path.realpath(path) != os.path.realpath(workspace)
 
 
+# the tags that move a decided row back (C3): parked, open, and architect's deferred, which blueprint's ledger
+# view reads as parked
+MOVED_BACK = ("parked", "open", "deferred")
+
+
 def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
     """{"exit": 0 | 5, "refusals": [...]}; pure, nothing written."""
     problems = _shape(answer)
@@ -506,12 +512,13 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             continue
         row_named = ledger.get(named) if named is not None else None
         tag = line.get("tag")
-        if row_named is not None and row_named["tag"] == "decided" and tag in ("parked", "open"):
-            # C3 (as the control room narrowed it in slice 3a): a decided line named as `parked` or `open` is moved
-            # back, the same act as a question that re-asks it; any other tag is the core's own pass-forward
-            # vocabulary (a blueprint `constraint`, an architect or inspect tag) and the frame does not judge it
+        if row_named is not None and row_named["tag"] == "decided" and tag in MOVED_BACK:
+            # C3 (as the control room narrowed it in slice 3a, `deferred` added by C3A-2): a decided line named as
+            # `parked`, `open` or `deferred` is moved back, the same act as a question that re-asks it; any other
+            # tag is the core's own pass-forward vocabulary (a blueprint `constraint`, an architect or inspect tag)
+            # and the frame does not judge it
             refusals.append(_refusal("re-asked-decided", "the line %r names the decided ledger line %s as %s; a "
-                                     "decided line passes forward and is never moved back to parked or open"
+                                     "decided line passes forward and is never moved back to parked, open or deferred"
                                      % (line["text"], named, tag), line_id=named, **where))
             continue
         if tag != "decided":

@@ -74,8 +74,7 @@
         "id": {"$ref": "#/$defs/id", "description": "the handle a slice names; required in practice for every requirement line of a build doc"},
         "text": {"$ref": "#/$defs/oneLine", "description": "rendered verbatim"},
         "tag": {"type": "string", "enum": ["requirement", "constraint", "out-of-scope"]},
-        "trace": {"$ref": "#/$defs/trace"},
-        "row": {"type": "string", "pattern": "^[a-z]+-[0-9a-f]{12}(-[0-9]+)?$", "description": "the id of the ledger row this line decides, settles, passes forward or moves (the row's id is the trace: the line is judged by it and its words are never matched against that row). Absent on a NEW line, one that names no existing row. A line whose trace is `ledger` names its row by that trace; `row` may repeat it and may not differ from it."}
+        "trace": {"$ref": "#/$defs/trace"}
       }
     },
     "criterion": {
