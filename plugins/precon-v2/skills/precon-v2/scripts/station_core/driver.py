@@ -428,6 +428,28 @@ def _flush_real_stdout():
         real.flush()
 
 
+def _stdout_to_null():
+    null = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(null, 1)
+    finally:
+        os.close(null)
+
+
+def _release(output, fd):
+    """The checked output: to the caller's own sys.stdout (fd None), or through the saved descriptor of a
+    process whose file descriptor 1 is sealed."""
+    if fd is None:
+        sys.stdout.write(output)
+        sys.stdout.flush()
+        return
+    real = sys.__stdout__
+    data = output.encode(getattr(real, "encoding", None) or "utf-8", getattr(real, "errors", None) or "strict")
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view):]
+
+
 def checked_dispatch(handler, ctx, args):
     """Every command's exit code and stdout are checked before either leaves the process (the fifteenth seam
     fix: the outside reviewer's L-3, P-4, A3 and I F7). The handler runs with stdout captured twice: its
@@ -440,7 +462,11 @@ def checked_dispatch(handler, ctx, args):
     with nothing on stdout (the frame's missing-dependency path). Anything else is a Defect: exit 1 with the
     sentence on stderr and nothing released to stdout. A Terminal raised inside is emitted as before and then
     checked the same way; a Usage raised inside propagates as usage. The frame's own commands, the lane
-    phases and a core's own commands all pass through here: one rule."""
+    phases and a core's own commands all pass through here: one rule. When the process's sys.stdout is its
+    real stdout (the driver run as a script), file descriptor 1 is not handed back after the handler: it
+    points at /dev/null for the rest of the process and the checked output leaves through the saved
+    descriptor, so a thread, an atexit hook or a retained stream the handler left behind writes nowhere (the
+    sixteenth seam). A caller that redirected sys.stdout itself gets the output there and keeps its fd 1."""
     captured = _Capture()
     raised = None
     sys.stdout.flush()
@@ -449,50 +475,61 @@ def checked_dispatch(handler, ctx, args):
         saved = os.dup(1)
     except OSError:
         saved = None
-    with tempfile.TemporaryFile() as leak:
-        if saved is not None:
-            os.dup2(leak.fileno(), 1)
-        try:
-            with contextlib.redirect_stdout(captured):
-                try:
-                    code = handler(ctx, args)
-                except Terminal as terminal:
-                    code = emit(terminal.document, exits.TERMINAL)
-        except SystemExit as exc:
-            raised = exc
-        finally:
-            _flush_real_stdout()
-            if saved is not None:
-                os.dup2(saved, 1)
-                os.close(saved)
-        leak.seek(0)
-        if leak.read(1):
-            raise Defect("a command handler wrote to the process's stdout outside the driver's capture")
-    output = captured.getvalue()
-    if raised is not None:
-        # the frame's own missing-dependency path exits 3 through SystemExit with nothing on stdout; that is a
-        # diagnostic exit like any other; every other SystemExit is a defect
-        if type(raised.code) is int and raised.code in DIAGNOSTIC_EXITS and not output.strip():
-            return raised.code
-        raise Defect("a command handler raised SystemExit: %r" % (raised.code,))
-    if type(code) is not int or code not in exits.ALL:
-        raise Defect("a command handler returned an exit code the interface does not document: %r" % (code,))
-    if code in DIAGNOSTIC_EXITS:
-        if output.strip():
-            raise Defect("a command handler wrote to stdout on a diagnostic exit %d" % code)
-        return code
+    seal = saved is not None and sys.stdout is sys.__stdout__
     try:
-        document = json.loads(output, parse_constant=_strict_constant, object_pairs_hook=_unique_keys)
-    except ValueError:
-        raise Defect("a command handler did not emit exactly one JSON document on exit %d" % code)
-    expected = ctx.envelope()
-    if not isinstance(document, dict) or any(
-            type(document.get(key)) is not type(value) or document.get(key) != value
-            for key, value in expected.items()):
-        raise Defect("a command handler emitted a document without this run's envelope")
-    sys.stdout.write(output)
-    sys.stdout.flush()
-    return code
+        try:
+            leak = tempfile.TemporaryFile()
+        except OSError as exc:
+            raise Defect("the driver cannot open a temporary file to check the command's stdout (%s); set "
+                         "TMPDIR to a writable directory" % exc)
+        with leak:
+            if saved is not None:
+                os.dup2(leak.fileno(), 1)
+            try:
+                with contextlib.redirect_stdout(captured):
+                    try:
+                        code = handler(ctx, args)
+                    except Terminal as terminal:
+                        code = emit(terminal.document, exits.TERMINAL)
+            except SystemExit as exc:
+                raised = exc
+            finally:
+                _flush_real_stdout()
+                if saved is not None:
+                    if seal:
+                        _stdout_to_null()
+                    else:
+                        os.dup2(saved, 1)
+            leak.seek(0)
+            if leak.read(1):
+                raise Defect("a command handler wrote to the process's stdout outside the driver's capture")
+        output = captured.getvalue()
+        if raised is not None:
+            # the frame's own missing-dependency path exits 3 through SystemExit with nothing on stdout; that is
+            # a diagnostic exit like any other; every other SystemExit is a defect
+            if type(raised.code) is int and raised.code in DIAGNOSTIC_EXITS and not output.strip():
+                return raised.code
+            raise Defect("a command handler raised SystemExit: %r" % (raised.code,))
+        if type(code) is not int or code not in exits.ALL:
+            raise Defect("a command handler returned an exit code the interface does not document: %r" % (code,))
+        if code in DIAGNOSTIC_EXITS:
+            if output.strip():
+                raise Defect("a command handler wrote to stdout on a diagnostic exit %d" % code)
+            return code
+        try:
+            document = json.loads(output, parse_constant=_strict_constant, object_pairs_hook=_unique_keys)
+        except ValueError:
+            raise Defect("a command handler did not emit exactly one JSON document on exit %d" % code)
+        expected = ctx.envelope()
+        if not isinstance(document, dict) or any(
+                type(document.get(key)) is not type(value) or document.get(key) != value
+                for key, value in expected.items()):
+            raise Defect("a command handler emitted a document without this run's envelope")
+        _release(output, saved if seal else None)
+        return code
+    finally:
+        if saved is not None:
+            os.close(saved)
 
 
 def main(station, hunts, handlers, argv=None, commands=None):

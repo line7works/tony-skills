@@ -417,6 +417,40 @@ class OwnCommands(_Cli):
             if want != 0:
                 self.assertEqual(out, "", source)
 
+    def test_nothing_a_handler_leaves_behind_reaches_stdout_after_the_check(self):
+        """The seam 16 rule: a thread, an atexit hook or a retained stream on file descriptor 1 that a handler
+        leaves behind writes after the check; the driver seals file descriptor 1, so none of it reaches the
+        caller's stdout, and a handler that closed sys.__stdout__ still has its checked document released."""
+        late = (
+            ("def h(ctx, args):\n    import threading, time\n    threading.Thread(target=lambda: (time.sleep(0.3), os.write(1, b'late thread\\n'))).start()\n    return 2", 2),
+            ("def h(ctx, args):\n    import threading, time\n    threading.Thread(target=lambda: (time.sleep(0.3), print('late print'))).start()\n    return driver.emit(ctx.envelope(ok=True))", 0),
+            ("def h(ctx, args):\n    import atexit\n    atexit.register(lambda: print('late atexit'))\n    return 2", 2),
+            ("def h(ctx, args):\n    global KEEP\n    KEEP = open(1, 'w', closefd=False)\n    KEEP.write('late buffered\\n')\n    return 2", 2),
+            ("def h(ctx, args):\n    sys.__stdout__.close()\n    return driver.emit(ctx.envelope(ok=True))", 0),
+        )
+        for source, want in late:
+            path = self.contract_driver(source)
+            code, out, err = self.run_own(path, ["thing"])
+            self.assertEqual(code, want, (source, out, err))
+            if want == 0:
+                doc = self.json_out(out)
+                self.assertEqual(out, json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n", source)
+            else:
+                self.assertEqual(out, "", source)
+
+    def test_no_writable_temporary_directory_is_one_sentence(self):
+        """The check's own temporary file cannot open: exit 1, one sentence naming it, nothing on stdout."""
+        path = self.contract_driver("\n".join([
+            "import tempfile",
+            "tempfile.tempdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ro')",
+            "os.makedirs(tempfile.tempdir, exist_ok=True)",
+            "os.chmod(tempfile.tempdir, 0o555)",
+            "def h(ctx, args):\n    return driver.emit(ctx.envelope(ok=True))"]))
+        code, out, err = self.run_own(path, ["thing"])
+        self.assertEqual((code, out), (1, ""), err)
+        self.assertIn("temporary file", err)
+        self.assertNotIn("Traceback", err)
+
     def test_no_own_commands_lists_none(self):
         path = self.own_driver("[]")
         code, out, err = self.run_own(path, ["--help"])

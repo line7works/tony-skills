@@ -2,6 +2,8 @@
 
     resolve(name, plugin_root, argument=None) -> {"root", "route", "looked"}
     skill_file(root, name) -> <root>/skills/<name>/SKILL.md
+    manifest(folder) -> the folder's `.claude-plugin/plugin.json` as a mapping, or None
+    version_key(name) -> a folder name as a tuple of integers, or None when it is not canonical
 
 inspect-v2's code book is `blueprint-v2`'s installed `SKILL.md`; this is how it is found, never
 through a v1 folder and never through a personal path:
@@ -30,7 +32,8 @@ class SiblingRefused(ValueError):
     """A name or a folder that is not a v2 sibling."""
 
 
-def _manifest(folder):
+def manifest(folder):
+    """The plugin manifest of `folder` as a mapping, or None (missing, unreadable, not an object)."""
     try:
         with open(os.path.join(folder, MANIFEST), encoding="utf-8") as fh:
             body = json.load(fh)
@@ -39,12 +42,19 @@ def _manifest(folder):
         return None
 
 
-def _version_key(name):
+def version_key(name):
+    """A folder name as a version: a tuple of integers for dotted canonical digits (`0.1.10`), None for
+    anything else (`01.2`, `1.x`, `1..2`, an empty part)."""
     parts = name.split(".")
     for part in parts:
         if not part or [ch for ch in part if ch not in DIGITS] or (len(part) > 1 and part[0] == "0"):
             return None
     return tuple(int(part) for part in parts)
+
+
+# the names this module used before `manifest` and `version_key` were public (slice 3a); kept for callers
+_manifest = manifest
+_version_key = version_key
 
 
 def resolve(name, plugin_root, argument=None):
@@ -53,14 +63,14 @@ def resolve(name, plugin_root, argument=None):
                              "plugin, never a v1 station" % (name,))
     looked = []
     if argument:
-        body = _manifest(argument)
+        body = manifest(argument)
         if body is None or body.get("name") != name:
             raise SiblingRefused("the folder %s holds %s, not the v2 plugin %s" % (
                 argument, "no plugin manifest" if body is None else "the plugin %r" % body.get("name"), name))
         return {"root": argument, "route": "argument", "looked": [argument]}
     beside = os.path.join(plugin_root, os.pardir, name)
     looked.append(beside)
-    body = _manifest(beside)
+    body = manifest(beside)
     if body is not None and body.get("name") == name:
         return {"root": beside, "route": "3a", "looked": looked}
     if body is not None:
@@ -75,17 +85,17 @@ def resolve(name, plugin_root, argument=None):
             folder = os.path.join(base, entry)
             if not os.path.isdir(folder):
                 continue
-            body = _manifest(folder)
+            body = manifest(folder)
             if body is None:
                 looked.append("%s (no plugin.json)" % folder)
             elif body.get("name") != name:
                 looked.append("%s (its manifest names %r)" % (folder, body.get("name")))
             elif body.get("version") != entry:
                 looked.append("%s (name differs from version %s)" % (folder, body.get("version")))
-            elif _version_key(entry) is None:
+            elif version_key(entry) is None:
                 looked.append("%s (version not dotted integers)" % folder)
             else:
-                accepted.append((_version_key(entry), folder))
+                accepted.append((version_key(entry), folder))
         if accepted:
             return {"root": max(accepted)[1], "route": "3b", "looked": looked}
     raise LookupError("missing sibling: %s (looked in: %s)" % (name, ", ".join(looked)))

@@ -376,8 +376,9 @@ class UntracedLine(_Answer):
         self.ledger.append({"id": "prk-s14r", "tag": "parked", "section": "Decisions", "text": u"\u201ekeep the owner\u2019s tally in memory\u201c"})
         refused(apos, " (row side, apostrophe inside)")
         self.ledger.pop()
-        # CS13-3: a sign token that carries the meaning is part of the words on both sides
-        pairs = (("zoom -", "zoom +"), (u"sort \u2193", u"sort \u2191"), (u"status \u2717", u"status \u2713"),
+        # CS13-3: a sign token that carries the meaning is part of the words on both sides (a status mark is not: the
+        # seam 14 reader's CS14-1, re-ruled in slice 3a; `status` with a check meets `status` with a cross)
+        pairs = (("zoom -", "zoom +"), (u"sort \u2193", u"sort \u2191"), (u"units \u2032", u"units \u00b0"),
                  (u"rating \u2605", u"rating \u2605\u2605\u2605"), ("volume --", "volume ++"),
                  ("(US) data residency", "(EU) data residency"), ("(12V) supply", "(5V) supply"), ("(v1) API", "(v2) API"),
                  ("(CLI) rate limit", "(API) rate limit"),
@@ -490,6 +491,327 @@ class ParkedQuietlyResolved(_Answer):
         code, report = self.record(doc)
         self.assertEqual(code, 0, report)
         self.assertTrue(os.path.isfile(os.path.join(self.run_dir, "answer.json")))
+
+
+# The decorations the quiet-upgrade guard reads through (the shapes of
+# `test_the_quiet_upgrade_rule_sees_through_every_known_decoration`), as formats of a row's words.
+DECORATED = (u"R2 \u2014 %s", "AC1: %s", "Q7 %s", "- %s", "%s (waits on: the owner's call)", "%s (parked: needs research)",
+             u"%s \u2014 decided (his words)", u"%s \u00b7 parked: needs prototype", u"%s\u200b", u"R3 \u2014 %s (waits on: x)",
+             "%s (parked: needs research).", "%s (waits on: Q2);", "1. %s", u"\u2022 %s", "(R2) %s", "[R2] %s", "R-2: %s",
+             "AC-1: %s", "**%s**", "`%s`", '"%s"', u"%s\u200e", u"\u2063%s", u"%s\u034f", "%s (waits on: the owner (Q2)).",
+             "%s (waiting on the bench rig)", "%s (needs research).", "%s?", u"%s\ufe0f", "+ %s", "2) %s",
+             "%s [parked: needs research]", "*%s*", "_%s_", "~~%s~~", "R2a: %s", "R12.3 %s", "AC1.2: %s", u"\u2013 %s",
+             "a) %s", "(1) %s", "### %s", "> %s", "- [ ] %s", u"%s\u2026", u"%s\u2014decided (x)", "i. %s", "[x] %s",
+             "- **R2** %s", "**R2:** %s", u"%s\uff0e", "(%s)", "[%s]", u"\u2713 %s", u"\u2192 %s", u"\u00ab%s\u00bb",
+             "R10000 %s", "Open: %s", "Constraint: %s", u"%s\U000e0000", "r2: %s", "D1: %s",
+             u"\u201e%s\u201c", u"\u300c%s\u300d", "__R2__ %s", "***R2*** %s", "%s (R2)", u"\u2610 %s", u"\u21d2 %s",
+             ">> %s", "(a) %s", "A. %s", "Deferred: %s", "Poured concrete: %s", u"%s\u3001", u"%s \u2014",
+             "%s (deferred)", u"%s\uff08waits on: x\uff09", "%s (waits on: the bench call (see (Q2) first))",
+             "%s, tbd", "Footprint: %s", "==%s==", "%s {parked: x}")
+
+
+class TheRowId(_Answer):
+    """Ruling A5(4), the design's R4-1 to R4-4 and C3: a line that decides, settles, passes forward or moves a
+    ledger row names that row by its id (`row`, defaulting from a `ledger` trace); a line that names its row is
+    judged by the id alone; the text match is only a guard on the id-less path, and its refusal says to name
+    the row."""
+
+    allowed = ("ledger", "repo_path", "question", "owner_words")
+
+    def parked(self):
+        return self.ids["The storage format"]
+
+    def settled(self, text, **line):
+        row = {"text": text, "tag": "decided", "row": self.parked(), "trace": {"kind": "question", "ref": "Q1"}}
+        row.update(line)
+        return {"questions": [{"id": "Q1", "text": "Where does the count live?", "touches": [self.parked()],
+                               "answer": "in memory only"}],
+                "lines": [row]}
+
+    def rules(self, doc):
+        return [r["rule"] for r in self.check(doc, allowed=self.allowed)["refusals"]]
+
+    def test_a_parked_row_settled_by_its_id_and_an_answered_question_is_accepted(self):
+        doc = self.settled("The count lives in memory")
+        self.assertEqual(self.check(doc, allowed=self.allowed), {"exit": 0, "refusals": []})
+        code, report = self.record(doc, allowed=self.allowed)
+        self.assertEqual(code, 0, report)
+
+    def test_the_same_line_with_no_question_is_quietly_resolved(self):
+        doc = self.settled("The count lives in memory", trace={"kind": "owner_words", "ref": "he said"})
+        doc["questions"] = []
+        code, report = self.record(doc, allowed=self.allowed)
+        self.assertEqual(code, 5, report)
+        self.assertEqual(os.listdir(self.run_dir), [], "nothing written")
+        (refusal,) = report["refusals"]
+        self.assertEqual(refusal["rule"], "quietly-resolved")
+        self.assertIn("its ledger line %s is parked and no question of this run settled it" % self.parked(),
+                      refusal["message"])
+        # a question asked and left without an answer settles nothing
+        doc = self.settled("The count lives in memory", trace={"kind": "owner_words", "ref": "he said"})
+        doc["questions"][0]["answer"] = ""
+        self.assertEqual(self.rules(doc), ["quietly-resolved"])
+
+    def test_a_row_that_names_no_ledger_line_is_an_unknown_line(self):
+        doc = self.settled("The count lives in memory", row="dec-000000000000")
+        result = self.check(doc, allowed=self.allowed)
+        self.assertEqual([(r["rule"], r.get("line_id")) for r in result["refusals"]],
+                         [("unknown-line", "dec-000000000000")])
+        self.assertIn("The count lives in memory", result["refusals"][0]["message"])
+
+    def test_a_row_and_a_ledger_trace_that_differ_is_a_shape_refusal(self):
+        other = self.ids["Python 3.9 standard library only"]
+        doc = self.settled("The count lives in memory", trace={"kind": "ledger", "ref": other})
+        result = self.check(doc, allowed=self.allowed)
+        self.assertEqual([r["rule"] for r in result["refusals"]], ["shape"])
+        self.assertIn("names row %s but traces to ledger row %s" % (self.parked(), other), result["refusals"][0]["message"])
+        # the same id twice is one row
+        doc = self.settled("The storage format", trace={"kind": "ledger", "ref": self.parked()})
+        self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [])
+        # a row that is not a string is a shape refusal
+        doc = self.settled("The count lives in memory", row=5)
+        self.assertEqual(self.rules(doc), ["shape"])
+
+    def test_a_line_naming_its_row_is_judged_by_the_id_never_by_its_words(self):
+        """The row's own words, decorated every way the guard knows: accepted when a question settled the row;
+        unsettled, refused once, by the id (never the id-less guard's message)."""
+        words = "The storage format"
+        for shape in DECORATED:
+            text = shape % words
+            doc = self.settled(text, trace={"kind": "owner_words", "ref": "he said"})
+            self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [], repr(text))
+            doc["questions"] = []
+            refusals = self.check(doc, allowed=self.allowed)["refusals"]
+            self.assertEqual([r["rule"] for r in refusals], ["quietly-resolved"], repr(text))
+            self.assertNotIn("without naming it", refusals[0]["message"], repr(text))
+
+    def test_an_id_less_line_restating_another_parked_row_is_told_to_name_it(self):
+        """The guard on the id-less path (C2): a decided line under `owner_words` that names no row and restates
+        a parked row's words is refused, and the refusal says to name the row's id."""
+        doc = {"questions": [], "lines": [{"text": "**The storage format**", "tag": "decided",
+                                           "trace": {"kind": "owner_words", "ref": "he said"}}]}
+        (refusal,) = self.check(doc, allowed=self.allowed)["refusals"]
+        self.assertEqual(refusal["rule"], "quietly-resolved")
+        self.assertIn("restates the parked ledger line %s without naming it" % self.parked(), refusal["message"])
+        self.assertIn("carries the row's id (`row`)", refusal["message"])
+        # a line naming ANOTHER row is on the guard's path for every row but its own
+        opened = self.ids["how often it resets"]
+        doc = {"questions": [{"id": "Q1", "text": "How often?", "touches": [opened], "answer": "daily"}],
+               "lines": [{"text": "The storage format", "tag": "decided", "row": opened,
+                          "trace": {"kind": "question", "ref": "Q1"}}]}
+        (refusal,) = self.check(doc, allowed=self.allowed)["refusals"]
+        self.assertEqual(refusal["rule"], "quietly-resolved")
+        self.assertIn("without naming it", refusal["message"])
+        # and settled by an answered question touching the row, the id-less line is accepted as before
+        doc["questions"][0]["touches"].append(self.parked())
+        self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [])
+
+    def test_a_decided_row_is_never_moved_back(self):
+        """C3, as the control room narrowed it: a line naming a `decided` row as `parked` or `open` is a re-ask;
+        any other tag is the core's own pass-forward vocabulary and is not judged by the frame."""
+        decided = self.ids["Python 3.9 standard library only"]
+        for tag in ("open", "parked"):
+            for line in ({"text": "Python 3.9 standard library only", "tag": tag, "row": decided,
+                          "trace": {"kind": "owner_words", "ref": "he said"}},
+                         {"text": "Python 3.9 standard library only", "tag": tag,
+                          "trace": {"kind": "ledger", "ref": decided}}):
+                doc = {"questions": [], "lines": [line]}
+                refusals = self.check(doc, allowed=self.allowed)["refusals"]
+                self.assertEqual([(r["rule"], r.get("line_id")) for r in refusals], [("re-asked-decided", decided)],
+                                 (tag, line))
+        for tag in ("decided", "assumed", "constraint", "requirement", "struck", "carried"):
+            for line in ({"text": "Python 3.9 standard library only", "tag": tag, "row": decided,
+                          "trace": {"kind": "ledger", "ref": decided}},
+                         {"text": "Python 3.9 standard library only", "tag": tag,
+                          "trace": {"kind": "ledger", "ref": decided}}):
+                doc = {"questions": [], "lines": [line]}
+                self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [], (tag, line))
+
+    def test_a_row_of_any_section_prefix_a_ledger_view_emits(self):
+        """The control room's ruling on the row pattern: the schema takes any lower-case section prefix and twelve
+        hex digits (blueprint's view holds `arch-` and `defer-` rows); `check` proves the id exists."""
+        import json
+        import jsonschema
+        with open(os.path.join(testlib.REF, "answer.schema.json"), encoding="utf-8") as fh:
+            schema = json.load(fh)
+        rows = []
+
+        def walk(node):
+            if isinstance(node, dict):
+                props = node.get("properties")
+                # the line's row (inspect's top-level `row` is its readers row, another field)
+                if isinstance(props, dict) and isinstance(props.get("row"), dict) and \
+                        str(props["row"].get("description", "")).startswith("the id of the ledger row"):
+                    rows.append(props["row"])
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+        walk(schema)
+        self.assertTrue(rows, "this core's answer schema holds the row property")
+        cls = jsonschema.validators.validator_for(schema)
+        good = "arch-0123456789ab"
+        bad = ("ARCH-0123456789ab", "arch_0123456789ab", "0123456789ab")
+        for row in rows:
+            self.assertTrue(cls(row).is_valid(good))
+            self.assertTrue(cls(row).is_valid("defer-0123456789ab-2"))
+            for value in bad:
+                self.assertFalse(cls(row).is_valid(value), value)
+        self.ledger.append({"id": good, "tag": "decided", "section": "Poured concrete", "text": "one queue per tenant"})
+        doc = {"questions": [], "lines": [{"text": "one queue per tenant", "tag": "decided", "row": good,
+                                           "trace": {"kind": "owner_words", "ref": "he said"}}]}
+        self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [])
+        for value in bad:
+            doc["lines"][0]["row"] = value
+            self.assertEqual(self.rules(doc), ["unknown-line"], value)
+
+    def test_a_ledger_trace_alone_still_names_its_row(self):
+        """R4-1: `row` absent and a `ledger` trace: the row is the trace's ref, so every answer written before
+        the id keeps its meaning."""
+        doc = {"questions": [], "lines": [{"text": "The storage format", "tag": "decided",
+                                           "trace": {"kind": "ledger", "ref": self.parked()}}]}
+        (refusal,) = self.check(doc, allowed=self.allowed)["refusals"]
+        self.assertEqual(refusal["rule"], "quietly-resolved")
+        self.assertNotIn("without naming it", refusal["message"])
+
+
+class MarkedLabelsAreKeyed(_Answer):
+    """Ruling A5(1), E14-4 read again: a MARKED item label (`AC1:`, `(R2)`, `[R2]`, `**R2:**`, `R2 <dash>`, a
+    trailing `(R2)`) is part of the words on both sides, as a bare label (`R2 `) is; it is still stripped from
+    the words. Each consequence through `forms` and `row_forms`, and through the check a decided line meets."""
+
+    allowed = ("ledger", "repo_path", "question", "owner_words")
+
+    def meets(self, line, row):
+        return bool(answer.forms(line) & answer.row_forms(row))
+
+    def rules(self, line, row):
+        self.ledger.append({"id": "prk-m", "tag": "parked", "section": "Decisions", "text": row})
+        try:
+            doc = self.clean()
+            doc["lines"].append({"text": line, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            return [r["rule"] for r in self.check(doc, allowed=self.allowed)["refusals"]]
+        finally:
+            self.ledger.pop()
+
+    def test_two_different_labels_never_meet(self):
+        for line, row in (("R2: budget", "R3: budget"), ("AC1: budget", "AC2: budget"), ("Q4: budget", "Q3: budget"),
+                          ("**R2:** budget", "**R3:** budget"), ("(R2) budget", "(R3) budget"), ("[R2] budget", "[R3] budget"),
+                          ("budget (R2)", "budget (R3)"), (u"R2 \u2014 budget", u"R3 \u2014 budget"),
+                          ("R2: budget", "R3 budget"), ("R2 budget", "R3: budget"), ("- **R2** budget", "R3: budget")):
+            self.assertFalse(self.meets(line, row), (line, row))
+            self.assertEqual(self.rules(line, row), [], (line, row))
+
+    def test_a_marked_label_meets_an_unlabelled_row_and_its_own_label(self):
+        for line in ("AC1: budget", "**R2:** budget", "(R2) budget", "[R2] budget", "budget (R2)", u"R2 \u2014 budget",
+                     "- **R2** budget", "r2: budget"):
+            self.assertTrue(self.meets(line, "budget"), line)
+            self.assertEqual(self.rules(line, "budget"), ["quietly-resolved"], line)
+            self.assertTrue(self.meets("budget", line), "row %r" % line)
+            self.assertEqual(self.rules("budget", line), ["quietly-resolved"], "row %r" % line)
+        for line, row in (("R2: budget", "R2: budget"), ("R2: budget", "R2 budget"), ("R2 budget", "(R2) budget"),
+                          ("**R2:** budget", "budget [R2]"), ("r2: budget", "R2: budget")):
+            self.assertTrue(self.meets(line, row), (line, row))
+            self.assertEqual(self.rules(line, row), ["quietly-resolved"], (line, row))
+
+    def test_a_marked_label_is_keyed_and_a_bare_one_behind_it_is_words(self):
+        self.assertEqual(answer._split("R2: Q3 budget"), ("r2", "q3 budget"))
+        self.assertEqual(answer.bare("R2: Q3 budget"), "q3 budget")
+        self.assertEqual(answer._split("**AC-1:** budget"), ("ac1", "budget"))
+        self.assertEqual(answer._split("budget (R2)"), ("r2", "budget"))
+        self.assertTrue(self.meets("R2: Q3 budget", "Q3 budget"))
+        self.assertEqual(self.rules("R2: Q3 budget", "Q3 budget"), ["quietly-resolved"])
+        self.assertFalse(self.meets("R2: Q3 budget", "Q4 budget"))
+        self.assertEqual(self.rules("R2: Q3 budget", "Q4 budget"), [])
+
+    def test_a_text_that_is_only_a_label_has_no_words(self):
+        for text, key in (("R2:", "r2"), ("(AC1)", "ac1"), ("[R2]", "r2"), ("**R2:**", "r2"), ("R2", "r2")):
+            self.assertEqual(answer._split(text), (key, ""), text)
+            self.assertEqual(answer.forms(text), set(), text)
+            self.assertEqual(self.rules(text, "R2: budget"), [], text)
+
+    def test_every_decoration_on_a_labelled_line_still_meets_an_unlabelled_row(self):
+        words = "keep the tally in memory"
+        for shape in DECORATED:
+            self.assertTrue(self.meets(shape % words, words), repr(shape))
+            self.assertEqual(self.rules(shape % words, words), ["quietly-resolved"], repr(shape))
+
+
+class TheGuardsHoles(_Answer):
+    """The guard's known holes on the id-less path (the design's C4): the seam 14 reader's CS14-1 and CS14-2, the
+    reviewer's underscore emphasis and inline link (lane P's patch, inspect's F2), each line side and row side."""
+
+    allowed = ("ledger", "repo_path", "question", "owner_words")
+    W = "keep the tally in memory"
+
+    def rules(self, line, row, trace=None, questions=()):
+        self.ledger.append({"id": "prk-h", "tag": "parked", "section": "Decisions", "text": row})
+        try:
+            doc = self.clean()
+            doc["questions"] += list(questions)
+            doc["lines"].append({"text": line, "tag": "decided",
+                                 "trace": trace or {"kind": "owner_words", "ref": "he said"}})
+            return [r["rule"] for r in self.check(doc, allowed=self.allowed)["refusals"]]
+        finally:
+            self.ledger.pop()
+
+    def refused(self, line, row, **kw):
+        self.assertEqual(self.rules(line, row, **kw), ["quietly-resolved"], "line %r, row %r" % (line, row))
+
+    def accepted(self, line, row, **kw):
+        self.assertEqual(self.rules(line, row, **kw), [], "line %r, row %r" % (line, row))
+
+    def test_cs14_2_template_labels_line_breaks_and_bracket_tails(self):
+        W = self.W
+        for text in ("When: %s" % W, "Step 3.1 (walkthrough target): %s" % W, "Step 3.2 (candidates): %s" % W,
+                     "Step 3.3 (one-way doors): %s" % W, "Must be able to: %s" % W,
+                     u"keep the tally\x0bin memory", u"keep the tally\x0cin memory",
+                     u"%s \u2768parked: x\u2769" % W, u"%s \ufe59parked: x\ufe5a" % W, u"%s \u2045parked: x\u2046" % W,
+                     u"%s \u2e28parked: x\u2e29" % W):
+            self.refused(text, W)
+        for row in ("When: %s" % W, u"keep the tally\x0bin memory", u"%s \u2768parked: x\u2769" % W):
+            self.refused(W, row)
+
+    def test_p2_f2_underscore_emphasis_and_inline_links(self):
+        row = "budget ceiling"
+        for line in ("budget _ceiling_", "_budget_ ceiling", "budget _ceiling_."):
+            self.refused(line, row)
+        self.refused(row, "budget _ceiling_")
+        # under an unrelated ledger trace, and beside an answered question touching another row (F2's row-07, row-08)
+        decided = self.ids["Python 3.9 standard library only"]
+        self.refused("budget _ceiling_", row, trace={"kind": "ledger", "ref": decided})
+        self.refused("budget _ceiling_", row, questions=[{"id": "Q8", "text": "Anything else?",
+                                                          "touches": [self.ids["how often it resets"]],
+                                                          "answer": "no"}])
+        # identifiers keep their underscores (F2's three probes)
+        self.assertEqual(answer.bare("_ceiling_"), "ceiling")
+        self.assertEqual(answer.bare("use __init__ hooks"), "use __init__ hooks")
+        self.assertEqual(answer.bare("rename snake_case fields"), "rename snake_case fields")
+        self.accepted("use __init__ hooks", "use init hooks")
+        self.accepted("rename snake_case fields", "rename snakecase fields")
+        # an inline link is read by its visible text; an image is not a link
+        self.refused("[keep the tally](https://example.com/a) in memory", self.W)
+        self.refused(self.W, "keep the [tally](docs/tally.md) in memory")
+        self.assertEqual(answer.bare("see ![chart](c.png) now"), "see ![chart](c.png) now")
+
+    def test_cs14_1_status_marks_and_punctuation_are_decoration(self):
+        W = self.W
+        for row, line in ((u"%s \u2610" % W, u"%s \u2611" % W), (u"%s \u2610" % W, u"%s \u2705" % W),
+                          (u"%s \u2610" % W, u"%s \u2713" % W), (u"%s \u23f3" % W, u"%s \u2705" % W),
+                          (u"%s \U0001f44e" % W, u"%s \U0001f44d" % W), ("%s ?" % W, u"%s \u2713" % W),
+                          ("%s ?" % W, "%s !" % W), (u"%s \u2026" % W, u"%s \u2713" % W),
+                          (u"%s \u2014" % W, u"%s \u2713" % W), (u"%s \u2610 \u2014 parked: x" % W, u"%s \u2713" % W),
+                          ("zoom +", u"zoom \uff0b"), (u"%s \u2610" % W, u"%s \u2610 \u2713" % W),
+                          (u"%s \u2713" % W, u"%s \u2714" % W), (u"status \u2717", u"status \u2713"),
+                          (u"status \u2713", u"status \u2717")):
+            self.refused(line, row)
+        # a sign that can be the meaning stays keyed
+        for row, line in (("zoom -", "zoom +"), (u"sort \u2193", u"sort \u2191"), (u"rating \u2605", u"rating \u2605\u2605\u2605"),
+                          ("volume --", "volume ++"), ("(US) data residency", "(EU) data residency"),
+                          ("(12V) supply", "(5V) supply"), ("(v1) API", "(v2) API"), ("(CLI) rate limit", "(API) rate limit"),
+                          (u"units \u2032", u"units \u00b0")):
+            self.accepted(line, row)
 
 class ShapeRefusals(_Answer):
 
