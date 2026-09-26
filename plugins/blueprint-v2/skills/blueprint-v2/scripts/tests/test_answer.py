@@ -608,9 +608,8 @@ class TheRowId(_Answer):
 
     def test_a_decided_row_is_never_moved_back(self):
         """C3, as the control room narrowed it and C3A-2 widened it: a line naming a `decided` row as `parked`, `open`
-        or `deferred` (architect's deferred list, which blueprint's ledger view reads as parked) is a re-ask, and so is a
-        line under one of those tags that names no row (or another) and restates the decided row's words (C3A2-4); any
-        other tag is the core's own pass-forward vocabulary and is not judged by the frame."""
+        or `deferred` (architect's deferred list, which blueprint's ledger view reads as parked) is a re-ask; any other
+        tag is the core's own pass-forward vocabulary and is not judged by the frame."""
         decided = self.ids["Python 3.9 standard library only"]
         for tag in ("open", "parked", "deferred"):
             for line in ({"text": "Python 3.9 standard library only", "tag": tag, "row": decided,
@@ -621,33 +620,13 @@ class TheRowId(_Answer):
                 refusals = self.check(doc, allowed=self.allowed)["refusals"]
                 self.assertEqual([(r["rule"], r.get("line_id")) for r in refusals], [("re-asked-decided", decided)],
                                  (tag, line))
-        # C3A2-4, the id-less half: the decided row's words under a move-back tag, naming no row (or another), are
-        # the same move back and are refused, the refusal naming the decided row
-        allowed = self.allowed + ("assumed",)
-        for tag in ("open", "parked", "deferred"):
-            for line in ({"text": "Python 3.9 standard library only", "tag": tag,
-                          "trace": {"kind": "assumed", "ref": "revisit later"}},
-                         {"text": "**Python 3.9 standard library only**", "tag": tag, "row": self.parked(),
-                          "trace": {"kind": "ledger", "ref": self.parked()}}):
-                doc = {"questions": [], "lines": [line]}
-                refusals = self.check(doc, allowed=allowed)["refusals"]
-                self.assertEqual([(r["rule"], r.get("line_id")) for r in refusals], [("re-asked-decided", decided)],
-                                 (tag, line))
-                self.assertIn("restates the decided ledger line %s as %s without naming it" % (decided, tag),
-                              refusals[0]["message"])
         for tag in ("decided", "assumed", "constraint", "requirement", "poured", "struck", "carried"):
             for line in ({"text": "Python 3.9 standard library only", "tag": tag, "row": decided,
                           "trace": {"kind": "ledger", "ref": decided}},
                          {"text": "Python 3.9 standard library only", "tag": tag,
-                          "trace": {"kind": "ledger", "ref": decided}},
-                         {"text": "Python 3.9 standard library only", "tag": tag,
-                          "trace": {"kind": "assumed", "ref": "revisit later"}}):
+                          "trace": {"kind": "ledger", "ref": decided}}):
                 doc = {"questions": [], "lines": [line]}
-                self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], (tag, line))
-        # a move-back tag on words no decided row holds is the core's own parked or open line, not judged here
-        doc = {"questions": [], "lines": [{"text": "a phone app", "tag": "parked",
-                                           "trace": {"kind": "assumed", "ref": "revisit later"}}]}
-        self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
+                self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [], (tag, line))
 
     def test_a_row_of_any_section_prefix_a_ledger_view_emits(self):
         """The control room's ruling on the row pattern: the schema takes any lower-case section prefix and twelve

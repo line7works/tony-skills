@@ -594,5 +594,38 @@ class TheAnswerIsNeverRepaired(_Record):
         self.assertEqual(code, 0, out + err)
 
 
+class TheDeferredSectionIsAMoveBack(_Record):
+    """Slice 3a round 4, R3 (C3A2-1, landed on the owner's word A8): every entry of the Deferred section is read
+    as parked by the next station (blueprint's ledger view), and a `lines` entry renders there as a
+    `NEEDS CHECK:` line, so each such entry reaches the frame a second time under the tag `deferred`. A decided
+    scope row named by a `deferred` entry or a `lines` entry under any tag is a move back, refused
+    `re-asked-decided`; the same entry on another row, or traced to a question, passes."""
+
+    def test_a_decided_row_in_the_deferred_section_is_refused_under_any_tag(self):
+        ledger = {"kind": "ledger", "ref": self.i["decided"]}
+        for tag in ("assumed", "decided"):
+            a = archlib.clean_answer()
+            a["lines"] = [{"text": self.i["decided_text"], "tag": tag, "trace": ledger}]
+            doc = self.refused(a, "re-asked-decided")
+            self.assertIn(self.i["decided"], " ".join(r["message"] for r in doc["refusals"]), tag)
+            a = archlib.clean_answer()
+            a["deferred"].append({"text": "the stdlib-only rule %s revisit when the bench grows" % D, "tag": tag,
+                                  "trace": ledger})
+            doc = self.refused(a, "re-asked-decided")
+            self.assertIn(self.i["decided"], " ".join(r["message"] for r in doc["refusals"]), tag)
+
+    def test_a_needs_check_line_on_another_row_or_a_question_is_accepted(self):
+        for tag in ("assumed", "decided"):
+            for trace in ({"kind": "ledger", "ref": self.i["parked"]}, {"kind": "question", "ref": "Q1"}):
+                testlib.rmtree(self.run.run_dir)
+                code, doc, out, err = self.run.to_harvest()
+                self.assertEqual(code, 0, out + err)
+                a = archlib.clean_answer()
+                a["lines"] = [{"text": "the bench clock drift", "tag": tag, "trace": trace}]
+                code, doc, out, err = self.run.record(a)
+                self.assertEqual(code, 0, (tag, trace, out + err))
+                self.assertTrue(doc["accepted"])
+
+
 if __name__ == "__main__":
     unittest.main()

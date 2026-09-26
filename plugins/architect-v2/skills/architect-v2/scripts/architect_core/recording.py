@@ -98,6 +98,9 @@ def view(answer):
                 continue
             where = "%s/%d" % (key, index)
             lines.append({"text": entry["text"], "tag": entry["tag"], "trace": entry.get("trace"), "where": where})
+            if key == "deferred" and entry["tag"] not in shared.MOVED_BACK:
+                # the Deferred section is read as parked by the next station: every entry of it is a move
+                lines.append({"text": entry["text"], "tag": "deferred", "trace": entry.get("trace"), "where": where})
             fields = poured_fields(entry["text"]) if key == "poured_concrete" else None
             if fields:
                 lines.append({"text": fields[1], "category": fields[0], "why": fields[2], "tag": entry["tag"],
@@ -105,6 +108,10 @@ def view(answer):
     for index, line in enumerate(answer["lines"]):
         lines.append({"text": line["text"], "tag": line["tag"], "trace": line.get("trace"),
                       "where": "lines/%d" % index})
+        if line["tag"] not in shared.MOVED_BACK:
+            # a NEEDS CHECK line renders into the Deferred section (docs.section_items), read as parked downstream
+            lines.append({"text": line["text"], "tag": "deferred", "trace": line.get("trace"),
+                          "where": "lines/%d" % index})
     for index, ruling in enumerate(answer["rulings"]):
         lines.append({"text": "%s: %s" % (ruling["disagreement"], ruling["ruling"]), "tag": "ruling",
                       "trace": ruling.get("trace"), "where": "rulings/%d" % index})

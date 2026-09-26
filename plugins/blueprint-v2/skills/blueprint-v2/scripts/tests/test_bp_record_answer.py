@@ -633,5 +633,45 @@ class ALabelIsPartOfTheWords(_Record):
             self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), text)
 
 
+class AMarkedLabelIsALabel(_Record):
+    """Slice 3a round 4, R2 (C3A-3 with C3A2-2, landed on the owner's word A8): the frame keys a marked label
+    (`R2:`, `(R2)`, `[R2]`, `**R2:**`) in any case and a bare one in upper case only, so this core's reason cut
+    keeps a marked label in upper or lower case as it keeps a bare one, and an open item carried out of scope
+    under a marked label is still the open item. A lower-case bare token is words, and other words are a new
+    line."""
+
+    OPEN = "budget ceiling"
+    SCOPE = bplib.SCOPE.replace("- how often the counter resets\n", "- how often the counter resets\n- %s\n" % OPEN)
+    files = dict(bplib.base_files(arch=True), **{bplib.SCOPE_PATH: SCOPE})
+
+    def setUp(self):
+        super(AMarkedLabelIsALabel, self).setUp()
+        self.ids = bplib.ledger_ids(self.SCOPE)
+
+    def fresh(self):
+        testlib.rmtree(self.run.run_dir)
+        self.run.to_harvest()
+
+    def out_of_scope(self, text):
+        doc = bplib.clean_answer()
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": text,
+                           "trace": {"kind": "repo_path", "ref": "README.md"}}
+        return doc
+
+    def test_a_marked_label_in_either_case_carrying_the_open_item_is_refused(self):
+        for text in ("R2: budget ceiling, declined by owner", "AC1: budget ceiling, not in v1",
+                     "r2: budget ceiling, declined by owner", "ac1: budget ceiling, not in v1"):
+            self.fresh()
+            out = self.refused(self.out_of_scope(text), "open-item-descoped")
+            self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), text)
+
+    def test_other_words_or_a_lower_case_bare_token_are_a_new_line(self):
+        for text in ("r2: a phone app, declined by owner", "R2: a phone app, declined by owner",
+                     "ac1 budget ceiling review, later", "r2 budget ceiling, declined by owner",
+                     "(r2) a phone app: declined", "Q3: budget ceiling review board, not now"):
+            self.fresh()
+            self.accepted(self.out_of_scope(text))
+
+
 if __name__ == "__main__":
     unittest.main()
