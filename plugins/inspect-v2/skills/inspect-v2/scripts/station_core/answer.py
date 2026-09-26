@@ -31,9 +31,11 @@ lines. The refusals, each `{"rule", "message", ...}` naming the question or line
     re-asked-decided   a question touches a `decided` ledger line, or its text is a `decided`
                        line's text (every known decoration seen through) whatever it touches;
                        or a line names a `decided` row under the tag `parked`, `open` or `deferred`
-                       (architect's deferred list, which blueprint reads as parked): a decided line
-                       passes forward and is never moved back; any other tag is the core's own
-                       pass-forward vocabulary, not judged here
+                       (architect's deferred list, which blueprint reads as parked), by its id or by
+                       its words (a line under one of those tags that names no row, or another, and
+                       restates a decided line's words): a decided line passes forward and is never
+                       moved back; any other tag is the core's own pass-forward vocabulary, not
+                       judged here
     unknown-line       a question touches an id the ledger does not hold, or a line's `row`
                        names one
     untraced           a line with no trace, a trace kind the core does not allow, or a trace
@@ -520,6 +522,16 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
             refusals.append(_refusal("re-asked-decided", "the line %r names the decided ledger line %s as %s; a "
                                      "decided line passes forward and is never moved back to parked, open or deferred"
                                      % (line["text"], named, tag), line_id=named, **where))
+            continue
+        if tag in MOVED_BACK:
+            # the id-less half of C3: a line moving a decided row back by its words, naming no row (or another)
+            moved = _forms(line["text"])
+            for row in ledger_lines:
+                if row["tag"] == "decided" and row["id"] != named and moved & _row_forms(row["text"]):
+                    refusals.append(_refusal("re-asked-decided", "the line %r restates the decided ledger line %s as %s "
+                                             "without naming it; a decided line passes forward and is never moved back"
+                                             % (line["text"], row["id"], tag), line_id=row["id"], **where))
+                    break
             continue
         if tag != "decided":
             continue
