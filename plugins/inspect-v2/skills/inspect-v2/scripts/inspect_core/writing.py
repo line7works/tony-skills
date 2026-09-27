@@ -337,7 +337,9 @@ def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records):
     the row whose `verdict_doc` is the intended mirror's workspace path. Found: the mirror block the
     result carries (`recognised: true`, the row's state, the component's answer kept whole). Not found,
     or refused: the run ends `records-refused`, the missing capability named and the owner's ruling asked
-    for, with nothing written (no records event, no stamp, no document, no mirror)."""
+    for, with nothing written (no records event, no stamp, no document, no mirror). Recognising means
+    the component's `mirrors` answer, asked before the mirror is written, names the intended path (the
+    component's rule decides it, not the file's presence)."""
     want = os.path.relpath(mirror_path, ws)
     mirror = {"path": mirror_path, "recognised": False, "state": None, "answer": None}
     after = ("Nothing was written: no records event, no stamp, no document, no mirror. The owner's ruling is "
@@ -357,7 +359,7 @@ def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records):
         mirror["state"] = "not recognised by `mirrors`"
         _mirror_stop(ctx, run, records, mirror, want, None,
                      "the records component's `mirrors` does not recognise the intended verdict mirror %s (no row "
-                     "of its answer for %s names it): the frozen records interface lacks that capability, and "
+                     "of its answer for %s, asked before the mirror is written, names it): the frozen records interface lacks that capability, and "
                      "this station requires it before appending findings, stamping the plan or writing the "
                      "verdict. %s" % (want, rel, after))
     mirror["recognised"] = True

@@ -25,14 +25,15 @@ and command reads, writes and prints, its exits and its stops. This file holds w
 its name, its hunt table, its phases (`inspect_core/`) and its own commands.
 
 The hunt tables are the v1 inspect station's own (its Step 1). `build`: `docs/plans/*-<topic>.md`
-and `docs/plans/<topic>.md` (one tier: the dated doc and the undated one blueprint-v2 writes),
-then the older flat `docs/<feature>-build-plan.md`, then any phase or slice doc under `docs/`
-or `plan/`, in that order (the two-source narrowing, then the fallback). `scope`: by glob,
-never by a guessed slug, over every `docs/scope/*.md`, every older flat `docs/*-scope.md` and
-every staging `*-scope.md`, one tier; matching by `Intent:` line is the executor's, recorded with
-`choose`. A build doc the invocation names by path is taken with `named` instead of the build hunt;
-when it lies outside every build home, this run's scope hunt also globs its own directory's
-`scope/*.md` and `*-scope.md` (`gate.hunts_for_run`).
+and `docs/plans/<topic>.md` (one tier: blueprint-v2 writes a new doc dated and extends an
+existing undated one, so either can be the plan), then the older flat
+`docs/<feature>-build-plan.md`, then any phase or slice doc under `docs/` or `plan/`, in that
+order (the two-source narrowing, then the fallback). `scope`: by glob, never by a guessed slug,
+over every `docs/scope/*.md`, every older flat `docs/*-scope.md` and every staging `*-scope.md`,
+one tier; matching by `Intent:` line is the executor's, recorded with `choose`. A build doc the
+invocation names by path is taken with `named` instead of the build hunt; when it lies outside
+every build home, this run's scope hunt also globs its own directory's `scope/*.md` and
+`*-scope.md` (`gate.hunts_for_run`).
 """
 import os
 import sys

@@ -216,8 +216,8 @@ class TheMirrorsCapabilityIsRequired(_Write):
     FIND = [ilib.finding("build-doc.md:12", quote="AC1")]
     MIRROR = "docs/reviews/%s-inspect-turnstile.md" % ilib.TODAY
 
-    def upto_answer(self, records, fleet=None, adjudications=CB1):
-        self.ws = ilib.workspace(self.tmp)
+    def upto_answer(self, records, fleet=None, adjudications=CB1, scope=ilib.SCOPE_DOC):
+        self.ws = ilib.workspace(self.tmp, scope=scope)
         self.run = ilib.Runner(self.tmp, self.ws, records=records)
         fleet = fleet if fleet is not None else ilib.claude_fleet(R, model=MODEL, code_book=self.FIND)
         extra = {"adjudications": adjudications} if adjudications else {}
@@ -309,6 +309,95 @@ class TheMirrorsCapabilityIsRequired(_Write):
         code, doc, out, err = self.run.phase("write")
         self.assertEqual(code, 2, out + err)
         self.assertEqual(testlib.tree_digest(self.ws), self.digest)
+
+    # CI3B-1 (round 2, R1): the stopped read-back carries the triaged inspection, marked unrecorded, so the
+    # owner rules on `mirrors` with the verdict, the findings and the questions in view
+    NEXT_RULING = ("Next: the owner rules on the records component's `mirrors` (E14-2); the findings above stay "
+                   "unrecorded, and a fresh inspect-v2 run follows his ruling.")
+
+    def chat_lines(self, doc):
+        return doc["station_result"]["chat"].splitlines()
+
+    def test_the_real_component_stop_prints_the_unrecorded_inspection(self):
+        self.upto_answer("real")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        lines = self.chat_lines(doc)
+        self.assertIn("Stamp: none written", lines)
+        unrecorded = [l for l in lines if l.startswith("Unrecorded (nothing appended, no stamp, no verdict doc): ")]
+        self.assertEqual(len(unrecorded), 1, lines)
+        self.assertIn("the verdict would be %s" % doc["station_result"]["verdict"], unrecorded[0])
+        self.assertIn("0 BLOCKER · 1 MAJOR · 0 MINOR; Refuted: 0", unrecorded[0])
+        found = [l for l in lines if l.endswith(" not appended")]
+        self.assertEqual(len(found), 1, lines)
+        self.assertIn(ilib.BUILD_REL + ":12", found[0])
+        self.assertTrue(found[0].startswith("MAJOR · "), found[0])
+        self.assertIn("Hunted and held: %s" % ilib.HUNTED, lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING)
+        self.assertEqual(len([l for l in lines if l.startswith("Next:")]), 1)
+        self.assertFalse([l for l in lines if l.startswith("Record:")], "not weaker: no no-record note")
+        # the order: the stop, the reason, the stamp line, then the unrecorded block, then Next
+        self.assertLess(lines.index("Stamp: none written"), lines.index(unrecorded[0]))
+        # the chat block alone changes: the result still says none of it was appended
+        self.assertEqual(doc["station_result"]["records"]["appended"], 0)
+        self.assertEqual(doc["station_result"]["findings"][0]["finding_id"], None)
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual(again["station_result"]["chat"], doc["station_result"]["chat"])
+
+    def test_a_weaker_real_component_stop_prints_its_questions_and_the_no_record_note(self):
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=self.FIND, traceability=[ilib.finding(
+            "build-doc.md:14", severity="BLOCKER", claim="was the reset deferred")])
+        self.upto_answer("real", fleet=fleet, scope=None)
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertTrue(doc["station_result"]["weaker"])
+        lines = self.chat_lines(doc)
+        questions = [l for l in lines if l.startswith("Questions (not written): ")]
+        self.assertEqual(len(questions), 1, lines)
+        self.assertIn(ilib.BUILD_REL + ":14 · was the reset deferred", questions[0])
+        self.assertIn("Record: no scope doc exists for this feature, so this run is weaker: untraceable items are "
+                      "questions for the owner, never blockers (the no-record rule).", lines)
+        self.assertTrue([l for l in lines if l.endswith(" not appended") and ilib.BUILD_REL + ":12" in l], lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING)
+
+    def test_a_double_with_no_row_names_the_owners_ruling_too(self):
+        self.upto_answer("other")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        lines = self.chat_lines(doc)
+        self.assertTrue([l for l in lines if l.endswith(" not appended")], lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING)
+
+    def test_a_head_moved_stop_keeps_its_own_next_line(self):
+        # the unrecorded block prints on any `records-refused` after triage; `Next:` names the owner's
+        # ruling on `mirrors` only when the mirror was not recognised
+        self.upto_answer("recognise")
+        other = dict(TheHeadIsReadBeforeAnyWrite.OTHER)
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [other])
+        code, body, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                            "--events", events, "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        lines = self.chat_lines(doc)
+        self.assertTrue([l for l in lines if l.endswith(" not appended")], lines)
+        self.assertEqual(lines[-1], "Next: read the component's sentence; nothing here repairs the log.")
+
+    def test_a_records_refusal_before_triage_prints_no_unrecorded_block(self):
+        # a log the component refuses to read stops the run at `harvest`, before any answer
+        log = "docs/records/%s.events.jsonl" % ilib.BUILD_REL.replace("/", "__")[:-3]
+        self.ws = ilib.workspace(self.tmp, extra={log: "this is not an event log\n"})
+        self.run = ilib.Runner(self.tmp, self.ws, records="real")
+        code, doc, out, err = self.run.upto("harvest")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        lines = self.chat_lines(doc)
+        self.assertFalse([l for l in lines if l.startswith("Unrecorded") or l.endswith(" not appended")
+                          or l.startswith("Questions") or l.startswith("Hunted and held:")], lines)
+        self.assertEqual(lines[-1], "Next: read the component's sentence; nothing here repairs the log.")
 
     def test_a_completed_result_with_an_unrecognised_mirror_does_not_validate(self):
         import copy
@@ -984,6 +1073,10 @@ class ReportOnly(_Write):
         self.assertEqual(code, 10, out + err)
         self.assertTrue(doc["wrote_nothing"])
         self.assertEqual(testlib.tree_digest(self.ws), ws_digest)
+        # CI3B-1 (round 2): the report-only read-back is unchanged, never the stopped run's unrecorded block
+        chat = doc["station_result"]["chat"].splitlines()
+        self.assertTrue([l for l in chat if l.startswith("Verdict: ")], chat)
+        self.assertFalse([l for l in chat if l.startswith("Unrecorded") or l.endswith(" not appended")], chat)
 
 
 if __name__ == "__main__":

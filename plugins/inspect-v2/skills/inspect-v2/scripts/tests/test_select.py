@@ -77,7 +77,8 @@ class TheBuildHunt(_Select):
         self.assertEqual(doc["outcome"], "several")
         self.assertEqual(len(doc["candidates"]), 2)
 
-    # J-1, inspect's half: `docs/plans/<name>.md`, the undated doc blueprint-v2 writes, is the first tier too
+    # J-1, inspect's half: `docs/plans/<name>.md` is the first tier too (blueprint-v2 writes a new doc dated
+    # and extends an existing undated one, so an undated plans doc can be the plan)
     def test_an_undated_plans_doc_alone_is_one(self):
         run = self.runner({"docs/plans/turnstile.md": ilib.BUILD_DOC}, build=None)
         doc = self.select(run, "build", "turnstile")

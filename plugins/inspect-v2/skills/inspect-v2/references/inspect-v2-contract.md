@@ -475,7 +475,11 @@ Next: <by the verdict>
 that member exists, else every existing member (so an earlier run's copy is never listed as this
 run's when the result names this run's); `n/a` is for the Claude lane only, and an outside lane with no copy on disk says
 `none:` and why (report-only, or readers filed none at the request's path). A stopped run's block
-names the stop, its sentence, that no stamp was written when none was, and what follows.
+names the stop, its sentence, that no stamp was written when none was, and what follows; a run
+stopped `records-refused` after its answer was triaged also prints, marked unrecorded, the verdict
+it would have given, every surviving finding (each `not appended`), the questions, the no-record
+note and what was hunted and held, so the owner rules with them in view; nothing of them is
+appended, stamped or mirrored.
 
 ## 10. Report-only
 
@@ -551,9 +555,11 @@ reader answer holds a verified finding with a holding citation and no planted li
    hunt finds no build doc has asked one question for nothing. Recorded for the owner.
 2. **Mirror capability is required.** Before appending findings, stamping the plan or writing
    the verdict, establish that the frozen records interface can recognise the intended verdict
-   mirror. If it cannot, stop `records-refused`, name the missing capability and request the
-   owner's ruling. Write no records event, stamp or verdict. Recording `recognised: false` does not
-   complete this requirement.
+   mirror. Here the component recognises the mirror when its `mirrors` answer, asked before the
+   mirror is written, names the intended path (the component's rule, not the file's presence,
+   decides it); the owner's ruling on `mirrors` is asked in those terms. If it cannot, stop
+   `records-refused`, name the missing capability and request the owner's ruling. Write no records
+   event, stamp or verdict. Recording `recognised: false` does not complete this requirement.
 3. **An untaggable scope-doc line does not stop the run.** Quoted, never dropped or guessed, under
    `harvest.json`'s `ledger.refused`; v1 inspects a plan whatever its record's form, and the
    traceability lens reads the scope doc's bytes.
