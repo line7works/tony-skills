@@ -105,8 +105,12 @@ class ThePlantedAdjudications(unittest.TestCase):
         case_dir, neutral, step = self.built()
         module, facts, via = self.observe(case_dir, neutral, step)
         self.assertEqual(facts["_errors"], [])
-        self.assertEqual([(p["phase"], p["exit"]) for p in facts["_phases"]][-3:],
-                         [("record-answer", 0), ("write", 0), ("report", 10)])
+        # the answer is recorded; `write` then stops `records-refused` at the mirror capability (F1): the
+        # frozen records component of this checkout does not recognise an inspect verdict mirror (E14-2)
+        self.assertEqual([(p["phase"], p["exit"]) for p in facts["_phases"]][-2:],
+                         [("record-answer", 0), ("write", 10)])
+        self.assertIsNone(facts["stamp_model"])
+        self.assertIs(facts["stamp_written"], False)
         for name in step["pending"]:
             self.assertIn(name, facts)
             self.assertIn("translation choice", via[name])

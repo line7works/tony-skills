@@ -29,6 +29,14 @@ and a missing call is `lane-down`; `write` reads the records head before any wri
 included, and stops `records-refused` when it moved; and an incomplete ledger refuses questions and
 asserted lines (`ledger-incomplete`) while a findings-only answer is still recorded.
 
+Slice 3b (the reviewer's closing look, F1, and the control room's rulings R1 to R5): mirror
+capability is required, so `write` asks the records component's `mirrors` before any records
+event, stamp or verdict whether it recognises the intended verdict mirror, and stops
+`records-refused` when it does not (the frozen component lists signoff verdict docs only, so every
+`write` stops there until the owner rules); a content refusal at `record-answer` banners the outside
+raw copies too; the build hunt's first tier also takes `docs/plans/<name>.md`; a line's `tag` is one
+of a closed, lower-case set; and the readers roster is found by the shared resolver.
+
 What stays for the join (slice 3): the full suites on the joined tree, the seven-station install
 proof with inspect-v2 resolving blueprint-v2 by route 3b beside the real blueprint-v2 core (in this
 lane route 3a finds the frame's skeleton `SKILL.md` of lane L), the end-to-end replay across the

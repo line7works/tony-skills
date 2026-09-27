@@ -24,7 +24,8 @@ every front core shares and `references/inspect-v2-contract.md` is this core's o
 and command reads, writes and prints, its exits and its stops. This file holds what is inspect-v2's:
 its name, its hunt table, its phases (`inspect_core/`) and its own commands.
 
-The hunt tables are the v1 inspect station's own (its Step 1). `build`: `docs/plans/*-<topic>.md`,
+The hunt tables are the v1 inspect station's own (its Step 1). `build`: `docs/plans/*-<topic>.md`
+and `docs/plans/<topic>.md` (one tier: the dated doc and the undated one blueprint-v2 writes),
 then the older flat `docs/<feature>-build-plan.md`, then any phase or slice doc under `docs/`
 or `plan/`, in that order (the two-source narrowing, then the fallback). `scope`: by glob,
 never by a guessed slug, over every `docs/scope/*.md`, every older flat `docs/*-scope.md` and
@@ -46,7 +47,7 @@ STATION = "inspect-v2"
 
 HUNTS = {
     "build": [
-        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/*-{name}.md"], "tier": 1},
+        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/*-{name}.md", "docs/plans/{name}.md"], "tier": 1},
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-build-plan.md"], "tier": 2},
         {"home": "phase-or-slice", "root": "workspace", "globs": ["docs/*phase*.md", "docs/*slice*.md", "plan/*.md"], "tier": 3},
     ],

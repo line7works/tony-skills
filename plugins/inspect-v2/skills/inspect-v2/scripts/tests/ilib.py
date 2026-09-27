@@ -88,9 +88,17 @@ def make_input(ws, run_dir, row="claude-session", staging=None, run_id="run-0001
 
 
 class Runner(object):
-    """One run of the real CLI, phase by phase."""
+    """One run of the real CLI, phase by phase.
 
-    def __init__(self, tmp, ws, run_dir=None, env=None, driver=None):
+    `write` asks the records component's `mirrors` whether it recognises the intended verdict mirror
+    before any write (the reviewer's F1, ruling A5(3)); the frozen component of this checkout does not
+    recognise an inspect mirror (the owner's call, E14-2), so every `write` against it stops
+    `records-refused`. A test that exercises what `write` does once the capability is there runs it
+    against a test double (`records_double`, mode `recognise`), which is the default here: `write` gets
+    `--records-root <the double>` unless the test passes its own. `records="real"` runs `write` against
+    the real component of this checkout, as the run would today."""
+
+    def __init__(self, tmp, ws, run_dir=None, env=None, driver=None, records="recognise"):
         self.tmp = tmp
         self.ws = ws
         self.run_dir = run_dir or os.path.join(tmp, "run")
@@ -98,6 +106,8 @@ class Runner(object):
         os.makedirs(self.cwd, exist_ok=True)
         self.env = testlib.base_env(dict(ENV, **(env or {})))
         self.driver = driver or testlib.DRIVER
+        self.records = records
+        self.double = None
 
     def cli(self, args, env=None):
         full = dict(self.env)
@@ -119,7 +129,12 @@ class Runner(object):
         return self.cli(["check-input", path])
 
     def phase(self, name, *args, **kw):
-        return self.cli([name, "--run-dir", self.run_dir] + list(args), env=kw.get("env"))
+        args = list(args)
+        if name == "write" and self.records != "real" and "--records-root" not in args:
+            if self.double is None:
+                self.double = records_double(self.tmp, self.records)
+            args += ["--records-root", self.double]
+        return self.cli([name, "--run-dir", self.run_dir] + args, env=kw.get("env"))
 
     def upto(self, last, doc=None, answer=None, name="turnstile"):
         """Run check-input through `last`, asserting each earlier step's exit."""
@@ -205,7 +220,71 @@ def records_cli(args, python=None):
     return proc.returncode, (json.loads(out) if out.strip() else None), proc.stderr.decode("utf-8", "replace")
 
 
-def installed_shape(parent, with_records=True, with_code_book=True, records_version=None):
+DOUBLE_MODES = ("recognise", "other", "refuse")
+DOUBLE_REFUSAL = "the test double refuses `mirrors` on purpose"
+
+
+def records_double(parent, mode="recognise"):
+    """A test double of the records component: `<parent>/records-double-<n>/scripts/records.py`, which
+    logs its argv to `argv.log` beside `scripts/` and runs this checkout's real `records.py` for every
+    command but `mirrors`. For `mirrors` it answers by `mode`:
+
+        recognise  the real answer, plus one row for each name the station can give this doc's verdict
+                   mirror on the run's date (`docs/reviews/<date>-inspect-<feature>.md`, then `-2` to
+                   `-20`), as a component that recognises inspect mirrors would
+        other      the real answer, plus one row for a verdict doc that is not the station's mirror
+        refuse     exit 4 `invalid`, with the sentence `DOUBLE_REFUSAL`
+
+    Built under a test's own temporary directory; the real component's path is data in the double,
+    written at test time. Returns the double's root (what `--records-root` takes)."""
+    if mode not in DOUBLE_MODES:
+        raise ValueError(mode)
+    n = 1
+    while os.path.exists(os.path.join(parent, "records-double-%d" % n)):
+        n += 1
+    root = os.path.join(parent, "records-double-%d" % n)
+    real = os.path.join(testlib.records_root(), "scripts", "records.py")
+    testlib.write_text(os.path.join(root, "scripts", "records.py"), "\n".join([
+        "import json, os, re, runpy, subprocess, sys",
+        "sys.dont_write_bytecode = True",
+        "REAL = %s" % json.dumps(real),
+        "MODE = %s" % json.dumps(mode),
+        "HERE = os.path.dirname(os.path.abspath(__file__))",
+        "with open(os.path.join(os.path.dirname(HERE), 'argv.log'), 'a') as fh:",
+        "    fh.write(json.dumps(sys.argv[1:]) + '\\n')",
+        "args = sys.argv[1:]",
+        "if not args or args[0] != 'mirrors':",
+        "    sys.argv[0] = REAL",
+        "    sys.path[0] = os.path.dirname(REAL)",
+        "    runpy.run_path(REAL, run_name='__main__')",
+        "    sys.exit(0)",
+        "if MODE == 'refuse':",
+        "    print(json.dumps({'ok': False, 'error': 'invalid', 'reason': %s}))" % json.dumps(DOUBLE_REFUSAL),
+        "    sys.exit(4)",
+        "proc = subprocess.run([sys.executable, REAL] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)",
+        "if proc.returncode != 0:",
+        "    sys.stdout.write(proc.stdout.decode('utf-8'))",
+        "    sys.stderr.write(proc.stderr.decode('utf-8'))",
+        "    sys.exit(proc.returncode)",
+        "body = json.loads(proc.stdout.decode('utf-8'))",
+        "doc = args[args.index('--doc') + 1]",
+        "base = os.path.basename(doc)",
+        "m = re.match(r'^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$', base)",
+        "feature = m.group(1) if m else (base[:-len('-build-plan.md')] if base.endswith('-build-plan.md') else base[:-3])",
+        "date = os.environ.get('INSPECT_V2_TEST_NOW', '')[:10]",
+        "if MODE == 'recognise':",
+        "    names = ['%s-inspect-%s.md' % (date, feature)] + ['%s-inspect-%s-%d.md' % (date, feature, k) for k in range(2, 21)]",
+        "else:",
+        "    names = ['%s-signoff-%s-a.md' % (date, feature)]",
+        "for name in names:",
+        "    body.setdefault('mirrors', []).append({'slice': None, 'verdict_doc': 'docs/reviews/' + name,",
+        "                                           'state': 'recognised by the test double', 'blocks': [],",
+        "                                           'only_in_mirror': []})",
+        "print(json.dumps(body))", ""]))
+    return root
+
+
+def installed_shape(parent, with_records=True, with_code_book=True, records_version=None, with_readers=True):
     """This checkout's inspect-v2 (and its siblings) laid out the way a harness installs plugins:
     `<cache>/<marketplace>/<plugin>/<version>/`. Returns the copied driver's path."""
     base = os.path.join(parent, "cache", "local")
@@ -225,7 +304,7 @@ def installed_shape(parent, with_records=True, with_code_book=True, records_vers
         rec = testlib.records_root()
         shutil.copytree(rec, os.path.join(base, "records", records_version or version_of(rec)),
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "fixtures"))
-    readers = testlib.checkout_sibling("readers")
+    readers = testlib.checkout_sibling("readers") if with_readers else None
     if readers is not None:
         shutil.copytree(readers, os.path.join(base, "readers", version_of(readers)),
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "fixtures"))

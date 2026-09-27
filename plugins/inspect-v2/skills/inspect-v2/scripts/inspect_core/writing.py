@@ -8,7 +8,13 @@ In this order, each step checked before the next:
    records head, read now through the component's CLI (`events`), is the head `harvest` pinned (round
    5, R3), on every run, a clean run's stamp included: a head that moved means another writer
    reviewed this doc since, so the stop is `records-refused` with no append, no stamp, no document
-   write and no mirror.
+   write and no mirror. Then the mirror capability (the reviewer's F1, ruling A5(3)): the component's
+   `mirrors` is asked, before anything is appended, stamped or written, whether it recognises the
+   intended verdict mirror (a row whose `verdict_doc` is the mirror's workspace path, `_mirror_recognised`).
+   When it does not, or it refuses, the stop is `records-refused`, naming the missing capability and
+   asking for the owner's ruling: no records event, no stamp, no document, no mirror. `recognised: false`
+   never completes a run. The records component is frozen (E14-2) and its `mirrors` lists signoff verdict
+   docs only, so against it every `write` stops here until the owner rules.
 2. **The records** (only when a finding survived): one `finding_raised` event per surviving
    finding, `raised_by` the effective model of the call that found it, `slice` the slice whose
    section holds the cited build-doc line (`plan` for any other line), `source` the workspace's
@@ -26,7 +32,8 @@ In this order, each step checked before the next:
 4. **The banner** on each outside call's raw copy under `docs/reviews/` is already on: `record-answer`
    prepends it before any triage (`banner_raw_copies`, v1 Step 3) and its writes open the receipt.
 5. **The verdict mirror** `docs/reviews/<date>-inspect-<feature>.md` (`-2`, `-3` on a same-day
-   repeat, never an overwrite), holding the block's bytes, then `records.py mirrors` asked.
+   repeat, never an overwrite), holding the block's bytes; the `mirrors` answer step 1 got, which
+   recognised it, is kept whole in the result.
 
 Every write is in `receipt.json` with its bytes' hash before and after (the log's hashes are the
 component's to keep: the receipt names the log and the result carries the heads the component
@@ -256,6 +263,7 @@ def handler(ctx, args):
     render_text = ""
     progress = run.checkpoint.setdefault("write_progress", {})
     _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records)
+    mirror = _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records)
     if triage["findings"]:
         try:
             if not progress.get("appended"):
@@ -288,16 +296,6 @@ def handler(ctx, args):
     body = mirror_text(harvest, triage, date, render_text, own, stamp)
     fsio.atomic_write(mirror_path, body.encode("utf-8"))
     _receipt(writes, mirror_path, "document", None, fsio.sha256_file(mirror_path))
-    mirror = {"path": mirror_path, "recognised": None, "state": None, "answer": None}
-    try:
-        answer = client.mirrors(ws, rel)
-        mirror["answer"] = answer    # the component's answer, kept whole (contract section 15, point 2)
-        rows = answer.get("mirrors") or []
-        mine = [r for r in rows if r.get("verdict_doc") == os.path.relpath(mirror_path, ws)]
-        mirror["recognised"] = bool(mine)
-        mirror["state"] = mine[0]["state"] if mine else "not listed by `mirrors`"
-    except RecordsRefusal as refusal:
-        mirror["state"] = records_link.refusal_sentence(refusal, "asking `mirrors`")
     common.write(run, "receipt.json", {"writes": writes})
     common.write(run, "triage.json", triage)
     common.write(run, "write.json", {"stamp": stamp, "stamp_written": True, "question_lines": questions,
@@ -331,6 +329,48 @@ def _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records):
                          "appended to the doc's log since (a conflict), so this inspection is stale. Nothing was "
                          "written: no append, no stamp, no document, no mirror. Run inspect-v2 again on the doc "
                          "and its log as they are now" % (rel, now, expected))
+
+
+def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records):
+    """The reviewer's F1 (ruling A5(3); contract section 15, point 2): mirror capability is required.
+    Before any records event, stamp or verdict, ask the component's `mirrors` for the build doc and find
+    the row whose `verdict_doc` is the intended mirror's workspace path. Found: the mirror block the
+    result carries (`recognised: true`, the row's state, the component's answer kept whole). Not found,
+    or refused: the run ends `records-refused`, the missing capability named and the owner's ruling asked
+    for, with nothing written (no records event, no stamp, no document, no mirror)."""
+    want = os.path.relpath(mirror_path, ws)
+    mirror = {"path": mirror_path, "recognised": False, "state": None, "answer": None}
+    after = ("Nothing was written: no records event, no stamp, no document, no mirror. The owner's ruling is "
+             "needed: the records component is frozen (E14-2), and making its `mirrors` recognise an inspect "
+             "verdict mirror is his call; then run inspect-v2 again")
+    try:
+        answer = client.mirrors(ws, rel)
+    except RecordsRefusal as refusal:
+        mirror["state"] = records_link.refusal_sentence(refusal, "asking `mirrors` before any write")
+        _mirror_stop(ctx, run, records, mirror, want, refusal.body,
+                     "%s. So this station cannot establish that the frozen records interface recognises the "
+                     "intended verdict mirror %s, a capability it requires before appending findings, stamping "
+                     "the plan or writing the verdict. %s" % (mirror["state"], want, after))
+    mirror["answer"] = answer    # the component's answer, kept whole (contract section 15, point 2)
+    rows = [r for r in answer.get("mirrors") or [] if isinstance(r, dict) and r.get("verdict_doc") == want]
+    if not rows:
+        mirror["state"] = "not recognised by `mirrors`"
+        _mirror_stop(ctx, run, records, mirror, want, None,
+                     "the records component's `mirrors` does not recognise the intended verdict mirror %s (no row "
+                     "of its answer for %s names it): the frozen records interface lacks that capability, and "
+                     "this station requires it before appending findings, stamping the plan or writing the "
+                     "verdict. %s" % (want, rel, after))
+    mirror["recognised"] = True
+    state = rows[0].get("state")
+    mirror["state"] = state if isinstance(state, str) else None
+    return mirror
+
+
+def _mirror_stop(ctx, run, records, mirror, want, body, reason):
+    common.write(run, "write.json", {"stamp": None, "stamp_written": False, "records": records, "mirror": mirror,
+                                     "refused": {"capability": "mirrors", "verdict_mirror": want,
+                                                 "component": body}})
+    reporting.finish(ctx, run, "stopped", "records-refused", reason)
 
 
 def banner_raw_copies(run):

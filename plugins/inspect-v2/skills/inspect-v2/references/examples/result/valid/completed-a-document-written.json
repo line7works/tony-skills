@@ -98,7 +98,15 @@
           "same": 0
         },
         "doc": "docs/plans/2026-09-22-widget.md",
-        "mirrors": [],
+        "mirrors": [
+          {
+            "blocks": [],
+            "only_in_mirror": [],
+            "slice": null,
+            "state": "same",
+            "verdict_doc": "docs/reviews/2026-09-25-inspect-widget.md"
+          }
+        ],
         "slices": [
           "A"
         ],
@@ -108,8 +116,8 @@
         }
       },
       "path": "/tmp/widget-workspace/docs/reviews/2026-09-25-inspect-widget.md",
-      "recognised": false,
-      "state": "not listed by `mirrors`"
+      "recognised": true,
+      "state": "same"
     },
     "no_record": false,
     "packet": [

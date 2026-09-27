@@ -171,22 +171,9 @@ class TheHeadIsReadBeforeAnyWrite(_Write):
         self.assertEqual(kinds, [("finding_raised", "competing review")])
 
     def shim(self):
-        """A copy of this checkout's records component whose CLI logs its argv, then runs the real one."""
-        import shutil
-        root = os.path.join(self.tmp, "shim", "records")
-        shutil.copytree(testlib.records_root(), root,
-                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "fixtures"))
-        scripts = os.path.join(root, "scripts")
-        os.rename(os.path.join(scripts, "records.py"), os.path.join(scripts, "records_real.py"))
-        testlib.write_text(os.path.join(scripts, "records.py"), "\n".join([
-            "import json, os, runpy, sys",
-            "sys.dont_write_bytecode = True",
-            "HERE = os.path.dirname(os.path.abspath(__file__))",
-            "with open(os.path.join(os.path.dirname(HERE), 'argv.log'), 'a') as fh:",
-            "    fh.write(json.dumps(sys.argv[1:]) + '\\n')",
-            "sys.argv[0] = os.path.join(HERE, 'records_real.py')",
-            "runpy.run_path(sys.argv[0], run_name='__main__')", ""]))
-        return root
+        """The records test double (`ilib.records_double`): it logs its argv, runs the real component for
+        every command, and recognises the verdict mirror at `mirrors` (the capability `write` requires)."""
+        return ilib.records_double(self.tmp)
 
     def logged(self, root):
         import json
@@ -216,6 +203,130 @@ class TheHeadIsReadBeforeAnyWrite(_Write):
         calls = [argv[0] for argv in self.logged(root)]
         self.assertIn("events", calls)
         self.assertNotIn("append", calls)
+
+
+class TheMirrorsCapabilityIsRequired(_Write):
+    """The reviewer's F1 (MAJOR), ruling A5(3): before appending findings, stamping the plan or writing the
+    verdict, `write` establishes through the records component's `mirrors` that the frozen interface
+    recognises the intended verdict mirror (a row whose `verdict_doc` is the mirror's workspace path). When
+    it does not, or the component refuses, the run stops `records-refused`, names the missing capability
+    and asks for the owner's ruling: no records event, no stamp, no document, no mirror. `recognised:
+    false` never completes a run."""
+
+    FIND = [ilib.finding("build-doc.md:12", quote="AC1")]
+    MIRROR = "docs/reviews/%s-inspect-turnstile.md" % ilib.TODAY
+
+    def upto_answer(self, records, fleet=None, adjudications=CB1):
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws, records=records)
+        fleet = fleet if fleet is not None else ilib.claude_fleet(R, model=MODEL, code_book=self.FIND)
+        extra = {"adjudications": adjudications} if adjudications else {}
+        self.assertEqual(self.run.upto("record-answer", answer=ilib.answer(R, fleet, **extra))[0], 0)
+
+    def assert_stopped_whole(self, code, doc, out, err):
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "records-refused"))
+        self.assertIn(self.MIRROR, doc["reason"])
+        self.assertIn("`mirrors`", doc["reason"])
+        self.assertIn("owner's ruling", doc["reason"])
+        self.assertEqual(testlib.tree_digest(self.ws), self.digest, "no stamp, no mirror, no document, no append")
+        self.assertEqual(testlib.sha256_file(os.path.join(self.ws, ilib.BUILD_REL)), self.doc_sha)
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "reviews")))
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "records")), "no records event")
+        sr = doc["station_result"]
+        self.assertIsNone(sr["stamp"])
+        self.assertFalse(sr["stamp_written"])
+        self.assertFalse(sr["mirror"]["recognised"])
+        self.assertEqual([w for w in doc["writes"] if w["kind"] != "run_artifact"], [])
+        wrote = self.run.artifact("write.json")
+        self.assertFalse(wrote["stamp_written"])
+        self.assertEqual(wrote["records"]["appended"], 0)
+        # the stop is final: the run is done, `report` prints the same stopped result
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual((code, again["status"], again["stop_tag"]), (10, "stopped", "records-refused"))
+
+    def freeze(self):
+        self.digest = testlib.tree_digest(self.ws)
+        self.doc_sha = testlib.sha256_file(os.path.join(self.ws, ilib.BUILD_REL))
+
+    def test_a_double_that_recognises_the_mirror_lets_the_write_proceed(self):
+        self.upto_answer("recognise")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 0, out + err)
+        mirror = self.run.artifact("write.json")["mirror"]
+        self.assertIs(mirror["recognised"], True)
+        self.assertEqual(mirror["state"], "recognised by the test double")
+        self.assertIn(self.MIRROR, [r["verdict_doc"] for r in mirror["answer"]["mirrors"]])
+        self.assertTrue(os.path.isfile(os.path.join(self.ws, self.MIRROR)))
+        self.assertEqual(len([l for l in self.doc_text().splitlines() if l.startswith("Plan: inspected")]), 1)
+        self.assertEqual([r["event"]["kind"] for r in self.events()["results"]], ["finding_raised"])
+        # asked before any write: `mirrors` comes before the append, the render and the doc write
+        calls = [argv[0] for argv in self.logged()]
+        self.assertLess(calls.index("mirrors"), calls.index("append"), calls)
+        self.assertEqual(calls.count("mirrors"), 1, calls)
+
+    def logged(self):
+        import json
+        with open(os.path.join(self.run.double, "argv.log"), encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def test_a_double_with_no_row_for_the_mirror_stops_a_finding_run_before_any_write(self):
+        self.upto_answer("other")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertIn("does not recognise", doc["reason"])
+        self.assertNotIn("append", [argv[0] for argv in self.logged()])
+
+    def test_a_double_with_no_row_for_the_mirror_stops_a_clean_run_before_the_stamp(self):
+        self.upto_answer("other", fleet=ilib.claude_fleet(R, model=MODEL), adjudications=None)
+        self.freeze()
+        self.assert_stopped_whole(*self.run.phase("write"))
+
+    def test_a_double_that_refuses_mirrors_stops_with_its_sentence(self):
+        self.upto_answer("refuse")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertIn(ilib.DOUBLE_REFUSAL, doc["reason"])
+        self.assertIn("exit 4", doc["reason"])
+
+    def test_the_real_component_of_this_checkout_stops_every_write(self):
+        # the consequence the ruling states: the frozen component's `mirrors` lists signoff verdict docs
+        # only, so against it every `write` stops here until the owner rules (E14-2)
+        self.upto_answer("real")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        kept = doc["station_result"]["mirror"]["answer"]
+        self.assertEqual(kept["doc"], ilib.BUILD_REL, "the component's own answer, kept whole")
+        self.assertNotIn(self.MIRROR, [r.get("verdict_doc") for r in kept["mirrors"]])
+
+    def test_a_resumed_write_still_asks_first(self):
+        self.upto_answer("other")
+        self.freeze()
+        self.assert_stopped_whole(*self.run.phase("write"))
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 2, out + err)
+        self.assertEqual(testlib.tree_digest(self.ws), self.digest)
+
+    def test_a_completed_result_with_an_unrecognised_mirror_does_not_validate(self):
+        import copy
+        import json
+        from station_core import validate
+        path = os.path.join(testlib.EX, "result", "valid", "completed-a-document-written.json")
+        with open(path, encoding="utf-8") as fh:
+            good = json.load(fh)
+        schema = validate.load_schema("result", testlib.PREFIX, testlib.SKILL)
+        self.assertEqual(validate.errors_for(good, schema, testlib.PREFIX), [])
+        self.assertIs(good["station_result"]["mirror"]["recognised"], True)
+        for recognised in (False, None):
+            bad = copy.deepcopy(good)
+            bad["station_result"]["mirror"]["recognised"] = recognised
+            self.assertNotEqual(validate.errors_for(bad, schema, testlib.PREFIX), [], recognised)
+        bad = copy.deepcopy(good)
+        bad["station_result"]["mirror"] = None
+        self.assertNotEqual(validate.errors_for(bad, schema, testlib.PREFIX), [])
 
 
 class TheStationsOwnLines(_Write):
@@ -345,8 +456,16 @@ class TheMirrorAndTheReceipt(_Write):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
         code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
-        code, body, err = ilib.records_cli(["mirrors", "--workspace", self.ws, "--doc", ilib.BUILD_REL])
-        self.assertEqual(code, 0, err)
+        # the component `write` asked is the test double (it recognises the mirror, F1); asked again, it
+        # gives the same answer the run kept, byte for byte, all but the version fields
+        import json
+        import subprocess
+        import sys
+        proc = subprocess.run([sys.executable, os.path.join(self.run.double, "scripts", "records.py"), "mirrors",
+                               "--workspace", self.ws, "--doc", ilib.BUILD_REL], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, env=self.run.env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        body = json.loads(proc.stdout.decode("utf-8"))
         kept = self.run.artifact("write.json")["mirror"]["answer"]
         drop = ("interface_version", "plugin_version", "component_version")
         self.assertEqual(dict((k, v) for k, v in kept.items() if k not in drop),
@@ -495,6 +614,81 @@ class TheBannerBeforeTriage(_Write):
         self.assert_bannered()
         self.assertFalse(doc["station_result"]["stamp_written"])
         self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "records")))
+
+
+class TheBannerOnAContentRefusal(_Write):
+    """The owner's ruling C4 (the check 5 observation): a content refusal at `record-answer` (exit 5,
+    nothing recorded) also puts the banner on every outside raw copy, so an executor who abandons the run
+    after the refusal leaves no bare copy. Nothing else of the refusal changes: exit 5, `accepted` false,
+    the answer not recorded. A run with no outside copy writes no banner file at a refusal."""
+
+    WORD = {"rows": ["gpt-astra"], "words": "send it to gpt-astra"}
+    MINE = "raw reply: this run's own copy\n"
+    PRIOR = "an earlier run's reply, never bannered\n"
+
+    def refused(self, adjudications=None):
+        """An outside run: an earlier same-day copy at the base (bare), this run's at -2; the paper result
+        holds a finding with a citation that holds and, unless given, no adjudication."""
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        doc = ilib.make_input(self.ws, self.run.run_dir, row="gpt-astra", owner_word=self.WORD)
+        self.assertEqual(self.run.upto("request", doc=doc)[0], 0)
+        base = self.run.artifact("requests.json")["calls"][0]["raw_path"]
+        stem, ext = os.path.splitext(base)
+        self.copies = [base, stem + "-2" + ext]
+        testlib.write_text(self.copies[0], self.PRIOR)
+        testlib.write_text(self.copies[1], self.MINE)
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", raw_path=self.copies[1],
+                                   findings=[ilib.finding("build-doc.md:12", quote="AC1")])
+        fleet = [paper, ilib.reader_result("%s-repo-reality" % R, model=MODEL)]
+        extra = {"adjudications": adjudications} if adjudications else {}
+        self.answer = os.path.join(self.tmp, "answer.json")
+        testlib.write_json(self.answer, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD, **extra))
+        return self.run.phase("record-answer", "--answer", self.answer)
+
+    def assert_bannered(self):
+        for path, tail in zip(self.copies, (self.PRIOR, self.MINE)):
+            text = testlib.read_text(path)
+            self.assertTrue(text.startswith("Raw inspector output \u2014 unverified."), path)
+            self.assertEqual(text.count("Raw inspector output"), 1, path)
+            self.assertTrue(text.endswith(tail), path)
+
+    def test_a_refused_answer_leaves_the_banner_on_every_outside_raw_copy(self):
+        code, doc, out, err = self.refused()
+        self.assertEqual(code, 5, out + err)
+        self.assertIs(doc["accepted"], False)
+        self.assertEqual([r["rule"] for r in doc["refusals"]], ["missing-adjudication"])
+        self.assert_bannered()
+        self.assertEqual(sorted(w["path"] for w in self.run.artifact("banner.json")["writes"]), sorted(self.copies))
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer.json")), "the answer is not recorded")
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "triage.json")))
+        self.assertEqual(self.run.phase("write")[0], 2, "the run stays where it was")
+
+    def test_a_corrected_answer_after_the_refusal_keeps_the_banner_writes_once(self):
+        self.assertEqual(self.refused()[0], 5)
+        code, doc, out, err = self.run.phase("record-answer", "--answer", self.answer)
+        self.assertEqual(code, 5, "the same refused answer again: still refused")
+        self.assert_bannered()
+        testlib.write_json(self.answer, dict(testlib.load_json(self.answer), adjudications=GPT1))
+        code, doc, out, err = self.run.phase("record-answer", "--answer", self.answer)
+        self.assertEqual(code, 0, out + err)
+        self.assert_bannered()
+        banners = [w["path"] for w in self.run.artifact("banner.json")["writes"]]
+        self.assertEqual(sorted(banners), sorted(self.copies), "each copy's banner write named once")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 0, out + err)
+        receipt = [w["path"] for w in self.run.artifact("receipt.json")["writes"]]
+        for path in self.copies:
+            self.assertEqual(receipt.count(path), 1, path)
+
+    def test_a_claude_row_refusal_writes_no_banner_file(self):
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
+        code, doc, out, err = self.run.upto("record-answer", answer=ilib.answer(R, fleet))
+        self.assertEqual(code, 5, out + err)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "banner.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer.json")))
 
 
 class TheRequestsRawPathIsTheOneSource(_Write):

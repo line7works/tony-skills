@@ -177,7 +177,7 @@ build doc".
 
 | Hunt | Tier | Home | Globs | Why |
 |---|---|---|---|---|
-| `build` | 1 | `repo-plans` (workspace) | `docs/plans/*-{name}.md` | the repo doc kit's folder, matched by the doc's topic |
+| `build` | 1 | `repo-plans` (workspace) | `docs/plans/*-{name}.md`, `docs/plans/{name}.md` | the repo doc kit's folder, matched by the doc's topic, dated or undated (one tier) |
 | `build` | 2 | `repo-flat` (workspace) | `docs/{name}-build-plan.md` | the older flat name; a tier-1 match beats it |
 | `build` | 3 | `phase-or-slice` (workspace) | `docs/*phase*.md`, `docs/*slice*.md`, `plan/*.md` | the fallback, then nowhere else |
 | `scope` | 1 | `repo-scope` (workspace) | `docs/scope/*.md` | precon's folder, by glob, never a guessed slug |
@@ -326,7 +326,10 @@ the result names: a same-day repeat files this run's copy at a variant while an 
 sits at the base, and the banner is idempotent, so an earlier run's bannered copy is left as it
 is. `banner.json` names each write with its hashes, `write`'s receipt
 opens with them, and a run that stops here or at any later tag names them in its result and leaves
-no bare copy. Never in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
+no bare copy. A content refusal (exit 5) records no answer and still puts the banner on those copies
+first (the owner's ruling C4), so a run abandoned after a refusal leaves no bare copy either:
+`banner.json` then names those writes (it is written at a refusal only when a copy got the banner),
+and a later accepted answer keeps them. Never in report-only (a report-only request carries no `raw_path`). Then two outcomes end the run instead
 of refusing the answer: any result whose `status` is not `ok`, or any call `request` built with no
 result (stop `lane-down`: each down call's status and reason, and each missing call id, in the
 stop's sentence; nothing triaged, raised or stamped; the owner re-asked), and any result with a null
@@ -391,8 +394,17 @@ In this order, each step checked before the next (`inspect_core/writing.py`):
    included. A head that moved means another writer appended to the doc's log since this run read
    it, so the inspection is stale: the stop is `records-refused`, naming both heads, with no append,
    no stamp, no document write and no mirror. (A read the component refuses is the same stop with
-   its sentence.) The raw copies' banner is the one earlier write, at `record-answer`, and it is not
-   held to this read: it marks an unverified reader's copy on every run, a stop included.
+   its sentence.) Then the mirror capability (section 15, point 2): `records.py mirrors` is asked for
+   the build doc, and its answer must hold a row whose `verdict_doc` is the intended verdict mirror's
+   workspace path (step 5's name). When it holds none, or the component refuses, the stop is
+   `records-refused`: its sentence names the missing capability (the component's `mirrors` does not
+   recognise that path) and asks for the owner's ruling, carrying the component's own sentence on a
+   refusal, with no append, no stamp, no document write and no mirror. The component is frozen in
+   this step (E14-2) and its `mirrors` associates a build doc's slices with
+   `docs/reviews/*-signoff-<feature>-<slice>.md` only, so against it every `write` stops here until
+   the owner rules that it recognise an inspect mirror. The raw copies' banner is the
+   one earlier write, at `record-answer`, and it is not held to these reads: it marks an unverified
+   reader's copy on every run, a stop included.
 2. **The records,** only when a finding survived: one `finding_raised` per surviving finding
    (`ledger_doc` the build doc, `slice`, `severity`, `location`, `claim`, `scenario`, `raised_by`
    the effective model of the call that found it, `actor.station` `inspect-v2`, `origin` native,
@@ -417,8 +429,8 @@ In this order, each step checked before the next (`inspect_core/writing.py`):
 5. **The verdict mirror** `docs/reviews/<YYYY-MM-DD>-inspect-<feature>.md` (`-2`, `-3` on a
    same-day repeat, never an overwrite): the verdict, the scope doc, the refuted count, the stamp,
    the block's bytes as rendered, the
-   station's lines, what was hunted and held, and the bottom line; then `records.py mirrors` is
-   asked and its answer kept whole, verbatim, as `mirror.answer` (section 15, point 2).
+   station's lines, what was hunted and held, and the bottom line. The `mirrors` answer step 1 got,
+   which recognised this path, is kept whole, verbatim, as `mirror.answer` (section 15, point 2).
 
 The date is the UTC date of the run's instant, the same instant every event carries.
 `receipt.json` names every write with its bytes' hash before and after; the log is the component's
@@ -433,8 +445,10 @@ documents, `authorized`), the calls with their effective models and statuses, th
 (`blocker`, `major`, `minor`, `confirmed`, `plausible`, `unverified`, `refuted`, `questions`,
 `locationless`), the verdict, the surviving findings (with their records finding ids), the
 questions, the refutations, the stamp and whether it was written, the records (`log`,
-`head_before`, `head_after`, `appended`), the mirror (its path, whether `mirrors` lists it, and
-the component's answer whole), `hunted_and_held`, `bottom_line`, the slices already under
+`head_before`, `head_after`, `appended`), the mirror (its path, `recognised: true` with the state
+of the row `mirrors` gave for it on a run that wrote, and the component's answer whole; a run
+stopped at the mirror capability records `recognised: false` beside its stop, and no completed run
+carries it), `hunted_and_held`, `bottom_line`, the slices already under
 construction, the lenses not run (empty on every completed run since a short fleet is `lane-down`), and the chat block, v1's read-back, with one line added after
 `INSPECT:`, `Selected:`, naming the doc taken, its home and tier, how it was taken, and any doc
 another tier matched by filename (v1: "the verdict says which doc it took"):
@@ -481,7 +495,7 @@ A stop is `status: stopped` with one tag. The shared tags keep their station-loo
 | `selection-several` | a hunt found several and no `choose` settled them |
 | `ledger-refused` | never: an untaggable scope-doc line is quoted under `ledger.refused` and the plan is still inspected (section 15, point 3) |
 | `write-refused` | the build doc changed after `harvest`, or a rendered line would not read back, or the composed doc would change a line; nothing is written to the doc |
-| `records-refused` | the records component refused (`events` at harvest or before any write, `identity`, `append`, `render` at write), its sentence carried; or the head `write` reads before any write is not the head `harvest` pinned (round 5, R3), both heads named: no append, no stamp, no document, no mirror |
+| `records-refused` | the records component refused (`events` at harvest or before any write, `mirrors` before any write, `identity`, `append`, `render` at write), its sentence carried; or the head `write` reads before any write is not the head `harvest` pinned (round 5, R3), both heads named; or the component's `mirrors` does not recognise the intended mirror, before any write (section 15, point 2), the missing capability named and the owner's ruling asked for: no append, no stamp, no document, no mirror |
 | `build-doc-unreadable` | the one build doc selected cannot be read as UTF-8 text |
 | `code-book-missing` | blueprint-v2's `SKILL.md` resolves by neither route |
 | `model-changed` | the later `suggest` shows another model for the row than the ask displayed |
@@ -535,11 +549,11 @@ reader answer holds a verified finding with a holding citation and no planted li
    this run's input (station-loop.md rule 5; lane contract section 12, "the input carries the
    row"), and the input is fixed at `check-input`, so the ask moves ahead of the hunt; a run whose
    hunt finds no build doc has asked one question for nothing. Recorded for the owner.
-2. **`mirrors` does not list an inspect mirror.** The component's `mirrors` associates a build
-   doc's slices with `docs/reviews/*-signoff-<feature>-<slice>.md` only, so
-   `docs/reviews/<date>-inspect-<feature>.md` is written, `mirrors` is asked, and its answer is
-   kept whole in the result (`mirror.answer`), with `recognised: false` recorded honestly beside it. The records component is frozen in this step
-   (E14-2); making `mirrors` recognise an inspect mirror is the owner's call.
+2. **Mirror capability is required.** Before appending findings, stamping the plan or writing
+   the verdict, establish that the frozen records interface can recognise the intended verdict
+   mirror. If it cannot, stop `records-refused`, name the missing capability and request the
+   owner's ruling. Write no records event, stamp or verdict. Recording `recognised: false` does not
+   complete this requirement.
 3. **An untaggable scope-doc line does not stop the run.** Quoted, never dropped or guessed, under
    `harvest.json`'s `ledger.refused`; v1 inspects a plan whatever its record's form, and the
    traceability lens reads the scope doc's bytes.

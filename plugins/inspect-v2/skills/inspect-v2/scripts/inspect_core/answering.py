@@ -36,7 +36,10 @@
 
 Only then is `answer.json` written, by `station_core.answer.record`; then, before anything is
 triaged, the banner goes on each outside raw copy (`writing.banner_raw_copies`, `banner.json`; never in
-report-only), and the mechanical triage (`verify.triage`) follows. Two outcomes end the run instead of
+report-only), and the mechanical triage (`verify.triage`) follows. A refusal at layer 2 or 3 (exit 5)
+records nothing, and still puts the banner on each outside raw copy (the owner's ruling C4), so an
+executor who abandons the run after a refusal leaves no bare copy; `banner.json` is written only when
+a copy got the banner, and a later accepted answer keeps those writes in it. Two outcomes end the run instead of
 refusing the answer: a short fleet, that is a call `request` built with no result, or a result whose
 status is not `ok` (stop `lane-down`, naming the missing call ids and the down calls: nothing is
 triaged, raised or stamped, the ask is re-asked; round 5, R2), and a result with no effective model,
@@ -187,6 +190,18 @@ def own_checks(doc, run, requests, packet, harvest):
     return out
 
 
+def _banner(run, always=False):
+    """The banner on each outside raw copy, its writes added to `banner.json` after any an earlier refused
+    answer of this run made there (the banner is idempotent, so a copy is named once). The file is written
+    when a copy got the banner now, or when `always` (the accepted path, as before). Returns this call's
+    writes."""
+    fresh = writing.banner_raw_copies(run)
+    earlier = list(common.read(run, "banner.json")["writes"]) if common.has(run, "banner.json") else []
+    if fresh or always:
+        common.write(run, "banner.json", {"writes": earlier + fresh})
+    return fresh
+
+
 def handler(ctx, args):
     """`record-answer --run-dir D --answer FILE`."""
     run = common.open_run(ctx, args.run_dir, ("requested",), "record-answer")
@@ -203,16 +218,23 @@ def handler(ctx, args):
     shared = sharedanswer.check(doc, ledger_lines, workspace=common.workspace(run), allowed=sharedanswer.DEFAULT_TRACES)
     refusals = list(shared["refusals"]) + own_checks(doc, run, requests, packet, harvest)
     if refusals:
+        # the owner's ruling C4: a content refusal leaves no outside raw copy bare either
+        banners = _banner(run) if not common.report_only(run) else []
+        if banners:
+            reason = ("the recorded answer was refused on its content (%d refusal(s)); the answer was not recorded, "
+                      "and the one write was the banner on %d outside raw copy(ies), so none is left bare"
+                      % (len(refusals), len(banners)))
+        else:
+            reason = "the recorded answer was refused on its content (%d refusal(s)); nothing was written" % len(refusals)
         return ctx.emit(ctx.envelope(accepted=False, run_id=run.input["run_id"], refusals=refusals,
-                                     reason="the recorded answer was refused on its content (%d refusal(s)); nothing "
-                                            "was written" % len(refusals)), 5)
+                                     reason=reason), 5)
     code, report = sharedanswer.record(run.run_dir, doc, ledger_lines, workspace=common.workspace(run),
                                        allowed=sharedanswer.DEFAULT_TRACES)
     if code != 0:
         raise driver.Defect("the shared check refused an answer it had accepted: %s" % report)
     if not common.report_only(run):
         # v1 Step 3: the raw copy carries its banner before anything is triaged, on every run, a stop included
-        common.write(run, "banner.json", {"writes": writing.banner_raw_copies(run)})
+        _banner(run, always=True)
     down = [r for r in doc["results"] if r.get("status", "ok") != "ok"]
     absent = missing_calls(doc, requests)
     if down or absent:

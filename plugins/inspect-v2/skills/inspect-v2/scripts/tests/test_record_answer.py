@@ -10,6 +10,7 @@ no-record rule turns a traceability item into a QUESTION note, a Claude-lane MIN
 unverified; a null effective model and a lane that did not answer `ok` are stops. The verdict rule
 over every severity mix is the library's (`inspect_core.verify.verdict`).
 """
+import json
 import os
 import unittest
 
@@ -162,6 +163,62 @@ class TheGates(_Rec):
         self.assertTrue(os.path.isfile(os.path.join(self.run.run_dir, "answer.json")))
         again = self._record(ilib.answer(R, ilib.claude_fleet(R)))
         self.assertEqual(again[0], 2, "a second answer to an answered run is usage")
+
+
+class TheLineTagIsAClosedLowerCaseSet(_Rec):
+    """R4 (the owner's ruling C6): a line's `tag` is one of every tag a line reaching inspect can carry,
+    lower case only, so `Decided`, `Parked` or `DEFERRED` cannot pass the frame's exact-case rules by.
+    The set, measured by the lane builder: the four cores' answer schemas' line tags (precon: decided,
+    assumed, parked, open; architect: the same and deferred; blueprint: requirement, constraint,
+    out-of-scope), the tags their views hand the frame (architect's struck and ruling, precon's and
+    blueprint's out-of-scope), the frame's ledger tags (research among them) and its move-back set
+    (parked, open, deferred), and the tags the seam 17 reader probed (poured, carried among them)."""
+
+    MEMBERS = ("assumed", "carried", "constraint", "decided", "deferred", "open", "out-of-scope", "parked",
+               "poured", "requirement", "research", "ruling", "struck")
+
+    def schema_errors(self, tag):
+        from station_core import validate
+        answer = ilib.answer(R, ilib.claude_fleet(R), lines=[
+            {"text": "a line the executor asserts", "tag": tag, "trace": {"kind": "repo_path", "ref": "README.md"}}])
+        with open(os.path.join(testlib.REF, "answer.schema.json"), encoding="utf-8") as fh:
+            schema = json.load(fh)
+        return validate.errors_for(answer, schema, testlib.PREFIX)
+
+    def test_the_schema_holds_exactly_the_measured_set(self):
+        with open(os.path.join(testlib.REF, "answer.schema.json"), encoding="utf-8") as fh:
+            tag = json.load(fh)["properties"]["lines"]["items"]["properties"]["tag"]
+        self.assertEqual(tuple(sorted(tag["enum"])), self.MEMBERS)
+        self.assertTrue(all(t == t.lower() for t in tag["enum"]))
+
+    def test_each_member_validates(self):
+        for tag in self.MEMBERS:
+            self.assertEqual(self.schema_errors(tag), [], tag)
+
+    def test_no_capitalised_variant_of_a_member_validates(self):
+        for tag in self.MEMBERS:
+            for variant in set((tag.upper(), tag.capitalize(), tag.title(), tag[:-1] + tag[-1].upper())):
+                self.assertNotEqual(self.schema_errors(variant), [], variant)
+
+    def test_a_capitalised_empty_or_unlisted_tag_is_exit_4_at_record_answer(self):
+        ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, ws)
+        self.run.upto("request", doc=ilib.make_input(ws, self.run.run_dir))
+        for tag in ("Decided", "Parked", "DEFERRED", "", "approved"):
+            answer = ilib.answer(R, ilib.claude_fleet(R), lines=[
+                {"text": "a line the executor asserts", "tag": tag, "trace": {"kind": "repo_path", "ref": "README.md"}}])
+            code, doc, out, err = self._record(answer)
+            self.assertEqual(code, 4, (tag, out + err))
+            self.assertIs(doc["accepted"], False)
+            self.assertIn("/lines/0/tag", json.dumps(doc["errors"]), tag)
+            self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer.json")), tag)
+            self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "banner.json")), tag)
+            self.assertEqual(self.run.artifact("checkpoint.json")["phase"], "requested", tag)
+
+    def test_a_lower_case_member_is_recorded(self):
+        code, doc, out, err = self.record(ilib.claude_fleet(R), lines=[
+            {"text": "a line the executor asserts", "tag": "constraint", "trace": {"kind": "repo_path", "ref": "README.md"}}])
+        self.assertEqual(code, 0, out + err)
 
 
 class Verify(_Rec):

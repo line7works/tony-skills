@@ -81,8 +81,8 @@ uv run scripts/inspect_v2.py select --run-dir D --hunt build --name <topic>
 uv run scripts/inspect_v2.py select --run-dir D --hunt scope
 ```
 
-`--name` is the topic the invocation names (`docs/plans/<date>-<topic>.md`, then the flat
-`docs/<topic>-build-plan.md`, then a phase or slice doc; nowhere else). Read both results. The
+`--name` is the topic the invocation names (`docs/plans/<date>-<topic>.md` or `docs/plans/<topic>.md`,
+one tier, then the flat `docs/<topic>-build-plan.md`, then a phase or slice doc; nowhere else). Read both results. The
 build hunt: `none` means there is nothing to inspect (a plan that lives only in this conversation
 is not inspectable; point at blueprint-v2 and stop); `several` is a list-and-ask, never a silent
 pick. When no filename matches, run `select --run-dir D --hunt build` without `--name`, match the
@@ -162,8 +162,8 @@ script's. Always add `hunted_and_held` (what the inspectors attacked that held u
 without them is refused (exit 4). An outside row's result is accepted only when this run's input
 carried the owner's word for that row (`unauthorized-send`, exit 5, otherwise).
 
-Exit 5 lists what was refused; nothing was written, so fix the answer and record it again. Exit
-10 is a stop: print the chat block and stop.
+Exit 5 lists what was refused; the answer was not recorded (the one write is the banner on any
+outside raw copy), so fix the answer and record it again. Exit 10 is a stop: print the chat block and stop.
 
 ## Step 5: The verdict and the two writes
 
@@ -172,7 +172,7 @@ uv run scripts/inspect_v2.py write --run-dir D
 uv run scripts/inspect_v2.py report --run-dir D
 ```
 
-`write` stops `records-refused`, writing nothing, when the records head moved since `harvest`.
+`write` stops `records-refused`, writing nothing, when the records head moved since `harvest` or `mirrors` does not recognise the verdict mirror (the owner's ruling is needed).
 Then it raises each surviving finding in the records component (`raised_by` the reader's effective model), places the component's rendered block at the punch list's tail with the station's QUESTION
 lines, or the clean line on a clean run, writes the stamp `Plan: inspected <date> by <model> ·
 <counts>` by v1's placement rule, and files the verdict mirror under `docs/reviews/`. `report`
