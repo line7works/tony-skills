@@ -90,9 +90,13 @@ def _answer_inside(run, answer_path):
         raise runmod.Outside("outside-home", "the answer file %s resolves outside %s (a symlink?); it is not read"
                              % (answer_path, ", ".join(r for r in roots if r)), answer_path)
     # the run's own `result.json` is the file `finish` writes and reads: an answer there (or linked to it) could
-    # be read as the run's result, so it is refused; the answer file belongs under `<run>/executor/` (R7 of 3b)
+    # be read as the run's result, so it is refused; the answer file belongs under `<run>/executor/` (R7 of 3b).
+    # The name is folded, since `realpath` does not fold case and a case-insensitive filesystem reads
+    # `Result.json` as `result.json`; a hard link is the same file (CP3B-2, R1 of 3b round 2)
     result = os.path.join(run.run_dir, "result.json")
-    if os.path.realpath(answer_path) == os.path.realpath(result):
+    real = os.path.realpath(answer_path)
+    if ((os.path.dirname(real) == os.path.realpath(run.run_dir) and os.path.basename(real).casefold() == "result.json")
+            or (os.path.exists(result) and os.path.samefile(answer_path, result))):
         raise runmod.Outside("outside-home", "the answer file %s resolves to the run's own result.json %s; write the "
                              "answer under %s and record it from there; it is not read"
                              % (answer_path, result, os.path.join(run.run_dir, "executor")), answer_path)

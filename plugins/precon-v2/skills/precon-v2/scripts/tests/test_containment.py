@@ -476,6 +476,64 @@ class PropertyLineReads(_Base):
         code, doc, err = run.record(preconlib.answer(run))
         self.assertEqual(code, 0, json.dumps(doc))
 
+    def refused_as_the_result(self, run, supplied):
+        """`record-answer` on `supplied` is refused `outside-home`, exit 5, `accepted` never true, nothing
+        written, the run left `harvested`, and the supplied file's bytes unchanged (no result written there)."""
+        with open(supplied, "rb") as fh:
+            planted = fh.read()
+        before = (self.digests(), sorted(os.listdir(run.run_dir)))
+        code, out, err = run.phase("record-answer", "--answer", supplied)
+        self.assertEqual(code, 5, out + err)
+        doc = json.loads(out)
+        self.assertIsNot(doc.get("accepted"), True)
+        self.assertFalse(doc["ok"])
+        self.assertEqual([r["rule"] for r in doc["refusals"]], ["outside-home"], out)
+        self.assertIn("resolves to the run's own result.json", doc["refusals"][0]["message"])
+        self.assertFalse(os.path.exists(run.run_file("answer.json")))
+        self.assertEqual(self.phase_of(run), "harvested")
+        self.assertEqual((self.digests(), sorted(os.listdir(run.run_dir))), before)
+        with open(supplied, "rb") as fh:
+            self.assertEqual(fh.read(), planted, supplied)
+
+    def test_a_case_variant_of_the_run_result_is_refused(self):
+        """CP3B-2 (round 2, R1): on a case-insensitive filesystem `<run>/Result.json` is the run's own
+        `result.json`, so a case variant at the run's top level is refused by its name, whatever the
+        filesystem; `finish` never writes its result into the supplied file."""
+        for name in ("Result.json", "RESULT.JSON", "result.JSON"):
+            run = self.harvested()
+            supplied = run.run_file(name)
+            testlib.write_json(supplied, preconlib.answer(run))
+            self.refused_as_the_result(run, supplied)
+            # the control: the same run records the same answer from `<run>/executor/` once the variant is gone
+            os.remove(supplied)
+            code, doc, err = run.record(preconlib.answer(run))
+            self.assertEqual(code, 0, "%s %s" % (name, json.dumps(doc)))
+
+    def test_a_hard_link_to_the_run_result_is_refused(self):
+        """CP3B-2 (round 2, R1): a hard link under `<run>/executor/` to a planted `result.json` is that file."""
+        run = self.harvested()
+        result = run.run_file("result.json")
+        testlib.write_json(result, preconlib.answer(run))
+        hard = run.run_file(os.path.join(preconlib.EXECUTOR_DIR, "hard.json"))
+        os.link(result, hard)
+        self.refused_as_the_result(run, hard)
+        os.remove(hard)
+        os.remove(result)
+        code, doc, err = run.record(preconlib.answer(run))
+        self.assertEqual(code, 0, json.dumps(doc))
+
+    def test_an_answer_named_result_json_under_executor_is_accepted(self):
+        """The control (round 2, R1): the rule is the run's own top-level file, not the name; an answer named
+        `result.json` (or a case variant) under `<run>/executor/` is read as any other."""
+        for name in ("result.json", "Result.json"):
+            run = self.harvested()
+            path = run.run_file(os.path.join(preconlib.EXECUTOR_DIR, name))
+            testlib.write_json(path, preconlib.answer(run))
+            code, out, err = run.phase("record-answer", "--answer", path)
+            self.assertEqual(code, 0, "%s: %s %s" % (name, out, err))
+            self.assertTrue(json.loads(out)["accepted"])
+            self.assertFalse(os.path.lexists(run.run_file("result.json")))
+
     def test_an_outside_file_that_is_not_json_is_refused_before_it_is_read(self):
         run = self.harvested()
         external = self.outside_file("outside-not-json.txt", "not json " + self.MARK)

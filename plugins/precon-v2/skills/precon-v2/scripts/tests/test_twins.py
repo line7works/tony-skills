@@ -383,6 +383,29 @@ class OutOfScopeByRow(_Born):
             self.assertEqual(self.refused(self.answer(out_of_scope=self.oos("Something else entirely",
                                                                             self.ids[key]))), ["retagged"], key)
 
+    def test_a_decided_row_by_row_is_refused_with_its_own_sentence(self):
+        """R2 of 3b round 2 (wording only): an item naming a decided row by `row` is refused `retagged` with a
+        sentence true of a decided row, with or without a question of this run touching it (the frame's
+        `re-asked-decided` beside it then); never the word-twin sentence about an untouched question."""
+        decided = self.ids["Python 3.9 standard library only"]
+        q = {"id": "Q1", "text": "Still on the standard library?", "touches": [decided], "answer": "yes"}
+        for questions, want in (([], ["retagged"]), ([q], ["re-asked-decided", "retagged"])):
+            answer = self.answer(questions=questions, out_of_scope=self.oos("Something else entirely", decided))
+            digest = testlib.tree_digest(self.fx.ws)
+            code, doc, err = self.run_.record(answer)
+            self.assertEqual(code, 5, json.dumps(doc, ensure_ascii=False))
+            self.assertEqual(sorted(set(r["rule"] for r in doc["refusals"])), want)
+            mine = [r for r in doc["refusals"] if r["rule"] == "retagged"]
+            self.assertEqual(len(mine), 1, json.dumps(doc["refusals"], ensure_ascii=False))
+            self.assertEqual(mine[0].get("out_of_scope"), 0)
+            message = mine[0]["message"]
+            self.assertNotIn("no answered question", message)
+            self.assertIn("names the decided ledger line %s" % decided, message)
+            self.assertIn("a decided line is settled in place and is not ruled out", message)
+            self.assertEqual(testlib.tree_digest(self.fx.ws), digest)
+            self.assertFalse(os.path.exists(self.run_.run_file("answer.json")))
+        self.assertEqual(preconlib.read(self.path), self.text)
+
     def test_an_unanswered_or_research_question_does_not_open_the_way(self):
         for q in ({"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]]},
                   {"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]],

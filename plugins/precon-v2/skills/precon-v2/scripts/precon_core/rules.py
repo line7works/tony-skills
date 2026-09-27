@@ -246,6 +246,13 @@ def _items(answer, harvest):
             # that touches it opens the way (and the write then removes the row, R4); a decided line is never
             # ruled out, by its words or its id
             how = "names" if twin["id"] == own else "repeats"
+            if twin["id"] == own and twin["tag"] == "decided":
+                # the same refusal, its own sentence (R2 of 3b round 2, wording only): a question touching a
+                # decided row is the frame's `re-asked-decided`, so the word-twin sentence is untrue here
+                out.append(refusal("retagged", "the out-of-scope item %r names the decided ledger line %s: a decided "
+                                               "line is settled in place and is not ruled out; pass it forward by "
+                                               "its id" % (item.get("text"), twin["id"]), out_of_scope=index))
+                continue
             out.append(refusal("retagged", "the out-of-scope item %r %s the %s ledger line %s, which no answered "
                                            "question of this run touched: the doc would hold the line and its twin"
                                % (item.get("text"), how, twin["tag"], twin["id"]), out_of_scope=index))
