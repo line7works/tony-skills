@@ -660,7 +660,8 @@ class AMarkedLabelIsALabel(_Record):
 
     def test_a_marked_label_in_either_case_carrying_the_open_item_is_refused(self):
         for text in ("R2: budget ceiling, declined by owner", "AC1: budget ceiling, not in v1",
-                     "r2: budget ceiling, declined by owner", "ac1: budget ceiling, not in v1"):
+                     "r2: budget ceiling, declined by owner", "ac1: budget ceiling, not in v1",
+                     "r2 : budget ceiling, declined by owner", "Ac1 : budget ceiling; not in v1"):
             self.fresh()
             out = self.refused(self.out_of_scope(text), "open-item-descoped")
             self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), text)

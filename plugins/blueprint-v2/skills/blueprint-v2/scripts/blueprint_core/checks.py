@@ -117,12 +117,12 @@ def _labelled_bare(text):
         return bare
     for token in text.split():
         token = "".join(ch for ch in token if unicodedata.category(ch) != "Cf")
-        # a marked label (`R2:`, `(R2)`, `[R2]`, `**R2:**`, `r2:`) is a label as the bare one is (ruling A5(1)); the
-        # frame keys a marked label in any case and a bare one in upper case only
-        marked = token.strip("*_`~").lstrip("([").rstrip(".:)]\uff1a").strip("*_`~")
-        if marked != token:
-            marked = re.sub(r"^[A-Za-z]+", lambda m: m.group(0).upper(), marked)
-        token = marked
+        # a marked label (`R2:`, `(R2)`, `[R2]`, `**R2:**`, `r2:`, `r2 : `) is a label as the bare one is (ruling
+        # A5(1)); the frame keys a marked label in any case, and this loop runs only for a line the frame reads as
+        # labelled, the forms check below confirming the label, so a token's letters are read in upper case whether
+        # or not a mark was stripped from it (`r2 : budget`, whose colon is a token of its own)
+        token = token.strip("*_`~").lstrip("([").rstrip(".:)]\uff1a").strip("*_`~")
+        token = re.sub(r"^[A-Za-z]+", lambda m: m.group(0).upper(), token)
         if ITEM_LABEL.match(token) and line & shared.row_forms(token + " " + bare):
             return token + " " + bare
     return None
