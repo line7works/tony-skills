@@ -290,7 +290,7 @@ the templates of section 8, rule 3.
 |---|---|---|---|
 | `precon-v2` | the scope doc: `<workspace>/docs/scope/<YYYY-MM-DD>-<idea>.md`, or `<staging>/<idea>-scope.md` when no repository owns the idea | `architect-v2` and `blueprint-v2` | `scope`: `docs/scope/*.md` and the older flat `docs/*-scope.md` in the workspace (and `<staging>/*-scope.md` for architect-v2 and inspect-v2) |
 | `architect-v2` | the architecture doc: `<workspace>/docs/architecture/<YYYY-MM-DD>-<slug>.md`, or `<staging>/<slug>-architecture.md`; its `Scope doc:` header line names the scope doc | `blueprint-v2` | `architecture`: `docs/architecture/*.md`, then the older flat `docs/*-architecture.md` |
-| `blueprint-v2` | the build doc: `<workspace>/docs/plans/<YYYY-MM-DD>-<feature>.md`, extended in place when one exists | `inspect-v2` (and `build-v2`'s own reader) | `build`: `docs/plans/*-<name>.md`, then the older flat `docs/<name>-build-plan.md` |
+| `blueprint-v2` | the build doc: `<workspace>/docs/plans/<YYYY-MM-DD>-<feature>.md`, extended in place when one exists | `inspect-v2` (and `build-v2`'s own reader) | `build`: `docs/plans/*-<name>.md` and `docs/plans/<name>.md` (one tier), then the older flat `docs/<name>-build-plan.md` |
 | `blueprint-v2` | the scope doc it read, unchanged | `inspect-v2` | `scope`, by glob over every home, never by a guessed slug |
 | `inspect-v2` | the `Plan: inspected` stamp and the station's own lines in the build doc, its findings in the records log, a verdict mirror under `docs/reviews/` | `build-v2`, `signoff-v2`, `recheck-v2` | their own readers, unchanged |
 

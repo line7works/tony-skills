@@ -652,10 +652,11 @@ class TheRowId(_Answer):
                 for index, value in enumerate(node):
                     walk(value, path + [str(index)])
         walk(schema, [])
-        placed = {"precon-v2": ["properties/lines/items"], "inspect-v2": ["properties/lines/items"],
-                  "architect-v2": [], "blueprint-v2": []}
-        # a core's schema holds `row` on exactly the lines its view hands the frame (C3A-1); 3b edits this map
-        # in the same commit as each lane's view line
+        placed = {"precon-v2": ["properties/lines/items", "properties/out_of_scope/items"],
+                  "inspect-v2": ["properties/lines/items"], "architect-v2": ["$defs/new_line"],
+                  "blueprint-v2": ["$defs/line"]}
+        # a core's schema holds `row` on exactly the lines its view hands the frame (C3A-1); the control room
+        # placed these for 3b (A10, C2): each lane's own schema line makes its own core green
         self.assertEqual(sorted(paths), placed[testlib.CORE])
         cls = jsonschema.validators.validator_for(schema)
         good = "arch-0123456789ab"
