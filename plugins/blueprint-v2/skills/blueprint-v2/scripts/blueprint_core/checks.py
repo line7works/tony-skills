@@ -48,7 +48,6 @@ in the shared shape, one per finding:
     feature-not-hunted        the answer's feature is not the name the build hunt ran with
 """
 import re
-import unicodedata
 
 from station_core import answer as shared
 
@@ -116,13 +115,15 @@ def _labelled_bare(text):
     if all(line & shared.row_forms(probe + " " + bare) for probe in PROBE_LABELS):
         return bare
     for token in text.split():
-        token = "".join(ch for ch in token if unicodedata.category(ch) != "Cf")
-        # a marked label (`R2:`, `(R2)`, `[R2]`, `**R2:**`, `r2:`, `r2 : `) is a label as the bare one is (ruling
-        # A5(1)); the frame keys a marked label in any case, and this loop runs only for a line the frame reads as
-        # labelled, the forms check below confirming the label, so a token's letters are read in upper case whether
-        # or not a mark was stripped from it (`r2 : budget`, whose colon is a token of its own)
-        token = token.strip("*_`~").lstrip("([").rstrip(".:)]\uff1a").strip("*_`~")
+        # a marked label (`R2:`, `(R2)`, `[R2]`, `**R2:**`, `r2:`, `r2 : `, `R2A:`) is a label as the bare one is
+        # (ruling A5(1)); the frame keys a marked label in any case and through every character it reads as
+        # invisible, and this loop runs only for a line the frame reads as labelled, the forms check below
+        # confirming the label, so a token keeps only what a label is written with (letters, digits, the dot and
+        # the hyphen), its leading letters read in upper case and a letter suffix in lower case, as `ITEM_LABEL`
+        # writes them (`r2 : budget`, whose colon is a token of its own; `R2A:`; `R2` with a joiner inside)
+        token = re.sub(r"[^\dA-Za-z.\-]", "", token).strip(".-")
         token = re.sub(r"^[A-Za-z]+", lambda m: m.group(0).upper(), token)
+        token = re.sub(r"(?<=\d)[A-Za-z]$", lambda m: m.group(0).lower(), token)
         if ITEM_LABEL.match(token) and line & shared.row_forms(token + " " + bare):
             return token + " " + bare
     return None

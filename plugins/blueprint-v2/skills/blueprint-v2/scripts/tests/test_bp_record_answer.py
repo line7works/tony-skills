@@ -661,7 +661,8 @@ class AMarkedLabelIsALabel(_Record):
     def test_a_marked_label_in_either_case_carrying_the_open_item_is_refused(self):
         for text in ("R2: budget ceiling, declined by owner", "AC1: budget ceiling, not in v1",
                      "r2: budget ceiling, declined by owner", "ac1: budget ceiling, not in v1",
-                     "r2 : budget ceiling, declined by owner", "Ac1 : budget ceiling; not in v1"):
+                     "r2 : budget ceiling, declined by owner", "Ac1 : budget ceiling; not in v1",
+                     "R2A: budget ceiling, declined by owner", "R2\u034f: budget ceiling, declined by owner"):
             self.fresh()
             out = self.refused(self.out_of_scope(text), "open-item-descoped")
             self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), text)
@@ -669,7 +670,8 @@ class AMarkedLabelIsALabel(_Record):
     def test_other_words_or_a_lower_case_bare_token_are_a_new_line(self):
         for text in ("r2: a phone app, declined by owner", "R2: a phone app, declined by owner",
                      "ac1 budget ceiling review, later", "r2 budget ceiling, declined by owner",
-                     "(r2) a phone app: declined", "Q3: budget ceiling review board, not now"):
+                     "(r2) a phone app: declined", "Q3: budget ceiling review board, not now",
+                     "R2A: a phone app, declined by owner"):
             self.fresh()
             self.accepted(self.out_of_scope(text))
 
