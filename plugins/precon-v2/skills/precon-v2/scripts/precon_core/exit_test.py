@@ -9,11 +9,10 @@ until the owner answers with a row).
 readers' run directory for the calls is `<run_dir>/readers`, so each call's sidecar is found at
 `<run_dir>/readers/<call id>/sidecar.json`, read from disk, never typed by the executor.
 """
-import json
 import os
 import re
 
-from station_core import fsio, readers_request, templates
+from station_core import fsio, readers_request, readers_roster, templates
 
 D = templates.D
 M = templates.M
@@ -22,7 +21,6 @@ MANDATE = "read this scope doc " + D + " what's unclear, what would you ask befo
 PROFILE = "starved"
 HOME = readers_request.HOME_PROVIDER
 READERS = "readers"
-MANIFEST = os.path.join(".claude-plugin", "plugin.json")
 SECTION = re.compile(r"^## (?P<row>[a-z0-9][a-z0-9-]*) %s (?P<model>.+)$" % M)
 DISPOSITIONS = ("surfaced", "absorbed", "left downstream")
 
@@ -31,45 +29,17 @@ class RosterMissing(LookupError):
     """readers' roster could not be found beside this core."""
 
 
-def _manifest(folder):
-    try:
-        with open(os.path.join(folder, MANIFEST), encoding="utf-8") as fh:
-            body = json.load(fh)
-        return body if isinstance(body, dict) else None
-    except (OSError, ValueError):
-        return None
-
-
-def _version_key(name):
-    parts = name.split(".")
-    return tuple(int(p) for p in parts) if all(p.isdigit() for p in parts) else None
-
-
 def roster_path(plugin_root):
-    """readers' `roster.json`: route 3a (the checkout sibling), else route 3b (the installed shape,
-    the highest version folder whose manifest names `readers` at that version). The records
-    component's two routes, applied to readers. There is no third route: a roster of the caller's
-    choosing could name a Claude row's provider as another and carry `authorized` onto it."""
-    looked = []
-    sibling = os.path.join(os.path.dirname(plugin_root), READERS)
-    looked.append(sibling)
-    body = _manifest(sibling)
-    if body and body.get("name") == READERS:
-        return os.path.join(sibling, "skills", READERS, "assets", "roster.json")
-    parent = os.path.join(os.path.dirname(os.path.dirname(plugin_root)), READERS)
-    looked.append(parent)
-    best = None
-    if os.path.isdir(parent):
-        for name in os.listdir(parent):
-            key = _version_key(name)
-            body = _manifest(os.path.join(parent, name))
-            if key is not None and body and body.get("name") == READERS and body.get("version") == name:
-                if best is None or key > best[0]:
-                    best = (key, os.path.join(parent, name))
-    if best:
-        return os.path.join(best[1], "skills", READERS, "assets", "roster.json")
-    raise RosterMissing("readers is not installed beside this core (looked in %s): install readers with this core"
-                        % ", ".join(looked))
+    """readers' `roster.json`, found by the shared resolver (`station_core.readers_roster.find`): route 3a
+    (the checkout sibling), else route 3b (the installed shape, the highest version folder whose manifest
+    names `readers` at that version), each counted only with its roster there. The records component's two
+    routes, applied to readers. There is no third route: no argument is passed, since a roster of the
+    caller's choosing could name a Claude row's provider as another and carry `authorized` onto it.
+    Nothing found raises precon's own `RosterMissing`, naming every place the shared resolver looked."""
+    try:
+        return readers_roster.find(plugin_root)["roster"]
+    except readers_roster.RosterMissing as exc:
+        raise RosterMissing("readers is not installed beside this core (%s): install readers with this core" % exc)
 
 
 def plan_requests(rows, input_doc, roster, run_id, run_dir, document, session_model=None, models=None):

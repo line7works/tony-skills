@@ -117,6 +117,32 @@ class TheLedgerRules(_Answer):
                      "source-kind")
 
 
+class TheCallsParentheses(_Answer):
+    """CP4-3 (R3 of 3b): precon writes an open line as `<text> (waits on: <call>)`, so a call whose
+    parentheses are unbalanced or nested more than one deep is refused `unrenderable`: every suffix
+    precon writes is one the frame's parenthesis reading strips, and precon keeps no reader of its own."""
+
+    def open_line(self, call):
+        return self.answer(lines=[{"text": "Whether resets are logged", "tag": "open", "waits_on": call,
+                                   "trace": {"kind": "owner_words", "ref": "ask me later"}}])
+
+    def test_an_unbalanced_or_two_deep_call_is_unrenderable(self):
+        for call in ("the bench call (see Q2", "the bench call see Q2) first", "the bench call (see (Q2) first)",
+                     "((two deep))", "a call ) and ( back", "the bench call [see Q2"):
+            doc = self.refused(self.open_line(call), "unrenderable")
+            self.assertEqual(sorted(set(r["rule"] for r in doc["refusals"])), ["unrenderable"], call)
+
+    def test_a_plain_call_or_one_balanced_parenthesis_is_accepted(self):
+        for call in ("the owner's call on logging", "the bench call (see Q2)", "the bench call (Q2) and (Q3)"):
+            run = self.fx.new_run()
+            run.select()
+            self.assertEqual(run.harvest()[0], 0)
+            code, doc, err = run.record(preconlib.answer(run, lines=[
+                {"text": "Whether resets are logged", "tag": "open", "waits_on": call,
+                 "trace": {"kind": "owner_words", "ref": "ask me later"}}]))
+            self.assertEqual(code, 0, "%s %s" % (call, json.dumps(doc, ensure_ascii=False)))
+
+
 class Twins(_Answer):
     """CP1-1 (ruling R1): a line that repeats a ledger line's text without its id. The shared
     `quietly-resolved` refuses a parked or open line's words asserted as decided under any trace

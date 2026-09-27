@@ -16,6 +16,7 @@ line is kept byte for byte, and the plan checks that it is.
 """
 import os
 import re
+import unicodedata
 
 from station_core import ledger, templates
 
@@ -26,12 +27,12 @@ M = templates.M
 TIERS = ("napkin", "bounded", "architectural")
 TIER_COMMENT = "<!-- precon-v2 triage: %s -->"
 TIER_LINE = re.compile(r"^<!-- precon-v2 triage: (napkin|bounded|architectural) -->$")
-# a triage comment as a hand may have typed it, recognized over the whole text with invisibles dropped:
-# any spacing or none, any case, any separator between `precon`, `v2` and `triage` (an underscore or a
-# non-breaking hyphen included), across lines, unterminated; every match counts, and one that is not
-# exactly TIER_LINE alone on its line is off its form (CP1-6)
-TIER_ANY = re.compile(r"<!--(?:(?!-->).)*?precon[\W_]*v2[\W_]*triage(?:(?!-->).)*?(?:-->|$)",
-                      re.IGNORECASE | re.DOTALL)
+# every comment span (`<!--` to the next `-->`, or to the end of the text when unterminated), read over the
+# whole text with invisibles dropped, across lines; a span is a triage comment by its content, not its
+# spelling: squeezed of every separator after an NFKC and case fold, it holds both `precon` and `triage`
+# (any spacing, case, separator, width or word order). Every one counts, and one that is not exactly
+# TIER_LINE alone on its line is off its form (CP1-6)
+COMMENT_SPAN = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 OPEN_LABEL = "Open:"
 TITLE = re.compile(r"^# (?P<title>.+) %s scope doc \((?P<date>.+)\)$" % D)
 PARKED_REASONS = ("needs research", "needs prototype")
@@ -69,9 +70,10 @@ def header(text):
 
 
 def comments(text):
-    """[(line number, exact)] for every triage comment in the text, in any hand's spelling, across lines:
-    the match is read on the text with invisibles dropped, and `exact` says it is TIER_LINE standing
-    alone on its line of the text as written (no invisible, no other character beside it)."""
+    """[(line number, exact, line)] for every triage comment in the text, in any hand's spelling, across lines:
+    each comment span is read on the text with invisibles dropped and recognized by its content
+    (`is_triage`), and `exact` says it is TIER_LINE standing alone on its line of the text as written (no
+    invisible, no other character beside it)."""
     visible, where = [], []
     for index, char in enumerate(text):
         if not textmod.invisible(char):
@@ -79,7 +81,9 @@ def comments(text):
             where.append(index)
     visible = "".join(visible)
     out = []
-    for match in TIER_ANY.finditer(visible):
+    for match in COMMENT_SPAN.finditer(visible):
+        if not is_triage(match.group(0)):
+            continue
         start = where[match.start()]
         end = where[match.end() - 1] + 1
         line_start = text.rfind("\n", 0, start) + 1
@@ -88,6 +92,13 @@ def comments(text):
         exact = bool(TIER_LINE.match(line)) and text[start:end] == line
         out.append((text.count("\n", 0, start) + 1, exact, line))
     return out
+
+
+def is_triage(span):
+    """A comment span is a triage comment by its content (CP1-6): NFKC- and case-folded, squeezed of every
+    non-word character and underscore, it holds both `precon` and `triage`."""
+    squeezed = re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", span).casefold())
+    return "precon" in squeezed and "triage" in squeezed
 
 
 def comment_findings(text):
@@ -133,6 +144,18 @@ def twins(value, rows, own=None):
         return []
     return [row for row in rows if row["section"] in ("Decisions", "Open") and row["id"] != own
             and forms & textmod.row_readings(row["text"])]
+
+
+def named(entry):
+    """The ledger row an answer's line or out-of-scope item names: its `row`, else the ref of a `ledger`
+    trace, else None (a new line). The id is the trace (A5(4)): the row it names is never matched
+    against the entry's own words."""
+    if not isinstance(entry, dict):
+        return None
+    if entry.get("row") is not None:
+        return entry["row"]
+    trace = entry.get("trace") if isinstance(entry.get("trace"), dict) else {}
+    return trace.get("ref") if trace.get("kind") == "ledger" else None
 
 
 def valid_parked(reason):
@@ -204,8 +227,10 @@ def classify(answer, ledger_rows, run_id):
         where = {"line": index}
         text, tag = line.get("text"), line.get("tag")
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
-        if trace.get("kind") == "ledger" and trace.get("ref") in by_id:
-            row = by_id[trace["ref"]]
+        if named(line) in by_id:
+            # a line that names its row, by `row` or a `ledger` trace, settles that row in place or passes
+            # it forward; it is never written beside the row as a new line (R8a of 3b)
+            row = by_id[named(line)]
             if tag == "decided" and row["tag"] in ("parked", "assumed", "open"):
                 qids = answered_touching(answer, row["id"])
                 source = settled_by(answer, qids, run_id)
@@ -233,7 +258,14 @@ def classify(answer, ledger_rows, run_id):
                     decisions.append(body)
             elif tag == "open":
                 if one_line(line.get("waits_on"), "an open line's call", problems, where):
-                    open_items.append("%s (waits on: %s)" % (text, line["waits_on"]))
+                    if not textmod.one_deep(line["waits_on"]):
+                        # CP4-3: every suffix precon writes is one the frame's parenthesis reading strips
+                        problems.append(dict(where, message="the open line's call %r has parentheses that are "
+                                                            "unbalanced or nested more than one deep: the "
+                                                            "` (waits on: <call>)` suffix would not read back "
+                                                            "as the item's words" % line["waits_on"]))
+                    else:
+                        open_items.append("%s (waits on: %s)" % (text, line["waits_on"]))
         except templates.FormError as exc:
             problems.append(dict(where, message="the line %r cannot be rendered: %s" % (text, exc)))
     out_of_scope = []
@@ -244,8 +276,12 @@ def classify(answer, ledger_rows, run_id):
             out_of_scope.append("%s %s %s" % (item["text"], D, item["reason"]))
             # R4 (CP3-2): the item rules out a parked, open or assumed row an answered question of this run
             # settled, so that row leaves the doc in the same write (the removal path of a settled Open item,
-            # a Decisions line too): the doc never holds the out-of-scope line and its twin
-            for row in twins(item["text"], ledger_rows):
+            # a Decisions line too), whether the item repeats its words or names it by `row` (R8b of 3b): the doc
+            # never holds the out-of-scope line and its twin
+            ruled = twins(item["text"], ledger_rows, own=named(item))
+            if named(item) in by_id:
+                ruled.insert(0, by_id[named(item)])
+            for row in ruled:
                 if row["tag"] in ("parked", "open", "assumed") and answered_touching(answer, row["id"]) \
                         and row["line"] not in rewrites:
                     removals.add(row["line"])

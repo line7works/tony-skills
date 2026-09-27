@@ -250,6 +250,35 @@ class Refused(_Harvest):
             self.assertEqual(doc["stop_tag"], "form-refused", repr(comment))
             self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [2], repr(comment))
 
+    def test_a_triage_comment_is_recognized_by_its_content(self):
+        # CP1-6 (R1 of 3b): any comment span whose words, NFKC- and case-folded and squeezed of every
+        # separator, hold both `precon` and `triage` is a triage comment: a space inside `v2`, fullwidth
+        # letters, the words in another order; and every shape rounds 3 and 4 held stays refused
+        for comment in ("<!-- precon-v 2 triage: bounded -->", "<!-- \uff50\uff52\uff45\uff43\uff4f\uff4e-v2 triage: bounded -->",
+                        "<!-- triage (precon-v2): bounded -->", " <!-- precon-v2 triage: bounded -->",
+                        "<!--precon-v2 triage: bounded-->", "\t<!-- precon-v2 triage: bounded -->",
+                        "\ufeff<!-- precon-v2 triage: bounded -->", "<!-- PRECON-V2 triage: bounded -->",
+                        "<!-- precon_v2 triage: bounded -->", "<!-- precon\u2011v2 triage: bounded -->",
+                        "<!--\nprecon-v2 triage: bounded -->", "<!--- precon-v2 triage: bounded --->",
+                        "<!-- precon-v2 tri\u200bage: bounded -->", "<!-- precon-v2 triage: bounded -->\u200b",
+                        "<!-- precon-v2 triage: bounded"):
+            tmp = testlib.make_scratch("harvest-")
+            self.addCleanup(testlib.rmtree, tmp)
+            self.fx = preconlib.Fixture(tmp)
+            text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n%s\n\nIntent:" % comment, 1)
+            run, doc = self.stop(text)
+            self.assertEqual(doc["stop_tag"], "form-refused", repr(comment))
+            self.assertEqual([f["line"] for f in doc["station_result"]["form_findings"]], [2], repr(comment))
+
+    def test_the_exact_comment_alone_is_harvested(self):
+        text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n<!-- precon-v2 triage: bounded -->\n\nIntent:", 1)
+        preconlib.ensure_scope_doc(self.fx, text=text)
+        run = self.fx.new_run()
+        run.select()
+        code, doc, err = run.harvest()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(doc["doc"]["tier"], "bounded")
+
     def test_every_match_counts(self):
         # a well-formed comment and a second one in another hand: the second is off its form
         text = preconlib.SCOPE_DOC.replace(
