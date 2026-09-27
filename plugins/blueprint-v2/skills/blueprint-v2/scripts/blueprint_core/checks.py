@@ -74,9 +74,7 @@ LABEL = re.compile(r"^(?:constraints?|out of scope|out-of-scope|assumed|assumpti
                    re.I)
 # where an out-of-scope line's item ends and its reason begins (round 3, R3; round 4, R1 adds the comma)
 REASON = re.compile(r"\s+[\u2014\u2013]\s+|\s+--?\s+|:\s+|;\s+|,\s+|\s+\(")
-# a bare item label as the station forms write one (the frame's label letters; round 5, R3), and two labels
-# no line of a real answer carries, used to ask the frame's own rule whether a line carries a bare label
-ITEM_LABEL = re.compile(r"^(?:R|AC|C|Q|O|A|D)-?\d{1,5}(?:\.\d{1,3})*[a-z]?$")
+# two labels no line of a real answer carries, used to ask the frame's own rule whether a line carries a label
 PROBE_LABELS = ("D99999", "A99998")
 
 
@@ -103,29 +101,28 @@ def words(text):
 
 
 def _labelled_bare(text):
-    """The line's bare words (`station_core.answer.bare`) with its bare item label put back in front, so a
-    reading taken from them keeps the label (round 5, R3); the bare words alone for an unlabelled line;
-    None when the line carries a bare label this core cannot place (then no reading is taken from them).
-    Whether the line carries one is the frame's own rule, asked through the public forms: an unlabelled
-    line meets a row of its words under any label, a labelled line meets only its own label's."""
+    """The line's bare words (`station_core.answer.bare`) with its item label put back in front, so a reading
+    taken from them keeps the label (round 5, R3); the bare words alone for an unlabelled line; None when the
+    line carries a label this core cannot place (then no reading is taken from them). The label is the
+    frame's own (`station_core.answer.label`, slice 3a round 7, R2): an unlabelled line meets a row of its
+    words under any label, a labelled line meets only its own label's, written with its leading letters in
+    upper case as the station forms write one (`R2`, `AC1`, `R2a`)."""
     bare = shared.bare(text)
     if not bare:
         return None
     line = shared.forms(text)
     if all(line & shared.row_forms(probe + " " + bare) for probe in PROBE_LABELS):
         return bare
-    for token in text.split():
-        # a marked label (`R2:`, `(R2)`, `[R2]`, `**R2:**`, `r2:`, `r2 : `, `R2A:`) is a label as the bare one is
-        # (ruling A5(1)); the frame keys a marked label in any case and through every character it reads as
-        # invisible, and this loop runs only for a line the frame reads as labelled, the forms check below
-        # confirming the label, so a token keeps only what a label is written with (letters, digits, the dot and
-        # the hyphen), its leading letters read in upper case and a letter suffix in lower case, as `ITEM_LABEL`
-        # writes them (`r2 : budget`, whose colon is a token of its own; `R2A:`; `R2` with a joiner inside)
-        token = re.sub(r"[^\dA-Za-z.\-]", "", token).strip(".-")
-        token = re.sub(r"^[A-Za-z]+", lambda m: m.group(0).upper(), token)
-        token = re.sub(r"(?<=\d)[A-Za-z]$", lambda m: m.group(0).lower(), token)
-        if ITEM_LABEL.match(token) and line & shared.row_forms(token + " " + bare):
-            return token + " " + bare
+    key = shared.label(text)
+    if not key:
+        return None
+    token = re.sub(r"^[a-z]+", lambda m: m.group(0).upper(), key)
+    # a label the frame cannot read back from its own spelling (a non-ASCII digit the frame keys as a bare
+    # letter) leaves the line unlabelled to this core, so its bare words are read (round 7, R2a)
+    if shared.label(token + " " + bare) != key:
+        return bare
+    if line & shared.row_forms(token + " " + bare):
+        return token + " " + bare
     return None
 
 

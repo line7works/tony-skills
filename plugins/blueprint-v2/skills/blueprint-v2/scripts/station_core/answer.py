@@ -370,6 +370,16 @@ def bare(text):
     return _bare(text)
 
 
+def label(text):
+    """Public: the item label the frame keys for a line or field, exactly as `_split_marks` finds it (bare or
+    marked, in front or trailing, in any case, through every decoration and invisible the frame strips): a key
+    of letters, digits and dots (`r2`, `ac1`, `r2.3a`), or '' when the text carries none or is not a string.
+    A lane asks this instead of re-deriving the frame's label rule (slice 3a round 7, R1)."""
+    if not isinstance(text, str):
+        return ""
+    return _split_marks(text)[0]
+
+
 def forms(text):
     """Public: every reading of a line's words (for a lane's own rules; E14-3). Compare a line's `forms` with
     a row's `row_forms` by set intersection; the elements are the frame's encoding, not for display."""

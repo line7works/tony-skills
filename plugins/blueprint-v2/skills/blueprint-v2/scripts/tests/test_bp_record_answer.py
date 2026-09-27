@@ -662,7 +662,9 @@ class AMarkedLabelIsALabel(_Record):
         for text in ("R2: budget ceiling, declined by owner", "AC1: budget ceiling, not in v1",
                      "r2: budget ceiling, declined by owner", "ac1: budget ceiling, not in v1",
                      "r2 : budget ceiling, declined by owner", "Ac1 : budget ceiling; not in v1",
-                     "R2A: budget ceiling, declined by owner", "R2\u034f: budget ceiling, declined by owner"):
+                     "R2A: budget ceiling, declined by owner", "R2\u034f: budget ceiling, declined by owner",
+                     "R2\u212a: budget ceiling, declined by owner", "R\x1c2: budget ceiling, declined by owner",
+                     "R\uff12: budget ceiling, declined by owner"):
             self.fresh()
             out = self.refused(self.out_of_scope(text), "open-item-descoped")
             self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), text)
@@ -671,7 +673,7 @@ class AMarkedLabelIsALabel(_Record):
         for text in ("r2: a phone app, declined by owner", "R2: a phone app, declined by owner",
                      "ac1 budget ceiling review, later", "r2 budget ceiling, declined by owner",
                      "(r2) a phone app: declined", "Q3: budget ceiling review board, not now",
-                     "R2A: a phone app, declined by owner"):
+                     "R2A: a phone app, declined by owner", "R2\u212a: a phone app, declined by owner"):
             self.fresh()
             self.accepted(self.out_of_scope(text))
 

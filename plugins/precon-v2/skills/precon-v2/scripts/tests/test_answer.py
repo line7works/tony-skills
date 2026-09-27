@@ -745,6 +745,42 @@ class MarkedLabelsAreKeyed(_Answer):
             self.assertEqual(self.rules(shape % words, words), ["quietly-resolved"], repr(shape))
 
 
+class TheFrameLabel(unittest.TestCase):
+    """Slice 3a round 7, R1: the frame publishes its own label reading, `label(text)`, the key `_split_marks`
+    finds (bare or marked, in front or trailing, in any case, through every decoration and invisible the frame
+    strips), so a lane asks the frame instead of re-deriving the rule; '' when the line carries none. The key
+    is the one `forms` pairs on: the line meets a row of its bare words under that label and no other label."""
+
+    KEYED = (("R2: budget", "r2"), ("(R2) budget", "r2"), ("**r2:** budget", "r2"), ("r2 : budget", "r2"),
+             ("R2A: budget", "r2a"), ("budget (R2)", "r2"), ("R2\u034f: budget", "r2"), ("R2\u212a: budget", "r2k"),
+             ("R\x1c2: budget", "r2"), ("- [ ] AC1: budget", "ac1"), ("r2.3a: budget", "r2.3a"))
+    UNKEYED = ("budget ceiling", "v2: budget")
+
+    def test_the_label_is_the_frames_key(self):
+        for text, key in self.KEYED:
+            self.assertEqual(answer.label(text), key, repr(text))
+        for text in self.UNKEYED:
+            self.assertEqual(answer.label(text), "", repr(text))
+
+    def test_a_non_string_has_no_label(self):
+        for value in (None, 2, ["R2: budget"], {"text": "R2: budget"}):
+            self.assertEqual(answer.label(value), "", repr(value))
+
+    def test_the_label_is_the_one_forms_pairs_on(self):
+        for text, key in self.KEYED:
+            words = answer.bare(text)
+            line = answer.forms(text)
+            self.assertTrue(line & answer.row_forms(answer.label(text) + " " + words), repr(text))
+            spelled = key.lstrip("abcdefghijklmnopqrstuvwxyz")
+            spelled = key[:len(key) - len(spelled)].upper() + spelled
+            self.assertTrue(line & answer.row_forms(spelled + " " + words), (text, spelled))
+            for other in ("Q77", "R99", "AC98"):
+                self.assertFalse(line & answer.row_forms(other + " " + words), (text, other))
+        for text in self.UNKEYED:
+            self.assertTrue(answer.forms(text) & answer.row_forms(answer.label(text) + " " + answer.bare(text)),
+                            repr(text))
+
+
 class TheGuardsHoles(_Answer):
     """The guard's known holes on the id-less path (the design's C4): the seam 14 reader's CS14-1 and CS14-2, the
     reviewer's underscore emphasis and inline link (lane P's patch, inspect's F2), each line side and row side."""
