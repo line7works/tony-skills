@@ -358,10 +358,10 @@ def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records):
     if not rows:
         mirror["state"] = "not recognised by `mirrors`"
         _mirror_stop(ctx, run, records, mirror, want, None,
-                     "the records component's `mirrors` does not recognise the intended verdict mirror %s (no row "
-                     "of its answer for %s, asked before the mirror is written, names it): the frozen records interface lacks that capability, and "
-                     "this station requires it before appending findings, stamping the plan or writing the "
-                     "verdict. %s" % (want, rel, after))
+                     "the records component's `mirrors` does not recognise the intended verdict mirror %s (asked "
+                     "about %s before the mirror is written, `mirrors` answers with no row naming it): the frozen "
+                     "records interface lacks that capability, and this station requires it before appending "
+                     "findings, stamping the plan or writing the verdict. %s" % (want, rel, after))
     mirror["recognised"] = True
     state = rows[0].get("state")
     mirror["state"] = state if isinstance(state, str) else None

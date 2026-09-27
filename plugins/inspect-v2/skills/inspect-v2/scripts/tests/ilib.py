@@ -220,8 +220,9 @@ def records_cli(args, python=None):
     return proc.returncode, (json.loads(out) if out.strip() else None), proc.stderr.decode("utf-8", "replace")
 
 
-DOUBLE_MODES = ("recognise", "other", "refuse")
+DOUBLE_MODES = ("recognise", "other", "refuse", "render-refuse")
 DOUBLE_REFUSAL = "the test double refuses `mirrors` on purpose"
+DOUBLE_RENDER_REFUSAL = "the test double refuses `render` on purpose"
 
 
 def records_double(parent, mode="recognise"):
@@ -234,6 +235,8 @@ def records_double(parent, mode="recognise"):
                    `-20`), as a component that recognises inspect mirrors would
         other      the real answer, plus one row for a verdict doc that is not the station's mirror
         refuse     exit 4 `invalid`, with the sentence `DOUBLE_REFUSAL`
+        render-refuse  `mirrors` as `recognise`; `render` exits 4 `invalid` with the sentence
+                   `DOUBLE_RENDER_REFUSAL`, so the append has landed when the component refuses
 
     Built under a test's own temporary directory; the real component's path is data in the double,
     written at test time. Returns the double's root (what `--records-root` takes)."""
@@ -253,6 +256,9 @@ def records_double(parent, mode="recognise"):
         "with open(os.path.join(os.path.dirname(HERE), 'argv.log'), 'a') as fh:",
         "    fh.write(json.dumps(sys.argv[1:]) + '\\n')",
         "args = sys.argv[1:]",
+        "if MODE == 'render-refuse' and args and args[0] == 'render':",
+        "    print(json.dumps({'ok': False, 'error': 'invalid', 'reason': %s}))" % json.dumps(DOUBLE_RENDER_REFUSAL),
+        "    sys.exit(4)",
         "if not args or args[0] != 'mirrors':",
         "    sys.argv[0] = REAL",
         "    sys.path[0] = os.path.dirname(REAL)",
@@ -272,7 +278,7 @@ def records_double(parent, mode="recognise"):
         "m = re.match(r'^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$', base)",
         "feature = m.group(1) if m else (base[:-len('-build-plan.md')] if base.endswith('-build-plan.md') else base[:-3])",
         "date = os.environ.get('INSPECT_V2_TEST_NOW', '')[:10]",
-        "if MODE == 'recognise':",
+        "if MODE in ('recognise', 'render-refuse'):",
         "    names = ['%s-inspect-%s.md' % (date, feature)] + ['%s-inspect-%s-%d.md' % (date, feature, k) for k in range(2, 21)]",
         "else:",
         "    names = ['%s-signoff-%s-a.md' % (date, feature)]",

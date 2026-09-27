@@ -476,10 +476,10 @@ that member exists, else every existing member (so an earlier run's copy is neve
 run's when the result names this run's); `n/a` is for the Claude lane only, and an outside lane with no copy on disk says
 `none:` and why (report-only, or readers filed none at the request's path). A stopped run's block
 names the stop, its sentence, that no stamp was written when none was, and what follows; a run
-stopped `records-refused` after its answer was triaged also prints, marked unrecorded, the verdict
-it would have given, every surviving finding (each `not appended`), the questions, the no-record
-note and what was hunted and held, so the owner rules with them in view; nothing of them is
-appended, stamped or mirrored.
+stopped `records-refused` after its answer was triaged and before anything was appended also
+prints, marked unrecorded, the verdict it would have given, every surviving finding (each `not
+appended`), the questions, the no-record note and what was hunted and held, so the owner rules with
+them in view; nothing of them is appended, stamped or mirrored.
 
 ## 10. Report-only
 

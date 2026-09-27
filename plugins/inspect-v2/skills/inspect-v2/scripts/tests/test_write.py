@@ -385,7 +385,61 @@ class TheMirrorsCapabilityIsRequired(_Write):
         self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
         lines = self.chat_lines(doc)
         self.assertTrue([l for l in lines if l.endswith(" not appended")], lines)
+        self.assertEqual(lines[-1], self.NEXT_MOVED)
+
+    # round 3, R2 (CI3B2-2): at the head-moved stop the reason is the station's own, the log needs no repair,
+    # and the owner's move is a fresh run on the doc and its log as they are now
+    NEXT_MOVED = ("Next: a fresh inspect-v2 run on the doc and its log as they are now; the findings above were "
+                  "read before the log moved and stay unrecorded.")
+
+    def move_the_head(self):
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [dict(TheHeadIsReadBeforeAnyWrite.OTHER)])
+        code, body, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                            "--events", events, "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+
+    # round 3, R1 (CI3B2-1): a `render` refusal comes after the append landed, so the block that says
+    # nothing was appended does not print there
+    def test_a_render_refusal_after_the_append_prints_no_unrecorded_block(self):
+        self.upto_answer("render-refuse")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        self.assertIn(ilib.DOUBLE_RENDER_REFUSAL, doc["reason"])
+        self.assertIn("`render`", doc["reason"])
+        self.assertEqual(doc["station_result"]["records"]["appended"], 1)
+        kinds = [r["event"]["kind"] for r in self.events()["results"]]
+        self.assertEqual(kinds, ["finding_raised"], "the append landed before the refusal")
+        lines = self.chat_lines(doc)
+        self.assertFalse([l for l in lines if l.startswith("Unrecorded") or l.endswith("not appended")], lines)
         self.assertEqual(lines[-1], "Next: read the component's sentence; nothing here repairs the log.")
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual(again["station_result"]["chat"], doc["station_result"]["chat"])
+
+    # round 3, R3 (a): a stopped block with no finding above never says "the findings above"
+    NEXT_RULING_CLEAN = ("Next: the owner rules on the records component's `mirrors` (E14-2); a fresh inspect-v2 "
+                         "run follows his ruling.")
+
+    def test_a_clean_run_mirror_stop_names_no_findings_above(self):
+        self.upto_answer("other", fleet=ilib.claude_fleet(R, model=MODEL), adjudications=None)
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertEqual(doc["station_result"]["findings"], [])
+        lines = self.chat_lines(doc)
+        self.assertEqual(len([l for l in lines if l.startswith("Unrecorded")]), 1, lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING_CLEAN)
+        self.assertFalse([l for l in lines if "findings above" in l], lines)
+
+    def test_a_clean_run_head_moved_stop_names_no_findings_above(self):
+        self.upto_answer("recognise", fleet=ilib.claude_fleet(R, model=MODEL), adjudications=None)
+        self.move_the_head()
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        self.assertEqual(doc["station_result"]["findings"], [])
+        lines = self.chat_lines(doc)
+        self.assertEqual(lines[-1], "Next: a fresh inspect-v2 run on the doc and its log as they are now.")
+        self.assertFalse([l for l in lines if "findings above" in l], lines)
 
     def test_a_records_refusal_before_triage_prints_no_unrecorded_block(self):
         # a log the component refuses to read stops the run at `harvest`, before any answer

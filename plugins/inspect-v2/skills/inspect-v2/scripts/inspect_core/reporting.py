@@ -94,9 +94,11 @@ def chat_block(run, result):
         lines.append("Reason: %s" % result["reason"])
         if sr.get("stamp_written") is False:
             lines.append("Stamp: none written")
-        # CI3B-1: a run stopped `records-refused` after its answer was triaged prints the inspection,
-        # marked unrecorded, so the owner rules with it in view; nothing of it is appended, stamped or mirrored
-        if result["stop_tag"] == "records-refused" and sr.get("counts") is not None and "findings" in sr:
+        # CI3B-1: a run stopped `records-refused` after its answer was triaged and before anything was
+        # appended prints the inspection, marked unrecorded, so the owner rules with it in view; nothing of
+        # it is appended, stamped or mirrored (CI3B2-1: a `render` refusal comes after the append landed)
+        if result["stop_tag"] == "records-refused" and sr.get("counts") is not None and "findings" in sr \
+                and not (sr.get("records") or {}).get("appended"):
             counts = sr["counts"]
             lines.append("Unrecorded (nothing appended, no stamp, no verdict doc): the verdict would be %s; "
                          "%d BLOCKER %s %d MAJOR %s %d MINOR; Refuted: %d"
@@ -113,9 +115,17 @@ def chat_block(run, result):
                              "items are questions for the owner, never blockers (the no-record rule).")
             lines.append("Hunted and held: %s" % sr["hunted_and_held"])
         mirror = sr.get("mirror") or {}
+        found = bool(sr.get("findings"))
         if result["stop_tag"] == "records-refused" and mirror.get("recognised") is False:
-            lines.append("Next: the owner rules on the records component's `mirrors` (E14-2); the findings above "
-                         "stay unrecorded, and a fresh inspect-v2 run follows his ruling.")
+            lines.append("Next: the owner rules on the records component's `mirrors` (E14-2); %s"
+                         % ("the findings above stay unrecorded, and a fresh inspect-v2 run follows his ruling."
+                            if found else "a fresh inspect-v2 run follows his ruling."))
+        elif result["stop_tag"] == "records-refused" and "head_now" in (
+                (_artifact(run, "write.json") or {}).get("refused") or {}):
+            # CI3B2-2: the head moved under `write`; the reason is the station's own and the log needs no repair
+            lines.append("Next: a fresh inspect-v2 run on the doc and its log as they are now%s"
+                         % ("; the findings above were read before the log moved and stay unrecorded."
+                            if found else "."))
         else:
             lines.append("Next: %s" % _next_after_stop(result["stop_tag"]))
         return "\n".join(lines) + "\n"
