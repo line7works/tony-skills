@@ -1,0 +1,27 @@
+{
+  "case": "P1-05-settled-by-row",
+  "lines": [
+    {
+      "row": "dec-95c8bc68ce67",
+      "tag": "decided",
+      "text": "Reverse turns count as a second mode",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "yes, count them as a second mode",
+      "id": "Q1",
+      "text": "Does the counter get a second mode for reverse turns?",
+      "touches": [
+        "dec-95c8bc68ce67"
+      ]
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

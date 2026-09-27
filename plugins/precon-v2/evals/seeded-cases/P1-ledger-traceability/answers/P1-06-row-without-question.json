@@ -1,0 +1,18 @@
+{
+  "case": "P1-06-row-without-question",
+  "lines": [
+    {
+      "row": "dec-95c8bc68ce67",
+      "tag": "decided",
+      "text": "Reverse turns count as a second mode",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "count them both"
+      }
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}
