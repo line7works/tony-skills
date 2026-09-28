@@ -178,6 +178,25 @@ class Choose(_Select):
         code, out, err = self.choose(run, os.path.join(run.ws, bplib.SCOPE_PATH), words="  ")
         self.assertEqual(code, 2, err)
 
+    def test_invisible_words_are_usage_and_nothing_written(self):
+        # CL4-1: the words test is the frame's own `bare`, so words of an invisible character only are no
+        # words (a zero width space, a byte order mark, a left-to-right mark), on a first pick and on a rerun
+        for label, words in (("U+200B", "\u200b"), ("BOM", "\ufeff"), ("LRM", "\u200e")):
+            run = self.several()
+            target = os.path.join(run.ws, bplib.SCOPE_PATH)
+            selection = os.path.join(run.run_dir, "selection-scope.json")
+            before = testlib.sha256_file(selection)
+            code, out, err = self.choose(run, target, words=words)
+            self.assertEqual(code, 2, (label, out, err))
+            self.assertEqual(before, testlib.sha256_file(selection), label)
+            code, out, err = self.choose(run, target)
+            self.assertEqual(code, 0, (label, err))
+            picked = testlib.sha256_file(selection)
+            code, out, err = self.choose(run, target, words=" %s " % words)
+            self.assertEqual(code, 2, (label, out, err))
+            self.assertEqual(picked, testlib.sha256_file(selection), label)
+            self.assertEqual(testlib.load_json(selection)["chosen"]["words"], "take the one under docs/scope")
+
     def test_only_a_several_outcome_takes_a_choice(self):
         run = self.run_with({"README.md": "x\n", bplib.SCOPE_PATH: bplib.SCOPE})
         run.select("scope")

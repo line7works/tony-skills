@@ -152,7 +152,7 @@ def command_choose(ctx, args):
     if args.hunt not in HUNTS_NEEDED:
         raise driver.Usage("no hunt %r in this core (its hunts: %s)" % (args.hunt, ", ".join(HUNTS_NEEDED)))
     words = args.words or ""
-    if not words.strip() or "\n" in words or "\r" in words:
+    if not answermod.bare(words) or "\n" in words or "\r" in words:
         raise driver.Usage("--words carries the owner's words that picked the document, verbatim, on one line")
     try:
         selection = harvestmod.selected(run.run_dir, args.hunt)
@@ -185,6 +185,20 @@ def _read_selected(path, hunt):
     except (OSError, UnicodeDecodeError) as exc:
         raise driver.Usage("the %s doc %s cannot be read as UTF-8 text (%s): fix it, or run `select --hunt %s` "
                            "again" % (hunt, path, exc, hunt))
+
+
+def _disk_spelling(path):
+    """The selected doc's path as the disk spells it (a case-insensitive file system answers a literal glob,
+    the undated plan or the flat scope, architecture and build-plan docs, under the name as typed)."""
+    folder, name = os.path.split(path)
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return path
+    if name in names:
+        return path
+    same = [n for n in names if n.casefold() == name.casefold()]
+    return os.path.join(folder, same[0]) if len(same) == 1 else path
 
 
 def phase_harvest(ctx, args):
@@ -220,7 +234,7 @@ def phase_harvest(ctx, args):
     run_date = datetime.date.today().isoformat()
     scope = None
     if taken["scope"][0]:
-        path = taken["scope"][0]
+        path = _disk_spelling(taken["scope"][0])
         try:
             lines = ledger.read(_read_selected(path, "scope"))
         except ledger.LedgerRefused as exc:
@@ -233,7 +247,7 @@ def phase_harvest(ctx, args):
                              "source": r["source"], "line": r["line"]} for r in lines]}
     architecture = None
     if taken["architecture"][0]:
-        path = taken["architecture"][0]
+        path = _disk_spelling(taken["architecture"][0])
         lines = harvestmod.architecture_lines(_read_selected(path, "architecture"))
         refused = lines.pop("refused")
         if refused:
@@ -246,7 +260,7 @@ def phase_harvest(ctx, args):
         architecture = dict(lines, path=path, chosen_by_owner=taken["architecture"][1])
     build = None
     if taken["build"][0]:
-        path = taken["build"][0]
+        path = _disk_spelling(taken["build"][0])
         build = dict(harvestmod.build_doc(path, _read_selected(path, "build")), chosen_by_owner=taken["build"][1])
         target = path
     else:
