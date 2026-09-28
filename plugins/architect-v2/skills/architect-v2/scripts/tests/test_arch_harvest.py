@@ -212,6 +212,41 @@ class AnExistingArchitectureDoc(_Harvest):
         self.assertEqual(doc["stop_tag"], "living-doc-malformed")
         self.assertIn("Owner: Sam Bench", doc["reason"])
 
+    def test_a_line_holding_another_line_boundary_stops_the_run_naming_it(self):
+        """Slice 3b R5 (CA7-3): every answer string refuses the line boundaries, so an item holding one other than LF
+        could be neither carried nor struck: the run stops at harvest naming the line by its number and the
+        character by its code point (never printed raw), nothing written, the doc left as found."""
+        cases = (("- a\u2028- b", "U+2028"), ("- a web dashboard\x85later", "U+0085"), ("- a\vb", "U+000B"),
+                 ("- a\x0cb", "U+000C"), ("- a\x1cb", "U+001C"), ("- a\u2029b", "U+2029"))
+        for index, (item, point) in enumerate(cases):
+            text = self.DOC.replace("## Deferred\n", "## Deferred\n%s\n" % item)
+            number = text.split("\n").index(item) + 1
+            ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md": text},
+                                        name="ws-b%d" % index)
+            before = archlib.listing(ws)
+            run = archlib.ArchRun(self.tmp, ws, self.staging, name="run-b%d" % index)
+            code, doc, out, err = run.to_harvest()
+            self.assertEqual(code, 10, (point, out + err))
+            self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+            self.assertIn("line %d: " % number, doc["reason"])
+            self.assertIn(point, doc["reason"])
+            self.assertIn("so no answer can carry or strike it", doc["reason"])
+            self.assertIn("then start a new run", doc["reason"])
+            self.assertFalse(any(ch in doc["reason"] for ch in item[2:] if not ch.isprintable()), point)
+            self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+            self.assertEqual(archlib.listing(ws), before)
+
+    def test_a_crlf_doc_keeps_its_one_cr_finding(self):
+        """CR and LF are no other boundary: a CRLF doc still stops on its one CR finding, as before R5."""
+        ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md":
+                                                    self.DOC.replace("\n", "\r\n")}, name="ws-crlf")
+        run = archlib.ArchRun(self.tmp, ws, self.staging, name="run-crlf")
+        code, doc, out, err = run.to_harvest()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+        self.assertIn("the doc has CR line endings; this core continues LF documents only", doc["reason"])
+        self.assertNotIn("line boundary other than LF", doc["reason"])
+
     def test_two_living_docs_are_several(self):
         ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md": self.DOC,
                                                     "docs/architecture/2026-09-22-turnstile.md": self.DOC})
@@ -232,6 +267,98 @@ class ALedgerTheReaderRefuses(_Harvest):
         self.assertEqual(doc["stop_tag"], "ledger-refused")
         self.assertIn("One module", doc["reason"])
 
+
+class ADocThatIsNotUtf8(_Harvest):
+    """Slice 3b round 2 R2 (CA3B-2): a scope doc or a living doc holding a byte that is not UTF-8 stops the run
+    with its tag (`ledger-refused` for the scope doc, `living-doc-malformed` for the living doc), the sentence
+    naming the doc and the error; never a traceback, and nothing is written outside the run directory."""
+
+    def latin(self, ws, rel, old, new):
+        path = os.path.join(ws, rel)
+        with open(path, "rb") as fh:
+            data = fh.read()
+        self.assertIn(old, data)
+        with open(path, "wb") as fh:
+            fh.write(data.replace(old, new, 1))
+        return path
+
+    def stopped(self, run, ws, tag, path):
+        before = archlib.listing(ws)
+        code, doc, out, err = run.to_harvest(**self.to_harvest)
+        self.assertEqual(code, 10, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(doc["stop_tag"], tag)
+        self.assertIn("%s is not UTF-8 (" % path, doc["reason"])
+        self.assertIn("the doc is left as found: save it as UTF-8, then start a new run", doc["reason"])
+        self.assertEqual(archlib.listing(ws), before)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvested-doc.md")))
+
+    to_harvest = {}
+
+    def test_a_scope_doc_that_is_not_utf8_is_ledger_refused(self):
+        ws = archlib.repo_workspace(self.tmp)
+        path = self.latin(ws, archlib.SCOPE_REL, b"bench rig", b"bench r\xefg")
+        self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "ledger-refused", path)
+
+    def test_a_living_doc_that_is_not_utf8_is_living_doc_malformed(self):
+        from test_arch_record import LIVING, LIVING_REL
+        ws = archlib.repo_workspace(self.tmp, files={LIVING_REL: LIVING})
+        path = self.latin(ws, LIVING_REL, b"a web dashboard", b"a web dashb\xf6ard")
+        self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "living-doc-malformed", path)
+
+    def test_a_docless_runs_living_doc_that_is_not_utf8_is_living_doc_malformed(self):
+        """No scope doc read, so the doc that is not UTF-8 is the living doc, and its tag says so."""
+        from test_arch_record import LIVING
+        rel = "docs/architecture/2026-09-21-bench-counter.md"
+        ws = testlib.git_workspace(self.tmp, "plain", {"README.md": "# A project\n", rel: LIVING})
+        path = self.latin(ws, rel, b"a web dashboard", b"a web dashb\xf6ard")
+        self.to_harvest = {"slug": "bench-counter", "scope": True}
+        self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "living-doc-malformed", path)
+
+
+
+@unittest.skipIf(os.geteuid() == 0, "root reads any file")
+class ADocItCannotRead(_Harvest):
+    """Slice 3b round 3 R4 (CA3B2-3): a scope doc or a living doc the process cannot read (mode 000) is exit 1 naming
+    the doc and the error, stdout empty, never a traceback; the workspace unchanged, no `harvest.json`, no
+    `harvested-doc.md`, the run still `selected`; its mode restored, `harvest` runs."""
+
+    def selected(self, ws):
+        run = archlib.ArchRun(self.tmp, ws, self.staging)
+        self.assertEqual(run.check_input()[0], 0)
+        self.assertEqual(run.select("scope")[0], 0)
+        self.assertEqual(run.select("architecture", "turnstile")[0], 0)
+        return run
+
+    def unreadable(self, run, ws, path):
+        before = archlib.listing(ws)
+        os.chmod(path, 0)
+        self.addCleanup(os.chmod, path, 0o644)
+        code, doc, out, err = run.harvest()
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        self.assertIn("%s cannot be read (" % path, err)
+        self.assertIn("the doc is left as found and the run stays where it was: fix its permissions by hand, then run "
+                      "`harvest` again", err)
+        self.assertNotIn("nothing was written", err)
+        os.chmod(path, 0o644)
+        self.assertEqual(archlib.listing(ws), before)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvested-doc.md")))
+        self.assertEqual(testlib.load_json(os.path.join(run.run_dir, "checkpoint.json"))["phase"], "selected")
+        code, doc, out, err = run.harvest()
+        self.assertEqual(code, 0, out + err)
+
+    def test_a_scope_doc_it_cannot_read(self):
+        ws = archlib.repo_workspace(self.tmp)
+        self.unreadable(self.selected(ws), ws, os.path.join(ws, archlib.SCOPE_REL))
+
+    def test_a_living_doc_it_cannot_read(self):
+        from test_arch_record import LIVING, LIVING_REL
+        ws = archlib.repo_workspace(self.tmp, files={LIVING_REL: LIVING})
+        self.unreadable(self.selected(ws), ws, os.path.join(ws, LIVING_REL))
 
 if __name__ == "__main__":
     unittest.main()

@@ -342,5 +342,191 @@ class DoclessStagingDoc(unittest.TestCase):
         self.assertEqual(templates.check("architecture-doc", text), [])
 
 
+class _Refused(object):
+    """Slice 3b round 2 R1 and R5 (CA3B-1): a hand-planted node on the way to a write, or a folder where a file
+    goes, is exit 1 before the command's first write: stdout empty, no traceback, the sentence naming the node,
+    that nothing was written, and the command to run again; every listing unchanged."""
+
+    def refused(self, call, node, command, folder=True, said=None):
+        roots = [r for r in (self.run.run_dir, self.ws, self.staging) if r]
+        before = [archlib.listing(r) for r in roots]
+        phase = testlib.load_json(os.path.join(self.run.run_dir, "checkpoint.json"))["phase"]
+        code, doc, out, err = call()
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        if said:
+            self.assertIn(said % node, err)
+        elif folder:
+            self.assertIn("unreadable run directory: %s is not a folder this run can write" % node, err)
+        else:
+            self.assertIn("%s is a folder where this run writes a file" % node, err)
+        self.assertIn("nothing was written and the run stays where it was", err)
+        self.assertIn("run `%s` again" % command, err)
+        self.assertEqual([archlib.listing(r) for r in roots], before)
+        self.assertEqual(testlib.load_json(os.path.join(self.run.run_dir, "checkpoint.json"))["phase"], phase)
+
+
+class ANodeInTheWritesWay(_Refused, _Write):
+
+    def test_a_file_where_the_doc_folder_goes(self):
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        node = os.path.join(self.ws, "docs", "architecture")
+        testlib.write_text(node, "not a folder\n")
+        self.refused(self.run.write, node, "write")
+        os.remove(node)
+        self.assertEqual(self.run.write()[0], 0)
+
+    def test_a_folder_where_the_snapshot_goes_before_the_first_write(self):
+        """The doc no longer lands before the snapshot's traceback: the write is refused whole."""
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        node = os.path.join(self.run.run_dir, "written-doc.md")
+        os.makedirs(node)
+        self.refused(self.run.write, node, "write", said="unreadable run directory: %s is not a file (a folder, or a "
+                     "symlink that leads to no file, stands where the run directory's written-doc.md")
+        os.rmdir(node)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(os.path.isfile(node))
+
+    def test_a_dangling_symlink_where_the_snapshot_goes_before_the_first_write(self):
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        node = os.path.join(self.run.run_dir, "written-doc.md")
+        os.symlink(os.path.join(self.run.run_dir, "no-such-file"), node)
+        self.refused(self.run.write, node, "write", said="unreadable run directory: %s is not a file")
+        os.remove(node)
+        self.assertEqual(self.run.write()[0], 0)
+
+    @unittest.skipIf(os.geteuid() == 0, "root writes any folder")
+    def test_a_run_directory_it_cannot_write(self):
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        os.chmod(self.run.run_dir, 0o555)
+        self.addCleanup(os.chmod, self.run.run_dir, 0o755)
+        self.refused(self.run.write, self.run.run_dir, "write")
+        os.chmod(self.run.run_dir, 0o755)
+        self.assertEqual(self.run.write()[0], 0)
+
+    def test_a_folder_where_a_run_file_goes_at_each_command(self):
+        """R5: record-answer, write, render-visual, record-publish and report each hold every run-directory file
+        they may write (the receipt, the checkpoint, the result, their own) before their first write."""
+        answer_json = os.path.join(self.run.run_dir, "answer.json")
+        os.makedirs(answer_json)
+        self.refused(lambda: self.run.record(archlib.clean_answer()), answer_json, "record-answer", folder=False)
+        os.rmdir(answer_json)
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        receipt = os.path.join(self.run.run_dir, "receipt.json")
+        with open(receipt, "rb") as fh:
+            kept = fh.read()
+        os.remove(receipt)
+        os.makedirs(receipt)
+        self.refused(self.run.write, receipt, "write", folder=False)
+        os.rmdir(receipt)
+        with open(receipt, "wb") as fh:
+            fh.write(kept)
+        self.assertEqual(self.run.write()[0], 0)
+        html = os.path.join(self.ws, "docs", "architecture", "turnstile-architecture.html")
+        os.makedirs(html)
+        self.refused(self.run.render, html, "render-visual", folder=False)
+        os.rmdir(html)
+        self.assertEqual(self.run.render()[0], 0)
+        publish = os.path.join(self.run.run_dir, "publish.json")
+        os.makedirs(publish)
+        self.refused(lambda: self.run.publish("https://example.invalid/artifact/turnstile"), publish,
+                     "record-publish", folder=False)
+        os.rmdir(publish)
+        self.assertEqual(self.run.publish("https://example.invalid/artifact/turnstile")[0], 0)
+        result = os.path.join(self.run.run_dir, "result.json")
+        os.makedirs(result)
+        self.refused(self.run.report, result, "report", folder=False)
+        os.rmdir(result)
+        self.assertEqual(self.run.report()[0], 10)
+
+
+
+class TheWrittenDocGone(_Refused, _Write):
+    """Slice 3b round 3 R3 (CA3B2-2): `render-visual`, `record-publish` and `report` read the doc this run wrote
+    before their first write; the doc removed, a folder in its place, or bytes that are not UTF-8 there, is exit 1
+    naming the doc and the command, stdout empty, no traceback, every listing unchanged, the phase still `written`;
+    the doc put back, the command runs."""
+
+    SAID = "the doc this run wrote, %s, cannot be read ("
+    URL = "https://example.invalid/artifact/turnstile"
+
+    def written(self):
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        return doc["doc"]
+
+    def each_shape(self, path, call, command, shapes=("removed", "folder")):
+        with open(path, "rb") as fh:
+            kept = fh.read()
+        for shape in shapes:
+            os.remove(path)
+            if shape == "folder":
+                os.makedirs(path)
+            elif shape == "not-utf-8":
+                with open(path, "wb") as fh:
+                    fh.write(kept + b"\xef\n")
+            self.refused(call, path, command, said=self.SAID)
+            if shape == "folder":
+                os.rmdir(path)
+            elif shape == "not-utf-8":
+                os.remove(path)
+            with open(path, "wb") as fh:
+                fh.write(kept)
+
+    def test_before_render_visual(self):
+        path = self.written()
+        self.each_shape(path, self.run.render, "render-visual", ("removed", "folder", "not-utf-8"))
+        self.assertEqual(self.run.render()[0], 0)
+
+    def test_before_record_publish(self):
+        path = self.written()
+        self.assertEqual(self.run.render()[0], 0)
+        self.each_shape(path, lambda: self.run.publish(self.URL), "record-publish")
+        self.assertEqual(self.run.publish(self.URL)[0], 0)
+
+    def test_before_report(self):
+        path = self.written()
+        self.assertEqual(self.run.render()[0], 0)
+        self.assertEqual(self.run.publish(self.URL)[0], 0)
+        self.each_shape(path, self.run.report, "report")
+        self.assertEqual(self.run.report()[0], 10)
+
+class ANodeInThePreviewsWay(_Refused, _Write):
+
+    EXTRA = {"report_only": True}
+
+    def test_a_file_where_the_preview_folder_goes(self):
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        node = os.path.join(self.run.run_dir, "preview")
+        testlib.write_text(node, "not a folder\n")
+        self.refused(self.run.write, node, "write")
+        os.remove(node)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(doc["doc"].startswith(node + os.sep))
+
+
+class ANodeInTheHarvestsWay(_Refused, unittest.TestCase):
+    """R5: harvest holds its run-directory files before its first write (the docless set-aside's included)."""
+
+    def test_a_folder_where_the_receipt_goes(self):
+        self.tmp = testlib.make_scratch("arch-write-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.staging = None
+        self.ws = archlib.repo_workspace(self.tmp)
+        self.run = archlib.ArchRun(self.tmp, self.ws)
+        self.assertEqual(self.run.check_input()[0], 0)
+        self.assertEqual(self.run.select("scope")[0], 0)
+        self.assertEqual(self.run.select("architecture", "turnstile")[0], 0)
+        node = os.path.join(self.run.run_dir, "receipt.json")
+        os.makedirs(node)
+        self.refused(self.run.harvest, node, "harvest", folder=False)
+        os.rmdir(node)
+        self.assertEqual(self.run.harvest()[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

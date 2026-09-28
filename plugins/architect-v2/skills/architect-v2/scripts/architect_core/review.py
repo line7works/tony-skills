@@ -9,15 +9,16 @@ verbatim (`MANDATE`), `profile: starved`, `authorized` decided there from the in
 under the repository's `docs/reviews/`, or `<slug>-review-<YYYY-MM-DD>-<lane>.md` under the
 staging home's `architect-reviews/`, `-2`, `-3` appended on a same-day repeat, never overwriting.
 
-`readers_roster(plugin_root)` finds readers' roster the way the records component is found:
-route 3a (`<plugin_root>/../readers`), then route 3b (`<plugin_root>/../../readers/<version>`,
-the highest dotted version whose manifest names `readers` and that version). `sibling.py` resolves
-v2 siblings only, and readers is not one, so this is architect-v2's own lookup of the same shape.
+`readers_roster(plugin_root)` finds readers' roster through the shared resolver
+(`station_core/readers_roster.find`, slice 3b R9, A7 section 5): route 3a (`<plugin_root>/../readers`),
+then route 3b (`<plugin_root>/../../readers/<version>`, the highest canonical version whose manifest
+names `readers` and that version), each taken only when the roster file is there. This core keeps its
+own `RosterMissing` and its way on: `request --roster FILE`.
 """
-import json
 import os
 
 from station_core import readers_request
+from station_core import readers_roster as shared_roster
 
 MANDATE = ("You are the architect. Read the attached precon scope doc and return your own full "
            "architecture-and-delivery take for it: the walkthrough target, a v0 drawing (component "
@@ -26,52 +27,24 @@ MANDATE = ("You are the architect. Read the attached precon scope doc and return
 PROFILE = "starved"
 LANES = {"gpt-astra": "gpt", "gpt-sol": "gpt", "gemini": "gemini", "claude-session": "claude",
          "claude-opus": "claude", "claude-fable": "claude", "claude-opus-cli": "claude"}
-ROSTER = os.path.join("skills", "readers", "assets", "roster.json")
 
 
 class RosterMissing(LookupError):
-    pass
+    """No readers roster beside this core; the message names every place looked and `--roster FILE`."""
 
 
 def lane_of(row):
     return LANES.get(row, row)
 
 
-def _manifest_name(folder):
-    try:
-        with open(os.path.join(folder, ".claude-plugin", "plugin.json"), encoding="utf-8") as fh:
-            body = json.load(fh)
-        return body.get("name"), body.get("version")
-    except (OSError, ValueError, AttributeError):
-        return None, None
-
-
-def _version_key(text):
-    parts = text.split(".")
-    if not all(p.isdigit() and (p == "0" or not p.startswith("0")) for p in parts):
-        return None
-    return tuple(int(p) for p in parts)
-
-
 def readers_roster(plugin_root):
-    looked = []
-    beside = os.path.normpath(os.path.join(plugin_root, os.pardir, "readers"))
-    looked.append(beside)
-    if _manifest_name(beside)[0] == "readers" and os.path.isfile(os.path.join(beside, ROSTER)):
-        return os.path.join(beside, ROSTER)
-    base = os.path.normpath(os.path.join(plugin_root, os.pardir, os.pardir, "readers"))
-    looked.append(base)
-    accepted = []
-    if os.path.isdir(base):
-        for entry in sorted(os.listdir(base)):
-            folder = os.path.join(base, entry)
-            name, version = _manifest_name(folder)
-            if name == "readers" and version == entry and _version_key(entry) and \
-                    os.path.isfile(os.path.join(folder, ROSTER)):
-                accepted.append((_version_key(entry), folder))
-    if accepted:
-        return os.path.join(max(accepted)[1], ROSTER)
-    raise RosterMissing("readers' roster was not found (looked in: %s); pass --roster FILE" % ", ".join(looked))
+    """The roster file's path as the shared resolver found and checked it (never normalized: through a
+    symlinked plugin root the lexical path is another place, slice 3b round 2 R4); this core's
+    `RosterMissing` otherwise."""
+    try:
+        return shared_roster.find(plugin_root)["roster"]
+    except shared_roster.RosterMissing as exc:
+        raise RosterMissing("readers' roster was not found: %s; pass --roster FILE" % exc)
 
 
 def requests(rows, input_doc, roster, scope_doc, run_id, session_model=None, models=None, taken=()):

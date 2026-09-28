@@ -72,11 +72,18 @@ def view(answer):
     before it. The formatting is the doc's rendering, added after the check, so an unanswered open
     or parked item asserted as a walkthrough value or a `lines` entry meets the shared text rule.
 
+    Every new entry of the Deferred section, and every `lines` entry (which the doc renders there as `NEEDS CHECK:`), gives a second row under the tag `deferred` when its own tag is not one of `station_core.answer.MOVED_BACK` (slice 3a round 4, C3A2-1): the next station reads the Deferred section as parked, so a decided scope row named there is refused as moved back.
+
     A new poured-concrete line on its form gives two rows (round 3 R4, CS-1's lane half): the whole
     line, and its DECISION field as the row's text with the `category` and the `why` beside it, so
     the shared text rule meets a parked or open line re-asserted as the decision alone as well as
     the whole line, even where the decision holds the form's dash. Both rows name the same place,
     and `shared_refusals` reports a refusal of that place once.
+
+    Every row an entry or a `lines` entry gives (its own, the Deferred section's second row, the
+    poured decision field's) carries the entry's `row` when it names one (slice 3b R7, A5(4)): each
+    names the same ledger row, and the frame judges the line by that id, never by its words against
+    that row. The neutral filter drops a `row` the entry does not carry.
 
     Returns (neutral, places): `places[i]` is `(where, unit)` for the i-th line, `unit` the place a
     missing or empty trace is reported against once (the walkthrough carries one trace for its
@@ -97,20 +104,22 @@ def view(answer):
                               "where": "%s/%d (struck)" % (key, index)})
                 continue
             where = "%s/%d" % (key, index)
-            lines.append({"text": entry["text"], "tag": entry["tag"], "trace": entry.get("trace"), "where": where})
+            lines.append({"text": entry["text"], "tag": entry["tag"], "trace": entry.get("trace"),
+                          "row": entry.get("row"), "where": where})
             if key == "deferred" and entry["tag"] not in shared.MOVED_BACK:
                 # the Deferred section is read as parked by the next station: every entry of it is a move
-                lines.append({"text": entry["text"], "tag": "deferred", "trace": entry.get("trace"), "where": where})
+                lines.append({"text": entry["text"], "tag": "deferred", "trace": entry.get("trace"),
+                              "row": entry.get("row"), "where": where})
             fields = poured_fields(entry["text"]) if key == "poured_concrete" else None
             if fields:
                 lines.append({"text": fields[1], "category": fields[0], "why": fields[2], "tag": entry["tag"],
-                              "trace": entry.get("trace"), "where": where})
+                              "trace": entry.get("trace"), "row": entry.get("row"), "where": where})
     for index, line in enumerate(answer["lines"]):
-        lines.append({"text": line["text"], "tag": line["tag"], "trace": line.get("trace"),
+        lines.append({"text": line["text"], "tag": line["tag"], "trace": line.get("trace"), "row": line.get("row"),
                       "where": "lines/%d" % index})
         if line["tag"] not in shared.MOVED_BACK:
             # a NEEDS CHECK line renders into the Deferred section (docs.section_items), read as parked downstream
-            lines.append({"text": line["text"], "tag": "deferred", "trace": line.get("trace"),
+            lines.append({"text": line["text"], "tag": "deferred", "trace": line.get("trace"), "row": line.get("row"),
                           "where": "lines/%d" % index})
     for index, ruling in enumerate(answer["rulings"]):
         lines.append({"text": "%s: %s" % (ruling["disagreement"], ruling["ruling"]), "tag": "ruling",

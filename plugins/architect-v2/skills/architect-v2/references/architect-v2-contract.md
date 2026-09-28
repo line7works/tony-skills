@@ -99,8 +99,8 @@ against a run that ended is exit 2, except `report`, which prints the recorded r
 |---|---|---|---|
 | `render-visual` | `--run-dir D`, a run whose doc this run wrote | `<slug>-architecture.html` beside the doc (in the run's `preview/` on report-only), in the receipt; stdout `{visual, next}` | 0; 2 out of turn, or a folder on the way that leads outside the homes (section 7.4), nothing written |
 | `record-publish` | `--run-dir D`, `--url URL` (the https URL the executor's publish returned: a host of dot-separated labels, an optional port and path, no space; omitted when it returned none), after a render | the `Artifact:` line written once (section 11), `publish.json` in the run; stdout `{outcome, artifact_url, reason, next}` | 0; 2 out of turn, a URL that is no such URL, a URL on a `publish: false` answer, no URL after this run recorded a published URL for the same render, or a doc folder that leads outside the homes; 5 `artifact-url-changed` with nothing written; 10 `document-changed` |
-| `request` | `--run-dir D`, one `--row ROW` per reviewer the owner named, `--session-model ID` (the `claude-session` row only), `--model ROW=ID` (a typed id), `--roster FILE` (default: readers beside this core, route 3a then 3b) | one request per row under `requests/<call id>.json`; stdout `{requests: [{row, call_id, path, authorized}], mandate, next}` | 0; 2 out of turn, a docless run, no row, an unknown row, no roster, or a scope doc whose bytes are not the ones harvest read (its sha256), nothing written; 5 `request-outside-run` when `requests/` (or a request's path) resolves outside the run directory, the containment check of the document and take writers (section 7.4), refused before the folder is read, nothing written, in report-only and otherwise |
-| `save-take` | `--run-dir D`, `--row`, `--take FILE` (the reply's raw text), `--model` (the effective model), `--isolation` (the isolation label), `--sidecar` (the readers sidecar path) | the take saved verbatim under the review home (the home harvest recorded for the doc) and copied under `takes/`, `takes.json`, both in the receipt; stdout `{path, copy, lane, next}` | 0; 2 out of turn, a docless run, an unreadable file, a row no `request` of this run built, or a review folder that leads outside the homes; 5 `take-empty` with nothing saved |
+| `request` | `--run-dir D`, one `--row ROW` per reviewer the owner named, `--session-model ID` (the `claude-session` row only), `--model ROW=ID` (a typed id), `--roster FILE` (default: readers beside this core, route 3a then 3b) | one request per row under `requests/<call id>.json`; stdout `{requests: [{row, call_id, path, authorized}], mandate, next}` | 0; 2 out of turn, a docless run, no row, an unknown row, no roster, or a scope doc whose bytes are not the ones harvest read (its sha256), nothing written; 5 `request-outside-run` when `requests/` (or a request's path) resolves outside the run directory, the containment check of the document and take writers (section 7.4), refused before the folder is read, nothing written, in report-only and otherwise; 1 when `requests/` in the run directory is no folder this run can write (a file, a symlink that leads to none, or a folder the process cannot list or write; a symlink to a folder inside the run directory is a folder), or a folder stands where a request or the receipt goes (section 7.4): an unreadable run directory, the stop's sentence naming the path, nothing written, the run left at its phase, so the owner removes it and runs `request` again |
+| `save-take` | `--run-dir D`, `--row`, `--take FILE` (the reply's raw text), `--model` (the effective model), `--isolation` (the isolation label), `--sidecar` (the readers sidecar path) | the take saved verbatim under the review home (the home harvest recorded for the doc) and copied under `takes/`, `takes.json`, both in the receipt; stdout `{path, copy, lane, next}` | 0; 2 out of turn, a docless run, an unreadable file, a row no `request` of this run built, a `--model`, `--isolation` or `--sidecar` that is blank or holds a line boundary (any of the answer's, section 6), or a review folder that leads outside the homes; 5 `take-empty` with nothing saved |
 
 ## 4. The input
 
@@ -162,10 +162,12 @@ It needs both selections (or `station.scope_doc` in place of the scope one). The
   so does a line under Poured concrete or Deferred that is no `- ` list line (a note or a heading
   the owner typed there), or a line in the head that is none of its header lines: an answer carries
   or strikes list lines only and the header lines are each run's own, so no re-run could keep it,
-  and the owner fixes the doc by hand.
+  and the owner fixes the doc by hand. So does a line holding a line boundary other than LF and CR
+  (section 6's list): every answer string refuses those, so no answer could carry or strike it.
   `several` stops `selection-several`. `none` means a new doc.
 - **The ledger.** The scope doc read by `station_core/ledger.py`: every line with its tag, source and
-  stable id. A line it cannot tag stops the run `ledger-refused`, quoted, never dropped.
+  stable id. A line it cannot tag stops the run `ledger-refused`, quoted, never dropped, and so does a
+  scope doc that is not UTF-8 (a living doc that is not UTF-8 stops `living-doc-malformed`).
 - **The target.** The living doc where it lies; else, following the scope doc's home,
   `<workspace>/docs/architecture/<YYYY-MM-DD>-<slug>.md` or `<staging>/<slug>-architecture.md`; on
   a docless run, the home the answer's `docless.home` names.
@@ -198,8 +200,8 @@ its field, at any depth, beside the schema's own findings).
 | `components` | each `name` and `serves`, the walkthrough requirement it serves |
 | `data_flow`, `diagram` | the v0 drawing's two other lines (the diagram one line: an ASCII one-liner or a one-line mermaid) |
 | `doors` | `{settled}`, the one-way-door check (Step 3.3); null when the interview ended |
-| `poured_concrete`, `deferred` | the section in full, in order: a new line `{text, tag, trace}`, a prior line kept `{carried}`, a prior line superseded `{strike, trace}`; `carried` and `strike` are plain one-line text, exactly a line the prior section holds (the renderer supplies the list prefix, so an item's own leading `#` or `- ` is its text, never a heading), a `strike` never already struck |
-| `lines` | the `NEEDS CHECK` lines, each `{text, tag, trace}`, rendered in the Deferred section |
+| `poured_concrete`, `deferred` | the section in full, in order: a new line `{text, tag, trace, row}` (`row` optional, 6.2), a prior line kept `{carried}`, a prior line superseded `{strike, trace}`; `carried` and `strike` are plain one-line text, exactly a line the prior section holds (the renderer supplies the list prefix, so an item's own leading `#` or `- ` is its text, never a heading), a `strike` never already struck |
+| `lines` | the `NEEDS CHECK` lines, each `{text, tag, trace, row}` (`row` optional, 6.2), rendered in the Deferred section |
 | `review` | `outcome`: `pending`, `declined` (with `date`), `failed` (with `date` and `reason`), `done` (with `spine`, what the takes agreed on, and optional `failed_lanes`, each lane that did not return: its `row` and the `reason` its `READERS:` line carried), or `not-offered` (a docless run only) |
 | `rulings` | the owner's ruling on each disagreement: `disagreement`, `ruling`, `reviewers`, `changes` (the answer fields the ruling changes), `trace` |
 | `publish`, `publish_url` | whether this run publishes; the artifact it republishes to: the living doc's recorded URL, or null on a first publish |
@@ -222,20 +224,41 @@ words, so an unanswered `open` or `parked` item asserted as a walkthrough value 
 refused `quietly-resolved`, and an untraced walkthrough is one `untraced` refusal;
 a new poured-concrete line on its form, `<category> <dash> <decision> <dash> <why>`, gives a second
 row whose text is its decision field, everything between the first field and the last, with the
-category and the why beside it, so the shared text rule meets a `parked` or `open` line asserted
-as the decision alone or as the whole line; a refusal of one line is reported once),
-with the trace kinds above; then this core's own checks; then renders the proposed doc and holds it
+category and the why beside it, so the shared guard on a line that names no row meets a `parked` or
+`open` line asserted as the decision alone or as the whole line; every new Deferred entry and every
+`lines` entry gives a second row under the tag `deferred` (below); a refusal of one line is reported
+once), with the trace kinds above; then this core's own checks; then renders the proposed doc and holds it
 to the no-loss check. Any refusal is exit 5 with every refusal on stdout, each `{"rule", "message",
 ...}`, and nothing written; the run stays where it was, so a corrected answer can be recorded.
 Only then is `answer.json` written. The shared `answer.record` is not called: it writes the neutral
 view as `answer.json`, and this core's `answer.json` is the whole answer; `answer.check` is the same
 one implementation of the shared refusals.
 
+The row's id is the trace (ruling A5(4)). A poured-concrete, deferred or `lines` entry may name the
+ledger row it decides, settles, passes forward or moves by `row` (a line whose trace is `ledger`
+names that trace's row; `row` may repeat it and never differ from it, `shape` otherwise), and every
+row of the view the entry gives carries that `row`. A line that names its row is judged by the id,
+and its words are never matched against the named row: a `row` the ledger does not hold is
+`unknown-line`, and a line asserted `decided` naming a `parked` or `open` row that no answered
+question of this run touched is `quietly-resolved`, whatever its words. Its words still meet every
+row it does not name: a line asserted `decided` whose words restate a `parked` or `open` row it
+does not name (it names no row, or another) is `quietly-resolved` by the frame's guard, whose
+refusal asks for the row's id. A decided row is never moved back (slice 3a C3, as amended by A8):
+`station_core.answer.MOVED_BACK` is `("parked", "open", "deferred")`, and a line naming a `decided`
+row by its id under one of those tags is `re-asked-decided`. The next station reads the Deferred
+section as parked, so every new Deferred entry, and every `lines` entry (rendered there as
+`NEEDS CHECK:`), whose own tag is not in `MOVED_BACK` gives a second row under the tag `deferred`
+with the same `row`: a `decided` scope row named there by its id, under any tag, is refused
+`re-asked-decided`. The words are compared by the frame's readings (`forms` against `row_forms`), and
+an item label is part of the words on both sides (ruling A5(1)), bare (`R2 `) or marked (`AC1:`,
+`(R2)`, `[R2]`, `**R2:**`): `R2: budget` never meets `R3: budget`, and a labelled line still meets an
+unlabelled row by its words. This core has no label reading of its own.
+
 ### 6.3 The refusals
 
 | Rule | When |
 |---|---|
-| `re-asked-decided`, `unknown-line`, `untraced`, `quietly-resolved`, `shape` | the shared refusals (`station-loop.md` section 8, rule 2): a question touching, or repeating the text of, a `decided` ledger line; an id the ledger does not hold; a decision line with no trace, a kind not admitted, or a trace that names nothing; a line asserted `decided` over a `parked` or `open` line no answered question touched |
+| `re-asked-decided`, `unknown-line`, `untraced`, `quietly-resolved`, `shape` | the shared refusals (`station-loop.md` section 8, rule 2): a question touching, or repeating the words of (every known decoration seen through, a marked label part of the words), a `decided` ledger line; a line naming a `decided` row by its id (`row` or a `ledger` trace) under the tag `parked`, `open` or `deferred`, or by its Deferred section's second row (6.2): a decided line is never moved back; an id the ledger does not hold, touched by a question or named by a line's `row`; a decision line with no trace, a kind not admitted, or a trace that names nothing; a line asserted `decided` naming by its id a `parked` or `open` row no answered question touched, whatever its words, or restating the words of such a row it does not name (the refusal asks for the row's id); a `row` that differs from the line's `ledger` trace (`shape`) |
 | `session-mismatch`, `run-mismatch` | the answer's session or run is not this run's |
 | `docless-without-reason` | no scope doc was found and the answer records no reason (no `docless`, or a reason of whitespace, format or zero-width characters only) |
 | `docless-unasked` | no scope doc was found and no answered question `about: scope-doc` asked whether one exists where the glob cannot see |
@@ -295,7 +318,9 @@ a substitute for preserving the line in the living document.
 
 The snapshot is `<run_dir>/written-doc.md`, written once by the first `write` (recorded in the
 receipt) and never rewritten; `record-answer` and `write` check its bytes against the hash the
-receipt recorded, and a difference is a defect (exit 1, nothing written). The amended doc is
+receipt recorded, and a difference is a defect (exit 1, nothing written). A snapshot the receipt records that
+is missing, or is not a file, is the same defect; before the first write, a folder or a symlink that
+leads to no file where the snapshot goes is exit 1 before the doc is written (section 7.4). The amended doc is
 continued from the snapshot, without its current run block, as a re-run continues a living doc
 (section 7.2): a walkthrough or v0 drawing line a ruling changed is struck and the new line goes
 below it, and the run block is rendered again from the amended answer.
@@ -355,6 +380,26 @@ compared with what the run expects there (the harvested hash, or the hash this r
 difference stops the run `document-changed` with the bytes left as found. A new doc's path must hold
 no file.
 
+Before its first write, every command holds every path it may write (slice 3b round 2): the
+document or take and its copy, the visual, the run directory's own files (`receipt.json`, which
+every receipt row rewrites, `checkpoint.json`, `result.json` where a stop can write it, and the
+command's own `selection-scope.json` (a docless run's set-aside), `harvest.json`,
+`harvested-doc.md`, `answer.json`, `answer-round-N.json`, `publish.json`, `takes.json`,
+`requests/<call id>.json`, the snapshot). A node on the way to the path's folder that is no folder
+this run can write (a file, a symlink that leads to no folder, a folder without permission), or a
+folder where the file goes, is exit 1, an unreadable run directory: the sentence names the node,
+says nothing was written and the run stays where it was, and names the command to run again once
+the owner fixes it by hand. The containment check above runs first, so a symlinked folder that
+leads outside keeps its own stop.
+
+The reads an owner can reach by hand are held the same way (slice 3b round 3): a `requests/`
+folder `record-answer` or `save-take` cannot list, or a request in it that cannot be read, is exit 1
+naming the folder and the command; the doc this run wrote, gone, a folder, or not UTF-8 when
+`render-visual`, `record-publish` or `report` reads it, is exit 1 naming the doc, with the way on to
+put it back or start a new run; a scope doc or living doc `harvest` cannot read (its permissions)
+is exit 1 naming the doc, left as found. Each is before the command's first write, never a
+traceback, and the run stays where it was.
+
 ## 8. The result
 
 `report` needs the doc written, the visual rendered after the last write, and, when the answer
@@ -381,7 +426,7 @@ reason), the `Next:` line, and on a stop the tag and its reason.
 ## 9. Stops
 
 A stop is `status: stopped` with one tag and a result. The shared tags this core emits:
-`selection-several` (harvest, either hunt), `ledger-refused` (harvest), `write-refused` (write, a
+`selection-several` (harvest, either hunt), `ledger-refused` (harvest: a scope doc line the reader cannot tag, or a scope doc that is not UTF-8, named with the decoding error and left as found), `write-refused` (write, a
 loss the answer's check did not catch, or a doc folder that leads outside the homes, section 7.4). It never emits `phase-not-built`, `selection-none` (a docless
 run continues) or `records-refused`.
 
@@ -389,7 +434,7 @@ run continues) or `records-refused`.
 
 | Tag | Phase | When |
 |---|---|---|
-| `living-doc-malformed` | harvest | the living doc does not hold its form, holds a line under Poured concrete or Deferred that is no list line or a line in its head that is no header line, or has CR line endings; continuing it would mean guessing |
+| `living-doc-malformed` | harvest | the living doc does not hold its form, holds a line under Poured concrete or Deferred that is no list line or a line in its head that is no header line, or has CR line endings, or a line holding another line boundary (named by its line number and the character's code point, never printed raw), or is not UTF-8 (named with the decoding error; the doc is left as found); continuing it would mean guessing |
 | `document-changed` | write, record-publish | the doc's bytes are not the bytes this run harvested or last wrote; nothing written, the bytes as found |
 | `review-pending` | report | the blind-review offer has no outcome, so the doc's `Blind review:` line still reads `none yet` |
 
