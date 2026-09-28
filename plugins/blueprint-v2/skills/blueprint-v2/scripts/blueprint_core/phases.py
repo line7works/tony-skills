@@ -152,7 +152,7 @@ def command_choose(ctx, args):
     if args.hunt not in HUNTS_NEEDED:
         raise driver.Usage("no hunt %r in this core (its hunts: %s)" % (args.hunt, ", ".join(HUNTS_NEEDED)))
     words = args.words or ""
-    if not words.strip() or "\n" in words or "\r" in words:
+    if not answermod.bare(words) or "\n" in words or "\r" in words:
         raise driver.Usage("--words carries the owner's words that picked the document, verbatim, on one line")
     try:
         selection = harvestmod.selected(run.run_dir, args.hunt)
@@ -185,6 +185,20 @@ def _read_selected(path, hunt):
     except (OSError, UnicodeDecodeError) as exc:
         raise driver.Usage("the %s doc %s cannot be read as UTF-8 text (%s): fix it, or run `select --hunt %s` "
                            "again" % (hunt, path, exc, hunt))
+
+
+def _disk_spelling(path):
+    """The selected doc's path as the disk spells it (a case-insensitive file system answers the literal
+    undated glob under the name as typed)."""
+    folder, name = os.path.split(path)
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return path
+    if name in names:
+        return path
+    same = [n for n in names if n.casefold() == name.casefold()]
+    return os.path.join(folder, same[0]) if len(same) == 1 else path
 
 
 def phase_harvest(ctx, args):
@@ -246,7 +260,7 @@ def phase_harvest(ctx, args):
         architecture = dict(lines, path=path, chosen_by_owner=taken["architecture"][1])
     build = None
     if taken["build"][0]:
-        path = taken["build"][0]
+        path = _disk_spelling(taken["build"][0])
         build = dict(harvestmod.build_doc(path, _read_selected(path, "build")), chosen_by_owner=taken["build"][1])
         target = path
     else:

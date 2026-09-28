@@ -184,6 +184,39 @@ class TheExistingBuildDoc(_Harvest):
         self.assertEqual(code, 0, err)
         self.assertEqual("".join(out["build"]["ledger_lines"]), crlf[crlf.index("## Build assumptions"):])
 
+    def test_an_undated_plan_is_named_as_the_disk_spells_it(self):
+        # CL5-1: the undated glob `docs/plans/<name>.md` is literal, so a case-insensitive file system answers
+        # it under the name as typed; the harvest target, the write, its receipt and the result name the file
+        # the disk holds
+        probe = os.path.join(self.tmp, "CaseProbe")
+        testlib.write_text(probe, "x\n")
+        folded = os.path.exists(os.path.join(self.tmp, "caseprobe"))
+        os.remove(probe)
+        if not folded:
+            self.skipTest("the test scratch is case-sensitive (probe: CaseProbe written, caseprobe not found)")
+        rel = "docs/plans/Turnstile.md"
+        run = self.run_for(dict(bplib.base_files(), **{rel: bplib.BUILD_FILLED}))
+        run.select_all()
+        code, out, err = run.harvest()
+        self.assertEqual(code, 0, err)
+        target = os.path.join(run.ws, rel)
+        self.assertEqual(out["target"], target)
+        self.assertEqual(out["build"]["path"], target)
+        code, out, err = run.record(bplib.extension_answer())
+        self.assertEqual(code, 0, (out, err))
+        code, out, err = run.write()
+        self.assertEqual((code, out["doc"], out["action"]), (0, target, "extended"), (out, err))
+        receipt = testlib.load_json(out["receipt"])
+        self.assertEqual([w["path"] for w in receipt["writes"]], [target])
+        code, out, err = run.report()
+        self.assertEqual(code, 10, (out, err))
+        result = testlib.load_json(os.path.join(run.run_dir, "result.json"))
+        self.assertEqual((out["status"], out["reason"]), ("completed", result["reason"]))
+        self.assertEqual(result["station_result"]["doc"], target)
+        self.assertIn(rel, result["reason"])
+        self.assertNotIn("docs/plans/turnstile.md", result["reason"])
+        self.assertEqual(os.listdir(os.path.join(run.ws, "docs", "plans")), ["Turnstile.md"])
+
 
 class Stops(_Harvest):
 

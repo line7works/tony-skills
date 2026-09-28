@@ -11,19 +11,20 @@ call and not a descoping: an out-of-scope line that carries one forward with no 
 of this run touching it is this core's own refusal, `open-item-descoped`, by the item's id and by
 its words alike (round 3, R3), whatever the line's trace. The words are compared through the frame's
 own readings (round 4, R1; E14-3): the line through `station_core.answer.forms`, the row through
-`row_forms`, so every decoration the frame knows (a trailing period, a marked label, a list mark, an
-invisible character, a ledger tail, the row decorated) is seen through the same way the shared
+`row_forms`, so every decoration the frame knows (a trailing period, a list mark, an invisible
+character, a ledger tail, the row decorated) is seen through the same way the shared
 `quietly-resolved` rule sees through it. This core adds only what the frame has no reading for: the
 item before its reason (cut at the first dash, colon, semicolon, comma or parenthesis, after a
 leading list mark and section label such as `Out of scope:`).
 
-The view carries each line's ORIGINAL text (round 5, R3): the shared forms own every decoration, a
-marked label such as `R2 <dash> ` or `R12: ` included, and a BARE item label (`R4 `, `R12.3 `) is part
-of the words when both sides carry one (the frame's rule): `R4 budget approval` is not the parked
-`R3 budget approval`, `R12.3 W` is the parked `W`, and a plain `budget approval` is the parked
-`R3 budget approval`. This core's own readings keep the label too: the reason cut is taken from the
-line as written and from its bare words with the line's bare label put back in front, never from a
-label-free reading of a labelled line.
+The view carries each line's ORIGINAL text (round 5, R3): the shared forms own every decoration, and
+an item label, BARE (`R4 `, `R12.3 `) or MARKED (`R2 <dash> `, `R12: `, `(R2)`, `**R2:**`, in any
+case), is part of the words when both sides carry one (the frame's rule, ruling A5(1)): `R4 budget
+approval` and `R4: budget approval` are not the parked `R3 budget approval`, `R12.3 W` is the parked
+`W`, and a plain `budget approval` is the parked `R3 budget approval`. This core's own readings keep
+the label too: the reason cut is taken from the line as written and from its bare words with the
+frame's own label of the line (`station_core.answer.label`, slice 3a round 7) put back in front,
+never from a label-free reading of a labelled line.
 
 The trace kinds this core allows (ruling R1 of round 2, the owner's words as a trace): `ledger`,
 `repo_path`, `question` and `owner_words` (the owner's words quoted verbatim, not blank: the schema
@@ -37,8 +38,9 @@ in the shared shape, one per finding:
     criterion-without-verify  a criterion with no `verify` form, or one that is none of the three forms
                               (`VERIFY_FORMS`, round 3 R4: a named test, a path, steps of two words;
                               round 4 R2: the rest after the prefix holds a letter or digit)
-    open-item-descoped        an out-of-scope line carrying a scope `Open:` item, by its id or by its
-                              words, that no answered question of this run touched
+    open-item-descoped        an out-of-scope line carrying a scope `Open:` item, by its id (its `row`
+                              or a ledger trace) or by its words, that no answered question of this run
+                              touched
     duplicate-id              two lines, two criteria or two slices sharing an id or a name
     unknown-id                a slice naming a requirement line, a criterion or a slice that is not there
     depends-forward           a slice depending on itself or on a slice after it
@@ -129,7 +131,7 @@ def _labelled_bare(text):
 def line_forms(text):
     """Every reading of an out-of-scope line's words, all of them the frame's (`station_core.answer.forms`):
     the line as written, the line without a leading list mark or section label (`words`), and the item
-    before its reason, cut from those words and from the bare words with the line's bare label kept
+    before its reason, cut from those words and from the bare words with the frame's label of the line kept
     (`_labelled_bare`). Compared with `station_core.answer.row_forms` of a row."""
     if not isinstance(text, str):
         return set()
@@ -147,13 +149,16 @@ def line_forms(text):
 
 def view(answer):
     """The answer as the shared refusals read it: its questions, and its lines tagged by `VIEW_TAGS`,
-    each line's ORIGINAL text (round 5, R3: the shared forms own the decorations, and a bare label is
-    part of the words when both sides carry one)."""
+    each line's ORIGINAL text (round 5, R3: the shared forms own the decorations, and an item label, bare
+    or marked, is part of the words when both sides carry one). A line's `row` is handed through as the
+    answer wrote it (slice 3b), so the frame judges a line that names its row by that id."""
     lines = []
     for line in answer.get("lines") or []:
         row = {"text": line.get("text"), "tag": VIEW_TAGS.get(line.get("tag"), "decided")}
         if "trace" in line:
             row["trace"] = line["trace"]
+        if "row" in line:
+            row["row"] = line["row"]
         lines.append(row)
     return {"questions": answer.get("questions"), "lines": lines}
 
@@ -225,11 +230,13 @@ def own(answer, run_input, harvest):
             continue
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
         ref = trace.get("ref")
-        # by its id (a ledger trace to the open item) or by its words (round 3, R3), whatever the trace,
-        # the words read through the frame's own readings on both sides (round 4, R1)
+        # by its id (the row the line names by `row`, slice 3b, or a ledger trace to the open item) or by its
+        # words (round 3, R3), whatever the trace, the words read through the frame's own readings on both
+        # sides (round 4, R1)
         carried = []
-        if trace.get("kind") == "ledger" and ref in ledger and ledger[ref].get("tag") == "open":
-            carried.append(ledger[ref])
+        for named in (line.get("row"), ref if trace.get("kind") == "ledger" else None):
+            if isinstance(named, str) and named in ledger and ledger[named].get("tag") == "open":
+                carried.append(ledger[named])
         forms = line_forms(line.get("text"))
         carried.extend(row for row in open_rows if forms & shared.row_forms(row["text"]))
         carried = next((row for row in carried if row["id"] not in settled), None)

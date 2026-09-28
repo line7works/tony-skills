@@ -176,8 +176,9 @@ listing every candidate.
 Its fields: `answer_version` 1; `run_id` (this run's); `session_id` (the adapter's
 `answer_fields.session_id`, never typed); `feature`, `title`, `intent`; `questions` (each `id`,
 `text`, `touches` (ledger ids), `answer`; a blank answer is unanswered); `lines` (each `text`,
-`tag` of `requirement`, `constraint` or `out-of-scope`, an optional `id` a slice names, and its
-`trace` of `kind` and `ref`); `criteria` (each `text`, `verify` in one of the three forms below,
+`tag` of `requirement`, `constraint` or `out-of-scope`, an optional `id` a slice names, its
+`trace` of `kind` and `ref`, and an optional `row`, the id of the ledger row the line decides,
+settles, passes forward or moves); `criteria` (each `text`, `verify` in one of the three forms below,
 and the `id` a slice names);
 `slices` (each `name`, `short`, `goal`, `requirements` and `criteria` (ids), `footprint`,
 `not_in_slice`, `depends_on`); `assumptions`; `open_questions`; `ceremony` (`needs_build_doc`
@@ -195,19 +196,23 @@ least one constraint line.
    the owner's words quoted verbatim, and a blank one fails the schema.
 2. The shared refusals of E14-11, `station_core/answer.py`'s `check`, called once on a view of the
    answer (its questions, and its lines, each with its ORIGINAL text (round 5, R3): the shared forms
-   own every decoration, a marked label such as `R2 <dash> ` or `R12: ` and a section label such as
-   `Constraint:` included, and a BARE item label (`R4 `, `R12.3 `) is part of the words whenever both
-   sides carry one, so `R4 budget approval` is not the parked `R3 budget approval` and `R21 storage`
-   is not the parked `R2.1 storage`, while `R12.3 W` is the parked `W` and a plain `budget approval`
-   is the parked `R3 budget approval`; the doc renders the text as written. Each line is tagged by its own kind: a requirement and a
+   own every decoration, a section label such as `Constraint:` included, and an item label, BARE
+   (`R4 `, `R12.3 `) or MARKED (`R12: `, `R2 <dash> `, `(R2)`, in any case), is part of the words on
+   both sides whenever both carry one (ruling A5(1)), so `R4 budget approval` and
+   `R4: budget approval` are not the parked `R3 budget approval` and `R21 storage` is not the parked
+   `R2.1 storage`, while `R12.3 W` is the parked `W` and a plain `budget approval` is the parked
+   `R3 budget approval`; the doc renders the text as written. A line may name its ledger row by `row`,
+   which the view hands through unchanged: the row's id is the trace, so the line is judged by that
+   id and its words are never matched against the row it names (ruling A5(4)). Each line is tagged by its own kind: a requirement and a
    constraint `decided`, since they are what the doc asserts as settled; an out-of-scope line
    `out-of-scope`, since carrying a parked scope line or a deferred architecture line forward as
    out of scope is the pass-forward E14-11 names, never a resolution) against `ledger_view`, with
    the allowed kinds below. Its rules: a question that re-asks a decided line (by id, or by its text);
    a question touching an id the ledger does not hold; an untraced line (no trace, a kind not
    allowed, a ledger id that names nothing, a path not in the workspace, a question not answered
-   in this run, a blank quote); a requirement or constraint tracing to a `parked` or `open` line
-   that no answered question settled (`quietly-resolved`).
+   in this run, a blank quote); a `row` naming no line of the ledger (`unknown-line`); a
+   requirement or constraint tracing to, or naming by `row`, a `parked` or `open` line that no
+   answered question settled (`quietly-resolved`).
 3. This core's own checks, each a refusal in the same `{"rule", "message", ...}` shape:
 
 | Rule | Refuses |
@@ -215,7 +220,7 @@ least one constraint line.
 | `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
 | `run-id-mismatch` | a `run_id` other than this run's |
 | `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
-| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its trace (a ledger trace to the item) or by its words, whatever the trace (round 3, R3). The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without a leading list mark or section label such as `Out of scope:`, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis from those words and from the line's bare words with its bare item label put back in front) equal to any reading of the open row (`row_forms`), so a trailing period, a marked label, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. A bare item label is kept in every reading (round 5, R3): no reading of a labelled line is label-free, so `R4 sensor calibration: not now` is not the open `R3 sensor calibration`, and `sensor calibration: not now` is. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
+| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its id (the row the line names by `row`, or a ledger trace to the item) or by its words, whatever the trace (round 3, R3). The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without a leading list mark or section label such as `Out of scope:`, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis from those words and from the line's bare words with the frame's label of the line (`station_core.answer.label`) put back in front) equal to any reading of the open row (`row_forms`), so a trailing period, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. An item label, bare or marked, is part of the words in every reading, keyed through the frame's `label()` (round 5, R3; ruling A5(1)): no reading of a labelled line is label-free, so `R4 sensor calibration: not now` and `R4: sensor calibration: not now` are not the open `R3 sensor calibration`, and `sensor calibration: not now` is. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |

@@ -214,6 +214,68 @@ class OutOfScopeLines(_Record):
         self.refused(doc, "quietly-resolved")
 
 
+class ALineNamesItsRowById(_Record):
+    """Slice 3b (A7 C1 and C2, A5(4)): a line may name the ledger row it decides, settles or passes forward by
+    `row`; the view hands `row` to the frame unchanged, and the frame judges the line by that id: a row the
+    ledger does not hold is `unknown-line`, a parked row settled with no answered question is
+    `quietly-resolved`, and the line's words are never matched against the row it names."""
+
+    def test_the_view_passes_row_through(self):
+        from blueprint_core import checks
+        got = checks.view({"questions": [], "lines": [
+            {"text": "a", "tag": "requirement", "row": "scope-0123456789ab"},
+            {"text": "b", "tag": "constraint"}]})
+        self.assertEqual(got["lines"][0]["row"], "scope-0123456789ab")
+        self.assertNotIn("row", got["lines"][1])
+
+    def test_an_unknown_row_is_refused_and_nothing_written(self):
+        doc = bplib.clean_answer()
+        doc["lines"][0]["row"] = "scope-0123456789ab"
+        out = self.refused(doc, "unknown-line")
+        self.assertIn("scope-0123456789ab", " ".join(r["message"] for r in out["refusals"]))
+
+    def test_a_parked_row_named_with_no_answered_question_is_quietly_resolved(self):
+        doc = bplib.clean_answer()
+        doc["questions"] = []
+        doc["lines"][1]["trace"] = {"kind": "repo_path", "ref": "src/turnstile.py"}
+        doc["lines"][1]["row"] = self.ids["Where the count is kept between sessions"]
+        self.refused(doc, "quietly-resolved")
+
+    def test_an_out_of_scope_line_naming_an_open_row_by_row_is_open_item_descoped(self):
+        # the id is the trace for this core's own rule too: an open item named by `row` under any trace and
+        # in any words is carried forward as out of scope, the owner's call
+        doc = bplib.clean_answer()
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "a nightly job %s not now" % bplib.D,
+                           "row": self.ids["how often the counter resets"],
+                           "trace": {"kind": "repo_path", "ref": "src/turnstile.py"}}
+        out = self.refused(doc, "open-item-descoped")
+        self.assertIn(self.ids["how often the counter resets"], " ".join(r["message"] for r in out["refusals"]))
+
+    def test_an_open_row_named_by_row_after_an_answered_question_may_go_out_of_scope(self):
+        doc = bplib.clean_answer()
+        doc["questions"].append({"id": "Q2", "text": "Is the reset in this build?",
+                                 "touches": [self.ids["how often the counter resets"]],
+                                 "answer": "no, leave it out of this build"})
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": "a nightly job %s the owner left it out"
+                           % bplib.D, "row": self.ids["how often the counter resets"],
+                           "trace": {"kind": "question", "ref": "Q2"}}
+        self.accepted(doc)
+
+    def named(self, text):
+        doc = bplib.clean_answer()
+        doc["lines"][2] = {"id": "C1", "tag": "constraint", "text": text,
+                           "row": self.ids["Python 3.9 standard library only"],
+                           "trace": {"kind": "repo_path", "ref": "src/turnstile.py"}}
+        return doc
+
+    def test_a_decided_line_named_by_row_with_the_rows_words_is_accepted(self):
+        self.accepted(self.named("Python 3.9 standard library only"))
+
+    def test_a_decided_line_named_by_row_with_other_words_is_accepted(self):
+        # the id is the trace: the line's words are never matched against the row it names
+        self.accepted(self.named("no packages beyond what ships with the interpreter"))
+
+
 
 class TheViewCarriesTheWordsWithoutTheirLabel(_Record):
     """Round 3, R2 (CL2-1): the shared text rule compares a line's words with the ledger's, so the view it
