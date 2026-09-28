@@ -591,6 +591,29 @@ class TheRowId(_Answer):
         doc = self.settled("The count lives in memory", row=5)
         self.assertEqual(self.rules(doc), ["shape"])
 
+    def test_a_shape_refusal_of_one_line_carries_that_lines_index(self):
+        """CA3B-3 (the lane A 3b round 1 checker): a shape problem of one line names the line by its index in the
+        answer the frame was given, as every other line refusal does, so a core's view can map it to the line's
+        place and report one line once; a problem of the whole answer or of a question names no line."""
+        other = self.ids["Python 3.9 standard library only"]
+        doc = self.settled("The count lives in memory", trace={"kind": "ledger", "ref": other})
+        doc["lines"].insert(0, {"text": "Python 3.9 standard library only", "tag": "decided",
+                                "trace": {"kind": "ledger", "ref": other}})
+        result = self.check(doc, allowed=self.allowed)
+        self.assertEqual([(r["rule"], r.get("line")) for r in result["refusals"]], [("shape", 1)])
+        # named by its words, never by a number no answer holds (CF3B2-1)
+        self.assertEqual(result["refusals"][0]["text"], "The count lives in memory")
+        self.assertNotRegex(result["refusals"][0]["message"], r"line \d")
+        self.assertIn("names row %s but traces to ledger row %s" % (self.parked(), other), result["refusals"][0]["message"])
+        doc["lines"].append(5)
+        result = self.check(doc, allowed=self.allowed)
+        self.assertEqual([(r["rule"], r.get("line")) for r in result["refusals"]], [("shape", 1), ("shape", 2)])
+        doc = self.settled("The count lives in memory")
+        doc["questions"].append({"id": "Q9", "touches": [], "answer": "yes"})
+        result = self.check(doc, allowed=self.allowed)
+        self.assertEqual([(r["rule"], r.get("line")) for r in result["refusals"]], [("shape", None)])
+        self.assertEqual(self.check({"questions": "x", "lines": []})["refusals"][0].get("line"), None)
+
     def test_a_line_naming_its_row_is_judged_by_the_id_never_by_its_words(self):
         """The row's own words, decorated every way the guard knows: accepted when a question settled the row;
         unsettled, refused once, by the id (never the id-less guard's message)."""
