@@ -218,6 +218,60 @@ class TheExistingBuildDoc(_Harvest):
         self.assertEqual(os.listdir(os.path.join(run.ws, "docs", "plans")), ["Turnstile.md"])
 
 
+class TheFlatDocsAsTheDiskSpellsThem(_Harvest):
+    """CL5-1 continued: the flat scope and architecture globs (`docs/<name>-scope.md`,
+    `docs/<name>-architecture.md`) are literal too, so a case-insensitive file system answers them under the
+    name as typed; the harvest envelope, harvest.json and result.json name the file the disk holds."""
+
+    def setUp(self):
+        super().setUp()
+        probe = os.path.join(self.tmp, "CaseProbe")
+        testlib.write_text(probe, "x\n")
+        folded = os.path.exists(os.path.join(self.tmp, "caseprobe"))
+        os.remove(probe)
+        if not folded:
+            self.skipTest("the test scratch is case-sensitive (probe: CaseProbe written, caseprobe not found)")
+
+    def _through_report(self, run):
+        code, out, err = run.record(bplib.clean_answer())
+        self.assertEqual(code, 0, (out, err))
+        code, out, err = run.write()
+        self.assertEqual(code, 0, (out, err))
+        code, out, err = run.report()
+        self.assertEqual(code, 10, (out, err))
+        return testlib.load_json(os.path.join(run.run_dir, "result.json"))
+
+    def test_a_flat_scope_doc_is_named_as_the_disk_spells_it(self):
+        rel = "docs/Turnstile-scope.md"
+        run = self.run_for(dict(bplib.base_files(scope=False), **{rel: bplib.SCOPE}))
+        run.select_all(scope_name="turnstile")
+        code, out, err = run.harvest()
+        self.assertEqual(code, 0, err)
+        path = os.path.join(run.ws, rel)
+        self.assertEqual(out["scope"]["path"], path)
+        saved = testlib.load_json(os.path.join(run.run_dir, "harvest.json"))
+        self.assertEqual(saved["scope"]["path"], path)
+        result = self._through_report(run)
+        self.assertEqual(result["station_result"]["scope_doc"], path)
+        self.assertIn("Turnstile-scope.md", os.listdir(os.path.join(run.ws, "docs")))
+        self.assertNotIn("turnstile-scope.md", os.listdir(os.path.join(run.ws, "docs")))
+
+    def test_a_flat_architecture_doc_is_named_as_the_disk_spells_it(self):
+        rel = "docs/Turnstile-architecture.md"
+        run = self.run_for(dict(bplib.base_files(), **{rel: bplib.ARCH}))
+        run.select_all(arch_name="turnstile")
+        code, out, err = run.harvest()
+        self.assertEqual(code, 0, err)
+        path = os.path.join(run.ws, rel)
+        self.assertEqual(out["architecture"]["path"], path)
+        saved = testlib.load_json(os.path.join(run.run_dir, "harvest.json"))
+        self.assertEqual(saved["architecture"]["path"], path)
+        result = self._through_report(run)
+        self.assertEqual(result["station_result"]["architecture_doc"], path)
+        self.assertIn("Turnstile-architecture.md", os.listdir(os.path.join(run.ws, "docs")))
+        self.assertNotIn("turnstile-architecture.md", os.listdir(os.path.join(run.ws, "docs")))
+
+
 class Stops(_Harvest):
 
     def test_several_scope_docs_stop_selection_several_listing_both(self):

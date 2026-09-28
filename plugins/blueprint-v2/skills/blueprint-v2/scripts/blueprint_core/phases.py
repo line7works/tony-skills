@@ -188,8 +188,8 @@ def _read_selected(path, hunt):
 
 
 def _disk_spelling(path):
-    """The selected doc's path as the disk spells it (a case-insensitive file system answers the literal
-    undated glob under the name as typed)."""
+    """The selected doc's path as the disk spells it (a case-insensitive file system answers a literal glob,
+    the undated plan or the flat scope, architecture and build-plan docs, under the name as typed)."""
     folder, name = os.path.split(path)
     try:
         names = os.listdir(folder)
@@ -234,7 +234,7 @@ def phase_harvest(ctx, args):
     run_date = datetime.date.today().isoformat()
     scope = None
     if taken["scope"][0]:
-        path = taken["scope"][0]
+        path = _disk_spelling(taken["scope"][0])
         try:
             lines = ledger.read(_read_selected(path, "scope"))
         except ledger.LedgerRefused as exc:
@@ -247,7 +247,7 @@ def phase_harvest(ctx, args):
                              "source": r["source"], "line": r["line"]} for r in lines]}
     architecture = None
     if taken["architecture"][0]:
-        path = taken["architecture"][0]
+        path = _disk_spelling(taken["architecture"][0])
         lines = harvestmod.architecture_lines(_read_selected(path, "architecture"))
         refused = lines.pop("refused")
         if refused:
