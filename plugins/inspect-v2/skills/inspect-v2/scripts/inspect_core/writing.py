@@ -262,8 +262,13 @@ def handler(ctx, args):
                "head_after": harvest["records"]["head"], "appended": 0}
     render_text = ""
     progress = run.checkpoint.setdefault("write_progress", {})
+    if progress.get("appended"):
+        # a write resumed after this run's own append: the log holds its findings already (CI3B3-1)
+        records["head_after"] = progress["appended"]["head"]
+        records["log"] = progress["appended"]["log"]
+        records["appended"] = len(progress["appended"]["findings"])
     _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records)
-    mirror = _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records)
+    mirror = _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records, progress.get("appended"))
     if triage["findings"]:
         try:
             if not progress.get("appended"):
@@ -312,7 +317,7 @@ def _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records):
     build doc's records head through the component's CLI and compare it with the head `harvest` pinned
     (or, on a `write` resumed after this run's own append, the head that append reported). A head that
     moved, or a refused read, ends the run `records-refused`: no append, no stamp, no document write,
-    no mirror."""
+    no mirror (on a resumed `write`, this run's own append has landed already, and the reason says so)."""
     expected = progress["appended"]["head"] if progress.get("appended") else harvest["records"]["head"]
     try:
         now = client.events(ws, rel).get("head")
@@ -322,16 +327,18 @@ def _head_unmoved(ctx, run, client, ws, rel, harvest, progress, records):
         reporting.finish(ctx, run, "stopped", "records-refused",
                          records_link.refusal_sentence(refusal, "reading the records head before any write"))
     if now != expected:
+        written = ("This run's own append landed before the stop; nothing else was written: no stamp, no "
+                   "document, no mirror." if progress.get("appended") else
+                   "Nothing was written: no append, no stamp, no document, no mirror.")
         common.write(run, "write.json", {"stamp": None, "stamp_written": False, "records": records,
                                          "mirror": None, "refused": {"head_pinned": expected, "head_now": now}})
         reporting.finish(ctx, run, "stopped", "records-refused",
                          "the records head of %s is %s, not the head %s this run pinned at harvest: another writer "
-                         "appended to the doc's log since (a conflict), so this inspection is stale. Nothing was "
-                         "written: no append, no stamp, no document, no mirror. Run inspect-v2 again on the doc "
-                         "and its log as they are now" % (rel, now, expected))
+                         "appended to the doc's log since (a conflict), so this inspection is stale. %s Run "
+                         "inspect-v2 again on the doc and its log as they are now" % (rel, now, expected, written))
 
 
-def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records):
+def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records, appended=None):
     """The reviewer's F1 (ruling A5(3); contract section 15, point 2): mirror capability is required.
     Before any records event, stamp or verdict, ask the component's `mirrors` for the build doc and find
     the row whose `verdict_doc` is the intended mirror's workspace path. Found: the mirror block the
@@ -339,12 +346,15 @@ def _mirror_recognised(ctx, run, client, ws, rel, mirror_path, records):
     or refused: the run ends `records-refused`, the missing capability named and the owner's ruling asked
     for, with nothing written (no records event, no stamp, no document, no mirror). Recognising means
     the component's `mirrors` answer, asked before the mirror is written, names the intended path (the
-    component's rule decides it, not the file's presence)."""
+    component's rule decides it, not the file's presence). On a `write` resumed after this run's own
+    append (`appended`), the reason says that append landed and nothing else was written."""
     want = os.path.relpath(mirror_path, ws)
     mirror = {"path": mirror_path, "recognised": False, "state": None, "answer": None}
-    after = ("Nothing was written: no records event, no stamp, no document, no mirror. The owner's ruling is "
-             "needed: the records component is frozen (E14-2), and making its `mirrors` recognise an inspect "
-             "verdict mirror is his call; then run inspect-v2 again")
+    after = ("%s The owner's ruling is needed: the records component is frozen (E14-2), and making its `mirrors` "
+             "recognise an inspect verdict mirror is his call; then run inspect-v2 again"
+             % ("This run's own append landed before the stop; nothing else was written: no stamp, no document, "
+                "no mirror." if appended else "Nothing was written: no records event, no stamp, no document, no "
+                "mirror."))
     try:
         answer = client.mirrors(ws, rel)
     except RecordsRefusal as refusal:

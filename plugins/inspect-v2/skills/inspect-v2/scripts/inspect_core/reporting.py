@@ -115,7 +115,9 @@ def chat_block(run, result):
                              "items are questions for the owner, never blockers (the no-record rule).")
             lines.append("Hunted and held: %s" % sr["hunted_and_held"])
         mirror = sr.get("mirror") or {}
-        found = bool(sr.get("findings"))
+        # CI3B3-1: findings the log already holds (a `write` resumed after this run's own append) are not
+        # "above and unrecorded"
+        found = bool(sr.get("findings")) and not (sr.get("records") or {}).get("appended")
         if result["stop_tag"] == "records-refused" and mirror.get("recognised") is False:
             lines.append("Next: the owner rules on the records component's `mirrors` (E14-2); %s"
                          % ("the findings above stay unrecorded, and a fresh inspect-v2 run follows his ruling."

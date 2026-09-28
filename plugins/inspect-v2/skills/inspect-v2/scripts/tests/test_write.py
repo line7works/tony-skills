@@ -416,6 +416,65 @@ class TheMirrorsCapabilityIsRequired(_Write):
         code, again, out, err = self.run.phase("report")
         self.assertEqual(again["station_result"]["chat"], doc["station_result"]["chat"])
 
+    # round 4, R1 (CI3B3-1): a `write` resumed after this run's own append knows what landed; the log holds
+    # its findings already, so the stopped block never calls them unrecorded or not appended
+    LANDED = ("This run's own append landed before the stop; nothing else was written: no stamp, no document, "
+              "no mirror.")
+
+    def crash_after_the_append(self):
+        self.upto_answer("render-blank")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 1, out + err)
+        checkpoint = self.run.artifact("checkpoint.json")
+        self.assertEqual(checkpoint["phase"], "answered")
+        landed = checkpoint["write_progress"]["appended"]
+        self.assertEqual(len(landed["findings"]), 1, landed)
+        self.assertEqual([(r["event"]["kind"], r["event"]["actor"]["station"]) for r in self.events()["results"]],
+                         [("finding_raised", "inspect-v2")])
+        return landed
+
+    def assert_nothing_called_unrecorded(self, doc, landed):
+        sr = doc["station_result"]
+        self.assertEqual(sr["records"]["appended"], 1)
+        self.assertEqual(sr["records"]["head_after"], landed["head"])
+        self.assertEqual(sr["records"]["log"], landed["log"])
+        lines = self.chat_lines(doc)
+        self.assertFalse([l for l in lines if l.startswith("Unrecorded") or l.endswith("not appended")], lines)
+        self.assertFalse([l for l in lines if "stay unrecorded" in l], lines)
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual(again["station_result"]["chat"], sr["chat"])
+        return lines
+
+    def test_a_write_resumed_after_its_own_append_stops_at_a_moved_head_without_calling_it_unrecorded(self):
+        landed = self.crash_after_the_append()
+        code, body, err = ilib.records_cli(["events", "--workspace", self.ws, "--doc", ilib.BUILD_REL])
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [dict(TheHeadIsReadBeforeAnyWrite.OTHER)])
+        code, moved, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                             "--events", events, "--expect-head", body["head"]])
+        self.assertEqual(code, 0, err)
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["status"], doc["stop_tag"]), (10, "stopped", "records-refused"), out + err)
+        self.assertIn(self.LANDED, doc["reason"])
+        self.assertNotIn("Nothing was written", doc["reason"])
+        lines = self.assert_nothing_called_unrecorded(doc, landed)
+        self.assertEqual(lines[-1], "Next: a fresh inspect-v2 run on the doc and its log as they are now.")
+        self.assertEqual(len([r for r in self.events()["results"]
+                              if r["event"]["actor"]["station"] == "inspect-v2"]), 1, "appended once, not twice")
+
+    def test_a_write_resumed_after_its_own_append_stops_at_mirrors_without_calling_it_unrecorded(self):
+        landed = self.crash_after_the_append()
+        refusing = ilib.records_double(self.tmp, "refuse")
+        code, doc, out, err = self.run.phase("write", "--records-root", refusing)
+        self.assertEqual((code, doc["status"], doc["stop_tag"]), (10, "stopped", "records-refused"), out + err)
+        self.assertIn(ilib.DOUBLE_REFUSAL, doc["reason"])
+        # the control room's ruling on round 4's Question 1: the mirror stop's reason says what landed too
+        self.assertIn(self.LANDED, doc["reason"])
+        self.assertNotIn("Nothing was written", doc["reason"])
+        self.assertIs(doc["station_result"]["mirror"]["recognised"], False)
+        lines = self.assert_nothing_called_unrecorded(doc, landed)
+        self.assertEqual(lines[-1], self.NEXT_RULING_CLEAN)
+
     # round 3, R3 (a): a stopped block with no finding above never says "the findings above"
     NEXT_RULING_CLEAN = ("Next: the owner rules on the records component's `mirrors` (E14-2); a fresh inspect-v2 "
                          "run follows his ruling.")
