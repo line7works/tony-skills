@@ -406,7 +406,69 @@ outside the run directory except the one build doc, never changes a protected li
 among several candidates, never calls a model, never touches the network, and never starts
 another station.
 
-## 19. Open points
+## 19. Interface
+
+This document closes `scripts/blueprint.py`'s CLI; this section states it in one place, in tables a test
+reads (`scripts/tests/test_interface_document.py` extracts each table below by its heading and
+fails when the code, the schemas or this section disagree). Added in E14 slice 3c (the join,
+contract section 13; build-v2's section 19 is the model). Nothing here changes what the core does:
+every row restates the driver's parser and dispatch, `station-loop.md` sections 2 and 5, the input
+schema, and the names the code joins onto the run directory. Numbered 19, as in build-v2's contract and every front core's, so one heading names the interface in each; the open points follow as section 20.
+
+### Commands
+
+| Command | Arguments | Exit codes |
+|---|---|---|
+| `check-input` | `<input.json>` | 0, 1, 2, 3, 4 |
+| `select` | `--run-dir D [--hunt NAME] [--name NAME]` | 0, 1, 2 |
+| `harvest` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 5, 10 |
+| `write` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `report` | `--run-dir D` | 1, 2, 3, 10 |
+| `identity` | `<workspace>` | 0, 1, 2 |
+| `skill-identity` | none | 0, 1, 2 |
+| `choose` | `--run-dir D --hunt NAME --path P --words TEXT` | 0, 1, 2, 10 |
+
+Every command also takes `--skill-root DIR` (test only) and `--records-root DIR` after its name.
+The exit codes of a row are the codes that command's code can return, as the test reads them from
+the source (the handler, its decorators and every function of this core it calls); each means what
+`station-loop.md` section 2 says, and 1 (a defect) and 2 (a usage slip) are every command's.
+
+### Result statuses
+
+| Status | Terminal status |
+|---|---|
+| `completed` | `completion` |
+| `stopped` | `stop` |
+
+### Invocation fields
+
+The input's `invocation` object, which the adapter's `invocation.py` fills (`../adapters/README.md`),
+never the executor.
+
+| Field | Required | Values |
+|---|---|---|
+| `harness` | yes | a string, or null: the harness the run is driven from |
+| `caller` | yes | `user` on a direct request, or the name of the station that called this one |
+| `mode` | yes | `direct` when a person asked, `station` when another station drove the run |
+| `session_id` | no | the session the adapter READ from the harness's own record, or null; the recorded answer names the same session |
+
+### Run-directory artifacts
+
+Every name this core's code joins onto `run_dir` (`*` is the slot a name fills), a folder with `/`.
+
+| Artifact | Written by |
+|---|---|
+| `answer.json` | `record-answer` |
+| `checkpoint.json` | `check-input`, then every phase and `choose` |
+| `harvest.json` | `harvest` |
+| `input.json` | `check-input` |
+| `proposed-build-doc.md` | `write` (the rendered build doc; in report-only the one copy) |
+| `receipt.json` | `write` |
+| `result.json` | the phase that ends the run |
+| `selection-*.json` | `select` (`*` the hunt); `choose` records the owner's pick in it |
+
+## 20. Open points
 
 - The build doc's `Footprint:` is the template's one-line form (`Footprint: a, b`); `build-v2`'s
   reader reads named paths only from a bulleted list under a bare `Footprint:` label, so it reads

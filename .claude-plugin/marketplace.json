@@ -239,6 +239,42 @@
         "quality-gate",
         "skills-v2"
       ]
+    },
+    {
+      "name": "precon-v2",
+      "source": "./plugins/precon-v2",
+      "description": "Harvest an idea discussion into a fixed-format scope doc, every decided, assumed or parked line traced to the owner's words or an answered question, the doc placed and continued by script. Strictly user-invoked. The portable precon core of the skills v2 rebuild; the -v2 suffix stays while v1 precon is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "precon"
+      ]
+    },
+    {
+      "name": "architect-v2",
+      "source": "./plugins/architect-v2",
+      "description": "One interview after precon that writes the one living architecture doc and renders its visual, with the scope doc's decided lines passed forward by script, never re-asked, and the run log continued, never rewritten. Strictly user-invoked. The portable architect core of the skills v2 rebuild; the -v2 suffix stays while v1 architect is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "architect"
+      ]
+    },
+    {
+      "name": "blueprint-v2",
+      "source": "./plugins/blueprint-v2",
+      "description": "Draft a build document in dependency-ordered, verifiable slices, every requirement traced and the load-bearing forms rendered by script, so build, signoff and recheck read what they read today. The portable blueprint core of the skills v2 rebuild; the -v2 suffix stays while v1 blueprint is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "blueprint"
+      ]
+    },
+    {
+      "name": "inspect-v2",
+      "source": "./plugins/inspect-v2",
+      "description": "Check a build doc before it is built: fresh inspectors read a packet built by script from the build doc, the scope doc and the code book alone; surviving findings are raised in the shared records and the plan is stamped with the model that inspected it. Strictly user-invoked. The portable inspect core of the skills v2 rebuild; the -v2 suffix stays while v1 inspect is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "inspect"
+      ]
     }
   ]
 }

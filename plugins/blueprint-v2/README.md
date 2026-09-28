@@ -35,13 +35,24 @@ written; the build hunt's first tier holds the undated `docs/plans/<topic>.md` b
 (an existing undated plan is extended where it lies, never forked); the shared refusals read each
 answer line's original text, so a bare item label is part of the words when both sides carry one.
 
-For the join: the version and the marketplace entry are the control room's at close. Interface
-version 1, plugin version 0.1.0. Test counts are measured and filled in by the control room.
+Slices 3a and 3b (the join's first two steps): answer lines name their ledger row by its id and
+the marked-label reading is the frame's own (`station_core.answer.label`); the scope and
+architecture docs a literal glob finds are harvested as the disk spells them (CL5-1's class).
+
+Slice 3c (the join, its first hand-back): the contract's section 19, Interface, states the CLI in
+build-v2's four tables (commands with their arguments and exit codes, result statuses, invocation
+fields, run-directory artifacts), and `scripts/tests/test_interface_document.py` reads them against
+the parser, the dispatch table, the schemas and the source, with a mutation proof; the shared hunt
+lists a candidate as its folder spells it, so `select` and every later use of a candidate carry the
+disk spelling on a case-insensitive disk; and the plugin has its marketplace entry. The seeded case L3-03 is renamed
+`L3-03-two-scope-homes-one-tier`, for what it now proves (the two scope homes are one tier).
+
+Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
 
 ## Layout
 
 ```text
-.claude-plugin/plugin.json           name blueprint-v2, version 0.1.0
+.claude-plugin/plugin.json           name blueprint-v2, version 0.1.1
 skills/blueprint-v2/
   SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar

@@ -3,9 +3,17 @@
 Zero, one and two candidates in each home; the `searched` list names every home looked in, the
 ones not given included; tiers decide in order; the helper never expands `~` and never guesses a
 home the table does not name.
+
+The disk spelling (E14 slice 3c, item 3.3): a candidate a literal glob answers on a
+case-insensitive disk is listed as its folder spells it, through the hunt and through each core's
+`select`, and where the core has a `choose` command a pick named in that spelling is accepted.
+Those tests are skipped on a case-sensitive scratch, by the probe blueprint's harvest test uses;
+the rule for several entries or none is proved on a stubbed folder listing, on any disk.
 """
+import json
 import os
 import unittest
+from unittest import mock
 
 import testlib
 
@@ -170,6 +178,117 @@ class MetacharacterRoots(unittest.TestCase):
         testlib.write_text(os.path.join(other, "docs", "widget-scope.md"), "# not this root\n")
         result = hunt.hunt(HOMES, {"workspace": ws, "staging": staging}, name="widget")
         self.assertEqual((result["outcome"], result["candidates"]), ("none", []))
+
+
+def case_folded(scratch):
+    """True when the scratch's file system answers a name in another letter case (the probe
+    blueprint's harvest test uses: CaseProbe written, caseprobe looked up)."""
+    probe = os.path.join(scratch, "CaseProbe")
+    testlib.write_text(probe, "x\n")
+    folded = os.path.exists(os.path.join(scratch, "caseprobe"))
+    os.remove(probe)
+    return folded
+
+
+SKIP_SENSITIVE = "the test scratch is case-sensitive (probe: CaseProbe written, caseprobe not found)"
+
+
+class TheDiskSpelling(_Homes):
+
+    def test_a_literal_glob_lists_the_file_as_the_folder_spells_it(self):
+        if not case_folded(self.tmp):
+            self.skipTest(SKIP_SENSITIVE)
+        path = self.touch(self.ws, "docs", "Turnstile-scope.md")
+        result = self.run_hunt(name="turnstile")
+        self.assertEqual((result["outcome"], [c["path"] for c in result["candidates"]]),
+                         ("one", [path]))
+        flat = [row for row in result["searched"] if row["home"] == "repo-flat"][0]
+        self.assertEqual(flat["found"], [path])
+
+    def spelled(self, listing, name="turnstile-scope.md"):
+        folder = os.path.join(self.ws, "docs")
+        with mock.patch.object(hunt.os, "listdir", return_value=list(listing)):
+            return hunt.disk_spelling(os.path.join(folder, name)), folder
+
+    def test_one_entry_in_another_case_gives_its_spelling(self):
+        got, folder = self.spelled(["README.md", "Turnstile-scope.md"])
+        self.assertEqual(got, os.path.join(folder, "Turnstile-scope.md"))
+
+    def test_several_entries_or_none_leave_the_path_as_found(self):
+        for listing in (["Turnstile-scope.md", "TURNSTILE-scope.md"], ["gadget-scope.md"], []):
+            with self.subTest(listing=listing):
+                got, folder = self.spelled(listing)
+                self.assertEqual(got, os.path.join(folder, "turnstile-scope.md"))
+
+    def test_a_name_listed_as_is_is_kept(self):
+        got, folder = self.spelled(["Turnstile-scope.md", "turnstile-scope.md"])
+        self.assertEqual(got, os.path.join(folder, "turnstile-scope.md"))
+
+    def test_a_folder_that_cannot_be_listed_leaves_the_path_as_found(self):
+        path = os.path.join(self.tmp, "absent", "turnstile-scope.md")
+        self.assertEqual(hunt.disk_spelling(path), path)
+
+
+# Per core: a literal-glob hunt of its own table, the file its folder holds in another letter case,
+# and, where the core has a `choose` command, a second candidate in the same tier so the hunt is
+# `several` and the owner's pick can be named in the disk spelling.
+THROUGH_SELECT = {
+    "precon-v2": {"hunt": "scope", "file": "docs/Turnstile-scope.md", "choose": None},
+    "architect-v2": {"hunt": "architecture", "file": "docs/Turnstile-architecture.md", "choose": None},
+    "blueprint-v2": {"hunt": "scope", "file": "docs/Turnstile-scope.md",
+                     "choose": {"second": "docs/scope/2026-09-20-turnstile.md",
+                                "argv": ["--words", "the flat one"]}},
+    "inspect-v2": {"hunt": "build", "file": "docs/plans/Turnstile.md",
+                   "choose": {"second": "docs/plans/2026-09-20-turnstile.md",
+                              "argv": ["--by", "owner", "--words", "the undated one"]}},
+}
+
+
+class TheDiskSpellingThroughSelect(unittest.TestCase):
+    """The core's own `select` lists the disk spelling in its envelope and in selection-<hunt>.json,
+    and its `choose` (blueprint-v2 and inspect-v2 carry one) accepts a pick named that way."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("hunt-cli-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        if not case_folded(self.tmp):
+            self.skipTest(SKIP_SENSITIVE)
+        self.case = THROUGH_SELECT[testlib.CORE]
+        files = {"README.md": "# A project\n", self.case["file"]: "# Turnstile\n"}
+        if self.case["choose"]:
+            files[self.case["choose"]["second"]] = "# Turnstile, dated\n"
+        self.ws = testlib.git_workspace(self.tmp, files=files)
+        self.run_dir = os.path.join(self.tmp, "run")
+        doc = os.path.join(self.tmp, "input.json")
+        testlib.write_json(doc, testlib.make_input(self.ws, self.run_dir))
+        code, out, err = testlib.run_driver(["check-input", doc])
+        self.assertEqual(code, 0, (out, err))
+
+    def select(self):
+        code, out, err = testlib.run_driver(["select", "--run-dir", self.run_dir, "--hunt",
+                                             self.case["hunt"], "--name", "turnstile"])
+        self.assertEqual(code, 0, (out, err))
+        return json.loads(out)
+
+    def test_the_envelope_and_the_selection_file_carry_the_disk_spelling(self):
+        spelled = os.path.join(self.ws, self.case["file"])
+        envelope = self.select()
+        self.assertIn(spelled, [c["path"] for c in envelope["candidates"]])
+        saved = testlib.load_json(os.path.join(self.run_dir, "selection-%s.json" % self.case["hunt"]))
+        self.assertIn(spelled, [c["path"] for c in saved["candidates"]])
+        lowered = os.path.join(self.ws, self.case["file"].replace("Turnstile", "turnstile"))
+        self.assertNotIn(lowered, [c["path"] for c in envelope["candidates"]])
+
+    def test_a_pick_named_in_the_disk_spelling_is_accepted(self):
+        if not self.case["choose"]:
+            self.skipTest("%s has no `choose` command" % testlib.CORE)
+        envelope = self.select()
+        self.assertEqual(envelope["outcome"], "several")
+        spelled = os.path.join(self.ws, self.case["file"])
+        code, out, err = testlib.run_driver(["choose", "--run-dir", self.run_dir, "--hunt", self.case["hunt"],
+                                             "--path", spelled] + self.case["choose"]["argv"])
+        self.assertEqual(code, 0, (out, err))
+        self.assertIn(spelled, out)
 
 
 class Refusals(_Homes):

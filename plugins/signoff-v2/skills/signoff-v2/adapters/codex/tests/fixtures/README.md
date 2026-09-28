@@ -10,3 +10,10 @@ The child rollout the slice 3 reviewer test stood in for a fresh `codex exec` re
 with that transport (Astra's F6): this adapter launches no reviewer and reads no child record.
 
 Copied, not referenced, because an installed plugin cannot reach a sibling plugin's folder.
+
+`roster-portable-opus.json` and `roster-no-portable-opus.json` (E14 slice 3c, item 3.1) are readers
+rosters cut from the checkout's `plugins/readers/skills/readers/assets/roster.json` at the join:
+the first keeps `claude-session`, `gpt-astra` and the portable `claude-opus-cli` row (eligible at
+the Opus-class floor), the second `claude-session`, `claude-opus` and `gpt-astra` (no portable
+Claude row). `test_a3_readers_route.py` sets each beside a copy of the real `readers.py` to prove
+the reviewer's roster lookup: the row named, `lane-unavailable` without one.

@@ -1,8 +1,9 @@
 """The lane contract read against the code (required test 1).
 
 `references/precon-v2-contract.md` states, in its Interface section, the commands of this core
-and the stop tags it can end a run in. Each own command is listed under "Commands of this core"
-in the driver's `--help`, and no other own command is; each stop tag is in the result schema's
+and the stop tags it can end a run in. Each own command (a row of the Commands table that no
+shared command names) is listed under "Commands of this core" in the driver's `--help`, and no
+other own command is; each stop tag is in the result schema's
 `stop_tag` enum and named in its description, and the lane's own tags are exactly the enum's
 tags that are not shared; `SKILL.md` names every command it runs; the quoted mandate is the one
 the code sends.
@@ -34,6 +35,14 @@ def table(heading):
     return rows
 
 
+def own_commands():
+    """The Commands table's rows that are no shared command's (E14 slice 3c: one table, build-v2's
+    shape, where the frame had "Shared commands" and "Commands of this core")."""
+    testlib.add_scripts_to_path()
+    from station_core import driver
+    return [name for name in table("### Commands") if name not in driver.SHARED_COMMANDS]
+
+
 def own_help_lines():
     code, out, err = testlib.run_driver(["--help"])
     assert code == 0, err
@@ -44,12 +53,12 @@ def own_help_lines():
 class TheContract(unittest.TestCase):
 
     def test_the_own_commands_are_the_helps(self):
-        commands = table("### Commands of this core")
+        commands = own_commands()
         self.assertEqual(sorted(commands), ["request", "state"])
         self.assertEqual(sorted(own_help_lines()), sorted(commands))
 
     def test_every_command_the_contract_names_answers_help(self):
-        for command in table("### Commands of this core") + table("### Shared commands"):
+        for command in table("### Commands"):
             code, out, err = testlib.run_driver([command, "--help"])
             self.assertEqual(code, 0, (command, err))
 

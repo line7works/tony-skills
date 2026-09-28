@@ -12,6 +12,7 @@ import subprocess
 
 from station_core import answer as answermod
 from station_core import driver, exits, fsio, ledger, readers_request, templates, validate
+from station_core import hunt as huntmod
 
 from . import exit_test, rules, run as runmod, scopedoc
 
@@ -206,7 +207,9 @@ def _contained_or_usage(target, root):
 
 
 def _untaken(ctx, run, idea, sel):
-    """Every entry the scope hunt's globs match that the hunt did not take as a candidate."""
+    """Every entry the scope hunt's globs match that the hunt did not take as a candidate. A match is
+    compared in the spelling the hunt lists it in (its folder's, C3C1-1): a case-insensitive disk answers
+    a literal glob under the idea's name as typed, and the candidate is the same file."""
     roots = {"workspace": run.input.get("workspace"), "staging": run.input.get("staging")}
     taken = set(os.path.normpath(c["path"]) for c in sel.get("candidates") or [])
     out = []
@@ -216,7 +219,7 @@ def _untaken(ctx, run, idea, sel):
             continue
         for pattern in home["globs"]:
             for path in glob.glob(os.path.join(glob.escape(root), pattern.replace("{name}", idea))):
-                if os.path.lexists(path) and os.path.normpath(path) not in taken:
+                if os.path.lexists(path) and huntmod.disk_spelling(os.path.normpath(path)) not in taken:
                     out.append(os.path.normpath(path))
     return sorted(set(out))
 

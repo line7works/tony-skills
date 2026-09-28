@@ -18,6 +18,7 @@ import os
 
 from station_core import answer as answermod
 from station_core import driver, exits, fsio, ledger, templates, validate
+from station_core import hunt as huntmod
 
 from . import buildoc, checks, harvest as harvestmod, readback
 
@@ -161,7 +162,9 @@ def command_choose(ctx, args):
     if selection.get("outcome") != "several":
         raise driver.Usage("the %s hunt's outcome is %r: `choose` settles a `several` outcome only"
                            % (args.hunt, selection.get("outcome")))
-    wanted = os.path.normpath(os.path.abspath(args.path))
+    # the pick named in the idea's case is the file the hunt lists in its folder's spelling (C3C1-1's class):
+    # it is compared, and recorded, as the folder spells it
+    wanted = huntmod.disk_spelling(os.path.normpath(os.path.abspath(args.path)))
     paths = [c["path"] for c in selection.get("candidates") or []]
     if wanted not in paths:
         raise driver.Usage("%s is not one of the %s hunt's candidates (%s)" % (wanted, args.hunt, ", ".join(paths)))

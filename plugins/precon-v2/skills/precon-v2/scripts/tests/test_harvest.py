@@ -3,6 +3,11 @@
 No doc, one doc, a doc carrying the triage comment, a doc with an untaggable line
 (`ledger-refused`, quoted), a heading inside a ledger section, a doc off the form
 (`form-refused`), a slug found in two homes (`selection-several`), and the usage slips.
+
+The disk spelling (E14 slice 3c, C3C1-1): a scope doc whose folder spells its name in another
+letter case than the idea (`docs/Turnstile-scope.md` for `turnstile`) is listed by `select` in the
+disk spelling and harvested as that one candidate, its run records the records a doc named in the
+idea's own case leaves. Skipped on a case-sensitive scratch, by the shared hunt test's probe.
 """
 import json
 import os
@@ -11,6 +16,7 @@ import unittest
 import preconlib
 import testlib
 from preconlib import D
+from test_hunt import SKIP_SENSITIVE, case_folded
 
 
 class _Harvest(unittest.TestCase):
@@ -341,6 +347,61 @@ class Usage(_Harvest):
         code, doc, err = run.record(preconlib.answer(run))
         self.assertEqual(code, 0, json.dumps(doc))
         self.assertEqual(run.harvest()[0], 2)
+
+
+class TheDiskSpelling(_Harvest):
+    """C3C1-1: `harvest` takes the candidate `select` listed in the disk spelling, in each flat home a
+    literal glob searches (the repo's `docs/{name}-scope.md` and the staging `{name}-scope.md`)."""
+
+    HOMES = (("repo", "docs/Turnstile-scope.md", False), ("staging", "Turnstile-scope.md", True))
+
+    def setUp(self):
+        super(TheDiskSpelling, self).setUp()
+        if not case_folded(self.tmp):
+            self.skipTest(SKIP_SENSITIVE)
+
+    def harvested(self, fx, rel, staged):
+        path = preconlib.ensure_scope_doc(fx, staged=staged, rel=rel)
+        run = fx.new_run()
+        selected = run.select()
+        self.assertEqual((selected["outcome"], [c["path"] for c in selected["candidates"]]), ("one", [path]))
+        code, doc, err = run.harvest()
+        self.assertEqual(code, 0, "%s %s" % (doc, err))
+        return path, run, doc
+
+    def records(self, fx, run):
+        """The run directory's files and the harvest's records, with the fixture's root and the doc's
+        spelling written the same way, so two runs compare by content."""
+        def same(text):
+            return text.replace(fx.tmp, "<tmp>").replace("Turnstile-scope.md", "turnstile-scope.md")
+        names = sorted(os.listdir(run.run_dir))
+        texts = dict((name, same(testlib.read_text(run.run_file(name))))
+                     for name in ("harvest.json", "harvest-scope-doc.md", "selection-scope.json"))
+        return names, texts
+
+    def test_the_candidate_select_listed_is_harvested(self):
+        for home, rel, staged in self.HOMES:
+            with self.subTest(home=home):
+                fx = preconlib.Fixture(self._fresh("one-" + home))
+                path, run, doc = self.harvested(fx, rel, staged)
+                self.assertEqual(doc["doc"]["path"], path)
+                self.assertTrue(doc["doc"]["path"].endswith(os.sep + rel), doc["doc"]["path"])
+                self.assertEqual(doc["doc"]["home"], home)
+                self.assertEqual(testlib.load_json(run.run_file("harvest.json"))["doc"]["path"], path)
+
+    def test_its_records_are_those_of_a_doc_named_in_the_ideas_case(self):
+        for home, rel, staged in self.HOMES:
+            with self.subTest(home=home):
+                disk = preconlib.Fixture(self._fresh("disk-" + home))
+                typed = preconlib.Fixture(self._fresh("typed-" + home))
+                _, disk_run, _ = self.harvested(disk, rel, staged)
+                _, typed_run, _ = self.harvested(typed, rel.replace("Turnstile", "turnstile"), staged)
+                self.assertEqual(self.records(disk, disk_run), self.records(typed, typed_run))
+
+    def _fresh(self, name):
+        path = os.path.join(self.tmp, name)
+        os.makedirs(path)
+        return path
 
 
 class ReportOnly(_Harvest):

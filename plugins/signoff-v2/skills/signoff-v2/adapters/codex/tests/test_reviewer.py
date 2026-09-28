@@ -1,10 +1,12 @@
 """signoff-v2 on Codex: reviewer.py, the readers request and the sidecar map (Astra's F6).
 
-The helper carries no reviewer transport: it checks the run's own readers request, reports that
-readers has no floor-qualified route a Codex session can dispatch (`lane-unavailable`, exit 3,
-the missing capability named), and maps a readers sidecar onto the answer's reviewer identity.
-No test launches Codex or calls a model; `test_full_fix_f6.py` proves nothing is launched even
-with a `codex` on PATH.
+The helper carries no reviewer transport: it checks the run's own readers request, looks the
+reviewer up through readers' `suggest` at the Opus-class floor (E14 A3; in this checkout readers
+is the sibling plugin, route 3a, whose roster holds the portable `claude-opus-cli` row), writes
+the readers request for the row it names and exits 0, and maps a readers sidecar onto the
+answer's reviewer identity. No test launches Codex or Claude or calls a model;
+`test_full_fix_f6.py` proves nothing is launched even with `codex` and `claude` on PATH, and
+`test_a3_readers_route.py` holds the fixture rosters (eligible, none eligible, suggest refusing).
 """
 
 import json
@@ -55,13 +57,14 @@ class ReviewerTest(unittest.TestCase):
         self.assertNotIn("codex exec", json.loads(out)["help"])
         self.assertEqual(testlib.run(HELPER, [])[0], 2)
 
-    def test_the_run_request_is_lane_unavailable_with_the_capability_named(self):
+    def test_the_run_request_names_the_checkouts_readers_row(self):
         code, out, err = self.call()
-        self.assertEqual(code, 3, err)
+        self.assertEqual(code, 0, err)
         doc = json.loads(out)
-        self.assertEqual(doc["status"], "lane-unavailable")
-        self.assertIn("floor-qualified", doc["missing_capability"])
-        self.assertEqual((doc["requests"], doc["answer_identity"]), ([], None))
+        self.assertEqual((doc["status"], doc["row"]), ("ready", "claude-opus-cli"))
+        self.assertEqual(doc["_sources"]["readers_route"], "3a")
+        self.assertEqual([block["floor"] for block in doc["requests"]], ["opus"])
+        self.assertIsNone(doc["answer_identity"])
 
     def test_a_request_bound_elsewhere_is_usage(self):
         other = tempfile.mkdtemp(prefix="other-")

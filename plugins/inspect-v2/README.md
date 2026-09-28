@@ -37,17 +37,23 @@ event, stamp or verdict whether it recognises the intended verdict mirror, and s
 raw copies too; the build hunt's first tier also takes `docs/plans/<name>.md`; a line's `tag` is one
 of a closed, lower-case set; and the readers roster is found by the shared resolver.
 
-What stays for the join (slice 3): the full suites on the joined tree, the seven-station install
-proof with inspect-v2 resolving blueprint-v2 by route 3b beside the real blueprint-v2 core (in this
-lane route 3a finds the frame's skeleton `SKILL.md` of lane L), the end-to-end replay across the
-front of the loop, the interface document for this plugin, and the owner's rulings on the open
-points of the contract's section 15. Interface version 1, plugin version 0.1.0. Test counts are
-measured and filled in by the control room at close.
+Slice 3c (the join, its first hand-back): the contract's section 19, Interface, states the CLI in
+build-v2's four tables (commands with their arguments and exit codes, result statuses, invocation
+fields, run-directory artifacts), and `scripts/tests/test_interface_document.py` reads them against
+the parser, the dispatch table, the schemas and the source, with a mutation proof; the shared hunt
+lists a candidate as its folder spells it, so `select` and every later use of a candidate carry the
+disk spelling on a case-insensitive disk; and the plugin has its marketplace entry.
+
+What stays for the join (slice 3c's second hand-back and the close): the seven-station install
+proof with inspect-v2 resolving blueprint-v2 by route 3b, the end-to-end replay across the front of
+the loop, and the owner's rulings on the open points of the contract's section 15.
+
+Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
 
 ## Layout
 
 ```text
-.claude-plugin/plugin.json           name inspect-v2, version 0.1.0
+.claude-plugin/plugin.json           name inspect-v2, version 0.1.1
 skills/inspect-v2/
   SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar (manual-only)

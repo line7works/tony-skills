@@ -49,6 +49,9 @@ def env_for(work, with_codex=True, extra=None):
         environment.pop(name, None)
     environment.update({"PYTHONDONTWRITEBYTECODE": "1", TEST_FLAG: "1", RECORD_VAR: ROLLOUT,
                         "TMPDIR": work,
+                        # readers' last-pick memory: a checkout that is not there, so a test's
+                        # `suggest` reports it unavailable and writes nothing outside the tree
+                        "READERS_CHECKOUT": os.path.join(work, "no-readers-checkout"),
                         "PATH": fake_bin(work, with_codex) + os.pathsep + "/usr/bin:/bin"})
     for key, value in (extra or {}).items():
         if value is None:

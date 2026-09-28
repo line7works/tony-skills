@@ -14,6 +14,13 @@ included (`given: false`). The candidates are those of the lowest tier that hold
 them is `one`, two or more are `several` (listed for the owner, never picked), none is `none`.
 The helper never expands `~`, never takes a relative root, and never lets a glob leave its root; a
 root is taken literally, a glob metacharacter in its path escaped (`glob.escape`).
+
+A candidate is listed as its folder spells it (E14 slice 3c, item 3.3): a case-insensitive file
+system answers a literal glob (`docs/{name}-scope.md`) under the name as typed, so the file name is
+taken from the folder listing when exactly one entry matches it case-insensitively; several such
+entries, or none, and the path stays as found (blueprint's `_disk_spelling` rule). The `select`
+envelope, `selection-<hunt>.json` and every later use of a candidate then carry the disk spelling,
+and a pick named in that spelling is one of the candidates.
 """
 import glob
 import os
@@ -48,6 +55,21 @@ def _pattern(glob_text, name):
     return glob_text.replace("{name}", name if name is not None else "*")
 
 
+def disk_spelling(path):
+    """`path` with its file name as the folder listing spells it: the one entry that matches it
+    case-insensitively; the path as found when the name is listed as is, or when several entries
+    match, or none, or the folder cannot be listed."""
+    folder, name = os.path.split(path)
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return path
+    if name in names:
+        return path
+    same = [entry for entry in names if entry.casefold() == name.casefold()]
+    return os.path.join(folder, same[0]) if len(same) == 1 else path
+
+
 def hunt(homes, roots, name=None):
     if name is not None and (not isinstance(name, str) or not NAME.match(name)):
         raise HuntRefused("the name %r is not one path segment of lowercase letters, digits, "
@@ -71,7 +93,7 @@ def hunt(homes, roots, name=None):
                 for path in glob.glob(os.path.join(glob.escape(root), pattern)):
                     if os.path.isfile(path) and os.path.realpath(path).startswith(
                             os.path.realpath(root).rstrip(os.sep) + os.sep):
-                        found.add(os.path.normpath(path))
+                        found.add(disk_spelling(os.path.normpath(path)))
             row["found"] = sorted(found)
             for path in row["found"]:
                 by_tier.setdefault(tier, []).append({"path": path, "home": label, "tier": tier})
