@@ -153,6 +153,42 @@ def _outside(path):
             "a folder on its way is a symlink that leads elsewhere; nothing was written" % path)
 
 
+def _folder_stop(path, command):
+    """A Defect when a node on the way to path's folder is not a folder (R2's class)."""
+    folder = os.path.dirname(os.path.abspath(path))
+    while not os.path.lexists(folder):
+        folder = os.path.dirname(folder)
+    if not os.path.isdir(folder) or not os.access(folder, os.R_OK | os.W_OK | os.X_OK):
+        raise driver.Defect("unreadable run directory: %s is not a folder this run can write (a file, a symlink that "
+                            "leads to no folder, or a folder without permission, stands on the way to %s); nothing "
+                            "was written and the run stays where it was: fix %s by hand, then run `%s` again"
+                            % (folder, path, folder, command))
+
+
+def _file_stop(path, command):
+    """A Defect when a folder stands where path's file goes: the rename that writes the file cannot
+    replace it (slice 3b round 2 R5; a symlink there is replaced, as before)."""
+    if os.path.isdir(path) and not os.path.islink(path):
+        raise driver.Defect("unreadable run directory: %s is a folder where this run writes a file; nothing was "
+                            "written and the run stays where it was: remove %s by hand, then run `%s` again"
+                            % (path, path, command))
+
+
+RUN_FILES = ("receipt.json", "checkpoint.json", "result.json")
+
+
+def _writable(run, command, *paths, **kw):
+    """Slice 3b round 2 R1 and R5 (CA3B-1): before a command's first write, every path it may write
+    has a folder it can write on its way (`_folder_stop`) and no folder where its file goes
+    (`_file_stop`): the run directory's own files (`run_files`, by name; every receipt row rewrites
+    `receipt.json`, every stop writes `result.json` and `checkpoint.json`) and `paths`. Nothing is
+    written before the check, so its sentence is true."""
+    names = kw.get("run_files", RUN_FILES)
+    for path in [os.path.join(run.run_dir, n) for n in names] + list(paths):
+        _folder_stop(path, command)
+        _file_stop(path, command)
+
+
 def _session(run):
     return (run.input.get("invocation") or {}).get("session_id")
 
@@ -168,6 +204,8 @@ def harvest(ctx, args):
     if _phase(run) == "checked":
         raise driver.Usage("run `select --hunt scope` and `select --hunt architecture --name <slug>` before `harvest`")
     _need(run, "selected")
+    _writable(run, "harvest", *[os.path.join(run.run_dir, n) for n in
+                                ("selection-scope.json", "harvest.json", "harvested-doc.md")])
     ws, staging = run.input["workspace"], run.input.get("staging")
     station = _station(run)
     scope_sel = _load(run, "selection-scope.json")
@@ -232,8 +270,19 @@ def harvest(ctx, args):
                                                                 ", ".join(c["path"] for c in arch_sel["candidates"])),
                      sr, receipt)
     living_path = arch_sel["candidates"][0]["path"] if arch_sel["outcome"] == "one" else None
-    scope_text = read_text(scope_path) if scope_path else None
-    living_text = read_text(living_path) if living_path else None
+    # slice 3b round 2 R2 (CA3B-2): a doc that is not UTF-8 stops the run with its tag, never a traceback;
+    # `reading` is the doc being read when the error came (on a docless run it can only be the living doc)
+    scope_text = living_text = None
+    reading = scope_path
+    try:
+        scope_text = read_text(scope_path) if scope_path else None
+        reading = living_path
+        living_text = read_text(living_path) if living_path else None
+    except UnicodeDecodeError as exc:
+        sr = dict(results.empty_station_result(), slug=slug, scope_doc=scope_path)
+        return _stop(ctx, run, "living-doc-malformed" if reading == living_path else "ledger-refused",
+                     "%s is not UTF-8 (%s), so it cannot be read without guessing; the doc is left as found: save "
+                     "it as UTF-8, then start a new run" % (reading, exc), sr, receipt)
     try:
         record = harvesting.describe(ws, staging, today(), slug, scope_path, scope_text, living_path, living_text,
                                      run_id=run.checkpoint["run_id"], input_publish=station.get("publish", True),
@@ -321,6 +370,9 @@ def record_answer(ctx, args):
                                         reason="the recorded answer was refused on its content (%d refusal(s)); "
                                                "nothing was written, and a corrected answer can be recorded"
                                                % len(refusals)), exits.REFUSED)
+    _writable(run, "record-answer", os.path.join(run.run_dir, "answer.json"),
+              os.path.join(run.run_dir, "answer-round-%d.json" % state["round"]),
+              run_files=("receipt.json", "checkpoint.json"))
     receipt = Receipt(run.run_dir)
     if amending:
         receipt.write_json(os.path.join(run.run_dir, "answer-round-%d.json" % state["round"]), prior)
@@ -356,6 +408,7 @@ def write(ctx, args):
     if _phase(run) in ("checked", "selected", "harvested"):
         raise driver.Usage("run `record-answer` before `write`: the doc is rendered from an accepted answer")
     _need(run, "answered")
+    _writable(run, "write")
     answer = _load(run, "answer.json")
     record = _load(run, "harvest.json")
     state = _state(run)
@@ -371,6 +424,15 @@ def write(ctx, args):
     if not _contained(run, target):
         return _stop(ctx, run, "write-refused", "the doc %s" % _outside(target),
                      _station_result(run, record, answer, None), receipt)
+    snap = _snapshot_path(run)
+    if not snapshot and os.path.lexists(snap) and not os.path.isfile(snap):
+        # slice 3b round 2 R1 (CA3B-1), R3's class before the first write: the snapshot's place holds a folder
+        # or a link to none, so the doc would land and the snapshot would not; refused before either
+        raise driver.Defect("unreadable run directory: %s is not a file (a folder, or a symlink that leads to no "
+                            "file, stands where the run directory's %s, the first write's snapshot and the "
+                            "amendment's baseline, goes); nothing was written and the run stays where it was: "
+                            "remove %s by hand, then run `write` again" % (snap, SNAPSHOT, snap))
+    _writable(run, "write", target, snap, run_files=())
     try:
         receipt.write(target, plan["doc_text"], expect=_expected(run, receipt, target, record))
     except Changed as exc:
@@ -403,6 +465,7 @@ def render_visual(ctx, args):
     html_path = os.path.join(os.path.dirname(state["doc"]), "%s-architecture.html" % record["slug"])
     if not _contained(run, html_path):
         raise driver.Usage("the visual %s" % _outside(html_path))
+    _writable(run, "render-visual", html_path, run_files=("receipt.json", "checkpoint.json"))
     receipt = Receipt(run.run_dir)
     receipt.write(html_path, visual.render(text))
     state.update(rendered=True, visual=html_path, published=None)
@@ -436,10 +499,12 @@ def record_publish(ctx, args):
     if decision["refusal"]:
         return driver.emit(ctx.envelope(accepted=False, refusals=[decision["refusal"]],
                                         reason="the publish record was refused; nothing was written"), exits.REFUSED)
+    if decision["changed"] and not _contained(run, state["doc"]):
+        raise driver.Usage("the doc %s" % _outside(state["doc"]))
+    _writable(run, "record-publish", os.path.join(run.run_dir, "publish.json"),
+              *([state["doc"]] if decision["changed"] else []))
     receipt = Receipt(run.run_dir)
     if decision["changed"]:
-        if not _contained(run, state["doc"]):
-            raise driver.Usage("the doc %s" % _outside(state["doc"]))
         record = _load(run, "harvest.json")
         try:
             receipt.write(state["doc"], decision["text"], expect=_expected(run, receipt, state["doc"], record))
@@ -507,13 +572,10 @@ def request(ctx, args):
     refused = _request_outside(ctx, run, os.path.join(folder, "request.json"), folder)
     if refused is not None:
         return refused
-    if os.path.lexists(folder) and not os.path.isdir(folder):
-        # slice 3b R2 (the control room's wording, C4): a regular file, a symlink to one, or a symlink that
-        # leads to nothing stands where the requests folder goes (a symlink to a folder is a folder); an
-        # unreadable run directory, exit 1 before any write, the run left at its phase
-        raise driver.Defect("unreadable run directory: %s is not a folder (a file, or a symlink that leads to no "
-                            "folder, stands where the requests folder goes); nothing was written and the run stays "
-                            "where it was: remove %s by hand, then run `request` again" % (folder, folder))
+    # slice 3b R2 (C4) as widened by round 2 R1 (CA3B-1): a regular file, a symlink to one, a symlink that
+    # leads to nothing, or a folder the process cannot list or write, stands where the requests folder goes (a
+    # symlink to a folder is a folder); an unreadable run directory, exit 1 before the folder is read
+    _folder_stop(os.path.join(folder, "x.json"), "request")
     taken = [n[:-5] for n in os.listdir(folder)] if os.path.isdir(folder) else []
     try:
         built = review.requests(rows, run.input, roster, scope["path"], run.checkpoint["run_id"],
@@ -525,6 +587,7 @@ def request(ctx, args):
         refused = _request_outside(ctx, run, path)
         if refused is not None:
             return refused
+    _writable(run, "request", *[path for _, _, path in pending], run_files=("receipt.json",))
     receipt = Receipt(run.run_dir)
     out = []
     for call_id, req, path in pending:
@@ -584,6 +647,7 @@ def save_take(ctx, args):
     for target in (path, copy):
         if not _contained(run, target):
             raise driver.Usage("the take %s" % _outside(target))
+    _writable(run, "save-take", path, copy, os.path.join(run.run_dir, "takes.json"), run_files=("receipt.json",))
     text = review.take_text(args.row, args.model, args.isolation, args.sidecar, body)
     receipt = Receipt(run.run_dir)
     receipt.write(path, text, expect=None)
@@ -647,6 +711,7 @@ def report(ctx, args):
     if answer["publish"] and state.get("published") is None:
         raise driver.Usage("the answer publishes: record the publish with `record-publish --url URL` (or without "
                            "--url when the publish returned none) before `report`")
+    _writable(run, "report", run_files=("checkpoint.json", "result.json"))
     receipt = Receipt(run.run_dir)
     sr = _station_result(run, record, answer, state)
     outcome = answer["review"]["outcome"]

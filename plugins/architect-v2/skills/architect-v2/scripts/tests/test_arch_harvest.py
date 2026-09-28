@@ -268,5 +268,54 @@ class ALedgerTheReaderRefuses(_Harvest):
         self.assertIn("One module", doc["reason"])
 
 
+class ADocThatIsNotUtf8(_Harvest):
+    """Slice 3b round 2 R2 (CA3B-2): a scope doc or a living doc holding a byte that is not UTF-8 stops the run
+    with its tag (`ledger-refused` for the scope doc, `living-doc-malformed` for the living doc), the sentence
+    naming the doc and the error; never a traceback, and nothing is written outside the run directory."""
+
+    def latin(self, ws, rel, old, new):
+        path = os.path.join(ws, rel)
+        with open(path, "rb") as fh:
+            data = fh.read()
+        self.assertIn(old, data)
+        with open(path, "wb") as fh:
+            fh.write(data.replace(old, new, 1))
+        return path
+
+    def stopped(self, run, ws, tag, path):
+        before = archlib.listing(ws)
+        code, doc, out, err = run.to_harvest(**self.to_harvest)
+        self.assertEqual(code, 10, out + err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(doc["stop_tag"], tag)
+        self.assertIn("%s is not UTF-8 (" % path, doc["reason"])
+        self.assertIn("the doc is left as found: save it as UTF-8, then start a new run", doc["reason"])
+        self.assertEqual(archlib.listing(ws), before)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvested-doc.md")))
+
+    to_harvest = {}
+
+    def test_a_scope_doc_that_is_not_utf8_is_ledger_refused(self):
+        ws = archlib.repo_workspace(self.tmp)
+        path = self.latin(ws, archlib.SCOPE_REL, b"bench rig", b"bench r\xefg")
+        self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "ledger-refused", path)
+
+    def test_a_living_doc_that_is_not_utf8_is_living_doc_malformed(self):
+        from test_arch_record import LIVING, LIVING_REL
+        ws = archlib.repo_workspace(self.tmp, files={LIVING_REL: LIVING})
+        path = self.latin(ws, LIVING_REL, b"a web dashboard", b"a web dashb\xf6ard")
+        self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "living-doc-malformed", path)
+
+    def test_a_docless_runs_living_doc_that_is_not_utf8_is_living_doc_malformed(self):
+        """No scope doc read, so the doc that is not UTF-8 is the living doc, and its tag says so."""
+        from test_arch_record import LIVING
+        rel = "docs/architecture/2026-09-21-bench-counter.md"
+        ws = testlib.git_workspace(self.tmp, "plain", {"README.md": "# A project\n", rel: LIVING})
+        path = self.latin(ws, rel, b"a web dashboard", b"a web dashb\xf6ard")
+        self.to_harvest = {"slug": "bench-counter", "scope": True}
+        self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "living-doc-malformed", path)
+
+
 if __name__ == "__main__":
     unittest.main()

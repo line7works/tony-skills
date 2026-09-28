@@ -38,9 +38,11 @@ def lane_of(row):
 
 
 def readers_roster(plugin_root):
-    """The roster file's path, found by the shared resolver; this core's `RosterMissing` otherwise."""
+    """The roster file's path as the shared resolver found and checked it (never normalized: through a
+    symlinked plugin root the lexical path is another place, slice 3b round 2 R4); this core's
+    `RosterMissing` otherwise."""
     try:
-        return os.path.normpath(shared_roster.find(plugin_root)["roster"])
+        return shared_roster.find(plugin_root)["roster"]
     except shared_roster.RosterMissing as exc:
         raise RosterMissing("readers' roster was not found: %s; pass --roster FILE" % exc)
 
