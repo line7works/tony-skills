@@ -28,8 +28,20 @@ def emit(document, code):
     return code
 
 
+def own_files_inside(run_dir):
+    """The run's own `checkpoint.json` and `input.json`, which the frame's `open_run` opens unchecked, each
+    resolved inside the run directory before any command opens it: a file leaving the run (a symlink) is
+    refused, `outside-run`, exit 5, and never read (CP6-1)."""
+    for name in ("checkpoint.json", "input.json"):
+        full = os.path.join(run_dir or "", name)
+        if run_dir and os.path.lexists(full) and not fsio.inside(full, run_dir):
+            raise Outside("outside-run", "the run file %s resolves outside the run directory %s (a symlink?); it is "
+                                         "not read" % (full, run_dir), full)
+
+
 def open_run(ctx, args):
     """The run, or its recorded result printed again when it has already ended (exit 10)."""
+    own_files_inside(args.run_dir)
     run = ctx.open_run(args.run_dir)
     if run.checkpoint.get("phase") == "done":
         result_path = path(run, "result.json")  # resolved inside the run before it is opened (R1 of round 6)

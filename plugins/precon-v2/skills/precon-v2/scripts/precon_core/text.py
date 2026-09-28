@@ -14,25 +14,18 @@ the frame's too; what stays here is what precon alone needs:
                       line feed and carriage return, VT, FF, the file, group and record separators,
                       NEL, U+2028, U+2029), and holding no invisible character: a value the scope
                       doc can carry and read back as the words it was given
-    readings(text)    every reading of a LINE's words: the frame's `answer.forms`, also of the text
-                      without precon's own ` (waits on: <call>)` suffix
-    row_readings(text)  every reading of a ledger ROW's words: the frame's `answer.row_forms`, also
-                      of the row without that suffix
+    one_deep(value)   every opening bracket (Unicode category Ps) closed in order by a closer (Pe),
+                      none nested inside another: the call precon writes in its ` (waits on: <call>)`
+                      suffix, so every suffix it writes is one the frame's parenthesis reading strips
+                      (CP4-3; `record-answer` refuses any other call `unrenderable`)
+    readings(text)    every reading of a LINE's words: the frame's `answer.forms`
+    row_readings(text)  every reading of a ledger ROW's words: the frame's `answer.row_forms`
 
-`without_waits` stays for one case the frame's parenthesis rule does not read: precon writes an
-`Open:` item as `<text> (waits on: <call>)` with the call as the owner gave it, and a call holding
-a parenthesis two deep, or an unbalanced one (`the bench call (see (Q2) first)`), is not stripped by
-the frame, so the item's bare words would not meet the row (test_twins,
-TheOwnSuffixTheFrameCannotRead). Every other decoration is the frame's to see through.
+precon reads no suffix of its own: an `Open:` item it wrote is read by the frame's readings alone.
 """
-import re
 import unicodedata
 
 from station_core import answer as shared
-
-# precon's own suffix, as it writes it (and a trailing mark after it): everything from the
-# ` (waits on:` to the last closing parenthesis
-WAITS = re.compile(r"^(?P<text>.*?\S)\s*\(\s*waits on\s*:.*\)[\s.;,:!?]*$", re.IGNORECASE | re.DOTALL)
 
 
 def invisible(char):
@@ -52,19 +45,28 @@ def one_line(value):
             and not any(invisible(c) for c in value))
 
 
-def without_waits(text):
-    """The text before precon's trailing ` (waits on: <call>)`, or the text itself."""
-    match = WAITS.match(shared._visible(text))
-    return match.group("text") if match else text
+def one_deep(value):
+    depth = 0
+    for char in value if isinstance(value, str) else "":
+        category = unicodedata.category(char)
+        if category == "Ps":
+            depth += 1
+            if depth > 1:
+                return False
+        elif category == "Pe":
+            depth -= 1
+            if depth < 0:
+                return False
+    return isinstance(value, str) and depth == 0
 
 
 def readings(text):
     if not isinstance(text, str):
         return set()
-    return shared.forms(text) | shared.forms(without_waits(text))
+    return shared.forms(text)
 
 
 def row_readings(text):
     if not isinstance(text, str):
         return set()
-    return shared.row_forms(text) | shared.row_forms(without_waits(text))
+    return shared.row_forms(text)

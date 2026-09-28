@@ -309,7 +309,10 @@ class TheCommentInAnyHand(unittest.TestCase):
         from precon_core import scopedoc
         parts = {"decisions": [], "rewrites": {}, "removals": set(), "out_of_scope": [], "research": [], "open": []}
         for comment in ("<!--\nprecon-v2 triage: bounded -->", "<!-- precon-v2triage: bounded -->",
-                        "<!-- precon\u2011v2 triage: bounded -->"):
+                        "<!-- precon\u2011v2 triage: bounded -->",
+                        # R1 of 3b: recognized by content, not spelling
+                        "<!-- precon-v 2 triage: bounded -->", "<!-- \uff50\uff52\uff45\uff43\uff4f\uff4e-v2 triage: bounded -->",
+                        "<!-- triage (precon-v2): bounded -->"):
             text = preconlib.SCOPE_DOC.replace("\n\nIntent:", "\n%s\n\nIntent:" % comment, 1)
             self.assertEqual(scopedoc.render_continued(text, "napkin", parts), text, repr(comment))
 

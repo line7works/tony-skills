@@ -106,8 +106,8 @@ Interview in batched frontier rounds, a few questions each:
 
 ## Step 4: The ledger, landed every round
 
-At the end of each round, write ONE answer file (`references/answer.schema.json`) inside the run
-directory and record it: `record-answer --run-dir D --answer <file>` (outside the run, workspace and staging it is refused). It carries:
+At the end of each round, write ONE answer file (`references/answer.schema.json`) under
+`<run>/executor/` (make the folder if it is absent) and record it: `record-answer --run-dir D --answer <file>` (outside the run, workspace and staging, or at the run's `result.json`, it is refused). It carries:
 
 - `session_id`: your adapter's `answer_fields.session_id`; `run_id`: this run's; `triage`.
 - `questions`: every question you put in this run, each with the ledger line ids it `touches`

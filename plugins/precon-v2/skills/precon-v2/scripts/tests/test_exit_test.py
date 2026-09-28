@@ -214,6 +214,57 @@ class Requests(_Exit):
         self.assertFalse(os.path.exists(os.path.join(run.run_dir, "readers")), "validate writes nothing")
 
 
+@unittest.skipIf(testlib.readers_roster() is None, "no readers component beside this core")
+class RosterRoutes(_Exit):
+    """R8d of 3b: readers' roster is found by the shared `station_core.readers_roster` (route 3a, the checkout
+    sibling; route 3b, the installed shape), and precon keeps its own stop: nothing found is exit 2, the
+    places looked named, nothing written. Each layout is a copy of this core moved only by the test hook."""
+
+    def install(self, layout):
+        """This core copied into `layout`'s shape; a readers roster whose rows are all outside rows, so a
+        request built against it carries `authorized` on the named row and proves which roster was read."""
+        base = os.path.join(self.tmp, "layout-" + layout)
+        plugin = {"3a": os.path.join(base, "precon-v2"), "3b": os.path.join(base, "precon-v2", "0.1.1"),
+                  "none": os.path.join(base, "precon-v2")}[layout]
+        skill = os.path.join(plugin, "skills", "precon-v2")
+        shutil.copytree(testlib.SKILL, skill, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        shutil.copytree(os.path.join(testlib.PLUGIN, ".claude-plugin"), os.path.join(plugin, ".claude-plugin"))
+        readers = {"3a": os.path.join(base, "readers"), "3b": os.path.join(base, "readers", "9.9.9"),
+                   "none": None}[layout]
+        if readers:
+            testlib.write_json(os.path.join(readers, ".claude-plugin", "plugin.json"),
+                               {"name": "readers", "version": "9.9.9"})
+            roster = testlib.load_json(testlib.readers_roster())
+            for row in roster.get("rows", []):
+                row["provider"] = "not-anthropic"
+            testlib.write_json(os.path.join(readers, "skills", "readers", "assets", "roster.json"), roster)
+        return skill
+
+    def request_in(self, skill):
+        run = self.harvested(owner_word={"rows": ["claude-session"], "words": "claude-session, go"})
+        before = sorted(os.listdir(run.run_dir))
+        code, out, err = run.cli(["request", "--run-dir", run.run_dir, "--row", "claude-session", "--skill-root",
+                                  skill], env=testlib.base_env({"PRECON_V2_TEST": "1"}))
+        return run, before, code, out, err
+
+    def test_route_3a_the_checkout_sibling(self):
+        run, before, code, out, err = self.request_in(self.install("3a"))
+        self.assertEqual(code, 0, out + err)
+        self.assertIs(self.requests(run)["claude-session"].get("authorized"), True)
+
+    def test_route_3b_the_installed_shape(self):
+        run, before, code, out, err = self.request_in(self.install("3b"))
+        self.assertEqual(code, 0, out + err)
+        self.assertIs(self.requests(run)["claude-session"].get("authorized"), True)
+
+    def test_no_readers_is_usage_and_nothing_is_written(self):
+        run, before, code, out, err = self.request_in(self.install("none"))
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("readers", err)
+        self.assertIn(os.path.join(self.tmp, "layout-none"), err, "the places looked are named")
+        self.assertEqual(sorted(os.listdir(run.run_dir)), before, "nothing written")
+
+
 class ColdRead(_Exit):
 
     RAW = {"claude-session": "1. What resets the counter?\n2. Where do counts go?\n\n## a heading the reader wrote\n",

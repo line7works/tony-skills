@@ -1,9 +1,10 @@
 """The twin rule (precon-v2-contract.md section 5, `retagged`), through the real CLI.
 
 A line's words repeating a `Decisions:` or `Open:` ledger line under anything but that line's id
-would leave the doc holding the line and its twin. The match reads every form of both texts: the
-whole text (whitespace collapsed, case folded, invisibles dropped), the text with a trailing
-` (waits on: <call>)` removed, and each whole field of a dashed or middle-dot line. An `Open:`
+would leave the doc holding the line and its twin. The match reads every form of both texts in the
+frame's readings (`answer.forms` against `answer.row_forms`): the whole text (whitespace collapsed,
+case folded, invisibles dropped), the text bare of every decoration the frame knows (a trailing
+` (waits on: <call>)` among them), and each whole field of a dashed or middle-dot line. An `Open:`
 line this core wrote itself always carries that suffix (ruling R1 of round 3, CP1-1), so the
 fixture here is a doc precon-v2 births. Twins inside one answer (CP2-2) and an out-of-scope item
 repeating a parked or open line (CP2-3) are refused the same way.
@@ -167,18 +168,6 @@ class TheOpenRowWithAnInvisible(_Born, _Traces):
         for text in ("Colour" + CGJ + " of the case", "Colour of the case" + VS16):
             rules = self.refused(self.answer(lines=[preconlib.owner_line(text, "blue")]), rule="unrenderable")
             self.assertEqual(rules, ["unrenderable"])
-
-
-class TheOwnSuffixTheFrameCannotRead(_Born, _Traces):
-    """R1: precon's own ` (waits on: <call>)` with a call the frame's parenthesis rule cannot strip
-    (a parenthesis two deep): `without_waits` stays for this suffix only."""
-
-    WAITS = "the bench call (see (Q2) first)"
-
-    def test_the_bare_words_are_refused(self):
-        self.assertIn("Open: %s\n" % self.item, self.text)
-        for text in (OPEN, OPEN + ".", "- " + OPEN):
-            self.under_each_trace(text)
 
 
 class OneAnswer(_Born):
@@ -366,6 +355,232 @@ class RuledOutAfterAQuestion(_Born):
     def test_the_row_with_a_decoration(self):
         before, now = self.rule_out(PARKED, PARKED + ".")
         self.assertEqual(now["parked"], before["parked"] - 1)
+
+
+
+class OutOfScopeByRow(_Born):
+    """R8b (3b): an out-of-scope item may name the row it rules out by `row`, the id being the trace
+    (A5(4)); the view hands it to the frame, which refuses an unknown row (`unknown-line`), and
+    precon's own `retagged` refuses a row ruled out with no answered question of this run touching
+    it, whatever the item's words; with its answered question the write removes the row."""
+
+    def oos(self, text, row, trace=None):
+        return [{"text": text, "reason": "the owner ruled it out", "row": row,
+                 "trace": trace or {"kind": "owner_words", "ref": "drop it"}}]
+
+    def test_an_unknown_row_is_unknown_line(self):
+        self.assertEqual(self.refused(self.answer(out_of_scope=self.oos("The storage question", "dec-000000000000")),
+                                      rule="unknown-line"), ["unknown-line"])
+        self.assertEqual(preconlib.read(self.path), self.text)
+
+    def test_a_parked_row_by_row_with_no_answered_question_is_refused(self):
+        for text in ("The storage question", PARKED):
+            self.assertEqual(self.refused(self.answer(out_of_scope=self.oos(text, self.ids[PARKED]))), ["retagged"])
+        self.assertEqual(preconlib.read(self.path), self.text)
+
+    def test_the_open_assumed_and_decided_rows_by_row_are_refused(self):
+        for key in (self.item, ASSUMED, "Python 3.9 standard library only"):
+            self.assertEqual(self.refused(self.answer(out_of_scope=self.oos("Something else entirely",
+                                                                            self.ids[key]))), ["retagged"], key)
+
+    def test_a_decided_row_by_row_is_refused_with_its_own_sentence(self):
+        """R2 of 3b round 2 (wording only): an item naming a decided row by `row` is refused `retagged` with a
+        sentence true of a decided row, with or without a question of this run touching it (the frame's
+        `re-asked-decided` beside it then); never the word-twin sentence about an untouched question."""
+        decided = self.ids["Python 3.9 standard library only"]
+        q = {"id": "Q1", "text": "Still on the standard library?", "touches": [decided], "answer": "yes"}
+        for questions, want in (([], ["retagged"]), ([q], ["re-asked-decided", "retagged"])):
+            answer = self.answer(questions=questions, out_of_scope=self.oos("Something else entirely", decided))
+            digest = testlib.tree_digest(self.fx.ws)
+            code, doc, err = self.run_.record(answer)
+            self.assertEqual(code, 5, json.dumps(doc, ensure_ascii=False))
+            self.assertEqual(sorted(set(r["rule"] for r in doc["refusals"])), want)
+            mine = [r for r in doc["refusals"] if r["rule"] == "retagged"]
+            self.assertEqual(len(mine), 1, json.dumps(doc["refusals"], ensure_ascii=False))
+            self.assertEqual(mine[0].get("out_of_scope"), 0)
+            message = mine[0]["message"]
+            self.assertNotIn("no answered question", message)
+            self.assertIn("names the decided ledger line %s" % decided, message)
+            self.assertIn("a decided line is settled in place and is not ruled out", message)
+            self.assertEqual(testlib.tree_digest(self.fx.ws), digest)
+            self.assertFalse(os.path.exists(self.run_.run_file("answer.json")))
+        self.assertEqual(preconlib.read(self.path), self.text)
+
+    def test_an_unanswered_or_research_question_does_not_open_the_way(self):
+        for q in ({"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]]},
+                  {"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]],
+                   "answer": "park it", "needs_research": True}):
+            self.refused(self.answer(questions=[q], out_of_scope=self.oos("The storage question", self.ids[PARKED])),
+                         rule=None)
+
+    def test_a_parked_row_ruled_out_by_row_with_its_answered_question_is_removed(self):
+        q = {"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]], "answer": "no, drop it"}
+        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=self.oos(
+            "The storage question", self.ids[PARKED], {"kind": "question", "ref": "Q1"})))
+        self.assertEqual(code, 0, "%s %s" % (json.dumps(doc, ensure_ascii=False), err))
+        self.assertEqual(self.run_.write()[0], 0)
+        after = preconlib.read(self.path)
+        self.assertNotIn(PARKED, after)
+        self.assertEqual(after.split("Out of scope:")[1].split("Research:")[0].count(
+            "- The storage question %s the owner ruled it out\n" % D), 1, after)
+
+
+
+class LinesByRow(_Born):
+    """R8a (3b): a line naming its row by `row` reads as one naming it by a `ledger` trace. The id is the
+    trace (A5(4)), so the line is never twinned against its own row by words; it is passed forward
+    under the row's tag, settled as decided in place by an answered question, or refused `retagged`,
+    and the doc never holds the line beside its unchanged row (seam 17 O-2)."""
+
+    def accepted(self, answer):
+        code, doc, err = self.run_.record(answer)
+        self.assertEqual(code, 0, "%s %s" % (json.dumps(doc, ensure_ascii=False), err))
+        self.assertEqual(self.run_.write()[0], 0)
+        return preconlib.read(self.path)
+
+    def refusals(self, answer):
+        code, doc, err = self.run_.record(answer)
+        self.assertEqual(code, 5, "%s %s" % (json.dumps(doc, ensure_ascii=False), err))
+        self.assertFalse(os.path.exists(self.run_.run_file("answer.json")))
+        self.assertEqual(preconlib.read(self.path), self.text)
+        return doc["refusals"]
+
+    def test_a_parked_row_moved_to_assumed_by_row_is_refused(self):
+        for text in ("Storage stays in memory", PARKED):
+            rules = self.refused(self.answer(lines=[{"text": text, "tag": "assumed", "row": self.ids[PARKED],
+                                                     "trace": {"kind": "assumed", "ref": "small and reversible"}}]))
+            self.assertEqual(rules, ["retagged"], text)
+
+    def test_a_parked_row_passed_forward_by_row_with_another_reason_is_refused(self):
+        for text in ("The storage question", PARKED):
+            refusals = self.refusals(self.answer(lines=[{"text": text, "tag": "parked", "reason": "needs prototype",
+                                                         "row": self.ids[PARKED],
+                                                         "trace": {"kind": "owner_words", "ref": "build one"}}]))
+            self.assertEqual([r["rule"] for r in refusals], ["retagged"], text)
+            self.assertIn("passes the parked line", refusals[0]["message"])
+
+    def test_a_parked_row_passed_forward_by_row_with_its_reason_writes_nothing(self):
+        for text in (PARKED, "The storage question"):
+            self.setUp()
+            after = self.accepted(self.answer(lines=[{"text": text, "tag": "parked", "reason": "needs research",
+                                                      "row": self.ids[PARKED],
+                                                      "trace": {"kind": "owner_words", "ref": "still open"}}]))
+            self.assertEqual(after, self.text, text)
+
+    def test_a_decided_row_passed_forward_by_row_is_not_twinned_by_its_own_words(self):
+        decided = "Python 3.9 standard library only"
+        after = self.accepted(self.answer(lines=[{"text": decided, "tag": "decided", "row": self.ids[decided],
+                                                  "trace": {"kind": "owner_words", "ref": "still true"}}]))
+        self.assertEqual(after, self.text)
+
+    def test_a_decided_row_moved_back_by_row_is_the_frames_re_asked_decided(self):
+        decided = "Python 3.9 standard library only"
+        refusals = self.refusals(self.answer(lines=[{"text": decided, "tag": "parked", "reason": "needs research",
+                                                     "row": self.ids[decided],
+                                                     "trace": {"kind": "owner_words", "ref": "maybe not"}}]))
+        self.assertIn("re-asked-decided", [r["rule"] for r in refusals])
+        self.assertEqual([r for r in refusals if "repeats the" in r["message"]], [], json.dumps(refusals))
+
+    def test_a_parked_or_open_row_settled_by_row_under_its_question_is_rewritten_in_place(self):
+        for key in (PARKED, self.item):
+            self.setUp()
+            q = {"id": "Q1", "text": "Settle this one?", "touches": [self.ids[key]], "answer": "in memory only"}
+            after = self.accepted(self.answer(questions=[q], lines=[
+                {"text": "Kept in memory only", "tag": "decided", "row": self.ids[key],
+                 "trace": {"kind": "question", "ref": "Q1"}}]))
+            self.assertNotIn("Kept in memory only", after)
+            settled = "%s %s decided (answer to Q1 (run %s): in memory only)" % (key, D, self.run_.run_id)
+            self.assertEqual(after.count(settled), 1, after)
+            self.assertNotIn("%s %s parked" % (key, D), after)
+
+    def test_an_assumed_row_settled_by_row_without_a_question_has_no_source(self):
+        rules = self.refused(self.answer(lines=[{"text": "One module it is", "tag": "decided",
+                                                 "row": self.ids[ASSUMED],
+                                                 "trace": {"kind": "owner_words", "ref": "keep it"}}]),
+                             rule="decided-without-source")
+        self.assertEqual(rules, ["decided-without-source"])
+
+    def test_a_decided_line_by_row_traced_as_an_assumption_has_no_source(self):
+        q = {"id": "Q1", "text": "Settle storage?", "touches": [self.ids[PARKED]], "answer": "memory"}
+        self.refused(self.answer(questions=[q], lines=[{"text": "Kept in memory only", "tag": "decided",
+                                                        "row": self.ids[PARKED],
+                                                        "trace": {"kind": "assumed", "ref": "cheapest"}}]),
+                     rule="decided-without-source")
+
+
+
+class SettledAndRuledOut(_Born):
+    """CP4-2 (R2 of 3b): one answer that settles a parked, open or assumed row as decided by its id (a
+    `ledger` trace or `row`, with a line text other than the row's words) AND rules the same row out is
+    refused `retagged` ("the answer settles <id> as decided and rules it out"), nothing written; the
+    same answer without the out-of-scope item is accepted (the checker's probes/31, three row kinds)."""
+
+    def both(self, key, words, by_row=False, rule_out=True):
+        q = {"id": "Q9", "text": "Settle this one?", "touches": [self.ids[key]], "answer": "settled"}
+        line = {"text": "x", "tag": "decided", "trace": {"kind": "ledger", "ref": self.ids[key]}}
+        if by_row:
+            line = {"text": "the storage question", "tag": "decided", "row": self.ids[key],
+                    "trace": {"kind": "question", "ref": "Q9"}}
+        oos = [{"text": words, "reason": "the owner ruled it out", "trace": {"kind": "question", "ref": "Q9"}}]
+        return self.answer(questions=[q], lines=[line], out_of_scope=oos if rule_out else [])
+
+    def test_each_row_kind_settled_and_ruled_out_is_refused(self):
+        for key, words in ((PARKED, PARKED), (self.item, OPEN), (ASSUMED, ASSUMED)):
+            for by_row in (False, True):
+                code, doc, err = self.run_.record(self.both(key, words, by_row))
+                self.assertEqual(code, 5, "%s %s %s" % (key, by_row, json.dumps(doc, ensure_ascii=False)))
+                self.assertTrue(any(r["rule"] == "retagged" and "as decided and rules it out" in r["message"]
+                                    for r in doc["refusals"]), json.dumps(doc["refusals"], ensure_ascii=False))
+                self.assertFalse(os.path.exists(self.run_.run_file("answer.json")))
+                self.assertEqual(preconlib.read(self.path), self.text)
+
+    def test_ruled_out_by_row_while_settled_is_refused(self):
+        q = {"id": "Q9", "text": "Settle this one?", "touches": [self.ids[PARKED]], "answer": "settled"}
+        code, doc, err = self.run_.record(self.answer(questions=[q], lines=[
+            {"text": "x", "tag": "decided", "trace": {"kind": "ledger", "ref": self.ids[PARKED]}}], out_of_scope=[
+            {"text": "The storage question", "reason": "the owner ruled it out", "row": self.ids[PARKED],
+             "trace": {"kind": "question", "ref": "Q9"}}]))
+        self.assertEqual(code, 5, json.dumps(doc, ensure_ascii=False))
+        self.assertTrue(any("as decided and rules it out" in r["message"] for r in doc["refusals"]))
+
+    def test_the_same_answer_without_the_out_of_scope_item_is_accepted(self):
+        for key, words in ((PARKED, PARKED), (self.item, OPEN), (ASSUMED, ASSUMED)):
+            code, doc, err = self.run_.record(self.both(key, words, rule_out=False))
+            self.assertEqual(code, 0, "%s %s" % (key, json.dumps(doc, ensure_ascii=False)))
+            self.run_ = self.fx.new_run()
+            self.run_.select()
+            self.assertEqual(self.run_.harvest()[0], 0)
+
+
+
+class AWaitsOnInTheMiddle(_Born):
+    """CP4-3 (R3 of 3b): with precon's own suffix reader gone, a line holding `(waits on:` in its middle is
+    read by the frame's readings alone: the checker's two probe lines (probes/13) no longer meet the open
+    row `Who reads the log`, so they are no longer refused `retagged`."""
+
+    PROBES = ("Who reads the log (waits on: nobody now) and who archives it (the bench tech)",
+              "Who reads the log (waits on: done) plus a nightly export (cron)")
+
+    def test_the_probe_lines_are_not_twins_of_the_open_row(self):
+        run = self.run_
+        code, doc, err = run.record(self.answer(lines=[
+            {"text": "Who reads the log", "tag": "open", "waits_on": "the owner's call",
+             "trace": {"kind": "owner_words", "ref": "later"}}], sitting="continues"))
+        self.assertEqual(code, 0, json.dumps(doc, ensure_ascii=False))
+        self.assertEqual(run.write()[0], 0)
+        self.assertEqual(run.report()[0], 10)
+        self.assertIn("- Who reads the log (waits on: the owner's call)\n", preconlib.read(self.path))
+        for text in self.PROBES:
+            self.run_ = self.fx.new_run()
+            self.run_.select()
+            self.assertEqual(self.run_.harvest()[0], 0)
+            code, doc, err = self.run_.record(self.answer(lines=[preconlib.owner_line(text, "the bench tech")]))
+            self.assertEqual(code, 0, "%s %s" % (text, json.dumps(doc, ensure_ascii=False)))
+        for text in ("Who reads the log", "Who reads the log (waits on: the owner's call)", "Who reads the log."):
+            self.run_ = self.fx.new_run()
+            self.run_.select()
+            self.assertEqual(self.run_.harvest()[0], 0)
+            self.refused(self.answer(lines=[preconlib.owner_line(text, "the bench tech")]), rule=None)
 
 
 if __name__ == "__main__":

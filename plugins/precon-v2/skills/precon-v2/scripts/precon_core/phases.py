@@ -82,12 +82,24 @@ def _resolves_inside(path, roots):
 
 def _answer_inside(run, answer_path):
     """The supplied answer file, resolved immediately before it is opened, lies inside the workspace, the
-    staging home or the run directory; anywhere else (a symlink included) it is never read: `outside-home`,
-    exit 5, `accepted` never true, nothing written (the property line, R1 of round 6)."""
+    staging home or the run directory, and is not the run's own `result.json`; anywhere else (a symlink
+    included) it is never read: `outside-home`, exit 5, `accepted` never true, nothing written (the property
+    line, R1 of round 6; R7 of 3b)."""
     roots = (run.input.get("workspace"), run.input.get("staging"), run.run_dir)
     if not any(root and fsio.inside(answer_path, root) for root in roots):
         raise runmod.Outside("outside-home", "the answer file %s resolves outside %s (a symlink?); it is not read"
                              % (answer_path, ", ".join(r for r in roots if r)), answer_path)
+    # the run's own `result.json` is the file `finish` writes and reads: an answer there (or linked to it) could
+    # be read as the run's result, so it is refused; the answer file belongs under `<run>/executor/` (R7 of 3b).
+    # The name is folded, since `realpath` does not fold case and a case-insensitive filesystem reads
+    # `Result.json` as `result.json`; a hard link is the same file (CP3B-2, R1 of 3b round 2)
+    result = os.path.join(run.run_dir, "result.json")
+    real = os.path.realpath(answer_path)
+    if ((os.path.dirname(real) == os.path.realpath(run.run_dir) and os.path.basename(real).casefold() == "result.json")
+            or (os.path.exists(result) and os.path.samefile(answer_path, result))):
+        raise runmod.Outside("outside-home", "the answer file %s resolves to the run's own result.json %s; write the "
+                             "answer under %s and record it from there; it is not read"
+                             % (answer_path, result, os.path.join(run.run_dir, "executor")), answer_path)
 
 
 def _selection(run, hunt):
@@ -156,8 +168,7 @@ def harvest(ctx, args):
         out["doc"] = dict(head, path=cand["path"], home=HOMES.get(cand["home"], cand["home"]),
                           sha256=fsio.sha256_bytes(text.encode("utf-8")))
         out["ledger"] = rows
-        runmod.preflight(run, "harvest-scope-doc.md", "harvest.json")
-        fsio.atomic_write(runmod.path(run, "harvest-scope-doc.md"), text.encode("utf-8"))
+        scope_text = text
     elif home == "repo" and not _is_git_root(workspace):
         raise driver.Usage("the input's home is repo, and the workspace %s is not a git work tree root: a new scope "
                            "doc goes into the repository the idea belongs to, or set station.home to staging"
@@ -177,6 +188,11 @@ def harvest(ctx, args):
             candidates.append({"path": cand["path"], "home": cand["home"], "sha256": fsio.sha256_bytes(text.encode("utf-8")),
                                "rows": sorted(exit_test.section_rows(text, roots=(workspace, staging)))})
         out["cold_read"] = {"outcome": cold["outcome"], "candidates": candidates}
+    # the scope doc's copy is written only once every cold-read candidate is read inside its home, so a
+    # refused harvest leaves nothing in the run (CP5-2)
+    runmod.preflight(run, "harvest-scope-doc.md", "harvest.json")
+    if out["doc"] is not None:
+        fsio.atomic_write(runmod.path(run, "harvest-scope-doc.md"), scope_text.encode("utf-8"))
     runmod.write_json(run, "harvest.json", out)
     runmod.advance(run, "harvested")
     return runmod.emit(ctx.envelope(next="record-answer", run_id=run.checkpoint["run_id"],
@@ -219,6 +235,7 @@ def _current_doc(run):
 
 @handler
 def state(ctx, args):
+    runmod.own_files_inside(args.run_dir)
     run = ctx.open_run(args.run_dir)
     runmod.need(run, runmod.PHASES[1:], "state", "after `select`")
     sel = _selection(run, "scope")
@@ -255,9 +272,13 @@ def request(ctx, args):
                            "the doc exists")
     doc = harvest_doc["doc"]
     workspace, staging = run.input["workspace"], run.input.get("staging")
-    _contained_or_usage(exit_test.cold_read_path(doc["home"], workspace, staging, harvest_doc["date"],
-                                                 harvest_doc["idea"]),
-                        scopedoc.root_of(doc["path"], doc["home"], workspace, staging))
+    # the cold-read file itself, not only its folder: resolved inside its home before any request is built, as
+    # `record-answer` does as it plans, so no reader is summoned for a run that would be refused (CP5-1)
+    cold_path = exit_test.cold_read_path(doc["home"], workspace, staging, harvest_doc["date"], harvest_doc["idea"])
+    root = scopedoc.root_of(doc["path"], doc["home"], workspace, staging)
+    _contained_or_usage(cold_path, root)
+    if os.path.lexists(cold_path):
+        _resolves_inside(cold_path, (root,))
     try:
         roster = readers_request.load_roster(exit_test.roster_path(_own_plugin_root(ctx)))
     except (exit_test.RosterMissing, OSError, ValueError) as exc:
@@ -391,12 +412,16 @@ def _answer_schema(ctx):
 
 
 def _view(answer):
-    """The shared checks' view: the questions, and every asserted line with the out-of-scope items."""
+    """The shared checks' view: the questions, and every asserted line with the out-of-scope items (each
+    with the `row` it names, when it names one)."""
     lines = list(answer.get("lines") or [])
     for item in answer.get("out_of_scope") or []:
         row = {"text": item.get("text"), "tag": "out-of-scope"}
         if "trace" in item:
             row["trace"] = item["trace"]
+        if "row" in item:
+            # the row the item rules out, by its id (R8b of 3b): the frame refuses an unknown one
+            row["row"] = item["row"]
         lines.append(row)
     return {"questions": answer.get("questions"), "lines": lines}
 

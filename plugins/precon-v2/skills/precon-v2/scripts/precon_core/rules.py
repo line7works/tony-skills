@@ -19,17 +19,21 @@ The rules, each named once:
     open-without-call       an open line that does not say which call of the owner's it waits on
     source-kind             a parked or open line, or an out-of-scope item, traced to anything but
                             the owner's words or a question he answered
-    retagged                a line traced to a ledger line under another tag, other than a parked,
-                            open or assumed line settled as decided; a line or a new open item
-                            that repeats the words of a Decisions or Open ledger line under any
-                            trace but that line's id (`scopedoc.twins`: the frame's readings of
-                            the line against the frame's readings of the row, `forms(line) &
-                            row_forms(row)`); an out-of-scope item that does, unless an answered
-                            question of this run (not one marked needs research) touched that
-                            parked, open or assumed line (the write then removes that row); two
-                            entries of one answer whose readings meet, one read as a line and
-                            the other as a row (`forms(a) & row_forms(b)`, both ways): each a
-                            twin the doc would hold beside the line it repeats
+    retagged                a line naming a ledger line (by `row` or a `ledger` trace, the id
+                            being the trace) under another tag, other than a parked, open or
+                            assumed line settled as decided, or a parked line passed forward with
+                            another reason; a line or a new open item that repeats the words of a
+                            Decisions or Open ledger line under any trace but that line's id
+                            (`scopedoc.twins`: the frame's readings of the line against the
+                            frame's readings of the row, `forms(line) & row_forms(row)`, the row
+                            the line names left out); an out-of-scope item that does, or names
+                            such a line by `row`, unless an answered question of this run (not
+                            one marked needs research) touched that parked, open or assumed line
+                            (the write then removes that row); an out-of-scope item ruling out a
+                            row this answer settles as decided by its id; two entries of one
+                            answer whose readings meet, one read as a line and the other as a row
+                            (`forms(a) & row_forms(b)`, both ways): each a twin the doc would
+                            hold beside the line it repeats
     research-resolved       a question marked needs research that a line or an out-of-scope item
                             of this run resolves, or that leaves a parked line of another reason
     research-not-parked     a question marked needs research that leaves no parked line
@@ -41,6 +45,7 @@ The rules, each named once:
                             `text.one_line`: a line separator, a format character or an invisible
                             letter anywhere in it refuses it)
     unrenderable            a value the scope doc or the cold-read doc cannot carry and read back
+                            (an open line's call with unbalanced or two-deep parentheses among them)
     exit-test-rows          the exit test's rows are not the rows this run built requests for
     exit-test-unrecorded    a built request with no result recorded by readers
     disposition-before-raw  dispositions in the run that writes the readers' raw text
@@ -126,7 +131,10 @@ def _lines(answer, harvest):
         tag = line.get("tag")
         trace = line.get("trace") if isinstance(line.get("trace"), dict) else {}
         kind, ref = trace.get("kind"), trace.get("ref")
-        twin = next(iter(scopedoc.twins(line.get("text"), rows, own=ref if kind == "ledger" else None)), None)
+        # the row the line names, by `row` or a `ledger` trace (R8a of 3b): the id is the trace (A5(4)), so the
+        # named row is judged by its id and never matched against the line's own words
+        own = scopedoc.named(line)
+        twin = next(iter(scopedoc.twins(line.get("text"), rows, own=own)), None)
         if twin is not None:
             # the shared quietly-resolved covers a parked or open line's words asserted as decided with no
             # question touching it; this covers every twin, under every trace kind, a ledger trace to
@@ -137,29 +145,43 @@ def _lines(answer, harvest):
             out.append(refusal("retagged", "the line %r repeats the %s ledger line %s: pass it forward by its "
                                            "id, and settle it only with an answered question that touches it"
                                % (line.get("text"), twin["tag"], twin["id"]), **where))
-        if kind == "ledger" and ref in ledger:
-            row = ledger[ref]
+        if own in ledger:
+            # a line naming its row by `row` reads as one naming it by a `ledger` trace (R8a of 3b): passed
+            # forward under the row's own tag (a parked row with its own reason), settled as decided by an
+            # answered question, or refused `retagged`, so the doc never holds the line beside its unchanged row
+            row = ledger[own]
             if tag == row["tag"]:
                 if tag == "parked" and "reason" in line and line.get("reason") != row["source"]:
                     out.append(refusal("retagged", "the line %r passes the parked line %s forward with the reason %r; "
-                                                   "the ledger says %r" % (line.get("text"), ref, line.get("reason"),
+                                                   "the ledger says %r" % (line.get("text"), own, line.get("reason"),
                                                                            row["source"]), **where))
-                continue
-            if tag == "decided" and row["tag"] in ("parked", "open", "assumed"):
+            elif tag == "decided" and row["tag"] in ("parked", "open", "assumed"):
                 qids = [q["id"] for q in answer.get("questions") or []
-                        if ref in (q.get("touches") or []) and not _blank(q.get("answer"))]
+                        if own in (q.get("touches") or []) and not _blank(q.get("answer"))]
                 settling = [q for q in qids if q not in research]
                 if row["tag"] == "assumed" and not settling:
                     out.append(refusal("decided-without-source", "the line %r turns the assumed line %s into a decision "
                                                                  "that no answered question of this run touches"
-                                       % (line.get("text"), ref), **where))
+                                       % (line.get("text"), own), **where))
                 if row["tag"] in ("parked", "open") and qids and not settling:
                     out.append(refusal("research-resolved", "the line %r resolves %s, which only a question marked "
                                                             "needs research touches; it stays parked"
-                                       % (line.get("text"), ref), **where))
+                                       % (line.get("text"), own), **where))
+            else:
+                out.append(refusal("retagged", "the line %r is asserted as %s, but its ledger line %s is %s"
+                                   % (line.get("text"), tag, own, row["tag"]), **where))
+            # a line naming its row by `row` under another trace kind still answers for that trace: a decided line
+            # is never sourced by an assumption, and nothing resolves a needs-research question
+            if kind == "ledger" or kind is None:
                 continue
-            out.append(refusal("retagged", "the line %r is asserted as %s, but its ledger line %s is %s"
-                               % (line.get("text"), tag, ref, row["tag"]), **where))
+            if tag == "decided" and kind == "assumed":
+                out.append(refusal("decided-without-source", "the line %r is asserted as decided with an assumption for "
+                                                             "its source: a decided line traces to the owner's words, an "
+                                                             "answered question or the repo" % line.get("text"), **where))
+            if tag in ("decided", "assumed") and kind == "question" and ref in research:
+                out.append(refusal("research-resolved", "the line %r resolves question %s, which is marked needs "
+                                                        "research: it is a parked line, never resolved in the run"
+                                   % (line.get("text"), ref), **where))
             continue
         if tag in ("parked", "open") and kind is not None and kind not in SOURCES:
             out.append(refusal("source-kind", "the %s line %r carries a %s trace: a %s line traces to the owner's words "
@@ -193,6 +215,10 @@ def _lines(answer, harvest):
 def _items(answer, harvest):
     out = []
     rows = harvest.get("ledger") or []
+    ledger = dict((row["id"], row) for row in rows)
+    # the rows this answer settles as decided by their id (a `ledger` trace or `row`)
+    decided = set(scopedoc.named(line) for line in answer.get("lines") or []
+                  if isinstance(line, dict) and line.get("tag") == "decided" and scopedoc.named(line) in ledger)
     for index, item in enumerate(answer.get("out_of_scope") or []):
         trace = item.get("trace") if isinstance(item.get("trace"), dict) else {}
         kind = trace.get("kind")
@@ -200,15 +226,36 @@ def _items(answer, harvest):
             out.append(refusal("source-kind", "the out-of-scope item %r carries a %s trace: what the owner ruled out "
                                               "traces to his words or a question he answered" % (item.get("text"), kind),
                                out_of_scope=index))
-        twin = next((row for row in scopedoc.twins(item.get("text"), rows)
+        own = scopedoc.named(item)
+        ruled = scopedoc.twins(item.get("text"), rows, own=own)
+        if own in ledger:
+            # the row the item names by `row` (R8b of 3b): ruled out by its id, whatever the item's words
+            ruled.insert(0, ledger[own])
+        both = next((row for row in ruled if row["id"] in decided), None)
+        if both is not None:
+            # CP4-2: one answer settling a row as decided and ruling the same row out would leave the doc
+            # holding the item decided and out of scope at once
+            out.append(refusal("retagged", "the answer settles %s as decided and rules it out (the out-of-scope item "
+                                           "%r): one ruling per item" % (both["id"], item.get("text")),
+                               out_of_scope=index))
+            continue
+        twin = next((row for row in ruled
                      if not (row["tag"] in ("parked", "open", "assumed") and _settling(answer, row["id"]))), None)
         if twin is not None:
             # CP2-3: ruling out a parked or open line is settling it, so only an answered question of this run
             # that touches it opens the way (and the write then removes the row, R4); a decided line is never
-            # ruled out by its words
-            out.append(refusal("retagged", "the out-of-scope item %r repeats the %s ledger line %s, which no answered "
+            # ruled out, by its words or its id
+            how = "names" if twin["id"] == own else "repeats"
+            if twin["id"] == own and twin["tag"] == "decided":
+                # the same refusal, its own sentence (R2 of 3b round 2, wording only): a question touching a
+                # decided row is the frame's `re-asked-decided`, so the word-twin sentence is untrue here
+                out.append(refusal("retagged", "the out-of-scope item %r names the decided ledger line %s: a decided "
+                                               "line is settled in place and is not ruled out; pass it forward by "
+                                               "its id" % (item.get("text"), twin["id"]), out_of_scope=index))
+                continue
+            out.append(refusal("retagged", "the out-of-scope item %r %s the %s ledger line %s, which no answered "
                                            "question of this run touched: the doc would hold the line and its twin"
-                               % (item.get("text"), twin["tag"], twin["id"]), out_of_scope=index))
+                               % (item.get("text"), how, twin["tag"], twin["id"]), out_of_scope=index))
     for index, item in enumerate(answer.get("open_items") or []):
         twin = next(iter(scopedoc.twins(item, rows)), None)
         if twin is not None:
