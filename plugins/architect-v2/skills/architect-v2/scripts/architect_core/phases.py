@@ -69,19 +69,25 @@ def _baseline(run, record):
     with its review and rulings; everything else in it survives verbatim or struck."""
     path = _snapshot_path(run)
     if not os.path.isfile(path):
+        if Receipt(run.run_dir).last_after(path) is not False or _state(run).get("doc"):
+            # slice 3b R3 (CA7-1): the receipt records the snapshot, so its absence is never a first write
+            raise driver.Defect("the run directory's %s (%s, the first write's snapshot, the amendment's baseline) "
+                                "is missing or not a file, and this run wrote it; nothing was written: start a new "
+                                "run on the doc as it stands" % (SNAPSHOT, path))
         return _living_text(run), False
     with open(path, "rb") as fh:
         data = fh.read()
     recorded = Receipt(run.run_dir).last_after(path)
     if recorded is False or fsio.sha256_bytes(data) != recorded:
         raise driver.Defect("the run directory's %s (the first write's snapshot, the amendment's baseline) is not "
-                            "the bytes this run wrote there (receipt %s, found %s); start a new run on the doc as "
-                            "it stands" % (SNAPSHOT, recorded or "no row", fsio.sha256_bytes(data)))
+                            "the bytes this run wrote there (receipt %s, found %s); nothing was written: start a new "
+                            "run on the doc as it stands" % (SNAPSHOT, recorded or "no row", fsio.sha256_bytes(data)))
     living = record.get("living_doc")
     try:
         return docs.without_run(data.decode("utf-8"), living["next_run"] if living else 1), True
     except (UnicodeDecodeError, docs.DocRefused) as exc:
-        raise driver.Defect("the run directory's %s cannot serve as the amendment's baseline: %s" % (SNAPSHOT, exc))
+        raise driver.Defect("the run directory's %s cannot serve as the amendment's baseline: %s; nothing was "
+                            "written: start a new run on the doc as it stands" % (SNAPSHOT, exc))
 
 
 def _report_only(run):
@@ -251,12 +257,12 @@ def harvest(ctx, args):
     _state(run)
     run.save()
     if set_aside:
-        reason = ("docless: the scope hunt's %s, %s, %s set aside by the input (`station.docless`): %s not this "
+        reason = ("docless: the scope hunt's %s, %s, %s set aside by the input (`station.docless`): %s this "
                   "project's scope doc and the owner said none exists; the answer records the gate's question "
                   "(`about: scope-doc`) and `docless.reason` equal to the input's `station.docless_reason`"
                   % ("one hit" if len(set_aside["paths"]) == 1 else "%d hits" % len(set_aside["paths"]),
                      ", ".join(set_aside["paths"]), "is" if len(set_aside["paths"]) == 1 else "are",
-                     "it is" if len(set_aside["paths"]) == 1 else "none of them is"))
+                     "it is not" if len(set_aside["paths"]) == 1 else "none of them is"))
     elif record["docless"]:
         reason = ("docless: no scope doc was found; ask the owner once whether one exists where the glob cannot see "
                   "(a question `about: scope-doc`), then the docless gate: the answer records its reason")
@@ -501,6 +507,13 @@ def request(ctx, args):
     refused = _request_outside(ctx, run, os.path.join(folder, "request.json"), folder)
     if refused is not None:
         return refused
+    if os.path.lexists(folder) and not os.path.isdir(folder):
+        # slice 3b R2 (the control room's wording, C4): a regular file, a symlink to one, or a symlink that
+        # leads to nothing stands where the requests folder goes (a symlink to a folder is a folder); an
+        # unreadable run directory, exit 1 before any write, the run left at its phase
+        raise driver.Defect("unreadable run directory: %s is not a folder (a file, or a symlink that leads to no "
+                            "folder, stands where the requests folder goes); nothing was written and the run stays "
+                            "where it was: remove %s by hand, then run `request` again" % (folder, folder))
     taken = [n[:-5] for n in os.listdir(folder)] if os.path.isdir(folder) else []
     try:
         built = review.requests(rows, run.input, roster, scope["path"], run.checkpoint["run_id"],
@@ -541,7 +554,7 @@ def save_take(ctx, args):
     if not ROW.match(args.row or ""):
         raise driver.Usage("--row is a readers roster row id (lowercase letters, digits and '-'): %r" % args.row)
     for flag, value in (("--model", args.model), ("--isolation", args.isolation), ("--sidecar", args.sidecar)):
-        if blank(value) or "\n" in value or "\r" in value:
+        if blank(value) or any(ch in schema.LINE_BOUNDARIES for ch in value):
             raise driver.Usage("%s is one line of text, as the readers result carries it: %r" % (flag, value))
     try:
         with open(args.take, "rb") as fh:

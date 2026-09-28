@@ -43,6 +43,17 @@ def docless_answer(reason=REASON, **over):
     return a
 
 
+def reason_sentence(paths):
+    """harvest's set-aside sentence, verbatim (slice 3b R1, CA4-1): one hit "is ... it is not", several "are ...
+    none of them is", never the double negative."""
+    one = len(paths) == 1
+    return ("docless: the scope hunt's %s, %s, %s set aside by the input (`station.docless`): %s this project's "
+            "scope doc and the owner said none exists; the answer records the gate's question (`about: scope-doc`) "
+            "and `docless.reason` equal to the input's `station.docless_reason`"
+            % ("one hit" if one else "%d hits" % len(paths), ", ".join(paths), "is" if one else "are",
+               "it is not" if one else "none of them is"))
+
+
 class _SetAside(unittest.TestCase):
 
     STATION = {"docless": True, "docless_reason": REASON}
@@ -123,6 +134,13 @@ class TheHitIsSetAside(_SetAside):
         code, doc, out, err = self.run.record(a)
         self.assertEqual(code, 5, out + err)
         self.assertIn("docless-unasked", [r["rule"] for r in doc["refusals"]])
+
+    def test_harvests_sentence_says_the_one_hit_is_not_this_projects(self):
+        code, doc, out, err = self.harvested()
+        self.assertEqual(code, 0, out + err)
+        path = os.path.join(self.ws, OTHER_REL)
+        self.assertEqual(doc["reason"], reason_sentence([path]))
+        self.assertIn(": it is not this project's scope doc", doc["reason"])
 
     def test_a_request_on_the_set_aside_run_is_usage(self):
         self.assertEqual(self.harvested()[0], 0)
@@ -245,6 +263,16 @@ class SeveralWithTheFlagOpensTheDoclessGate(_Several):
                                                     cwd=run.cwd)
                 self.assertEqual(code, 0, out + err)
                 self.assertEqual({p: testlib.read_text(p) for p in planted}, before)
+
+    def test_harvests_sentence_says_none_of_the_hits_is_this_projects(self):
+        for key in ("staging-two", "staging-three", "mixed"):
+            with self.subTest(key=key):
+                run, ws, staging, planted = self.plant(key, {"docless": True, "docless_reason": REASON})
+                code, doc, out, err = self.selected(run, len(planted))
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual(doc["reason"], reason_sentence(doc["set_aside"]["paths"]))
+                self.assertIn(": none of them is this project's scope doc", doc["reason"])
+                self.assertNotIn("is not this", doc["reason"])
 
     def test_the_answer_reason_is_still_held_to_the_inputs(self):
         run, ws, staging, planted = self.plant("staging-two", {"docless": True, "docless_reason": REASON})

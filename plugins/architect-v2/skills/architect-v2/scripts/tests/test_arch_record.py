@@ -627,5 +627,182 @@ class TheDeferredSectionIsAMoveBack(_Record):
                 self.assertTrue(doc["accepted"])
 
 
+
+class ALineNamesItsRow(_Record):
+    """Slice 3b R7 (the 3a carried pass-through; A5(4)): a poured-concrete, deferred or `lines` entry may name
+    the ledger row it decides, settles, passes forward or moves by `row`; the view hands `row` to the frame on
+    every row the entry gives (its own, the poured decision field's, the Deferred section's second row), so the
+    frame judges the line by the id and never matches its words against that row."""
+
+    UNKNOWN = "dec-000000000000"
+
+    def fresh(self):
+        testlib.rmtree(self.run.run_dir)
+        code, doc, out, err = self.run.to_harvest()
+        self.assertEqual(code, 0, out + err)
+
+    def accepted(self, answer, label):
+        self.fresh()
+        code, doc, out, err = self.run.record(answer)
+        self.assertEqual(code, 0, (label, out + err))
+        self.assertTrue(doc["accepted"], label)
+
+    def test_an_unknown_row_is_unknown_line_and_nothing_is_written(self):
+        q1 = {"kind": "question", "ref": "Q1"}
+        a = archlib.clean_answer()
+        a["lines"] = [{"text": "the bench clock drift", "tag": "assumed", "row": self.UNKNOWN, "trace": q1}]
+        doc = self.refused(a, "unknown-line")
+        self.assertIn(self.UNKNOWN, " ".join(r["message"] for r in doc["refusals"]))
+        a = archlib.clean_answer()
+        a["poured_concrete"][1]["row"] = self.UNKNOWN
+        self.refused(a, "unknown-line")
+        a = archlib.clean_answer()
+        a["deferred"][0] = {"text": "a CSV export %s later" % D, "tag": "deferred", "row": self.UNKNOWN,
+                            "trace": {"kind": "assumed", "ref": "nothing asks for it yet"}}
+        self.refused(a, "unknown-line")
+
+    def test_a_row_naming_a_parked_row_no_answered_question_settled_is_quietly_resolved(self):
+        assumed = {"kind": "assumed", "ref": "the bench has no disk to spare"}
+        a = archlib.clean_answer()
+        a["questions"] = [q for q in a["questions"] if q["id"] != "Q2"]
+        a["poured_concrete"][1]["trace"] = assumed
+        a["lines"] = [{"text": "the count lives in memory", "tag": "decided", "row": self.i["parked"],
+                       "trace": assumed}]
+        doc = self.refused(a, "quietly-resolved")
+        self.assertIn(self.i["parked"], " ".join(r["message"] for r in doc["refusals"]))
+        a = archlib.clean_answer()
+        a["questions"] = [q for q in a["questions"] if q["id"] != "Q2"]
+        a["poured_concrete"][1]["trace"] = assumed
+        a["poured_concrete"][1]["row"] = self.i["parked"]
+        self.refused(a, "quietly-resolved")
+        # asked and left without an answer settles nothing
+        a = archlib.clean_answer()
+        a["questions"][1]["answer"] = ""
+        a["poured_concrete"][1]["trace"] = assumed
+        a["poured_concrete"][1]["row"] = self.i["parked"]
+        self.refused(a, "quietly-resolved")
+
+    def test_a_decided_line_naming_its_row_is_accepted_with_the_rows_words_or_other_words(self):
+        parked_text = next(r["text"] for r in ledger_rows() if r["id"] == self.i["parked"])
+        for text in (parked_text, "the count lives in memory for v0"):
+            a = archlib.clean_answer()
+            a["lines"] = [{"text": text, "tag": "decided", "row": self.i["parked"],
+                           "trace": {"kind": "question", "ref": "Q2"}}]
+            self.accepted(a, ("lines", text))
+            a = archlib.clean_answer()
+            a["poured_concrete"][1]["row"] = self.i["parked"]
+            self.accepted(a, ("poured, the settled row", text))
+        for text in (self.i["decided_text"], "the bench runs the stdlib only"):
+            a = archlib.clean_answer()
+            a["poured_concrete"][0] = {"text": "language %s %s %s every bench script imports it" % (D, text, D),
+                                       "tag": "decided", "row": self.i["decided"],
+                                       "trace": {"kind": "question", "ref": "Q1"}}
+            self.accepted(a, ("poured, the decided row passed forward", text))
+
+    def test_a_row_that_differs_from_its_ledger_trace_is_refused(self):
+        a = archlib.clean_answer()
+        a["poured_concrete"][0]["row"] = self.i["assumed"]
+        self.refused(a, "shape")
+
+    def test_a_row_off_its_pattern_is_exit_4(self):
+        for bad in ("DEC-1", "dec-00000000000g", "", "dec-000000000000\u2028"):
+            a = archlib.clean_answer()
+            a["lines"] = [{"text": "the bench clock drift", "tag": "assumed", "row": bad,
+                           "trace": {"kind": "question", "ref": "Q1"}}]
+            self.refused(a, None, code=4)
+
+    def test_the_deferred_sections_second_row_carries_the_row(self):
+        """The Deferred section's second row names the same row as its entry, so a decided row moved there
+        by `row` alone (no `ledger` trace) is a move back, refused `re-asked-decided`."""
+        assumed = {"kind": "assumed", "ref": "revisit when the bench grows"}
+        a = archlib.clean_answer()
+        a["deferred"].append({"text": "a second language %s later" % D, "tag": "assumed",
+                              "row": self.i["decided"], "trace": assumed})
+        doc = self.refused(a, "re-asked-decided")
+        self.assertIn(self.i["decided"], " ".join(r["message"] for r in doc["refusals"]))
+        a = archlib.clean_answer()
+        a["lines"] = [{"text": "a second language", "tag": "assumed", "row": self.i["decided"], "trace": assumed}]
+        doc = self.refused(a, "re-asked-decided")
+        self.assertIn(self.i["decided"], " ".join(r["message"] for r in doc["refusals"]))
+
+    def test_the_view_hands_the_row_on_every_row_an_entry_gives(self):
+        testlib.add_scripts_to_path()
+        from architect_core import recording
+        assumed = {"kind": "assumed", "ref": "why"}
+        a = archlib.clean_answer()
+        a["poured_concrete"][1]["row"] = self.i["parked"]
+        a["deferred"][0]["row"] = self.i["oos"]
+        a["deferred"].append({"text": "a CSV export %s later" % D, "tag": "assumed", "row": self.i["open"],
+                              "trace": assumed})
+        a["lines"] = [{"text": "the bench clock drift", "tag": "assumed", "row": self.i["assumed"],
+                       "trace": assumed},
+                      {"text": "no row here", "tag": "assumed", "trace": assumed}]
+        neutral, places = recording.view(a)
+        by_place = {}
+        for row, (where, unit) in zip(neutral["lines"], places):
+            by_place.setdefault(where, []).append(row)
+        self.assertEqual([r.get("row") for r in by_place["poured_concrete/1"]], [self.i["parked"]] * 2)
+        self.assertEqual([r.get("row") for r in by_place["poured_concrete/0"]], [None, None])
+        self.assertEqual([(r["tag"], r.get("row")) for r in by_place["deferred/0"]],
+                         [("deferred", self.i["oos"])])
+        self.assertEqual([(r["tag"], r.get("row")) for r in by_place["deferred/1"]],
+                         [("assumed", self.i["open"]), ("deferred", self.i["open"])])
+        self.assertEqual([(r["tag"], r.get("row")) for r in by_place["lines/0"]],
+                         [("assumed", self.i["assumed"]), ("deferred", self.i["assumed"])])
+        self.assertEqual([("row" in r) for r in by_place["lines/1"]], [False, False])
+        self.assertTrue(all("row" not in r for r in neutral["lines"] if r["tag"] == "decided"
+                            and r["text"] in a["walkthrough"]["must"]))
+
+
+class TheTakesModelIsOneLine(unittest.TestCase):
+    """Slice 3b R4 (CA7-2): `save-take`'s `--model` reaches the doc's `Blind review:` header, so a model id holding
+    any line boundary `str.splitlines` knows (`schema.LINE_BOUNDARIES`, the set TheSchema holds) is refused exit 2
+    with nothing saved; a plain model is accepted. The same rule holds `--isolation` and `--sidecar`."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("arch-take-model-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.ws = archlib.repo_workspace(self.tmp)
+        self.run = archlib.ArchRun(self.tmp, self.ws)
+        self.assertEqual(self.run.to_harvest()[0], 0)
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        self.assertEqual(self.run.write()[0], 0)
+        self.assertEqual(self.run.request("gpt-astra")[0], 0)
+        self.take = os.path.join(self.tmp, "take.md")
+        testlib.write_text(self.take, "a module and a reset, no server\n")
+
+    def refused(self, **flags):
+        before_run = archlib.listing(self.run.run_dir)
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = self.run.save_take("gpt-astra", self.take, **flags)
+        self.assertEqual(code, 2, (flags, out + err))
+        self.assertEqual(out, "")
+        self.assertIn("is one line of text", err)
+        self.assertEqual(archlib.listing(self.run.run_dir), before_run, flags)
+        self.assertEqual(archlib.listing(self.ws), before_ws, flags)
+
+    def test_a_model_holding_any_line_boundary_is_refused_and_nothing_is_saved(self):
+        testlib.add_scripts_to_path()
+        from architect_core import schema
+        self.assertEqual(len(schema.LINE_BOUNDARIES), 10)
+        for ch in sorted(schema.LINE_BOUNDARIES):
+            self.refused(model="gpt-x%s## Deferred" % ch)
+
+    def test_isolation_and_sidecar_are_held_the_same_way(self):
+        for ch in ("\u2028", "\x85", "\v"):
+            self.refused(isolation="sandbox%senforced" % ch)
+            self.refused(sidecar="/tmp/side%scar.json" % ch)
+
+    def test_a_plain_model_is_accepted(self):
+        code, doc, out, err = self.run.save_take("gpt-astra", self.take, model="gpt-x 5 (high)")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("gpt-x 5 (high)", testlib.read_text(doc["path"]).split("\n", 1)[0])
+
+
+def ledger_rows():
+    from station_core import ledger
+    return ledger.read(archlib.SCOPE)
+
+
 if __name__ == "__main__":
     unittest.main()

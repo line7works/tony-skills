@@ -212,6 +212,41 @@ class AnExistingArchitectureDoc(_Harvest):
         self.assertEqual(doc["stop_tag"], "living-doc-malformed")
         self.assertIn("Owner: Sam Bench", doc["reason"])
 
+    def test_a_line_holding_another_line_boundary_stops_the_run_naming_it(self):
+        """Slice 3b R5 (CA7-3): every answer string refuses the line boundaries, so an item holding one other than LF
+        could be neither carried nor struck: the run stops at harvest naming the line by its number and the
+        character by its code point (never printed raw), nothing written, the doc left as found."""
+        cases = (("- a\u2028- b", "U+2028"), ("- a web dashboard\x85later", "U+0085"), ("- a\vb", "U+000B"),
+                 ("- a\x0cb", "U+000C"), ("- a\x1cb", "U+001C"), ("- a\u2029b", "U+2029"))
+        for index, (item, point) in enumerate(cases):
+            text = self.DOC.replace("## Deferred\n", "## Deferred\n%s\n" % item)
+            number = text.split("\n").index(item) + 1
+            ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md": text},
+                                        name="ws-b%d" % index)
+            before = archlib.listing(ws)
+            run = archlib.ArchRun(self.tmp, ws, self.staging, name="run-b%d" % index)
+            code, doc, out, err = run.to_harvest()
+            self.assertEqual(code, 10, (point, out + err))
+            self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+            self.assertIn("line %d: " % number, doc["reason"])
+            self.assertIn(point, doc["reason"])
+            self.assertIn("so no answer can carry or strike it", doc["reason"])
+            self.assertIn("then start a new run", doc["reason"])
+            self.assertFalse(any(ch in doc["reason"] for ch in item[2:] if not ch.isprintable()), point)
+            self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+            self.assertEqual(archlib.listing(ws), before)
+
+    def test_a_crlf_doc_keeps_its_one_cr_finding(self):
+        """CR and LF are no other boundary: a CRLF doc still stops on its one CR finding, as before R5."""
+        ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md":
+                                                    self.DOC.replace("\n", "\r\n")}, name="ws-crlf")
+        run = archlib.ArchRun(self.tmp, ws, self.staging, name="run-crlf")
+        code, doc, out, err = run.to_harvest()
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual(doc["stop_tag"], "living-doc-malformed")
+        self.assertIn("the doc has CR line endings; this core continues LF documents only", doc["reason"])
+        self.assertNotIn("line boundary other than LF", doc["reason"])
+
     def test_two_living_docs_are_several(self):
         ws = archlib.repo_workspace(self.tmp, files={"docs/architecture/2026-09-21-turnstile.md": self.DOC,
                                                     "docs/architecture/2026-09-22-turnstile.md": self.DOC})

@@ -9,7 +9,7 @@ import re
 from station_core import fsio, ledger, runlog, templates
 
 from .common import HEADER_LABELS, SLUG, display, inside
-from . import docs
+from . import docs, schema
 
 DATED = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
 
@@ -73,11 +73,21 @@ def free_lines(text):
 
 def living_findings(text):
     """Why the living doc cannot be continued: its form's findings, a free line under a listed
-    section, and CR line endings."""
+    section, CR line endings, and a line holding a line boundary other than LF and CR (slice 3b R5,
+    CA7-3): every answer string refuses those, so such a line could be neither carried nor struck.
+    The character is named by its code point; the line is quoted by `%r`, which never prints it raw."""
     findings = [dict(f) for f in templates.check("architecture-doc", text)]
     findings += free_lines(text)
     if "\r" in text:
         findings.append({"line": 1, "message": "the doc has CR line endings; this core continues LF documents only"})
+    boundaries = schema.LINE_BOUNDARIES - {"\n", "\r"}
+    for number, line in enumerate(text.split("\n"), 1):
+        held = sorted(set(ch for ch in line if ch in boundaries))
+        if held:
+            findings.append({"line": number, "message": "%r holds %s, a line boundary other than LF (vertical tab, "
+                             "form feed, U+001C to U+001E, U+0085, U+2028 or U+2029), so no answer can carry or "
+                             "strike it; the doc is left as found: replace it by hand, then start a new run"
+                             % (line, " and ".join("U+%04X" % ord(ch) for ch in held))})
     return findings
 
 

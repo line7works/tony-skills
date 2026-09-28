@@ -100,6 +100,58 @@ class Request(unittest.TestCase):
         run = self.written()
         self.assertEqual(run.request("no-such-row", roster=ROSTER)[0], 2)
 
+    def not_a_folder(self, run, plant):
+        """`request` with `plant(<run>/requests)` in place: exit 1, the stop's sentence on stderr naming the path,
+        stdout empty, no traceback, nothing written in the run directory or the workspace."""
+        folder = os.path.join(run.run_dir, "requests")
+        plant(folder)
+        before_run = archlib.listing(run.run_dir)
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = run.request("gpt-astra", roster=ROSTER)
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        self.assertIn(folder, err)
+        self.assertIn("unreadable run directory", err)
+        self.assertIn("nothing was written", err)
+        self.assertIn("run `request` again", err)
+        self.assertEqual(archlib.listing(run.run_dir), before_run)
+        self.assertEqual(archlib.listing(self.ws), before_ws)
+        return folder
+
+    def test_a_regular_file_where_the_requests_folder_goes_is_exit_1_and_nothing_is_written(self):
+        """Slice 3b R2 (the control room's wording, C4): a regular file at `<run>/requests` is an unreadable run
+        directory, exit 1 before any write; the run stays where it was, so the file removed, `request` runs."""
+        run = self.written()
+        folder = self.not_a_folder(run, lambda path: testlib.write_text(path, "not a folder\n"))
+        self.assertEqual(testlib.read_text(folder), "not a folder\n")
+        os.remove(folder)
+        code, doc, out, err = run.request("gpt-astra", roster=ROSTER)
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(os.path.isfile(doc["requests"][0]["path"]))
+
+    def test_a_symlink_to_a_file_or_to_nothing_inside_the_run_is_exit_1(self):
+        """A symlink to a regular file is no directory either, and neither is a link that leads to nothing; a link
+        that leads out of the run directory stays `request-outside-run` (exit 5, ASymlinkedRequestsFolder)."""
+        run = self.written()
+
+        def to_file(path):
+            target = os.path.join(run.run_dir, "requests-file")
+            testlib.write_text(target, "a file\n")
+            os.symlink(target, path)
+        folder = self.not_a_folder(run, to_file)
+        os.remove(folder)
+        self.not_a_folder(run, lambda path: os.symlink(os.path.join(run.run_dir, "no-such-folder"), path))
+
+    def test_a_symlink_to_a_folder_inside_the_run_is_a_folder(self):
+        run = self.written()
+        target = os.path.join(run.run_dir, "requests-real")
+        os.makedirs(target)
+        os.symlink(target, os.path.join(run.run_dir, "requests"))
+        code, doc, out, err = run.request("gpt-astra", roster=ROSTER)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(os.listdir(target), [os.path.basename(doc["requests"][0]["path"])])
+
     @unittest.skipIf(testlib.readers_entry() is None, "no readers entry beside this core")
     def test_readers_validate_accepts_it(self):
         run = self.written(owner_word={"rows": ["gpt-astra"], "words": "send it to gpt-astra"})
@@ -123,6 +175,71 @@ class Request(unittest.TestCase):
             self.skipTest("gpt-astra's transport is absent from this shell (readers says lane-unavailable); "
                           "claude-session and gemini were checked: %s" % verdicts)
         self.assertEqual(verdicts["gpt-astra"], "valid", verdicts)
+
+
+class TheRosterResolver(unittest.TestCase):
+    """Slice 3b R9 (A7 section 5): `review.readers_roster` is the shared `station_core.readers_roster.find`, route
+    3a (the checkout sibling) then route 3b (the installed shape, the highest canonical version), keeping this
+    core's own `RosterMissing` and its "pass --roster FILE" (exit 2 at `request`)."""
+
+    ROSTER_REL = os.path.join("skills", "readers", "assets", "roster.json")
+
+    def setUp(self):
+        testlib.add_scripts_to_path()
+        from architect_core import review
+        self.review = review
+        self.tmp = testlib.make_scratch("arch-roster-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+
+    def plugin(self, root, name, version, roster=True):
+        testlib.write_json(os.path.join(root, ".claude-plugin", "plugin.json"), {"name": name, "version": version})
+        if roster:
+            testlib.write_json(os.path.join(root, self.ROSTER_REL), {"rows": [{"id": "gpt-astra", "provider": "o"}]})
+        return root
+
+    def test_route_3a_the_checkout_sibling(self):
+        plugins = os.path.join(self.tmp, "plugins")
+        me = self.plugin(os.path.join(plugins, "architect-v2"), "architect-v2", "0.1.0", roster=False)
+        readers = self.plugin(os.path.join(plugins, "readers"), "readers", "0.3.0")
+        self.assertEqual(self.review.readers_roster(me), os.path.join(readers, self.ROSTER_REL))
+
+    def test_route_3b_the_installed_shape_takes_the_highest_version(self):
+        market = os.path.join(self.tmp, "cache", "market")
+        me = self.plugin(os.path.join(market, "architect-v2", "0.1.0"), "architect-v2", "0.1.0", roster=False)
+        for version in ("0.3.0", "0.10.0", "0.9.9"):
+            self.plugin(os.path.join(market, "readers", version), "readers", version)
+        self.plugin(os.path.join(market, "readers", "01.2"), "readers", "01.2")
+        self.assertEqual(self.review.readers_roster(me),
+                         os.path.join(market, "readers", "0.10.0", self.ROSTER_REL))
+
+    def test_nothing_found_is_this_cores_roster_missing_naming_the_places_looked(self):
+        plugins = os.path.join(self.tmp, "plugins")
+        me = self.plugin(os.path.join(plugins, "architect-v2"), "architect-v2", "0.1.0", roster=False)
+        self.plugin(os.path.join(plugins, "readers"), "readers", "0.3.0", roster=False)
+        with self.assertRaises(self.review.RosterMissing) as caught:
+            self.review.readers_roster(me)
+        message = str(caught.exception)
+        self.assertTrue(message.endswith("; pass --roster FILE"), message)
+        self.assertIn("readers' roster was not found", message)
+        self.assertIn(os.path.join(plugins, "architect-v2", os.pardir, "readers") + " (no roster)", message)
+        self.assertIn(os.path.join(plugins, "architect-v2", os.pardir, os.pardir, "readers") + " (no such directory)",
+                      message)
+        self.assertIsInstance(caught.exception, LookupError)
+
+    def test_the_old_helpers_are_gone(self):
+        self.assertFalse(hasattr(self.review, "_manifest_name"))
+        self.assertFalse(hasattr(self.review, "_version_key"))
+
+    @unittest.skipIf(ROSTER is None, "no readers component beside this core (the installed shape)")
+    def test_request_without_roster_reads_the_checkout_sibling(self):
+        ws = archlib.repo_workspace(self.tmp)
+        run = archlib.ArchRun(self.tmp, ws)
+        self.assertEqual(run.to_harvest()[0], 0)
+        self.assertEqual(run.record(archlib.clean_answer())[0], 0)
+        self.assertEqual(run.write()[0], 0)
+        code, doc, out, err = run.cli("request", "--run-dir", run.run_dir, "--row", "gpt-astra")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual([r["row"] for r in doc["requests"]], ["gpt-astra"])
 
 
 class SaveTake(unittest.TestCase):
@@ -401,6 +518,46 @@ class TheFirstWriteIsTheBaseline(_Rulings):
         self.assertIn("written-doc.md", err)
         self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer-round-1.json")))
         self.assertEqual(archlib.listing(self.ws), before_ws)
+
+    def defect(self, step):
+        """`step()` exits 1 naming the snapshot's path, stdout empty, nothing written in the run or the workspace."""
+        before_run = archlib.listing(self.run.run_dir)
+        before_ws = archlib.listing(self.ws)
+        code, doc, out, err = step()
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        self.assertIn(self.snapshot(), err)
+        self.assertIn("missing or not a file", err)
+        self.assertIn("nothing was written", err)
+        self.assertEqual(archlib.listing(self.run.run_dir), before_run)
+        self.assertEqual(archlib.listing(self.ws), before_ws)
+        return err
+
+    def deleting(self):
+        a = ruled(self.amended(), "poured_concrete")
+        a["poured_concrete"] = a["poured_concrete"][:1]
+        a["changed"] = "remove storage decision"
+        return a
+
+    def test_a_removed_snapshot_is_a_defect(self):
+        """Slice 3b R3 (CA7-1): the receipt records the snapshot, so its absence never returns the amendment to
+        the harvested baseline (her A1 deletion): exit 1, nothing written."""
+        os.remove(self.snapshot())
+        self.defect(lambda: self.run.record(self.deleting()))
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer-round-1.json")))
+        self.assertIn("- %s\n" % STORAGE, testlib.read_text(self.doc_path()))
+
+    def test_a_snapshot_replaced_by_a_folder_is_a_defect(self):
+        os.remove(self.snapshot())
+        os.makedirs(self.snapshot())
+        self.defect(lambda: self.run.record(self.deleting()))
+        self.assertTrue(os.path.isdir(self.snapshot()))
+
+    def test_a_snapshot_removed_after_the_amendment_is_recorded_stops_the_write(self):
+        self.assertEqual(self.run.record(self.amended())[0], 0)
+        os.remove(self.snapshot())
+        self.defect(self.run.write)
 
 
 class TheFirstWriteIsTheBaselineOnARerun(unittest.TestCase):
