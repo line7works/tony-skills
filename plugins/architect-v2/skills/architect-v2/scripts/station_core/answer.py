@@ -400,41 +400,48 @@ def row_forms(text):
 
 
 def _shape(answer):
+    """[(message, where)]: the answer's shape problems, `where` `{"line": index}` (with the line's `text` when
+    it has one) for a problem of one line (the index in the answer the frame was given, as every other line
+    refusal carries it, so a core's view can map it to the line's place and report one line once; CA3B-3) and
+    `{}` for a problem of the answer or a question."""
     if not isinstance(answer, dict):
-        return ["the answer is not an object"]
+        return [("the answer is not an object", {})]
     problems = []
     for key in ("questions", "lines"):
         if not isinstance(answer.get(key), list):
-            problems.append("the answer's %r is a list" % key)
+            problems.append(("the answer's %r is a list" % key, {}))
     if problems:
         return problems
     ids = []
     for index, q in enumerate(answer["questions"]):
         if not isinstance(q, dict) or not isinstance(q.get("id"), str) or not q["id"].strip():
-            problems.append("question %d carries no id" % index)
+            problems.append(("question %d carries no id" % index, {}))
             continue
         if not isinstance(q.get("touches", []), list):
-            problems.append("question %s: 'touches' is a list of ledger line ids" % q["id"])
+            problems.append(("question %s: 'touches' is a list of ledger line ids" % q["id"], {}))
         if not isinstance(q.get("text"), str) or not q["text"].strip():
             # a question with no text would skip the decided-text match (C3-1, round 4)
-            problems.append("question %s carries no text" % q["id"])
+            problems.append(("question %s carries no text" % q["id"], {}))
         ids.append(q["id"])
     if len(ids) != len(set(ids)):
-        problems.append("two questions share an id")
+        problems.append(("two questions share an id", {}))
     for index, line in enumerate(answer["lines"]):
+        where = {"line": index}
         if not isinstance(line, dict) or not isinstance(line.get("text"), str):
-            problems.append("line %d is not an object with its text" % index)
+            problems.append(("line %d is not an object with its text" % index, where))
             continue
         if "row" not in line:
             continue
+        # the line is an object with its text here: name it by its words, as every other line refusal does (CF3B2-1)
+        where = {"line": index, "text": line["text"]}
         if not isinstance(line["row"], str) or not line["row"].strip():
-            problems.append("line %d: 'row' is the id of a ledger line" % index)
+            problems.append(("the line %r: 'row' is the id of a ledger line" % line["text"], where))
             continue
         trace = line.get("trace")
         if isinstance(trace, dict) and trace.get("kind") == "ledger" and trace.get("ref") != line["row"]:
             # `row` may repeat a ledger trace, never differ from it (R4-1)
-            problems.append("line %d: the line names row %s but traces to ledger row %s"
-                            % (index, line["row"], trace.get("ref")))
+            problems.append(("the line %r names row %s but traces to ledger row %s"
+                             % (line["text"], line["row"], trace.get("ref")), where))
     return problems
 
 
@@ -462,7 +469,7 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
     problems = _shape(answer)
     if problems:
         return {"exit": exits.REFUSED,
-                "refusals": [_refusal("shape", p) for p in problems]}
+                "refusals": [_refusal("shape", message, **where) for message, where in problems]}
     ledger = dict((row["id"], row) for row in ledger_lines)
     refusals = []
     answered = set()
