@@ -94,7 +94,42 @@ def chat_block(run, result):
         lines.append("Reason: %s" % result["reason"])
         if sr.get("stamp_written") is False:
             lines.append("Stamp: none written")
-        lines.append("Next: %s" % _next_after_stop(result["stop_tag"]))
+        # CI3B-1: a run stopped `records-refused` after its answer was triaged and before anything was
+        # appended prints the inspection, marked unrecorded, so the owner rules with it in view; nothing of
+        # it is appended, stamped or mirrored (CI3B2-1: a `render` refusal comes after the append landed)
+        if result["stop_tag"] == "records-refused" and sr.get("counts") is not None and "findings" in sr \
+                and not (sr.get("records") or {}).get("appended"):
+            counts = sr["counts"]
+            lines.append("Unrecorded (nothing appended, no stamp, no verdict doc): the verdict would be %s; "
+                         "%d BLOCKER %s %d MAJOR %s %d MINOR; Refuted: %d"
+                         % (sr["verdict"], counts["blocker"], M, counts["major"], M, counts["minor"], counts["refuted"]))
+            for f in sr["findings"]:
+                lines.append("%s %s %s %s %s %s %s %s %s %s not appended" % (f["severity"], M, f["location"], M,
+                                                                          f["claim"], M, f["scenario"], M,
+                                                                          f["label"], M))
+            if sr.get("questions"):
+                lines.append("Questions (not written): %s"
+                             % "; ".join("%s %s %s" % (q["location"], M, q["what"]) for q in sr["questions"]))
+            if sr.get("weaker"):
+                lines.append("Record: no scope doc exists for this feature, so this run is weaker: untraceable "
+                             "items are questions for the owner, never blockers (the no-record rule).")
+            lines.append("Hunted and held: %s" % sr["hunted_and_held"])
+        mirror = sr.get("mirror") or {}
+        # CI3B3-1: findings the log already holds (a `write` resumed after this run's own append) are not
+        # "above and unrecorded"
+        found = bool(sr.get("findings")) and not (sr.get("records") or {}).get("appended")
+        if result["stop_tag"] == "records-refused" and mirror.get("recognised") is False:
+            lines.append("Next: the owner rules on the records component's `mirrors` (E14-2); %s"
+                         % ("the findings above stay unrecorded, and a fresh inspect-v2 run follows his ruling."
+                            if found else "a fresh inspect-v2 run follows his ruling."))
+        elif result["stop_tag"] == "records-refused" and "head_now" in (
+                (_artifact(run, "write.json") or {}).get("refused") or {}):
+            # CI3B2-2: the head moved under `write`; the reason is the station's own and the log needs no repair
+            lines.append("Next: a fresh inspect-v2 run on the doc and its log as they are now%s"
+                         % ("; the findings above were read before the log moved and stay unrecorded."
+                            if found else "."))
+        else:
+            lines.append("Next: %s" % _next_after_stop(result["stop_tag"]))
         return "\n".join(lines) + "\n"
     counts = sr["counts"]
     calls = sr.get("calls") or []

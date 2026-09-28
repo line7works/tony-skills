@@ -95,7 +95,22 @@
           },
           "tag": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "assumed",
+              "carried",
+              "constraint",
+              "decided",
+              "deferred",
+              "open",
+              "out-of-scope",
+              "parked",
+              "poured",
+              "requirement",
+              "research",
+              "ruling",
+              "struck"
+            ],
+            "description": "every tag a line reaching inspect can carry, lower case only, so a capitalised tag cannot pass the frame's exact-case rules by (R4, the owner's ruling C6): the four cores' line tags and the tags their views hand the frame, the frame's ledger tags and its move-back set (parked, open, deferred), and the pass-forward tags the seam 17 reader probed"
           },
           "trace": {
             "type": "object",

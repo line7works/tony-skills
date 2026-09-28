@@ -12,9 +12,12 @@ drive of this core did, never from what a case expects; `via` says how each fact
              (a renaming: the reader's `row`, `call_id`, `effective_model` and `findings` carried
              over unchanged, inside the executor's envelope with no question, no line and no
              adjudication of its own), then write and report when the run has not stopped. The facts
-             are read from the run's `result.json` and the build doc as written. `write` appends to
-             the case workspace's records log and writes the build doc, so these cases observe
-             `writes_none: false`: a fact of the run, measured by observe.py.
+             are read from the run's `result.json` and the build doc as written. `write` asks the
+             records component's `mirrors` first whether it recognises the verdict mirror (the
+             reviewer's F1, ruling A5(3)); the frozen component of this checkout does not (E14-2), so
+             the drive observes `write` stopped `records-refused` with nothing written: no event, no
+             stamp, no document, no mirror. That stop is a fact of the run, measured as it happens;
+             with no stamp written, `stamp_model` is observed as null (the stamp names no model).
     I1       the real CLI up to harvest (so the record the packet must hold is the core's own
              answer), then `inspect_core.packet.check_dir`, the three-file rule `request` applies
              before it builds anything, on the case's `packet/` directory as the station would hand
@@ -261,8 +264,8 @@ def observe_run(step, case_dir, neutral, facts, via, scratch):
     stamp = sr.get("stamp")
     doc_path = sr.get("build_doc") or ""
     found["stamp_written"] = bool(sr.get("stamp_written")) and _stamp_in(doc_path, stamp)
-    if found["stamp_written"]:
-        found["stamp_model"] = stamp.split(" by ", 1)[1].split(" ", 1)[0]
+    # no stamp written, no model named: null, the observed fact (F1's mirrors stop ends `write` before the stamp)
+    found["stamp_model"] = stamp.split(" by ", 1)[1].split(" ", 1)[0] if found["stamp_written"] else None
     if "findings" in sr:
         found["raised_locations"] = sorted(f["location"] for f in sr["findings"] if f.get("finding_id"))
         found["blocker_count"] = counts.get("blocker", 0)

@@ -77,6 +77,30 @@ class TheBuildHunt(_Select):
         self.assertEqual(doc["outcome"], "several")
         self.assertEqual(len(doc["candidates"]), 2)
 
+    # J-1, inspect's half: `docs/plans/<name>.md` is the first tier too (blueprint-v2 writes a new doc dated
+    # and extends an existing undated one, so an undated plans doc can be the plan)
+    def test_an_undated_plans_doc_alone_is_one(self):
+        run = self.runner({"docs/plans/turnstile.md": ilib.BUILD_DOC}, build=None)
+        doc = self.select(run, "build", "turnstile")
+        self.assertEqual((doc["outcome"], self.rel(run, doc)), ("one", ["docs/plans/turnstile.md"]))
+        self.assertEqual([(c["home"], c["tier"]) for c in doc["candidates"]], [("repo-plans", 1)])
+
+    def test_an_undated_and_a_dated_plans_doc_are_several_in_one_tier(self):
+        run = self.runner({"docs/plans/turnstile.md": ilib.BUILD_DOC,
+                           "docs/plans/2026-09-23-turnstile.md": ilib.BUILD_DOC}, build=None)
+        doc = self.select(run, "build", "turnstile")
+        self.assertEqual(doc["outcome"], "several")
+        self.assertEqual(self.rel(run, doc), ["docs/plans/2026-09-23-turnstile.md", "docs/plans/turnstile.md"])
+        self.assertEqual(set((c["home"], c["tier"]) for c in doc["candidates"]), {("repo-plans", 1)})
+
+    def test_the_flat_name_is_still_the_second_tier_under_an_undated_plans_doc(self):
+        run = self.runner({"docs/plans/turnstile.md": ilib.BUILD_DOC, "docs/turnstile-build-plan.md": "# flat\n"},
+                          build=None)
+        doc = self.select(run, "build", "turnstile")
+        self.assertEqual((doc["outcome"], self.rel(run, doc)), ("one", ["docs/plans/turnstile.md"]))
+        flat = [row for row in doc["searched"] if row["home"] == "repo-flat"]
+        self.assertEqual([row["tier"] for row in flat], [2])
+
     def test_none_when_no_doc_is_written(self):
         run = self.runner({}, build=None)
         doc = self.select(run, "build", "turnstile")

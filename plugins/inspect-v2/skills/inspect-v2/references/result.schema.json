@@ -756,6 +756,52 @@
           }
         }
       }
+    },
+    {
+      "description": "the reviewer's F1 (ruling A5(3)): a run that wrote its stamp established first that the records component's `mirrors` recognises the verdict mirror; `recognised: false` never completes a run (contract section 15, point 2)",
+      "if": {
+        "required": [
+          "status",
+          "station_result"
+        ],
+        "properties": {
+          "status": {
+            "const": "completed"
+          },
+          "station_result": {
+            "required": [
+              "stamp_written"
+            ],
+            "properties": {
+              "stamp_written": {
+                "const": true
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "station_result": {
+            "required": [
+              "mirror"
+            ],
+            "properties": {
+              "mirror": {
+                "type": "object",
+                "required": [
+                  "recognised"
+                ],
+                "properties": {
+                  "recognised": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }

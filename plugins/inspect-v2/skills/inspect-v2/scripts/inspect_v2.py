@@ -24,14 +24,16 @@ every front core shares and `references/inspect-v2-contract.md` is this core's o
 and command reads, writes and prints, its exits and its stops. This file holds what is inspect-v2's:
 its name, its hunt table, its phases (`inspect_core/`) and its own commands.
 
-The hunt tables are the v1 inspect station's own (its Step 1). `build`: `docs/plans/*-<topic>.md`,
-then the older flat `docs/<feature>-build-plan.md`, then any phase or slice doc under `docs/`
-or `plan/`, in that order (the two-source narrowing, then the fallback). `scope`: by glob,
-never by a guessed slug, over every `docs/scope/*.md`, every older flat `docs/*-scope.md` and
-every staging `*-scope.md`, one tier; matching by `Intent:` line is the executor's, recorded with
-`choose`. A build doc the invocation names by path is taken with `named` instead of the build hunt;
-when it lies outside every build home, this run's scope hunt also globs its own directory's
-`scope/*.md` and `*-scope.md` (`gate.hunts_for_run`).
+The hunt tables are the v1 inspect station's own (its Step 1). `build`: `docs/plans/*-<topic>.md`
+and `docs/plans/<topic>.md` (one tier: blueprint-v2 writes a new doc dated and extends an
+existing undated one, so either can be the plan), then the older flat
+`docs/<feature>-build-plan.md`, then any phase or slice doc under `docs/` or `plan/`, in that
+order (the two-source narrowing, then the fallback). `scope`: by glob, never by a guessed slug,
+over every `docs/scope/*.md`, every older flat `docs/*-scope.md` and every staging `*-scope.md`,
+one tier; matching by `Intent:` line is the executor's, recorded with `choose`. A build doc the
+invocation names by path is taken with `named` instead of the build hunt; when it lies outside
+every build home, this run's scope hunt also globs its own directory's `scope/*.md` and
+`*-scope.md` (`gate.hunts_for_run`).
 """
 import os
 import sys
@@ -46,7 +48,7 @@ STATION = "inspect-v2"
 
 HUNTS = {
     "build": [
-        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/*-{name}.md"], "tier": 1},
+        {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/*-{name}.md", "docs/plans/{name}.md"], "tier": 1},
         {"home": "repo-flat", "root": "workspace", "globs": ["docs/{name}-build-plan.md"], "tier": 2},
         {"home": "phase-or-slice", "root": "workspace", "globs": ["docs/*phase*.md", "docs/*slice*.md", "plan/*.md"], "tier": 3},
     ],

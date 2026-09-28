@@ -34,6 +34,60 @@ class _Run(unittest.TestCase):
         return run
 
 
+class TheReadersRosterRoutes(_Run):
+    """A7 section 5 (R5): `packet` and `request` find readers' roster through the shared resolver
+    (`station_core/readers_roster.py`); the argument route, 3a, 3b and the missing case exit as before,
+    and nothing found (or an unreadable roster) is this core's exit 3, one line naming every place looked."""
+
+    def packet(self, *args, **kw):
+        run = self.run_for(**kw)
+        self.assertEqual(run.upto("harvest")[0], 0)
+        return run, run.phase("packet", *args)
+
+    def test_the_argument_route(self):
+        run, (code, doc, out, err) = self.packet("--readers-root", testlib.checkout_sibling("readers"))
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(run.artifact("packet.json")["readers"]["route"], "argument")
+
+    def test_an_unusable_argument_is_passed_over_for_route_3a(self):
+        bogus = os.path.join(self.tmp, "not-readers")
+        os.makedirs(bogus)
+        run, (code, doc, out, err) = self.packet("--readers-root", bogus)
+        self.assertEqual(code, 0, out + err)
+        found = run.artifact("packet.json")["readers"]
+        self.assertEqual(found["route"], "3a")
+        self.assertIn("%s (no plugin.json)" % bogus, found["looked"])
+
+    def test_route_3a_in_this_checkout(self):
+        run, (code, doc, out, err) = self.packet()
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(run.artifact("packet.json")["readers"]["route"], "3a")
+
+    def test_route_3b_in_the_installed_shape(self):
+        run, (code, doc, out, err) = self.packet(driver=ilib.installed_shape(self.tmp))
+        self.assertEqual(code, 0, out + err)
+        found = run.artifact("packet.json")["readers"]
+        self.assertEqual(found["route"], "3b")
+        self.assertIn(os.path.join("cache", "local", "readers"), os.path.normpath(found["root"]))
+
+    def test_no_readers_is_exit_3_naming_every_place_looked(self):
+        run, (code, doc, out, err) = self.packet(driver=ilib.installed_shape(self.tmp, with_readers=False))
+        self.assertEqual((code, out), (3, ""), err)
+        self.assertTrue(err.startswith("missing dependency: readers component (looked in: "), err)
+        self.assertIn("%s (no such directory)" % os.path.join(os.pardir, os.pardir, "readers"), err)
+        self.assertEqual(len(err.strip().splitlines()), 1)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "packet.json")))
+
+    def test_an_unreadable_roster_is_exit_3(self):
+        driver = ilib.installed_shape(self.tmp)
+        base = os.path.join(self.tmp, "cache", "local", "readers")
+        (version,) = os.listdir(base)
+        testlib.write_text(os.path.join(base, version, "skills", "readers", "assets", "roster.json"), "{not json\n")
+        run, (code, doc, out, err) = self.packet(driver=driver)
+        self.assertEqual((code, out), (3, ""), err)
+        self.assertIn("has no readable roster", err)
+
+
 class Harvest(_Run):
 
     def test_the_code_book_by_route_3a_and_the_records_confirmed(self):

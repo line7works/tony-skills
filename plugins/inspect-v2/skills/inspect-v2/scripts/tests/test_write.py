@@ -171,22 +171,9 @@ class TheHeadIsReadBeforeAnyWrite(_Write):
         self.assertEqual(kinds, [("finding_raised", "competing review")])
 
     def shim(self):
-        """A copy of this checkout's records component whose CLI logs its argv, then runs the real one."""
-        import shutil
-        root = os.path.join(self.tmp, "shim", "records")
-        shutil.copytree(testlib.records_root(), root,
-                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "fixtures"))
-        scripts = os.path.join(root, "scripts")
-        os.rename(os.path.join(scripts, "records.py"), os.path.join(scripts, "records_real.py"))
-        testlib.write_text(os.path.join(scripts, "records.py"), "\n".join([
-            "import json, os, runpy, sys",
-            "sys.dont_write_bytecode = True",
-            "HERE = os.path.dirname(os.path.abspath(__file__))",
-            "with open(os.path.join(os.path.dirname(HERE), 'argv.log'), 'a') as fh:",
-            "    fh.write(json.dumps(sys.argv[1:]) + '\\n')",
-            "sys.argv[0] = os.path.join(HERE, 'records_real.py')",
-            "runpy.run_path(sys.argv[0], run_name='__main__')", ""]))
-        return root
+        """The records test double (`ilib.records_double`): it logs its argv, runs the real component for
+        every command, and recognises the verdict mirror at `mirrors` (the capability `write` requires)."""
+        return ilib.records_double(self.tmp)
 
     def logged(self, root):
         import json
@@ -216,6 +203,332 @@ class TheHeadIsReadBeforeAnyWrite(_Write):
         calls = [argv[0] for argv in self.logged(root)]
         self.assertIn("events", calls)
         self.assertNotIn("append", calls)
+
+
+class TheMirrorsCapabilityIsRequired(_Write):
+    """The reviewer's F1 (MAJOR), ruling A5(3): before appending findings, stamping the plan or writing the
+    verdict, `write` establishes through the records component's `mirrors` that the frozen interface
+    recognises the intended verdict mirror (a row whose `verdict_doc` is the mirror's workspace path). When
+    it does not, or the component refuses, the run stops `records-refused`, names the missing capability
+    and asks for the owner's ruling: no records event, no stamp, no document, no mirror. `recognised:
+    false` never completes a run."""
+
+    FIND = [ilib.finding("build-doc.md:12", quote="AC1")]
+    MIRROR = "docs/reviews/%s-inspect-turnstile.md" % ilib.TODAY
+
+    def upto_answer(self, records, fleet=None, adjudications=CB1, scope=ilib.SCOPE_DOC):
+        self.ws = ilib.workspace(self.tmp, scope=scope)
+        self.run = ilib.Runner(self.tmp, self.ws, records=records)
+        fleet = fleet if fleet is not None else ilib.claude_fleet(R, model=MODEL, code_book=self.FIND)
+        extra = {"adjudications": adjudications} if adjudications else {}
+        self.assertEqual(self.run.upto("record-answer", answer=ilib.answer(R, fleet, **extra))[0], 0)
+
+    def assert_stopped_whole(self, code, doc, out, err):
+        self.assertEqual(code, 10, out + err)
+        self.assertEqual((doc["status"], doc["stop_tag"]), ("stopped", "records-refused"))
+        self.assertIn(self.MIRROR, doc["reason"])
+        self.assertIn("`mirrors`", doc["reason"])
+        self.assertIn("owner's ruling", doc["reason"])
+        self.assertEqual(testlib.tree_digest(self.ws), self.digest, "no stamp, no mirror, no document, no append")
+        self.assertEqual(testlib.sha256_file(os.path.join(self.ws, ilib.BUILD_REL)), self.doc_sha)
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "reviews")))
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "records")), "no records event")
+        sr = doc["station_result"]
+        self.assertIsNone(sr["stamp"])
+        self.assertFalse(sr["stamp_written"])
+        self.assertFalse(sr["mirror"]["recognised"])
+        self.assertEqual([w for w in doc["writes"] if w["kind"] != "run_artifact"], [])
+        wrote = self.run.artifact("write.json")
+        self.assertFalse(wrote["stamp_written"])
+        self.assertEqual(wrote["records"]["appended"], 0)
+        # the stop is final: the run is done, `report` prints the same stopped result
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual((code, again["status"], again["stop_tag"]), (10, "stopped", "records-refused"))
+
+    def freeze(self):
+        self.digest = testlib.tree_digest(self.ws)
+        self.doc_sha = testlib.sha256_file(os.path.join(self.ws, ilib.BUILD_REL))
+
+    def test_a_double_that_recognises_the_mirror_lets_the_write_proceed(self):
+        self.upto_answer("recognise")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 0, out + err)
+        mirror = self.run.artifact("write.json")["mirror"]
+        self.assertIs(mirror["recognised"], True)
+        self.assertEqual(mirror["state"], "recognised by the test double")
+        self.assertIn(self.MIRROR, [r["verdict_doc"] for r in mirror["answer"]["mirrors"]])
+        self.assertTrue(os.path.isfile(os.path.join(self.ws, self.MIRROR)))
+        self.assertEqual(len([l for l in self.doc_text().splitlines() if l.startswith("Plan: inspected")]), 1)
+        self.assertEqual([r["event"]["kind"] for r in self.events()["results"]], ["finding_raised"])
+        # asked before any write: `mirrors` comes before the append, the render and the doc write
+        calls = [argv[0] for argv in self.logged()]
+        self.assertLess(calls.index("mirrors"), calls.index("append"), calls)
+        self.assertEqual(calls.count("mirrors"), 1, calls)
+
+    def logged(self):
+        import json
+        with open(os.path.join(self.run.double, "argv.log"), encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def test_a_double_with_no_row_for_the_mirror_stops_a_finding_run_before_any_write(self):
+        self.upto_answer("other")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertIn("does not recognise", doc["reason"])
+        self.assertNotIn("append", [argv[0] for argv in self.logged()])
+
+    def test_a_double_with_no_row_for_the_mirror_stops_a_clean_run_before_the_stamp(self):
+        self.upto_answer("other", fleet=ilib.claude_fleet(R, model=MODEL), adjudications=None)
+        self.freeze()
+        self.assert_stopped_whole(*self.run.phase("write"))
+
+    def test_a_double_that_refuses_mirrors_stops_with_its_sentence(self):
+        self.upto_answer("refuse")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertIn(ilib.DOUBLE_REFUSAL, doc["reason"])
+        self.assertIn("exit 4", doc["reason"])
+
+    def test_the_real_component_of_this_checkout_stops_every_write(self):
+        # the consequence the ruling states: the frozen component's `mirrors` lists signoff verdict docs
+        # only, so against it every `write` stops here until the owner rules (E14-2)
+        self.upto_answer("real")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        kept = doc["station_result"]["mirror"]["answer"]
+        self.assertEqual(kept["doc"], ilib.BUILD_REL, "the component's own answer, kept whole")
+        self.assertNotIn(self.MIRROR, [r.get("verdict_doc") for r in kept["mirrors"]])
+
+    def test_a_resumed_write_still_asks_first(self):
+        self.upto_answer("other")
+        self.freeze()
+        self.assert_stopped_whole(*self.run.phase("write"))
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 2, out + err)
+        self.assertEqual(testlib.tree_digest(self.ws), self.digest)
+
+    # CI3B-1 (round 2, R1): the stopped read-back carries the triaged inspection, marked unrecorded, so the
+    # owner rules on `mirrors` with the verdict, the findings and the questions in view
+    NEXT_RULING = ("Next: the owner rules on the records component's `mirrors` (E14-2); the findings above stay "
+                   "unrecorded, and a fresh inspect-v2 run follows his ruling.")
+
+    def chat_lines(self, doc):
+        return doc["station_result"]["chat"].splitlines()
+
+    def test_the_real_component_stop_prints_the_unrecorded_inspection(self):
+        self.upto_answer("real")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        lines = self.chat_lines(doc)
+        self.assertIn("Stamp: none written", lines)
+        unrecorded = [l for l in lines if l.startswith("Unrecorded (nothing appended, no stamp, no verdict doc): ")]
+        self.assertEqual(len(unrecorded), 1, lines)
+        self.assertIn("the verdict would be %s" % doc["station_result"]["verdict"], unrecorded[0])
+        self.assertIn("0 BLOCKER · 1 MAJOR · 0 MINOR; Refuted: 0", unrecorded[0])
+        found = [l for l in lines if l.endswith(" not appended")]
+        self.assertEqual(len(found), 1, lines)
+        self.assertIn(ilib.BUILD_REL + ":12", found[0])
+        self.assertTrue(found[0].startswith("MAJOR · "), found[0])
+        self.assertIn("Hunted and held: %s" % ilib.HUNTED, lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING)
+        self.assertEqual(len([l for l in lines if l.startswith("Next:")]), 1)
+        self.assertFalse([l for l in lines if l.startswith("Record:")], "not weaker: no no-record note")
+        # the order: the stop, the reason, the stamp line, then the unrecorded block, then Next
+        self.assertLess(lines.index("Stamp: none written"), lines.index(unrecorded[0]))
+        # the chat block alone changes: the result still says none of it was appended
+        self.assertEqual(doc["station_result"]["records"]["appended"], 0)
+        self.assertEqual(doc["station_result"]["findings"][0]["finding_id"], None)
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual(again["station_result"]["chat"], doc["station_result"]["chat"])
+
+    def test_a_weaker_real_component_stop_prints_its_questions_and_the_no_record_note(self):
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=self.FIND, traceability=[ilib.finding(
+            "build-doc.md:14", severity="BLOCKER", claim="was the reset deferred")])
+        self.upto_answer("real", fleet=fleet, scope=None)
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertTrue(doc["station_result"]["weaker"])
+        lines = self.chat_lines(doc)
+        questions = [l for l in lines if l.startswith("Questions (not written): ")]
+        self.assertEqual(len(questions), 1, lines)
+        self.assertIn(ilib.BUILD_REL + ":14 · was the reset deferred", questions[0])
+        self.assertIn("Record: no scope doc exists for this feature, so this run is weaker: untraceable items are "
+                      "questions for the owner, never blockers (the no-record rule).", lines)
+        self.assertTrue([l for l in lines if l.endswith(" not appended") and ilib.BUILD_REL + ":12" in l], lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING)
+
+    def test_a_double_with_no_row_names_the_owners_ruling_too(self):
+        self.upto_answer("other")
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        lines = self.chat_lines(doc)
+        self.assertTrue([l for l in lines if l.endswith(" not appended")], lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING)
+
+    def test_a_head_moved_stop_keeps_its_own_next_line(self):
+        # the unrecorded block prints on any `records-refused` after triage; `Next:` names the owner's
+        # ruling on `mirrors` only when the mirror was not recognised
+        self.upto_answer("recognise")
+        other = dict(TheHeadIsReadBeforeAnyWrite.OTHER)
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [other])
+        code, body, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                            "--events", events, "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        lines = self.chat_lines(doc)
+        self.assertTrue([l for l in lines if l.endswith(" not appended")], lines)
+        self.assertEqual(lines[-1], self.NEXT_MOVED)
+
+    # round 3, R2 (CI3B2-2): at the head-moved stop the reason is the station's own, the log needs no repair,
+    # and the owner's move is a fresh run on the doc and its log as they are now
+    NEXT_MOVED = ("Next: a fresh inspect-v2 run on the doc and its log as they are now; the findings above were "
+                  "read before the log moved and stay unrecorded.")
+
+    def move_the_head(self):
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [dict(TheHeadIsReadBeforeAnyWrite.OTHER)])
+        code, body, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                            "--events", events, "--expect-head", "0" * 64])
+        self.assertEqual(code, 0, err)
+
+    # round 3, R1 (CI3B2-1): a `render` refusal comes after the append landed, so the block that says
+    # nothing was appended does not print there
+    def test_a_render_refusal_after_the_append_prints_no_unrecorded_block(self):
+        self.upto_answer("render-refuse")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        self.assertIn(ilib.DOUBLE_RENDER_REFUSAL, doc["reason"])
+        self.assertIn("`render`", doc["reason"])
+        self.assertEqual(doc["station_result"]["records"]["appended"], 1)
+        kinds = [r["event"]["kind"] for r in self.events()["results"]]
+        self.assertEqual(kinds, ["finding_raised"], "the append landed before the refusal")
+        lines = self.chat_lines(doc)
+        self.assertFalse([l for l in lines if l.startswith("Unrecorded") or l.endswith("not appended")], lines)
+        self.assertEqual(lines[-1], "Next: read the component's sentence; nothing here repairs the log.")
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual(again["station_result"]["chat"], doc["station_result"]["chat"])
+
+    # round 4, R1 (CI3B3-1): a `write` resumed after this run's own append knows what landed; the log holds
+    # its findings already, so the stopped block never calls them unrecorded or not appended
+    LANDED = ("This run's own append landed before the stop; nothing else was written: no stamp, no document, "
+              "no mirror.")
+
+    def crash_after_the_append(self):
+        self.upto_answer("render-blank")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 1, out + err)
+        checkpoint = self.run.artifact("checkpoint.json")
+        self.assertEqual(checkpoint["phase"], "answered")
+        landed = checkpoint["write_progress"]["appended"]
+        self.assertEqual(len(landed["findings"]), 1, landed)
+        self.assertEqual([(r["event"]["kind"], r["event"]["actor"]["station"]) for r in self.events()["results"]],
+                         [("finding_raised", "inspect-v2")])
+        return landed
+
+    def assert_nothing_called_unrecorded(self, doc, landed):
+        sr = doc["station_result"]
+        self.assertEqual(sr["records"]["appended"], 1)
+        self.assertEqual(sr["records"]["head_after"], landed["head"])
+        self.assertEqual(sr["records"]["log"], landed["log"])
+        lines = self.chat_lines(doc)
+        self.assertFalse([l for l in lines if l.startswith("Unrecorded") or l.endswith("not appended")], lines)
+        self.assertFalse([l for l in lines if "stay unrecorded" in l], lines)
+        code, again, out, err = self.run.phase("report")
+        self.assertEqual(again["station_result"]["chat"], sr["chat"])
+        return lines
+
+    def test_a_write_resumed_after_its_own_append_stops_at_a_moved_head_without_calling_it_unrecorded(self):
+        landed = self.crash_after_the_append()
+        code, body, err = ilib.records_cli(["events", "--workspace", self.ws, "--doc", ilib.BUILD_REL])
+        events = os.path.join(self.tmp, "other.json")
+        testlib.write_json(events, [dict(TheHeadIsReadBeforeAnyWrite.OTHER)])
+        code, moved, err = ilib.records_cli(["append", "--workspace", self.ws, "--doc", ilib.BUILD_REL,
+                                             "--events", events, "--expect-head", body["head"]])
+        self.assertEqual(code, 0, err)
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["status"], doc["stop_tag"]), (10, "stopped", "records-refused"), out + err)
+        self.assertIn(self.LANDED, doc["reason"])
+        self.assertNotIn("Nothing was written", doc["reason"])
+        lines = self.assert_nothing_called_unrecorded(doc, landed)
+        self.assertEqual(lines[-1], "Next: a fresh inspect-v2 run on the doc and its log as they are now.")
+        self.assertEqual(len([r for r in self.events()["results"]
+                              if r["event"]["actor"]["station"] == "inspect-v2"]), 1, "appended once, not twice")
+
+    def test_a_write_resumed_after_its_own_append_stops_at_mirrors_without_calling_it_unrecorded(self):
+        landed = self.crash_after_the_append()
+        refusing = ilib.records_double(self.tmp, "refuse")
+        code, doc, out, err = self.run.phase("write", "--records-root", refusing)
+        self.assertEqual((code, doc["status"], doc["stop_tag"]), (10, "stopped", "records-refused"), out + err)
+        self.assertIn(ilib.DOUBLE_REFUSAL, doc["reason"])
+        # the control room's ruling on round 4's Question 1: the mirror stop's reason says what landed too
+        self.assertIn(self.LANDED, doc["reason"])
+        self.assertNotIn("Nothing was written", doc["reason"])
+        self.assertIs(doc["station_result"]["mirror"]["recognised"], False)
+        lines = self.assert_nothing_called_unrecorded(doc, landed)
+        self.assertEqual(lines[-1], self.NEXT_RULING_CLEAN)
+
+    # round 3, R3 (a): a stopped block with no finding above never says "the findings above"
+    NEXT_RULING_CLEAN = ("Next: the owner rules on the records component's `mirrors` (E14-2); a fresh inspect-v2 "
+                         "run follows his ruling.")
+
+    def test_a_clean_run_mirror_stop_names_no_findings_above(self):
+        self.upto_answer("other", fleet=ilib.claude_fleet(R, model=MODEL), adjudications=None)
+        self.freeze()
+        code, doc, out, err = self.run.phase("write")
+        self.assert_stopped_whole(code, doc, out, err)
+        self.assertEqual(doc["station_result"]["findings"], [])
+        lines = self.chat_lines(doc)
+        self.assertEqual(len([l for l in lines if l.startswith("Unrecorded")]), 1, lines)
+        self.assertEqual(lines[-1], self.NEXT_RULING_CLEAN)
+        self.assertFalse([l for l in lines if "findings above" in l], lines)
+
+    def test_a_clean_run_head_moved_stop_names_no_findings_above(self):
+        self.upto_answer("recognise", fleet=ilib.claude_fleet(R, model=MODEL), adjudications=None)
+        self.move_the_head()
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        self.assertEqual(doc["station_result"]["findings"], [])
+        lines = self.chat_lines(doc)
+        self.assertEqual(lines[-1], "Next: a fresh inspect-v2 run on the doc and its log as they are now.")
+        self.assertFalse([l for l in lines if "findings above" in l], lines)
+
+    def test_a_records_refusal_before_triage_prints_no_unrecorded_block(self):
+        # a log the component refuses to read stops the run at `harvest`, before any answer
+        log = "docs/records/%s.events.jsonl" % ilib.BUILD_REL.replace("/", "__")[:-3]
+        self.ws = ilib.workspace(self.tmp, extra={log: "this is not an event log\n"})
+        self.run = ilib.Runner(self.tmp, self.ws, records="real")
+        code, doc, out, err = self.run.upto("harvest")
+        self.assertEqual((code, doc["stop_tag"]), (10, "records-refused"), out + err)
+        lines = self.chat_lines(doc)
+        self.assertFalse([l for l in lines if l.startswith("Unrecorded") or l.endswith(" not appended")
+                          or l.startswith("Questions") or l.startswith("Hunted and held:")], lines)
+        self.assertEqual(lines[-1], "Next: read the component's sentence; nothing here repairs the log.")
+
+    def test_a_completed_result_with_an_unrecognised_mirror_does_not_validate(self):
+        import copy
+        import json
+        from station_core import validate
+        path = os.path.join(testlib.EX, "result", "valid", "completed-a-document-written.json")
+        with open(path, encoding="utf-8") as fh:
+            good = json.load(fh)
+        schema = validate.load_schema("result", testlib.PREFIX, testlib.SKILL)
+        self.assertEqual(validate.errors_for(good, schema, testlib.PREFIX), [])
+        self.assertIs(good["station_result"]["mirror"]["recognised"], True)
+        for recognised in (False, None):
+            bad = copy.deepcopy(good)
+            bad["station_result"]["mirror"]["recognised"] = recognised
+            self.assertNotEqual(validate.errors_for(bad, schema, testlib.PREFIX), [], recognised)
+        bad = copy.deepcopy(good)
+        bad["station_result"]["mirror"] = None
+        self.assertNotEqual(validate.errors_for(bad, schema, testlib.PREFIX), [])
 
 
 class TheStationsOwnLines(_Write):
@@ -345,8 +658,16 @@ class TheMirrorAndTheReceipt(_Write):
         fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
         code, doc, out, err = self.go(fleet, adjudications=CB1)
         self.assertEqual(code, 0, out + err)
-        code, body, err = ilib.records_cli(["mirrors", "--workspace", self.ws, "--doc", ilib.BUILD_REL])
-        self.assertEqual(code, 0, err)
+        # the component `write` asked is the test double (it recognises the mirror, F1); asked again, it
+        # gives the same answer the run kept, byte for byte, all but the version fields
+        import json
+        import subprocess
+        import sys
+        proc = subprocess.run([sys.executable, os.path.join(self.run.double, "scripts", "records.py"), "mirrors",
+                               "--workspace", self.ws, "--doc", ilib.BUILD_REL], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, env=self.run.env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        body = json.loads(proc.stdout.decode("utf-8"))
         kept = self.run.artifact("write.json")["mirror"]["answer"]
         drop = ("interface_version", "plugin_version", "component_version")
         self.assertEqual(dict((k, v) for k, v in kept.items() if k not in drop),
@@ -495,6 +816,81 @@ class TheBannerBeforeTriage(_Write):
         self.assert_bannered()
         self.assertFalse(doc["station_result"]["stamp_written"])
         self.assertFalse(os.path.exists(os.path.join(self.ws, "docs", "records")))
+
+
+class TheBannerOnAContentRefusal(_Write):
+    """The owner's ruling C4 (the check 5 observation): a content refusal at `record-answer` (exit 5,
+    nothing recorded) also puts the banner on every outside raw copy, so an executor who abandons the run
+    after the refusal leaves no bare copy. Nothing else of the refusal changes: exit 5, `accepted` false,
+    the answer not recorded. A run with no outside copy writes no banner file at a refusal."""
+
+    WORD = {"rows": ["gpt-astra"], "words": "send it to gpt-astra"}
+    MINE = "raw reply: this run's own copy\n"
+    PRIOR = "an earlier run's reply, never bannered\n"
+
+    def refused(self, adjudications=None):
+        """An outside run: an earlier same-day copy at the base (bare), this run's at -2; the paper result
+        holds a finding with a citation that holds and, unless given, no adjudication."""
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        doc = ilib.make_input(self.ws, self.run.run_dir, row="gpt-astra", owner_word=self.WORD)
+        self.assertEqual(self.run.upto("request", doc=doc)[0], 0)
+        base = self.run.artifact("requests.json")["calls"][0]["raw_path"]
+        stem, ext = os.path.splitext(base)
+        self.copies = [base, stem + "-2" + ext]
+        testlib.write_text(self.copies[0], self.PRIOR)
+        testlib.write_text(self.copies[1], self.MINE)
+        paper = ilib.reader_result("%s-gpt-astra" % R, row="gpt-astra", model="gpt-test-model", raw_path=self.copies[1],
+                                   findings=[ilib.finding("build-doc.md:12", quote="AC1")])
+        fleet = [paper, ilib.reader_result("%s-repo-reality" % R, model=MODEL)]
+        extra = {"adjudications": adjudications} if adjudications else {}
+        self.answer = os.path.join(self.tmp, "answer.json")
+        testlib.write_json(self.answer, ilib.answer(R, fleet, row="gpt-astra", owner_word=self.WORD, **extra))
+        return self.run.phase("record-answer", "--answer", self.answer)
+
+    def assert_bannered(self):
+        for path, tail in zip(self.copies, (self.PRIOR, self.MINE)):
+            text = testlib.read_text(path)
+            self.assertTrue(text.startswith("Raw inspector output \u2014 unverified."), path)
+            self.assertEqual(text.count("Raw inspector output"), 1, path)
+            self.assertTrue(text.endswith(tail), path)
+
+    def test_a_refused_answer_leaves_the_banner_on_every_outside_raw_copy(self):
+        code, doc, out, err = self.refused()
+        self.assertEqual(code, 5, out + err)
+        self.assertIs(doc["accepted"], False)
+        self.assertEqual([r["rule"] for r in doc["refusals"]], ["missing-adjudication"])
+        self.assert_bannered()
+        self.assertEqual(sorted(w["path"] for w in self.run.artifact("banner.json")["writes"]), sorted(self.copies))
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer.json")), "the answer is not recorded")
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "triage.json")))
+        self.assertEqual(self.run.phase("write")[0], 2, "the run stays where it was")
+
+    def test_a_corrected_answer_after_the_refusal_keeps_the_banner_writes_once(self):
+        self.assertEqual(self.refused()[0], 5)
+        code, doc, out, err = self.run.phase("record-answer", "--answer", self.answer)
+        self.assertEqual(code, 5, "the same refused answer again: still refused")
+        self.assert_bannered()
+        testlib.write_json(self.answer, dict(testlib.load_json(self.answer), adjudications=GPT1))
+        code, doc, out, err = self.run.phase("record-answer", "--answer", self.answer)
+        self.assertEqual(code, 0, out + err)
+        self.assert_bannered()
+        banners = [w["path"] for w in self.run.artifact("banner.json")["writes"]]
+        self.assertEqual(sorted(banners), sorted(self.copies), "each copy's banner write named once")
+        code, doc, out, err = self.run.phase("write")
+        self.assertEqual(code, 0, out + err)
+        receipt = [w["path"] for w in self.run.artifact("receipt.json")["writes"]]
+        for path in self.copies:
+            self.assertEqual(receipt.count(path), 1, path)
+
+    def test_a_claude_row_refusal_writes_no_banner_file(self):
+        self.ws = ilib.workspace(self.tmp)
+        self.run = ilib.Runner(self.tmp, self.ws)
+        fleet = ilib.claude_fleet(R, model=MODEL, code_book=[ilib.finding("build-doc.md:12", quote="AC1")])
+        code, doc, out, err = self.run.upto("record-answer", answer=ilib.answer(R, fleet))
+        self.assertEqual(code, 5, out + err)
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "banner.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.run.run_dir, "answer.json")))
 
 
 class TheRequestsRawPathIsTheOneSource(_Write):
@@ -790,6 +1186,10 @@ class ReportOnly(_Write):
         self.assertEqual(code, 10, out + err)
         self.assertTrue(doc["wrote_nothing"])
         self.assertEqual(testlib.tree_digest(self.ws), ws_digest)
+        # CI3B-1 (round 2): the report-only read-back is unchanged, never the stopped run's unrecorded block
+        chat = doc["station_result"]["chat"].splitlines()
+        self.assertTrue([l for l in chat if l.startswith("Verdict: ")], chat)
+        self.assertFalse([l for l in chat if l.startswith("Unrecorded") or l.endswith(" not appended")], chat)
 
 
 if __name__ == "__main__":
