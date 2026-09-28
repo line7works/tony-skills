@@ -41,6 +41,17 @@ def _phase(run):
     return run.checkpoint.get("phase")
 
 
+def _written_text(run, command):
+    """The doc this run wrote, as it stands; a Defect when it is gone, no file or not UTF-8."""
+    path = _state(run)["doc"]
+    try:
+        return read_text(path)
+    except (OSError, UnicodeDecodeError) as exc:
+        raise driver.Defect("the doc this run wrote, %s, cannot be read (%s); nothing was written and the run stays "
+                            "where it was: put the doc back by hand, then run `%s` again, or start a new run on the "
+                            "doc as it stands" % (path, exc, command))
+
+
 def _load(run, name):
     path = os.path.join(run.run_dir, name)
     return fsio.read_json(path) if os.path.isfile(path) else None
@@ -283,6 +294,11 @@ def harvest(ctx, args):
         return _stop(ctx, run, "living-doc-malformed" if reading == living_path else "ledger-refused",
                      "%s is not UTF-8 (%s), so it cannot be read without guessing; the doc is left as found: save "
                      "it as UTF-8, then start a new run" % (reading, exc), sr, receipt)
+    except OSError as exc:
+        # slice 3b round 3 R4 (CA3B2-3): a doc the process cannot read; a docless set-aside run has rewritten
+        # `selection-scope.json` by now, so the sentence says the doc is left as found, not that nothing was written
+        raise driver.Defect("%s cannot be read (%s); the doc is left as found and the run stays where it was: fix its "
+                            "permissions by hand, then run `harvest` again" % (reading, exc))
     try:
         record = harvesting.describe(ws, staging, today(), slug, scope_path, scope_text, living_path, living_text,
                                      run_id=run.checkpoint["run_id"], input_publish=station.get("publish", True),
@@ -333,7 +349,7 @@ def _context(run, prior=None):
     takes = _load(run, "takes.json") or []
     baseline, snapshot = _baseline(run, record)
     return recording.context(record, baseline, session_id=_session(run), takes=takes, prior=prior,
-                             run_id=run.checkpoint["run_id"], requested=_requested_rows(run),
+                             run_id=run.checkpoint["run_id"], requested=_requested_rows(run, "record-answer"),
                              repeat_strike=snapshot)
 
 
@@ -460,8 +476,7 @@ def render_visual(ctx, args):
     _need(run, "written")
     state = _state(run)
     record = _load(run, "harvest.json")
-    with open(state["doc"], "r", encoding="utf-8", newline="") as fh:
-        text = fh.read()
+    text = _written_text(run, "render-visual")
     html_path = os.path.join(os.path.dirname(state["doc"]), "%s-architecture.html" % record["slug"])
     if not _contained(run, html_path):
         raise driver.Usage("the visual %s" % _outside(html_path))
@@ -493,8 +508,7 @@ def record_publish(ctx, args):
         # republish returned no URL" is recorded as rendered-not-published (round 3 CA2-7)
         raise driver.Usage("this render's publish was recorded to %s; a record without --url would unsay it. Record "
                            "the republish with --url %s, the same URL" % (state["publish_url"], state["publish_url"]))
-    with open(state["doc"], "r", encoding="utf-8", newline="") as fh:
-        text = fh.read()
+    text = _written_text(run, "record-publish")
     decision = publishing.decide(text, answer["publish"], args.url)
     if decision["refusal"]:
         return driver.emit(ctx.envelope(accepted=False, refusals=[decision["refusal"]],
@@ -574,8 +588,10 @@ def request(ctx, args):
         return refused
     # slice 3b R2 (C4) as widened by round 2 R1 (CA3B-1): a regular file, a symlink to one, a symlink that
     # leads to nothing, or a folder the process cannot list or write, stands where the requests folder goes (a
-    # symlink to a folder is a folder); an unreadable run directory, exit 1 before the folder is read
-    _folder_stop(os.path.join(folder, "x.json"), "request")
+    # symlink to a folder is a folder); an unreadable run directory, exit 1 before the folder is read. The path it
+    # names is the first request this call writes (review.requests' call id, before any -2 a listing would add;
+    # round 3 R6(b))
+    _folder_stop(os.path.join(folder, "%s-review-%s.json" % (run.checkpoint["run_id"], rows[0])), "request")
     taken = [n[:-5] for n in os.listdir(folder)] if os.path.isdir(folder) else []
     try:
         built = review.requests(rows, run.input, roster, scope["path"], run.checkpoint["run_id"],
@@ -598,15 +614,22 @@ def request(ctx, args):
                                            "document; summon /readers with each, and save each take with save-take"))
 
 
-def _requested_rows(run):
+def _requested_rows(run, command):
+    """The rows `request` built in this run, in the order of their files; a Defect when the requests folder or a
+    request in it cannot be read (slice 3b round 3 R2, CA3B2-1), before the command's first write."""
     folder = os.path.join(run.run_dir, "requests")
     rows = []
-    if os.path.isdir(folder):
+    if not os.path.isdir(folder):
+        return rows
+    try:
         for name in sorted(os.listdir(folder)):
             if name.endswith(".json"):
                 row = fsio.read_json(os.path.join(folder, name)).get("row")
                 if row not in rows:
                     rows.append(row)
+    except (OSError, ValueError) as exc:
+        raise driver.Defect("unreadable run directory: %s cannot be read (%s); nothing was written and the run stays "
+                            "where it was: fix %s by hand, then run `%s` again" % (folder, exc, folder, command))
     return rows
 
 
@@ -628,7 +651,7 @@ def save_take(ctx, args):
         return driver.emit(ctx.envelope(accepted=False, refusals=[{"rule": "take-empty", "message":
                                         "the take is empty; an empty reply is a failed review for that lane, and "
                                         "nothing is saved for it"}], reason="nothing was saved"), exits.REFUSED)
-    requested = _requested_rows(run)
+    requested = _requested_rows(run, "save-take")
     if args.row not in requested:
         raise driver.Usage("the row %r was never requested in this run (requested: %s); a take answers a request "
                            "`request` built" % (args.row, ", ".join(requested) or "none"))
@@ -678,8 +701,7 @@ def _station_result(run, record, answer, state):
                                        for f in answer["review"].get("failed_lanes") or []],
                   passed_forward=[r["id"] for r in docs.passed_forward(record["ledger"], answer)] if record else [])
     if state and state.get("doc"):
-        with open(state["doc"], "r", encoding="utf-8", newline="") as fh:
-            text = fh.read()
+        text = _written_text(run, "report")
         living = (record or {}).get("living_doc")
         takes = _load(run, "takes.json") or []
         published = state.get("published")

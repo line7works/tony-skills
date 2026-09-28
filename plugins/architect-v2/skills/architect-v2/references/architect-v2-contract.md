@@ -381,14 +381,24 @@ difference stops the run `document-changed` with the bytes left as found. A new 
 no file.
 
 Before its first write, every command holds every path it may write (slice 3b round 2): the
-document or take and its copy, the run directory's own files (`receipt.json`, which every receipt
-row rewrites, `checkpoint.json`, `result.json` where a stop can write it, and the command's own
-`harvest.json`, `answer.json`, `publish.json`, `takes.json`, `requests/<call id>.json`, the
-snapshot). A node on the way to the path's folder that is no folder this run can write (a file, a
-symlink that leads to no folder, a folder without permission), or a folder where the file goes, is
-exit 1, an unreadable run directory: the sentence names the node, says nothing was written and the
-run stays where it was, and names the command to run again once the owner fixes it by hand. The
-containment check above runs first, so a symlinked folder that leads outside keeps its own stop.
+document or take and its copy, the visual, the run directory's own files (`receipt.json`, which
+every receipt row rewrites, `checkpoint.json`, `result.json` where a stop can write it, and the
+command's own `selection-scope.json` (a docless run's set-aside), `harvest.json`,
+`harvested-doc.md`, `answer.json`, `answer-round-N.json`, `publish.json`, `takes.json`,
+`requests/<call id>.json`, the snapshot). A node on the way to the path's folder that is no folder
+this run can write (a file, a symlink that leads to no folder, a folder without permission), or a
+folder where the file goes, is exit 1, an unreadable run directory: the sentence names the node,
+says nothing was written and the run stays where it was, and names the command to run again once
+the owner fixes it by hand. The containment check above runs first, so a symlinked folder that
+leads outside keeps its own stop.
+
+The reads an owner can reach by hand are held the same way (slice 3b round 3): a `requests/`
+folder `record-answer` or `save-take` cannot list, or a request in it that cannot be read, is exit 1
+naming the folder and the command; the doc this run wrote, gone, a folder, or not UTF-8 when
+`render-visual`, `record-publish` or `report` reads it, is exit 1 naming the doc, with the way on to
+put it back or start a new run; a scope doc or living doc `harvest` cannot read (its permissions)
+is exit 1 naming the doc, left as found. Each is before the command's first write, never a
+traceback, and the run stays where it was.
 
 ## 8. The result
 

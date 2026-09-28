@@ -317,5 +317,48 @@ class ADocThatIsNotUtf8(_Harvest):
         self.stopped(archlib.ArchRun(self.tmp, ws, self.staging), ws, "living-doc-malformed", path)
 
 
+
+@unittest.skipIf(os.geteuid() == 0, "root reads any file")
+class ADocItCannotRead(_Harvest):
+    """Slice 3b round 3 R4 (CA3B2-3): a scope doc or a living doc the process cannot read (mode 000) is exit 1 naming
+    the doc and the error, stdout empty, never a traceback; the workspace unchanged, no `harvest.json`, no
+    `harvested-doc.md`, the run still `selected`; its mode restored, `harvest` runs."""
+
+    def selected(self, ws):
+        run = archlib.ArchRun(self.tmp, ws, self.staging)
+        self.assertEqual(run.check_input()[0], 0)
+        self.assertEqual(run.select("scope")[0], 0)
+        self.assertEqual(run.select("architecture", "turnstile")[0], 0)
+        return run
+
+    def unreadable(self, run, ws, path):
+        before = archlib.listing(ws)
+        os.chmod(path, 0)
+        self.addCleanup(os.chmod, path, 0o644)
+        code, doc, out, err = run.harvest()
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        self.assertIn("%s cannot be read (" % path, err)
+        self.assertIn("the doc is left as found and the run stays where it was: fix its permissions by hand, then run "
+                      "`harvest` again", err)
+        self.assertNotIn("nothing was written", err)
+        os.chmod(path, 0o644)
+        self.assertEqual(archlib.listing(ws), before)
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvest.json")))
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "harvested-doc.md")))
+        self.assertEqual(testlib.load_json(os.path.join(run.run_dir, "checkpoint.json"))["phase"], "selected")
+        code, doc, out, err = run.harvest()
+        self.assertEqual(code, 0, out + err)
+
+    def test_a_scope_doc_it_cannot_read(self):
+        ws = archlib.repo_workspace(self.tmp)
+        self.unreadable(self.selected(ws), ws, os.path.join(ws, archlib.SCOPE_REL))
+
+    def test_a_living_doc_it_cannot_read(self):
+        from test_arch_record import LIVING, LIVING_REL
+        ws = archlib.repo_workspace(self.tmp, files={LIVING_REL: LIVING})
+        self.unreadable(self.selected(ws), ws, os.path.join(ws, LIVING_REL))
+
 if __name__ == "__main__":
     unittest.main()

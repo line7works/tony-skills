@@ -113,6 +113,8 @@ class Request(unittest.TestCase):
         self.assertNotIn("Traceback", err)
         self.assertIn(folder, err)
         self.assertIn("unreadable run directory", err)
+        # slice 3b round 3 R6(b): the path the stop names is the request this call would write, never a placeholder
+        self.assertIn("stands on the way to %s)" % os.path.join(folder, "run-0001-review-gpt-astra.json"), err)
         self.assertIn("nothing was written", err)
         self.assertIn("run `request` again", err)
         self.assertEqual(archlib.listing(run.run_dir), before_run)
@@ -490,6 +492,72 @@ class TheRulingsRound(_Rulings):
         code, doc, out, err = self.run.record(a)
         self.assertEqual(code, 0, out + err)
 
+
+
+class AnUnreadableRequestsFolder(_Rulings):
+    """Slice 3b round 3 R2 (CA3B2-1): `record-answer` (the amendment, through its context) and `save-take` read
+    `<run>/requests` before their first write; a folder the process cannot list, or a folder named like a request
+    inside it, is exit 1 naming the folder and the command, stdout empty, no traceback, every listing unchanged."""
+
+    def unreadable(self, call, command, folder):
+        roots = [self.run.run_dir, self.ws]
+        before = [archlib.listing(r) for r in roots]
+        phase = testlib.load_json(os.path.join(self.run.run_dir, "checkpoint.json"))["phase"]
+        code, doc, out, err = call()
+        self.assertEqual(code, 1, out + err)
+        self.assertEqual(out, "")
+        self.assertNotIn("Traceback", err)
+        self.assertIn("unreadable run directory: %s cannot be read (" % folder, err)
+        self.assertIn("nothing was written and the run stays where it was: fix %s by hand, then run `%s` again"
+                      % (folder, command), err)
+        self.assertEqual([archlib.listing(r) for r in roots], before)
+        self.assertEqual(testlib.load_json(os.path.join(self.run.run_dir, "checkpoint.json"))["phase"], phase)
+
+    def take(self):
+        path = os.path.join(self.tmp, "take-2.md")
+        testlib.write_text(path, "a second take\n")
+        return path
+
+    def locked(self):
+        folder = os.path.join(self.run.run_dir, "requests")
+        os.chmod(folder, 0)
+        self.addCleanup(os.chmod, folder, 0o755)
+        return folder, lambda: os.chmod(folder, 0o755)
+
+    def planted(self):
+        folder = os.path.join(self.run.run_dir, "requests")
+        node = os.path.join(folder, "x.json")
+        os.makedirs(node)
+        return folder, lambda: os.rmdir(node)
+
+    def at_the_amendment(self, plant):
+        folder, undo = plant()
+        self.unreadable(lambda: self.run.record(self.amended()), "record-answer", folder)
+        undo()
+        code, doc, out, err = self.run.record(self.amended())
+        self.assertEqual(code, 0, out + err)
+
+    def at_save_take(self, plant):
+        folder, undo = plant()
+        self.unreadable(lambda: self.run.save_take("gpt-astra", self.take()), "save-take", folder)
+        undo()
+        code, doc, out, err = self.run.save_take("gpt-astra", self.take())
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(doc["path"].endswith("-gpt-2.md"), doc["path"])
+
+    @unittest.skipIf(os.geteuid() == 0, "root lists any folder")
+    def test_a_requests_folder_it_cannot_list_at_the_amendment(self):
+        self.at_the_amendment(self.locked)
+
+    @unittest.skipIf(os.geteuid() == 0, "root lists any folder")
+    def test_a_requests_folder_it_cannot_list_at_save_take(self):
+        self.at_save_take(self.locked)
+
+    def test_a_folder_named_like_a_request_at_the_amendment(self):
+        self.at_the_amendment(self.planted)
+
+    def test_a_folder_named_like_a_request_at_save_take(self):
+        self.at_save_take(self.planted)
 
 class OneAmendment(_Rulings):
     """R1 (CA1-1, CA1-2): one recorded answer and ONE amendment per run. A second `record-answer`

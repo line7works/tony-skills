@@ -442,6 +442,58 @@ class ANodeInTheWritesWay(_Refused, _Write):
         self.assertEqual(self.run.report()[0], 10)
 
 
+
+class TheWrittenDocGone(_Refused, _Write):
+    """Slice 3b round 3 R3 (CA3B2-2): `render-visual`, `record-publish` and `report` read the doc this run wrote
+    before their first write; the doc removed, a folder in its place, or bytes that are not UTF-8 there, is exit 1
+    naming the doc and the command, stdout empty, no traceback, every listing unchanged, the phase still `written`;
+    the doc put back, the command runs."""
+
+    SAID = "the doc this run wrote, %s, cannot be read ("
+    URL = "https://example.invalid/artifact/turnstile"
+
+    def written(self):
+        self.assertEqual(self.run.record(archlib.clean_answer())[0], 0)
+        code, doc, out, err = self.run.write()
+        self.assertEqual(code, 0, out + err)
+        return doc["doc"]
+
+    def each_shape(self, path, call, command, shapes=("removed", "folder")):
+        with open(path, "rb") as fh:
+            kept = fh.read()
+        for shape in shapes:
+            os.remove(path)
+            if shape == "folder":
+                os.makedirs(path)
+            elif shape == "not-utf-8":
+                with open(path, "wb") as fh:
+                    fh.write(kept + b"\xef\n")
+            self.refused(call, path, command, said=self.SAID)
+            if shape == "folder":
+                os.rmdir(path)
+            elif shape == "not-utf-8":
+                os.remove(path)
+            with open(path, "wb") as fh:
+                fh.write(kept)
+
+    def test_before_render_visual(self):
+        path = self.written()
+        self.each_shape(path, self.run.render, "render-visual", ("removed", "folder", "not-utf-8"))
+        self.assertEqual(self.run.render()[0], 0)
+
+    def test_before_record_publish(self):
+        path = self.written()
+        self.assertEqual(self.run.render()[0], 0)
+        self.each_shape(path, lambda: self.run.publish(self.URL), "record-publish")
+        self.assertEqual(self.run.publish(self.URL)[0], 0)
+
+    def test_before_report(self):
+        path = self.written()
+        self.assertEqual(self.run.render()[0], 0)
+        self.assertEqual(self.run.publish(self.URL)[0], 0)
+        self.each_shape(path, self.run.report, "report")
+        self.assertEqual(self.run.report()[0], 10)
+
 class ANodeInThePreviewsWay(_Refused, _Write):
 
     EXTRA = {"report_only": True}
