@@ -308,6 +308,25 @@ class UntracedLine(_Answer):
                                                 "trace": {"kind": "owner_words", "ref": "he said"}})
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
+    def test_a_hand_written_call_with_an_unbalanced_ledger_parenthesis_still_meets_the_row(self):
+        """CP3B-1 (lane P's 3b round 1 checker; the control room's frame fix on the owner's word, 2026-09-27): a
+        hand-written row's call whose ledger parenthesis is never closed, `(waits on: a (b)`, is stripped back to the
+        words, so the frame's readings meet the row and neither `quietly-resolved` nor a lane's `retagged` is blind to
+        it; a trailing parenthesis that is not ledger words, `(open question) (x)`, is never stripped."""
+        opened = [row for row in self.ledger if row["tag"] == "open"][0]
+        words = opened["text"]
+        allowed = ("ledger", "repo_path", "question", "owner_words")
+        for text in ["%s (waits on: a (b)" % words, "%s (parked: see (Q2) later (b)" % words,
+                     "%s [waits on: a [b]" % words]:
+            rules = self.refused_rule({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}},
+                                      allowed=allowed)
+            self.assertEqual(rules, ["quietly-resolved"], repr(text))
+        self.ledger.append({"id": "prk-3", "tag": "parked", "section": "Decisions", "text": "Budget ceiling for the rig"})
+        for text in ("Budget ceiling for the rig (open question) (x)", "Budget ceiling for the rig (see (Q2)"):
+            doc = self.clean(); doc["lines"].append({"text": text, "tag": "decided", "trace": {"kind": "owner_words", "ref": "he said"}})
+            self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [], text)
+        self.ledger.pop()
+
     def test_the_seam_13_reader_shapes(self):
         """The seam 13 reader (CS13-1 to CS13-6): a wrapper pair with an apostrophe or a parenthesis inside, mark-like
         tokens of the Sm, Sk and quote categories, the ledger's tag tail with every parenthesis word, the templates'
