@@ -214,22 +214,30 @@ def _normalized(text):
 def _strip_paren_tail(text):
     """The text without a trailing `(waits on: ...)`, `[parked: ...]` or other ledger parenthesis in any bracket
     kind (a closing bracket of the Pe category and its opener, or an angle pair), to any depth of nesting (lane P's
-    round 4 builder: a call such as `(waits on: the bench call (see (Q2) first))`; the seam 14 reader, CS14-2)."""
+    round 4 builder: a call such as `(waits on: the bench call (see (Q2) first))`; the seam 14 reader, CS14-2), and
+    a ledger parenthesis never closed by hand, `(waits on: a (b)` (CP3B-1); a trailing parenthesis that is not ledger
+    words is kept."""
     out = text.rstrip()
     if not out or not (unicodedata.category(out[-1]) == "Pe" or out[-1] == ">"):
         return text
     angle = out[-1] == ">"
     depth = 0
+    failed = False
     for index in range(len(out) - 1, -1, -1):
         ch = out[index]
         if (ch == ">") if angle else (unicodedata.category(ch) == "Pe"):
             depth += 1
         elif (ch == "<") if angle else (unicodedata.category(ch) == "Ps"):
             depth -= 1
-            if depth == 0:
+            if depth == 0 and not failed:
                 if _PAREN_WORDS.match(out[index + 1:-1].strip()):
                     return out[:index].rstrip()
-                return text
+                # the last parenthesis is not ledger words: keep walking for a ledger opener further left that was
+                # never closed, a hand-written `(waits on: a (b)` (lane P's 3b checker, CP3B-1; the control room's fix)
+                failed = True
+            elif depth < 0:
+                if _PAREN_WORDS.match(out[index + 1:-1].strip()):
+                    return out[:index].rstrip()
     return text
 
 
