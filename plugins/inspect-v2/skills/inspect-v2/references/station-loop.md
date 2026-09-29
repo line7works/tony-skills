@@ -123,6 +123,7 @@ command against a run at the wrong phase is exit 2 with the command to run inste
   other tag is the core's own pass-forward vocabulary, which the frame does not judge). The words
   are compared only as a guard on the id-less path: a line asserted as `decided` whose words restate
   a `parked` or `open` row it does not name is refused, and the refusal says to name the row's id.
+  An answered question of this run that touches that row does not substitute for the line's id.
   In that comparison an item label, bare (`R2 `) or marked (`AC1:`, `(R2)`, `[R2]`, `**R2:**`), is
   part of the words on both sides.
 - Stop tags: none; a refusal leaves the run where it was.
@@ -258,13 +259,14 @@ The result schema's `stop_tag` description publishes the full list a core can em
    id of a question answered in this run (and, where the core's lane contract allows them,
    `assumed` with its why, or the owner's words quoted); a line with no trace, or a trace that
    names nothing, is refused the same way. `parked` and `open` lines pass forward as `parked` and
-   `open`; one asserted as `decided` is refused unless an answered question of this run touches it.
+   `open`; one asserted as `decided` is refused unless it names the row by its id and an answered
+   question of this run touches it.
    A line that decides, settles, passes forward or moves a ledger row names the row by its id
    (`row`, or its `ledger` trace) and is judged by the id alone; a `decided` row is never named as
    `parked`, `open` or `deferred`. The text match is only the guard on the id-less path: a `decided`
    line whose words restate a `parked` or `open` row it does not name is refused with "name the
-   row's id", an item label (bare or marked, `R2 ` or `AC1:`) being part of the words on both sides
-   (section 3.4).
+   row's id", whether or not an answered question of this run touched that row, an item label (bare
+   or marked, `R2 ` or `AC1:`) being part of the words on both sides (section 3.4).
 3. **Documents are rendered, never typed.** Every load-bearing form (the scope doc, the
    architecture doc, the build doc, the stamp and the station's own block lines) is rendered and
    parsed by `station_core/templates.py` from `references/templates/`, whose forms are v1's byte

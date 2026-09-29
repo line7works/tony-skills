@@ -30,9 +30,47 @@ case "$HARNESS" in claude-code|codex) ;; *) echo "seven-stations.sh: harness is 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 PLUGINS_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
 [ ! -e "$SETUP_HOME" ] || [ -z "$(ls -A "$SETUP_HOME" 2>/dev/null)" ] || { echo "seven-stations.sh: $SETUP_HOME is not empty" >&2; exit 2; }
+# The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
+# may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
+SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "seven-stations.sh" <<'GUARD'
+import os, sys
+target, home, name = sys.argv[1:4]
+
+
+def refuse(why):
+    sys.stderr.write("%s: %s; nothing created\n" % (name, why))
+    sys.exit(2)
+
+
+def forms(path):
+    return (os.path.abspath(path), os.path.realpath(path))
+
+
+def rest(path, base):
+    """The part of `path` below `base` ("" when they are the same), or None; compared casefolded."""
+    p, b = path.casefold(), base.casefold().rstrip(os.sep)
+    return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+
+
+if not os.path.isabs(home):
+    refuse("HOME is not an absolute path")
+share = os.path.join(home, ".local", "share")
+homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
+         os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
+for path in forms(target):
+    for forbidden in homes:
+        if any(rest(path, base) is not None for base in forms(forbidden)):
+            refuse("%s is under %s, which no setup may touch" % (target, forbidden))
+    for base in forms(share):
+        below = rest(path, base)
+        if below and below.split(os.sep)[0].startswith("skills-v2-"):
+            refuse("%s is under %s, which no setup may touch"
+                   % (target, os.path.join(share, below.split(os.sep)[0])))
+print(os.path.realpath(target))
+GUARD
+) || exit $?
 mkdir -p "$SETUP_HOME"
 SETUP_HOME=$(CDPATH= cd -- "$SETUP_HOME" && pwd -P)
-case "$SETUP_HOME/" in "$HOME/.claude/"*|"$HOME/.codex/"*|"$HOME/.local/share/skills-v2-"*) echo "seven-stations.sh: not a live or pilot home" >&2; exit 2 ;; esac
 export PYTHONDONTWRITEBYTECODE=1
 unset RECORDS_ROOT || true
 exec python3 - "$HARNESS" "$SETUP_HOME" "$PLUGINS_DIR" <<'PY'

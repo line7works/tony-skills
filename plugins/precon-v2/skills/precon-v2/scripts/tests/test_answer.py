@@ -176,7 +176,7 @@ class UntracedLine(_Answer):
             rules = self.refused_rule({"text": "  " + opened["text"].upper() + " ", "tag": "decided", "trace": trace},
                                       allowed=allowed)
             self.assertEqual(rules, ["quietly-resolved"], trace)
-        # the parked line the same way, once no answered question of this run touches it
+        # the parked line the same way, with no question of this run touching it
         doc = self.clean()
         doc["questions"] = []
         doc["lines"] = [line for line in doc["lines"] if line["trace"]["kind"] != "question"
@@ -184,8 +184,11 @@ class UntracedLine(_Answer):
         doc["lines"].append({"text": parked["text"], "tag": "decided", "trace": {"kind": "owner_words", "ref": "his words"}})
         result = self.check(doc, allowed=allowed)
         self.assertEqual([r["rule"] for r in result["refusals"]], ["quietly-resolved"])
-        # and settled by an answered question, it is accepted
+        # an answered question touching the row does not stand in for the line's row id (the slice 3c review's
+        # F3): still quietly-resolved; the line that names the row is accepted
         doc["questions"] = [{"id": "Q9", "text": "Which storage?", "touches": [parked["id"]], "answer": "none"}]
+        self.assertEqual([r["rule"] for r in self.check(doc, allowed=allowed)["refusals"]], ["quietly-resolved"])
+        doc["lines"][-1]["row"] = parked["id"]
         self.assertEqual(self.check(doc, allowed=allowed)["refusals"], [])
 
     def test_the_quiet_upgrade_rule_sees_through_every_known_decoration(self):
@@ -644,9 +647,33 @@ class TheRowId(_Answer):
         (refusal,) = self.check(doc, allowed=self.allowed)["refusals"]
         self.assertEqual(refusal["rule"], "quietly-resolved")
         self.assertIn("without naming it", refusal["message"])
-        # and settled by an answered question touching the row, the id-less line is accepted as before
+        # an answered question touching that row too does not stand in for its id (the slice 3c review's F3)
         doc["questions"][0]["touches"].append(self.parked())
-        self.assertEqual(self.check(doc, allowed=self.allowed)["refusals"], [])
+        self.assertEqual(self.rules(doc), ["quietly-resolved"])
+
+    def test_an_answered_question_touching_the_row_does_not_stand_in_for_its_id(self):
+        """The slice 3c review's F3 (ruling A5(4)): a question of this run, answered and touching a parked or
+        open row, does not let a decided line under that question's trace restate the row's words without
+        the row's id; the line is refused `quietly-resolved`, exit 5 and nothing written. The control: the same
+        line carrying `row` = the row's id is accepted and recorded."""
+        for text, ident in (("The storage format", self.parked()), ("**The storage format**", self.parked()),
+                            ("how often it resets", self.ids["how often it resets"])):
+            doc = {"questions": [{"id": "Q1", "text": "Where does the count live?", "touches": [ident],
+                                  "answer": "in memory only"}],
+                   "lines": [{"text": text, "tag": "decided", "trace": {"kind": "question", "ref": "Q1"}}]}
+            (refusal,) = self.check(doc, allowed=self.allowed)["refusals"]
+            self.assertEqual(refusal["rule"], "quietly-resolved", text)
+            self.assertIn("without naming it", refusal["message"])
+            self.assertIn(ident, refusal["message"])
+            code, report = self.record(doc, allowed=self.allowed)
+            self.assertEqual(code, 5, report)
+            self.assertEqual(os.listdir(self.run_dir), [], "nothing written")
+            # the control: the same line naming its row
+            doc["lines"][0]["row"] = ident
+            self.assertEqual(self.check(doc, allowed=self.allowed), {"exit": 0, "refusals": []}, text)
+        code, report = self.record(doc, allowed=self.allowed)
+        self.assertEqual(code, 0, report)
+        self.assertTrue(os.path.isfile(os.path.join(self.run_dir, "answer.json")))
 
     def test_a_decided_row_is_never_moved_back(self):
         """C3, as the control room narrowed it and C3A-2 widened it: a line naming a `decided` row as `parked`, `open`

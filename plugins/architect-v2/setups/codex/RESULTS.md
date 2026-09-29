@@ -14,6 +14,18 @@ itself) and verified; the probe installed beside it from a second marketplace in
 carry `disable-model-invocation: true` and `allow_implicit_invocation: false`; both prompts present. No prompt sent
 by this step.
 
+## Commands for the recorded sessions
+
+Run from this plugin's root. `H` is the same isolated home used by the install
+above; `WS` is the fixture workspace, and the two `OUT` paths are distinct run
+directories. These are command templates; the filed launch records hold the
+measurement's concrete paths.
+
+```sh
+ARCHITECT_V2_CODEX_HOME=H sh setups/codex/launch.sh setups/codex/prompts/manual-only-words.md WS OUT-words
+ARCHITECT_V2_CODEX_HOME=H sh setups/codex/launch.sh setups/codex/prompts/manual-only-explicit.md WS OUT-explicit
+```
+
 ## Manual-only probe (ruling E9-5, P5): the live measurement
 
 | Route | Record-derived outcome |

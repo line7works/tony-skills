@@ -3,6 +3,9 @@
 
     python3 replay.py [--keep DIR]
 
+`--keep DIR` is refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
+~/.local/share/skills-v2-* home, as given or resolved (the setups' home guard, E14 slice 3c).
+
 One fixture project (`fixtures/turnstile/`, the seeded cases' turnstile idea: a bench-rig turn
 counter) is copied into a fresh temporary tree, made a git work tree, and walked through the five
 stations in order, each through its REAL phase driver in this checkout:
@@ -422,6 +425,24 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.keep and os.path.exists(args.keep):
         parser.error("--keep %s exists" % args.keep)
+    if args.keep:
+        # The setups' home guard (E14 slice 3c fix 3-2), before anything is created.
+        out = os.path.abspath(args.keep)
+        home = os.environ.get("HOME", "")
+        share = os.path.join(home, ".local", "share")
+        for path in (out, os.path.realpath(out)):
+            for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
+                for form in (os.path.abspath(base), os.path.realpath(base)):
+                    p, b = path.casefold(), form.casefold().rstrip(os.sep)
+                    below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+                    if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
+                        continue
+                    sys.stderr.write("replay.py: %s is under %s, which no setup may touch; nothing created\n"
+                                     % (args.keep, base if base != share else os.path.join(share, below.split(os.sep)[0])))
+                    return 2
+        if not os.path.isabs(home):
+            sys.stderr.write("replay.py: HOME is not an absolute path; nothing created\n")
+            return 2
     root = os.path.abspath(args.keep) if args.keep else tempfile.mkdtemp(prefix="front-replay-")
     os.makedirs(root, exist_ok=True)
     root = os.path.realpath(root)

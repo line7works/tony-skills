@@ -117,8 +117,9 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
   question's id>}` or `{"kind": "owner_words", "ref": "<his words from the discussion, verbatim>"}`.
   Nothing else traces a line here; what you decided alone is an assumption, never a line's trace.
   An out-of-scope line may carry a parked scope line or a deferred architecture line forward by its
-  id; a scope `Open:` item is his call, so it goes out of scope (by its id or in its words, under
-  any trace) only after he answered a question touching it, and otherwise stays an open question.
+  id; a scope `Open:` item is his call, so it goes out of scope only after he answered a question
+  touching it, and only by its id (`row`, or a ledger trace to the item): the question never stands
+  in for the id, and the item's words alone are refused. Otherwise it stays an open question.
 - `criteria`: one measurable end state each, with its `verify` form, exactly one of `existing test
   <name>` (the test named, one token), `new test at <path>` (a path with a `/` or a file extension,
   no spaces), `manual: <steps>` (at least two words), the rest after the prefix holding a letter or
@@ -131,10 +132,10 @@ Write ONE answer in the shape of `references/answer.schema.json` (examples under
   collapsed the gate, with his words.
 
 Exit 4 (the schema) or exit 5 (the content: an untraced line, a re-asked decided line, a parked or
-open line asserted with no question that settled it, an open item descoped without his answer, a
-criterion with no check in one of the three forms, a slice naming what is not there, a feature the
-build hunt did not look for) lists every refusal and writes nothing: fix the answer, or go back to
-the owner, and record it again.
+open line asserted without its id or with no question that settled it, an open item descoped
+without his answer or without its id, a criterion with no check in one of the three forms, a slice
+naming what is not there, a feature the build hunt did not look for) lists every refusal and writes
+nothing: fix the answer, or go back to the owner, and record it again.
 
 ## Step 5: Write, read back and stop
 

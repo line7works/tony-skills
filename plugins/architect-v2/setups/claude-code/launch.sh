@@ -1,8 +1,11 @@
 #!/bin/sh
 # One headless Claude Code session of this core's setup (E13 slice 3, brief 3.3).
 #
-# Adapted from plugins/recheck-v2/setups/claude-code/launch.sh. Byte-identical in build-v2 and
-# signoff-v2; the core is this script's own plugin folder.
+# Adapted from plugins/recheck-v2/setups/claude-code/launch.sh. Byte-identical in the four front
+# cores; build-v2's and signoff-v2's (E13, frozen) differ only in the home guard below (E14 slice 3c):
+# the out-dir and the installed home may not be or sit under ~/.claude, ~/.codex or
+# ~/.local/share/skills-v2-*, as given or resolved (exit 2, nothing created). The core is this
+# script's own plugin folder.
 #
 # Usage: launch.sh <prompt-file> <workspace> <out-dir>
 # The session runs with CLAUDE_CONFIG_DIR=<home>/config, the ISOLATED config directory install.sh
@@ -28,6 +31,45 @@ command -v claude >/dev/null 2>&1 || { echo "launch.sh: claude is not on PATH" >
 [ -n "$SETUP_HOME" ] && [ -d "$SETUP_HOME/config" ] || { echo "launch.sh: $VAR must name the installed home" >&2; exit 3; }
 [ -s "$PROMPT_FILE" ] || { echo "launch.sh: no prompt file (or it is empty): $PROMPT_FILE" >&2; exit 2; }
 [ -d "$WORKSPACE" ] || { echo "launch.sh: no workspace: $WORKSPACE" >&2; exit 2; }
+# The home guard, before anything is created (E14 slice 3c fix 3-2): the installers' GUARD, byte for byte.
+for checked in "$OUT_DIR" "$SETUP_HOME"; do
+  python3 - "$checked" "$HOME" "launch.sh" <<'GUARD' >/dev/null || exit 2
+import os, sys
+target, home, name = sys.argv[1:4]
+
+
+def refuse(why):
+    sys.stderr.write("%s: %s; nothing created\n" % (name, why))
+    sys.exit(2)
+
+
+def forms(path):
+    return (os.path.abspath(path), os.path.realpath(path))
+
+
+def rest(path, base):
+    """The part of `path` below `base` ("" when they are the same), or None; compared casefolded."""
+    p, b = path.casefold(), base.casefold().rstrip(os.sep)
+    return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+
+
+if not os.path.isabs(home):
+    refuse("HOME is not an absolute path")
+share = os.path.join(home, ".local", "share")
+homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
+         os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
+for path in forms(target):
+    for forbidden in homes:
+        if any(rest(path, base) is not None for base in forms(forbidden)):
+            refuse("%s is under %s, which no setup may touch" % (target, forbidden))
+    for base in forms(share):
+        below = rest(path, base)
+        if below and below.split(os.sep)[0].startswith("skills-v2-"):
+            refuse("%s is under %s, which no setup may touch"
+                   % (target, os.path.join(share, below.split(os.sep)[0])))
+print(os.path.realpath(target))
+GUARD
+done
 for kept in trace.jsonl launch.json transcript.jsonl result.txt; do
   [ -e "$OUT_DIR/$kept" ] && { echo "launch.sh: $OUT_DIR already holds $kept; name a fresh output directory" >&2; exit 2; }
 done

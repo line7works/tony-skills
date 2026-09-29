@@ -2,16 +2,30 @@
 
 One directory per harness (Claude Code and Codex; E13's pick P3 stands). A setup is everything
 needed to install this core into an isolated copy of that harness's configuration, verify the
-installed package, run the negative installation tests, and launch one headless session. Nothing
-here touches the live `~/.claude` or `~/.codex`: every home is named by its caller (an argument or
-the per-core variable `<CORE>_CLAUDE_HOME` / `<CORE>_CODEX_HOME`) and there is no default.
+installed package, run the negative installation tests, and launch one headless session. No script
+here writes under the live `~/.claude` or `~/.codex` or a `~/.local/share/skills-v2-*` home: every
+home is named by its caller (an argument or the per-core variable `<CORE>_CLAUDE_HOME` /
+`<CORE>_CODEX_HOME`) and there is no default. Both installers (and `seven-stations.sh`) refuse, with
+exit 2 and before anything is created, a home that is or sits under `~/.claude`, `~/.codex` or a
+`~/.local/share/skills-v2-*` home (the pilot's, the locked one), whichever harness they serve; the
+home is compared as given and resolved (symlinks and `..`), and so is each forbidden home. The same
+guard, before the first write, holds every other path a caller names here: both launchers' out-dir
+and home (Claude Code's installed home, Codex's condition home and each `--writable` root),
+`negative-cases.py`'s `--out` (both `negative-tests.sh`), and, beside the setups, the seeded cases'
+`--out` (`evals/seeded-cases/observe.py` and every family's `build.py`) and inspect-v2's
+`evals/replay/replay.py --keep`. `manual-only.sh` writes nothing before its `install.sh`, whose
+guard stops it.
 
 Every script is build-v2's own (E13 slice 3), copied with the core as the variable, and is
 byte-identical in the four front cores; each reads the core it serves from its own location. Two
-changes from build-v2's copies, both parameterisations: the plugin list the installers bring along
+changes from build-v2's copies are parameterisations: the plugin list the installers bring along
 is a `case` on the core (inspect-v2 brings `records`, `readers` and `blueprint-v2`, its code book;
 precon-v2 and architect-v2 bring `readers`; blueprint-v2 brings nothing), and the core's driver
 script is derived from its name (`<station>.py`) in `verify-package.py` and `negative-cases.py`.
+The third is the home guard above (E14 slice 3c, fixes 3 and 3-2) in the installers, the launchers
+and `negative-cases.py`, which build-v2's and signoff-v2's frozen copies (E14-8) do not carry: their
+installers still create the home before their check and name only their own harness's live home, and
+their launchers and `negative-cases.py` have no guard.
 
 | File | Does |
 |---|---|

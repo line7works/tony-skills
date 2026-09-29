@@ -220,8 +220,9 @@ values one by one, `who`, `when` and each `must` item as its own row with its pl
 (`walkthrough/who`, `walkthrough/must/0`), each new or struck poured-concrete and deferred line, each
 `lines` entry's own text, each ruling; the walkthrough line's `Who: ... Must be able to:` formatting
 and the `NEEDS CHECK:` prefix are the doc's rendering, added after the check and never the answer's
-words, so an unanswered `open` or `parked` item asserted as a walkthrough value or a `lines` entry is
-refused `quietly-resolved`, and an untraced walkthrough is one `untraced` refusal;
+words, so an `open` or `parked` item asserted as a walkthrough value, or as a `lines` entry that does
+not name its row by `row`, is refused `quietly-resolved`, answered or not (a walkthrough value has no
+`row`), and an untraced walkthrough is one `untraced` refusal;
 a new poured-concrete line on its form, `<category> <dash> <decision> <dash> <why>`, gives a second
 row whose text is its decision field, everything between the first field and the last, with the
 category and the why beside it, so the shared guard on a line that names no row meets a `parked` or
@@ -243,7 +244,8 @@ and its words are never matched against the named row: a `row` the ledger does n
 question of this run touched is `quietly-resolved`, whatever its words. Its words still meet every
 row it does not name: a line asserted `decided` whose words restate a `parked` or `open` row it
 does not name (it names no row, or another) is `quietly-resolved` by the frame's guard, whose
-refusal asks for the row's id. A decided row is never moved back (slice 3a C3, as amended by A8):
+refusal asks for the row's id, whether or not an answered question of this run touched that row (an
+answered question does not substitute for the line's row id). A decided row is never moved back (slice 3a C3, as amended by A8):
 `station_core.answer.MOVED_BACK` is `("parked", "open", "deferred")`, and a line naming a `decided`
 row by its id under one of those tags is `re-asked-decided`. The next station reads the Deferred
 section as parked, so every new Deferred entry, and every `lines` entry (rendered there as
@@ -289,7 +291,7 @@ unlabelled row by its words. This core has no label reading of its own.
 Every `decided` ledger line reaches the doc untouched: an accepted answer touches none (touching one
 is refused), and the run log's `Rulings:` line lists each by id and text after
 `passed forward untouched:`. `parked` and `open` lines pass forward as they are; one asserted as
-`decided` is refused unless an answered question of this run touched it.
+`decided` is refused unless it names the row by its id and an answered question of this run touched it.
 
 ### 6.5 The amended answer
 
