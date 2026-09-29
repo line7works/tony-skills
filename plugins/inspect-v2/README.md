@@ -53,7 +53,7 @@ project with its own assertions; and `setups/manual-only.sh` with the manual-onl
 (`setups/_fixtures/`) and its two prompts per harness, whose live measurement is the control room's.
 What stays: the owner's rulings on the open points of the contract's section 15.
 
-Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
+Interface version 1, plugin version 0.1.1. Tests: 480.
 
 ## Layout
 

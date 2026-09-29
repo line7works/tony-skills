@@ -33,7 +33,7 @@ Slice 3c's second hand-back: `setups/manual-only.sh` installs the manual-only pr
 controls; the two prompts per harness are in `setups/<harness>/prompts/`; the live measurement is
 the control room's.
 
-Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
+Interface version 1, plugin version 0.1.1. Tests: 478.
 
 ## Layout
 

@@ -47,7 +47,7 @@ lists a candidate as its folder spells it, so `select` and every later use of a 
 disk spelling on a case-insensitive disk; and the plugin has its marketplace entry. The seeded case L3-03 is renamed
 `L3-03-two-scope-homes-one-tier`, for what it now proves (the two scope homes are one tier).
 
-Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
+Interface version 1, plugin version 0.1.1. Tests: 421.
 
 ## Layout
 
