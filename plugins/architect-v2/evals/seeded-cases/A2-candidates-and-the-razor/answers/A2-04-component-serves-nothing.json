@@ -1,0 +1,52 @@
+{
+  "candidates": [
+    {
+      "assumes": "a",
+      "categories": [
+        "platform:library"
+      ],
+      "later_cost": "b",
+      "name": "module"
+    },
+    {
+      "assumes": "c",
+      "categories": [
+        "platform:server"
+      ],
+      "later_cost": "d",
+      "name": "service"
+    }
+  ],
+  "case": "A2-04-component-serves-nothing",
+  "components": [
+    {
+      "name": "turnstile.py",
+      "serves": "count turns"
+    },
+    {
+      "name": "metrics exporter",
+      "serves": ""
+    }
+  ],
+  "exit_ramp": "system",
+  "lines": [],
+  "pick": "module",
+  "questions": [],
+  "rejected": [
+    {
+      "name": "service",
+      "why": "the bench imports a module"
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session",
+  "walkthrough": {
+    "must": [
+      "count turns",
+      "reset the count"
+    ],
+    "when": "2026-10-01",
+    "who": "Sam Bench"
+  }
+}

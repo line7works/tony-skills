@@ -1,0 +1,52 @@
+{
+  "answer_version": 1,
+  "doc": {
+    "intent": "a small turn counter for the owner's bench rig",
+    "title": "Turnstile"
+  },
+  "gate": "round 1: runtime decided, storage parked for research; the encoder mode is next",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "reason": "needs research",
+      "tag": "parked",
+      "text": "Where the count is kept between sessions",
+      "trace": {
+        "kind": "question",
+        "ref": "Q2"
+      }
+    }
+  ],
+  "open_items": [],
+  "out_of_scope": [],
+  "questions": [
+    {
+      "answer": "3.9, standard library only",
+      "id": "Q1",
+      "text": "Which Python?",
+      "touches": []
+    },
+    {
+      "answer": "I need to look into storage",
+      "id": "Q2",
+      "needs_research": true,
+      "text": "Where is the count kept between sessions?",
+      "touches": []
+    }
+  ],
+  "research": [],
+  "run_id": "run-0001",
+  "session_id": "session-example-1",
+  "sitting": "continues",
+  "triage": {
+    "tier": "bounded",
+    "why": "a normal feature with known edges"
+  }
+}

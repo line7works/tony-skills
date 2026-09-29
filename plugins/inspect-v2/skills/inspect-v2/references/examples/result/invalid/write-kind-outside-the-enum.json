@@ -1,0 +1,204 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "x",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "inspect-v2",
+  "station_result": {
+    "bottom_line": "One criterion names no failure case; fix it before build.",
+    "build_doc": "/tmp/widget-workspace/docs/plans/2026-09-22-widget.md",
+    "calls": [
+      {
+        "authorized": false,
+        "call_id": "run-0001-traceability",
+        "effective_model": "claude-example-model",
+        "lens": "traceability",
+        "row": "claude-session",
+        "status": "ok"
+      },
+      {
+        "authorized": false,
+        "call_id": "run-0001-code-book",
+        "effective_model": "claude-example-model",
+        "lens": "code-book",
+        "row": "claude-session",
+        "status": "ok"
+      },
+      {
+        "authorized": false,
+        "call_id": "run-0001-repo-reality",
+        "effective_model": "claude-example-model",
+        "lens": "repo-reality",
+        "row": "claude-session",
+        "status": "ok"
+      }
+    ],
+    "chat": "INSPECT: /tmp/widget-workspace/docs/plans/2026-09-22-widget.md\nVerdict: APPROVED WITH CONDITIONS\nInspector: claude-session · claude-example-model · isolation not recorded  ·  Scope doc: /tmp/widget-workspace/docs/scope/2026-09-20-widget.md  ·  Refuted: 1\nRaw: n/a — Claude lane\nFindings: 0 BLOCKER · 1 MAJOR · 0 MINOR\n\nBottom line: One criterion names no failure case; fix it before build.\n\nMAJOR      MAJOR · docs/plans/2026-09-22-widget.md:12 · AC1 names no failure case · a grader cannot tell a partial counter · CONFIRMED\nHunted and held: the slice order and the ledger scaffold held\nNext: the owner adjudicates the findings, the drafting session amends the doc on his word, then a fresh inspect-v2 run.\n",
+    "code_book": {
+      "path": "/tmp/plugins/blueprint-v2/skills/blueprint-v2/SKILL.md",
+      "route": "3a"
+    },
+    "construction_started": [],
+    "counts": {
+      "blocker": 0,
+      "confirmed": 1,
+      "locationless": 0,
+      "major": 1,
+      "minor": 0,
+      "plausible": 0,
+      "questions": 0,
+      "refuted": 1,
+      "unverified": 0
+    },
+    "findings": [
+      {
+        "call_id": "run-0001-code-book",
+        "claim": "AC1 names no failure case",
+        "converged": [
+          "run-0001-code-book"
+        ],
+        "finding_id": "f1:0123456789abcdef0123",
+        "label": "CONFIRMED",
+        "location": "docs/plans/2026-09-22-widget.md:12",
+        "raised_by": "claude-example-model",
+        "scenario": "a grader cannot tell a partial counter",
+        "severity": "MAJOR",
+        "slice": "A"
+      }
+    ],
+    "hunted_and_held": "the slice order and the ledger scaffold held",
+    "lenses_not_run": [],
+    "mirror": {
+      "answer": {
+        "counts": {
+          "absent": 0,
+          "differs": 0,
+          "only_in_mirror": 0,
+          "same": 0
+        },
+        "doc": "docs/plans/2026-09-22-widget.md",
+        "mirrors": [
+          {
+            "blocks": [],
+            "only_in_mirror": [],
+            "slice": null,
+            "state": "same",
+            "verdict_doc": "docs/reviews/2026-09-25-inspect-widget.md"
+          }
+        ],
+        "slices": [
+          "A"
+        ],
+        "spec": {
+          "doc": "docs/plans/2026-09-22-widget.md",
+          "slice": null
+        }
+      },
+      "path": "/tmp/widget-workspace/docs/reviews/2026-09-25-inspect-widget.md",
+      "recognised": true,
+      "state": "same"
+    },
+    "no_record": false,
+    "packet": [
+      {
+        "dir": "/tmp/station-runs/run-0001/packet/traceability",
+        "files": [
+          "build-doc.md",
+          "code-book.md",
+          "scope-doc.md"
+        ],
+        "lens": "traceability"
+      },
+      {
+        "dir": "/tmp/station-runs/run-0001/packet/code-book",
+        "files": [
+          "build-doc.md",
+          "code-book.md",
+          "scope-doc.md"
+        ],
+        "lens": "code-book"
+      },
+      {
+        "dir": "/tmp/station-runs/run-0001/packet/repo-reality",
+        "files": [
+          "build-doc.md",
+          "code-book.md",
+          "scope-doc.md"
+        ],
+        "lens": "repo-reality"
+      }
+    ],
+    "questions": [],
+    "records": {
+      "appended": 1,
+      "head_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "head_before": "0000000000000000000000000000000000000000000000000000000000000000",
+      "log": "docs/records/docs__plans__2026-09-22-widget.events.jsonl"
+    },
+    "refuted": [
+      {
+        "call_id": "run-0001-code-book",
+        "finding": "run-0001-code-book#2",
+        "location": "build-doc.md:99",
+        "why": "line 99 is past the end of build-doc.md (22 lines)"
+      }
+    ],
+    "requests": [
+      {
+        "authorized": false,
+        "call_id": "run-0001-traceability",
+        "documents": [
+          "build-doc.md",
+          "scope-doc.md"
+        ],
+        "lens": "traceability",
+        "profile": "packet-only",
+        "row": "claude-session"
+      },
+      {
+        "authorized": false,
+        "call_id": "run-0001-code-book",
+        "documents": [
+          "code-book.md",
+          "build-doc.md"
+        ],
+        "lens": "code-book",
+        "profile": "packet-only",
+        "row": "claude-session"
+      },
+      {
+        "authorized": false,
+        "call_id": "run-0001-repo-reality",
+        "documents": [
+          "build-doc.md"
+        ],
+        "lens": "repo-reality",
+        "profile": "repo",
+        "row": "claude-session"
+      }
+    ],
+    "scope_doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+    "stamp": "Plan: inspected 2026-09-25 by claude-example-model · 0 BLOCKER · 1 MAJOR · 0 MINOR",
+    "stamp_written": true,
+    "verdict": "APPROVED WITH CONDITIONS",
+    "weaker": false
+  },
+  "status": "completed",
+  "writes": [
+    {
+      "kind": "note",
+      "path": "/tmp/widget-workspace/a.md",
+      "sha256_after": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": false
+}

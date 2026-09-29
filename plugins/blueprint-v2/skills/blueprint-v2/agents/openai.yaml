@@ -1,0 +1,3 @@
+interface:
+  display_name: "Blueprint v2"
+  short_description: "Draft a traced build document in verifiable slices"

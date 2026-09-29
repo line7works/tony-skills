@@ -342,7 +342,11 @@ Four rules hold that shape together, each one a failure found in the pilot befor
   the line reads now, that this run wrote its value there earlier, and that the line is left as it
   is, never that the edit came between the plan and the write (punch4-C2-3); only without a
   receipted write, where the run cannot know the line was ever its, does it say the line was not
-  written;
+  written, and then only on the pass that planned the move and met the edit before its own write;
+  a pass that reopens a receipt with no recorded write (an earlier pass was interrupted, or stopped,
+  before one) says instead that it cannot know whether the line was ever its own, that this run
+  did not write the line as it now reads, and that it is left as it is, neither written again nor
+  reverted (E14 C4-1);
 - **the source the decision was made on is pinned with it** (Astra's F1, E13 full review): the
   checkpoint's `decision.source_pin` holds HEAD and the identity of every changed or untracked
   path, the build doc and `docs/records/` excepted. A path's identity is its type, the mode git

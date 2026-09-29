@@ -1,0 +1,17 @@
+{
+  "case": "L1-04-repo-path-missing",
+  "lines": [
+    {
+      "tag": "requirement",
+      "text": "The reset lives in src/reset.py",
+      "trace": {
+        "kind": "repo_path",
+        "ref": "src/reset.py"
+      }
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,12 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "precon-v2",
+    "harness": "codex-cli",
+    "mode": "station",
+    "session_id": null
+  },
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "workspace": "/tmp/widget-workspace"
+}

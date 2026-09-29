@@ -1,0 +1,122 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the build doc was extended in place: docs/plans/2026-09-22-widget.md",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "selection": {
+    "scope": {
+      "candidates": [
+        {
+          "home": "repo-scope",
+          "path": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+          "tier": 1
+        }
+      ],
+      "hunt": "scope",
+      "name": null,
+      "outcome": "one",
+      "searched": [
+        {
+          "found": [
+            "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md"
+          ],
+          "given": true,
+          "globs": [
+            "docs/scope/{name}.md",
+            "docs/scope/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-{name}.md"
+          ],
+          "home": "repo-scope",
+          "root": "workspace",
+          "tier": 1
+        },
+        {
+          "found": [],
+          "given": true,
+          "globs": [
+            "docs/{name}-scope.md"
+          ],
+          "home": "repo-flat",
+          "root": "workspace",
+          "tier": 1
+        }
+      ]
+    }
+  },
+  "station": "blueprint-v2",
+  "station_result": {
+    "architecture_doc": null,
+    "assumptions": 0,
+    "collapsed_gate": null,
+    "doc": "/tmp/widget-workspace/docs/plans/2026-09-22-widget.md",
+    "doc_action": "extended",
+    "feature": "widget",
+    "needs_build_doc": true,
+    "new_slices": [
+      "B"
+    ],
+    "open_questions": 0,
+    "questions_asked": 1,
+    "readback": "BLUEPRINT: widget\nDoc: docs/plans/2026-09-22-widget.md  ·  Slices: 2  ·  Open questions: 0  ·  Assumptions: 0\n\nSlice A — Count turns\nSlice B — Reset\n\nNext: build-v2 slice B when ready.",
+    "scope_doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+    "slice_names": [
+      "A",
+      "B"
+    ],
+    "slices": 2
+  },
+  "status": "completed",
+  "stop_tag": null,
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/answer.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/checkpoint.json",
+      "sha256_after": null,
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/harvest.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/input.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/receipt.json",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    },
+    {
+      "kind": "document",
+      "path": "/tmp/widget-workspace/docs/plans/2026-09-22-widget.md",
+      "sha256_after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256_before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "wrote_nothing": false
+}

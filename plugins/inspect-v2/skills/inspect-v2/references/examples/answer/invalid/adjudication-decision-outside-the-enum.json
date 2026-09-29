@@ -1,0 +1,63 @@
+{
+  "adjudications": [
+    {
+      "decision": "waived",
+      "finding": "run-0002-gpt-astra#1",
+      "why": "line 12 names no failure case, as the finding says"
+    }
+  ],
+  "answer_version": 1,
+  "bottom_line": "The plan holds one real defect. Fix it, then build.",
+  "hunted_and_held": "the slice order and the ledger scaffold held",
+  "lanes": [
+    "paper",
+    "repo-reality"
+  ],
+  "lines": [],
+  "owner_word": {
+    "rows": [
+      "gpt-astra"
+    ],
+    "words": "send it to gpt-astra"
+  },
+  "questions": [],
+  "results": [
+    {
+      "call_id": "run-0002-gpt-astra",
+      "effective_model": "gpt-example-model",
+      "findings": [
+        {
+          "claim": "AC1 names no failure case",
+          "confidence": "high",
+          "lens": "code-book",
+          "location": "build-doc.md:12",
+          "quote": "AC1",
+          "scenario": "a grader cannot tell a partial counter",
+          "severity": "MAJOR"
+        },
+        {
+          "claim": "the plan reads long",
+          "confidence": "low",
+          "location": null,
+          "scenario": "a builder skims it",
+          "severity": "MINOR"
+        }
+      ],
+      "isolation": "sandbox-enforced",
+      "parity": "web tools off",
+      "raw_path": "/tmp/widget-workspace/docs/reviews/2026-09-25-inspect-widget-gpt.md",
+      "row": "gpt-astra",
+      "status": "ok"
+    },
+    {
+      "call_id": "run-0002-repo-reality",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    }
+  ],
+  "row": "gpt-astra",
+  "run_id": "run-0002",
+  "session_id": "session-example-1"
+}

@@ -10,7 +10,7 @@ description: >-
   recorded in the shared records. Not an inspection of what was built, not a plan check, not a
   whole-build review, and not the bare /build command, which belongs to the v1 station.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Build v2

@@ -1,0 +1,17 @@
+{
+  "case": "P1-07-restated-without-row",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "Where the _count_ is kept between sessions",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "keep it in memory"
+      }
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,27 @@
+{
+  "case": "L1-02-requirement-untraced",
+  "criteria": [
+    {
+      "text": "AC1: `spin(2)` returns 3",
+      "verify": "new test at tests/test_turnstile.py"
+    }
+  ],
+  "lines": [
+    {
+      "tag": "constraint",
+      "text": "Python 3.9 standard library",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "requirement",
+      "text": "R2 \u2014 counts are exported as CSV"
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

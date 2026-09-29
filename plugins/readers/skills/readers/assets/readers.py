@@ -17,7 +17,8 @@ Usage:
   readers <request.json | ->            run one call (the request on stdin with -)
 
 Slice A carries the contract's pre-send checks, the roster, and the GPT lane
-(codex exec). Slice B adds the OpenRouter adapter (deepseek, qwen), the last-pick
+(codex exec). E14 (A12) adds the Claude CLI lane (claude -p), a portable Claude reader any
+shell with the `claude` binary on PATH can dispatch. Slice B adds the OpenRouter adapter (deepseek, qwen), the last-pick
 memory in the checkout, the `suggest` step, the run-wide freeze (snapshot), and the
 canned transport hooks. Slice C adds the host lanes' two steps: `compose` (the skill body
 runs the lane with what it prints) and `record` (the body hands the capture back), so a host
@@ -40,7 +41,7 @@ import uuid
 from datetime import datetime, timezone
 
 PROTOCOL_VERSION = 1
-ADAPTER_VERSION = "slice-c-fix-2026-09-06"
+ADAPTER_VERSION = "e14-claude-cli-2026-09-24"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROSTER_PATH = os.path.join(HERE, "roster.json")
 # The last-pick memory lives in the tony-skills checkout (blueprint assumption 1), never in the
@@ -522,6 +523,8 @@ def check_lane(req, row, dispatching):
         return
     if row["transport"] == "codex-exec" and shutil.which("codex") is None:
         raise Refuse("lane-unavailable", "codex CLI not on PATH")
+    if row["transport"] == "claude-cli" and shutil.which("claude") is None:
+        raise Refuse("lane-unavailable", "claude CLI not on PATH")
     if row["credential_env"]:
         key = os.environ.get(row["credential_env"], "")
         if not key:
@@ -847,6 +850,136 @@ def run_codex(req, row, prompt, result, call_dir, diag):
             f.write(text)
         os.remove(out_file) if os.path.exists(out_file) else None
         raise Refuse("incomplete", "truncation signal in the event stream (%s); partial text kept in diagnostics only" % signal)
+    if not text.strip():
+        raise Refuse("empty", "no content or whitespace only")
+    return text
+
+
+# ---------- the Claude CLI adapter (claude -p; E14, A12) ----------
+
+# The tools a Claude CLI reader gets per profile: none at all under starved and packet-only (the
+# documents are in the prompt), the read-only built-ins under repo. Web tools are denied in every
+# profile as belt and braces. repo-with-tools is not a profile of this lane: the route runs nothing.
+CLAUDE_CLI_TOOLS = {"starved": "", "packet-only": "", "repo": "Read,Glob,Grep"}
+CLAUDE_CLI_DISALLOWED = "WebFetch,WebSearch"
+# A result document that says the reply was cut short: the model stopped at its output cap, or the
+# run stopped at its turn cap (the CLI's `error_max_turns` result subtype).
+CLAUDE_CLI_CUT_STOP_REASONS = ("max_tokens", "length", "model_context_window_exceeded")
+CLAUDE_CLI_CUT_SUBTYPES = ("error_max_turns",)
+
+
+def claude_cli_command(req, result, wd):
+    """The argv of one headless Claude CLI read; every value an argv item, never shell text. The prompt
+    travels on stdin. `--safe-mode` (it takes no value) starts the child with every customization
+    disabled: CLAUDE.md, skills, installed plugins, hooks, MCP servers, custom commands and agents,
+    output styles, workflows. Kept beside it as belt and braces: `--setting-sources ""` loads no user,
+    project or local settings (so no plugin, hook or permission rule of the caller's home),
+    `--strict-mcp-config` with no `--mcp-config` loads no MCP server, `--disable-slash-commands` loads no
+    skill, and `--tools` and `--disallowedTools` below; each flag was checked against `claude --help`."""
+    cmd = ["claude", "-p", "--model", result["effective_model"], "--output-format", "json",
+           "--no-session-persistence", "--safe-mode", "--setting-sources", "", "--strict-mcp-config",
+           "--disable-slash-commands"]
+    if req.get("effort"):
+        cmd += ["--effort", result["effective_effort"]]
+    cmd += ["--tools", CLAUDE_CLI_TOOLS[req["profile"]]]
+    if req["profile"] == "repo":
+        cmd += ["--add-dir", wd]
+    cmd += ["--disallowedTools", CLAUDE_CLI_DISALLOWED]
+    return cmd
+
+
+def claude_cli_message(doc, stderr_f):
+    """The CLI's own error text, wherever it put it: the result document's `result` or error fields, then
+    the stderr tail."""
+    msgs = []
+    if isinstance(doc, dict):
+        for k in ("result", "error", "errors", "api_error_status", "subtype"):
+            v = doc.get(k)
+            if v:
+                msgs.append(v if isinstance(v, str) else json.dumps(v))
+    try:
+        with open(stderr_f, errors="replace") as f:
+            tail = f.read()[-2000:].strip()
+        if tail:
+            msgs.append(tail)
+    except OSError:
+        pass
+    return " | ".join(m for m in msgs if m)
+
+
+def run_claude_cli(req, row, prompt, result, call_dir, diag):
+    wd = prepare_workdir(req, call_dir)
+    result["workdir"] = wd
+    result["workdir_instruction_files"] = instruction_files(wd)
+    stdout_f = os.path.join(diag, "stdout.json")
+    stderr_f = os.path.join(diag, "stderr.txt")
+    partial_f = os.path.join(diag, "partial.md")
+    # never read a stale file from an earlier attempt (the codex lane's R5 rule)
+    for stale in (stdout_f, partial_f):
+        if os.path.exists(stale):
+            os.remove(stale)
+    cmd = claude_cli_command(req, result, wd)
+    with open(os.path.join(diag, "command.txt"), "w") as f:
+        f.write(json.dumps(cmd) + "\n")
+    log_dispatch(call_dir, "dispatch claude -p model=%s effort=%s profile=%s" % (result["effective_model"], result["effective_effort"], req["profile"]))
+    canned = canned_hook("READERS_CANNED_CLAUDE", result)
+    if canned:
+        # the saved child: stdout.json, stderr.txt, exit, read in place of a launch
+        for name, dest in (("stdout.json", stdout_f), ("stderr.txt", stderr_f)):
+            src = os.path.join(canned, name)
+            if os.path.exists(src):
+                shutil.copyfile(src, dest)
+            else:
+                open(dest, "wb").close()
+        try:
+            with open(os.path.join(canned, "exit")) as f:
+                returncode = int(f.read().strip() or "0")
+        except (OSError, ValueError) as e:
+            raise Refuse("transport-failed", "canned claude directory %s: exit file unreadable (%s)" % (canned, e))
+    else:
+        with open(stdout_f, "wb") as out, open(stderr_f, "wb") as er:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=out, stderr=er, cwd=wd, env=child_env())
+            try:
+                proc.communicate(prompt.encode("utf-8"), timeout=row["timeout_s"])
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                result["exit_code"] = proc.returncode
+                raise Refuse("timed-out", "claude -p exceeded timeout_s %d and was killed" % row["timeout_s"])
+            except KeyboardInterrupt:
+                proc.kill()
+                proc.communicate()
+                result["exit_code"] = proc.returncode
+                raise Refuse("cancelled", "interrupted; child killed")
+        returncode = proc.returncode
+    result["exit_code"] = returncode
+    # guards, in the contract's order (the codex lane's): the exit code, then a document that cannot be
+    # read, then a cut-short reply, then an error document, then empty content
+    doc = None
+    try:
+        with open(stdout_f, encoding="utf-8") as f:
+            doc = json.loads(f.read())
+    except (OSError, ValueError):
+        doc = None
+    if returncode != 0:
+        msg = claude_cli_message(doc, stderr_f)
+        raise Refuse("transport-failed", "claude -p exit %d: %s" % (returncode, msg or "(no message on stdout or stderr)"))
+    if not isinstance(doc, dict):
+        raise Refuse("transport-failed", "claude -p stdout is not one JSON result document: %s" % (claude_cli_message(None, stderr_f) or "(no message on stderr)"))
+    text = doc.get("result")
+    cut = None
+    if doc.get("stop_reason") in CLAUDE_CLI_CUT_STOP_REASONS:
+        cut = "stop_reason %s" % doc.get("stop_reason")
+    elif doc.get("subtype") in CLAUDE_CLI_CUT_SUBTYPES:
+        cut = "subtype %s (num_turns %s)" % (doc.get("subtype"), doc.get("num_turns"))
+    if cut:
+        with open(partial_f, "w", encoding="utf-8") as f:
+            f.write(text if isinstance(text, str) else "")
+        raise Refuse("incomplete", "the result document says the reply was cut short (%s); partial text kept in diagnostics only" % cut)
+    if doc.get("is_error") is True:
+        raise Refuse("transport-failed", "claude -p reported an error: %s" % (claude_cli_message(doc, stderr_f) or "(no message)"))
+    if not isinstance(text, str):
+        raise Refuse("transport-failed", "claude -p result document carries no `result` text: %s" % (claude_cli_message(doc, stderr_f) or "(no message)"))
     if not text.strip():
         raise Refuse("empty", "no content or whitespace only")
     return text
@@ -1293,8 +1426,9 @@ def host_record(req, row, prompt, result, call_dir, diag, host):
     return finish(result, call_dir, "ok", anomaly)
 
 
-ADAPTERS = {"codex-exec": None, "openrouter": None}  # filled below, after both adapters are defined
-CANNED_HOOK_ENV = {"codex-exec": "READERS_CANNED_CODEX", "openrouter": "READERS_CANNED_RESPONSE"}
+ADAPTERS = {"codex-exec": None, "openrouter": None, "claude-cli": None}  # filled below, after the adapters are defined
+CANNED_HOOK_ENV = {"codex-exec": "READERS_CANNED_CODEX", "openrouter": "READERS_CANNED_RESPONSE",
+                   "claude-cli": "READERS_CANNED_CLAUDE"}
 
 
 def run(req, dispatching, host=None):
@@ -1385,6 +1519,7 @@ def run(req, dispatching, host=None):
 
 ADAPTERS["codex-exec"] = run_codex
 ADAPTERS["openrouter"] = run_openrouter
+ADAPTERS["claude-cli"] = run_claude_cli
 
 
 # ---------- suggest (Slice B R5) ----------

@@ -1,0 +1,21 @@
+{
+  "case": "A1-03-poured-line-untraced",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "language \u2014 Python 3.9 \u2014 every bench script imports it",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "database \u2014 SQLite \u2014 the counts need a table"
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/station-v2/blueprint-v2/answer.schema.json",
+  "title": "blueprint-v2 recorded answer",
+  "description": "The executor's one recorded answer of a blueprint-v2 run (references/blueprint-v2-contract.md section 7), checked by `record-answer`: this schema first (exit 4), then the shared refusals of station_core/answer.py with the trace kinds `ledger`, `repo_path`, `question` and `owner_words` (exit 5), then blueprint's own content checks (exit 5). Closed at every level. A trace is optional here so an untraced line reaches the content check and is refused by rule, and every one of the five shared trace kinds is spelled here so `assumed` is refused by the content check as a kind this core does not allow (assumptions have their own field); an `owner_words` trace carries the owner's words quoted verbatim, never blank. A criterion's `verify` is optional here for the same reason as the trace: a missing one, or one that is none of the three forms, is refused by rule. When `ceremony.needs_build_doc` is true the answer names its feature, title and intent and holds at least one constraint line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answer_version", "run_id", "session_id", "questions", "lines", "criteria", "slices", "assumptions", "open_questions", "ceremony"],
+  "properties": {
+    "answer_version": {"type": "integer", "const": 1, "description": "the version of this answer shape"},
+    "run_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "description": "the run's own id; record-answer refuses another"},
+    "session_id": {"type": "string", "minLength": 1, "description": "the executor's session, the adapter's answer_fields.session_id; record-answer refuses one other than the input's invocation.session_id"},
+    "feature": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9._-]*$", "description": "the feature's slug: the build hunt's --name, and the <feature> of docs/plans/<YYYY-MM-DD>-<feature>.md"},
+    "title": {"$ref": "#/$defs/oneLine", "description": "the <Feature> of the title line '# <Feature> \u2014 build plan (<date>)'"},
+    "intent": {"$ref": "#/$defs/oneLine", "description": "the Intent: line's text"},
+    "questions": {"type": "array", "items": {"$ref": "#/$defs/question"}, "description": "every question put to the owner in this run"},
+    "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}, "description": "the build doc's requirements, constraints and out-of-scope lines, each with its trace"},
+    "criteria": {"type": "array", "items": {"$ref": "#/$defs/criterion"}, "description": "the acceptance criteria, each with its verify form"},
+    "slices": {"type": "array", "items": {"$ref": "#/$defs/slice"}, "description": "the slices this run adds or revises, in dependency order"},
+    "assumptions": {"type": "array", "items": {"$ref": "#/$defs/oneLine"}, "description": "small reversible gaps the executor decided, one line each"},
+    "open_questions": {"type": "array", "items": {"$ref": "#/$defs/oneLine"}, "description": "load-bearing questions the owner still owes, one line each"},
+    "ceremony": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["needs_build_doc", "why"],
+      "properties": {
+        "needs_build_doc": {"type": "boolean", "description": "false: this does not need a build doc, and the run stops no-build-doc with no file"},
+        "why": {"$ref": "#/$defs/oneLine"}
+      }
+    },
+    "collapsed_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["words"],
+      "description": "present only when the owner's invocation collapsed the gate; his words verbatim. The core records it and never acts on it",
+      "properties": {"words": {"$ref": "#/$defs/oneLine"}}
+    }
+  },
+  "if": {"required": ["ceremony"], "properties": {"ceremony": {"required": ["needs_build_doc"], "properties": {"needs_build_doc": {"const": true}}}}},
+  "then": {
+    "required": ["feature", "title", "intent"],
+    "properties": {"lines": {"contains": {"required": ["tag"], "properties": {"tag": {"const": "constraint"}}}}}
+  },
+  "$defs": {
+    "oneLine": {"type": "string", "pattern": "\\S", "not": {"pattern": "[\\r\\n]"}, "description": "one line of text, not blank"},
+    "id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "sliceName": {"type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$"},
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "touches", "answer"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "text": {"type": "string", "description": "a blank text is refused by the shared check (shape)"},
+        "touches": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "the ledger line ids this question touches"},
+        "answer": {"type": "string", "description": "the owner's answer; blank means unanswered, and an unanswered question settles nothing"}
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["ledger", "repo_path", "question", "assumed", "owner_words"], "description": "blueprint-v2 allows ledger, repo_path, question and owner_words; assumed is refused by record-answer"},
+        "ref": {"type": "string", "description": "the ledger line id, the workspace path, the question id, or the owner's words quoted verbatim (owner_words: not blank)"}
+      },
+      "allOf": [{"if": {"required": ["kind"], "properties": {"kind": {"const": "owner_words"}}}, "then": {"properties": {"ref": {"pattern": "\\S"}}}}]
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "tag"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id", "description": "the handle a slice names; required in practice for every requirement line of a build doc"},
+        "text": {"$ref": "#/$defs/oneLine", "description": "rendered verbatim"},
+        "tag": {"type": "string", "enum": ["requirement", "constraint", "out-of-scope"]},
+        "trace": {"$ref": "#/$defs/trace"},
+        "row": {
+          "type": "string",
+          "pattern": "^[a-z]+-[0-9a-f]{12}(-[0-9]+)?$",
+          "description": "the id of the ledger row this line decides, settles, passes forward or moves (the row's id is the trace: the line is judged by it and its words are never matched against that row). Absent on a NEW line, one that names no existing row. A line whose trace is `ledger` names its row by that trace; `row` may repeat it and may not differ from it."
+        }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "text": {"$ref": "#/$defs/oneLine"},
+        "verify": {"type": "string", "description": "one of the template's three forms: existing test | new test at <path> | manual: <steps>; missing, blank or any other text is refused by record-answer (criterion-without-verify)"}
+      }
+    },
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "short", "goal", "requirements", "criteria", "footprint", "not_in_slice", "depends_on"],
+      "properties": {
+        "name": {"$ref": "#/$defs/sliceName"},
+        "short": {"$ref": "#/$defs/oneLine"},
+        "goal": {"$ref": "#/$defs/oneLine"},
+        "requirements": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/id"}, "description": "ids of requirement lines"},
+        "criteria": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/id"}, "description": "ids of criteria"},
+        "footprint": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/oneLine"}, "description": "the files expected to change"},
+        "not_in_slice": {"$ref": "#/$defs/oneLine"},
+        "depends_on": {"type": "array", "items": {"$ref": "#/$defs/sliceName"}, "description": "earlier slices; empty renders 'nothing'"}
+      }
+    }
+  }
+}

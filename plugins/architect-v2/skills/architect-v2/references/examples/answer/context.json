@@ -1,0 +1,53 @@
+{
+  "cases": {
+    "invalid/content-docless-reason-mismatch-re-cased.json": {
+      "docless": true,
+      "docless_reason": "an experiment the owner wants drawn before any precon",
+      "slug": "bench-counter"
+    },
+    "invalid/content-docless-reason-mismatch.json": {
+      "docless": true,
+      "docless_reason": "an experiment the owner wants drawn before any precon",
+      "slug": "bench-counter"
+    },
+    "invalid/content-docless-unasked.json": {
+      "docless": true,
+      "slug": "bench-counter"
+    },
+    "invalid/content-docless-without-reason-invisible-only.json": {
+      "docless": true,
+      "slug": "bench-counter"
+    },
+    "invalid/content-docless-without-reason.json": {
+      "docless": true,
+      "slug": "bench-counter"
+    },
+    "invalid/content-no-loss-poured-line.json": {
+      "living_doc": "living-doc.md"
+    },
+    "invalid/content-no-loss-run-block.json": {
+      "living_doc": "living-doc-run-block-misplaced.md"
+    },
+    "valid/docless-set-aside.json": {
+      "docless": true,
+      "docless_reason": "an experiment the owner wants drawn before any precon",
+      "slug": "bench-counter"
+    },
+    "valid/docless.json": {
+      "docless": true,
+      "slug": "bench-counter"
+    },
+    "valid/rerun.json": {
+      "living_doc": "living-doc.md"
+    }
+  },
+  "default": {
+    "living_rel": "docs/architecture/2026-09-21-turnstile.md",
+    "run_id": "run-0001",
+    "scope_doc": "scope-doc.md",
+    "scope_rel": "docs/scope/2026-09-20-turnstile.md",
+    "session_id": "session-example-1",
+    "slug": "turnstile",
+    "today": "2026-09-25"
+  }
+}

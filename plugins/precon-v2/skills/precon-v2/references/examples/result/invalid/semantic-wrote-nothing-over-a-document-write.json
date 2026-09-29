@@ -1,0 +1,53 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "x",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "precon-v2",
+  "station_result": {
+    "board": "decided 2 · assumed 1 · parked 1 · open your-calls 1",
+    "chat_block": "PRECON: turnstile\nDoc: /tmp/widget-workspace/docs/scope/2026-09-20-widget.md\nCounts: decided 2 · assumed 1 · parked 1 · out of scope 1\nParked: Where the count is kept between sessions \u2014 parked: needs research\nGate: every branch was visited or parked\nNext: /blueprint when ready.",
+    "counts": {
+      "assumed": 1,
+      "decided": 2,
+      "out_of_scope": 1,
+      "parked": 1
+    },
+    "doc": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+    "exit_test": null,
+    "gate": "every branch was visited or parked",
+    "home": "repo",
+    "idea": "turnstile",
+    "parked": [
+      "Where the count is kept between sessions \u2014 parked: needs research"
+    ],
+    "planned": [],
+    "sitting": "ends",
+    "tier": "bounded",
+    "triage_why": "a normal feature with known edges"
+  },
+  "status": "completed",
+  "writes": [
+    {
+      "kind": "document",
+      "path": "/tmp/widget-workspace/docs/scope/2026-09-20-widget.md",
+      "sha256_after": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256_before": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

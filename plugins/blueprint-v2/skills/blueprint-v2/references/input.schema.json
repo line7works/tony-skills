@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/station-v2/input.schema.json",
+  "title": "front core input (shared base)",
+  "description": "The one validated input document of a front core's run (station-loop.md section 4). The shared base the four front cores start from; each core's lane adds its own fields under `station`, and nothing else. Every object is closed: an unknown key is refused, never ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code (station_core/inputs.py): the workspace and the staging home are existing absolute directories, and the run directory is absolute and lies inside neither.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input_version", "run_id", "workspace", "run_dir", "invocation"],
+  "properties": {
+    "input_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this input shape; a reader that does not know it refuses the input"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "this run's own id, single-use, one path segment"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of the directory the core reads and writes; a git work tree root when the core writes into a repository"
+    },
+    "staging": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "optional: absolute path of the named non-repository home, passed resolved and never expanded by a script; precon and architect write there when no repository owns the idea"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of this run's directory, outside the workspace and outside the staging home"
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "when true the run writes nothing to the workspace, the staging home or the records log, and its result says so"
+    },
+    "owner_word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rows", "words"],
+      "description": "the owner's word in this run, the one source of a reader request's `authorized` flag: the readers rows the owner named, and his words verbatim. Never carried over from another run.",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "uniqueItems": true,
+          "description": "the readers roster row ids the owner's words name"
+        },
+        "words": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the owner's words, verbatim"
+        }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "caller", "mode"],
+      "description": "facts about the session this run happens in, filled by the adapter's invocation.py, never typed by the executor",
+      "properties": {
+        "harness": {
+          "type": ["string", "null"],
+          "description": "the harness this run is driven from"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1,
+          "description": "who asked for the run: `user` on a direct request, or the station that called this one"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["direct", "station"],
+          "description": "`direct` when a person asked, `station` when another station drove it"
+        },
+        "session_id": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "the session this run happens in, as the adapter READ it from the harness's own record; the recorded answer names the same session"
+        }
+      }
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "default": {},
+      "description": "the fields the core's own lane adds (slice 2); closed and empty in the frame"
+    }
+  }
+}

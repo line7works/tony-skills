@@ -1,0 +1,31 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the code book, blueprint-v2's SKILL.md, resolves by neither route",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "inspect-v2",
+  "station_result": {
+    "chat": "INSPECT: /tmp/widget-workspace/docs/plans/2026-09-22-widget.md\nStopped: code-book-missing\nReason: the code book, blueprint-v2's SKILL.md, resolves by neither route\nStamp: none written\nNext: read the reason.\n",
+    "stamp": null,
+    "stamp_written": false
+  },
+  "status": "stopped",
+  "stop_tag": "code-book-missing",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/checkpoint.json",
+      "sha256_after": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

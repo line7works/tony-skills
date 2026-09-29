@@ -1,0 +1,11 @@
+{
+  "name": "precon-v2",
+  "description": "Harvest an idea discussion into a fixed-format scope doc, every decided, assumed or parked line traced to the owner's words or an answered question, the doc placed and continued by script. Strictly user-invoked. The portable precon core of the skills v2 rebuild; the -v2 suffix stays while v1 precon is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.1"
+}

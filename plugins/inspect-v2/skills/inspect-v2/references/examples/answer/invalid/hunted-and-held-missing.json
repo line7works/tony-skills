@@ -1,0 +1,38 @@
+{
+  "adjudications": [],
+  "answer_version": 1,
+  "bottom_line": "The plan traces to its record and reads as the code book asks. Build when ready.",
+  "lanes": [
+    "traceability",
+    "code-book",
+    "repo-reality"
+  ],
+  "lines": [],
+  "questions": [],
+  "results": [
+    {
+      "call_id": "run-0001-traceability",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    },
+    {
+      "call_id": "run-0001-code-book",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    },
+    {
+      "call_id": "run-0001-repo-reality",
+      "effective_model": "claude-example-model",
+      "findings": [],
+      "row": "claude-session",
+      "status": "ok"
+    }
+  ],
+  "row": "claude-session",
+  "run_id": "run-0001",
+  "session_id": "session-example-1"
+}

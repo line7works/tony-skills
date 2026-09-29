@@ -1,0 +1,47 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the `harvest` phase of precon-v2 is not built yet",
+  "report_only": false,
+  "run_dir": "/tmp/station-runs/run-0001",
+  "run_id": "run-0001",
+  "station": "architect-v2",
+  "station_result": {
+    "artifact_url": null,
+    "candidates": [],
+    "counts": null,
+    "doc_path": null,
+    "docless": null,
+    "passed_forward": [],
+    "pick": null,
+    "project": null,
+    "publish_outcome": "not-reached",
+    "published": false,
+    "review": null,
+    "review_files": [],
+    "review_failed_lanes": [],
+    "review_reason": null,
+    "rulings_count": 0,
+    "run_number": null,
+    "scope_doc": null,
+    "slug": null,
+    "visual_path": null
+  },
+  "status": "stopped",
+  "stop_tag": "phase-not-built",
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/station-runs/run-0001/result.json",
+      "sha256_after": null,
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/inspect-v2/answer.schema.json",
+  "title": "inspect-v2 recorded answer",
+  "description": "The one recorded answer of an inspect-v2 run, handed to `record-answer --answer FILE` (references/inspect-v2-contract.md section 7). It is two documents in one file: the executor's (the shared fields every front core's answer carries, `questions` and `lines`, plus `row`, `owner_word`, `lanes`, `adjudications`, `hunted_and_held` and `bottom_line`) and, under `results`, the readers' results, one per lens call, each carrying the reader's call id, row, effective model and findings exactly as the READERS: line and the reply gave them. Closed at every level: an unknown key is refused, never ignored, so a clear (`disposition`, `waived`) can never ride in. What a schema cannot say is checked by `record-answer` in code (the shared E14-11 refusals through station_core/answer.py, then this core's own rules, section 7 of the contract). Every text a person or a reader writes must hold a non-space character: a blank field is refused, never carried.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "answer_version",
+    "run_id",
+    "session_id",
+    "questions",
+    "lines",
+    "row",
+    "lanes",
+    "results",
+    "hunted_and_held",
+    "bottom_line"
+  ],
+  "properties": {
+    "answer_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this answer shape"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "the run this answer belongs to; record-answer refuses another run's id"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "description": "the executor's session, copied from the adapter's answer_fields.session_id; record-answer refuses one that differs from the input's invocation.session_id"
+    },
+    "questions": {
+      "type": "array",
+      "description": "the questions the executor put to the owner in this run, each with the scope doc's ledger line ids it touches (the shared E14-11 check refuses one that re-asks a decided line)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "touches",
+          "answer"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "touches": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the owner's answer, or null when he gave none"
+          }
+        }
+      }
+    },
+    "lines": {
+      "type": "array",
+      "description": "lines the executor asserts, each with its trace (the shared E14-11 check); inspect-v2 writes no line from them, so a run usually carries none",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "tag"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "tag": {
+            "type": "string",
+            "enum": [
+              "assumed",
+              "carried",
+              "constraint",
+              "decided",
+              "deferred",
+              "open",
+              "out-of-scope",
+              "parked",
+              "poured",
+              "requirement",
+              "research",
+              "ruling",
+              "struck"
+            ],
+            "description": "every tag a line reaching inspect can carry, lower case only, so a capitalised tag cannot pass the frame's exact-case rules by (R4, the owner's ruling C6): the four cores' line tags and the tags their views hand the frame, the frame's ledger tags and its move-back set (parked, open, deferred), and the pass-forward tags the seam 17 reader probed"
+          },
+          "trace": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ref": {
+                "type": "string"
+              }
+            }
+          },
+          "row": {
+            "type": "string",
+            "pattern": "^[a-z]+-[0-9a-f]{12}(-[0-9]+)?$",
+            "description": "the id of the ledger row this line decides, settles, passes forward or moves (the row's id is the trace: the line is judged by it and its words are never matched against that row). Absent on a NEW line, one that names no existing row. A line whose trace is `ledger` names its row by that trace; `row` may repeat it and may not differ from it."
+          }
+        }
+      }
+    },
+    "row": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "the readers row the owner named for this run; record-answer refuses one that differs from the input's station.row"
+    },
+    "owner_word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rows",
+        "words"
+      ],
+      "description": "present only for an outside row: the owner's word as the input carried it, byte for byte (record-answer refuses any other, and refuses it on a Claude row). It authorizes nothing here: the request's `authorized` flag came from the input alone.",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "words": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "traceability",
+          "code-book",
+          "repo-reality",
+          "paper"
+        ]
+      },
+      "description": "the lenses of the calls this run's `request` built, every one of them: `traceability`, `code-book`, `repo-reality` (the Claude lane's three) or `paper` (an outside row's one call for the two paper lenses) and `repo-reality`; record-answer refuses a list that is not the built requests' lenses (lanes-mismatch), and a fleet with no result for a built call ends the run lane-down"
+    },
+    "adjudications": {
+      "type": "array",
+      "description": "the executor's verify pass, one entry per finding it adjudicated. A finding is named `<call id>#<n>`, n its 1-based position in that result's findings. `confirmed` and `plausible` keep it with that label (the only source of either label); `refuted` drops it and counts it; `question` turns it into a QUESTION note. Every outside finding and every Claude-lane BLOCKER and MAJOR whose citation holds needs an entry (record-answer refuses a missing one, missing-adjudication), unless the no-record rule makes it a QUESTION note by itself. An entry cannot keep a finding whose citation matches nothing in the packet.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "finding",
+          "decision",
+          "why"
+        ],
+        "properties": {
+          "finding": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*#[1-9][0-9]*$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "plausible",
+              "refuted",
+              "question"
+            ]
+          },
+          "why": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    },
+    "hunted_and_held": {
+      "type": "string",
+      "minLength": 1,
+      "description": "what the inspectors attacked that held up (v1's anti-rubber-stamp line, rule 10: mandatory in every run), in the executor's words from the replies; printed in the chat block and the verdict mirror",
+      "pattern": "\\S"
+    },
+    "bottom_line": {
+      "type": "string",
+      "minLength": 1,
+      "description": "two or three sentences for the chat block and the verdict mirror: the plan's state and what to do next; mandatory in every run",
+      "pattern": "\\S"
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/result"
+      },
+      "description": "the readers' results, one per lens call, copied from each call's READERS: line and reply"
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "call_id",
+        "row",
+        "effective_model",
+        "findings"
+      ],
+      "properties": {
+        "call_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "the reader call id the request carried; null is accepted by the schema so that record-answer can refuse it by name (independence: a finding with no reader call id has no reader)"
+        },
+        "row": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "effective_model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "the READERS: line's effective model id; null ends the run `no-effective-model`, with no stamp"
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the READERS: line's status; absent reads as a reply that arrived. Anything but `ok` ends the run `lane-down` and nothing is triaged"
+        },
+        "reason": {
+          "type": "string",
+          "description": "the result's reason, carried into a `lane-down` stop"
+        },
+        "raw_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the raw copy readers filed for an outside call"
+        },
+        "isolation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the sidecar's isolation label"
+        },
+        "parity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the sidecar's parity line"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "location",
+        "claim",
+        "scenario",
+        "confidence"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR",
+            "QUESTION"
+          ]
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`<packet file>:<line>` in the numbered packet (`build-doc.md:12`), or a workspace-relative `file:line` for a repo-reality finding; null for a concern without location, which never reaches the result"
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "scenario": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "lens": {
+          "type": "string",
+          "enum": [
+            "traceability",
+            "code-book"
+          ],
+          "description": "on an outside row's paper call: which of the two paper lenses the finding came from, when the reply says"
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the cited text, when the reply quotes it: a citation whose line does not carry it is refuted; one whose line carries it shows only that the text exists, and its label is still the executor's adjudication",
+          "pattern": "\\S"
+        }
+      }
+    }
+  }
+}

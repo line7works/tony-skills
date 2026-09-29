@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/station-v2/result.schema.json",
+  "title": "front core result (shared base)",
+  "description": "The one result document of a front core's run (station-loop.md section 5), written to `<run_dir>/result.json` by `report` after it validates against this schema and the semantic checks of scripts/validate-result.py (S1 to S4). Every run ends in a terminal status, every stop included. Each core's lane fills `station_result` and adds its own stop tags to the `stop_tag` description, never to another field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["interface_version", "plugin_version", "station", "run_id", "run_dir", "status", "reason", "report_only", "wrote_nothing", "writes", "invocation", "station_result"],
+  "properties": {
+    "interface_version": {"type": "integer", "const": 1},
+    "plugin_version": {"type": "string", "minLength": 1},
+    "station": {"type": "string", "enum": ["precon-v2", "architect-v2", "blueprint-v2", "inspect-v2"]},
+    "run_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "run_dir": {"type": "string", "minLength": 2, "pattern": "^/"},
+    "status": {"type": "string", "enum": ["completed", "stopped"]},
+    "stop_tag": {
+      "type": ["string", "null"],
+      "enum": [null, "phase-not-built", "selection-none", "selection-several", "ledger-refused", "write-refused", "records-refused", "living-doc-malformed", "document-changed", "review-pending"],
+      "description": "the shared stop tags (station-loop.md section 7): `phase-not-built`, `selection-none`, `selection-several`, `ledger-refused`, `write-refused`, `records-refused`; and architect-v2's own (references/architect-v2-contract.md section 9): `living-doc-malformed` (harvest: the living doc does not hold its form, so it is not continued), `document-changed` (write or record-publish: the doc's bytes are not the bytes this run read or wrote; nothing written), `review-pending` (report: the blind-review offer has no outcome, so the doc's Blind review line still reads none yet). architect-v2 never emits `phase-not-built`, `selection-none` or `records-refused`; they stay in the enum because the frame's schema is the shared base."
+    },
+    "reason": {"type": "string", "minLength": 1},
+    "report_only": {"type": "boolean"},
+    "wrote_nothing": {
+      "type": "boolean",
+      "description": "true exactly when no write lies outside the run directory (S3)"
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "kind", "sha256_before", "sha256_after"],
+        "properties": {
+          "path": {"type": "string", "minLength": 2, "pattern": "^/"},
+          "kind": {"type": "string", "enum": ["run_artifact", "document", "records_log"]},
+          "sha256_before": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "sha256_after": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "description": "the hunt results the run used, by hunt name, as `select` printed them; a scope hunt whose hits the input set aside (`station.docless`: one hit or several, none of them this project's) also carries `set_aside`, every hit's path and the input's reason",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["outcome", "candidates", "searched"],
+        "properties": {
+          "outcome": {"type": "string", "enum": ["none", "one", "several"]},
+          "candidates": {"type": "array"},
+          "searched": {"type": "array"},
+          "set_aside": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["paths", "reason"],
+            "properties": {
+              "paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^/"}},
+              "reason": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "caller", "mode"],
+      "properties": {
+        "harness": {"type": ["string", "null"]},
+        "caller": {"type": "string", "minLength": 1},
+        "mode": {"type": "string", "enum": ["direct", "station"]},
+        "session_id": {"type": ["string", "null"]}
+      }
+    },
+    "station_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc_path",
+        "run_number",
+        "visual_path",
+        "published",
+        "artifact_url",
+        "publish_outcome",
+        "project",
+        "slug",
+        "scope_doc",
+        "docless",
+        "candidates",
+        "pick",
+        "rulings_count",
+        "review",
+        "review_reason",
+        "review_files",
+        "review_failed_lanes",
+        "passed_forward",
+        "counts"
+      ],
+      "description": "architect-v2's own result fields (references/architect-v2-contract.md section 8). A stop before the doc is written carries nulls, empty lists and `publish_outcome: not-reached`.",
+      "properties": {
+        "doc_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/",
+          "description": "the architecture doc this run wrote (its preview in the run directory on a report-only run)"
+        },
+        "run_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "the doc's `### Run <N>` this run appended"
+        },
+        "visual_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/",
+          "description": "`<slug>-architecture.html`, beside the doc"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "true only when the publish returned a URL and the doc records it"
+        },
+        "artifact_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the doc's Artifact: URL after the run, or null"
+        },
+        "publish_outcome": {
+          "type": "string",
+          "enum": [
+            "published",
+            "skipped",
+            "rendered-not-published",
+            "not-reached"
+          ],
+          "description": "the named result of the publish step (E14-6): published; skipped (publish: false); rendered-not-published (the publish returned no URL); not-reached (the run stopped before it)"
+        },
+        "project": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "slug": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope_doc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/",
+          "description": "the scope doc the run read, or null (docless, or a stop before one was taken)"
+        },
+        "docless": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pick": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rulings_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "review": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "pending",
+            "declined",
+            "failed",
+            "done",
+            "not-offered"
+          ]
+        },
+        "review_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the takes saved verbatim in this run, as the doc's Blind review line names them"
+        },
+        "review_failed_lanes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "row",
+              "reason"
+            ],
+            "properties": {
+              "row": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "beside a done review, each lane that did not return: its roster row and the reason its READERS: line carried (the read-back names each)"
+        },
+        "passed_forward": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the decided ledger line ids that passed forward untouched (the run log's Rulings line lists them)"
+        },
+        "counts": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "components",
+            "poured",
+            "deferred"
+          ],
+          "properties": {
+            "components": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "poured": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "deferred": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

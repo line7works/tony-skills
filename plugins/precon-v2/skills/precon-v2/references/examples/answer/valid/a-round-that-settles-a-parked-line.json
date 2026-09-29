@@ -1,0 +1,89 @@
+{
+  "answer_version": 1,
+  "gate": "every branch was visited or parked: storage settled, reverse turns parked for a prototype",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "Where the count is kept between sessions",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-e4907eb8a1ce"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "The count is kept in memory only",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "tag": "decided",
+      "text": "The counter lives in src/turnstile.py",
+      "trace": {
+        "kind": "repo_path",
+        "ref": "src/turnstile.py"
+      }
+    },
+    {
+      "tag": "assumed",
+      "text": "Tests use unittest",
+      "trace": {
+        "kind": "assumed",
+        "ref": "the standard library already has it"
+      }
+    },
+    {
+      "reason": "needs prototype",
+      "tag": "parked",
+      "text": "Reverse turns count as negative",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "show me on the rig first"
+      }
+    },
+    {
+      "tag": "open",
+      "text": "Whether resets are logged",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "ask me when the rig is wired"
+      },
+      "waits_on": "the owner's call on logging"
+    }
+  ],
+  "open_items": [
+    "who owns the bench log"
+  ],
+  "out_of_scope": [
+    {
+      "reason": "the owner declined it",
+      "text": "a phone app",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "no phone app"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "in memory only",
+      "id": "Q1",
+      "text": "Where is the count kept between sessions?",
+      "touches": [
+        "dec-e4907eb8a1ce"
+      ]
+    }
+  ],
+  "research": [
+    "notes/encoder-survey.md"
+  ],
+  "run_id": "run-0002",
+  "session_id": "session-example-1",
+  "sitting": "ends",
+  "triage": {
+    "tier": "bounded",
+    "why": "a normal feature with known edges"
+  }
+}

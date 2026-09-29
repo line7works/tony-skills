@@ -1,0 +1,784 @@
+"""architect-v2's phases and own commands: the handlers `scripts/architect.py` hands the driver.
+
+The run's own state rides in `checkpoint.json` beside the driver's `phase`: the `architect` block
+(`round`, the doc `written` at, whether the visual was `rendered` after the last write, the
+`published` outcome after the last render). The phases, in order:
+
+    harvest        selected -> harvested            (or a stop: stopped)
+    record-answer  harvested | answered | written -> answered
+    write          answered -> written              (or a stop)
+    render-visual  written, after a write
+    record-publish written, after a render
+    request        written (a run with a scope doc)
+    save-take      written (a run with a scope doc)
+    report         written, rendered, and published when the answer publishes -> reported
+                   (or stopped: review-pending); a stopped or reported run prints its result again
+
+A command out of turn is exit 2 naming what to run instead. `references/architect-v2-contract.md`
+is the contract of each.
+"""
+import os
+import re
+
+from station_core import driver, exits, fsio, ledger, readers_request
+
+from . import docs, harvesting, publishing, recording, results, review, schema, visual
+from .common import URL, blank, display, inside, read_text, today
+from .receipt import Changed, Receipt
+
+A = "architect"
+ROW = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+# ---- helpers ------------------------------------------------------------------------------------
+
+def _state(run):
+    return run.checkpoint.setdefault(A, {"round": 0, "doc": None, "rendered": False, "visual": None,
+                                         "published": None, "publish_url": None})
+
+
+def _phase(run):
+    return run.checkpoint.get("phase")
+
+
+def _written_text(run, command):
+    """The doc this run wrote, as it stands; a Defect when it is gone, no file or not UTF-8."""
+    path = _state(run)["doc"]
+    try:
+        return read_text(path)
+    except (OSError, UnicodeDecodeError) as exc:
+        raise driver.Defect("the doc this run wrote, %s, cannot be read (%s); nothing was written and the run stays "
+                            "where it was: put the doc back by hand, then run `%s` again, or start a new run on the "
+                            "doc as it stands" % (path, exc, command))
+
+
+def _load(run, name):
+    path = os.path.join(run.run_dir, name)
+    return fsio.read_json(path) if os.path.isfile(path) else None
+
+
+def _living_text(run):
+    path = os.path.join(run.run_dir, "harvested-doc.md")
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8", newline="") as fh:
+        return fh.read()
+
+
+SNAPSHOT = "written-doc.md"
+
+
+def _snapshot_path(run):
+    return os.path.join(run.run_dir, SNAPSHOT)
+
+
+def _baseline(run, record):
+    """(the preservation baseline, whether it is the first write's snapshot). Before this run's
+    first write: the harvested living doc (None on a first run). After it (round 7 R1): the
+    immutable snapshot of that write (`written-doc.md` in the run directory, its bytes held to the
+    hash the receipt recorded), without the current run's block, which the amendment regenerates
+    with its review and rulings; everything else in it survives verbatim or struck."""
+    path = _snapshot_path(run)
+    if not os.path.isfile(path):
+        if Receipt(run.run_dir).last_after(path) is not False or _state(run).get("doc"):
+            # slice 3b R3 (CA7-1): the receipt records the snapshot, so its absence is never a first write
+            raise driver.Defect("the run directory's %s (%s, the first write's snapshot, the amendment's baseline) "
+                                "is missing or not a file, and this run wrote it; nothing was written: start a new "
+                                "run on the doc as it stands" % (SNAPSHOT, path))
+        return _living_text(run), False
+    with open(path, "rb") as fh:
+        data = fh.read()
+    recorded = Receipt(run.run_dir).last_after(path)
+    if recorded is False or fsio.sha256_bytes(data) != recorded:
+        raise driver.Defect("the run directory's %s (the first write's snapshot, the amendment's baseline) is not "
+                            "the bytes this run wrote there (receipt %s, found %s); nothing was written: start a new "
+                            "run on the doc as it stands" % (SNAPSHOT, recorded or "no row", fsio.sha256_bytes(data)))
+    living = record.get("living_doc")
+    try:
+        return docs.without_run(data.decode("utf-8"), living["next_run"] if living else 1), True
+    except (UnicodeDecodeError, docs.DocRefused) as exc:
+        raise driver.Defect("the run directory's %s cannot serve as the amendment's baseline: %s; nothing was "
+                            "written: start a new run on the doc as it stands" % (SNAPSHOT, exc))
+
+
+def _report_only(run):
+    return bool(run.input.get("report_only"))
+
+
+def _preview(run, path):
+    """Where a document write lands: the path itself, or the run's preview folder in report-only."""
+    if not _report_only(run):
+        return path
+    return os.path.join(run.run_dir, "preview", os.path.basename(path))
+
+
+def _stop(ctx, run, tag, reason, station_result=None, receipt=None):
+    receipt = receipt or Receipt(run.run_dir)
+    sr = station_result or results.empty_station_result()
+    doc = results.build(ctx.envelope(), run, "stopped", tag, reason, sr, receipt)
+    results.write(doc, ctx.skill_root)
+    run.checkpoint["phase"] = "stopped"
+    run.save()
+    out = dict(doc, next="done", chat=results.chat(doc), result=os.path.join(run.run_dir, "result.json"))
+    return driver.emit(out, exits.TERMINAL)
+
+
+def _need(run, *phases):
+    phase = _phase(run)
+    if phase in ("stopped", "reported"):
+        raise driver.Usage("this run has ended (%s); run `report` to print its result, and start a new run for "
+                           "anything more" % phase)
+    if phase not in phases:
+        raise driver.Usage("this run is at phase %r; this command runs at %s" % (phase, " or ".join(phases)))
+
+
+def _named_under(path, root):
+    """Whether `path` lies under `root` by its name (the root as given, or its real path)."""
+    target = os.path.abspath(path)
+    for base in (os.path.abspath(root), os.path.realpath(root)):
+        if target.startswith(base.rstrip(os.sep) + os.sep):
+            return True
+    return False
+
+
+def _contained(run, path):
+    """Whether a document write at `path` stays in the home it is named under: the real path of the
+    target's nearest existing parent folder (a symlink counts as existing, and is followed) lies
+    inside the workspace, the staging home or the run directory that the target's own path names
+    (R2; round 3 CA2-3). A symlinked folder that leads anywhere else (outside every home, or from
+    the workspace into the run directory or the staging home) is refused before anything is
+    written, so a workspace path is never written into another home."""
+    roots = [r for r in (run.input["workspace"], run.input.get("staging"), run.run_dir) if r]
+    named = [r for r in roots if _named_under(path, r)]
+    folder = os.path.dirname(os.path.abspath(path))
+    while not os.path.lexists(folder):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            break
+        folder = parent
+    return any(inside(folder, root) for root in named)
+
+
+def _outside(path):
+    return ("%s would land outside the home its path names (the workspace, the staging home or the run directory): "
+            "a folder on its way is a symlink that leads elsewhere; nothing was written" % path)
+
+
+def _folder_stop(path, command):
+    """A Defect when a node on the way to path's folder is not a folder (R2's class)."""
+    folder = os.path.dirname(os.path.abspath(path))
+    while not os.path.lexists(folder):
+        folder = os.path.dirname(folder)
+    if not os.path.isdir(folder) or not os.access(folder, os.R_OK | os.W_OK | os.X_OK):
+        raise driver.Defect("unreadable run directory: %s is not a folder this run can write (a file, a symlink that "
+                            "leads to no folder, or a folder without permission, stands on the way to %s); nothing "
+                            "was written and the run stays where it was: fix %s by hand, then run `%s` again"
+                            % (folder, path, folder, command))
+
+
+def _file_stop(path, command):
+    """A Defect when a folder stands where path's file goes: the rename that writes the file cannot
+    replace it (slice 3b round 2 R5; a symlink there is replaced, as before)."""
+    if os.path.isdir(path) and not os.path.islink(path):
+        raise driver.Defect("unreadable run directory: %s is a folder where this run writes a file; nothing was "
+                            "written and the run stays where it was: remove %s by hand, then run `%s` again"
+                            % (path, path, command))
+
+
+RUN_FILES = ("receipt.json", "checkpoint.json", "result.json")
+
+
+def _writable(run, command, *paths, **kw):
+    """Slice 3b round 2 R1 and R5 (CA3B-1): before a command's first write, every path it may write
+    has a folder it can write on its way (`_folder_stop`) and no folder where its file goes
+    (`_file_stop`): the run directory's own files (`run_files`, by name; every receipt row rewrites
+    `receipt.json`, every stop writes `result.json` and `checkpoint.json`) and `paths`. Nothing is
+    written before the check, so its sentence is true."""
+    names = kw.get("run_files", RUN_FILES)
+    for path in [os.path.join(run.run_dir, n) for n in names] + list(paths):
+        _folder_stop(path, command)
+        _file_stop(path, command)
+
+
+def _session(run):
+    return (run.input.get("invocation") or {}).get("session_id")
+
+
+def _station(run):
+    return run.input.get("station") or {}
+
+
+# ---- harvest ------------------------------------------------------------------------------------
+
+def harvest(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    if _phase(run) == "checked":
+        raise driver.Usage("run `select --hunt scope` and `select --hunt architecture --name <slug>` before `harvest`")
+    _need(run, "selected")
+    _writable(run, "harvest", *[os.path.join(run.run_dir, n) for n in
+                                ("selection-scope.json", "harvest.json", "harvested-doc.md")])
+    ws, staging = run.input["workspace"], run.input.get("staging")
+    station = _station(run)
+    scope_sel = _load(run, "selection-scope.json")
+    arch_sel = _load(run, "selection-architecture.json")
+    if arch_sel is None:
+        raise driver.Usage("run `select --hunt architecture --name <slug>` before `harvest` (the slug is the scope "
+                           "doc's idea, or on a docless run the working name the gate discussion settled)")
+    receipt = Receipt(run.run_dir)
+    scope_path = station.get("scope_doc")
+    docless = station.get("docless") is True
+    set_aside = None
+    if docless and (scope_path or not recording.visible(station.get("docless_reason"))):
+        raise driver.Usage("station.docless carries station.docless_reason and excludes station.scope_doc")
+    if scope_path:
+        if not os.path.isfile(scope_path):
+            raise driver.Usage("the scope doc the input names is not a file: %s" % scope_path)
+        if not harvesting.home_of(scope_path, ws, staging):
+            raise driver.Usage("the scope doc the input names lies outside the workspace and the staging home: %s "
+                               "(the architecture doc's home follows the scope doc's)" % scope_path)
+    elif scope_sel is None:
+        raise driver.Usage("run `select --hunt scope` before `harvest` (or name the scope doc in the input's "
+                           "`station.scope_doc`)")
+    elif docless and scope_sel["outcome"] in ("one", "several"):
+        # R1 (CA2-1, CA3-1): v1's input gate matches candidates by their Intent: lines; no hit is
+        # this project's and the owner said none exists for it, so his "none" opens the docless gate
+        # however many files the glob found. Every hit is set aside, recorded in the scope selection.
+        set_aside = {"paths": [c["path"] for c in scope_sel["candidates"]], "reason": station["docless_reason"]}
+        receipt.write_json(os.path.join(run.run_dir, "selection-scope.json"), dict(scope_sel, set_aside=set_aside))
+    elif scope_sel["outcome"] == "several":
+        sr = results.empty_station_result()
+        return _stop(ctx, run, "selection-several",
+                     "the scope hunt found %d scope docs (%s); they are listed for the owner and never picked: put "
+                     "the list to him and start a new run whose input names his pick in `station.scope_doc`; when "
+                     "he says none of them is this project's, ask him once whether a scope doc exists where the glob "
+                     "cannot see, and on his \"none\" start a new run whose input carries `station.docless: true` "
+                     "and `station.docless_reason`"
+                     % (len(scope_sel["candidates"]), ", ".join(c["path"] for c in scope_sel["candidates"])), sr, receipt)
+    elif scope_sel["outcome"] == "one":
+        scope_path = scope_sel["candidates"][0]["path"]
+    if scope_path:
+        slug = harvesting.slug_of(scope_path)
+        if slug is None:
+            raise driver.Usage("the scope doc's name %s gives no slug (one path segment of lowercase letters, "
+                               "digits, '.', '_' and '-')" % os.path.basename(scope_path))
+        if arch_sel.get("name") != slug:
+            other = "" if station.get("scope_doc") else (
+                ". When this scope doc is another project's (its Intent: line) and the owner said no scope doc "
+                "exists for his, start a new run whose input carries station.docless: true and "
+                "station.docless_reason instead")
+            raise driver.Usage("the architecture hunt ran with --name %r; this scope doc's slug is %r. Run "
+                               "`select --hunt architecture --name %s`%s" % (arch_sel.get("name"), slug, slug, other))
+    else:
+        slug = arch_sel.get("name")
+        if not slug:
+            raise driver.Usage("no scope doc was found (the docless path): run `select --hunt architecture --name "
+                               "<slug>` with the working name the gate discussion settled")
+    if arch_sel["outcome"] == "several":
+        sr = dict(results.empty_station_result(), slug=slug, scope_doc=scope_path)
+        return _stop(ctx, run, "selection-several",
+                     "the architecture hunt found %d docs for %r (%s); one living doc per project, so they are "
+                     "listed for the owner and never picked" % (len(arch_sel["candidates"]), slug,
+                                                                ", ".join(c["path"] for c in arch_sel["candidates"])),
+                     sr, receipt)
+    living_path = arch_sel["candidates"][0]["path"] if arch_sel["outcome"] == "one" else None
+    # slice 3b round 2 R2 (CA3B-2): a doc that is not UTF-8 stops the run with its tag, never a traceback;
+    # `reading` is the doc being read when the error came (on a docless run it can only be the living doc)
+    scope_text = living_text = None
+    reading = scope_path
+    try:
+        scope_text = read_text(scope_path) if scope_path else None
+        reading = living_path
+        living_text = read_text(living_path) if living_path else None
+    except UnicodeDecodeError as exc:
+        sr = dict(results.empty_station_result(), slug=slug, scope_doc=scope_path)
+        return _stop(ctx, run, "living-doc-malformed" if reading == living_path else "ledger-refused",
+                     "%s is not UTF-8 (%s), so it cannot be read without guessing; the doc is left as found: save "
+                     "it as UTF-8, then start a new run" % (reading, exc), sr, receipt)
+    except OSError as exc:
+        # slice 3b round 3 R4 (CA3B2-3): a doc the process cannot read; a docless set-aside run has rewritten
+        # `selection-scope.json` by now, so the sentence says the doc is left as found, not that nothing was written
+        raise driver.Defect("%s cannot be read (%s); the doc is left as found and the run stays where it was: fix its "
+                            "permissions by hand, then run `harvest` again" % (reading, exc))
+    try:
+        record = harvesting.describe(ws, staging, today(), slug, scope_path, scope_text, living_path, living_text,
+                                     run_id=run.checkpoint["run_id"], input_publish=station.get("publish", True),
+                                     set_aside=set_aside, docless_reason=station.get("docless_reason") if docless else None)
+    except ledger.LedgerRefused as exc:
+        sr = dict(results.empty_station_result(), slug=slug, scope_doc=scope_path)
+        return _stop(ctx, run, "ledger-refused", "the scope doc's ledger holds line(s) the reader cannot tag, quoted "
+                     "and never dropped: %s" % "; ".join("line %d %r (%s)" % (r["line"], r["raw"], r["why"])
+                                                         for r in exc.lines), sr, receipt)
+    living = record["living_doc"]
+    if living and living["findings"]:
+        sr = dict(results.empty_station_result(), slug=slug, scope_doc=scope_path)
+        return _stop(ctx, run, "living-doc-malformed",
+                     "the living doc %s does not hold its form, so it cannot be continued without guessing: %s"
+                     % (living_path, "; ".join("line %d: %s" % (f["line"], f["message"]) for f in living["findings"])),
+                     sr, receipt)
+    receipt.write_json(os.path.join(run.run_dir, "harvest.json"), record)
+    if living_text is not None:
+        receipt.write(os.path.join(run.run_dir, "harvested-doc.md"), living_text)
+    run.checkpoint["phase"] = "harvested"
+    _state(run)
+    run.save()
+    if set_aside:
+        reason = ("docless: the scope hunt's %s, %s, %s set aside by the input (`station.docless`): %s this "
+                  "project's scope doc and the owner said none exists; the answer records the gate's question "
+                  "(`about: scope-doc`) and `docless.reason` equal to the input's `station.docless_reason`"
+                  % ("one hit" if len(set_aside["paths"]) == 1 else "%d hits" % len(set_aside["paths"]),
+                     ", ".join(set_aside["paths"]), "is" if len(set_aside["paths"]) == 1 else "are",
+                     "it is not" if len(set_aside["paths"]) == 1 else "none of them is"))
+    elif record["docless"]:
+        reason = ("docless: no scope doc was found; ask the owner once whether one exists where the glob cannot see "
+                  "(a question `about: scope-doc`), then the docless gate: the answer records its reason")
+    else:
+        reason = "the scope doc's ledger is harvested; its decided lines pass forward and are never asked again"
+    return driver.emit(ctx.envelope(
+        next="record-answer", run_id=run.checkpoint["run_id"], reason=reason, docless=record["docless"],
+        set_aside=set_aside, slug=slug, scope_doc=scope_path, target=record["target"]["path"],
+        living_doc=None if not living else {"path": living["path"], "runs": living["runs"],
+                                            "next_run": living["next_run"], "artifact_url": living["artifact_url"]},
+        ledger=[{"id": r["id"], "tag": r["tag"], "text": r["text"], "source": r["source"]} for r in record["ledger"]],
+        harvest=os.path.join(run.run_dir, "harvest.json")))
+
+
+# ---- record-answer ------------------------------------------------------------------------------
+
+def _context(run, prior=None):
+    record = _load(run, "harvest.json")
+    takes = _load(run, "takes.json") or []
+    baseline, snapshot = _baseline(run, record)
+    return recording.context(record, baseline, session_id=_session(run), takes=takes, prior=prior,
+                             run_id=run.checkpoint["run_id"], requested=_requested_rows(run, "record-answer"),
+                             repeat_strike=snapshot)
+
+
+def record_answer(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    if _phase(run) in ("checked", "selected"):
+        raise driver.Usage("run `harvest` before `record-answer`: the ledger is read before anything is asked")
+    _need(run, "harvested", "answered", "written")
+    state = _state(run)
+    amending = _phase(run) == "written"
+    if amending and state["round"] >= 2:
+        raise driver.Usage("one amended answer per run; start a new run for more (this run already took its "
+                           "amendment, and its doc was written from it)")
+    try:
+        answer = fsio.read_json(args.answer)
+    except (OSError, ValueError) as exc:
+        raise driver.Usage("the answer is not a readable JSON file: %s (%s)" % (args.answer, exc))
+    errors = schema.errors(answer, ctx.skill_root)
+    if errors:
+        return driver.emit(ctx.envelope(ok=False, accepted=False, error="invalid", errors=errors,
+                                        reason="the answer does not hold its schema (references/answer.schema.json): "
+                                               "%d finding(s); nothing was written" % len(errors)), exits.VALIDATION)
+    if amending:
+        prior = _load(run, "answer.json")
+    elif state.get("doc"):
+        # the amendment recorded again before its write: held to the first answer exactly as the
+        # amendment was (R1); it replaces the amendment, never the first answer
+        prior = _load(run, "answer-round-%d.json" % (state["round"] - 1))
+    else:
+        prior = None
+    refusals, plan = recording.evaluate(answer, _context(run, prior))
+    if refusals:
+        return driver.emit(ctx.envelope(accepted=False, refusals=refusals,
+                                        reason="the recorded answer was refused on its content (%d refusal(s)); "
+                                               "nothing was written, and a corrected answer can be recorded"
+                                               % len(refusals)), exits.REFUSED)
+    _writable(run, "record-answer", os.path.join(run.run_dir, "answer.json"),
+              os.path.join(run.run_dir, "answer-round-%d.json" % state["round"]),
+              run_files=("receipt.json", "checkpoint.json"))
+    receipt = Receipt(run.run_dir)
+    if amending:
+        receipt.write_json(os.path.join(run.run_dir, "answer-round-%d.json" % state["round"]), prior)
+    row = receipt.write_json(os.path.join(run.run_dir, "answer.json"), answer)
+    if amending or state["round"] == 0:
+        state["round"] += 1
+    run.checkpoint["phase"] = "answered"
+    run.save()
+    return driver.emit(ctx.envelope(accepted=True, refusals=[], answer=row["path"], sha256=row["sha256_after"],
+                                    round=state["round"], amendment=prior is not None, next="write",
+                                    doc=plan["doc_path"], run=plan["run"], passed_forward=plan["passed_forward"]))
+
+
+# ---- write --------------------------------------------------------------------------------------
+
+def _expected(run, receipt, path, record):
+    """The hash the bytes at `path` must have before this run writes there."""
+    last = receipt.last_after(path)
+    if last is not False:
+        return last
+    if _report_only(run):
+        return None
+    living = record.get("living_doc")
+    if living and living["path"] == path:
+        return living["sha256"]
+    return None
+
+
+def write(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    if _phase(run) == "written":
+        raise driver.Usage("this run's doc is written; an amended answer (`record-answer`) comes before another write")
+    if _phase(run) in ("checked", "selected", "harvested"):
+        raise driver.Usage("run `record-answer` before `write`: the doc is rendered from an accepted answer")
+    _need(run, "answered")
+    _writable(run, "write")
+    answer = _load(run, "answer.json")
+    record = _load(run, "harvest.json")
+    state = _state(run)
+    receipt = Receipt(run.run_dir)
+    living_text, snapshot = _baseline(run, record)
+    artifact = state.get("publish_url") or (record.get("living_doc") or {}).get("artifact_url")
+    plan = recording.plan(answer, record, living_text, _load(run, "takes.json") or [], artifact)
+    real = plan["doc_path"]
+    target = _preview(run, real)
+    if plan["losses"]:
+        return _stop(ctx, run, "write-refused", "the write would drop a protected line, so nothing was written: %s"
+                     % "; ".join(plan["losses"]), _station_result(run, record, answer, None), receipt)
+    if not _contained(run, target):
+        return _stop(ctx, run, "write-refused", "the doc %s" % _outside(target),
+                     _station_result(run, record, answer, None), receipt)
+    snap = _snapshot_path(run)
+    if not snapshot and os.path.lexists(snap) and not os.path.isfile(snap):
+        # slice 3b round 2 R1 (CA3B-1), R3's class before the first write: the snapshot's place holds a folder
+        # or a link to none, so the doc would land and the snapshot would not; refused before either
+        raise driver.Defect("unreadable run directory: %s is not a file (a folder, or a symlink that leads to no "
+                            "file, stands where the run directory's %s, the first write's snapshot and the "
+                            "amendment's baseline, goes); nothing was written and the run stays where it was: "
+                            "remove %s by hand, then run `write` again" % (snap, SNAPSHOT, snap))
+    _writable(run, "write", target, snap, run_files=())
+    try:
+        receipt.write(target, plan["doc_text"], expect=_expected(run, receipt, target, record))
+    except Changed as exc:
+        return _stop(ctx, run, "document-changed", "%s. The living doc moved after this run read it; its bytes are "
+                     "left as found. Start a new run on the doc as it stands." % exc,
+                     _station_result(run, record, answer, None), receipt)
+    if not snapshot:
+        # round 7 R1: the first write's immutable snapshot, the amendment's preservation baseline
+        receipt.write(_snapshot_path(run), plan["doc_text"], expect=None)
+    state.update(doc=target, real_doc=real, rendered=False, visual=None, published=None)
+    run.checkpoint["phase"] = "written"
+    run.save()
+    return driver.emit(ctx.envelope(next="render-visual", doc=target, run=plan["run"], report_only=_report_only(run),
+                                    passed_forward=plan["passed_forward"],
+                                    reason="the architecture doc was written%s" % (
+                                        " to the run's preview folder (report-only)" if _report_only(run) else "")))
+
+
+# ---- render-visual and record-publish -----------------------------------------------------------
+
+def render_visual(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    if _phase(run) != "written":
+        raise driver.Usage("`render-visual` renders the doc this run wrote: run `write` first")
+    _need(run, "written")
+    state = _state(run)
+    record = _load(run, "harvest.json")
+    text = _written_text(run, "render-visual")
+    html_path = os.path.join(os.path.dirname(state["doc"]), "%s-architecture.html" % record["slug"])
+    if not _contained(run, html_path):
+        raise driver.Usage("the visual %s" % _outside(html_path))
+    _writable(run, "render-visual", html_path, run_files=("receipt.json", "checkpoint.json"))
+    receipt = Receipt(run.run_dir)
+    receipt.write(html_path, visual.render(text))
+    state.update(rendered=True, visual=html_path, published=None)
+    run.save()
+    return driver.emit(ctx.envelope(next="record-publish", visual=html_path,
+                                    reason="the visual was rendered beside the doc; publishing it is the "
+                                           "executor's separate step, through the harness's own artifact tool"))
+
+
+def record_publish(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    _need(run, "written")
+    state = _state(run)
+    if not state.get("rendered"):
+        raise driver.Usage("run `render-visual` after the last write, before `record-publish`")
+    answer = _load(run, "answer.json")
+    if args.url is not None and not answer["publish"]:
+        raise driver.Usage("the answer says publish: false, so no URL is recorded")
+    if args.url is not None and not URL.match(args.url):
+        raise driver.Usage("--url is the https URL the publish returned (a host, an optional port and path, no "
+                           "space): %r" % args.url)
+    if answer["publish"] and args.url is None and state.get("published") == "published":
+        # keyed on the CURRENT render (render-visual resets `published`): a no-URL record after a
+        # published one of the same render would unsay it; after a re-render, an honest "the
+        # republish returned no URL" is recorded as rendered-not-published (round 3 CA2-7)
+        raise driver.Usage("this render's publish was recorded to %s; a record without --url would unsay it. Record "
+                           "the republish with --url %s, the same URL" % (state["publish_url"], state["publish_url"]))
+    text = _written_text(run, "record-publish")
+    decision = publishing.decide(text, answer["publish"], args.url)
+    if decision["refusal"]:
+        return driver.emit(ctx.envelope(accepted=False, refusals=[decision["refusal"]],
+                                        reason="the publish record was refused; nothing was written"), exits.REFUSED)
+    if decision["changed"] and not _contained(run, state["doc"]):
+        raise driver.Usage("the doc %s" % _outside(state["doc"]))
+    _writable(run, "record-publish", os.path.join(run.run_dir, "publish.json"),
+              *([state["doc"]] if decision["changed"] else []))
+    receipt = Receipt(run.run_dir)
+    if decision["changed"]:
+        record = _load(run, "harvest.json")
+        try:
+            receipt.write(state["doc"], decision["text"], expect=_expected(run, receipt, state["doc"], record))
+        except Changed as exc:
+            return _stop(ctx, run, "document-changed", "%s. The doc moved after this run wrote it; its bytes are left "
+                         "as found." % exc, _station_result(run, record, answer, None), receipt)
+    receipt.write_json(os.path.join(run.run_dir, "publish.json"),
+                       {"outcome": decision["outcome"], "url": decision["url"], "reason": decision["reason"]})
+    state.update(published=decision["outcome"], publish_url=decision["url"] if decision["outcome"] == "published"
+                 else state.get("publish_url"))
+    run.save()
+    return driver.emit(ctx.envelope(next="report", outcome=decision["outcome"], artifact_url=decision["url"],
+                                    reason=decision["reason"]))
+
+
+# ---- the blind review ---------------------------------------------------------------------------
+
+def _review_ready(run):
+    _need(run, "written")
+    record = _load(run, "harvest.json")
+    if record["docless"]:
+        raise driver.Usage("a docless run makes no blind-review offer: there is no scope doc to send")
+    return record
+
+
+def _request_outside(ctx, run, path, shown=None):
+    """None when a request write at `path` stays in the run directory; else the exit 5 refusal
+    (`request-outside-run`) naming `shown` (the path by default), with nothing written."""
+    if _contained(run, path):
+        return None
+    return driver.emit(ctx.envelope(accepted=False, refusals=[{"rule": "request-outside-run", "message":
+                                    "the request %s" % _outside(shown or path), "path": shown or path}],
+                                    reason="the requests were refused; nothing was written"), exits.REFUSED)
+
+
+def request(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    record = _review_ready(run)
+    rows = []
+    for row in args.row or []:
+        if row not in rows:
+            rows.append(row)
+    if not rows:
+        raise driver.Usage("name each reviewer the owner named with --row ROW")
+    models = {}
+    for item in args.model or []:
+        if "=" not in item:
+            raise driver.Usage("--model takes ROW=ID: %r" % item)
+        row, ident = item.split("=", 1)
+        models[row] = ident
+    try:
+        roster_path = args.roster or review.readers_roster(os.path.dirname(os.path.dirname(ctx.skill_root)))
+        roster = readers_request.load_roster(roster_path)
+    except (review.RosterMissing, OSError, ValueError) as exc:
+        raise driver.Usage(str(exc))
+    scope = record["scope_doc"]
+    found = fsio.sha256_file_or_none(scope["path"]) if os.path.isfile(scope["path"]) else None
+    if found != scope["sha256"]:
+        raise driver.Usage("the scope doc %s is not the one harvest read (sha256 %s, now %s): the packet is the scope "
+                           "doc as harvested; start a new run on the doc as it stands" % (scope["path"], scope["sha256"],
+                                                                                        found or "no file"))
+    folder = os.path.join(run.run_dir, "requests")
+    # round 6 R2: the requests folder is held to the containment check the document and take writers
+    # use, before it is read and before anything is written, in report-only and otherwise
+    refused = _request_outside(ctx, run, os.path.join(folder, "request.json"), folder)
+    if refused is not None:
+        return refused
+    # slice 3b R2 (C4) as widened by round 2 R1 (CA3B-1): a regular file, a symlink to one, a symlink that
+    # leads to nothing, or a folder the process cannot list or write, stands where the requests folder goes (a
+    # symlink to a folder is a folder); an unreadable run directory, exit 1 before the folder is read. The path it
+    # names is the first request this call writes (review.requests' call id, before any -2 a listing would add;
+    # round 3 R6(b))
+    _folder_stop(os.path.join(folder, "%s-review-%s.json" % (run.checkpoint["run_id"], rows[0])), "request")
+    taken = [n[:-5] for n in os.listdir(folder)] if os.path.isdir(folder) else []
+    try:
+        built = review.requests(rows, run.input, roster, scope["path"], run.checkpoint["run_id"],
+                                session_model=args.session_model, models=models, taken=taken)
+    except readers_request.RequestRefused as exc:
+        raise driver.Usage(str(exc))
+    pending = [(call_id, req, os.path.join(folder, "%s.json" % call_id)) for call_id, req in built]
+    for call_id, req, path in pending:
+        refused = _request_outside(ctx, run, path)
+        if refused is not None:
+            return refused
+    _writable(run, "request", *[path for _, _, path in pending], run_files=("receipt.json",))
+    receipt = Receipt(run.run_dir)
+    out = []
+    for call_id, req, path in pending:
+        receipt.write_json(path, req)
+        out.append({"row": req["row"], "call_id": call_id, "path": path, "authorized": req.get("authorized") is True})
+    return driver.emit(ctx.envelope(next="save-take", requests=out, mandate=review.MANDATE,
+                                    reason="one readers request per named reviewer, the scope doc its single "
+                                           "document; summon /readers with each, and save each take with save-take"))
+
+
+def _requested_rows(run, command):
+    """The rows `request` built in this run, in the order of their files; a Defect when the requests folder or a
+    request in it cannot be read (slice 3b round 3 R2, CA3B2-1), before the command's first write."""
+    folder = os.path.join(run.run_dir, "requests")
+    rows = []
+    if not os.path.isdir(folder):
+        return rows
+    try:
+        for name in sorted(os.listdir(folder)):
+            if name.endswith(".json"):
+                row = fsio.read_json(os.path.join(folder, name)).get("row")
+                if row not in rows:
+                    rows.append(row)
+    except (OSError, ValueError) as exc:
+        raise driver.Defect("unreadable run directory: %s cannot be read (%s); nothing was written and the run stays "
+                            "where it was: fix %s by hand, then run `%s` again" % (folder, exc, folder, command))
+    return rows
+
+
+def save_take(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    record = _review_ready(run)
+    state = _state(run)
+    if not ROW.match(args.row or ""):
+        raise driver.Usage("--row is a readers roster row id (lowercase letters, digits and '-'): %r" % args.row)
+    for flag, value in (("--model", args.model), ("--isolation", args.isolation), ("--sidecar", args.sidecar)):
+        if blank(value) or any(ch in schema.LINE_BOUNDARIES for ch in value):
+            raise driver.Usage("%s is one line of text, as the readers result carries it: %r" % (flag, value))
+    try:
+        with open(args.take, "rb") as fh:
+            body = fh.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise driver.Usage("the take is not a readable UTF-8 file: %s (%s)" % (args.take, exc))
+    if not body.strip():
+        return driver.emit(ctx.envelope(accepted=False, refusals=[{"rule": "take-empty", "message":
+                                        "the take is empty; an empty reply is a failed review for that lane, and "
+                                        "nothing is saved for it"}], reason="nothing was saved"), exits.REFUSED)
+    requested = _requested_rows(run, "save-take")
+    if args.row not in requested:
+        raise driver.Usage("the row %r was never requested in this run (requested: %s); a take answers a request "
+                           "`request` built" % (args.row, ", ".join(requested) or "none"))
+    home = record["target"]["home"]
+    if _report_only(run):
+        folder = os.path.join(run.run_dir, "reviews")
+    elif home == "workspace":
+        folder = os.path.join(run.input["workspace"], "docs", "reviews")
+    else:
+        folder = os.path.join(run.input["staging"], "architect-reviews")
+    lane = review.lane_of(args.row)
+    date = today()
+    name = review.take_name(home, record["slug"], lane, date, folder)
+    path = os.path.join(folder, name)
+    copy = os.path.join(run.run_dir, "takes", name)
+    for target in (path, copy):
+        if not _contained(run, target):
+            raise driver.Usage("the take %s" % _outside(target))
+    _writable(run, "save-take", path, copy, os.path.join(run.run_dir, "takes.json"), run_files=("receipt.json",))
+    text = review.take_text(args.row, args.model, args.isolation, args.sidecar, body)
+    receipt = Receipt(run.run_dir)
+    receipt.write(path, text, expect=None)
+    if copy != path:
+        receipt.write(copy, text)
+    takes = _load(run, "takes.json") or []
+    takes.append({"row": args.row, "lane": lane, "path": path, "copy": copy, "model": args.model,
+                  "isolation": args.isolation, "sidecar": args.sidecar, "date": date})
+    receipt.write_json(os.path.join(run.run_dir, "takes.json"), takes)
+    return driver.emit(ctx.envelope(next="record-answer", path=path, copy=copy, lane=lane,
+                                    reason="the take was saved verbatim before any triage; the review file is never "
+                                           "edited. Walk the owner through each disagreement, then record the "
+                                           "amended answer with the review's outcome and his rulings"))
+
+
+# ---- report -------------------------------------------------------------------------------------
+
+def _station_result(run, record, answer, state):
+    sr = results.empty_station_result()
+    if record:
+        sr.update(slug=record["slug"], docless=record["docless"],
+                  scope_doc=record["scope_doc"]["path"] if record["scope_doc"] else None)
+    if answer:
+        sr.update(project=answer["project"], candidates=[c["name"] for c in answer["candidates"]],
+                  pick=answer["pick"], rulings_count=len(answer["rulings"]), review=answer["review"]["outcome"],
+                  review_reason=answer["review"].get("reason"),
+                  review_failed_lanes=[{"row": f["row"], "reason": f["reason"]}
+                                       for f in answer["review"].get("failed_lanes") or []],
+                  passed_forward=[r["id"] for r in docs.passed_forward(record["ledger"], answer)] if record else [])
+    if state and state.get("doc"):
+        text = _written_text(run, "report")
+        living = (record or {}).get("living_doc")
+        takes = _load(run, "takes.json") or []
+        published = state.get("published")
+        sr.update(doc_path=state["doc"], run_number=living["next_run"] if living else 1, visual_path=state.get("visual"),
+                  published=published == "published", publish_outcome=published or ("skipped" if answer and not
+                                                                                     answer["publish"] else "not-reached"),
+                  artifact_url=docs.artifact_url(text), counts=docs.counts(text, answer["components"] if answer else []),
+                  review_files=[display(t["path"], run.input["workspace"]) for t in takes])
+    return sr
+
+
+def report(ctx, args):
+    run = ctx.open_run(args.run_dir)
+    if _phase(run) in ("stopped", "reported"):
+        doc = _load(run, "result.json")
+        if doc is None:
+            raise driver.Defect("the run ended without a result.json: %s" % run.run_dir)
+        return driver.emit(dict(doc, next="done", chat=results.chat(doc),
+                                result=os.path.join(run.run_dir, "result.json")), exits.TERMINAL)
+    if _phase(run) != "written":
+        raise driver.Usage("this run is at phase %r; `report` comes after `write`, `render-visual` and, when the "
+                           "answer publishes, `record-publish`" % _phase(run))
+    state = _state(run)
+    answer = _load(run, "answer.json")
+    record = _load(run, "harvest.json")
+    if not state.get("rendered"):
+        raise driver.Usage("run `render-visual` after the last write: every run ends with the visual rendered from "
+                           "the doc as it stands")
+    if answer["publish"] and state.get("published") is None:
+        raise driver.Usage("the answer publishes: record the publish with `record-publish --url URL` (or without "
+                           "--url when the publish returned none) before `report`")
+    _writable(run, "report", run_files=("checkpoint.json", "result.json"))
+    receipt = Receipt(run.run_dir)
+    sr = _station_result(run, record, answer, state)
+    outcome = answer["review"]["outcome"]
+    if outcome == "pending":
+        return _stop(ctx, run, "review-pending", "the blind-review offer has no outcome, so the doc's Blind review: "
+                     "line still reads none yet; record the amended answer with the owner's answer (declined, "
+                     "failed or done) and write again, or start a new run", sr, receipt)
+    status, reason = publishing.status_after(sr["publish_outcome"])
+    if sr["publish_outcome"] == "published":
+        reason += " to %s" % sr["artifact_url"]
+    if _report_only(run):
+        reason = "report-only: " + reason + "; every write stayed in the run directory"
+    doc = results.build(ctx.envelope(), run, status, None, reason, sr, receipt)
+    results.write(doc, ctx.skill_root)
+    run.checkpoint["phase"] = "reported"
+    run.save()
+    return driver.emit(dict(doc, next="done", chat=results.chat(doc), result=os.path.join(run.run_dir, "result.json")),
+                       exits.TERMINAL)
+
+
+HANDLERS = {"harvest": harvest, "record-answer": record_answer, "write": write, "report": report}
+
+RUN_DIR = {"flags": ["--run-dir"], "metavar": "D", "required": True, "help": "the run directory"}
+COMMANDS = [
+    {"name": "render-visual", "help": "write <slug>-architecture.html beside the doc, from the doc (E14-6)",
+     "arguments": [dict(RUN_DIR)], "handler": render_visual},
+    {"name": "record-publish", "help": "record the publish: the Artifact: line from the URL it returned (E14-6)",
+     "arguments": [dict(RUN_DIR), {"flags": ["--url"], "metavar": "URL", "default": None,
+                                   "help": "the URL the executor's publish returned; omit when it returned none"}],
+     "handler": record_publish},
+    {"name": "request", "help": "build one readers request per named reviewer for the blind review",
+     "arguments": [dict(RUN_DIR), {"flags": ["--row"], "metavar": "ROW", "action": "append",
+                                   "help": "a readers roster row the owner named (repeatable)"},
+                   {"flags": ["--session-model"], "metavar": "ID", "default": None,
+                    "help": "the session's own model id, for the claude-session row only"},
+                   {"flags": ["--model"], "metavar": "ROW=ID", "action": "append",
+                    "help": "a model id the owner typed for a row (repeatable)"},
+                   {"flags": ["--roster"], "metavar": "FILE", "default": None,
+                    "help": "readers' roster.json (default: the readers component beside this core)"}],
+     "handler": request},
+    {"name": "save-take", "help": "save one reviewer's take verbatim, before any triage (-2, -3 on a repeat)",
+     "arguments": [dict(RUN_DIR), {"flags": ["--row"], "metavar": "ROW", "required": True, "help": "the roster row"},
+                   {"flags": ["--take"], "metavar": "FILE", "required": True, "help": "the reply's raw text"},
+                   {"flags": ["--model"], "metavar": "ID", "required": True, "help": "the effective model"},
+                   {"flags": ["--isolation"], "metavar": "LABEL", "required": True, "help": "the isolation label"},
+                   {"flags": ["--sidecar"], "metavar": "PATH", "required": True, "help": "the readers sidecar path"}],
+     "handler": save_take},
+]

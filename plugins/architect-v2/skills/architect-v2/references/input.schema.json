@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/station-v2/input.schema.json",
+  "title": "front core input (shared base)",
+  "description": "The one validated input document of a front core's run (station-loop.md section 4). The shared base the four front cores start from; each core's lane adds its own fields under `station`, and nothing else. Every object is closed: an unknown key is refused, never ignored, so a typo cannot become a silent default. `input_version` is the bump path a closed schema needs. What the schema cannot say is enforced in code (station_core/inputs.py): the workspace and the staging home are existing absolute directories, and the run directory is absolute and lies inside neither.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input_version", "run_id", "workspace", "run_dir", "invocation"],
+  "properties": {
+    "input_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "the version of this input shape; a reader that does not know it refuses the input"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "this run's own id, single-use, one path segment"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of the directory the core reads and writes; a git work tree root when the core writes into a repository"
+    },
+    "staging": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "optional: absolute path of the named non-repository home, passed resolved and never expanded by a script; precon and architect write there when no repository owns the idea"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of this run's directory, outside the workspace and outside the staging home"
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "when true the run writes nothing to the workspace, the staging home or the records log, and its result says so"
+    },
+    "owner_word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rows", "words"],
+      "description": "the owner's word in this run, the one source of a reader request's `authorized` flag: the readers rows the owner named, and his words verbatim. Never carried over from another run.",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "uniqueItems": true,
+          "description": "the readers roster row ids the owner's words name"
+        },
+        "words": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the owner's words, verbatim"
+        }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "caller", "mode"],
+      "description": "facts about the session this run happens in, filled by the adapter's invocation.py, never typed by the executor",
+      "properties": {
+        "harness": {
+          "type": ["string", "null"],
+          "description": "the harness this run is driven from"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1,
+          "description": "who asked for the run: `user` on a direct request, or the station that called this one"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["direct", "station"],
+          "description": "`direct` when a person asked, `station` when another station drove it"
+        },
+        "session_id": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "the session this run happens in, as the adapter READ it from the harness's own record; the recorded answer names the same session"
+        }
+      }
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "description": "architect-v2's own input fields (references/architect-v2-contract.md section 4), each optional. `docless: true` carries `docless_reason` and excludes `scope_doc`; `docless_reason` comes only with `docless: true`.",
+      "allOf": [
+        {
+          "if": {"properties": {"docless": {"const": true}}, "required": ["docless"]},
+          "then": {"required": ["docless_reason"], "not": {"required": ["scope_doc"]}}
+        },
+        {
+          "if": {"required": ["docless_reason"]},
+          "then": {"properties": {"docless": {"const": true}}, "required": ["docless"]}
+        }
+      ],
+      "properties": {
+        "docless": {
+          "type": "boolean",
+          "default": false,
+          "description": "true when no hit of the scope hunt (one or several) is this project's scope doc (each `Intent:` line is another project's) and the owner, asked once, said no scope doc exists for it: `harvest` sets every hit aside (the scope selection's `set_aside`) and the docless gate opens; without it `several` stops and asks"
+        },
+        "docless_reason": {
+          "type": "string",
+          "pattern": "^[^\\n\\r]*[^\\u0000-\\u0020\\u007f-\\u00a0\\u00ad\\u034f\\u0600-\\u0605\\u061c\\u06dd\\u070f\\u08e2\\u115f-\\u1160\\u1680\\u17b4-\\u17b5\\u180b-\\u180f\\u2000-\\u200f\\u2028-\\u202f\\u205f-\\u206f\\u2800\\u3000\\u3164\\ufe00-\\ufe0f\\ufeff\\uffa0\\ufff0-\\ufffb\\U000110bd\\U000110cd\\U00013430-\\U00013438\\U0001bca0-\\U0001bca3\\U0001d173-\\U0001d17a\\U000e0000-\\U000e0fff][^\\n\\r]*(?![\\s\\S])",
+          "description": "the reason the executor states for the docless run, one line holding at least one visible character (the pattern's class is every character the frame's `answer._visible` drops or `str.strip` removes: whitespace, format and zero-width characters, the default-ignorable code points, the letter-shaped fillers; a test holds it to them code point by code point): recorded with the set-aside hit, and the answer's `docless.reason` (the doc's `Docless:` header) must be this reason"
+        },
+        "scope_doc": {
+          "type": "string",
+          "minLength": 2,
+          "pattern": "^/",
+          "description": "the scope doc the owner named in his invocation, or his pick after a `selection-several` stop: an absolute path inside the workspace or the staging home; when present it is taken over the scope hunt"
+        },
+        "publish": {
+          "type": "boolean",
+          "default": true,
+          "description": "false when the owner said not to publish the visual in this run (E14-6); the answer then cannot publish"
+        }
+      }
+    }
+  }
+}

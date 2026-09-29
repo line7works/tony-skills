@@ -1,0 +1,54 @@
+{
+  "case": "L1-01-clean",
+  "criteria": [
+    {
+      "text": "AC1: `spin(2)` returns 3",
+      "verify": "new test at tests/test_turnstile.py"
+    }
+  ],
+  "lines": [
+    {
+      "tag": "requirement",
+      "text": "R1 \u2014 `spin(n)` returns `n + 1`",
+      "trace": {
+        "kind": "question",
+        "ref": "Q1"
+      }
+    },
+    {
+      "tag": "constraint",
+      "text": "Python 3.9 standard library",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-4858c7412180"
+      }
+    },
+    {
+      "tag": "requirement",
+      "text": "The counter lives in src/turnstile.py",
+      "trace": {
+        "kind": "repo_path",
+        "ref": "src/turnstile.py"
+      }
+    },
+    {
+      "tag": "out-of-scope",
+      "text": "a web dashboard \u2014 declined",
+      "trace": {
+        "kind": "ledger",
+        "ref": "oos-936fd940e2a6"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "answer": "yes, spin(n) returns n + 1",
+      "id": "Q1",
+      "text": "Does spin take the current count?",
+      "touches": []
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

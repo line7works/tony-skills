@@ -1,0 +1,9 @@
+{
+  "call_id": "run-traceability",
+  "case": "I2-03-no-scope-doc-no-finding",
+  "effective_model": "claude-seeded",
+  "findings": [],
+  "role": "reader",
+  "row": "claude-session",
+  "seeded_answer": 1
+}

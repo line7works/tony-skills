@@ -16,7 +16,7 @@ at cutover.
 
 ## Status
 
-Interface version 1, plugin version 0.1.0. Built in E13 slice 2, lane B, against the lane
+Interface version 1, plugin version 0.1.1. Built in E13 slice 2, lane B, against the lane
 contract `docs/plans/2026-09-21-stations-e13.md` sections 8 and 9 with amendments A1 to A3.
 
 **The records component is a dependency.** Without it every command that needs it exits 3 with one
@@ -45,7 +45,7 @@ installed-shape lookup of all three stations. Nothing in the core's scripts is h
 
 ```text
 plugins/build-v2/
-  .claude-plugin/plugin.json          # name build-v2, version 0.1.0
+  .claude-plugin/plugin.json          # name build-v2, version 0.1.1
   README.md                           # this file
   skills/build-v2/
     SKILL.md                          # the portable procedure the executor follows

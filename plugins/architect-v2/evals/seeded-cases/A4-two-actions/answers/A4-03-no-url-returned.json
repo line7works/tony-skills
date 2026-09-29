@@ -1,0 +1,10 @@
+{
+  "case": "A4-03-no-url-returned",
+  "lines": [],
+  "publish": true,
+  "publish_url": null,
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

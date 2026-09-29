@@ -1,0 +1,17 @@
+{
+  "case": "A1-04-trace-names-nothing",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "platform \u2014 a phone app \u2014 the bench has phones",
+      "trace": {
+        "kind": "ledger",
+        "ref": "dec-000000000000"
+      }
+    }
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -43,6 +43,13 @@ class OutsideEdit(RuntimeError):
     """The document is at neither the hash the plan recorded nor the hash it planned."""
 
 
+# E14 C4-1: the receipts this process planned. A pass that planned the card move itself and meets
+# an edit before its own write knows the line was not written; a pass that reopened a receipt with
+# no recorded write (the run was interrupted) cannot know whether the line was ever its own. Held
+# in memory only: nothing about it is persisted, so a later pass never inherits it.
+_PLANNED_HERE = set()
+
+
 def open_receipt(run_dir, run_id, document, slice_name):
     """The receipt of this run, created or reopened. A corrupt one is a stop, never a fresh one."""
     path, log_path = statefile.receipt_paths(run_dir)
@@ -82,6 +89,7 @@ def plan(receipt, client, workspace, document, entry, slice_name, before, after,
         "sha256_after": None,
     }
     receipt.save()
+    _PLANNED_HERE.add(receipt.path)
     return event
 
 
@@ -212,7 +220,7 @@ def _line_is_ours(workspace, step, slice_name):
         bool(step.get("done")) or step.get("sha256_before") != step.get("sha256_planned"))
 
 
-def _edit_window(workspace, step, slice_name):
+def _edit_window(workspace, step, slice_name, planned_here=True):
     """When the edit an `outside_edit` stop names reached the document, as far as it is known.
 
     punch4-C2-3: the receipt decides first. A receipted write is this run's write whatever the
@@ -222,10 +230,14 @@ def _edit_window(workspace, step, slice_name):
         return "after this run's own `Status:` line reached it"
     if _line_is_ours(workspace, step, slice_name):
         return "after this run planned the card move"
+    if not planned_here:
+        # E14 C4-1: interrupted before the receipt recorded a write, so the run cannot place the
+        # edit against its own write; the words say only what the hashes prove.
+        return "after this run planned the card move"
     return "between the plan and the write"
 
 
-def _line_words(workspace, step, slice_name):
+def _line_words(workspace, step, slice_name, planned_here=True):
     """What the `outside_edit` reason says about the `Status:` line, read from the document on
     disk (punch3-C2-3, NEW-1's words): when the line already holds the value this run writes, it
     says so, whether the receipt records this run's write, and that the line is left as it is.
@@ -233,8 +245,12 @@ def _line_words(workspace, step, slice_name):
     punch4-C2-3: when the receipt records this run's write and the line reads something else now
     (put back by hand, changed to a third value, the document re-saved), the words say what the
     line reads now, that this run wrote its value there earlier, and that it is left as it is.
-    Without a receipted write the run cannot know the line was ever its, and the words say the
-    line was not written, as before."""
+    Without a receipted write, a pass that planned the move itself and met the edit before its own
+    write says the line was not written, as before. E14 C4-1: a pass that reopened a receipt with no
+    recorded write (an earlier pass was interrupted, or stopped, before one) cannot know whether the
+    line was ever its own, so the words are hedged and say only what the receipt shows: this run did
+    not write the line as it now reads, and it is left as it is, neither written again nor
+    reverted."""
     if step.get("done") and not _line_is_ours(workspace, step, slice_name):
         current = _status_on_disk(workspace, step["target"], slice_name)
         now = ("reads `%s` in %s now" % (current, step["target"]) if current is not None else
@@ -252,6 +268,17 @@ def _line_words(workspace, step, slice_name):
                    "the value this run's document step writes (the run was interrupted before its "
                    "receipt recorded a write, so the line is this run's write or an edit that set "
                    "the same value)"))
+    if not planned_here:
+        # E14 C4-1: no receipted write and a pass that did not plan it; the words are hedged and say
+        # only what the receipt shows (C1-1: an earlier pass may have been interrupted, or may have
+        # stopped itself, before a write; this pass cannot tell which).
+        current = _status_on_disk(workspace, step["target"], slice_name)
+        now = ("reads `%s` in %s now, not the `%s` this run writes"
+               % (current, step["target"], step.get("value")) if current is not None else
+               "can no longer be read in %s" % step["target"])
+        return ("its receipt records no write, so this pass cannot know whether the slice's "
+                "`Status:` line was ever its own; the line %s, so this run did not write the line "
+                "as it now reads, and it is left as it is, neither written again nor reverted." % now)
     return "the `Status:` line was not written."
 
 
@@ -293,6 +320,7 @@ def write_document_step(receipt, workspace):
                       _status_on_disk(workspace, step["target"], receipt.doc.get("slice")) or "-",
                       step.get("value"), (step.get("sha256_after") or "")[:12]))
     if current != step.get("sha256_before"):
+        planned_here = receipt.path in _PLANNED_HERE
         raise OutsideEdit(
             "the build doc %s is at neither the bytes this run read when it planned the card move "
             "(%s) nor the bytes that plan produces (%s); it now hashes to %s. Something edited it "
@@ -300,8 +328,8 @@ def write_document_step(receipt, workspace):
             "and run again."
             % (step["target"], (step.get("sha256_before") or "")[:12],
                (step.get("sha256_planned") or "")[:12], current[:12],
-               _edit_window(workspace, step, receipt.doc.get("slice")),
-               _line_words(workspace, step, receipt.doc.get("slice"))))
+               _edit_window(workspace, step, receipt.doc.get("slice"), planned_here),
+               _line_words(workspace, step, receipt.doc.get("slice"), planned_here)))
 
     with open(path, "r", encoding="utf-8") as fh:
         text = fh.read()

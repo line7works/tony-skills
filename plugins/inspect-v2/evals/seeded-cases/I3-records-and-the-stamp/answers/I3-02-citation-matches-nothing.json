@@ -1,0 +1,17 @@
+{
+  "call_id": "run-gpt-astra",
+  "case": "I3-02-citation-matches-nothing",
+  "effective_model": "gpt-6-astra",
+  "findings": [
+    {
+      "claim": "line 99 says the reset is required",
+      "confidence": "high",
+      "location": "build-doc.md:99",
+      "scenario": "a grader cannot tell a partial counter",
+      "severity": "MAJOR"
+    }
+  ],
+  "role": "reader",
+  "row": "gpt-astra",
+  "seeded_answer": 1
+}

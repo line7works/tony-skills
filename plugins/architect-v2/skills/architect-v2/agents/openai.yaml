@@ -1,0 +1,5 @@
+interface:
+  display_name: "Architect v2"
+  short_description: "Draw the least structure that serves a named first walkthrough"
+policy:
+  allow_implicit_invocation: false

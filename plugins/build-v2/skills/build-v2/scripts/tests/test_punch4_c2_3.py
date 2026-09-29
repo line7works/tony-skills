@@ -103,14 +103,15 @@ class Punch4C23TheReceiptDecides(_LineChangedByHand):
 class Punch4C23NoReceiptNoClaim(_LineChangedByHand):
 
     def test_third_value_after_the_write_before_its_receipt(self):
-        # The receipt records no write, so the run cannot know the line was its: the round 3
-        # words stay, and nothing is written.
+        # The receipt records no write, so the run cannot know the line was its: the words are
+        # the hedged E14 form (C4-1), and nothing is written.
         self.kill("after_write")
         text = self.doc_bytes().decode("utf-8").replace("Status: built", "Status: in progress")
         self.put(text.encode("utf-8"))
         reason = self.stopped_twice("in progress")
-        self.assertIn("between the plan and the write", reason)
-        self.assertIn("the `Status:` line was not written", reason)
+        self.assertNotIn("between the plan and the write", reason)
+        self.assertNotIn("was not written", reason)
+        self.assertIn("cannot know whether the slice's `Status:` line was ever its own", reason)
         self.assertNotIn("its receipt records that write", reason)
 
 

@@ -1,0 +1,17 @@
+{
+  "call_id": "run-gpt-astra",
+  "case": "I3-03-no-effective-model",
+  "effective_model": null,
+  "findings": [
+    {
+      "claim": "AC1 names no failure case",
+      "confidence": "high",
+      "location": "build-doc.md:10",
+      "scenario": "a grader cannot tell a partial counter",
+      "severity": "MAJOR"
+    }
+  ],
+  "role": "reader",
+  "row": "gpt-astra",
+  "seeded_answer": 1
+}

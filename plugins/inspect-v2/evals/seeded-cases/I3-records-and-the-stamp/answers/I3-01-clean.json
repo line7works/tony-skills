@@ -1,0 +1,24 @@
+{
+  "call_id": "run-gpt-astra",
+  "case": "I3-01-clean",
+  "effective_model": "gpt-6-astra",
+  "findings": [
+    {
+      "claim": "AC1 names no failure case",
+      "confidence": "high",
+      "location": "build-doc.md:10",
+      "scenario": "a grader cannot tell a partial counter",
+      "severity": "MAJOR"
+    }
+  ],
+  "role": "reader",
+  "row": "gpt-astra",
+  "seeded_adjudications": [
+    {
+      "decision": "plausible",
+      "finding": "run-gpt-astra#1",
+      "reason": "the seeded executor read build-doc.md:10: it holds R1, not AC1; AC1 (line 12) names no failure case, so the concern holds for the doc while the cited line does not show it"
+    }
+  ],
+  "seeded_answer": 1
+}
