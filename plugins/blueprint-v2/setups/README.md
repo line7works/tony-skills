@@ -25,6 +25,17 @@ script is derived from its name (`<station>.py`) in `verify-package.py` and `neg
 | `negative-cases.py` | the nine negative cases for either harness |
 | `*/prompts/` | the delivery probe (names the core) and, for Codex, the lock probe |
 
-`seven-stations.sh` (every v2 station and one records component from one marketplace in one home)
-is slice 3's. No measured result is recorded here yet: the control room runs the install proofs at
+`plugins/inspect-v2/setups/seven-stations.sh` is built (E14 slice 3c): on either harness it installs
+eight plugins (the seven v2 stations and one records component) from one marketplace into one fresh
+home, and each station resolves the component by route 3b, as inspect-v2 resolves blueprint-v2's
+installed `SKILL.md`; its negatives hide the records folder (every station refuses naming route 3b's
+directory, the front cores through their installed client) and then blueprint-v2 (inspect-v2's code
+book lookup refuses the same way). No measured result is recorded here yet: the control room runs the install proofs at
 the hand-back and records them.
+
+`setups/manual-only.sh` exists in precon-v2, architect-v2 and inspect-v2, the three strictly
+user-invoked stations (not blueprint-v2): it installs the core with its own `install.sh` and
+`verify-install.sh`, installs the manual-only probe (`setups/_fixtures/manual-only-probe`) beside it
+from a second marketplace in the same home, and checks from the installed copies that the probe and
+the core both carry `disable-model-invocation: true` and `allow_implicit_invocation: false`. It sends
+no prompt and launches no session; the live measurement is the control room's.

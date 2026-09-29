@@ -1,0 +1,84 @@
+{
+  "answer_version": 1,
+  "assumptions": [
+    "the bench script prints the count itself"
+  ],
+  "ceremony": {
+    "needs_build_doc": true,
+    "why": "two requirements across one slice"
+  },
+  "criteria": [
+    {
+      "id": "AC1",
+      "text": "AC1: `spin(2)` returns 3",
+      "verify": "new test at tests/test_turnstile.py"
+    }
+  ],
+  "feature": "turnstile",
+  "intent": "count turns for the owner's bench rig, so a bench session reports its turns.",
+  "lines": [
+    {
+      "id": "R1",
+      "tag": "requirement",
+      "text": "R1 \u2014 `spin(n)` returns `n + 1`",
+      "trace": {
+        "kind": "repo_path",
+        "ref": "src/turnstile.py"
+      }
+    },
+    {
+      "id": "R2",
+      "tag": "requirement",
+      "text": "R2 \u2014 the count lives in memory only",
+      "trace": {
+        "kind": "ledger",
+        "ref": "@ledger:storage \u2014 none in v0 \u2014 nothing is remembered@"
+      }
+    },
+    {
+      "id": "C1",
+      "tag": "constraint",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "ledger",
+        "ref": "@ledger:Python 3.9 standard library only@"
+      }
+    },
+    {
+      "id": "O1",
+      "tag": "out-of-scope",
+      "text": "a web dashboard \u2014 the owner declined it for the first version",
+      "trace": {
+        "kind": "ledger",
+        "ref": "@ledger:a web dashboard \u2014 the owner declined it for the first version@"
+      }
+    }
+  ],
+  "open_questions": [
+    "how often the counter resets"
+  ],
+  "questions": [],
+  "run_id": "@run@",
+  "session_id": "@session@",
+  "slices": [
+    {
+      "criteria": [
+        "AC1"
+      ],
+      "depends_on": [],
+      "footprint": [
+        "src/turnstile.py",
+        "tests/test_turnstile.py"
+      ],
+      "goal": "`spin()` returns the count after one more turn.",
+      "name": "A",
+      "not_in_slice": "the reset",
+      "requirements": [
+        "R1",
+        "R2"
+      ],
+      "short": "Count turns"
+    }
+  ],
+  "title": "Turnstile"
+}

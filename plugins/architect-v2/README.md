@@ -28,6 +28,11 @@ the parser, the dispatch table, the schemas and the source, with a mutation proo
 lists a candidate as its folder spells it, so `select` and every later use of a candidate carry the
 disk spelling on a case-insensitive disk; and the plugin has its marketplace entry.
 
+Slice 3c's second hand-back: `setups/manual-only.sh` installs the manual-only probe
+(`setups/_fixtures/`, recheck-v2's E9 probe) beside this core and checks both carry the manual-only
+controls; the two prompts per harness are in `setups/<harness>/prompts/`; the live measurement is
+the control room's.
+
 Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
 
 ## Layout

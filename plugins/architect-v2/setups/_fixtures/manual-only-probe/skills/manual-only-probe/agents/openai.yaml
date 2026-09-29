@@ -1,0 +1,5 @@
+interface:
+  display_name: "Manual-only probe"
+  short_description: "Replies PROBE-RAN when the user invokes it explicitly (skills v2 pilot fixture)"
+policy:
+  allow_implicit_invocation: false

@@ -44,9 +44,14 @@ the parser, the dispatch table, the schemas and the source, with a mutation proo
 lists a candidate as its folder spells it, so `select` and every later use of a candidate carry the
 disk spelling on a case-insensitive disk; and the plugin has its marketplace entry.
 
-What stays for the join (slice 3c's second hand-back and the close): the seven-station install
-proof with inspect-v2 resolving blueprint-v2 by route 3b, the end-to-end replay across the front of
-the loop, and the owner's rulings on the open points of the contract's section 15.
+Slice 3c's second hand-back: `setups/seven-stations.sh` (build-v2's three-stations proof extended
+to the seven v2 stations and one records component from one marketplace in one home, each station
+resolving the component by route 3b and inspect-v2 resolving blueprint-v2's installed `SKILL.md` the
+same way, with the hidden-component and hidden-code-book negatives); `evals/replay/`, the end-to-end
+replay of precon-v2, architect-v2, blueprint-v2, inspect-v2 and build-v2's `contract` on one fixture
+project with its own assertions; and `setups/manual-only.sh` with the manual-only probe
+(`setups/_fixtures/`) and its two prompts per harness, whose live measurement is the control room's.
+What stays: the owner's rulings on the open points of the contract's section 15.
 
 Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
 

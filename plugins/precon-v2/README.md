@@ -28,6 +28,11 @@ disk spelling on a case-insensitive disk; and the plugin has its marketplace ent
 build-v2's shape in place of the frame's two command tables, and `scripts/tests/test_contract_document.py`
 reads its own commands from it.
 
+Slice 3c's second hand-back: `setups/manual-only.sh` installs the manual-only probe
+(`setups/_fixtures/`, recheck-v2's E9 probe) beside this core and checks both carry the manual-only
+controls; the two prompts per harness are in `setups/<harness>/prompts/`; the live measurement is
+the control room's.
+
 Interface version 1, plugin version 0.1.1. Tests: <COUNT>.
 
 ## Layout

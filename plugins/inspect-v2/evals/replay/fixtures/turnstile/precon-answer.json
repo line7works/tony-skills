@@ -1,0 +1,57 @@
+{
+  "answer_version": 1,
+  "doc": {
+    "intent": "a small turn counter for the owner's bench rig, so one bench session can report how many turns a fixture made.",
+    "title": "Turnstile"
+  },
+  "gate": "every branch was visited or parked: storage parked for research, the rest decided",
+  "lines": [
+    {
+      "tag": "decided",
+      "text": "Python 3.9 standard library only",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "no dependencies on the bench"
+      }
+    },
+    {
+      "tag": "assumed",
+      "text": "One module, no package",
+      "trace": {
+        "kind": "assumed",
+        "ref": "small and reversible; nothing imports it yet"
+      }
+    },
+    {
+      "reason": "needs research",
+      "tag": "parked",
+      "text": "Where the count is kept between sessions",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "I need to look into storage"
+      }
+    }
+  ],
+  "open_items": [
+    "how often the counter resets"
+  ],
+  "out_of_scope": [
+    {
+      "reason": "the owner declined it for the first version",
+      "text": "a web dashboard",
+      "trace": {
+        "kind": "owner_words",
+        "ref": "no dashboard yet"
+      }
+    }
+  ],
+  "questions": [],
+  "research": [],
+  "run_id": "@run@",
+  "session_id": "@session@",
+  "sitting": "ends",
+  "triage": {
+    "tier": "bounded",
+    "why": "a normal feature with known edges"
+  }
+}
