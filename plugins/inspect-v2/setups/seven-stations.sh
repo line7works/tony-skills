@@ -32,6 +32,7 @@ PLUGINS_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
 [ ! -e "$SETUP_HOME" ] || [ -z "$(ls -A "$SETUP_HOME" 2>/dev/null)" ] || { echo "seven-stations.sh: $SETUP_HOME is not empty" >&2; exit 2; }
 # The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
 # may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
+# TMPDIR is held to the same rule (E14 punch list, check 6 C3C6-1).
 SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "seven-stations.sh" <<'GUARD'
 import os, sys
 target, home, name = sys.argv[1:4]
@@ -57,15 +58,16 @@ if not os.path.isabs(home):
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for path in forms(target):
-    for forbidden in homes:
-        if any(rest(path, base) is not None for base in forms(forbidden)):
-            refuse("%s is under %s, which no setup may touch" % (target, forbidden))
-    for base in forms(share):
-        below = rest(path, base)
-        if below and below.split(os.sep)[0].startswith("skills-v2-"):
-            refuse("%s is under %s, which no setup may touch"
-                   % (target, os.path.join(share, below.split(os.sep)[0])))
+for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+    for path in forms(given):
+        for forbidden in homes:
+            if any(rest(path, base) is not None for base in forms(forbidden)):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for base in forms(share):
+            below = rest(path, base)
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
 print(os.path.realpath(target))
 GUARD
 ) || exit $?

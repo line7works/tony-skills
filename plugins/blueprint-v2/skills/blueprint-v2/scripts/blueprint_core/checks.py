@@ -12,8 +12,11 @@ of this run touching it is this core's own refusal, `open-item-descoped`, by the
 its words alike (round 3, R3), whatever the line's trace; and descoping it moves a ledger row, so
 the line carries the item's id (`row`, or a ledger trace to the item): an answered question touching
 the item does not stand in for the id, and the item's words alone are refused the same way (A13,
-under A5(4)). The words are compared through the frame's own readings (round 4, R1; E14-3): the
-line through `station_core.answer.forms`, the row through `row_forms`, so every decoration the
+under A5(4)). A parked scope line or a deferred architecture line (the view's `parked` rows) goes forward
+as out of scope only by its id the same way: a line that restates such a row's words without naming it is
+refused `parked-line-unnamed`, whether or not an answered question touched the row (E14 punch list, the
+owner's ruling on A5(4) and E14-11). The words are compared through the frame's own readings (round 4, R1;
+E14-3): the line through `station_core.answer.forms`, the row through `row_forms`, so every decoration the
 frame knows (a trailing period, a list mark, an invisible character, a ledger tail, the row
 decorated) is seen through the same way the shared `quietly-resolved` rule sees through it. This
 core adds only what the frame has no reading for: the item before its reason (cut at the first
@@ -45,6 +48,10 @@ in the shared shape, one per finding:
                               or a ledger trace) or by its words, that no answered question of this run
                               touched; or carrying one by its words without its id, touched or not
                               (A13: the question does not stand in for the id)
+    parked-line-unnamed       an out-of-scope line that restates the words of a `parked` row of the view (a
+                              parked scope line or a deferred architecture line) without naming it by its id
+                              (`row` or a ledger trace), touched or not: the pass-forward carries the row's id
+                              (E14 punch list)
     duplicate-id              two lines, two criteria or two slices sharing an id or a name
     unknown-id                a slice naming a requirement line, a criterion or a slice that is not there
     depends-forward           a slice depending on itself or on a slice after it
@@ -59,8 +66,8 @@ from station_core import answer as shared
 
 ALLOWED_TRACES = ("ledger", "repo_path", "question", "owner_words")
 RULES = ("session-mismatch", "run-id-mismatch", "criterion-without-verify", "open-item-descoped",
-         "duplicate-id", "unknown-id", "depends-forward", "unplaced", "no-slice", "slices-without-build-doc",
-         "feature-not-hunted")
+         "parked-line-unnamed", "duplicate-id", "unknown-id", "depends-forward", "unplaced", "no-slice",
+         "slices-without-build-doc", "feature-not-hunted")
 # the tag each line of the answer carries in the view the shared refusals read
 VIEW_TAGS = {"requirement": "decided", "constraint": "decided", "out-of-scope": "out-of-scope"}
 # the build doc template's three verify forms, and what each must hold (round 3, R4): `existing test`
@@ -229,6 +236,8 @@ def own(answer, run_input, harvest):
     ledger = dict((row["id"], row) for row in (harvest or {}).get("ledger_view") or [])
     settled = _answered_touches(answer)
     open_rows = [row for row in ledger.values() if row.get("tag") == "open" and isinstance(row.get("text"), str)]
+    parked_rows = [row for row in ledger.values() if row.get("tag") == "parked" and isinstance(row.get("text"), str)]
+    deferred = set(r.get("id") for r in (((harvest or {}).get("architecture") or {}).get("deferred") or []))
     for index, line in enumerate(answer.get("lines") or []):
         if line.get("tag") != "out-of-scope":
             continue
@@ -241,6 +250,18 @@ def own(answer, run_input, harvest):
                  if isinstance(named, str)]
         carried = [ledger[named] for named in names if named in ledger and ledger[named].get("tag") == "open"]
         forms = line_forms(line.get("text"))
+        # E14 punch list (the owner's ruling on A5(4) and E14-11): a parked scope line or a deferred architecture
+        # line passes forward only by its id; its words alone are refused, touched by an answered question or not
+        restated = next((row for row in parked_rows
+                         if forms & shared.row_forms(row["text"]) and row["id"] not in names), None)
+        if restated is not None:
+            what = "architecture doc's deferred line" if restated["id"] in deferred else "scope doc's parked line"
+            refusals.append(_refusal("parked-line-unnamed", "the out-of-scope line %r carries the %s %r (%s) forward "
+                                     "as out of scope by its words without naming it: an answered question touching "
+                                     "the line does not stand in for its id; a line that passes a ledger row forward "
+                                     "carries the row's id (`row`)" % (line.get("text"), what, restated.get("text"),
+                                                                       restated["id"]),
+                                     line=index, text=line.get("text"), line_id=restated["id"]))
         worded = [row for row in open_rows if forms & shared.row_forms(row["text"]) and row["id"] not in names]
         unnamed = next((row for row in worded if row["id"] in settled), None)
         if unnamed is not None:

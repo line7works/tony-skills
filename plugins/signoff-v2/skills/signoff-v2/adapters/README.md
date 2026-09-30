@@ -8,7 +8,7 @@ enforces. Identify your harness from what it tells you about itself, never from 
 | Harness | Profile | Helpers (each with `--help`, JSON on stdout, diagnostics on stderr, exit 0/2/3/1) | Reviewer capability |
 |---|---|---|---|
 | Claude Code | `claude-code/profile.md` | `claude-code/invocation.py` (the invocation facts), `claude-code/reviewer.py` (the readers request block; the sidecar map) | the readers component: row `claude-session`, profile `repo-with-tools` |
-| Codex CLI | `codex/profile.md` | `codex/invocation.py`, `codex/reviewer.py` (checks the run's readers request, reports `lane-unavailable` with the missing capability; the sidecar map) | none today: readers has no floor-qualified route a Codex session can dispatch, so the run stops `lane-unavailable` (Astra's F6) |
+| Codex CLI | `codex/profile.md` | `codex/invocation.py`, `codex/reviewer.py` (checks the run's readers request, looks the row up through readers' own `suggest` and writes the readers request for it, or reports `lane-unavailable` with the missing capability; the sidecar map) | the readers component: the portable row `claude-opus-cli`, profile `repo` (the row offers no `repo-with-tools`), at floor `opus` (contract A3). Its reader names its own model, which the core judges by its class; it runs no command, so a clean review stops `answer_invalid` until a later step gives the row a tool-running profile. `lane-unavailable` when readers is not found or no row is eligible |
 
 **A harness this index does not list has no adapter** (OpenCode among them: pick P3). Its facts
 cannot be supplied, and the core's own stop applies: the schema requires `invocation.mode`,

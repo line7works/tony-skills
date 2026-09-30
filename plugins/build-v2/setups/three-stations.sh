@@ -15,6 +15,9 @@
 #      it resolved and the interface version it confirmed;
 # and then renames the installed records folder away and repeats step 1, where each station must
 # exit 3 with the interface's one line naming route 3b's directory. The folder is put back.
+# The home is refused, exit 2 and before anything is created, when it is or sits under ~/.claude,
+# ~/.codex or ~/.local/share/skills-v2-*, as given or resolved, or when TMPDIR does (the station
+# cores' home guard, byte for byte; E14 punch list).
 # One JSON document on stdout. Exit 0 when every expectation held, 1 otherwise, 2 usage.
 set -eu
 [ $# -eq 2 ] || { echo "usage: three-stations.sh claude-code|codex <fresh isolated home>" >&2; exit 2; }
@@ -23,9 +26,49 @@ case "$HARNESS" in claude-code|codex) ;; *) echo "three-stations.sh: harness is 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 PLUGINS_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
 [ ! -e "$SETUP_HOME" ] || [ -z "$(ls -A "$SETUP_HOME" 2>/dev/null)" ] || { echo "three-stations.sh: $SETUP_HOME is not empty" >&2; exit 2; }
+# The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
+# may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
+# TMPDIR is held to the same rule (E14 punch list, check 6 C3C6-1).
+SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "three-stations.sh" <<'GUARD'
+import os, sys
+target, home, name = sys.argv[1:4]
+
+
+def refuse(why):
+    sys.stderr.write("%s: %s; nothing created\n" % (name, why))
+    sys.exit(2)
+
+
+def forms(path):
+    return (os.path.abspath(path), os.path.realpath(path))
+
+
+def rest(path, base):
+    """The part of `path` below `base` ("" when they are the same), or None; compared casefolded."""
+    p, b = path.casefold(), base.casefold().rstrip(os.sep)
+    return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+
+
+if not os.path.isabs(home):
+    refuse("HOME is not an absolute path")
+share = os.path.join(home, ".local", "share")
+homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
+         os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
+for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+    for path in forms(given):
+        for forbidden in homes:
+            if any(rest(path, base) is not None for base in forms(forbidden)):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for base in forms(share):
+            below = rest(path, base)
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
+print(os.path.realpath(target))
+GUARD
+) || exit $?
 mkdir -p "$SETUP_HOME"
 SETUP_HOME=$(CDPATH= cd -- "$SETUP_HOME" && pwd -P)
-case "$SETUP_HOME/" in "$HOME/.claude/"*|"$HOME/.codex/"*|"$HOME/.local/share/skills-v2-"*) echo "three-stations.sh: not a live or pilot home" >&2; exit 2 ;; esac
 export PYTHONDONTWRITEBYTECODE=1
 unset RECORDS_ROOT || true
 exec python3 - "$HARNESS" "$SETUP_HOME" "$PLUGINS_DIR" <<'PY'

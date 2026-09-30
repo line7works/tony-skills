@@ -22,10 +22,10 @@ changes from build-v2's copies are parameterisations: the plugin list the instal
 is a `case` on the core (inspect-v2 brings `records`, `readers` and `blueprint-v2`, its code book;
 precon-v2 and architect-v2 bring `readers`; blueprint-v2 brings nothing), and the core's driver
 script is derived from its name (`<station>.py`) in `verify-package.py` and `negative-cases.py`.
-The third is the home guard above (E14 slice 3c, fixes 3 and 3-2) in the installers, the launchers
-and `negative-cases.py`, which build-v2's and signoff-v2's frozen copies (E14-8) do not carry: their
-installers still create the home before their check and name only their own harness's live home, and
-their launchers and `negative-cases.py` have no guard.
+The third is the home guard above (E14 slice 3c, fixes 3 and 3-2; TMPDIR since the E14 punch list),
+which build-v2's and signoff-v2's copies carry too since the E14 punch list: the launchers are
+byte-identical in the six cores, and the installers, `negative-cases.py` and `three-stations.sh` carry
+the same guard block.
 
 | File | Does |
 |---|---|

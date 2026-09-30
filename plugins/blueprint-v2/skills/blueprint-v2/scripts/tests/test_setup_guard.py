@@ -19,6 +19,34 @@ SEEDED = os.path.join(testlib.PLUGIN, "evals", "seeded-cases")
 SEVEN = os.path.join(SETUPS, "seven-stations.sh")
 REPLAY = os.path.join(testlib.PLUGIN, "evals", "replay", "replay.py")
 HARNESSES = ("claude-code", "codex")
+# an audit-hook spy (the E14 punch-list check's CPL-1): runs a Python script and reports, after it ends, every
+# open or os./shutil. call whose path is under the folder it watches, one "SPY" line each on stderr
+SPY = r"""
+import os, runpy, sys
+watch, script = sys.argv[1], sys.argv[2]
+forms = set(f.casefold().rstrip(os.sep) for f in (os.path.abspath(watch), os.path.realpath(watch)))
+seen, busy = [], [False]
+def hook(event, args):
+    if busy[0] or not args or not (event == "open" or event.startswith(("os.", "shutil."))):
+        return
+    busy[0] = True
+    try:
+        p = args[0]
+        if isinstance(p, (str, bytes, os.PathLike)):
+            p = os.fsdecode(os.fspath(p))
+            a = os.path.abspath(p).casefold()
+            if any(a == f or a.startswith(f + os.sep) for f in forms):
+                seen.append("%s %s" % (event, p))
+    finally:
+        busy[0] = False
+sys.addaudithook(hook)
+sys.argv = [script] + sys.argv[3:]
+try:
+    runpy.run_path(script, run_name="__main__")
+finally:
+    for line in seen:
+        sys.stderr.write("SPY " + line + "\n")
+"""
 
 
 def listing(root):
@@ -160,6 +188,57 @@ class TheHomeGuard(unittest.TestCase):
     def test_the_replay_refuses_a_protected_keep(self):
         for target in self.protected:
             self.assert_refused([sys.executable, REPLAY, "--keep", target], label=target)
+
+    def test_a_tmpdir_under_a_protected_home_is_refused(self):
+        # check 6's C3C6-1 (E14 punch list, item 2): a script that makes its scratch folder under TMPDIR, or
+        # carries the GUARD, refuses a TMPDIR under a protected home, exit 2 and nothing created
+        tmp = os.path.join(self.home, ".claude", "tmp")
+        os.makedirs(tmp)
+        extra = {"TMPDIR": tmp}
+        for harness in HARNESSES:
+            self.assert_refused(["sh", os.path.join(SETUPS, harness, "install.sh"), "--home",
+                                 os.path.join(self.home, "ordinary", "t-" + harness)], extra, ("install.sh", harness))
+            argv, env = self.launch(harness, os.path.join(self.home, "ordinary", "run-" + harness))
+            env.update(extra)
+            self.assert_refused(argv, env, ("launch.sh", harness))
+            if os.path.isfile(SEVEN):
+                self.assert_refused(["sh", SEVEN, harness, os.path.join(self.home, "ordinary", "st-" + harness)],
+                                    extra, ("seven-stations.sh", harness))
+        if os.path.isfile(os.path.join(SEEDED, "observe.py")):
+            family, case = self.seeded()
+            self.assert_refused([sys.executable, os.path.join(SEEDED, "observe.py"), "--case", case, "--out",
+                                 os.path.join(self.home, "ordinary", "obs")], extra, "observe.py")
+        if os.path.isfile(REPLAY):
+            self.assert_refused([sys.executable, REPLAY], extra, "replay.py")
+
+    @unittest.skipUnless(os.path.isfile(os.path.join(SEEDED, "observe.py")) or os.path.isfile(REPLAY),
+                         "no Python writer that reads the temp folder beside this copy")
+    def test_a_protected_temp_folder_is_refused_without_a_write_in_it(self):
+        # the E14 punch-list check's CPL-1: the Python writers read TMPDIR, TEMP and TMP from the environment,
+        # never through tempfile.gettempdir(), which proves a folder writable by creating and removing a file in
+        # it; the spy sees no call under the protected folder, and the refusal is unchanged
+        tmp = os.path.join(self.home, ".claude", "tmp")
+        os.makedirs(tmp)
+        runs = []
+        if os.path.isfile(os.path.join(SEEDED, "observe.py")):
+            family, case = self.seeded()
+            runs.append([os.path.join(SEEDED, "observe.py"), "--case", case, "--out",
+                         os.path.join(self.home, "ordinary", "obs")])
+        if os.path.isfile(REPLAY):
+            runs.append([REPLAY])
+        for name in ("TMPDIR", "TEMP"):
+            env = dict((k, v) for k, v in self.env.items() if k not in ("TMPDIR", "TEMP", "TMP"))
+            env[name] = tmp
+            for argv in runs:
+                label = (os.path.basename(argv[0]), name)
+                before = listing(self.tmp)
+                got = subprocess.run([sys.executable, "-c", SPY, tmp] + argv, env=env, cwd=self.tmp,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=600)
+                err = got.stderr.decode("utf-8", "replace")
+                self.assertEqual(got.returncode, 2, (label, err))
+                self.assertEqual([line for line in err.splitlines() if line.startswith("SPY ")], [], label)
+                self.assertIn("which no setup may touch; nothing created", err, label)
+                self.assertEqual(listing(self.tmp), before, label)
 
 
 if __name__ == "__main__":

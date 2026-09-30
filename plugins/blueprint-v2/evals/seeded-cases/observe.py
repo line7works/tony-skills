@@ -393,7 +393,8 @@ def main(argv=None):
     out = os.path.abspath(args.out)
     home = os.environ.get("HOME", "")
     share = os.path.join(home, ".local", "share")
-    for path in (out, os.path.realpath(out)):
+    temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
+    for path in [out, os.path.realpath(out)] + [form(t) for t in temps for form in (os.path.abspath, os.path.realpath)]:
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
             for form in (os.path.abspath(base), os.path.realpath(base)):
                 p, b = path.casefold(), form.casefold().rstrip(os.sep)
@@ -401,7 +402,7 @@ def main(argv=None):
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue
                 sys.stderr.write("observe.py: %s is under %s, which no setup may touch; nothing created\n"
-                                 % (args.out, base if base != share else os.path.join(share, below.split(os.sep)[0])))
+                                 % (path, base if base != share else os.path.join(share, below.split(os.sep)[0])))
                 return 2
     if not os.path.isabs(home):
         sys.stderr.write("observe.py: HOME is not an absolute path; nothing created\n")

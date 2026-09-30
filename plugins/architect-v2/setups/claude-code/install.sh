@@ -2,7 +2,7 @@
 # Install this core into an isolated Claude Code setup (E13 slice 3, brief 3.3).
 #
 # Adapted from plugins/recheck-v2/setups/claude-code/install.sh (E9 lane C). Byte-identical in
-# the four front cores (E14); build-v2's and signoff-v2's (E13) differ in the plugin list, a case here, and the home guard, slice 3c's here: the core is this script's own plugin folder, never configured.
+# the four front cores (E14); build-v2's and signoff-v2's (E13) differ in the plugin list, a case here, and this header; their home guard is this one (E14 punch list): the core is this script's own plugin folder, never configured.
 #
 # Usage: install.sh --home DIR      (or <CORE>_CLAUDE_HOME=DIR install.sh, e.g. BUILD_V2_CLAUDE_HOME)
 #
@@ -39,6 +39,7 @@ done
 command -v claude >/dev/null 2>&1 || { echo "install.sh: claude is not on PATH" >&2; exit 3; }
 # The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
 # may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
+# TMPDIR is held to the same rule (E14 punch list, check 6 C3C6-1).
 SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "install.sh" <<'GUARD'
 import os, sys
 target, home, name = sys.argv[1:4]
@@ -64,15 +65,16 @@ if not os.path.isabs(home):
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for path in forms(target):
-    for forbidden in homes:
-        if any(rest(path, base) is not None for base in forms(forbidden)):
-            refuse("%s is under %s, which no setup may touch" % (target, forbidden))
-    for base in forms(share):
-        below = rest(path, base)
-        if below and below.split(os.sep)[0].startswith("skills-v2-"):
-            refuse("%s is under %s, which no setup may touch"
-                   % (target, os.path.join(share, below.split(os.sep)[0])))
+for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+    for path in forms(given):
+        for forbidden in homes:
+            if any(rest(path, base) is not None for base in forms(forbidden)):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for base in forms(share):
+            below = rest(path, base)
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
 print(os.path.realpath(target))
 GUARD
 ) || exit $?

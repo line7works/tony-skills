@@ -112,8 +112,9 @@ command against a run at the wrong phase is exit 2 with the command to run inste
 - Exits: 0 accepted; 4 the answer fails its schema; 5 the answer is refused on its content by
   rule E14-11 (a question that re-asks a `decided` ledger line; an asserted line that traces to
   no ledger line, no repo path and no answered question of this run; a `parked` or `open` line
-  passed forward as `decided` with no question of this run that settled it). On 4 and 5 nothing is
-  written and the refusals are listed on stdout, each with the line or question it names.
+  passed forward as `decided` that does not name the row's id, or names it with no answered
+  question of this run touching that row). On 4 and 5 nothing is written and the refusals are
+  listed on stdout, each with the line or question it names.
 - The row id (ruling A5(4)): every answer line that decides, settles, passes forward or moves a
   ledger row names that row by its id, in the line's `row` field (a core's answer schema holds it on
   exactly the lines its view hands the frame; a line whose trace is `ledger` names that trace's row,

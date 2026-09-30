@@ -7,6 +7,10 @@ harness's `negative-tests.sh` calls it. Byte-identical in build-v2 and signoff-v
 
     negative-cases.py --harness claude-code|codex --out DIR [--live]
 
+DIR is refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
+~/.local/share/skills-v2-* home, as given or resolved (the installers' home guard, E14 slice 3c;
+the four front cores' block byte for byte, E14 punch list).
+
 The pilot's nine cases, each in its own throwaway copy under DIR: its own mutated copy of THIS
 core's plugin folder, its own marketplace (a symlink to that copy, the way install.sh builds
 one) and its own harness home (CLAUDE_CONFIG_DIR or CODEX_HOME). The pilot mutated two probe
@@ -311,6 +315,21 @@ def main():
     parser.add_argument("--case", action="append", default=[], choices=CASES)
     args = parser.parse_args()
     out = os.path.abspath(args.out)
+    home = os.environ.get("HOME", "")
+    share = os.path.join(home, ".local", "share")
+    for path in (out, os.path.realpath(out)):
+        for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
+            for form in (os.path.abspath(base), os.path.realpath(base)):
+                p, b = path.casefold(), form.casefold().rstrip(os.sep)
+                below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+                if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
+                    continue
+                sys.stderr.write("negative-cases.py: %s is under %s, which no setup may touch; nothing created\n"
+                                 % (args.out, base if base != share else os.path.join(share, below.split(os.sep)[0])))
+                return 2
+    if not os.path.isabs(home):
+        sys.stderr.write("negative-cases.py: HOME is not an absolute path; nothing created\n")
+        return 2
     if os.path.exists(out):
         sys.stderr.write("negative-cases.py: %s exists; retained trials are never overwritten\n"
                          % out)

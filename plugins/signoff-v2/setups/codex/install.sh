@@ -2,19 +2,19 @@
 # Install this core into an isolated Codex home (E13 slice 3, brief 3.3).
 #
 # Adapted from plugins/recheck-v2/setups/codex/install.sh (E9 lane R, E10-58). Byte-identical in
-# build-v2 and signoff-v2: the core is this script's own plugin folder.
+# build-v2 and signoff-v2 (the home guard block is the front cores' byte for byte, E14 punch list): the core is this script's own plugin folder.
 #
 # Usage: install.sh --home DIR [--credential]    (or <CORE>_CODEX_HOME=DIR, e.g. BUILD_V2_CODEX_HOME)
 #
-# DIR becomes the CODEX_HOME of this setup; it is REQUIRED (no default) and may never be the
-# live ~/.codex or anything under the pilot's ~/.local/share/skills-v2-pilot. Written inside it,
+# DIR becomes the CODEX_HOME of this setup; it is REQUIRED (no default) and is refused, before anything
+# is created, under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, as given or resolved. Written inside it,
 # the pilot's way: config.toml with exactly the model, model_reasoning_effort and sandbox_mode
 # lines of ~/.codex/config.toml plus approval_policy never, web_search disabled and
 # shell_snapshot off (E10-30), a child/ home for the tool shells ([shell_environment_policy.set]
 # CODEX_HOME and UV_CACHE_DIR, E9-25), and marketplace/, this setup's own marketplace whose
 # entries are symlinks to the worktree's plugin folders: the core and records. readers is not
-# installed here: it has no floor-qualified route a Codex session can dispatch, so signoff-v2's
-# Codex adapter stops lane-unavailable rather than summoning a reviewer (Astra's F6).
+# installed here (the plugin list is E13's), so an installed signoff-v2 finds no readers beside it
+# and its Codex adapter stops lane-unavailable; from a checkout it finds readers (route 3a).
 #
 # --credential copies ~/.codex/auth.json byte for byte into DIR at mode 600 and links
 # child/auth.json to it, the pilot's own step; it is never read, printed or logged. Without the
@@ -44,11 +44,49 @@ done
 [ -n "$SETUP_HOME" ] || { echo "install.sh: name the isolated home: --home DIR or $VAR" >&2; exit 2; }
 command -v codex >/dev/null 2>&1 || { echo "install.sh: codex is not on PATH" >&2; exit 3; }
 [ -f "$HOME/.codex/config.toml" ] || { echo "install.sh: ~/.codex/config.toml is missing" >&2; exit 3; }
+# The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
+# may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
+# TMPDIR is held to the same rule (E14 punch list, check 6 C3C6-1).
+SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "install.sh" <<'GUARD'
+import os, sys
+target, home, name = sys.argv[1:4]
+
+
+def refuse(why):
+    sys.stderr.write("%s: %s; nothing created\n" % (name, why))
+    sys.exit(2)
+
+
+def forms(path):
+    return (os.path.abspath(path), os.path.realpath(path))
+
+
+def rest(path, base):
+    """The part of `path` below `base` ("" when they are the same), or None; compared casefolded."""
+    p, b = path.casefold(), base.casefold().rstrip(os.sep)
+    return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+
+
+if not os.path.isabs(home):
+    refuse("HOME is not an absolute path")
+share = os.path.join(home, ".local", "share")
+homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
+         os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
+for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+    for path in forms(given):
+        for forbidden in homes:
+            if any(rest(path, base) is not None for base in forms(forbidden)):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for base in forms(share):
+            below = rest(path, base)
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
+print(os.path.realpath(target))
+GUARD
+) || exit $?
 mkdir -p "$SETUP_HOME"
 SETUP_HOME=$(CDPATH= cd -- "$SETUP_HOME" && pwd -P)
-for forbidden in "$HOME/.codex" "$HOME/.local/share/skills-v2-pilot" "$HOME/.local/share/skills-v2-locked"; do
-  case "$SETUP_HOME/" in "$forbidden"/*) echo "install.sh: $SETUP_HOME is under $forbidden, which no setup may touch" >&2; exit 2 ;; esac
-done
 export CODEX_HOME="$SETUP_HOME"
 MARKET_NAME="$CORE-setup"
 PLUGINS="$CORE records"

@@ -1,8 +1,13 @@
 #!/bin/sh
 # One headless Codex session of this core's setup (E13 slice 3, brief 3.3 and 3.5).
 #
-# Adapted from plugins/recheck-v2/setups/codex/launch.sh. Byte-identical in build-v2 and
-# signoff-v2; the core is this script's own plugin folder.
+# Adapted from plugins/recheck-v2/setups/codex/launch.sh. Byte-identical in the six v2 cores that
+# carry it (the four front cores, build-v2 and signoff-v2; E14 punch list), held equal by the front
+# cores' test_shared_equal.py and by build-v2's and signoff-v2's test_setup_guard.py, which compare
+# their copy with precon-v2's. The home guard below (E14 slice 3c): the out-dir, the condition home
+# and each --writable root may not be or sit under ~/.claude, ~/.codex or
+# ~/.local/share/skills-v2-*, as given or resolved, and neither may TMPDIR (exit 2, nothing
+# created). The core is this script's own plugin folder.
 #
 # Usage: launch.sh <prompt-file> <workspace> <out-dir> [--writable DIR]...
 # The condition home is <CORE>_CODEX_HOME (BUILD_V2_CODEX_HOME or SIGNOFF_V2_CODEX_HOME), which
@@ -15,9 +20,10 @@
 # own sandbox off, this setup keeps Codex's own sandbox: workspace-write, approvals never,
 # TMPDIR and /tmp NOT writable (so <out-dir>, wherever it sits, is not writable by the tool
 # shells and the executor's rollout stays unwritable to them, E9-37), --add-dir only the
-# per-launch child home and each --writable root. Network stays off for both cores: signoff-v2's
-# Codex adapter launches no nested reviewer since Astra's F6 (the reviewer is summoned through
-# readers, which has no qualified route on Codex today, so a signoff run stops lane-unavailable).
+# per-launch child home and each --writable root. Network stays off for every core: signoff-v2's
+# Codex adapter launches no nested reviewer (Astra's F6); it writes a readers request for the
+# claude-opus-cli row (E14 A3) that the executor dispatches through readers, outside this
+# launcher.
 #
 # Copies to <out-dir>: events.jsonl, final.md, stderr.log, command.json, rollout.jsonl (the
 # executor's own rollout, from <out-dir>/codex-home/sessions) and launch.json. Exit: the codex
@@ -40,6 +46,47 @@ CORE=$(basename -- "$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)")
 VAR=$(printf '%s' "$CORE" | tr 'a-z-' 'A-Z_')_CODEX_HOME
 CONDITION=$(eval "printf '%s' \"\${$VAR:-}\"")
 [ -n "$CONDITION" ] && [ -d "$CONDITION" ] || { echo "launch.sh: $VAR must name the installed condition home" >&2; exit 3; }
+# The home guard, before anything is created (E14 slice 3c fix 3-2): the installers' GUARD, byte for byte.
+# shellcheck disable=SC2086
+for checked in "$OUT_DIR" "$CONDITION" $WRITABLE; do
+  python3 - "$checked" "$HOME" "launch.sh" <<'GUARD' >/dev/null || exit 2
+import os, sys
+target, home, name = sys.argv[1:4]
+
+
+def refuse(why):
+    sys.stderr.write("%s: %s; nothing created\n" % (name, why))
+    sys.exit(2)
+
+
+def forms(path):
+    return (os.path.abspath(path), os.path.realpath(path))
+
+
+def rest(path, base):
+    """The part of `path` below `base` ("" when they are the same), or None; compared casefolded."""
+    p, b = path.casefold(), base.casefold().rstrip(os.sep)
+    return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+
+
+if not os.path.isabs(home):
+    refuse("HOME is not an absolute path")
+share = os.path.join(home, ".local", "share")
+homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
+         os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
+for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+    for path in forms(given):
+        for forbidden in homes:
+            if any(rest(path, base) is not None for base in forms(forbidden)):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for base in forms(share):
+            below = rest(path, base)
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
+print(os.path.realpath(target))
+GUARD
+done
 export CODEX_HOME="$CONDITION"
 export PYTHONDONTWRITEBYTECODE=1
 export UV_CACHE_DIR="$CODEX_HOME/child/uv-cache"

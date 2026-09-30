@@ -30,7 +30,9 @@ observation is an outside one:
                   core, and nothing here runs a git command that changes a repository.
 
 Standard library only, Python 3.9, no network, no model call, no harness launch. Builds into
-`--out` and leaves what it built there for the grader to read.
+`--out` and leaves what it built there for the grader to read. `--out`, or a TMPDIR, that is or
+sits under ~/.claude, ~/.codex or a ~/.local/share/skills-v2-* home, as given or resolved, is
+refused, exit 2 and nothing created (the setups' home guard, E14 punch list).
 """
 import argparse
 import hashlib
@@ -298,6 +300,24 @@ def main(argv=None):
     else:
         wanted = [(family_of(case), case) for case in args.case]
 
+    # The setups' home guard (E14 slice 3c fix 3-2; E14 punch list), TMPDIR included, before anything is created.
+    out = os.path.abspath(args.out)
+    home = os.environ.get("HOME", "")
+    share = os.path.join(home, ".local", "share")
+    temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
+    for path in [out, os.path.realpath(out)] + [form(t) for t in temps for form in (os.path.abspath, os.path.realpath)]:
+        for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
+            for form in (os.path.abspath(base), os.path.realpath(base)):
+                p, b = path.casefold(), form.casefold().rstrip(os.sep)
+                below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+                if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
+                    continue
+                sys.stderr.write("observe.py: %s is under %s, which no setup may touch; nothing created\n"
+                                 % (path, base if base != share else os.path.join(share, below.split(os.sep)[0])))
+                return 2
+    if not os.path.isabs(home):
+        sys.stderr.write("observe.py: HOME is not an absolute path; nothing created\n")
+        return 2
     os.makedirs(args.out, exist_ok=True)
     rows = []
     for family, case in wanted:

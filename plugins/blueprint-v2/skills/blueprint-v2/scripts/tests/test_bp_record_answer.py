@@ -765,5 +765,83 @@ class AMarkedLabelIsALabel(_Record):
             self.accepted(self.out_of_scope(text))
 
 
+class AParkedOrDeferredLineGoesForwardOnlyByItsId(_Record):
+    """The E14 punch list, item 6 (the owner's ruling on A5(4) and E14-11; check 6's O-1): an out-of-scope line
+    that carries a PARKED scope line or a DEFERRED architecture line forward names that row by its id (`row`, or a
+    ledger trace to it); a line that restates such a row's words with no id is refused `parked-line-unnamed`,
+    whether or not an answered question touched the row, and the refusal names the row's id. A line matching no
+    parked or deferred row is a new line and is accepted."""
+
+    PARKED = "Where the count is kept between sessions"
+
+    def deferred(self):
+        return testlib.load_json(os.path.join(self.run.run_dir, "harvest.json"))["architecture"]["deferred"][0]
+
+    def carried(self, text, trace, questions=True, row=None):
+        doc = bplib.clean_answer()
+        if not questions:
+            doc["questions"] = []
+            doc["lines"][1]["trace"] = {"kind": "repo_path", "ref": "src/turnstile.py"}
+        doc["lines"][3] = {"id": "O1", "tag": "out-of-scope", "text": text, "trace": trace}
+        if row is not None:
+            doc["lines"][3]["row"] = row
+        return doc
+
+    def refused_naming(self, doc, ident):
+        out = self.refused(doc, "parked-line-unnamed")
+        rows = [r for r in out["refusals"] if r["rule"] == "parked-line-unnamed"]
+        self.assertEqual([r["line_id"] for r in rows], [ident], out)
+        self.assertIn(ident, rows[0]["message"])
+        self.assertIn("carries the row's id", rows[0]["message"])
+        return out
+
+    def test_a_parked_scope_line_by_its_words_with_no_question_is_refused_and_accepted_with_its_id(self):
+        ident = self.ids[self.PARKED]
+        words = "Where the count is kept between sessions %s not in this build" % bplib.D
+        trace = {"kind": "owner_words", "ref": "not in this build"}
+        self.refused_naming(self.carried(words, trace, questions=False), ident)
+        self.accepted(self.carried(words, trace, questions=False, row=ident))
+
+    def test_the_same_after_an_answered_question_touched_it_is_refused_and_accepted_with_its_id(self):
+        ident = self.ids[self.PARKED]
+        words = "Where the count is kept between sessions %s not in this build" % bplib.D
+        trace = {"kind": "question", "ref": "Q1"}
+        self.refused_naming(self.carried(words, trace), ident)
+        self.accepted(self.carried(words, trace, row=ident))
+
+    def test_a_deferred_architecture_line_by_its_words_is_refused_and_accepted_with_its_id(self):
+        deferred = self.deferred()
+        words = "a web view %s the module has no I/O" % bplib.D
+        trace = {"kind": "owner_words", "ref": "the module has no I/O"}
+        self.refused_naming(self.carried(words, trace), deferred["id"])
+        self.accepted(self.carried(words, trace, row=deferred["id"]))
+        self.fresh()
+        self.accepted(self.carried(words, {"kind": "ledger", "ref": deferred["id"]}))
+
+    def test_decorated_words_are_the_row_too(self):
+        ident = self.ids[self.PARKED]
+        for text in ("- Out of scope: where the count is kept between sessions, later",
+                     "WHERE THE COUNT IS KEPT BETWEEN SESSIONS.",
+                     "Where the count is kept between sessions (needs research)"):
+            self.fresh()
+            self.refused_naming(self.carried(text, {"kind": "owner_words", "ref": "later"}, questions=False), ident)
+
+    def test_a_named_row_does_not_carry_the_words_of_another_parked_row(self):
+        words = "Where the count is kept between sessions %s not in this build" % bplib.D
+        self.refused_naming(self.carried(words, {"kind": "owner_words", "ref": "not in this build"},
+                                         row=self.deferred()["id"]), self.ids[self.PARKED])
+
+    def test_a_line_matching_no_parked_or_deferred_row_is_accepted(self):
+        self.accepted(self.carried("a reverse-turn mode %s waiting on the encoder spec" % bplib.D,
+                                   {"kind": "owner_words", "ref": "waiting on the encoder spec"}))
+        self.fresh()
+        self.accepted(self.carried("a count kept in a database %s not in this build" % bplib.D,
+                                   {"kind": "owner_words", "ref": "not in this build"}, questions=False))
+
+    def fresh(self):
+        testlib.rmtree(self.run.run_dir)
+        self.run.to_harvest()
+
+
 if __name__ == "__main__":
     unittest.main()
