@@ -20,6 +20,7 @@ import os
 import re
 
 from station_core import driver, fsio, ledger, records_link, sibling, templates
+from station_core import hunt as huntmod
 from station_core.records_client import RecordsRefusal
 
 from . import common, reporting
@@ -165,7 +166,9 @@ def choose(ctx, args):
         raise driver.Usage("the %s hunt found %s, not several: there is nothing to choose between"
                            % (args.hunt, selection["outcome"]))
     listed = [os.path.normpath(c["path"]) for c in selection["candidates"]]
-    chosen = os.path.normpath(os.path.abspath(args.path))
+    # the pick named in the idea's case is the file the hunt lists in its folder's spelling (C3C1-1's class):
+    # it is compared, and recorded, as the folder spells it
+    chosen = huntmod.disk_spelling(os.path.normpath(os.path.abspath(args.path)))
     if chosen not in listed:
         raise driver.Usage("%s is not one of the listed candidates (%s): a choice is made among them, never "
                            "beside them" % (args.path, ", ".join(listed)))

@@ -41,6 +41,9 @@ refuse never reaches the log, the document or the card.
 **The model floor, kept from v1.** Reviewers run at Opus-class or better. The floor is passed to
 `readers` as `floor: opus` with this session's own model id as `session_model`; it is never
 assumed and never silently upgraded. A floor this run cannot establish is a stop, not a default.
+On Codex the adapter's helper looks the reviewer's row up through readers' own `suggest` at this
+floor among the portable rows a shell can dispatch (`claude-opus-cli` today) and writes the request
+for that row, reporting `lane-unavailable` only when readers holds no row eligible at the floor.
 
 ## 2. Inputs: one validated structure
 

@@ -505,11 +505,15 @@ class ThePouredDecisionField(_Record):
         self.refused(self.poured("storage %s Where the count is kept between sessions %s one-way" % (D, D)),
                      "quietly-resolved")
 
-    def test_a_question_that_settled_it_lets_it_pass(self):
+    def test_a_question_that_settled_it_lets_it_pass_with_the_row_id(self):
+        # the answered question touching the row does not substitute for the line's row id (the slice 3c
+        # review's F3, A5(4)): the id-less line is refused; the line naming the row passes
         words = "counts kept on the bench %s or on the rig server" % D
         a = self.poured("storage %s %s %s one-way" % (D, words, D), trace={"kind": "question", "ref": "Q9"})
         a["questions"].append({"id": "Q9", "text": "Where are the counts kept?", "touches": [self.parked(words)["id"]],
                                "answer": "on the bench"})
+        self.refused(a, "quietly-resolved")
+        a["poured_concrete"][-1]["row"] = self.parked(words)["id"]
         code, doc, out, err = self.run.record(a)
         self.assertEqual(code, 0, out + err)
 
@@ -553,13 +557,23 @@ class TheAnswersOwnWords(_Record):
         doc = self.refused(a, "quietly-resolved")
         self.assertEqual(self.fields(doc), ["lines/0"], doc["refusals"])
 
-    def test_a_question_that_settled_it_lets_it_pass(self):
+    def test_a_question_that_settled_it_lets_the_line_naming_it_pass(self):
+        # the slice 3c review's F3 (A5(4)): the answered question touching the open row does not substitute for
+        # the row id. A `lines` entry naming the row by `row` passes; a walkthrough value names no row (it has
+        # no `row` field), so the row's words there are refused even after the question
         a = archlib.clean_answer()
         a["questions"].append({"id": "Q9", "text": "How often does the counter reset?",
                                "touches": [self.i["open"]], "answer": "at every session start"})
         a["walkthrough"]["must"] = [self.OPEN, "count turns"]
         a["components"] = [{"name": "counter", "serves": self.OPEN}, {"name": "turnstile.py", "serves": "count turns"}]
         a["lines"] = [{"text": self.OPEN, "tag": "decided", "trace": {"kind": "question", "ref": "Q9"}}]
+        doc = self.refused(a, "quietly-resolved")
+        self.assertEqual(self.fields(doc), ["walkthrough/must/0", "lines/0"], doc["refusals"])
+        a["lines"][0]["row"] = self.i["open"]
+        doc = self.refused(a, "quietly-resolved")
+        self.assertEqual(self.fields(doc), ["walkthrough/must/0"], doc["refusals"])
+        a["walkthrough"]["must"] = ["count turns"]
+        a["components"] = [{"name": "turnstile.py", "serves": "count turns"}]
         code, doc, out, err = self.run.record(a)
         self.assertEqual(code, 0, out + err)
 

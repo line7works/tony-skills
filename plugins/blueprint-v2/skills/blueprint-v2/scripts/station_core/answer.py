@@ -44,9 +44,9 @@ lines. The refusals, each `{"rule", "message", ...}` naming the question or line
                        left without an answer settles nothing); the line is judged by the id and
                        its words are never matched against its own row. And the guard on the
                        id-less path: a line asserted as `decided` whose words restate a `parked`
-                       or `open` row OTHER than the one it names, that no answered question
-                       touched, is refused with "name the row's id": a line that settles a
-                       ledger row carries the row's id
+                       or `open` row OTHER than the one it names is refused with "name the row's
+                       id", whether or not an answered question of this run touched that row: a
+                       line that settles a ledger row carries the row's id
 
 Any refusal is exit 5 and nothing is written (station-loop.md section 3.4).
 
@@ -555,13 +555,14 @@ def check(answer, ledger_lines, workspace=None, allowed=DEFAULT_TRACES):
                                      "line %s is %s and no question of this run settled it"
                                      % (line["text"], named, row_named["tag"]), **where))
             continue
-        # R4-3, the guard on the id-less path: a decided line's words (every reading, every known decoration seen
-        # through) against every parked or open row OTHER than the one it names that no answered question of
-        # this run touched; a meeting is a row settled without its id (lane P's CP1-1, lane L's CS-4 and the
-        # slice 2 escapes, each behind one decoration: the class is closed here, not the instance)
+        # R4-3: an answered question does not substitute for the line's row id.
+        # Compare against every parked or open row other than the row it names.
+        # (The guard on the id-less path: a decided line's words, every reading and every known decoration
+        # seen through; a meeting is a row settled without its id: lane P's CP1-1, lane L's CS-4, the slice 2
+        # escapes and the slice 3c review's F3, each closed as a class, not an instance.)
         candidates = _forms(line["text"])
         for row in ledger_lines:
-            if (row["tag"] in ("parked", "open") and row["id"] != named and row["id"] not in touched
+            if (row["tag"] in ("parked", "open") and row["id"] != named
                     and candidates & _row_forms(row["text"])):
                 refusals.append(_refusal("quietly-resolved", "the line %r is asserted as decided under a %s trace, "
                                          "but it restates the %s ledger line %s without naming it: a line that "

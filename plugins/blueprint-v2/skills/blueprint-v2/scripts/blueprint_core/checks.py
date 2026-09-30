@@ -9,13 +9,16 @@ settled, so they are `decided` there and a line of either kind that traces to a 
 of scope is the pass-forward E14-11 names, not a resolution. A scope `Open:` item is the owner's
 call and not a descoping: an out-of-scope line that carries one forward with no answered question
 of this run touching it is this core's own refusal, `open-item-descoped`, by the item's id and by
-its words alike (round 3, R3), whatever the line's trace. The words are compared through the frame's
-own readings (round 4, R1; E14-3): the line through `station_core.answer.forms`, the row through
-`row_forms`, so every decoration the frame knows (a trailing period, a list mark, an invisible
-character, a ledger tail, the row decorated) is seen through the same way the shared
-`quietly-resolved` rule sees through it. This core adds only what the frame has no reading for: the
-item before its reason (cut at the first dash, colon, semicolon, comma or parenthesis, after a
-leading list mark and section label such as `Out of scope:`).
+its words alike (round 3, R3), whatever the line's trace; and descoping it moves a ledger row, so
+the line carries the item's id (`row`, or a ledger trace to the item): an answered question touching
+the item does not stand in for the id, and the item's words alone are refused the same way (A13,
+under A5(4)). The words are compared through the frame's own readings (round 4, R1; E14-3): the
+line through `station_core.answer.forms`, the row through `row_forms`, so every decoration the
+frame knows (a trailing period, a list mark, an invisible character, a ledger tail, the row
+decorated) is seen through the same way the shared `quietly-resolved` rule sees through it. This
+core adds only what the frame has no reading for: the item before its reason (cut at the first
+dash, colon, semicolon, comma or parenthesis, after a leading list mark and section label such as
+`Out of scope:`).
 
 The view carries each line's ORIGINAL text (round 5, R3): the shared forms own every decoration, and
 an item label, BARE (`R4 `, `R12.3 `) or MARKED (`R2 <dash> `, `R12: `, `(R2)`, `**R2:**`, in any
@@ -40,7 +43,8 @@ in the shared shape, one per finding:
                               round 4 R2: the rest after the prefix holds a letter or digit)
     open-item-descoped        an out-of-scope line carrying a scope `Open:` item, by its id (its `row`
                               or a ledger trace) or by its words, that no answered question of this run
-                              touched
+                              touched; or carrying one by its words without its id, touched or not
+                              (A13: the question does not stand in for the id)
     duplicate-id              two lines, two criteria or two slices sharing an id or a name
     unknown-id                a slice naming a requirement line, a criterion or a slice that is not there
     depends-forward           a slice depending on itself or on a slice after it
@@ -233,13 +237,24 @@ def own(answer, run_input, harvest):
         # by its id (the row the line names by `row`, slice 3b, or a ledger trace to the open item) or by its
         # words (round 3, R3), whatever the trace, the words read through the frame's own readings on both
         # sides (round 4, R1)
-        carried = []
-        for named in (line.get("row"), ref if trace.get("kind") == "ledger" else None):
-            if isinstance(named, str) and named in ledger and ledger[named].get("tag") == "open":
-                carried.append(ledger[named])
+        names = [named for named in (line.get("row"), ref if trace.get("kind") == "ledger" else None)
+                 if isinstance(named, str)]
+        carried = [ledger[named] for named in names if named in ledger and ledger[named].get("tag") == "open"]
         forms = line_forms(line.get("text"))
-        carried.extend(row for row in open_rows if forms & shared.row_forms(row["text"]))
-        carried = next((row for row in carried if row["id"] not in settled), None)
+        worded = [row for row in open_rows if forms & shared.row_forms(row["text"]) and row["id"] not in names]
+        unnamed = next((row for row in worded if row["id"] in settled), None)
+        if unnamed is not None:
+            # A13 (A5(4)): descoping an open item moves it, so the line carries the item's id (`row`, or a ledger
+            # trace to the item); its words alone never do it, and an answered question touching the item does
+            # not stand in for the id
+            refusals.append(_refusal("open-item-descoped", "the out-of-scope line %r carries the scope doc's open "
+                                     "item %r (%s) forward as out of scope by its words without naming it: an "
+                                     "answered question touching the item does not stand in for its id; a line "
+                                     "that moves a ledger row out of scope carries the row's id (`row`)"
+                                     % (line.get("text"), unnamed.get("text"), unnamed["id"]),
+                                     line=index, text=line.get("text"), line_id=unnamed["id"]))
+            continue
+        carried = next((row for row in carried + worded if row["id"] not in settled), None)
         if carried is not None:
             refusals.append(_refusal("open-item-descoped", "the out-of-scope line %r carries the scope doc's open "
                                      "item %r (%s) forward as out of scope, and no answered question of this run "

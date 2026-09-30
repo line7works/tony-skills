@@ -10,6 +10,7 @@ import unittest
 
 import bplib
 import testlib
+from test_hunt import SKIP_SENSITIVE, case_folded
 
 
 class _Select(unittest.TestCase):
@@ -211,6 +212,37 @@ class Choose(_Select):
         self.assertEqual(run.harvest()[0], 0)
         code, out, err = self.choose(run, os.path.join(run.ws, bplib.SCOPE_PATH))
         self.assertEqual(code, 2, err)
+
+
+class ChooseInEitherSpelling(_Select):
+    """C3C1-1's class: the hunt lists a literal glob's match as its folder spells it
+    (`docs/Turnstile-scope.md`), and the owner's pick is the same file named in the idea's case
+    (`docs/turnstile-scope.md`), which `choose` took before the hunt respelled it. The pick is
+    accepted and recorded in the disk spelling, as a pick named that way is. Skipped on a
+    case-sensitive scratch, by the shared hunt test's probe."""
+
+    def test_a_pick_in_the_ideas_case_is_recorded_in_the_disk_spelling(self):
+        if not case_folded(self.tmp):
+            self.skipTest(SKIP_SENSITIVE)
+        spelled = "docs/Turnstile-scope.md"
+        for typed in (spelled, "docs/turnstile-scope.md"):
+            with self.subTest(path=typed):
+                run = self.run_with({"README.md": "x\n", bplib.SCOPE_PATH: bplib.SCOPE, spelled: bplib.SCOPE})
+                code, out, err = run.select("scope")
+                self.assertEqual((code, out["outcome"]), (0, "several"), err)
+                disk = os.path.join(run.ws, spelled)
+                self.assertIn(disk, [c["path"] for c in out["candidates"]])
+                code, out, err = run.cli(["choose", "--run-dir", run.run_dir, "--hunt", "scope", "--path",
+                                          os.path.join(run.ws, typed), "--words", "the flat one"])
+                self.assertEqual(code, 0, err)
+                self.assertEqual(out["chosen"]["path"], disk)
+                saved = testlib.load_json(os.path.join(run.run_dir, "selection-scope.json"))
+                self.assertEqual(saved["chosen"], {"path": disk, "by": "owner", "words": "the flat one"})
+                run.select("architecture")
+                run.select("build", "turnstile")
+                code, out, err = run.harvest()
+                self.assertEqual(code, 0, err)
+                self.assertEqual(out["scope"]["path"], disk)
 
 
 class UndatedPlans(_Select):

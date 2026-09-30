@@ -5,7 +5,9 @@ determinism, the tree hash and the CLI are kept; the build-doc helpers are gone,
 built from a spec rather than by hand. Identical in the four front cores
 (`references/shared-files.txt`). Standard library only, Python 3.9. Every family's build.py
 locates this file relative to its own `__file__`, holds a `SPECS` table, and ends with
-`make_family()`.
+`make_family()`. Its `--out` is refused, exit 2 and nothing created, when it is or sits under
+~/.claude, ~/.codex or a ~/.local/share/skills-v2-* home, as given or resolved (the setups' home
+guard, E14 slice 3c).
 
 A spec is a dict:
 
@@ -163,6 +165,23 @@ def make_family(family, core, specs, argv=None):
     unknown = [c for c in args.case if c not in specs]
     if unknown:
         sys.stderr.write("unknown case id(s): %s\n" % ", ".join(unknown))
+        sys.exit(2)
+    # The setups' home guard (E14 slice 3c fix 3-2), before anything is created or rebuilt.
+    out = os.path.abspath(args.out)
+    home = os.environ.get("HOME", "")
+    share = os.path.join(home, ".local", "share")
+    for path in (out, os.path.realpath(out)):
+        for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
+            for form in (os.path.abspath(base), os.path.realpath(base)):
+                p, b = path.casefold(), form.casefold().rstrip(os.sep)
+                below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+                if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
+                    continue
+                sys.stderr.write("build.py: %s is under %s, which no setup may touch; nothing created\n"
+                                 % (args.out, base if base != share else os.path.join(share, below.split(os.sep)[0])))
+                sys.exit(2)
+    if not os.path.isabs(home):
+        sys.stderr.write("build.py: HOME is not an absolute path; nothing created\n")
         sys.exit(2)
     os.makedirs(args.out, exist_ok=True)
     summary = []

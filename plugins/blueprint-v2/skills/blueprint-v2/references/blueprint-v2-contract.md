@@ -54,7 +54,8 @@ The seven rules:
 5. **Descoping is recorded with reasons.** Out-of-scope lines are rendered under `Out of scope:`
    with their trace, the written evidence signoff reads. A parked scope line or a deferred
    architecture line passes forward here as out of scope, by its id; a scope `Open:` item does not,
-   unless an answered question of this run touched it (section 7).
+   unless an answered question of this run touched it and the line names it by its id (section 7):
+   the question does not stand in for the id (A13, under A5(4)).
 6. **Tests are part of the plan.** Each criterion names its check; a slice with no runnable check
    is the executor's to flag to the owner before the doc ships.
 7. **One living doc.** One build doc per feature, extended in place, never forked. The ledger
@@ -212,7 +213,9 @@ least one constraint line.
    allowed, a ledger id that names nothing, a path not in the workspace, a question not answered
    in this run, a blank quote); a `row` naming no line of the ledger (`unknown-line`); a
    requirement or constraint tracing to, or naming by `row`, a `parked` or `open` line that no
-   answered question settled (`quietly-resolved`).
+   answered question settled (`quietly-resolved`); a requirement or constraint whose words restate a
+   `parked` or `open` line it does not name, whether or not an answered question touched that line
+   (`quietly-resolved`, the frame's guard: an answered question does not substitute for the row id).
 3. This core's own checks, each a refusal in the same `{"rule", "message", ...}` shape:
 
 | Rule | Refuses |
@@ -220,7 +223,7 @@ least one constraint line.
 | `session-mismatch` | a `session_id` other than the input's `invocation.session_id` |
 | `run-id-mismatch` | a `run_id` other than this run's |
 | `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
-| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its id (the row the line names by `row`, or a ledger trace to the item) or by its words, whatever the trace (round 3, R3). The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without a leading list mark or section label such as `Out of scope:`, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis from those words and from the line's bare words with the frame's label of the line (`station_core.answer.label`) put back in front) equal to any reading of the open row (`row_forms`), so a trailing period, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. An item label, bare or marked, is part of the words in every reading, keyed through the frame's `label()` (round 5, R3; ruling A5(1)): no reading of a labelled line is label-free, so `R4 sensor calibration: not now` and `R4: sensor calibration: not now` are not the open `R3 sensor calibration`, and `sensor calibration: not now` is. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
+| `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its id (the row the line names by `row`, or a ledger trace to the item) or by its words, whatever the trace (round 3, R3); and one that carries an item by its words without naming it by its id, even after an answered question of this run touched the item: descoping moves a ledger row, so the line carries the row's id and the answered question does not stand in for it (A13, under A5(4)); an item named by its id and touched by an answered question goes out of scope, whatever the line's words. The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without a leading list mark or section label such as `Out of scope:`, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis from those words and from the line's bare words with the frame's label of the line (`station_core.answer.label`) put back in front) equal to any reading of the open row (`row_forms`), so a trailing period, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. An item label, bare or marked, is part of the words in every reading, keyed through the frame's `label()` (round 5, R3; ruling A5(1)): no reading of a labelled line is label-free, so `R4 sensor calibration: not now` and `R4: sensor calibration: not now` are not the open `R3 sensor calibration`, and `sensor calibration: not now` is. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |
@@ -406,7 +409,69 @@ outside the run directory except the one build doc, never changes a protected li
 among several candidates, never calls a model, never touches the network, and never starts
 another station.
 
-## 19. Open points
+## 19. Interface
+
+This document closes `scripts/blueprint.py`'s CLI; this section states it in one place, in tables a test
+reads (`scripts/tests/test_interface_document.py` extracts each table below by its heading and
+fails when the code, the schemas or this section disagree). Added in E14 slice 3c (the join,
+contract section 13; build-v2's section 19 is the model). Nothing here changes what the core does:
+every row restates the driver's parser and dispatch, `station-loop.md` sections 2 and 5, the input
+schema, and the names the code joins onto the run directory. Numbered 19, as in build-v2's contract and every front core's, so one heading names the interface in each; the open points follow as section 20.
+
+### Commands
+
+| Command | Arguments | Exit codes |
+|---|---|---|
+| `check-input` | `<input.json>` | 0, 1, 2, 3, 4 |
+| `select` | `--run-dir D [--hunt NAME] [--name NAME]` | 0, 1, 2 |
+| `harvest` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 5, 10 |
+| `write` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `report` | `--run-dir D` | 1, 2, 3, 10 |
+| `identity` | `<workspace>` | 0, 1, 2 |
+| `skill-identity` | none | 0, 1, 2 |
+| `choose` | `--run-dir D --hunt NAME --path P --words TEXT` | 0, 1, 2, 10 |
+
+Every command also takes `--skill-root DIR` (test only) and `--records-root DIR` after its name.
+The exit codes of a row are the codes that command's code can return, as the test reads them from
+the source (the handler, its decorators and every function of this core it calls); each means what
+`station-loop.md` section 2 says, and 1 (a defect) and 2 (a usage slip) are every command's.
+
+### Result statuses
+
+| Status | Terminal status |
+|---|---|
+| `completed` | `completion` |
+| `stopped` | `stop` |
+
+### Invocation fields
+
+The input's `invocation` object, which the adapter's `invocation.py` fills (`../adapters/README.md`),
+never the executor.
+
+| Field | Required | Values |
+|---|---|---|
+| `harness` | yes | a string, or null: the harness the run is driven from |
+| `caller` | yes | `user` on a direct request, or the name of the station that called this one |
+| `mode` | yes | `direct` when a person asked, `station` when another station drove the run |
+| `session_id` | no | the session the adapter READ from the harness's own record, or null; the recorded answer names the same session |
+
+### Run-directory artifacts
+
+Every name this core's code joins onto `run_dir` (`*` is the slot a name fills), a folder with `/`.
+
+| Artifact | Written by |
+|---|---|
+| `answer.json` | `record-answer` |
+| `checkpoint.json` | `check-input`, then every phase and `choose` |
+| `harvest.json` | `harvest` |
+| `input.json` | `check-input` |
+| `proposed-build-doc.md` | `write` (the rendered build doc; in report-only the one copy) |
+| `receipt.json` | `write` |
+| `result.json` | the phase that ends the run |
+| `selection-*.json` | `select` (`*` the hunt); `choose` records the owner's pick in it |
+
+## 20. Open points
 
 - The build doc's `Footprint:` is the template's one-line form (`Footprint: a, b`); `build-v2`'s
   reader reads named paths only from a bulleted list under a bare `Footprint:` label, so it reads

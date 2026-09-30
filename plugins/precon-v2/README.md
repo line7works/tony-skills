@@ -12,15 +12,33 @@ invalid examples; the four phases the frame left as `phase-not-built` (`harvest`
 `request`, the exit test's readers requests), in `scripts/precon_core/`; the input's `station`
 fields (`home`, `date`) and the result's `station_result` with the core's four stop tags; the
 lane's observer of the seeded cases, `evals/seeded-cases/lane_observe.py`; and both adapter
-profiles filled. What stays for the join (slice 3): the four cores merged and the shared files
-held equal across them, the end-to-end replay across the front of the loop, the interface-document
-test, the version bump, and the marketplace entry. Interface version 1, plugin version 0.1.0.
-Test counts are measured and filled in by the control room at close.
+profiles filled.
+
+Slices 3a and 3b (the join's first two steps): answer lines name their ledger row by its id, and an
+out-of-scope row passes forward by it; the readers roster is found by the shared resolver; the
+punch list of the lane's outside look is closed and the contract restates it; the run's own
+`result.json` is refused as an answer file by its folded name and as the same file.
+
+Slice 3c (the join, its first hand-back): the contract's section 19, Interface, states the CLI in
+build-v2's four tables (commands with their arguments and exit codes, result statuses, invocation
+fields, run-directory artifacts), and `scripts/tests/test_interface_document.py` reads them against
+the parser, the dispatch table, the schemas and the source, with a mutation proof; the shared hunt
+lists a candidate as its folder spells it, so `select` and every later use of a candidate carry the
+disk spelling on a case-insensitive disk; and the plugin has its marketplace entry. Section 19 now holds the one Commands table in
+build-v2's shape in place of the frame's two command tables, and `scripts/tests/test_contract_document.py`
+reads its own commands from it.
+
+Slice 3c's second hand-back: `setups/manual-only.sh` installs the manual-only probe
+(`setups/_fixtures/`, recheck-v2's E9 probe) beside this core and checks both carry the manual-only
+controls; the two prompts per harness are in `setups/<harness>/prompts/`; the live measurement is
+the control room's.
+
+Interface version 1, plugin version 0.1.1. Tests: 483.
 
 ## Layout
 
 ```text
-.claude-plugin/plugin.json           name precon-v2, version 0.1.0
+.claude-plugin/plugin.json           name precon-v2, version 0.1.1
 skills/precon-v2/
   SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar (manual-only)

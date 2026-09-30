@@ -1,0 +1,24 @@
+{
+  "bottom_line": "The plan reads as buildable. Build when ready.",
+  "hunted_and_held": "slice order, the footprint and the verify forms held",
+  "results": [
+    {
+      "call_id": "@run@-traceability",
+      "effective_model": "claude-opus-5-5",
+      "findings": [],
+      "row": "claude-session"
+    },
+    {
+      "call_id": "@run@-code-book",
+      "effective_model": "claude-opus-5-5",
+      "findings": [],
+      "row": "claude-session"
+    },
+    {
+      "call_id": "@run@-repo-reality",
+      "effective_model": "claude-opus-5-5",
+      "findings": [],
+      "row": "claude-session"
+    }
+  ]
+}

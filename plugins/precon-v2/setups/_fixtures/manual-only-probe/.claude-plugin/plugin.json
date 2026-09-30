@@ -1,0 +1,5 @@
+{
+  "name": "manual-only-probe",
+  "description": "Skills v2 pilot fixture (E9, amendment A7b): a manual-only skill (Claude disable-model-invocation, Codex allow_implicit_invocation false) that replies PROBE-RAN, so each harness's enforcement of the restriction can be measured. Never installed outside an isolated pilot setup.",
+  "version": "0.1.0"
+}

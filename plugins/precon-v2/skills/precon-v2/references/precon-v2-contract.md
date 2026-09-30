@@ -137,7 +137,7 @@ before a byte of it is read (`outside-home`, exit 5, `accepted: false`, nothing 
 | `doc` | a new doc only: its `title` and its `intent` |
 | `questions` | every question put to the owner in this run: `id`, `text`, `touches` (the ledger line ids it touches), `answer` (verbatim, absent or blank when unanswered), `needs_research` |
 | `lines` | every line asserted: `text`, `tag` (`decided`, `assumed`, `parked`, `open`), `trace` (`kind`, `ref`), `row` (the id of the ledger row the line settles or passes forward, section 5); a parked line's `reason`, an open line's `waits_on` |
-| `out_of_scope` | what the owner ruled out: `text`, `reason`, `trace`, and `row` when the item rules out an existing ledger row (section 5) |
+| `out_of_scope` | what the owner ruled out: `text`, `reason`, `trace`, and `row`, required when the item rules out an existing ledger row (its words never stand in for it, section 5) |
 | `research` | paths or links to research the owner did himself |
 | `open_items` | unresolved threads for the next sitting |
 | `exit_test` | the cold read (section 7) |
@@ -167,7 +167,8 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `parked-without-reason` | a parked line whose reason is none of the three: `needs research`, `needs prototype`, `waiting on <x>` (with what it waits on named) |
 | `open-without-call` | an open line that does not say which of the owner's calls it waits on |
 | `source-kind` | a new parked or open line, or an out-of-scope item, traced to anything but the owner's words or a question he answered (an assumption is no source, and what he ruled out is his ruling) |
-| `retagged` | a line naming a ledger line (by its `row`, or by a `ledger` trace: the id is the trace, A5(4)) under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line, or a new open item, whose words repeat a `Decisions:` or `Open:` ledger line's under any trace but that line's id (a `row` or ledger trace naming another line included), whatever its tag and whether or not a question touched the line; a line that names its row is judged by the id, and its words are never matched against that row; an out-of-scope item whose words repeat one, or that names one by `row`, unless the line is parked, open or assumed and an answered question of this run, not marked `needs_research`, touched it (and then `write` removes that line, section 6); an out-of-scope item ruling out a row the same answer settles as decided by its id; two entries of one answer (lines, out-of-scope items, open items, in any mix) whose words meet, under any tags: each time the doc would hold the line and its twin. precon-v2 has no normalizer of its own (E14-3): the words are compared in the frame's readings (`station_core/answer.py`) alone, a line's `forms` against a row's `row_forms` (the whole text, the words bare of every decoration the frame knows, a trailing ` (waits on: <call>)` among them, each whole field of a `·`- or dash-separated line on the line's side and the first field on the row's, invisibles dropped by the frame's one set, whitespace collapsed, case folded), and an item label is part of the words on both sides, a marked one (`AC1:`, `(R2)`, `[R2]`, `**R2:**`) as a bare one is (A5(1)): `R2: budget` never meets `R3: budget`; two entries of one answer are each read as a line against the other read as a row (`forms(a) & row_forms(b)` or `forms(b) & row_forms(a)`, never two line readings against each other, which meet through their unlabelled alternatives: `Q3 budget` and `Q4 budget` are two lines, `Q3 budget` beside `budget` or the same words twice are one) |
+| `retagged` | a line naming a ledger line (by its `row`, or by a `ledger` trace: the id is the trace, A5(4)) under another tag, other than the one move a question can make: a parked, open or assumed line settled as decided; a parked line passed forward with another reason; a line, or a new open item, whose words repeat a `Decisions:` or `Open:` ledger line's under any trace but that line's id (a `row` or ledger trace naming another line included), whatever its tag and whether or not a question touched the line; a line that names its row is judged by the id, and its words are never matched against that row; an out-of-scope item whose words repeat one, or that names one by `row`, unless it names a parked, open or assumed line by `row` and an answered question of this run, not marked `needs_research`, touched that line (and then `write` removes that line, section 6; the line's words with no `row` after such a question are `quietly-resolved`, the next row); an out-of-scope item ruling out a row the same answer settles as decided by its id; two entries of one answer (lines, out-of-scope items, open items, in any mix) whose words meet, under any tags: each time the doc would hold the line and its twin. precon-v2 has no normalizer of its own (E14-3): the words are compared in the frame's readings (`station_core/answer.py`) alone, a line's `forms` against a row's `row_forms` (the whole text, the words bare of every decoration the frame knows, a trailing ` (waits on: <call>)` among them, each whole field of a `·`- or dash-separated line on the line's side and the first field on the row's, invisibles dropped by the frame's one set, whitespace collapsed, case folded), and an item label is part of the words on both sides, a marked one (`AC1:`, `(R2)`, `[R2]`, `**R2:**`) as a bare one is (A5(1)): `R2: budget` never meets `R3: budget`; two entries of one answer are each read as a line against the other read as a row (`forms(a) & row_forms(b)` or `forms(b) & row_forms(a)`, never two line readings against each other, which meet through their unlabelled alternatives: `Q3 budget` and `Q4 budget` are two lines, `Q3 budget` beside `budget` or the same words twice are one) |
+| `quietly-resolved` (the out-of-scope items) | an out-of-scope item whose words repeat a parked, open or assumed ledger line it does not name by `row`, after an answered question of this run touched that line: ruling a row out moves it, so the item carries the row's id, and the answered question does not stand in for it (A13, under A5(4)). The frame's refusal of the same name reads only the lines; this is its family on the path the frame does not read, one refusal per item, naming the row's id |
 | `research-resolved` | a line resolving a question marked `needs_research`, a parked line of another reason or an out-of-scope item traced to one, or a parked or open ledger line whose only touching questions are marked `needs_research` asserted as decided |
 | `research-not-parked` | a question marked `needs_research` that leaves no parked `needs research` line traced to it and touches none |
 | `napkin-outcome` | `no_scope_doc` outside the napkin tier, with any line, item, doc field or exit test, over an existing doc, or with a `sitting` other than `ends` (the napkin outcome ends the sitting) |
@@ -183,8 +184,10 @@ nothing written, the run where it was, so a corrected answer can be recorded.
 | `outside-run` | a run artifact (`preview/`, `exit-test/` and its index, readers' run directory, the receipt, the answer, the harvest, the result) whose path, resolved before it is written, leaves the run directory (a symlinked folder or file). The same for every run artifact `report` hashes into the result and for the `result.json` a finished run prints again: each is resolved before it is opened, and a file leaving the run is refused before the checkpoint moves (the run stays at the phase it was, never `done`), nothing hashed or printed. Every command checks every artifact it will write before it writes the first, exit 5, nothing written; a harvest refused as it reads a cold-read candidate leaves no copy of the scope doc in the run. The run's own `checkpoint.json` and `input.json`, which every command opens first, are each resolved inside the run directory before either is opened: a link leaving the run is refused, exit 5, nothing of it read or printed. A reader's sidecar resolving outside the run is never read (`exit-test-unrecorded`) |
 
 The E14-11 rule on the precon side: a parked or open line is never rewritten as decided unless
-an answered question of this run touches it (the shared `quietly-resolved`, which also catches
-the line's words asserted as decided under another trace kind), and a question that touches a
+the line names it by its id and an answered question of this run touches it (the shared
+`quietly-resolved`, which also catches the line's words asserted as decided without its id, under
+any trace kind, a question's included: an answered question touching the row does not substitute
+for the id, A5(4)), and a question that touches a
 decided line re-asks it (the shared `re-asked-decided`). Precon's `retagged` covers the rest of
 the twin case: a ledger line's words asserted under any trace but its id (an assumed line's, a
 decided line's, or a parked or open line's after a question touched it; an `Open:` line this core
@@ -193,11 +196,14 @@ are refused, so a line is settled only in place, by its id, and the doc never ho
 twin. A line names its row by `row` or by a `ledger` trace: the id is the trace (A5(4)), so the
 line is judged by the id and its words are never matched against that row; a marked label such as
 `AC1:` is part of the words on both sides, as a bare one is (A5(1)). Both
-refusals are computed and listed together. The one twin the rule lets through is the ruling-out
-of a line a question settled: an answered question of this run touches a parked, open or assumed
-line and the answer records that item as out of scope, by its words or by its `row` (an answer that
-also settles that row as decided is refused `retagged`). `write` then removes the settled line in
-the same write (section 6), so the doc holds the out-of-scope line and not the line, and the
+refusals are computed and listed together. The one ruling-out the rule lets through is that of a
+line a question settled, named by its id: an answered question of this run touches a parked, open
+or assumed line and the answer records that item as out of scope by its `row` (an answer that also
+settles that row as decided is refused `retagged`). Ruling a row out moves it, so the item carries
+the row's id (A5(4)): the answered question does not stand in for the id, and the line's words
+alone, without `row`, are refused, `quietly-resolved` after an answered question touched the line
+and `retagged` without one (A13). `write` then removes the settled line in the same write
+(section 6), so the doc holds the out-of-scope line and not the line, and the
 report and the next board count the item once, under out of scope.
 
 **A needs-research question.** Its `answer` is the owner's words parking it (the shared
@@ -227,8 +233,8 @@ is appended to `Decisions:`; an item written inline on the label line (`Open: <i
 `render_scope_doc` writes for one item, this core's own new docs included) leaves the label alone,
 `Open:`, the form's line for zero items, and the no-loss check counts that label line as rewritten,
 never dropped. A parked, open or assumed line that an answered question of this run touched and
-that the answer rules out (an out-of-scope item whose words meet the line's, or that names it by `row`, section 5) is removed
-in the same write, by the same path, a `Decisions:` line included: its out-of-scope line lands at
+that the answer rules out (an out-of-scope item that names it by `row`, section 5; the item's
+words never pick the row) is removed in the same write, by the same path, a `Decisions:` line included: its out-of-scope line lands at
 the tail of `Out of scope:`, and the no-loss check counts the removal as one the plan names, never
 a line lost. A new line renders through `templates.render_ledger_line`: decided
 with its source from its trace (`the owner's words: "<quote>"`, `answer to <Q> (run <run id>):
@@ -493,29 +499,73 @@ frame already set.
 
 ## 19. Interface
 
-Tables a test reads (`scripts/tests/test_contract_document.py`): each own command is listed in
-the driver's `--help` and nothing else is; each stop tag is in the result schema's enum and its
-description; `SKILL.md` names every command it runs; the mandate above is the one the code sends.
+This document closes `scripts/precon.py`'s CLI; this section states it in one place, in tables a test
+reads (`scripts/tests/test_interface_document.py` extracts each table below by its heading and
+fails when the code, the schemas or this section disagree). Added in E14 slice 3c (the join,
+contract section 13; build-v2's section 19 is the model). Nothing here changes what the core does:
+every row restates the driver's parser and dispatch, `station-loop.md` sections 2 and 5, the input
+schema, and the names the code joins onto the run directory. The stop tags close the section; `scripts/tests/test_contract_document.py` reads them, and the
+own commands of the Commands table (the rows no shared command names) against the driver's `--help`.
 
-### Shared commands
+### Commands
 
 | Command | Arguments | Exit codes |
 |---|---|---|
 | `check-input` | `<input.json>` | 0, 1, 2, 3, 4 |
-| `select` | `--run-dir D --hunt scope` or `--hunt cold-read`, `--name IDEA` | 0, 1, 2 |
-| `harvest` | `--run-dir D` | 0, 1, 2, 5, 10 |
+| `select` | `--run-dir D [--hunt NAME] [--name NAME]` | 0, 1, 2 |
+| `harvest` | `--run-dir D` | 0, 1, 2, 3, 5, 10 |
 | `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 5, 10 |
-| `write` | `--run-dir D` | 0, 1, 2, 5, 10 |
-| `report` | `--run-dir D` (after `write`) | 1, 2, 3, 5, 10 |
-| `identity` | `<workspace>` | 0, 2 |
-| `skill-identity` | none | 0 |
-
-### Commands of this core
-
-| Command | Arguments | Exit codes |
-|---|---|---|
+| `write` | `--run-dir D` | 0, 1, 2, 3, 5, 10 |
+| `report` | `--run-dir D` | 1, 2, 3, 5, 10 |
+| `identity` | `<workspace>` | 0, 1, 2 |
+| `skill-identity` | none | 0, 1, 2 |
 | `state` | `--run-dir D` | 0, 1, 2, 5 |
-| `request` | `--run-dir D --row ROW [--row ROW ...] [--model ROW=ID] [--session-model ID]` | 0, 1, 2, 5, 10 |
+| `request` | `--run-dir D [--row ROW ...] [--model ROW=ID ...] [--session-model ID]` | 0, 1, 2, 5, 10 |
+
+Every command also takes `--skill-root DIR` (test only) and `--records-root DIR` after its name.
+The exit codes of a row are the codes that command's code can return, as the test reads them from
+the source (the handler, its decorators and every function of this core it calls; a decorator's
+`except` clause counts only when the handler's own reach raises its exception, so `state`, whose reach
+never raises the ended run's `Ended`, has no 10); each means what `station-loop.md` section 2 says, and
+1 (a defect) and 2 (a usage slip) are every command's.
+
+### Result statuses
+
+| Status | Terminal status |
+|---|---|
+| `completed` | `completion` |
+| `stopped` | `stop` |
+
+### Invocation fields
+
+The input's `invocation` object, which the adapter's `invocation.py` fills (`../adapters/README.md`),
+never the executor.
+
+| Field | Required | Values |
+|---|---|---|
+| `harness` | yes | a string, or null: the harness the run is driven from |
+| `caller` | yes | `user` on a direct request, or the name of the station that called this one |
+| `mode` | yes | `direct` when a person asked, `station` when another station drove the run |
+| `session_id` | no | the session the adapter READ from the harness's own record, or null; the recorded answer names the same session |
+
+### Run-directory artifacts
+
+Every name this core's code joins onto `run_dir` (`*` is the slot a name fills), a folder with `/`.
+
+| Artifact | Written by |
+|---|---|
+| `answer.json` | `record-answer` |
+| `checkpoint.json` | `check-input`, then every phase |
+| `executor/` | the executor, never this core: where the recorded answer file is written before `record-answer` reads it |
+| `exit-test/` | `request` (`exit-test/requests.json`) |
+| `harvest-scope-doc.md` | `harvest` (the scope doc as harvested) |
+| `harvest.json` | `harvest` |
+| `input.json` | `check-input` |
+| `preview/` | `write`, in report-only (the documents it would have written) |
+| `readers/` | readers, for the exit test's calls (`request` names it as the requests' run directory) |
+| `receipt.json` | `write`, and the phase that ends the run |
+| `result.json` | the phase that ends the run |
+| `selection-*.json` | `select` (`*` the hunt) |
 
 ### Stop tags
 

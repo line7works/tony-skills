@@ -220,8 +220,9 @@ values one by one, `who`, `when` and each `must` item as its own row with its pl
 (`walkthrough/who`, `walkthrough/must/0`), each new or struck poured-concrete and deferred line, each
 `lines` entry's own text, each ruling; the walkthrough line's `Who: ... Must be able to:` formatting
 and the `NEEDS CHECK:` prefix are the doc's rendering, added after the check and never the answer's
-words, so an unanswered `open` or `parked` item asserted as a walkthrough value or a `lines` entry is
-refused `quietly-resolved`, and an untraced walkthrough is one `untraced` refusal;
+words, so an `open` or `parked` item asserted as a walkthrough value, or as a `lines` entry that does
+not name its row by `row`, is refused `quietly-resolved`, answered or not (a walkthrough value has no
+`row`), and an untraced walkthrough is one `untraced` refusal;
 a new poured-concrete line on its form, `<category> <dash> <decision> <dash> <why>`, gives a second
 row whose text is its decision field, everything between the first field and the last, with the
 category and the why beside it, so the shared guard on a line that names no row meets a `parked` or
@@ -243,7 +244,8 @@ and its words are never matched against the named row: a `row` the ledger does n
 question of this run touched is `quietly-resolved`, whatever its words. Its words still meet every
 row it does not name: a line asserted `decided` whose words restate a `parked` or `open` row it
 does not name (it names no row, or another) is `quietly-resolved` by the frame's guard, whose
-refusal asks for the row's id. A decided row is never moved back (slice 3a C3, as amended by A8):
+refusal asks for the row's id, whether or not an answered question of this run touched that row (an
+answered question does not substitute for the line's row id). A decided row is never moved back (slice 3a C3, as amended by A8):
 `station_core.answer.MOVED_BACK` is `("parked", "open", "deferred")`, and a line naming a `decided`
 row by its id under one of those tags is `re-asked-decided`. The next station reads the Deferred
 section as parked, so every new Deferred entry, and every `lines` entry (rendered there as
@@ -289,7 +291,7 @@ unlabelled row by its words. This core has no label reading of its own.
 Every `decided` ledger line reaches the doc untouched: an accepted answer touches none (touching one
 is refused), and the run log's `Rulings:` line lists each by id and text after
 `passed forward untouched:`. `parked` and `open` lines pass forward as they are; one asserted as
-`decided` is refused unless an answered question of this run touched it.
+`decided` is refused unless it names the row by its id and an answered question of this run touched it.
 
 ### 6.5 The amended answer
 
@@ -546,3 +548,76 @@ answer key's, outside this repository's lane.
    his words verbatim in `owner_word`, never the flag or the word added by hand.
 2. **The diagram is one line.** The form puts the diagram on its label line; a multi-line value
    would put bare lines inside the v0 drawing that a re-run could not strike as one.
+
+## 19. Interface
+
+This document closes `scripts/architect.py`'s CLI; this section states it in one place, in tables a test
+reads (`scripts/tests/test_interface_document.py` extracts each table below by its heading and
+fails when the code, the schemas or this section disagree). Added in E14 slice 3c (the join,
+contract section 13; build-v2's section 19 is the model). Nothing here changes what the core does:
+every row restates the driver's parser and dispatch, `station-loop.md` sections 2 and 5, the input
+schema, and the names the code joins onto the run directory. Numbered 19, as in build-v2's contract and every front core's, so one heading names the interface in each; sections 16 to 18 are not used here.
+
+### Commands
+
+| Command | Arguments | Exit codes |
+|---|---|---|
+| `check-input` | `<input.json>` | 0, 1, 2, 3, 4 |
+| `select` | `--run-dir D [--hunt NAME] [--name NAME]` | 0, 1, 2 |
+| `harvest` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `record-answer` | `--run-dir D --answer FILE` | 0, 1, 2, 3, 4, 5 |
+| `write` | `--run-dir D` | 0, 1, 2, 3, 10 |
+| `report` | `--run-dir D` | 1, 2, 3, 10 |
+| `identity` | `<workspace>` | 0, 1, 2 |
+| `skill-identity` | none | 0, 1, 2 |
+| `render-visual` | `--run-dir D` | 0, 1, 2 |
+| `record-publish` | `--run-dir D [--url URL]` | 0, 1, 2, 3, 5, 10 |
+| `request` | `--run-dir D [--row ROW ...] [--session-model ID] [--model ROW=ID ...] [--roster FILE]` | 0, 1, 2, 5 |
+| `save-take` | `--run-dir D --row ROW --take FILE --model ID --isolation LABEL --sidecar PATH` | 0, 1, 2, 5 |
+
+Every command also takes `--skill-root DIR` (test only) and `--records-root DIR` after its name.
+The exit codes of a row are the codes that command's code can return, as the test reads them from
+the source (the handler, its decorators and every function of this core it calls); each means what
+`station-loop.md` section 2 says, and 1 (a defect) and 2 (a usage slip) are every command's.
+
+### Result statuses
+
+| Status | Terminal status |
+|---|---|
+| `completed` | `completion` |
+| `stopped` | `stop` |
+
+### Invocation fields
+
+The input's `invocation` object, which the adapter's `invocation.py` fills (`../adapters/README.md`),
+never the executor.
+
+| Field | Required | Values |
+|---|---|---|
+| `harness` | yes | a string, or null: the harness the run is driven from |
+| `caller` | yes | `user` on a direct request, or the name of the station that called this one |
+| `mode` | yes | `direct` when a person asked, `station` when another station drove the run |
+| `session_id` | no | the session the adapter READ from the harness's own record, or null; the recorded answer names the same session |
+
+### Run-directory artifacts
+
+Every name this core's code joins onto `run_dir` (`*` is the slot a name fills), a folder with `/`.
+
+| Artifact | Written by |
+|---|---|
+| `answer-round-*.json` | `record-answer` (each round's answer; `*` the round) |
+| `answer.json` | `record-answer` |
+| `checkpoint.json` | `check-input`, then every phase and own command |
+| `harvest.json` | `harvest` |
+| `harvested-doc.md` | `harvest` (the living doc as harvested) |
+| `input.json` | `check-input` |
+| `preview/` | `write`, in report-only (the documents it would have written) |
+| `publish.json` | `record-publish` |
+| `receipt.json` | every command that writes, one row per write (section 7.4) |
+| `requests/` | `request` |
+| `result.json` | the phase that ends the run |
+| `reviews/` | `save-take` |
+| `selection-*.json` | `select` (`*` the hunt); `harvest` adds the scope hunt's set-aside record |
+| `takes.json` | `save-take`, `write` |
+| `takes/` | `save-take` |
+| `written-doc.md` | `write` (the doc as written, for the next command's check) |

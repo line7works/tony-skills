@@ -10,9 +10,9 @@ changed only by insertions at the tail of its sections, the one comment line whe
 and the lines this run's answer settled (a parked or assumed Decisions line rewritten in place as
 decided, under the same ledger id; an Open item removed, its decided line appended to
 `Decisions:`; a parked, open or assumed row an answered question settled and the answer rules out
-removed, its out-of-scope line appended to `Out of scope:`; an Open item written inline on the
-label line leaves the label alone, `Open:`, the form's line for zero items). Every other prior
-line is kept byte for byte, and the plan checks that it is.
+by its id (`row`) removed, its out-of-scope line appended to `Out of scope:`; an Open item written
+inline on the label line leaves the label alone, `Open:`, the form's line for zero items). Every
+other prior line is kept byte for byte, and the plan checks that it is.
 """
 import os
 import re
@@ -276,15 +276,14 @@ def classify(answer, ledger_rows, run_id):
             out_of_scope.append("%s %s %s" % (item["text"], D, item["reason"]))
             # R4 (CP3-2): the item rules out a parked, open or assumed row an answered question of this run
             # settled, so that row leaves the doc in the same write (the removal path of a settled Open item,
-            # a Decisions line too), whether the item repeats its words or names it by `row` (R8b of 3b): the doc
-            # never holds the out-of-scope line and its twin
-            ruled = twins(item["text"], ledger_rows, own=named(item))
-            if named(item) in by_id:
-                ruled.insert(0, by_id[named(item)])
-            for row in ruled:
-                if row["tag"] in ("parked", "open", "assumed") and answered_touching(answer, row["id"]) \
-                        and row["line"] not in rewrites:
-                    removals.add(row["line"])
+            # a Decisions line too), the row the item names by `row` (R8b of 3b) and no other: ruling a row
+            # out moves it, so the id is the trace and the item's words never pick the row (A13, under
+            # A5(4); `rules.py` refuses the words alone), and the doc never holds the out-of-scope line and
+            # its twin
+            row = by_id.get(named(item))
+            if row is not None and row["tag"] in ("parked", "open", "assumed") \
+                    and answered_touching(answer, row["id"]) and row["line"] not in rewrites:
+                removals.add(row["line"])
     research = []
     for index, item in enumerate(answer.get("research") or []):
         if one_line(item, "a research item", problems, {"research": index}):

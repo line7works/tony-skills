@@ -12,6 +12,7 @@ import unittest
 
 import ilib
 import testlib
+from test_hunt import SKIP_SENSITIVE, case_folded
 
 
 class _Select(unittest.TestCase):
@@ -168,6 +169,41 @@ class Choose(_Select):
         target = os.path.join(run.ws, ilib.BUILD_REL)
         code, doc, out, err = run.phase("choose", "--hunt", "build", "--path", target, "--by", "intent")
         self.assertEqual(code, 0, "an Intent match settles a build doc tie too (v1 Step 1): " + out + err)
+
+
+class ChooseInEitherSpelling(_Select):
+    """C3C1-1's class: the hunt lists a literal glob's match as its folder spells it
+    (`docs/plans/Turnstile.md`), and the owner's pick is the same file named in the idea's case
+    (`docs/plans/turnstile.md`), which `choose` took before the hunt respelled it. The pick is
+    accepted and recorded in the disk spelling, and `harvest` settles on it. Skipped on a
+    case-sensitive scratch, by the shared hunt test's probe."""
+
+    def test_a_pick_in_the_ideas_case_is_recorded_in_the_disk_spelling(self):
+        if not case_folded(self.tmp):
+            self.skipTest(SKIP_SENSITIVE)
+        spelled = "docs/plans/Turnstile.md"
+        for number, typed in enumerate((spelled, "docs/plans/turnstile.md")):
+            with self.subTest(path=typed):
+                parent = os.path.join(self.tmp, "pick-%d" % number)
+                os.makedirs(parent)
+                ws = ilib.workspace(parent, extra={spelled: ilib.BUILD_DOC}, scope=None)
+                run = ilib.Runner(parent, ws)
+                code, doc, out, err = run.check(ilib.make_input(ws, run.run_dir, staging=self.staging))
+                self.assertEqual(code, 0, out + err)
+                doc = self.select(run, "build", "turnstile")
+                self.assertEqual(doc["outcome"], "several")
+                disk = os.path.join(run.ws, spelled)
+                self.assertIn(disk, [c["path"] for c in doc["candidates"]])
+                code, doc, out, err = run.phase("choose", "--hunt", "build", "--path", os.path.join(run.ws, typed),
+                                                "--by", "owner", "--words", "the undated one")
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual(doc["chosen"], disk)
+                self.assertEqual(run.artifact("checkpoint.json")["choices"]["build"]["path"], disk)
+                self.select(run, "scope")
+                code, doc, out, err = run.phase("harvest")
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual(run.artifact("harvest.json")["build_doc"]["path"], disk)
+                self.assertEqual(run.artifact("harvest.json")["build_doc"]["how"], "chosen by owner")
 
 
 class Named(_Select):

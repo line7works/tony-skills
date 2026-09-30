@@ -99,9 +99,11 @@ class TheOwnOpenLine(_Born):
                                          "trace": {"kind": "repo_path", "ref": "src/turnstile.py"}}]))
 
     def test_even_after_a_question_touched_it(self):
+        # the answered question does not substitute for the row id (the slice 3c review's F3): the shared rule
+        # refuses the id-less line as well
         q = {"id": "Q1", "text": "Are resets logged?", "touches": [self.ids[self.item]], "answer": "yes"}
         self.assertEqual(self.refused(self.answer(questions=[q], lines=[preconlib.owner_line(OPEN, "yes")])),
-                         ["retagged"])
+                         ["quietly-resolved", "retagged"])
 
     def test_as_a_new_open_item_or_open_line(self):
         self.refused(self.answer(open_items=[OPEN.lower()]))
@@ -267,7 +269,8 @@ class OneAnswerLabels(_Born):
 
 class OutOfScopeDecorated(_Born):
     """CP2-3 (round 4, R2): an out-of-scope item whose frame readings meet a parked, open or assumed
-    row's, behind any decoration, is refused unless an answered question of this run touched it."""
+    row's, behind any decoration, is refused; only the row named by `row` and touched by an answered
+    question of this run is ruled out (A13)."""
 
     def oos(self, text):
         return [{"text": text, "reason": "the owner ruled it out", "trace": {"kind": "owner_words", "ref": "drop it"}}]
@@ -279,8 +282,9 @@ class OutOfScopeDecorated(_Born):
 
 
 class OutOfScope(_Born):
-    """CP2-3: an out-of-scope item repeating a parked or open line's words, unless an answered
-    question of this run touched that line."""
+    """CP2-3: an out-of-scope item repeating a parked or open line's words is refused; after an answered
+    question of this run touched that line it is still refused unless the item names the line by `row`
+    (A13, under A5(4): the question does not stand in for the id)."""
 
     def oos(self, text):
         return [{"text": text, "reason": "the owner ruled it out", "trace": {"kind": "owner_words", "ref": "drop it"}}]
@@ -292,10 +296,21 @@ class OutOfScope(_Born):
     def test_a_twin_of_a_decided_line_is_refused(self):
         self.refused(self.answer(out_of_scope=self.oos("Python 3.9 standard library only")))
 
-    def test_after_an_answered_question_touched_the_line_it_is_accepted(self):
+    def test_after_an_answered_question_touched_the_line_it_is_accepted_only_by_its_row_id(self):
+        # A13 (A5(4)): the answered question touching the line does not stand in for its id; the words alone
+        # are the frame's `quietly-resolved` family, naming the row, nothing written; with `row` accepted
         q = {"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]],
              "answer": "no, drop it"}
-        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=self.oos(PARKED)))
+        items = self.oos(PARKED)
+        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=items))
+        self.assertEqual(code, 5, json.dumps(doc))
+        self.assertEqual([r["rule"] for r in doc["refusals"]], ["quietly-resolved"])
+        self.assertIn(self.ids[PARKED], doc["refusals"][0]["message"])
+        self.assertEqual(doc["refusals"][0].get("out_of_scope"), 0)
+        self.assertFalse(os.path.exists(self.run_.run_file("answer.json")))
+        self.assertEqual(preconlib.read(self.path), self.text)
+        items[0]["row"] = self.ids[PARKED]
+        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=items))
         self.assertEqual(code, 0, json.dumps(doc))
 
     def test_an_unanswered_or_research_question_does_not_open_the_way(self):
@@ -307,15 +322,22 @@ class OutOfScope(_Born):
 
 class RuledOutAfterAQuestion(_Born):
     """CP3-2 (round 4, R4): an answered question of this run settles a parked, open or assumed row and
-    the answer records that item as out of scope: the write removes the row, the doc holds the
-    out-of-scope line and not the row, and the report and the next board count it once, under out of
-    scope (the round 3 checker's probes/31 shapes)."""
+    the answer records that item as out of scope, naming the row by `row` (A13, under A5(4)): the write
+    removes the row, the doc holds the out-of-scope line and not the row, and the report and the next
+    board count it once, under out of scope (the round 3 checker's probes/31 shapes). The same item in
+    the row's words without `row` is refused `quietly-resolved`, nothing written."""
 
     def rule_out(self, row_text, words):
         before = self.run_.state()[1]["counts"]
         q = {"id": "Q1", "text": "Keep this one?", "touches": [self.ids[row_text]], "answer": "no, drop it"}
-        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=[
-            {"text": words, "reason": "the owner dropped it", "trace": {"kind": "question", "ref": "Q1"}}]))
+        item = {"text": words, "reason": "the owner dropped it", "trace": {"kind": "question", "ref": "Q1"}}
+        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=[item]))
+        self.assertEqual(code, 5, json.dumps(doc, ensure_ascii=False))
+        self.assertEqual([(r["rule"], self.ids[row_text] in r["message"]) for r in doc["refusals"]],
+                         [("quietly-resolved", True)])
+        self.assertEqual(preconlib.read(self.path), self.text)
+        item["row"] = self.ids[row_text]
+        code, doc, err = self.run_.record(self.answer(questions=[q], out_of_scope=[item]))
         self.assertEqual(code, 0, json.dumps(doc, ensure_ascii=False))
         code, doc, err = self.run_.write()
         self.assertEqual(code, 0, err)
@@ -412,6 +434,16 @@ class OutOfScopeByRow(_Born):
                    "answer": "park it", "needs_research": True}):
             self.refused(self.answer(questions=[q], out_of_scope=self.oos("The storage question", self.ids[PARKED])),
                          rule=None)
+
+    def test_a_named_row_does_not_carry_the_words_of_another_touched_row(self):
+        # A13 (A5(4)): the item names the open row and repeats the parked row's words, both touched by answered
+        # questions; the parked row is ruled out by its words without its id, so the item is refused, naming it
+        qs = [{"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]], "answer": "no"},
+              {"id": "Q2", "text": "Keep the logging question?", "touches": [self.ids[self.item]], "answer": "no"}]
+        refusals = self.refused(self.answer(questions=qs, out_of_scope=self.oos(PARKED, self.ids[self.item])),
+                                rule="quietly-resolved")
+        self.assertEqual(refusals, ["quietly-resolved"])
+        self.assertEqual(preconlib.read(self.path), self.text)
 
     def test_a_parked_row_ruled_out_by_row_with_its_answered_question_is_removed(self):
         q = {"id": "Q1", "text": "Keep the storage question?", "touches": [self.ids[PARKED]], "answer": "no, drop it"}

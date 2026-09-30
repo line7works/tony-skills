@@ -3,8 +3,9 @@
 Run after `station_core/answer.py`'s shared refusals, never instead of them: a line with no trace,
 a trace naming nothing, a re-asked decided line and a parked or open line quietly resolved are the
 shared rules' (`untraced`, `re-asked-decided`, `unknown-line`, `quietly-resolved`), and nothing
-here repeats them. Each refusal is `{"rule", "message", ...where}`, the shared shape. Any refusal
-is exit 5 and nothing is written.
+here repeats them. One refusal here carries the shared `quietly-resolved` name because it is that
+rule's family on a path the frame does not read (the out-of-scope items, A13, below). Each refusal
+is `{"rule", "message", ...where}`, the shared shape. Any refusal is exit 5 and nothing is written.
 
 The rules, each named once:
 
@@ -27,13 +28,21 @@ The rules, each named once:
                             (`scopedoc.twins`: the frame's readings of the line against the
                             frame's readings of the row, `forms(line) & row_forms(row)`, the row
                             the line names left out); an out-of-scope item that does, or names
-                            such a line by `row`, unless an answered question of this run (not
-                            one marked needs research) touched that parked, open or assumed line
-                            (the write then removes that row); an out-of-scope item ruling out a
-                            row this answer settles as decided by its id; two entries of one
-                            answer whose readings meet, one read as a line and the other as a row
-                            (`forms(a) & row_forms(b)`, both ways): each a twin the doc would
-                            hold beside the line it repeats
+                            such a line by `row`, unless it names a parked, open or assumed line
+                            by `row` and an answered question of this run (not one marked needs
+                            research) touched that line (the write then removes that row; the
+                            item's words alone after such a question are `quietly-resolved`
+                            below); an out-of-scope item ruling out a row this answer settles
+                            as decided by its id; two entries of one answer whose readings meet,
+                            one read as a line and the other as a row (`forms(a) &
+                            row_forms(b)`, both ways): each a twin the doc would hold beside the
+                            line it repeats
+    quietly-resolved        (the frame's family, on the out-of-scope path the frame does not read)
+                            an out-of-scope item whose words repeat a parked, open or assumed
+                            ledger line it does not name by `row`, after an answered question of
+                            this run touched that line: ruling a row out moves it, so the item
+                            carries the row's id and the question never stands in for it (A13,
+                            under A5(4))
     research-resolved       a question marked needs research that a line or an out-of-scope item
                             of this run resolves, or that leaves a parked line of another reason
     research-not-parked     a question marked needs research that leaves no parked line
@@ -136,8 +145,8 @@ def _lines(answer, harvest):
         own = scopedoc.named(line)
         twin = next(iter(scopedoc.twins(line.get("text"), rows, own=own)), None)
         if twin is not None:
-            # the shared quietly-resolved covers a parked or open line's words asserted as decided with no
-            # question touching it; this covers every twin, under every trace kind, a ledger trace to
+            # the shared quietly-resolved covers a parked or open line's words asserted as decided without the
+            # row's id, a question touching it or not (F3); this covers every twin, under every trace kind, a ledger trace to
             # another line included (an assumed or decided line repeated, a parked or open line repeated
             # even after a question touched it, an Open line this core wrote with its `(waits on: ...)`
             # named by its bare words, any tag): the doc would hold the line and its twin, so the line is
@@ -239,8 +248,22 @@ def _items(answer, harvest):
                                            "%r): one ruling per item" % (both["id"], item.get("text")),
                                out_of_scope=index))
             continue
+        # A13 (A5(4)): ruling a row out moves it, so the item names that row by its id (`row`); only the row it
+        # names may pass, and only when an answered question of this run touched it. A row the item's words
+        # repeat without naming it never passes, whether or not a question touched it
         twin = next((row for row in ruled
-                     if not (row["tag"] in ("parked", "open", "assumed") and _settling(answer, row["id"]))), None)
+                     if row["id"] != own
+                     or not (row["tag"] in ("parked", "open", "assumed") and _settling(answer, row["id"]))), None)
+        if twin is not None and twin["id"] != own and twin["tag"] in ("parked", "open", "assumed") \
+                and _settling(answer, twin["id"]):
+            # the frame's `quietly-resolved` family on the out-of-scope path the frame does not read: an answered
+            # question touching the row does not stand in for its id
+            out.append(refusal("quietly-resolved", "the out-of-scope item %r rules out the %s ledger line %s by its "
+                                                   "words without naming it: an answered question touching the line "
+                                                   "does not stand in for its id; an item that moves a ledger row "
+                                                   "out of scope carries the row's id (`row`)"
+                               % (item.get("text"), twin["tag"], twin["id"]), out_of_scope=index))
+            continue
         if twin is not None:
             # CP2-3: ruling out a parked or open line is settling it, so only an answered question of this run
             # that touches it opens the way (and the write then removes the row, R4); a decided line is never

@@ -40,6 +40,7 @@ skills/{core}/scripts/tests/test_shared_equal.py
 skills/{core}/scripts/tests/test_sibling.py
 skills/{core}/scripts/tests/test_readers_roster.py
 skills/{core}/scripts/tests/test_templates.py
+skills/{core}/scripts/tests/test_setup_guard.py
 evals/seeded-cases/README.md
 evals/seeded-cases/RUNNING.md
 evals/seeded-cases/observe.py

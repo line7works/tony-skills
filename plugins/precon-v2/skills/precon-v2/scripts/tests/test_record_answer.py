@@ -146,9 +146,10 @@ class TheCallsParentheses(_Answer):
 class Twins(_Answer):
     """CP1-1 (ruling R1): a line that repeats a ledger line's text without its id. The shared
     `quietly-resolved` refuses a parked or open line's words asserted as decided under any trace
-    kind unless a question of this run touched it; precon's `retagged` refuses every repeat of a
-    `Decisions:` or `Open:` line under a non-ledger trace (an assumed line included, and a parked or
-    open line a question did touch), so the doc never holds a line and its twin."""
+    kind, whether or not a question of this run touched it (the slice 3c review's F3); precon's
+    `retagged` refuses every repeat of a `Decisions:` or `Open:` line under a non-ledger trace (an
+    assumed line included, and a parked or open line a question did touch), so the doc never holds a
+    line and its twin."""
 
     PARKED = "Where the count is kept between sessions"
     OPEN = "how often the counter resets"
@@ -167,15 +168,16 @@ class Twins(_Answer):
             else:
                 self.assertEqual(rules, ["retagged"], text)
 
-    def test_a_twin_the_shared_rule_passes_is_still_refused(self):
-        # a question of this run touched the parked line, so the shared rule is satisfied; the twin is not
+    def test_a_twin_after_an_answered_touch_is_refused_by_both_rules(self):
+        # a question of this run touched the parked line; that does not substitute for the line's row id (the
+        # slice 3c review's F3, A5(4)), so the shared rule refuses the id-less line too, and the twin rule as before
         q = {"id": "Q1", "text": "Where is the count kept?", "touches": [preconlib.PARKED_RESEARCH_ID],
              "answer": "in memory only"}
         for trace in ({"kind": "owner_words", "ref": "in memory only"}, {"kind": "question", "ref": "Q1"},
                       {"kind": "repo_path", "ref": "src/turnstile.py"}):
             rules = self.rules(self.answer(questions=[q], lines=[
                 {"text": self.PARKED, "tag": "decided", "trace": trace}]))
-            self.assertEqual(rules, ["retagged"], trace)
+            self.assertEqual(rules, ["quietly-resolved", "retagged"], trace)
 
     def test_a_twin_by_case_and_whitespace_and_under_every_tag(self):
         self.rules(self.answer(lines=[preconlib.owner_line("  where THE count is kept   between sessions ",

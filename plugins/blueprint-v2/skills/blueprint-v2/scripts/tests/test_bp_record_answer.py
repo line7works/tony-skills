@@ -154,7 +154,8 @@ class SharedRefusals(_Record):
 
 class OutOfScopeLines(_Record):
     """R2 (CL1-1): an out-of-scope line carries a parked or deferred item forward by its id; a scope
-    `Open:` item is the owner's call, carried as out of scope only when an answered question touched it."""
+    `Open:` item is the owner's call, carried as out of scope only when an answered question touched it
+    and the line names it by its id (A13)."""
 
     def harvested(self):
         return testlib.load_json(os.path.join(self.run.run_dir, "harvest.json"))
@@ -282,8 +283,8 @@ class TheViewCarriesTheWordsWithoutTheirLabel(_Record):
     reads carries a requirement's text without its `R<n>` prefix, and a constraint's or out-of-scope
     line's without a label; the doc still renders the prefix. An open, parked or deferred item's words
     written as `R2 <dash> ...` under the owner's words, a repo path, or a question that touched something
-    else are refused `quietly-resolved`; the same with an answered question touching the item is
-    accepted."""
+    else are refused `quietly-resolved`; the same with an answered question touching the item is still
+    refused unless the line names the item by `row` (the slice 3c review's F3)."""
 
     def harvested(self):
         return testlib.load_json(os.path.join(self.run.run_dir, "harvest.json"))
@@ -326,12 +327,17 @@ class TheViewCarriesTheWordsWithoutTheirLabel(_Record):
                 self.refused(self.answer_with(words, {"kind": "repo_path", "ref": "README.md"}, tag="constraint"),
                              "quietly-resolved")
 
-    def test_with_an_answered_question_touching_the_item_it_is_accepted(self):
+    def test_with_an_answered_question_touching_the_item_it_is_accepted_only_by_its_row_id(self):
+        # the slice 3c review's F3 (A5(4)): the answered question touching the item does not substitute for the
+        # line's row id; the id-less line is refused, the line naming the item by `row` is accepted
         for label, text, ident in self.items():
             testlib.rmtree(self.run.run_dir)
             self.run.to_harvest()
-            self.accepted(self.answer_with("R2 %s %s" % (bplib.D, text), {"kind": "question", "ref": "Q2"},
-                                           settle=ident))
+            doc = self.answer_with("R2 %s %s" % (bplib.D, text), {"kind": "question", "ref": "Q2"}, settle=ident)
+            out = self.refused(doc, "quietly-resolved")
+            self.assertIn(ident, " ".join(r["message"] for r in out["refusals"]), label)
+            doc["lines"][1]["row"] = ident
+            self.accepted(doc)
 
     def test_the_view_carries_each_lines_original_text(self):
         # round 5, R3: the shared forms read each line as written (a bare `R<n>` label is part of the words
@@ -345,7 +351,9 @@ class TheViewCarriesTheWordsWithoutTheirLabel(_Record):
 class AnOpenItemUnderAnotherTrace(_Record):
     """Round 3, R3 (CL2-2): `open-item-descoped` fires by the item's words as well as by its id: an
     out-of-scope line whose words (whole, or the item before its reason) are a scope `Open:` item is
-    refused unless an answered question of this run touched that item, whatever the line's trace."""
+    refused, whatever the line's trace; after an answered question of this run touched that item it is
+    still refused unless the line names the item by its id (A13, under A5(4): the question does not
+    stand in for the id)."""
 
     OPEN = "how often the counter resets"
 
@@ -374,11 +382,23 @@ class AnOpenItemUnderAnotherTrace(_Record):
             out = self.refused(self.answer_with(text, trace), "open-item-descoped")
             self.assertIn(self.ids[self.OPEN], " ".join(r["message"] for r in out["refusals"]), (text, trace))
 
-    def test_with_an_answered_question_touching_the_item_they_are_accepted(self):
+    def test_with_an_answered_question_touching_the_item_they_are_accepted_only_by_its_id(self):
+        # A13 (A5(4)): the answered question touching the item does not stand in for its id, under any trace (a
+        # ledger trace to another row included); the line naming the item by `row`, or by a ledger trace to it
+        # where the shape's trace is a ledger one (`row` may not differ from a ledger trace), is accepted
         for index, (text, trace) in enumerate(self.shapes()):
             testlib.rmtree(self.run.run_dir)
             self.run.to_harvest()
-            self.accepted(self.answer_with(text, trace, settle=True))
+            doc = self.answer_with(text, trace, settle=True)
+            out = self.refused(doc, "open-item-descoped")
+            message = " ".join(r["message"] for r in out["refusals"])
+            self.assertIn(self.ids[self.OPEN], message, (text, trace))
+            self.assertIn("does not stand in for its id", message, (text, trace))
+            if trace["kind"] == "ledger":
+                doc["lines"][3]["trace"] = {"kind": "ledger", "ref": self.ids[self.OPEN]}
+            else:
+                doc["lines"][3]["row"] = self.ids[self.OPEN]
+            self.accepted(doc)
 
     def test_other_words_are_not_the_open_item(self):
         self.accepted(self.answer_with("how often the counter resets its display %s later" % bplib.D,
@@ -435,11 +455,16 @@ class AnOpenItemUnderAnyDecoration(_Record):
             for text, row in self.shapes():
                 self.refused(self.answer_with(text, trace=trace), "open-item-descoped")
 
-    def test_with_an_answered_question_touching_the_item_they_are_accepted(self):
+    def test_with_an_answered_question_touching_the_item_they_are_accepted_only_by_its_id(self):
+        # A13 (A5(4)): the answered question touching the item does not stand in for its id
         for text, row in self.shapes():
             testlib.rmtree(self.run.run_dir)
             self.run.to_harvest()
-            self.accepted(self.answer_with(text, settle=row))
+            doc = self.answer_with(text, settle=row)
+            out = self.refused(doc, "open-item-descoped")
+            self.assertIn(self.ids[row], " ".join(r["message"] for r in out["refusals"]), text)
+            doc["lines"][3]["row"] = self.ids[row]
+            self.accepted(doc)
 
     def test_a_new_line_sharing_a_word_with_an_open_item_is_accepted(self):
         for text in ("how often the display refreshes %s later" % bplib.D, "the counter resets on power loss",

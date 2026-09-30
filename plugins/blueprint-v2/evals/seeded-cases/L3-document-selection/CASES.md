@@ -16,7 +16,7 @@ One scope doc, `docs/scope/2026-09-20-turnstile.md`; the hunt `scope` with no na
 
 Two scope docs under `docs/scope/`, both about the turnstile (their `Intent:` lines both name the counter); the hunt `scope` with no name.
 
-## L3-03-new-home-beats-flat
+## L3-03-two-scope-homes-one-tier
 
 One scope doc under `docs/scope/` and one at the older flat `docs/turnstile-scope.md`.
 

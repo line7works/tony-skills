@@ -1,0 +1,140 @@
+{
+  "eligible_session_models": [
+    "claude-opus-*",
+    "claude-fable-*",
+    "claude-mythos-*"
+  ],
+  "protocol_version": 1,
+  "rows": [
+    {
+      "available": true,
+      "context_window": "unknown",
+      "credential_env": "",
+      "effort_default": "",
+      "effort_encoding": "field",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "eligibility": "session-dependent",
+      "guide": "",
+      "id": "claude-session",
+      "isolation": {
+        "packet-only": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)",
+        "repo": "unmeasured",
+        "repo-with-tools": "unmeasured",
+        "starved": "harness-enforced (toolCalls: 0 measured; harness-injected context, the git-status block included, not measured)"
+      },
+      "kind": "host",
+      "limits_source": "harness",
+      "max_output": "unknown",
+      "model": "session",
+      "parity": {
+        "packet-only": "toolCalls: 0",
+        "repo": "web tools forbidden by instruction",
+        "repo-with-tools": "web tools forbidden by instruction",
+        "starved": "toolCalls: 0"
+      },
+      "provider": "anthropic",
+      "quirks": "Inherits the session model; the skill body fills session_model on every request (the id its harness reports) so the floor check has its input and the sidecar's effective_model names the real id. Host lane (Slice C): starved, packet-only, and any pinned effort run through the Workflow route (assets/claude-boxes.workflow.js filled by `readers compose`; the run record's per-agent toolCalls goes to `readers record --tool-calls`); repo and repo-with-tools with no effort run as a general-purpose subagent through the Agent tool, in worktree isolation when the request says so. Isolation measured 2026-09-06 (docs/evidence/readers/slice-c-host-runs.md): starved and packet-only reads through the Workflow route returned with tool_uses 0 and the decoy read (AC5) quoted no file, reported no decoy line, and named no earlier finding; repo and repo-with-tools are instruction-bound and stay unmeasured.",
+      "reasoning": "n/a",
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo",
+        "repo-with-tools"
+      ],
+      "timeout_s": 1800,
+      "transport": "claude-subagent",
+      "verified_at": "2026-09-06",
+      "web_off": "the fixed instruction forbids web tools; toolCalls: 0 under starved and packet-only"
+    },
+    {
+      "available": true,
+      "context_window": 272000,
+      "credential_env": "",
+      "effort_default": "low",
+      "effort_encoding": "flag",
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "eligibility": "not classified",
+      "guide": "guides/gpt.md",
+      "id": "gpt-astra",
+      "isolation": {
+        "packet-only": "instruction-only (read)",
+        "repo": "unmeasured",
+        "starved": "instruction-only (read)"
+      },
+      "kind": "portable",
+      "limits_source": "~/.codex/models_cache.json context_window (checked 2026-09-06); models_cache.json carries no output-token field (checked 2026-09-06)",
+      "max_output": "unknown",
+      "model": "gpt-6-astra",
+      "parity": {
+        "packet-only": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = packet dir only",
+        "repo": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = workspace",
+        "starved": "web_search: disabled (-c web_search=disabled); sandbox read-only; cwd = fresh empty dir"
+      },
+      "provider": "openai",
+      "quirks": "Default GPT row (Tony, blueprint Q3: astra on low). The roster's effort_default low overrides models_cache.json's default_reasoning_level (medium) on purpose. codex-cli 0.153.4 refuses to run outside a git repo without --skip-git-repo-check. Prompt on stdin (-); final response via -o; event stream via --json on stdout. Isolation measured 2026-09-06 (docs/evidence/readers/slice-a-isolation.md): sentinel outside the packet dir readable under starved and packet-only (command_execution in the event stream); write attempted and refused by the sandbox under both (`operation not permitted`, codex rollout records quoted in the evidence doc; the --json stream did not surface that step).",
+      "reasoning": "n/a",
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo"
+      ],
+      "timeout_s": 900,
+      "transport": "codex-exec",
+      "verified_at": "2026-09-06",
+      "web_off": "-c web_search=disabled on codex exec; the top-level --search flag is never passed"
+    },
+    {
+      "available": true,
+      "context_window": "unknown",
+      "credential_env": "",
+      "effort_default": "",
+      "effort_encoding": "flag",
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "eligibility": "eligible",
+      "guide": "",
+      "id": "claude-opus-cli",
+      "isolation": {
+        "packet-only": "unmeasured",
+        "repo": "unmeasured",
+        "starved": "unmeasured"
+      },
+      "kind": "portable",
+      "limits_source": "harness",
+      "max_output": "unknown",
+      "model": "opus",
+      "parity": {
+        "packet-only": "tools: none (--tools \"\"); web tools denied (--disallowedTools WebFetch,WebSearch); every customization disabled, no setting sources, no MCP server, no skill (--safe-mode --setting-sources \"\" --strict-mcp-config --disable-slash-commands); cwd = packet dir only",
+        "repo": "tools: Read, Glob, Grep only (--tools Read,Glob,Grep; --add-dir workspace); web tools denied (--disallowedTools WebFetch,WebSearch); every customization disabled, no setting sources, no MCP server, no skill (--safe-mode --setting-sources \"\" --strict-mcp-config --disable-slash-commands); cwd = workspace",
+        "starved": "tools: none (--tools \"\"); web tools denied (--disallowedTools WebFetch,WebSearch); every customization disabled, no setting sources, no MCP server, no skill (--safe-mode --setting-sources \"\" --strict-mcp-config --disable-slash-commands); cwd = fresh empty dir"
+      },
+      "provider": "anthropic",
+      "quirks": "Portable Claude row (E14, A12): one headless claude -p run per call, dispatchable from any shell where the claude binary is on PATH, Codex included; the same Opus class as claude-opus, pinned to the harness model name opus. Command: claude -p --model <model> --output-format json --no-session-persistence --safe-mode --setting-sources \"\" --strict-mcp-config --disable-slash-commands [--effort <effort> when the request carries one] --tools \"\" (starved, packet-only) or --tools Read,Glob,Grep --add-dir <workspace> (repo) --disallowedTools WebFetch,WebSearch, every value an argv item, the prompt on stdin, cwd the profile's working directory, the child environment the fixed list; the reply is the JSON document's result field, verbatim. Flags checked against claude --help of Claude Code 2.1.282 on 2026-09-24. repo-with-tools is not offered: the route runs nothing. --safe-mode (no value) starts the child with every customization disabled (CLAUDE.md, skills, installed plugins, hooks, MCP servers, custom commands and agents, output styles, workflows); the narrower flags stay as belt and braces. The isolation labels stay unmeasured until measured: whether anything the harness injects on its own still reaches the child under --safe-mode (the user's instruction files, any memory index), and the sentinel and write probes, are measured only by the control room's one live smoke run, recorded in the E14 audit record.",
+      "reasoning": "n/a",
+      "supported_profiles": [
+        "starved",
+        "packet-only",
+        "repo"
+      ],
+      "timeout_s": 1800,
+      "transport": "claude-cli",
+      "verified_at": "2026-09-24",
+      "web_off": "--disallowedTools WebFetch,WebSearch on every claude -p run; no tool at all under starved and packet-only (--tools \"\"), the read-only Read, Glob and Grep under repo; every run in --safe-mode, so no MCP server, plugin or hook of the caller's home reaches the child"
+    }
+  ]
+}

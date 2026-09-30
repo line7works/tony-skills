@@ -12,14 +12,33 @@ its lane contract `references/architect-v2-contract.md`; the recorded answer's s
 `request` and `save-take` (`scripts/architect_core/`); the result's `station_result` and three own
 stop tags (`living-doc-malformed`, `document-changed`, `review-pending`); the lane observer
 `evals/seeded-cases/lane_observe.py` for the A2 and A4 lane steps; the adapter profiles' lane
-sections. It writes no event and never opens the records component (ruling E14-9). For the join:
-the marketplace entry, the measured test counts below, and the version bump. Interface version 1,
-plugin version 0.1.0.
+sections. It writes no event and never opens the records component (ruling E14-9).
+
+Slices 3a and 3b (the join's first two steps): answer lines name their ledger row by its id and
+deferred rows pass forward by it; the readers roster is found by the shared resolver; the write
+guards refuse a folder or a file planted where the run writes, before anything is written; a scope
+doc that is not UTF-8 stops `ledger-refused`, named with its decoding error; and every read of the
+run directory (the requests, the written doc, a doc unreadable at harvest) stops on a hand-planted
+node instead of failing.
+
+Slice 3c (the join, its first hand-back): the contract's section 19, Interface, states the CLI in
+build-v2's four tables (commands with their arguments and exit codes, result statuses, invocation
+fields, run-directory artifacts), and `scripts/tests/test_interface_document.py` reads them against
+the parser, the dispatch table, the schemas and the source, with a mutation proof; the shared hunt
+lists a candidate as its folder spells it, so `select` and every later use of a candidate carry the
+disk spelling on a case-insensitive disk; and the plugin has its marketplace entry.
+
+Slice 3c's second hand-back: `setups/manual-only.sh` installs the manual-only probe
+(`setups/_fixtures/`, recheck-v2's E9 probe) beside this core and checks both carry the manual-only
+controls; the two prompts per harness are in `setups/<harness>/prompts/`; the live measurement is
+the control room's.
+
+Interface version 1, plugin version 0.1.1. Tests: 478.
 
 ## Layout
 
 ```text
-.claude-plugin/plugin.json           name architect-v2, version 0.1.0
+.claude-plugin/plugin.json           name architect-v2, version 0.1.1
 skills/architect-v2/
   SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar (manual-only)
