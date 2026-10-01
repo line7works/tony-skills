@@ -377,20 +377,8 @@ def main(argv=None):
     parser.add_argument("--list", action="store_true", help="print family and case ids")
     parser.add_argument("--out", help="the output directory the cases are built into")
     args = parser.parse_args(argv)
-    catalog = [(f, c) for f in families() for c in case_ids(f)]
-    if args.list:
-        for f, c in catalog:
-            print("%s  %s" % (f, c))
-        return 0
-    if not args.out or not (args.all or args.case):
-        parser.error("--out and one of --all or --case are required")
-    wanted = catalog if args.all else [(f, c) for f, c in catalog if c in args.case]
-    unknown = sorted(set(args.case) - set(c for _, c in catalog))
-    if unknown:
-        sys.stderr.write("unknown case id(s): %s\n" % ", ".join(unknown))
-        return 2
     # The setups' home guard (E14 slice 3c fix 3-2), before anything is created.
-    out = os.path.abspath(args.out)
+    out = os.path.abspath(args.out or os.curdir)
     home = os.environ.get("HOME", "")
     share = os.path.join(home, ".local", "share")
     temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
@@ -406,6 +394,18 @@ def main(argv=None):
                 return 2
     if not os.path.isabs(home):
         sys.stderr.write("observe.py: HOME is not an absolute path; nothing created\n")
+        return 2
+    catalog = [(f, c) for f in families() for c in case_ids(f)]
+    if args.list:
+        for f, c in catalog:
+            print("%s  %s" % (f, c))
+        return 0
+    if not args.out or not (args.all or args.case):
+        parser.error("--out and one of --all or --case are required")
+    wanted = catalog if args.all else [(f, c) for f, c in catalog if c in args.case]
+    unknown = sorted(set(args.case) - set(c for _, c in catalog))
+    if unknown:
+        sys.stderr.write("unknown case id(s): %s\n" % ", ".join(unknown))
         return 2
     os.makedirs(args.out, exist_ok=True)
     rows = []

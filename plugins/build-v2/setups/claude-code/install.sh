@@ -39,8 +39,8 @@ done
 command -v claude >/dev/null 2>&1 || { echo "install.sh: claude is not on PATH" >&2; exit 3; }
 # The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
 # may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
-# TMPDIR is held to the same rule (E14 punch list, check 6 C3C6-1).
-SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "install.sh" <<'GUARD'
+# TMPDIR, TEMP and TMP are held to the same rule (E14 punch list, check 6 C3C6-1; review F1).
+SETUP_HOME=$(env -u TMPDIR -u TEMP -u TMP python3 - "$SETUP_HOME" "$HOME" "install.sh" "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'GUARD'
 import os, sys
 target, home, name = sys.argv[1:4]
 
@@ -65,7 +65,8 @@ if not os.path.isabs(home):
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
+for given in [target] + temps:
     for path in forms(given):
         for forbidden in homes:
             if any(rest(path, base) is not None for base in forms(forbidden)):

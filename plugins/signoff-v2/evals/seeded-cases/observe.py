@@ -321,19 +321,8 @@ def main(argv=None):
     parser.add_argument("--records-root", metavar="DIR",
                         help="pass this to the core as the records component root")
     args = parser.parse_args(argv)
-
-    if args.list:
-        for family, case_id in all_cases():
-            sys.stdout.write(case_id + "\n")
-        return 0
-    if not args.out:
-        parser.error("--out DIR is required")
-    if not args.case and not args.all:
-        parser.error("name --case ID or pass --all")
-
-    wanted = all_cases() if args.all else [(family_of(c), c) for c in args.case]
     # The setups' home guard (E14 slice 3c fix 3-2; E14 punch list), TMPDIR included, before anything is created.
-    out = os.path.abspath(args.out)
+    out = os.path.abspath(args.out or os.curdir)
     home = os.environ.get("HOME", "")
     share = os.path.join(home, ".local", "share")
     temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
@@ -350,6 +339,17 @@ def main(argv=None):
     if not os.path.isabs(home):
         sys.stderr.write("observe.py: HOME is not an absolute path; nothing created\n")
         return 2
+
+    if args.list:
+        for family, case_id in all_cases():
+            sys.stdout.write(case_id + "\n")
+        return 0
+    if not args.out:
+        parser.error("--out DIR is required")
+    if not args.case and not args.all:
+        parser.error("name --case ID or pass --all")
+
+    wanted = all_cases() if args.all else [(family_of(c), c) for c in args.case]
     rows, failed = [], 0
     for family, case_id in wanted:
         try:

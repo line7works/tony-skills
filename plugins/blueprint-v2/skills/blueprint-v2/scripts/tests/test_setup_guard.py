@@ -6,6 +6,7 @@ home, each --writable root); negative-cases.py behind both negative-tests.sh; th
 and a family's build.py (caselib); and, where the core has them, seven-stations.sh and the replay's --keep.
 A fake HOME and inert `claude`, `codex` and `uv` stand-ins first on PATH; never the real homes or commands."""
 import os
+import shlex
 import subprocess
 import sys
 import unittest
@@ -47,6 +48,29 @@ finally:
     for line in seen:
         sys.stderr.write("SPY " + line + "\n")
 """
+
+# an audit-hook spy for launches (the E14 punch-list review's F1): runs a Python script and reports, after it ends,
+# every subprocess or exec it started, one "LAUNCH" line each on stderr
+LAUNCH_SPY = r"""
+import runpy, sys
+script = sys.argv[1]
+seen = []
+def hook(event, args):
+    if event in ("subprocess.Popen", "os.system", "os.exec", "os.posix_spawn", "os.spawn", "os.fork"):
+        seen.append(("%s %r" % (event, args))[:300])
+sys.addaudithook(hook)
+sys.argv = [script] + sys.argv[2:]
+try:
+    runpy.run_path(script, run_name="__main__")
+finally:
+    for line in seen:
+        sys.stderr.write("LAUNCH " + line + "\n")
+"""
+# a python3 stand-in (the E14 punch-list review's F1): the native python3 writes into the temp folder as it starts
+# (`xcrun_db`) before any line of a script runs; this stand-in makes that start-up write into each of TMPDIR, TEMP
+# and TMP it is started with, then runs the real interpreter
+STARTUP = "#!/bin/sh\nfor t in \"${TMPDIR-}\" \"${TEMP-}\" \"${TMP-}\"; do\n  if [ -n \"$t\" ] && [ -d \"$t\" ]; then " \
+          "mkdir -p \"$t/startup-write\"; fi\ndone\nexec %s \"$@\"\n"
 
 
 def listing(root):
@@ -239,6 +263,118 @@ class TheHomeGuard(unittest.TestCase):
                 self.assertEqual([line for line in err.splitlines() if line.startswith("SPY ")], [], label)
                 self.assertIn("which no setup may touch; nothing created", err, label)
                 self.assertEqual(listing(self.tmp), before, label)
+
+    def guarded_shell_scripts(self):
+        """(label, argv, env) for every shell script of this core that carries the GUARD: both installers, both
+        launchers and, where the core has it, seven-stations.sh, each aimed at an ordinary path."""
+        o = os.path.join(self.home, "ordinary")
+        rows = []
+        for harness in HARNESSES:
+            rows.append((("install.sh", harness), ["sh", os.path.join(SETUPS, harness, "install.sh"), "--home",
+                                                   os.path.join(o, "t-" + harness)], {}))
+            argv, extra = self.launch(harness, os.path.join(o, "run-" + harness))
+            rows.append((("launch.sh", harness), argv, extra))
+            if os.path.isfile(SEVEN):
+                rows.append((("seven-stations.sh", harness), ["sh", SEVEN, harness, os.path.join(o, "st-" + harness)],
+                             {}))
+        return rows
+
+    def python_writers(self):
+        """(label, argv) for the Python scripts of this core that read the temp folder: observe.py and, where the
+        core has it, the replay."""
+        rows = []
+        if os.path.isfile(os.path.join(SEEDED, "observe.py")):
+            family, case = self.seeded()
+            rows.append(("observe.py", [os.path.join(SEEDED, "observe.py"), "--case", case, "--out",
+                                        os.path.join(self.home, "ordinary", "obs")]))
+        if os.path.isfile(REPLAY):
+            rows.append(("replay.py", [REPLAY]))
+        return rows
+
+    def under_temp(self, name, tmp, extra=None):
+        """This test's environment with TMPDIR, TEMP and TMP removed and `name` alone set to `tmp`."""
+        env = dict((k, v) for k, v in self.env.items() if k not in ("TMPDIR", "TEMP", "TMP"))
+        env.update(extra or {})
+        env[name] = tmp
+        return env
+
+    def refused_under(self, env, argv, label):
+        before = listing(self.tmp)
+        got = subprocess.run(argv, env=env, cwd=self.tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             timeout=600)
+        err = got.stderr.decode("utf-8", "replace")
+        self.assertEqual(got.returncode, 2, (label, err[-800:]))
+        self.assertEqual(listing(self.tmp), before, label)
+        return err
+
+    def test_a_temp_or_tmp_under_a_protected_home_is_refused(self):
+        # the E14 punch-list review's F1: TEMP and TMP are held to TMPDIR's rule by every script that carries the
+        # GUARD, as by the Python writers; each alone (TMPDIR unset) under a protected home is refused, exit 2 and
+        # nothing created
+        tmp = os.path.join(self.home, ".claude", "tmp")
+        os.makedirs(tmp)
+        python = [(label, [sys.executable] + argv, {}) for label, argv in self.python_writers()]
+        for name in ("TEMP", "TMP"):
+            for label, argv, extra in self.guarded_shell_scripts() + python:
+                self.refused_under(self.under_temp(name, tmp, extra), argv, (label, name))
+
+    def test_nothing_starts_under_a_protected_temp_folder_before_the_guard(self):
+        # the E14 punch-list review's F1: the shell GUARD's interpreter starts with TMPDIR, TEMP and TMP cleared
+        # (their values reach it as arguments), so an interpreter's own start-up write into the temp folder cannot
+        # land under a protected home; and observe.py starts no subprocess (its case catalog) before its guard
+        tmp = os.path.join(self.home, ".claude", "tmp")
+        os.makedirs(tmp)
+        startup = os.path.join(self.tmp, "startup-bin")
+        os.makedirs(startup)
+        with open(os.path.join(startup, "python3"), "w", encoding="utf-8") as fh:
+            fh.write(STARTUP % shlex.quote(sys.executable))
+        os.chmod(os.path.join(startup, "python3"), 0o755)
+        path = {"PATH": startup + os.pathsep + self.env["PATH"]}
+        for name in ("TMPDIR", "TEMP", "TMP"):
+            for label, argv, extra in self.guarded_shell_scripts():
+                extra = dict(extra, **path)
+                self.refused_under(self.under_temp(name, tmp, extra), argv, (label, name))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "startup-write")), (label, name))
+            for label, argv in self.python_writers():
+                err = self.refused_under(self.under_temp(name, tmp), [sys.executable, "-c", LAUNCH_SPY] + argv,
+                                         (label, name))
+                self.assertEqual([line for line in err.splitlines() if line.startswith("LAUNCH ")], [],
+                                 (label, name))
+                self.assertIn("which no setup may touch; nothing created", err, (label, name))
+
+    def test_the_claude_code_launcher_refuses_a_missing_protected_home(self):
+        # the E14 punch-list review's F2: the GUARD runs before the existence check, so an installed home under a
+        # protected home that does not exist is refused, exit 2; an ordinary one that does not exist is still 3
+        h = self.home
+        out = os.path.join(h, "ordinary", "run")
+        for home in (h + "/.claude/missing", h + "/.codex/missing", h + "/.local/share/skills-v2-pilot/missing",
+                     h + "/link/missing", h + "/ordinary/../.claude/missing"):
+            argv, extra = self.launch("claude-code", out, home=home)
+            self.assert_refused(argv, extra, home)
+        argv, extra = self.launch("claude-code", out, home=h + "/ordinary/missing")
+        before = listing(self.tmp)
+        self.assertEqual(self.run_it(argv, extra), 3)
+        self.assertEqual(listing(self.tmp), before)
+
+    def test_the_codex_launcher_refuses_a_missing_protected_condition_home_or_writable_root(self):
+        # the E14 punch-list review's F2: the GUARD runs before the existence checks, so a condition home or a
+        # --writable root under a protected home that does not exist is refused, exit 2; an ordinary one that does
+        # not exist is still 3
+        h = self.home
+        out = os.path.join(h, "ordinary", "run")
+        missing = (h + "/.codex/missing", h + "/.claude/missing", h + "/.local/share/skills-v2-locked/missing",
+                   h + "/link/missing", h + "/ordinary/../.codex/missing")
+        for home in missing:
+            argv, extra = self.launch("codex", out, home=home)
+            self.assert_refused(argv, extra, ("condition", home))
+        for writable in missing:
+            argv, extra = self.launch("codex", out, writable=writable)
+            self.assert_refused(argv, extra, ("writable", writable))
+        for home, writable in ((h + "/ordinary/missing", None), (None, h + "/ordinary/missing")):
+            argv, extra = self.launch("codex", out, home=home, writable=writable)
+            before = listing(self.tmp)
+            self.assertEqual(self.run_it(argv, extra), 3, (home, writable))
+            self.assertEqual(listing(self.tmp), before, (home, writable))
 
 
 if __name__ == "__main__":

@@ -6,8 +6,8 @@
 # cores' test_shared_equal.py and by build-v2's and signoff-v2's test_setup_guard.py, which compare
 # their copy with precon-v2's. The home guard below (E14 slice 3c): the out-dir, the condition home
 # and each --writable root may not be or sit under ~/.claude, ~/.codex or
-# ~/.local/share/skills-v2-*, as given or resolved, and neither may TMPDIR (exit 2, nothing
-# created). The core is this script's own plugin folder.
+# ~/.local/share/skills-v2-*, as given or resolved, and neither may TMPDIR, TEMP or TMP (exit 2,
+# nothing created). The core is this script's own plugin folder.
 #
 # Usage: launch.sh <prompt-file> <workspace> <out-dir> [--writable DIR]...
 # The condition home is <CORE>_CODEX_HOME (BUILD_V2_CODEX_HOME or SIGNOFF_V2_CODEX_HOME), which
@@ -36,7 +36,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --writable)
       [ "$#" -ge 2 ] || { echo 'launch.sh: --writable takes a value' >&2; exit 2; }
-      [ -d "$2" ] || { echo "launch.sh: no writable directory: $2" >&2; exit 3; }
       WRITABLE="$WRITABLE $2"; shift 2 ;;
     *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -45,11 +44,10 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 CORE=$(basename -- "$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)")
 VAR=$(printf '%s' "$CORE" | tr 'a-z-' 'A-Z_')_CODEX_HOME
 CONDITION=$(eval "printf '%s' \"\${$VAR:-}\"")
-[ -n "$CONDITION" ] && [ -d "$CONDITION" ] || { echo "launch.sh: $VAR must name the installed condition home" >&2; exit 3; }
 # The home guard, before anything is created (E14 slice 3c fix 3-2): the installers' GUARD, byte for byte.
 # shellcheck disable=SC2086
 for checked in "$OUT_DIR" "$CONDITION" $WRITABLE; do
-  python3 - "$checked" "$HOME" "launch.sh" <<'GUARD' >/dev/null || exit 2
+  env -u TMPDIR -u TEMP -u TMP python3 - "$checked" "$HOME" "launch.sh" "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'GUARD' >/dev/null || exit 2
 import os, sys
 target, home, name = sys.argv[1:4]
 
@@ -74,7 +72,8 @@ if not os.path.isabs(home):
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
+for given in [target] + temps:
     for path in forms(given):
         for forbidden in homes:
             if any(rest(path, base) is not None for base in forms(forbidden)):
@@ -86,6 +85,10 @@ for given in (target, os.environ.get("TMPDIR") or "/tmp"):
                        % (given, os.path.join(share, below.split(os.sep)[0])))
 print(os.path.realpath(target))
 GUARD
+done
+[ -n "$CONDITION" ] && [ -d "$CONDITION" ] || { echo "launch.sh: $VAR must name the installed condition home" >&2; exit 3; }
+for checked in $WRITABLE; do
+  [ -d "$checked" ] || { echo "launch.sh: no writable directory: $checked" >&2; exit 3; }
 done
 export CODEX_HOME="$CONDITION"
 export PYTHONDONTWRITEBYTECODE=1

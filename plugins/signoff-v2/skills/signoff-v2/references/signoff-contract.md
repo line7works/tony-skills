@@ -160,14 +160,17 @@ read intent into what is on disk.
   so its answer must also carry the session's recorded model; a portable row a Codex session
   dispatches names its own model and is judged by its class alone. Which row answered is read from
   the answer's `session_id`, the adapter's `answer_identity.session_id`, `<transport>:<call id>`
-  from readers' sidecar: the transport `claude-cli` is the portable `claude-opus-cli` row; any other
-  answer keeps the same-model rule, one with no `session_id` at all included (it names no row, so
-  the rule fails closed). `record` re-checks the model and `session_id` `record-answer`
-  recorded under the same rule, and holds the model equal to the one it established. Otherwise the
-  answer is refused (`refusal_reason: floor`). Nothing upgrades a model and nothing changes who is
-  eligible. The result's `floor` block says which facts were used
-  and where they came from. **Synthetic replay facts** (a seeded case replays a recorded answer and
-  no harness observed a model) enter through one explicit test interface only:
+  from readers' sidecar: the transport `claude-cli` is the portable `claude-opus-cli` row, and it
+  opens the exception only when the session's recorded model is one of the Codex ids above (the
+  transport is typed in the answer, so a Claude session keeps the same-model rule whatever
+  transport its answer types); any other answer keeps the same-model rule, one with no
+  `session_id` at all included (it names no row, so the rule fails closed). `record` re-checks
+  the model and `session_id` `record-answer` recorded under the same rule, and holds the model
+  equal to the one it established. Otherwise the answer is refused (`refusal_reason: floor`).
+  Nothing upgrades a model and nothing changes who is eligible. The result's `floor` block says
+  which facts were used and where they came from. **Synthetic replay facts** (a seeded case
+  replays a recorded answer and no harness observed a model) enter through one explicit test
+  interface only:
   `SIGNOFF_TEST_REPLAY_MODEL=<id>` under `SIGNOFF_TEST=1`, used where the input or the answer
   carries no model, and named as synthetic in `floor.source`; outside test mode it is ignored.
 
@@ -477,7 +480,7 @@ redone, the append is never made twice, and a committed receipt reports the same
 | The proposed completion fails the result's semantic checks | `stopped` | `answer_invalid` |
 | A record line fits no Appendix A shape | `missing_input` | `legacy_ambiguous` |
 | The model floor is not met, not established, or its typed facts disagree with the observed id (at `request` or `record`) | `stopped` | `floor_refused` |
-| The answer's reviewer model is below the floor, missing, or (any reader but the portable `claude-cli` row) not the session's recorded model | `stopped` (`refusal_reason: floor`) | `floor_refused` |
+| The answer's reviewer model is below the floor, missing, or (any reader but the portable `claude-cli` row, and that row only when the session's recorded model is one of the Codex ids) not the session's recorded model | `stopped` (`refusal_reason: floor`) | `floor_refused` |
 | The source moved after the packet was built | `stale_source` | `source_moved` |
 | The source outside the run's own targets moved during the transaction, the final append included, or a packet entry's bytes moved | `stale_source` | `source_moved` |
 | The component refused `identity` | per the refusal map | `identity_refused` |

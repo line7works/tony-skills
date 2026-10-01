@@ -6,8 +6,8 @@
 # front cores' test_shared_equal.py and by build-v2's and signoff-v2's test_setup_guard.py, which
 # compare their copy with precon-v2's. The home guard below (E14 slice 3c): the out-dir and the
 # installed home may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, as
-# given or resolved, and neither may TMPDIR (exit 2, nothing created). The core is this script's
-# own plugin folder.
+# given or resolved, and neither may TMPDIR, TEMP or TMP (exit 2, nothing created). The core is
+# this script's own plugin folder.
 #
 # Usage: launch.sh <prompt-file> <workspace> <out-dir>
 # The session runs with CLAUDE_CONFIG_DIR=<home>/config, the ISOLATED config directory install.sh
@@ -30,12 +30,11 @@ SETUP_HOME=$(eval "printf '%s' \"\${$VAR:-}\"")
 [ $# -eq 3 ] || { echo "usage: launch.sh <prompt-file> <workspace> <out-dir>" >&2; exit 2; }
 PROMPT_FILE="$1"; WORKSPACE="$2"; OUT_DIR="$3"
 command -v claude >/dev/null 2>&1 || { echo "launch.sh: claude is not on PATH" >&2; exit 3; }
-[ -n "$SETUP_HOME" ] && [ -d "$SETUP_HOME/config" ] || { echo "launch.sh: $VAR must name the installed home" >&2; exit 3; }
 [ -s "$PROMPT_FILE" ] || { echo "launch.sh: no prompt file (or it is empty): $PROMPT_FILE" >&2; exit 2; }
 [ -d "$WORKSPACE" ] || { echo "launch.sh: no workspace: $WORKSPACE" >&2; exit 2; }
 # The home guard, before anything is created (E14 slice 3c fix 3-2): the installers' GUARD, byte for byte.
 for checked in "$OUT_DIR" "$SETUP_HOME"; do
-  python3 - "$checked" "$HOME" "launch.sh" <<'GUARD' >/dev/null || exit 2
+  env -u TMPDIR -u TEMP -u TMP python3 - "$checked" "$HOME" "launch.sh" "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'GUARD' >/dev/null || exit 2
 import os, sys
 target, home, name = sys.argv[1:4]
 
@@ -60,7 +59,8 @@ if not os.path.isabs(home):
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for given in (target, os.environ.get("TMPDIR") or "/tmp"):
+temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
+for given in [target] + temps:
     for path in forms(given):
         for forbidden in homes:
             if any(rest(path, base) is not None for base in forms(forbidden)):
@@ -73,6 +73,7 @@ for given in (target, os.environ.get("TMPDIR") or "/tmp"):
 print(os.path.realpath(target))
 GUARD
 done
+[ -n "$SETUP_HOME" ] && [ -d "$SETUP_HOME/config" ] || { echo "launch.sh: $VAR must name the installed home" >&2; exit 3; }
 for kept in trace.jsonl launch.json transcript.jsonl result.txt; do
   [ -e "$OUT_DIR/$kept" ] && { echo "launch.sh: $OUT_DIR already holds $kept; name a fresh output directory" >&2; exit 2; }
 done

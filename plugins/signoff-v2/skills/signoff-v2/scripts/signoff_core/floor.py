@@ -20,10 +20,13 @@ establishes it. Before this fix the core recorded a verdict whatever `invocation
   `<readers transport>:<call id>` from readers' sidecar (item 4(b)): the portable Claude row a
   Codex session dispatches (`claude-cli`) names its own model and is judged by its class alone;
   every other answer, the `claude-session` reader's (`claude-subagent`) among them, keeps the
-  same-model rule. `record` re-checks with the recorded reviewer's model and `session_id`, under
-  the same rule, and holds the model equal to the one `record-answer` established (E14 punch list
-  round 2). A model handed over with no `session_id` at all names no row and keeps the same-model
-  rule: it fails closed (the E14 punch-list check's O-1).
+  same-model rule. The transport is typed in the answer, so it opens that exception only when the
+  session's own model is one of the Codex ids the map admits (`OPUS_IDS`): a Claude session keeps
+  the same-model rule whatever transport the answer types (the E14 punch-list review's F3).
+  `record` re-checks with the recorded reviewer's model and `session_id`, under the same rule,
+  and holds the model equal to the one `record-answer` established (E14 punch list round 2). A
+  model handed over with no `session_id` at all names no row and keeps the same-model rule: it
+  fails closed (the E14 punch-list check's O-1).
 - **A false, null, missing or unestablished floor is a named stop** (`floor_refused`) before the
   reviewer request is emitted, before the answer is accepted, and again before anything is recorded.
   Nothing is written to the project. No model is upgraded, silently or otherwise, and eligibility is
@@ -52,7 +55,8 @@ REPLAY_VAR = "SIGNOFF_TEST_REPLAY_MODEL"
 STOP_CODE = "floor_refused"
 # readers' transports whose reader names its own model rather than inheriting the session's (item 4(b)): the
 # portable claude-opus-cli row, which a Codex session dispatches; a claude-session reader (claude-subagent)
-# inherits the session's model
+# inherits the session's model. Honoured only in a session whose model is in OPUS_IDS, the Codex ids (the E14
+# punch-list review's F3): the transport is typed in the answer, so a Claude session never takes it on its word
 NAMES_ITS_OWN_MODEL = ("claude-cli",)
 
 
@@ -129,7 +133,8 @@ def reviewer_facts(answer, session, environ=None):
     model = answer.get("model") if isinstance(answer, dict) else None
     source = "the readers result (the answer's model, readers' effective model)"
     transport = reader_transport(answer)
-    own_model = transport in NAMES_ITS_OWN_MODEL
+    own_model = (transport in NAMES_ITS_OWN_MODEL
+                 and bool(session) and session.get("model") in OPUS_IDS)
     if own_model:
         source += "; a %s reader names its own model and is judged by its class" % transport
     if not isinstance(model, str) or not model.strip():

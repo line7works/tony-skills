@@ -10,6 +10,9 @@ Item 4(b): the same-model rule holds for a `claude-session` reader, which inheri
 portable row dispatched from a Codex session names its own model and is judged by its class alone. What tells
 the core which row answered is the answer's `session_id`, the adapter's `answer_identity.session_id`,
 `<readers transport>:<call id>` from readers' sidecar: `claude-cli` is the portable Claude row's transport.
+The E14 punch-list review's F3: the transport is typed in the answer, so it opens the exception only when the
+session's own model is one of the Codex ids the floor map admits (`OPUS_IDS`); a Claude session keeps the
+same-model rule whatever transport the answer types.
 """
 import importlib.util
 import json
@@ -84,6 +87,24 @@ class WhichRowAnswered(unittest.TestCase):
             with self.assertRaises(floor.FloorRefused):
                 floor.reviewer_facts({"model": "opus", "session_id": session_id}, self.CLAUDE)
 
+    def test_a_claude_session_answer_typed_as_the_portable_transport_keeps_the_same_model_rule(self):
+        # the E14 punch-list review's F3: the typed `claude-cli` transport opens no exception in a Claude session
+        for model in ("opus", FABLE):
+            with self.assertRaises(floor.FloorRefused) as caught:
+                floor.reviewer_facts({"model": model, "session_id": "claude-cli:run-1-review"}, self.CLAUDE)
+            self.assertIn("claude-session", str(caught.exception))
+        for session_model in ("claude-fable-5-1", "claude-mythos-1", "unknown"):
+            with self.assertRaises(floor.FloorRefused):
+                floor.reviewer_facts({"model": "opus", "session_id": "claude-cli:run-1-review"},
+                                     dict(self.CLAUDE, model=session_model))
+        facts = floor.reviewer_facts({"model": "claude-opus-5-5", "session_id": "claude-cli:run-1-review"},
+                                     self.CLAUDE)
+        self.assertTrue(facts["met"])
+        for session_model in floor.OPUS_IDS:
+            facts = floor.reviewer_facts({"model": "opus", "session_id": "claude-cli:run-1-review"},
+                                         dict(self.CODEX, model=session_model))
+            self.assertEqual((facts["model"], facts["met"]), ("opus", True), session_model)
+
     def test_a_model_handed_over_with_no_session_id_keeps_the_same_model_rule(self):
         # the E14 punch-list check's O-1, ruled fail closed: an answer with no `session_id` key names no row, so it
         # keeps the same-model rule; `record` hands the recorded reviewer's `session_id` with its model since round
@@ -154,6 +175,38 @@ class TheCodexRouteThroughTheCore(_Floor):
         self.assertFalse(result["verdict_recorded"])
 
 
+class TheForgedTransportInAClaudeSession(_Floor):
+    """The E14 punch-list review's F3, her `forged_transport.py` shape through the real CLI: a Claude session
+    (`claude-opus-5-5`) handed an answer naming `model: opus` with `session_id: claude-cli:<call id>` recorded
+    `completed` although the route was `readers:claude-session`. The typed transport opens the portable-row
+    exception only in a Codex session, so this answer is a floor stop; the same session's own model through the
+    same typed transport is still recorded."""
+
+    def setUp(self):
+        _Floor.setUp(self)
+        self.with_model({"id": OPUS, "floor_class": "opus", "floor_met": True})
+
+    def forged(self, model):
+        answer = self.answer_model(model)
+        answer["session_id"] = "claude-cli:signoff-fix3-forged"
+        return answer
+
+    def test_a_harness_name_through_a_forged_transport_is_a_floor_stop(self):
+        code, body, err = self.through_answer(self.forged("opus"))
+        self.assert_floor_stop(code, body, err)
+
+    def test_another_opus_model_through_a_forged_transport_is_a_floor_stop(self):
+        code, body, err = self.through_answer(self.forged(FABLE))
+        self.assert_floor_stop(code, body, err)
+
+    def test_the_sessions_own_model_through_the_same_transport_is_recorded(self):
+        code, body, err = self.through_answer(self.forged(OPUS))
+        self.assertEqual(code, 0, err or json.dumps(body))
+        code, body, err = self.record()
+        self.assertEqual(code, 10, err or json.dumps(body))
+        self.assertEqual(self.result()["status"], "completed", json.dumps(self.result())[:1200])
+
+
 class TheRecordReCheckAppliesTheFullRule(_Floor):
     """Round 2 of the E14 punch list (the control room's grant): `record` hands the floor the recorded reviewer's
     `session_id` with its model, so it applies the rule `record-answer` applied. What only the full rule refuses: a
@@ -181,11 +234,22 @@ class TheRecordReCheckAppliesTheFullRule(_Floor):
         code, body, err = self.record()
         self.assert_floor_stop(code, body, err)
 
-    def test_the_portable_transport_is_still_judged_by_its_class_at_record(self):
+    def test_the_portable_transport_from_a_codex_session_is_still_judged_by_its_class_at_record(self):
+        # corrected by the E14 punch-list review's F3: the exception belongs to a Codex session, so this method
+        # now runs in one (`gpt-6-astra`); in the Claude session of setUp the same typed transport keeps the rule
+        # (the method below)
+        self.with_model({"id": "gpt-6-astra", "floor_class": "opus", "floor_met": True})
         self.answered_then_changed("claude-cli:signoff-fix2-run-review")
         code, body, err = self.record()
         self.assertEqual(code, 10, err or json.dumps(body))
         self.assertEqual(self.result()["status"], "completed", json.dumps(self.result())[:1200])
+
+    def test_the_portable_transport_in_a_claude_session_is_refused_at_record(self):
+        # the E14 punch-list review's F3: in a Claude session the typed `claude-cli` transport opens no exception,
+        # so a reviewer model changed between the phases is refused at record as a claude-session answer is
+        self.answered_then_changed("claude-cli:signoff-fix2-run-review")
+        code, body, err = self.record()
+        self.assert_floor_stop(code, body, err)
 
 
 if __name__ == "__main__":
