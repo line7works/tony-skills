@@ -5,6 +5,8 @@
 
 `--keep DIR` is refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
 ~/.local/share/skills-v2-* home, as given or resolved (the setups' home guard, E14 slice 3c).
+The interpreter that runs this file starts before its guard: where TMPDIR, TEMP or TMP may point into a
+protected folder, start it through uv or a real interpreter, not the /usr/bin/python3 shim.
 
 One fixture project (`fixtures/turnstile/`, the seeded cases' turnstile idea: a bench-rig turn
 counter) is copied into a fresh temporary tree, made a git work tree, and walked through the five
@@ -418,6 +420,29 @@ def find_date(harvest):
     return found.group(1) if found else DATE
 
 
+def _same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="replay.py", description=__doc__.split("\n\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -433,9 +458,10 @@ def main(argv=None):
         temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
         for path in [out, os.path.realpath(out)] + [form(t) for t in temps for form in (os.path.abspath, os.path.realpath)]:
             for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
-                for form in (os.path.abspath(base), os.path.realpath(base)):
-                    p, b = path.casefold(), form.casefold().rstrip(os.sep)
-                    below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+                for form in (os.path.abspath(base), os.path.realpath(base), None):
+                    p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
+                    below = (_same_below(path, base) if form is None
+                             else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                     if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                         continue
                     sys.stderr.write("replay.py: %s is under %s, which no setup may touch; nothing created\n"

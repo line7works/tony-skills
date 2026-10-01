@@ -273,6 +273,29 @@ class Case:
 
 # ---- CLI ----------------------------------------------------------------------------------
 
+def _same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
 def make_family(family: str, cases: Dict[str, Callable[[Case], None]],
                 argv: Optional[List[str]] = None) -> None:
     here = os.path.dirname(os.path.abspath(sys.argv[0] if argv is None else sys.argv[0]))
@@ -307,9 +330,10 @@ def make_family(family: str, cases: Dict[str, Callable[[Case], None]],
     share = os.path.join(home, ".local", "share")
     for path in (out, os.path.realpath(out)):
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
-            for form in (os.path.abspath(base), os.path.realpath(base)):
-                p, b = path.casefold(), form.casefold().rstrip(os.sep)
-                below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+            for form in (os.path.abspath(base), os.path.realpath(base), None):
+                p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
+                below = (_same_below(path, base) if form is None
+                         else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue
                 sys.stderr.write("build.py: %s is under %s, which no setup may touch; nothing created\n"

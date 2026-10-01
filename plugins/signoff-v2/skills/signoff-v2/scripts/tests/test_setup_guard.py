@@ -100,7 +100,11 @@ STARTUP = "#!/bin/sh\nfor t in \"${TMPDIR-}\" \"${TEMP-}\" \"${TMP-}\"; do\n  if
 
 
 def listing(root):
-    return sorted(os.path.relpath(os.path.join(d, n), root) for d, ds, fs in os.walk(root) for n in ds + fs)
+    """Every path under `root`, and `root` itself, with its modification time in ns: a folder made and removed
+    again still shows, in its parent's time (the E14 punch-list re-check's O-7)."""
+    return [(".", os.lstat(root).st_mtime_ns)] + sorted(
+        (os.path.relpath(os.path.join(d, n), root), os.lstat(os.path.join(d, n)).st_mtime_ns)
+        for d, ds, fs in os.walk(root) for n in ds + fs)
 
 
 def sibling(name):
@@ -399,6 +403,75 @@ class TheHomeGuard(unittest.TestCase):
             before = listing(self.tmp)
             self.assertEqual(self.run_it(argv, extra), 3, (home, writable))
             self.assertEqual(listing(self.tmp), before, (home, writable))
+
+    def test_a_temp_variable_spelled_through_a_symlink_is_refused(self):
+        # the E14 punch-list re-check's O-6: TMPDIR, TEMP and TMP, each alone, spelled through a symlink into a
+        # protected home (`link` is the fake ~/.codex) are refused by every script that carries the GUARD and by
+        # the Python writers, exit 2 and nothing created
+        os.makedirs(os.path.join(self.home, ".codex", "tmp"))
+        tmp = os.path.join(self.home, "link", "tmp")
+        python = [(label, [sys.executable] + argv, {}) for label, argv in self.python_writers()]
+        for name in ("TMPDIR", "TEMP", "TMP"):
+            for label, argv, extra in self.guarded_shell_scripts() + python:
+                self.refused_under(self.under_temp(name, tmp, extra), argv, (label, name))
+
+    def other_names(self):
+        """This test's home under the other names macOS gives its folder, which neither abspath nor realpath
+        rewrites: the firmlink into the Data volume and the /.nofollow prefix (the E14 punch-list re-check's
+        CPL3-1). A name that does not reach the same folder here skips the test, reported as skipped."""
+        real = os.path.realpath(self.home)
+        names = []
+        for prefix in ("/System/Volumes/Data", "/.nofollow"):
+            try:
+                same = os.path.samestat(os.stat(prefix + real), os.stat(real))
+            except OSError:
+                same = False
+            if not same:
+                self.skipTest("%s<home> does not name this test's home here" % prefix)
+            names.append(prefix + real)
+        return names
+
+    @unittest.skipUnless(os.path.isdir("/System/Volumes/Data"), "no /System/Volumes/Data on this system")
+    def test_a_protected_home_under_another_name_of_its_folder_is_refused(self):
+        # the E14 punch-list re-check's CPL3-1: every protected row spelled through the firmlink and through
+        # /.nofollow is refused as the target of every script that takes one, as a launcher's home or --writable
+        # root, and as each of TMPDIR, TEMP and TMP, exit 2 and nothing created (listing with modification times):
+        # the guard holds the nearest existing folder to the protected home by device and inode, beside the names
+        h = self.home
+        names = self.other_names()
+        family, case = self.seeded()
+        os.makedirs(os.path.join(h, ".claude", "tmp"))
+        python = [(label, [sys.executable] + argv, {}) for label, argv in self.python_writers()]
+        out = os.path.join(h, "ordinary", "run")
+        for other in names:
+            for row in self.protected:
+                target = other + row[len(h):]
+                rows = []
+                for harness in HARNESSES:
+                    rows.append((("install.sh", harness),
+                                 ["sh", os.path.join(SETUPS, harness, "install.sh"), "--home", target], {}))
+                    argv, extra = self.launch(harness, target)
+                    rows.append((("launch.sh", harness), argv, extra))
+                    rows.append((("negative-tests.sh", harness),
+                                 ["sh", os.path.join(SETUPS, harness, "negative-tests.sh"), target, "--case",
+                                  "missing-resource"], {}))
+                    if os.path.isfile(THREE):
+                        rows.append((("three-stations.sh", harness), ["sh", THREE, harness, target], {}))
+                rows.append(("observe.py", [sys.executable, os.path.join(SEEDED, "observe.py"), "--case", case,
+                                            "--out", target], {}))
+                rows.append(("build.py", [sys.executable, os.path.join(SEEDED, family, "build.py"), "--case", case,
+                                          "--out", target], {}))
+                for label, argv, extra in rows:
+                    self.assert_refused(argv, extra, (label, target))
+            for argv, extra in (self.launch("claude-code", out, home=other + "/.claude"),
+                                self.launch("codex", out, home=other + "/.codex"),
+                                self.launch("codex", out, writable=other + "/.codex"),
+                                self.launch("codex", out, writable=other + "/.local/share/skills-v2-locked")):
+                self.assert_refused(argv, extra, (argv[1:], extra))
+            tmp = other + "/.claude/tmp"
+            for name in ("TMPDIR", "TEMP", "TMP"):
+                for label, argv, extra in self.guarded_shell_scripts() + python:
+                    self.refused_under(self.under_temp(name, tmp, extra), argv, (label, name, tmp))
 
 
 class TheSixCoresHoldOneGuard(unittest.TestCase):

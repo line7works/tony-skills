@@ -53,6 +53,29 @@ def rest(path, base):
     return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
 
 
+def same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
 if not os.path.isabs(home):
     refuse("HOME is not an absolute path")
 share = os.path.join(home, ".local", "share")
@@ -62,10 +85,10 @@ temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
 for given in [target] + temps:
     for path in forms(given):
         for forbidden in homes:
-            if any(rest(path, base) is not None for base in forms(forbidden)):
+            if (any(rest(path, base) is not None for base in forms(forbidden))
+                    or same_below(path, forbidden) is not None):
                 refuse("%s is under %s, which no setup may touch" % (given, forbidden))
-        for base in forms(share):
-            below = rest(path, base)
+        for below in [rest(path, base) for base in forms(share)] + [same_below(path, share)]:
             if below and below.split(os.sep)[0].startswith("skills-v2-"):
                 refuse("%s is under %s, which no setup may touch"
                        % (given, os.path.join(share, below.split(os.sep)[0])))

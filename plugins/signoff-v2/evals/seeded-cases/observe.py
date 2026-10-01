@@ -32,6 +32,8 @@ built into a temporary directory with the family's own generator and cleaned up 
 `--out`, or a TMPDIR, that is or sits under ~/.claude, ~/.codex or a ~/.local/share/skills-v2-*
 home, as given or resolved, is refused, exit 2 and nothing created (the setups' home guard, E14
 punch list).
+The interpreter that runs this file starts before its guard: where TMPDIR, TEMP or TMP may point into a
+protected folder, start it through uv or a real interpreter, not the /usr/bin/python3 shim.
 """
 import argparse
 import json
@@ -306,6 +308,29 @@ def observe_one(family, case_id, out_dir, records_root=None, keep=None):
     return path, observed
 
 
+def _same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="observe.py",
@@ -321,16 +346,18 @@ def main(argv=None):
     parser.add_argument("--records-root", metavar="DIR",
                         help="pass this to the core as the records component root")
     args = parser.parse_args(argv)
-    # The setups' home guard (E14 slice 3c fix 3-2; E14 punch list), TMPDIR included, before anything is created.
+    # The setups' home guard (E14 slice 3c fix 3-2; E14 punch list), TMPDIR, TEMP and TMP included, before
+    # anything is created.
     out = os.path.abspath(args.out or os.curdir)
     home = os.environ.get("HOME", "")
     share = os.path.join(home, ".local", "share")
     temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
     for path in [out, os.path.realpath(out)] + [form(t) for t in temps for form in (os.path.abspath, os.path.realpath)]:
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
-            for form in (os.path.abspath(base), os.path.realpath(base)):
-                p, b = path.casefold(), form.casefold().rstrip(os.sep)
-                below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+            for form in (os.path.abspath(base), os.path.realpath(base), None):
+                p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
+                below = (_same_below(path, base) if form is None
+                         else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue
                 sys.stderr.write("observe.py: %s is under %s, which no setup may touch; nothing created\n"
