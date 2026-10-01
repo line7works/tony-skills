@@ -13,4 +13,6 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 command -v claude >/dev/null 2>&1 || { echo "negative-tests.sh: claude is not on PATH" >&2; exit 3; }
 export PYTHONDONTWRITEBYTECODE=1
 OUT="$1"; shift
-exec python3 "$SCRIPT_DIR/../negative-cases.py" --harness claude-code --out "$OUT" "$@"
+# Through ../safe-python.sh: the interpreter starts with TMPDIR, TEMP and TMP cleared and their values reach
+# negative-cases.py's guard (E14 punch list, the outside confirm's F1).
+exec sh "$SCRIPT_DIR/../safe-python.sh" "$SCRIPT_DIR/../negative-cases.py" --harness claude-code --out "$OUT" "$@"

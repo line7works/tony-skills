@@ -5,6 +5,8 @@ owner). Standard library only, Python 3.9. Every family's build.py locates this 
 its own __file__, constructs a Case per case id, and ends with make_family(). Its `--out` is
 refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
 ~/.local/share/skills-v2-* home, as given or resolved (the setups' home guard, E14 punch list).
+So is a TMPDIR, TEMP or TMP under one (E14 punch list); a family's build.py is started through
+`setups/safe-python.sh`, since the /usr/bin/python3 shim writes into the temp folder as it starts.
 
 Encoding decisions this library fixes, so two builds of one case are byte-identical:
 
@@ -296,6 +298,19 @@ def _same_below(path, base):
         probe = parent
 
 
+def _below_home(path, base, home):
+    """`_same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = _same_below(path, base)
+    if got is not None:
+        return got
+    below = _same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 def make_family(family: str, cases: Dict[str, Callable[[Case], None]],
                 argv: Optional[List[str]] = None) -> None:
     here = os.path.dirname(os.path.abspath(sys.argv[0] if argv is None else sys.argv[0]))
@@ -328,11 +343,14 @@ def make_family(family: str, cases: Dict[str, Callable[[Case], None]],
     out = os.path.abspath(args.out)
     home = os.environ.get("HOME", "")
     share = os.path.join(home, ".local", "share")
-    for path in (out, os.path.realpath(out)):
+    candidates = [out] + [os.environ[k] for k in ("TMPDIR", "TEMP", "TMP")
+                          if os.environ.get(k)]
+    for path in (form for candidate in candidates
+                 for form in (os.path.abspath(candidate), os.path.realpath(candidate))):
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
             for form in (os.path.abspath(base), os.path.realpath(base), None):
                 p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
-                below = (_same_below(path, base) if form is None
+                below = (_below_home(path, base, home) if form is None
                          else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue

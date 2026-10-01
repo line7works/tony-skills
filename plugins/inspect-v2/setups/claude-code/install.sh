@@ -83,6 +83,19 @@ def same_below(path, base):
         probe = parent
 
 
+def below_home(path, base):
+    """`same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = same_below(path, base)
+    if got is not None:
+        return got
+    below = same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 if not os.path.isabs(home):
     refuse("HOME is not an absolute path")
 share = os.path.join(home, ".local", "share")
@@ -93,9 +106,9 @@ for given in [target] + temps:
     for path in forms(given):
         for forbidden in homes:
             if (any(rest(path, base) is not None for base in forms(forbidden))
-                    or same_below(path, forbidden) is not None):
+                    or below_home(path, forbidden) is not None):
                 refuse("%s is under %s, which no setup may touch" % (given, forbidden))
-        for below in [rest(path, base) for base in forms(share)] + [same_below(path, share)]:
+        for below in [rest(path, base) for base in forms(share)] + [below_home(path, share)]:
             if below and below.split(os.sep)[0].startswith("skills-v2-"):
                 refuse("%s is under %s, which no setup may touch"
                        % (given, os.path.join(share, below.split(os.sep)[0])))

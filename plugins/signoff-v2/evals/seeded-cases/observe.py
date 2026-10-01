@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """observe.py: drive signoff-v2 over a seeded case and write down what it did.
 
-    PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --case S1-02-untracked-defect --out DIR
-    PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --all --out DIR
-    PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --list
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --case S1-02-untracked-defect --out DIR
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --all --out DIR
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --list
 
 This writes FACTS, never expectations. The answer key lives outside this repository and nobody
 here has seen it, so nothing in this file says what a case "should" produce: each run is driven
@@ -32,8 +32,10 @@ built into a temporary directory with the family's own generator and cleaned up 
 `--out`, or a TMPDIR, that is or sits under ~/.claude, ~/.codex or a ~/.local/share/skills-v2-*
 home, as given or resolved, is refused, exit 2 and nothing created (the setups' home guard, E14
 punch list).
-The interpreter that runs this file starts before its guard: where TMPDIR, TEMP or TMP may point into a
-protected folder, start it through uv or a real interpreter, not the /usr/bin/python3 shim.
+The interpreter that runs this file starts before its guard, and the /usr/bin/python3 shim writes into the
+temp folder as it starts (inside a Codex sandbox, `xcrun_db`): start this file through
+`../../setups/safe-python.sh`, which starts the interpreter with TMPDIR, TEMP and TMP cleared and hands their
+values to this guard, or through uv (its own interpreter, not the shim).
 """
 import argparse
 import json
@@ -51,7 +53,7 @@ FAMILIES = ("S1-review-scope", "S2-evidence", "S3-independence")
 PHASES = ("check-input", "scope", "request", "record-answer", "record")
 
 EXAMPLES = """examples:
-  PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --all --out /tmp/observed
+  PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --all --out /tmp/observed
   -> one <case id>/observed.json per case, plus a summary on stdout
 
 exit status: 0 every case ran to a terminal status; 2 usage; 1 a case could not be built or
@@ -331,6 +333,19 @@ def _same_below(path, base):
         probe = parent
 
 
+def _below_home(path, base, home):
+    """`_same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = _same_below(path, base)
+    if got is not None:
+        return got
+    below = _same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="observe.py",
@@ -356,7 +371,7 @@ def main(argv=None):
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
             for form in (os.path.abspath(base), os.path.realpath(base), None):
                 p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
-                below = (_same_below(path, base) if form is None
+                below = (_below_home(path, base, home) if form is None
                          else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue

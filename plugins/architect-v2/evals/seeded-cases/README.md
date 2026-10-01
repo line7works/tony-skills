@@ -37,10 +37,14 @@ names the facts the lane will produce; the frame observes only its frame facts, 
 ## Building the cases
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 <family>/build.py --out <dir>
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 <family>/build.py --list
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 <family>/build.py --out <dir> --case <id> --json
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh <family>/build.py --out <dir>
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh <family>/build.py --list
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh <family>/build.py --out <dir> --case <id> --json
 ```
+
+`../../setups/safe-python.sh` starts `/usr/bin/python3` with TMPDIR, TEMP and TMP cleared and hands their
+values to `build.py`, whose guard (`_lib/caselib.py`) holds them: the shim writes into the temp folder as
+it starts, before any line of `build.py` runs (`RUNNING.md`).
 
 Standard library only, `/usr/bin/python3` 3.9.6 and git 2.50.1, no network. Git runs only inside
 the throwaway repositories the library creates under `--out`, with a fixed author, committer and

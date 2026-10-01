@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """The end-to-end replay across the front of the loop (E14 slice 3c, item 3.8; contract section 13).
 
-    python3 replay.py [--keep DIR]
+    sh ../../setups/safe-python.sh replay.py [--keep DIR]
 
 `--keep DIR` is refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
 ~/.local/share/skills-v2-* home, as given or resolved (the setups' home guard, E14 slice 3c).
-The interpreter that runs this file starts before its guard: where TMPDIR, TEMP or TMP may point into a
-protected folder, start it through uv or a real interpreter, not the /usr/bin/python3 shim.
+The interpreter that runs this file starts before its guard, and the /usr/bin/python3 shim writes into the
+temp folder as it starts (inside a Codex sandbox, `xcrun_db`): start this file through
+`../../setups/safe-python.sh`, which starts the interpreter with TMPDIR, TEMP and TMP cleared and hands their
+values to this guard, or through uv (its own interpreter, not the shim).
 
 One fixture project (`fixtures/turnstile/`, the seeded cases' turnstile idea: a bench-rig turn
 counter) is copied into a fresh temporary tree, made a git work tree, and walked through the five
@@ -443,6 +445,19 @@ def _same_below(path, base):
         probe = parent
 
 
+def _below_home(path, base, home):
+    """`_same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = _same_below(path, base)
+    if got is not None:
+        return got
+    below = _same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="replay.py", description=__doc__.split("\n\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -460,7 +475,7 @@ def main(argv=None):
             for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
                 for form in (os.path.abspath(base), os.path.realpath(base), None):
                     p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
-                    below = (_same_below(path, base) if form is None
+                    below = (_below_home(path, base, home) if form is None
                              else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                     if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                         continue

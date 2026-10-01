@@ -5,10 +5,14 @@ Adapted from the recheck-v2 pilot's `setups/claude-code/negative-tests.sh` and
 `setups/codex/negative-tests.sh` + `prepare-negative.py`. One file for both harnesses; each
 harness's `negative-tests.sh` calls it. Byte-identical in the four front cores (E14; from build-v2's).
 
-    negative-cases.py --harness claude-code|codex --out DIR [--live]
+    sh safe-python.sh negative-cases.py --harness claude-code|codex --out DIR [--live]
 
 DIR is refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
 ~/.local/share/skills-v2-* home, as given or resolved (the installers' home guard, E14 slice 3c).
+So is a TMPDIR, TEMP or TMP that is or sits under one (E14 punch list). Start this file through
+`safe-python.sh` beside it, as both `negative-tests.sh` do: it starts the interpreter with those three
+cleared and hands their values to this guard, since the /usr/bin/python3 shim writes into the temp folder
+as it starts, before any line of this file runs.
 
 The pilot's nine cases, each in its own throwaway copy under DIR: its own mutated copy of THIS
 core's plugin folder, its own marketplace (a symlink to that copy, the way install.sh builds
@@ -331,6 +335,19 @@ def _same_below(path, base):
         probe = parent
 
 
+def _below_home(path, base, home):
+    """`_same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = _same_below(path, base)
+    if got is not None:
+        return got
+    below = _same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 def main():
     parser = argparse.ArgumentParser(description="The negative installation tests of %s." % CORE)
     parser.add_argument("--harness", required=True, choices=["claude-code", "codex"])
@@ -341,11 +358,14 @@ def main():
     out = os.path.abspath(args.out)
     home = os.environ.get("HOME", "")
     share = os.path.join(home, ".local", "share")
-    for path in (out, os.path.realpath(out)):
+    candidates = [out] + [os.environ[k] for k in ("TMPDIR", "TEMP", "TMP")
+                          if os.environ.get(k)]
+    for path in (form for candidate in candidates
+                 for form in (os.path.abspath(candidate), os.path.realpath(candidate))):
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
             for form in (os.path.abspath(base), os.path.realpath(base), None):
                 p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
-                below = (_same_below(path, base) if form is None
+                below = (_below_home(path, base, home) if form is None
                          else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue

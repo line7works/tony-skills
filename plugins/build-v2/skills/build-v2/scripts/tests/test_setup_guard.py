@@ -7,11 +7,16 @@ installed or condition home, each --writable root); negative-cases.py behind bot
 cases' observe.py and a family's build.py (caselib); and, where the core has it, three-stations.sh. The launchers
 are byte-equal to the four front cores' (precon-v2's copy is compared, in the checkout shape), and the guard
 blocks of the installers, negative-cases.py and three-stations.sh are the front cores' byte for byte.
+Since the E14 punch list's fix 5: negative-cases.py and caselib hold TMPDIR, TEMP and TMP too, spelled any way; a
+protected home that does not exist yet is held through HOME's own folder; and setups/safe-python.sh starts a
+guarded Python file with the three cleared, so an interpreter's start-up write never lands under a protected home.
 A fake HOME and inert `claude`, `codex` and `uv` stand-ins first on PATH; never the real homes or commands.
 Byte-identical in build-v2 and signoff-v2."""
 import hashlib
+import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import unittest
@@ -27,6 +32,8 @@ SEEDED = os.path.join(testlib.PLUGIN, "evals", "seeded-cases")
 THREE = os.path.join(SETUPS, "three-stations.sh")
 SEVEN = ("inspect-v2", "setups", "seven-stations.sh")
 HARNESSES = ("claude-code", "codex")
+WRAPPER = os.path.join(SETUPS, "safe-python.sh")
+MANUAL = os.path.join(SETUPS, "manual-only.sh")
 # an audit-hook spy (the E14 punch-list check's CPL-1): runs a Python script and reports, after it ends, every
 # open or os./shutil. call whose path is under the folder it watches, one "SPY" line each on stderr
 SPY = r"""
@@ -311,12 +318,18 @@ class TheHomeGuard(unittest.TestCase):
         return rows
 
     def python_writers(self):
-        """(label, argv) for the Python scripts of this core that read the temp folder: observe.py."""
+        """(label, argv) for the Python scripts of this core that read the temp folder: observe.py, a family's
+        build.py and negative-cases.py."""
         rows = []
         if os.path.isfile(os.path.join(SEEDED, "observe.py")):
             family, case = self.seeded()
             rows.append(("observe.py", [os.path.join(SEEDED, "observe.py"), "--case", case, "--out",
                                         os.path.join(self.home, "ordinary", "obs")]))
+            rows.append(("build.py", [os.path.join(SEEDED, family, "build.py"), "--case", case, "--out",
+                                      os.path.join(self.home, "ordinary", "built")]))
+            rows.append(("negative-cases.py", [os.path.join(SETUPS, "negative-cases.py"), "--harness", "claude-code",
+                                               "--out", os.path.join(self.home, "ordinary", "neg"), "--case",
+                                               "missing-resource"]))
         return rows
 
     def under_temp(self, name, tmp, extra=None):
@@ -414,6 +427,166 @@ class TheHomeGuard(unittest.TestCase):
         for name in ("TMPDIR", "TEMP", "TMP"):
             for label, argv, extra in self.guarded_shell_scripts() + python:
                 self.refused_under(self.under_temp(name, tmp, extra), argv, (label, name))
+
+    @unittest.skipUnless(os.path.isfile(os.path.join(SEEDED, "observe.py")), "no seeded cases beside this copy")
+    def test_negative_cases_and_the_seeded_builder_refuse_a_protected_temp_folder(self):
+        # the outside confirm's CPL3-1 (E14 punch list fix 5): negative-cases.py (directly, through the wrapper and
+        # behind both negative-tests.sh) and a family's build.py (caselib; directly and through the wrapper) refuse a
+        # TMPDIR, TEMP or TMP, each alone, under a protected home, spelled directly and through every other name of
+        # the home's folder this system gives (the firmlink, /.nofollow): exit 2, the refusal, nothing created
+        h = self.home
+        os.makedirs(os.path.join(h, ".claude", "tmp"))
+        family, case = self.seeded()
+        o = os.path.join(h, "ordinary")
+        neg = [os.path.join(SETUPS, "negative-cases.py"), "--harness", "claude-code", "--out", os.path.join(o, "neg"),
+               "--case", "missing-resource"]
+        build = [os.path.join(SEEDED, family, "build.py"), "--case", case, "--out", os.path.join(o, "built")]
+        rows = [("negative-cases.py", [sys.executable] + neg), ("build.py", [sys.executable] + build),
+                ("safe-python.sh negative-cases.py", ["sh", WRAPPER] + neg),
+                ("safe-python.sh build.py", ["sh", WRAPPER] + build)]
+        for harness in HARNESSES:
+            rows.append((("negative-tests.sh", harness),
+                         ["sh", os.path.join(SETUPS, harness, "negative-tests.sh"), os.path.join(o, "neg-" + harness),
+                          "--case", "missing-resource"]))
+        real = os.path.realpath(h)
+        homes = [h]
+        for prefix in ("/System/Volumes/Data", "/.nofollow"):
+            try:
+                if os.path.samestat(os.stat(prefix + real), os.stat(real)):
+                    homes.append(prefix + real)
+            except OSError:
+                pass
+        for home in homes:
+            tmp = home + "/.claude/tmp"
+            for name in ("TMPDIR", "TEMP", "TMP"):
+                for label, argv in rows:
+                    err = self.refused_under(self.under_temp(name, tmp), argv, (label, name, tmp))
+                    self.assertIn("which no setup may touch; nothing created", err, (label, name, tmp))
+
+    @unittest.skipUnless(os.path.isfile(os.path.join(SEEDED, "observe.py")), "no seeded cases beside this copy")
+    def test_the_wrapper_starts_the_interpreter_with_the_temp_variables_cleared(self):
+        # the outside confirm's F1 (E14 punch list fix 5): inside a Codex sandbox the /usr/bin/python3 shim writes into
+        # the temp folder (`xcrun_db`) before any line of a script runs, so no guard inside a script can stop it;
+        # setups/safe-python.sh starts the interpreter with TMPDIR, TEMP and TMP cleared and hands their values to the
+        # script. A python3 stand-in that writes into each temp folder it starts with (SAFE_PYTHON, and first on PATH
+        # for the shell scripts) shows the start-up write never lands under a protected home, each variable alone:
+        # through the wrapper, both negative-tests.sh and, where the core has it, manual-only.sh; the guard then
+        # refuses, exit 2 (manual-only.sh: exit 1 with install.sh's refusal in its report), nothing created. Controls:
+        # an ordinary temp folder, the arguments and the exit status reach the script unchanged, through the stand-in
+        # and through the default /usr/bin/python3.
+        h = self.home
+        tmp = os.path.join(h, ".claude", "tmp")
+        os.makedirs(tmp)
+        startup = os.path.join(self.tmp, "startup-bin")
+        os.makedirs(startup)
+        stand_in = os.path.join(startup, "python3")
+        with open(stand_in, "w", encoding="utf-8") as fh:
+            fh.write(STARTUP % shlex.quote(sys.executable))
+        os.chmod(stand_in, 0o755)
+        extra = {"SAFE_PYTHON": stand_in, "PATH": startup + os.pathsep + self.env["PATH"]}
+        family, case = self.seeded()
+        o = os.path.join(h, "ordinary")
+        rows = [("observe.py", ["sh", WRAPPER, os.path.join(SEEDED, "observe.py"), "--case", case, "--out",
+                                os.path.join(o, "obs")]),
+                ("build.py", ["sh", WRAPPER, os.path.join(SEEDED, family, "build.py"), "--case", case, "--out",
+                              os.path.join(o, "built")]),
+                ("negative-cases.py", ["sh", WRAPPER, os.path.join(SETUPS, "negative-cases.py"), "--harness",
+                                       "claude-code", "--out", os.path.join(o, "neg"), "--case", "missing-resource"])]
+        replay = os.path.join(testlib.PLUGIN, "evals", "replay", "replay.py")
+        if os.path.isfile(replay):
+            rows.append(("replay.py", ["sh", WRAPPER, replay]))
+        for harness in HARNESSES:
+            rows.append((("negative-tests.sh", harness),
+                         ["sh", os.path.join(SETUPS, harness, "negative-tests.sh"), os.path.join(o, "neg-" + harness),
+                          "--case", "missing-resource"]))
+        for name in ("TMPDIR", "TEMP", "TMP"):
+            for label, argv in rows:
+                err = self.refused_under(self.under_temp(name, tmp, extra), argv, (label, name))
+                self.assertIn("which no setup may touch; nothing created", err, (label, name))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "startup-write")), (label, name))
+            if os.path.isfile(MANUAL):
+                before = listing(self.tmp)
+                got = subprocess.run(["sh", MANUAL, "claude-code", "--home", os.path.join(o, "mo")],
+                                     env=self.under_temp(name, tmp, extra), cwd=self.tmp, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, timeout=600)
+                report = got.stdout.decode("utf-8", "replace")
+                self.assertEqual(got.returncode, 1, ("manual-only.sh", name, report[-800:]))
+                self.assertIn("which no setup may touch; nothing created", report, ("manual-only.sh", name))
+                self.assertEqual(listing(self.tmp), before, ("manual-only.sh", name))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "startup-write")), ("manual-only.sh", name))
+        ordinary = os.path.join(o, "tmp")
+        os.makedirs(ordinary)
+        script = os.path.join(self.tmp, "echo_args.py")
+        with open(script, "w", encoding="utf-8") as fh:
+            fh.write("import json, os, sys\nprint(json.dumps({'argv': sys.argv, 'temps': [os.environ.get(k) for k in "
+                     "('TMPDIR', 'TEMP', 'TMP')]}))\nsys.exit(3)\n")
+        controls = [("stand-in", extra)]
+        if os.path.exists("/usr/bin/python3"):
+            controls.append(("/usr/bin/python3", {}))
+        for label, more in controls:
+            env = self.under_temp("TMPDIR", ordinary, more)
+            env.update(TEMP=ordinary, TMP=ordinary)
+            got = subprocess.run(["sh", WRAPPER, script, "a b", "--c"], env=env, cwd=self.tmp, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, timeout=120)
+            self.assertEqual(got.returncode, 3, (label, got.stderr.decode("utf-8", "replace")[-800:]))
+            facts = json.loads(got.stdout.decode("utf-8"))
+            self.assertEqual(facts, {"argv": [script, "a b", "--c"], "temps": [ordinary] * 3}, label)
+            self.assertFalse(os.path.exists(os.path.join(ordinary, "startup-write")), label)
+
+    @unittest.skipUnless(os.path.isdir("/System/Volumes/Data"), "no /System/Volumes/Data on this system")
+    @unittest.skipUnless(os.path.isfile(os.path.join(SEEDED, "observe.py")), "no seeded cases beside this copy")
+    def test_a_protected_home_that_does_not_exist_yet_is_refused_under_another_name(self):
+        # the CPL3-1 re-check's CPL4-1 (E14 punch list fix 5): the CPL3-1 method's rows with ~/.claude, ~/.codex and
+        # ~/.local removed from the fake home first (a bare home), then again with only ~/.local/share: a protected
+        # home that does not exist yet is held through HOME's own folder, so every row is refused, exit 2 and nothing
+        # created. The Codex installer is left out: it stops, exit 3, on the missing ~/.codex/config.toml before its
+        # guard. Controls: a name beside a protected home (.claude2, .localx, .local/share/other) passes the guard.
+        h = self.home
+        names = self.other_names()
+        family, case = self.seeded()
+        python = [(label, [sys.executable] + argv, {}) for label, argv in self.python_writers()]
+        shell = [row for row in self.guarded_shell_scripts() if row[0] != ("install.sh", "codex")]
+        out = os.path.join(h, "ordinary", "run")
+        for rel in (".claude", ".codex", ".local"):
+            shutil.rmtree(os.path.join(h, rel))
+        for shape in ("bare", "share-only"):
+            if shape == "share-only":
+                os.makedirs(os.path.join(h, ".local", "share"))
+            for other in names:
+                for row in self.protected:
+                    target = other + row[len(h):]
+                    rows = [(("install.sh", "claude-code"),
+                             ["sh", os.path.join(SETUPS, "claude-code", "install.sh"), "--home", target], {})]
+                    for harness in HARNESSES:
+                        argv, extra = self.launch(harness, target)
+                        rows.append((("launch.sh", harness), argv, extra))
+                        rows.append((("negative-tests.sh", harness),
+                                     ["sh", os.path.join(SETUPS, harness, "negative-tests.sh"), target, "--case",
+                                      "missing-resource"], {}))
+                    rows.append(("negative-cases.py", [sys.executable, os.path.join(SETUPS, "negative-cases.py"),
+                                                       "--harness", "claude-code", "--out", target, "--case",
+                                                       "missing-resource"], {}))
+                    rows.append(("observe.py", [sys.executable, os.path.join(SEEDED, "observe.py"), "--case", case,
+                                                "--out", target], {}))
+                    rows.append(("build.py", [sys.executable, os.path.join(SEEDED, family, "build.py"), "--case",
+                                              case, "--out", target], {}))
+                    for label, argv, extra in rows:
+                        self.assert_refused(argv, extra, (shape, label, target))
+                for argv, extra in (self.launch("claude-code", out, home=other + "/.claude"),
+                                    self.launch("codex", out, home=other + "/.codex"),
+                                    self.launch("codex", out, writable=other + "/.codex"),
+                                    self.launch("codex", out, writable=other + "/.local/share/skills-v2-locked")):
+                    self.assert_refused(argv, extra, (shape, argv[1:], extra))
+                tmp = other + "/.claude/tmp"
+                for name in ("TMPDIR", "TEMP", "TMP"):
+                    for label, argv, extra in shell + python:
+                        err = self.refused_under(self.under_temp(name, tmp, extra), argv, (shape, label, name, tmp))
+                        self.assertIn("which no setup may touch; nothing created", err, (shape, label, name, tmp))
+        for rel in (".claude2/x", ".localx/x", ".local/share/other/x"):
+            target = names[0] + "/" + rel
+            argv = ["sh", os.path.join(SETUPS, "claude-code", "install.sh"), "--home", target]
+            self.assertEqual(self.run_it(argv), 0, target)
+            self.assertTrue(os.path.isdir(os.path.join(h, rel, "marketplace")), target)
 
     def other_names(self):
         """This test's home under the other names macOS gives its folder, which neither abspath nor realpath
@@ -516,6 +689,10 @@ class TheSixCoresHoldOneGuard(unittest.TestCase):
         self.assertIsNotNone(mine)
         theirs = between(read_text(seven), GUARD_START, GUARD_END)
         self.assertEqual(mine, theirs.replace('"seven-stations.sh" ', '"three-stations.sh" '))
+
+    def test_the_safe_python_wrapper_is_the_front_cores_copy(self):
+        rel = os.path.join("setups", "safe-python.sh")
+        self.assertEqual(digest(os.path.join(testlib.PLUGIN, rel)), digest(os.path.join(self.canonical, rel)), rel)
 
 
 if __name__ == "__main__":

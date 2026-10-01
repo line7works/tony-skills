@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Drive this core on each of its seeded cases and write down what it did (E14 slice 1).
 
-    PYTHONDONTWRITEBYTECODE=1 python3 observe.py --all --out <dir>
-    PYTHONDONTWRITEBYTECODE=1 python3 observe.py --case P2-03-two-homes --out <dir>
-    PYTHONDONTWRITEBYTECODE=1 python3 observe.py --list
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --all --out <dir>
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --case P2-03-two-homes --out <dir>
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --list
 
 Identical in the four front cores (`references/shared-files.txt`); the core is this file's own
 plugin, and the families are the folders beside it. This script emits FACTS and never an
@@ -37,8 +37,10 @@ workspace and the staging home before the first step and after the last.
 ~/.local/share/skills-v2-* home, as given or resolved (the setups' home guard, E14 slice 3c).
 The guard runs for `--list` too, with the current folder as its `--out`: `--list` from such a
 folder, or with TMPDIR, TEMP or TMP under such a home, exits 2 and prints nothing.
-The interpreter that runs this file starts before its guard: where TMPDIR, TEMP or TMP may point into a
-protected folder, start it through uv or a real interpreter, not the /usr/bin/python3 shim.
+The interpreter that runs this file starts before its guard, and the /usr/bin/python3 shim writes into the
+temp folder as it starts (inside a Codex sandbox, `xcrun_db`): start this file through
+`../../setups/safe-python.sh`, which starts the interpreter with TMPDIR, TEMP and TMP cleared and hands their
+values to this guard, or through uv (its own interpreter, not the shim).
 
 Needs jsonschema for the `select` step (run it under `uv run --with jsonschema==4.25.1`, or an
 interpreter that has it). Standard library otherwise, Python 3.9, no network, no model call.
@@ -397,6 +399,19 @@ def _same_below(path, base):
         probe = parent
 
 
+def _below_home(path, base, home):
+    """`_same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = _same_below(path, base)
+    if got is not None:
+        return got
+    below = _same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Observe %s on its seeded cases." % CORE)
     parser.add_argument("--all", action="store_true", help="every case of every family of this core")
@@ -413,7 +428,7 @@ def main(argv=None):
         for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
             for form in (os.path.abspath(base), os.path.realpath(base), None):
                 p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
-                below = (_same_below(path, base) if form is None
+                below = (_below_home(path, base, home) if form is None
                          else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
                 if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
                     continue
