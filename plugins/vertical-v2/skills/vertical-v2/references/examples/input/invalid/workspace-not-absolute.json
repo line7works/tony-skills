@@ -1,0 +1,15 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "4cd53208-8cb8-4de2-bb71-be7594182bb1"
+  },
+  "run_dir": "/tmp/vertical-v2/run-0001",
+  "run_id": "run-0001",
+  "station": {
+    "session_model": "claude-opus-5-5"
+  },
+  "workspace": "turnstile"
+}

@@ -1,0 +1,79 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "4cd53208-8cb8-4de2-bb71-be7594182bb1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "no build doc was found in the repo's tiers: ask the owner which build doc this review is for",
+  "report_only": false,
+  "run_dir": "/tmp/vertical-v2/run-0001",
+  "run_id": "run-0001",
+  "selection": {
+    "build": {
+      "named": "docs/plans/2026-09-20-turnstile.md",
+      "outcome": "one"
+    }
+  },
+  "station": "vertical-v2",
+  "station_result": {
+    "ask": null,
+    "calls": [],
+    "chat": null,
+    "depth": null,
+    "findings": null,
+    "gate": {
+      "base": {
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "field": "git merge-base refs/heads/main HEAD",
+        "how": "merge-base"
+      },
+      "boundary": [
+        {
+          "path": "src/turnstile.py",
+          "status": "M"
+        }
+      ],
+      "collapse": null,
+      "committed_only": null,
+      "dirt": {
+        "inside": [],
+        "outside": [
+          ".env"
+        ]
+      },
+      "disagree": [],
+      "doc": "docs/plans/2026-09-20-turnstile.md",
+      "feature": "turnstile",
+      "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "malformed": [],
+      "notes": [],
+      "short": [],
+      "slices": [
+        {
+          "card": "signed off",
+          "card_derived": "signed off",
+          "card_source": "records",
+          "name": "A",
+          "status_line": "signed off"
+        }
+      ]
+    },
+    "lenses": [],
+    "method": [],
+    "refuted": null,
+    "review_sheet": null,
+    "verdict": null,
+    "verdict_doc": null
+  },
+  "status": "stopped",
+  "stop_tag": "selection-none",
+  "trace": {
+    "lines": 0,
+    "path": "/tmp/vertical-v2/run-0001/trace.jsonl"
+  },
+  "writes": [],
+  "wrote_nothing": true
+}

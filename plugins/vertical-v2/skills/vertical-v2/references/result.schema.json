@@ -1,0 +1,649 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/vertical-v2/result.schema.json",
+  "title": "vertical-v2 result",
+  "description": "One vertical-v2 run's result, written by `report` (or by the stop that ends a run), closed at every level (references/vertical-contract.md section 9; references/back-loop.md section 4). Every run ends in a terminal status, every stop included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "interface_version",
+    "plugin_version",
+    "station",
+    "run_id",
+    "run_dir",
+    "status",
+    "stop_tag",
+    "reason",
+    "report_only",
+    "wrote_nothing",
+    "writes",
+    "selection",
+    "invocation",
+    "trace",
+    "station_result"
+  ],
+  "properties": {
+    "interface_version": {
+      "const": 1
+    },
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "station": {
+      "const": "vertical-v2"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "stopped"
+      ]
+    },
+    "stop_tag": {
+      "enum": [
+        "selection-none",
+        "selection-several",
+        "records-refused",
+        "station-refused",
+        "gate-malformed",
+        "gate-short",
+        "card-disagrees",
+        "not-git",
+        "base-unresolved",
+        "dirty-boundary",
+        "floor-refused",
+        "local-incomplete",
+        "verdict-doc-ambiguous",
+        "write-refused",
+        null
+      ],
+      "description": "the stop's tag; null on a completion. The tags this core emits: `selection-none`, `selection-several`, `records-refused`, `station-refused`, `gate-malformed`, `gate-short`, `card-disagrees`, `not-git`, `base-unresolved`, `dirty-boundary`, `floor-refused`, `local-incomplete`, `verdict-doc-ambiguous`, `write-refused`."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_only": {
+      "type": "boolean"
+    },
+    "wrote_nothing": {
+      "type": "boolean"
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "run_artifact",
+              "document",
+              "records_log"
+            ]
+          },
+          "sha256_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sha256_after": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "sha256_before",
+          "sha256_after"
+        ]
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "type": "object"
+        }
+      },
+      "description": "the hunt the run used, as `gate` recorded it (or the doc it was named)"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "description": "as the input carried it"
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "lines"
+      ]
+    },
+    "station_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gate": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "doc": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "feature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "slices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "status_line": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "card": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "card_source": {
+                        "enum": [
+                          "records",
+                          "status-line"
+                        ]
+                      },
+                      "card_derived": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "status_line",
+                      "card",
+                      "card_source",
+                      "card_derived"
+                    ]
+                  }
+                },
+                "short": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "state"
+                    ]
+                  }
+                },
+                "disagree": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "card": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "status_line": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "card",
+                      "status_line"
+                    ]
+                  }
+                },
+                "notes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "collapse": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "words": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "short": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "state"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "words",
+                        "short"
+                      ]
+                    }
+                  ]
+                },
+                "committed_only": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "words": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "words"
+                      ]
+                    }
+                  ]
+                },
+                "malformed": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "base": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "commit": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{40}$"
+                        },
+                        "how": {
+                          "enum": [
+                            "doc",
+                            "merge-base",
+                            "owner"
+                          ]
+                        },
+                        "field": {
+                          "type": "string"
+                        },
+                        "words": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "commit",
+                        "how"
+                      ]
+                    }
+                  ]
+                },
+                "head": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "boundary": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "status": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "path"
+                    ]
+                  }
+                },
+                "dirt": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "inside": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "outside": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "inside",
+                        "outside"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "doc",
+                "feature",
+                "slices",
+                "short",
+                "disagree",
+                "notes",
+                "collapse",
+                "committed_only",
+                "malformed",
+                "base",
+                "head",
+                "boundary",
+                "dirt"
+              ],
+              "description": "what the gate read and found (contract section 3.1)"
+            }
+          ]
+        },
+        "ask": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "words": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rows",
+                "words"
+              ]
+            }
+          ]
+        },
+        "depth": {
+          "enum": [
+            "LEAN",
+            "DEEP",
+            null
+          ]
+        },
+        "lenses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "call_id": {
+                "type": "string"
+              },
+              "row": {
+                "type": "string"
+              },
+              "lens": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "side": {
+                "enum": [
+                  "local",
+                  "outside"
+                ]
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profile": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "call_id",
+              "row",
+              "lens",
+              "side",
+              "status",
+              "model",
+              "profile",
+              "reason"
+            ]
+          }
+        },
+        "verdict": {
+          "enum": [
+            "SIGNED OFF",
+            "SIGNED OFF WITH CONDITIONS",
+            "REJECTED",
+            null
+          ]
+        },
+        "findings": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "refuted": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "verdict_doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_sheet": {
+          "enum": [
+            "read",
+            "present but not the kit sheet",
+            "absent",
+            null
+          ]
+        },
+        "method": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "chat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "gate",
+        "ask",
+        "depth",
+        "lenses",
+        "calls",
+        "verdict",
+        "findings",
+        "refuted",
+        "verdict_doc",
+        "review_sheet",
+        "method",
+        "chat"
+      ],
+      "description": "vertical-v2's own facts of the run (contract section 9)"
+    }
+  }
+}

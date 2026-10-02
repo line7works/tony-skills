@@ -1,0 +1,10 @@
+{
+  "answer_version": 1,
+  "kind": "verdict",
+  "rows": [
+    "gpt-astra",
+    "gemini"
+  ],
+  "run_id": "run-0001",
+  "words": "local + GPT + Gemini"
+}

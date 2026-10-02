@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/vertical-v2/answer.schema.json",
+  "title": "vertical-v2 recorded answer",
+  "description": "What the executor hands the script, one of three kinds, each closed at every level (references/vertical-contract.md sections 3.2, 3.5 and 3.6): the owner's answer to the ask, the local fleet's merged and verified findings, and the outside fleet's verified findings. The script checks each against the run (exit 5 on a refusal) and never repairs one.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer_version",
+        "kind",
+        "run_id",
+        "rows",
+        "words"
+      ],
+      "description": "the owner's answer to the ask, recorded by `ask --answer`",
+      "properties": {
+        "answer_version": {
+          "const": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "this run's id"
+        },
+        "kind": {
+          "const": "ask"
+        },
+        "rows": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "the outside rows the owner's answer names; empty for a local-only review"
+        },
+        "words": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+          "description": "the owner's answer, verbatim"
+        },
+        "models": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+          },
+          "description": "a model id the owner typed against a row he named"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer_version",
+        "kind",
+        "run_id",
+        "method",
+        "findings",
+        "tried"
+      ],
+      "description": "the local fleet's merged and verified answer, recorded by `record-local`",
+      "properties": {
+        "answer_version": {
+          "const": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "this run's id"
+        },
+        "kind": {
+          "const": "local"
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+          "description": "how the local review verified (the declare-the-method rule)"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "location",
+              "claim",
+              "scenario",
+              "severity",
+              "confidence",
+              "found_by",
+              "stamp"
+            ],
+            "description": "one merged finding: the reviewer's claim at its file:line, the executor's verification stamp, and any re-grade with its reason",
+            "properties": {
+              "location": {
+                "type": "string",
+                "pattern": "^[^\\s:][^:]*:[0-9]+(-[0-9]+)?$",
+                "description": "file:line or file:line-line, workspace-relative, as it reads in the reviewed copy (a packet-only staged name with __ for / is read back)"
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "one sentence: what is wrong"
+              },
+              "scenario": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "the concrete failure scenario"
+              },
+              "severity": {
+                "enum": [
+                  "BLOCKER",
+                  "MAJOR",
+                  "MINOR"
+                ],
+                "description": "the severity this merge grades"
+              },
+              "confidence": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "found_by": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._-]+$"
+                },
+                "description": "the readers call ids whose report holds this finding"
+              },
+              "stamp": {
+                "enum": [
+                  "CONFIRMED",
+                  "PLAUSIBLE",
+                  "REFUTED"
+                ],
+                "description": "the executor's verification against the source"
+              },
+              "refuted_because": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "why the finding was refuted; required on REFUTED"
+              },
+              "reported_severity": {
+                "enum": [
+                  "BLOCKER",
+                  "MAJOR",
+                  "MINOR"
+                ],
+                "description": "the severity the reviewer stated, when the merge changed it"
+              },
+              "reported_confidence": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "description": "the confidence the reviewer stated, when the merge changed it"
+              },
+              "regrade_reason": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "one clause of why the merge changed the reviewer's severity or confidence"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "a merge note: the real site located for a hallucinated location, a convergence"
+              }
+            }
+          }
+        },
+        "tried": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lens",
+              "what",
+              "how"
+            ],
+            "description": "what a lens tried to break and could not (the anti-rubber-stamp rule)",
+            "properties": {
+              "lens": {
+                "type": "string",
+                "minLength": 1
+              },
+              "what": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+              },
+              "how": {
+                "enum": [
+                  "executed",
+                  "read",
+                  "reasoned"
+                ]
+              },
+              "output": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "description": "what an executed check printed; required on executed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer_version",
+        "kind",
+        "run_id",
+        "findings"
+      ],
+      "description": "the outside fleet's verified answer, recorded by `record-outside`",
+      "properties": {
+        "answer_version": {
+          "const": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "this run's id"
+        },
+        "kind": {
+          "const": "outside"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "location",
+              "claim",
+              "scenario",
+              "severity",
+              "confidence",
+              "found_by",
+              "stamp"
+            ],
+            "description": "one merged finding: the reviewer's claim at its file:line, the executor's verification stamp, and any re-grade with its reason",
+            "properties": {
+              "location": {
+                "type": "string",
+                "pattern": "^[^\\s:][^:]*:[0-9]+(-[0-9]+)?$",
+                "description": "file:line or file:line-line, workspace-relative, as it reads in the reviewed copy (a packet-only staged name with __ for / is read back)"
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "one sentence: what is wrong"
+              },
+              "scenario": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "the concrete failure scenario"
+              },
+              "severity": {
+                "enum": [
+                  "BLOCKER",
+                  "MAJOR",
+                  "MINOR"
+                ],
+                "description": "the severity this merge grades"
+              },
+              "confidence": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "found_by": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._-]+$"
+                },
+                "description": "the readers call ids whose report holds this finding"
+              },
+              "stamp": {
+                "enum": [
+                  "CONFIRMED",
+                  "PLAUSIBLE",
+                  "REFUTED"
+                ],
+                "description": "the executor's verification against the source"
+              },
+              "refuted_because": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "why the finding was refuted; required on REFUTED"
+              },
+              "reported_severity": {
+                "enum": [
+                  "BLOCKER",
+                  "MAJOR",
+                  "MINOR"
+                ],
+                "description": "the severity the reviewer stated, when the merge changed it"
+              },
+              "reported_confidence": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "description": "the confidence the reviewer stated, when the merge changed it"
+              },
+              "regrade_reason": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "one clause of why the merge changed the reviewer's severity or confidence"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+                "description": "a merge note: the real site located for a hallucinated location, a convergence"
+              }
+            }
+          }
+        },
+        "ledger_notes": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+          "description": "the executor's prose on the repeats and misses against the per-slice record"
+        }
+      }
+    }
+  ]
+}

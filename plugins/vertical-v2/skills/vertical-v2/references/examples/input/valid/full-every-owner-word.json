@@ -1,0 +1,26 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "4cd53208-8cb8-4de2-bb71-be7594182bb1"
+  },
+  "report_only": false,
+  "run_dir": "/tmp/vertical-v2/run-0001",
+  "run_id": "run-0001",
+  "station": {
+    "date": "2026-10-01",
+    "depth": "DEEP",
+    "owner_words": {
+      "base": {
+        "commit": "0123abc",
+        "words": "from the first commit"
+      },
+      "collapse_gate": "run it anyway",
+      "committed_only": "review what is committed"
+    },
+    "session_model": "claude-opus-5-5"
+  },
+  "workspace": "/tmp/turnstile"
+}

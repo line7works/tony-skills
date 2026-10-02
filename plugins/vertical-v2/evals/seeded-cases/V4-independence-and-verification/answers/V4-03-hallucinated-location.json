@@ -1,0 +1,56 @@
+{
+  "ask": {
+    "rows": [
+      "gpt-astra"
+    ],
+    "words": "local plus GPT"
+  },
+  "case": "V4-03-hallucinated-location",
+  "outside": [
+    {
+      "findings": [
+        {
+          "claim": "the ghost module imports the encoder",
+          "confidence": "medium",
+          "found_by": [
+            "{RUN}-gpt-astra"
+          ],
+          "location": "src/ghost.py:9",
+          "scenario": "the bench stalls on start",
+          "severity": "BLOCKER",
+          "stamp": "CONFIRMED"
+        }
+      ]
+    },
+    {
+      "findings": [
+        {
+          "claim": "the ghost module imports the encoder",
+          "confidence": "medium",
+          "found_by": [
+            "{RUN}-gpt-astra"
+          ],
+          "location": "src/ghost.py:9",
+          "refuted_because": "no src/ghost.py in the reviewed copy and no real site found",
+          "scenario": "the bench stalls on start",
+          "severity": "BLOCKER",
+          "stamp": "REFUTED"
+        }
+      ]
+    }
+  ],
+  "readers": {
+    "gpt-astra": {
+      "model": "model-of-gpt-astra",
+      "raw": "- BLOCKER src/ghost.py:9 the ghost module imports the encoder\n",
+      "status": "ok"
+    },
+    "local": {
+      "raw": "Findings: none. Tried: the suite; it held.\n",
+      "status": "ok"
+    }
+  },
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

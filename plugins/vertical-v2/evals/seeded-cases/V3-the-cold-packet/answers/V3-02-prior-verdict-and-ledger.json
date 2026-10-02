@@ -1,0 +1,12 @@
+{
+  "ask": {
+    "rows": [
+      "gpt-astra"
+    ],
+    "words": "local plus GPT"
+  },
+  "case": "V3-02-prior-verdict-and-ledger",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

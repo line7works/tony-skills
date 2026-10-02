@@ -1,0 +1,12 @@
+{
+  "answer_version": 1,
+  "kind": "ask",
+  "models": {
+    "gpt-sol": "gpt-6-sol"
+  },
+  "rows": [
+    "gpt-sol"
+  ],
+  "run_id": "run-0001",
+  "words": "local and GPT on sol, the newer one"
+}

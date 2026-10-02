@@ -1,0 +1,12 @@
+{
+  "ask": {
+    "rows": [
+      "claude-opus"
+    ],
+    "words": "local plus the other Claude"
+  },
+  "case": "V5-02-claude-row-named",
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

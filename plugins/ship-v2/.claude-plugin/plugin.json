@@ -1,0 +1,11 @@
+{
+  "name": "ship-v2",
+  "description": "The coordinator that takes one slice through build-v2, signoff-v2, the fixes and recheck-v2, calling only qualified v2 stations and proving it with a trace. The portable ship core of the skills v2 rebuild; the -v2 suffix stays while v1 ship is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

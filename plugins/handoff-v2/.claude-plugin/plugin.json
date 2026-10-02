@@ -1,0 +1,11 @@
+{
+  "name": "handoff-v2",
+  "description": "The end-of-slice photograph rebuilt from the records component and git, the question gate, one additive block in the build doc and the next move. Strictly user-invoked. The portable handoff core of the skills v2 rebuild; the -v2 suffix stays while v1 handoff is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}
