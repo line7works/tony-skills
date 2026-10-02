@@ -8,10 +8,16 @@ One fixture project walked through precon-v2, architect-v2, blueprint-v2, inspec
 From this folder, in a checkout (the stations are found beside `inspect-v2` under `plugins/`):
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 python3 replay.py
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh replay.py
 PYTHONDONTWRITEBYTECODE=1 uv run --offline --python /usr/bin/python3 --with jsonschema==4.25.1 python replay.py
-PYTHONDONTWRITEBYTECODE=1 python3 replay.py --keep /tmp/front-replay   # keep the tree to look at
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh replay.py --keep /tmp/front-replay   # keep the tree to look at
 ```
+
+`../../setups/safe-python.sh` starts `/usr/bin/python3` with TMPDIR, TEMP and TMP cleared and hands their values
+to the script, whose guard then holds them: the `/usr/bin/python3` shim writes into the temp folder as it starts
+(inside a Codex sandbox, `xcrun_db`), before any line of a script runs, so it is never started on `replay.py`
+directly. The `uv run` line stays as it is: uv starts its own environment's interpreter, not the
+shim.
 
 It prints one JSON document and exits 0 only when every assertion held, 1 otherwise. The tree is
 built in a fresh temporary directory and removed at the end (`--keep DIR` keeps it in DIR, which

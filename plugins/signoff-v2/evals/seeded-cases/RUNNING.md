@@ -6,10 +6,15 @@ unchanged; nothing in them was edited. This file and `observe.py` are this lane'
 ## The two commands
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --list
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --all --out <dir>
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --case S1-02-untracked-defect --out <dir>
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --list
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --all --out <dir>
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --case S1-02-untracked-defect --out <dir>
 ```
+
+`../../setups/safe-python.sh` starts `/usr/bin/python3` with TMPDIR, TEMP and TMP cleared and hands their values
+to the script, whose guard then holds them: the `/usr/bin/python3` shim writes into the temp folder as it starts
+(inside a Codex sandbox, `xcrun_db`), before any line of a script runs, so it is never started on a guarded
+script directly.
 
 Each case is built into a temporary directory with its own family's `build.py`, driven through
 the real CLI (`check-input`, `scope`, `request`, `record-answer`, `record`) with the case's own

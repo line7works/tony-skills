@@ -54,6 +54,7 @@ skills/{core}/adapters/codex/tests/fixtures/real-rollout.jsonl
 setups/README.md
 setups/verify-package.py
 setups/negative-cases.py
+setups/safe-python.sh
 setups/claude-code/install.sh
 setups/claude-code/verify-install.sh
 setups/claude-code/negative-tests.sh

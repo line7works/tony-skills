@@ -53,9 +53,11 @@ The seven rules:
 4. **Requirements say what, slices say when, the builder decides how.** The executor's.
 5. **Descoping is recorded with reasons.** Out-of-scope lines are rendered under `Out of scope:`
    with their trace, the written evidence signoff reads. A parked scope line or a deferred
-   architecture line passes forward here as out of scope, by its id; a scope `Open:` item does not,
-   unless an answered question of this run touched it and the line names it by its id (section 7):
-   the question does not stand in for the id (A13, under A5(4)).
+   architecture line passes forward here as out of scope only by its id; the words alone are refused
+   (`parked-line-unnamed`, whether or not an answered question touched the row; E14 punch list, the
+   owner's ruling on A5(4) and E14-11). A scope `Open:` item does not go out of scope, unless an
+   answered question of this run touched it and the line names it by its id (section 7): the
+   question does not stand in for the id (A13, under A5(4)).
 6. **Tests are part of the plan.** Each criterion names its check; a slice with no runnable check
    is the executor's to flag to the owner before the doc ships.
 7. **One living doc.** One build doc per feature, extended in place, never forked. The ledger
@@ -224,6 +226,7 @@ least one constraint line.
 | `run-id-mismatch` | a `run_id` other than this run's |
 | `criterion-without-verify` | a criterion with no `verify` form, or one that is none of the three forms below (a bare `verify:`, free text, a blank or multi-line one) |
 | `open-item-descoped` | an out-of-scope line that carries a scope `Open:` item that no answered question of this run touched, by its id (the row the line names by `row`, or a ledger trace to the item) or by its words, whatever the trace (round 3, R3); and one that carries an item by its words without naming it by its id, even after an answered question of this run touched the item: descoping moves a ledger row, so the line carries the row's id and the answered question does not stand in for it (A13, under A5(4)); an item named by its id and touched by an answered question goes out of scope, whatever the line's words. The words are read through the frame's own readings on both sides, never a comparison of this core's (round 4, R1): any reading of the line (`station_core.answer.forms` of the line as written, of the line without a leading list mark or section label such as `Out of scope:`, and of the item before its reason, cut at the first dash, colon, semicolon, comma or parenthesis from those words and from the line's bare words with the frame's label of the line (`station_core.answer.label`) put back in front) equal to any reading of the open row (`row_forms`), so a trailing period, a list mark, an invisible character, a ledger tail or a decorated row hides nothing. An item label, bare or marked, is part of the words in every reading, keyed through the frame's `label()` (round 5, R3; ruling A5(1)): no reading of a labelled line is label-free, so `R4 sensor calibration: not now` and `R4: sensor calibration: not now` are not the open `R3 sensor calibration`, and `sensor calibration: not now` is. A new line that only shares a word with an open item is not the item. An open item is the owner's call, not a descoping |
+| `parked-line-unnamed` | an out-of-scope line whose words restate a `parked` row of the ledger view (a parked scope line, or a deferred architecture line, which the view tags `parked`) that the line does not name by its id (`row`, or a ledger trace to the row), whether or not an answered question of this run touched that row: a parked or deferred line passes forward only by its id and its words alone are refused (E14 punch list, the owner's ruling on A5(4) and E14-11); the refusal names the row's id. The words are read as for `open-item-descoped` (the frame's readings on both sides, the item before its reason); a line that names one parked row by its id and restates the words of another is refused naming the other. A line matching no parked or deferred row is a new line |
 | `duplicate-id` | two lines, two criteria or two slices sharing an id or a name |
 | `unknown-id` | a slice naming a requirement line, a criterion or a slice (`depends_on`) that neither the answer nor the existing doc holds |
 | `depends-forward` | a slice depending on itself or on a slice after it |

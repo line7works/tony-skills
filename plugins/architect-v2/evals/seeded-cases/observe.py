@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Drive this core on each of its seeded cases and write down what it did (E14 slice 1).
 
-    PYTHONDONTWRITEBYTECODE=1 python3 observe.py --all --out <dir>
-    PYTHONDONTWRITEBYTECODE=1 python3 observe.py --case P2-03-two-homes --out <dir>
-    PYTHONDONTWRITEBYTECODE=1 python3 observe.py --list
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --all --out <dir>
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --case P2-03-two-homes --out <dir>
+    PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --list
 
 Identical in the four front cores (`references/shared-files.txt`); the core is this file's own
 plugin, and the families are the folders beside it. This script emits FACTS and never an
@@ -35,6 +35,12 @@ workspace and the staging home before the first step and after the last.
 
 `--out` is refused, exit 2 and nothing created, when it is or sits under ~/.claude, ~/.codex or a
 ~/.local/share/skills-v2-* home, as given or resolved (the setups' home guard, E14 slice 3c).
+The guard runs for `--list` too, with the current folder as its `--out`: `--list` from such a
+folder, or with TMPDIR, TEMP or TMP under such a home, exits 2 and prints nothing.
+The interpreter that runs this file starts before its guard, and the /usr/bin/python3 shim writes into the
+temp folder as it starts (inside a Codex sandbox, `xcrun_db`): start this file through
+`../../setups/safe-python.sh`, which starts the interpreter with TMPDIR, TEMP and TMP cleared and hands their
+values to this guard, or through uv (its own interpreter, not the shim).
 
 Needs jsonschema for the `select` step (run it under `uv run --with jsonschema==4.25.1`, or an
 interpreter that has it). Standard library otherwise, Python 3.9, no network, no model call.
@@ -370,6 +376,42 @@ def observe(family, case, out):
     return facts
 
 
+def _same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
+def _below_home(path, base, home):
+    """`_same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = _same_below(path, base)
+    if got is not None:
+        return got
+    below = _same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Observe %s on its seeded cases." % CORE)
     parser.add_argument("--all", action="store_true", help="every case of every family of this core")
@@ -377,6 +419,25 @@ def main(argv=None):
     parser.add_argument("--list", action="store_true", help="print family and case ids")
     parser.add_argument("--out", help="the output directory the cases are built into")
     args = parser.parse_args(argv)
+    # The setups' home guard (E14 slice 3c fix 3-2), before anything is created.
+    out = os.path.abspath(args.out or os.curdir)
+    home = os.environ.get("HOME", "")
+    share = os.path.join(home, ".local", "share")
+    temps = [os.environ[name] for name in ("TMPDIR", "TEMP", "TMP") if os.environ.get(name)] or ["/tmp"]
+    for path in [out, os.path.realpath(out)] + [form(t) for t in temps for form in (os.path.abspath, os.path.realpath)]:
+        for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
+            for form in (os.path.abspath(base), os.path.realpath(base), None):
+                p, b = path.casefold(), (form or "").casefold().rstrip(os.sep)
+                below = (_below_home(path, base, home) if form is None
+                         else "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None))
+                if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
+                    continue
+                sys.stderr.write("observe.py: %s is under %s, which no setup may touch; nothing created\n"
+                                 % (path, base if base != share else os.path.join(share, below.split(os.sep)[0])))
+                return 2
+    if not os.path.isabs(home):
+        sys.stderr.write("observe.py: HOME is not an absolute path; nothing created\n")
+        return 2
     catalog = [(f, c) for f in families() for c in case_ids(f)]
     if args.list:
         for f, c in catalog:
@@ -388,23 +449,6 @@ def main(argv=None):
     unknown = sorted(set(args.case) - set(c for _, c in catalog))
     if unknown:
         sys.stderr.write("unknown case id(s): %s\n" % ", ".join(unknown))
-        return 2
-    # The setups' home guard (E14 slice 3c fix 3-2), before anything is created.
-    out = os.path.abspath(args.out)
-    home = os.environ.get("HOME", "")
-    share = os.path.join(home, ".local", "share")
-    for path in (out, os.path.realpath(out)):
-        for base in (os.path.join(home, ".claude"), os.path.join(home, ".codex"), share):
-            for form in (os.path.abspath(base), os.path.realpath(base)):
-                p, b = path.casefold(), form.casefold().rstrip(os.sep)
-                below = "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
-                if below is None or (base == share and not below.split(os.sep)[0].startswith("skills-v2-")):
-                    continue
-                sys.stderr.write("observe.py: %s is under %s, which no setup may touch; nothing created\n"
-                                 % (args.out, base if base != share else os.path.join(share, below.split(os.sep)[0])))
-                return 2
-    if not os.path.isabs(home):
-        sys.stderr.write("observe.py: HOME is not an absolute path; nothing created\n")
         return 2
     os.makedirs(args.out, exist_ok=True)
     rows = []

@@ -6,13 +6,27 @@ establishes it. Before this fix the core recorded a verdict whatever `invocation
 
 - **The session's facts are the adapter's observed model id.** The class is computed here from
   `invocation.model.id` by the same map the adapters use (ruling E9-3; the Codex half provisional,
-  as the pilot's lane settled it). The `floor_class` and `floor_met` the input carries are checked
-  AGAINST that computation and never trusted in its place: a typed `floor_met: true` for a Haiku id
-  is a disagreement, and a disagreement is refused.
+  as the pilot's lane settled it), widened here by readers' harness names (below). The
+  `floor_class` and `floor_met` the input carries are checked AGAINST that computation and never
+  trusted in its place: a typed `floor_met: true` for a Haiku id is a disagreement, and a
+  disagreement is refused.
 - **The reviewer's facts are the readers result.** The answer's `model` is readers' effective
   model as the adapter's sidecar map hands it over (`answer_identity.model`). It must be
   established, at the floor, and the model the session recorded: a `claude-session` reader
-  inherits the session's model, so any other id is a disagreement.
+  inherits the session's model, so any other id is a disagreement. A pinned roster row reports
+  its harness model name (`opus` for `claude-opus-cli` and `claude-opus`, `fable` for
+  `claude-fable`), which the map classes by the roster (E14 punch list, item 4(a)). Which row
+  answered is read from the answer's `session_id`, the adapter's `answer_identity.session_id`,
+  `<readers transport>:<call id>` from readers' sidecar (item 4(b)): the portable Claude row a
+  Codex session dispatches (`claude-cli`) names its own model and is judged by its class alone;
+  every other answer, the `claude-session` reader's (`claude-subagent`) among them, keeps the
+  same-model rule. The transport is typed in the answer, so it opens that exception only when the
+  session's own model is one of the Codex ids the map admits (`OPUS_IDS`): a Claude session keeps
+  the same-model rule whatever transport the answer types (the E14 punch-list review's F3).
+  `record` re-checks with the recorded reviewer's model and `session_id`, under the same rule,
+  and holds the model equal to the one `record-answer` established (E14 punch list round 2). A
+  model handed over with no `session_id` at all names no row and keeps the same-model rule: it
+  fails closed (the E14 punch-list check's O-1).
 - **A false, null, missing or unestablished floor is a named stop** (`floor_refused`) before the
   reviewer request is emitted, before the answer is accepted, and again before anything is recorded.
   Nothing is written to the project. No model is upgraded, silently or otherwise, and eligibility is
@@ -30,11 +44,20 @@ import os
 FLOOR = "opus"
 OPUS_PATTERNS = ("claude-opus-*", "claude-fable-*", "claude-mythos-*")
 OPUS_IDS = ("gpt-6-astra", "gpt-5.6-sol")      # the Codex map, provisional (E9-3, E10-62)
+# readers' harness model names of the roster rows eligible at the Opus floor (claude-opus-cli and claude-opus:
+# `opus`; claude-fable: `fable`), exactly and never wider (E14 punch list, item 4(a)); `session` is the
+# claude-session row's placeholder, never a model (that reader reports the session's own id)
+HARNESS_NAMES = ("opus", "fable")
 BELOW = (("claude-sonnet-*", "sonnet"), ("claude-haiku-*", "haiku"))
 UNKNOWN = "unknown"
 REPLAY_FLAG = "SIGNOFF_TEST"
 REPLAY_VAR = "SIGNOFF_TEST_REPLAY_MODEL"
 STOP_CODE = "floor_refused"
+# readers' transports whose reader names its own model rather than inheriting the session's (item 4(b)): the
+# portable claude-opus-cli row, which a Codex session dispatches; a claude-session reader (claude-subagent)
+# inherits the session's model. Honoured only in a session whose model is in OPUS_IDS, the Codex ids (the E14
+# punch-list review's F3): the transport is typed in the answer, so a Claude session never takes it on its word
+NAMES_ITS_OWN_MODEL = ("claude-cli",)
 
 
 class FloorRefused(RuntimeError):
@@ -45,7 +68,8 @@ def class_of(model_id):
     """(class, floor met): opus is met; sonnet and haiku are not; anything else is unknown/None."""
     if not isinstance(model_id, str) or not model_id.strip() or model_id == UNKNOWN:
         return UNKNOWN, None
-    if model_id in OPUS_IDS or any(fnmatch.fnmatchcase(model_id, p) for p in OPUS_PATTERNS):
+    if model_id in OPUS_IDS or model_id in HARNESS_NAMES or any(fnmatch.fnmatchcase(model_id, p)
+                                                                for p in OPUS_PATTERNS):
         return FLOOR, True
     for pattern, name in BELOW:
         if fnmatch.fnmatchcase(model_id, pattern):
@@ -95,10 +119,24 @@ def session_facts(resolved, environ=None):
     return {"model": model["id"], "class": computed, "met": True, "source": source}
 
 
+def reader_transport(answer):
+    """The readers transport the answer's `session_id` names (`<transport>:<call id>`), or None."""
+    session_id = answer.get("session_id") if isinstance(answer, dict) else None
+    if not isinstance(session_id, str) or ":" not in session_id:
+        return None
+    transport, call = session_id.split(":", 1)
+    return transport if transport and call and ":" not in call else None
+
+
 def reviewer_facts(answer, session, environ=None):
     """{model, class, met, source} for the reviewer the answer names, or raise FloorRefused."""
     model = answer.get("model") if isinstance(answer, dict) else None
     source = "the readers result (the answer's model, readers' effective model)"
+    transport = reader_transport(answer)
+    own_model = (transport in NAMES_ITS_OWN_MODEL
+                 and bool(session) and session.get("model") in OPUS_IDS)
+    if own_model:
+        source += "; a %s reader names its own model and is judged by its class" % transport
     if not isinstance(model, str) or not model.strip():
         replay = replay_model(environ)
         if replay is None:
@@ -115,7 +153,7 @@ def reviewer_facts(answer, session, environ=None):
             "the reviewer ran %r, class %r: %s. A verdict from below the Opus-class floor is never "
             "recorded (v1 Step 0)." % (model, computed, "below the floor" if met is False else
                                         "a floor this run cannot establish"))
-    if session and model != session.get("model"):
+    if session and not own_model and model != session.get("model"):
         raise FloorRefused(
             "the reviewer's model %r disagrees with the model the session recorded, %r. A "
             "`claude-session` reader inherits the session's model, so the two facts must agree; "

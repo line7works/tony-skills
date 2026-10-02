@@ -731,8 +731,11 @@ def cmd_record(args):
     # takes a floor it did not establish at `record-answer`.
     try:
         session_floor = floormod.session_facts(resolved)
+        # E14 punch list round 2: the recorded reviewer's session_id travels with its model, so the rule
+        # record-answer applied (which row answered, floor.py) is applied again here
         reviewer_floor = floormod.reviewer_facts(
-            {"model": (state.get("reviewer") or {}).get("model")}, session_floor)
+            {"model": (state.get("reviewer") or {}).get("model"),
+             "session_id": (state.get("reviewer") or {}).get("session_id")}, session_floor)
         recorded = ((state.get("floor") or {}).get("reviewer") or {}).get("model")
         if recorded != reviewer_floor["model"]:
             raise floormod.FloorRefused(

@@ -38,9 +38,15 @@ PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
 CORE=$(basename -- "$PLUGIN_ROOT")
 case "$CORE" in precon-v2|architect-v2|inspect-v2) ;; *) echo "manual-only.sh: $CORE is not a strictly user-invoked station" >&2; exit 2 ;; esac
 export PYTHONDONTWRITEBYTECODE=1
-exec python3 - "$HARNESS" "$SETUP_HOME" "$SCRIPT_DIR" "$CORE" "$CREDENTIAL" <<'PY'
+# The interpreter starts with TMPDIR, TEMP and TMP cleared, before install.sh's guard has run, and the body
+# puts their values back first (E14 punch list, the outside confirm's F1; the 26 GUARD starts do the same).
+exec env -u TMPDIR -u TEMP -u TMP python3 - "$HARNESS" "$SETUP_HOME" "$SCRIPT_DIR" "$CORE" "$CREDENTIAL" \
+  "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'PY'
 import json, os, re, subprocess, sys
 harness, home, setups, core, credential = sys.argv[1:6]
+for key, value in zip(("TMPDIR", "TEMP", "TMP"), sys.argv[6:9]):
+    if value:
+        os.environ[key] = value
 PROBE = "manual-only-probe"
 MARKET = core + "-probes"
 report = {"harness": harness, "core": core, "home": None, "steps": [], "checks": {}, "problems": []}

@@ -1,11 +1,13 @@
 #!/bin/sh
 # One headless Codex session of this core's setup (E13 slice 3, brief 3.3 and 3.5).
 #
-# Adapted from plugins/recheck-v2/setups/codex/launch.sh. Byte-identical in the four front cores;
-# build-v2's and signoff-v2's (E13, frozen) differ only in the home guard below (E14 slice 3c): the
-# out-dir, the condition home and each --writable root may not be or sit under ~/.claude, ~/.codex
-# or ~/.local/share/skills-v2-*, as given or resolved (exit 2, nothing created). The core is this
-# script's own plugin folder.
+# Adapted from plugins/recheck-v2/setups/codex/launch.sh. Byte-identical in the six v2 cores that
+# carry it (the four front cores, build-v2 and signoff-v2; E14 punch list), held equal by the front
+# cores' test_shared_equal.py and by build-v2's and signoff-v2's test_setup_guard.py, which compare
+# their copy with precon-v2's. The home guard below (E14 slice 3c): the out-dir, the condition home
+# and each --writable root may not be or sit under ~/.claude, ~/.codex or
+# ~/.local/share/skills-v2-*, as given or resolved, and neither may TMPDIR, TEMP or TMP (exit 2,
+# nothing created). The core is this script's own plugin folder.
 #
 # Usage: launch.sh <prompt-file> <workspace> <out-dir> [--writable DIR]...
 # The condition home is <CORE>_CODEX_HOME (BUILD_V2_CODEX_HOME or SIGNOFF_V2_CODEX_HOME), which
@@ -18,9 +20,10 @@
 # own sandbox off, this setup keeps Codex's own sandbox: workspace-write, approvals never,
 # TMPDIR and /tmp NOT writable (so <out-dir>, wherever it sits, is not writable by the tool
 # shells and the executor's rollout stays unwritable to them, E9-37), --add-dir only the
-# per-launch child home and each --writable root. Network stays off for both cores: signoff-v2's
-# Codex adapter launches no nested reviewer since Astra's F6 (the reviewer is summoned through
-# readers, which has no qualified route on Codex today, so a signoff run stops lane-unavailable).
+# per-launch child home and each --writable root. Network stays off for every core: signoff-v2's
+# Codex adapter launches no nested reviewer (Astra's F6); it writes a readers request for the
+# claude-opus-cli row (E14 A3) that the executor dispatches through readers, outside this
+# launcher.
 #
 # Copies to <out-dir>: events.jsonl, final.md, stderr.log, command.json, rollout.jsonl (the
 # executor's own rollout, from <out-dir>/codex-home/sessions) and launch.json. Exit: the codex
@@ -33,7 +36,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --writable)
       [ "$#" -ge 2 ] || { echo 'launch.sh: --writable takes a value' >&2; exit 2; }
-      [ -d "$2" ] || { echo "launch.sh: no writable directory: $2" >&2; exit 3; }
       WRITABLE="$WRITABLE $2"; shift 2 ;;
     *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -42,11 +44,10 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 CORE=$(basename -- "$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)")
 VAR=$(printf '%s' "$CORE" | tr 'a-z-' 'A-Z_')_CODEX_HOME
 CONDITION=$(eval "printf '%s' \"\${$VAR:-}\"")
-[ -n "$CONDITION" ] && [ -d "$CONDITION" ] || { echo "launch.sh: $VAR must name the installed condition home" >&2; exit 3; }
 # The home guard, before anything is created (E14 slice 3c fix 3-2): the installers' GUARD, byte for byte.
 # shellcheck disable=SC2086
 for checked in "$OUT_DIR" "$CONDITION" $WRITABLE; do
-  python3 - "$checked" "$HOME" "launch.sh" <<'GUARD' >/dev/null || exit 2
+  env -u TMPDIR -u TEMP -u TMP python3 - "$checked" "$HOME" "launch.sh" "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'GUARD' >/dev/null || exit 2
 import os, sys
 target, home, name = sys.argv[1:4]
 
@@ -66,22 +67,64 @@ def rest(path, base):
     return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
 
 
+def same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
+def below_home(path, base):
+    """`same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = same_below(path, base)
+    if got is not None:
+        return got
+    below = same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 if not os.path.isabs(home):
     refuse("HOME is not an absolute path")
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for path in forms(target):
-    for forbidden in homes:
-        if any(rest(path, base) is not None for base in forms(forbidden)):
-            refuse("%s is under %s, which no setup may touch" % (target, forbidden))
-    for base in forms(share):
-        below = rest(path, base)
-        if below and below.split(os.sep)[0].startswith("skills-v2-"):
-            refuse("%s is under %s, which no setup may touch"
-                   % (target, os.path.join(share, below.split(os.sep)[0])))
+temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
+for given in [target] + temps:
+    for path in forms(given):
+        for forbidden in homes:
+            if (any(rest(path, base) is not None for base in forms(forbidden))
+                    or below_home(path, forbidden) is not None):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for below in [rest(path, base) for base in forms(share)] + [below_home(path, share)]:
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
 print(os.path.realpath(target))
 GUARD
+done
+[ -n "$CONDITION" ] && [ -d "$CONDITION" ] || { echo "launch.sh: $VAR must name the installed condition home" >&2; exit 3; }
+for checked in $WRITABLE; do
+  [ -d "$checked" ] || { echo "launch.sh: no writable directory: $checked" >&2; exit 3; }
 done
 export CODEX_HOME="$CONDITION"
 export PYTHONDONTWRITEBYTECODE=1

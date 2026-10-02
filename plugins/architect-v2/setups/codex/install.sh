@@ -2,7 +2,7 @@
 # Install this core into an isolated Codex home (E13 slice 3, brief 3.3).
 #
 # Adapted from plugins/recheck-v2/setups/codex/install.sh (E9 lane R, E10-58). Byte-identical in
-# the four front cores (E14); build-v2's and signoff-v2's (E13) differ in the plugin list, a case here, and the home guard, slice 3c's here: the core is this script's own plugin folder.
+# the four front cores (E14); build-v2's and signoff-v2's (E13) differ in the plugin list, a case here, and this header; their home guard is this one (E14 punch list): the core is this script's own plugin folder.
 #
 # Usage: install.sh --home DIR [--credential]    (or <CORE>_CODEX_HOME=DIR, e.g. BUILD_V2_CODEX_HOME)
 #
@@ -46,7 +46,8 @@ command -v codex >/dev/null 2>&1 || { echo "install.sh: codex is not on PATH" >&
 [ -f "$HOME/.codex/config.toml" ] || { echo "install.sh: ~/.codex/config.toml is missing" >&2; exit 3; }
 # The home guard, before anything is created (E14 slice 3c fix 3): the home, as given and resolved,
 # may not be or sit under ~/.claude, ~/.codex or ~/.local/share/skills-v2-*, whichever harness this is.
-SETUP_HOME=$(python3 - "$SETUP_HOME" "$HOME" "install.sh" <<'GUARD'
+# TMPDIR, TEMP and TMP are held to the same rule (E14 punch list, check 6 C3C6-1; review F1).
+SETUP_HOME=$(env -u TMPDIR -u TEMP -u TMP python3 - "$SETUP_HOME" "$HOME" "install.sh" "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'GUARD'
 import os, sys
 target, home, name = sys.argv[1:4]
 
@@ -66,20 +67,58 @@ def rest(path, base):
     return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
 
 
+def same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
+def below_home(path, base):
+    """`same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = same_below(path, base)
+    if got is not None:
+        return got
+    below = same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
 if not os.path.isabs(home):
     refuse("HOME is not an absolute path")
 share = os.path.join(home, ".local", "share")
 homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
          os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
-for path in forms(target):
-    for forbidden in homes:
-        if any(rest(path, base) is not None for base in forms(forbidden)):
-            refuse("%s is under %s, which no setup may touch" % (target, forbidden))
-    for base in forms(share):
-        below = rest(path, base)
-        if below and below.split(os.sep)[0].startswith("skills-v2-"):
-            refuse("%s is under %s, which no setup may touch"
-                   % (target, os.path.join(share, below.split(os.sep)[0])))
+temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
+for given in [target] + temps:
+    for path in forms(given):
+        for forbidden in homes:
+            if (any(rest(path, base) is not None for base in forms(forbidden))
+                    or below_home(path, forbidden) is not None):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for below in [rest(path, base) for base in forms(share)] + [below_home(path, share)]:
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
 print(os.path.realpath(target))
 GUARD
 ) || exit $?

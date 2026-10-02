@@ -2,7 +2,7 @@
 
 Family L1 of the E14 seeded cases (lane contract section 14, row "traceability"; blueprint-v2). 4 cases, catalog order, ids exact. Facts only: what each case holds and what its recorded answer carries. Nothing here states an outcome.
 
-Build: `/usr/bin/python3 build.py --out <dir>`. `build.py --list` prints the ids. `../observe.py` drives each case.
+Build: `sh ../../../setups/safe-python.sh build.py --out <dir>`. `build.py --list` prints the ids. `../observe.py` drives each case.
 
 ## Shared shape
 

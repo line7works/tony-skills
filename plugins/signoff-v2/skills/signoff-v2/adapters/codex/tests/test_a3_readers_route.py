@@ -190,6 +190,22 @@ class ReadersRoute(unittest.TestCase):
         self.assertIn("readers component", doc["missing_capability"],
                       "the hook's roster was not read: no readers beside the installed copy")
 
+    def test_the_row_it_names_meets_the_cores_floor_by_its_roster_model(self):
+        # E14 punch list, item 4(a): the reader reports the row's roster `model` (`opus` for claude-opus-cli) as
+        # its effective model, which the sidecar map hands the core; the core's floor classes it opus
+        code, out, err = self.call("roster-portable-opus.json")
+        self.assertEqual(code, 0, "%s %s" % (out, err))
+        doc = json.loads(out)
+        with open(os.path.join(self.calls, "snapshot", "roster.json")) as handle:
+            rows = json.load(handle)["rows"]
+        model = [r["model"] for r in rows if r["id"] == doc["row"]][0]
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "signoff_floor_for_adapter", os.path.join(testlib.SKILL_ROOT, "scripts", "signoff_core", "floor.py"))
+        floor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(floor)
+        self.assertEqual((model, floor.class_of(model)), ("opus", ("opus", True)))
+
 
 if __name__ == "__main__":
     unittest.main()

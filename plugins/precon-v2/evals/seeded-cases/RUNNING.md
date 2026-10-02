@@ -2,9 +2,15 @@
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 observe.py --all --out /tmp/observe
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --case <case id> --out /tmp/observe
-PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 observe.py --list
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --case <case id> --out /tmp/observe
+PYTHONDONTWRITEBYTECODE=1 sh ../../setups/safe-python.sh observe.py --list
 ```
+
+`../../setups/safe-python.sh` starts `/usr/bin/python3` with TMPDIR, TEMP and TMP cleared and hands their values
+to the script, whose guard then holds them: the `/usr/bin/python3` shim writes into the temp folder as it starts
+(inside a Codex sandbox, `xcrun_db`), before any line of a script runs, so it is never started on a guarded
+script directly. The `uv run` line stays as it is: uv starts its own environment's interpreter, not the
+shim.
 
 Each case is built by its family's `build.py` into `--out/<family>/`, the steps of its
 `drive.json` are run, and `observed.json` is written beside the case. `observe.py` prints one JSON

@@ -74,21 +74,34 @@ lock".
 
 ## 7. The reviewer capability
 
-**None on this harness today: the run stops `lane-unavailable`** (Astra's F6). The reviewer is
-summoned through `readers` and nothing else (contract sections 3 and 10, the repository invariant);
-floor, isolation, no-web and retry policy are readers'. readers has no route a Codex session can
-dispatch at the Opus-class floor: its floor-qualified rows (`claude-session`, `claude-fable`,
-`claude-opus`) run on the `claude-subagent` transport through Claude Code's Agent and Workflow
-tools, and its `codex-exec` rows (`gpt-astra`, `gpt-sol`) are `eligibility: not classified`, which
-readers refuses as `unknown-model` under a floor. `reviewer.py --run-dir D [--workspace WS]`
-checks that `D/request.json` is the run's own and prints `status: lane-unavailable` with that
-`missing_capability`, `requests: []`, exit 3, writing and launching nothing
-(`tests/test_full_fix_f6.py` puts a `codex` that records its arguments on PATH and finds it never
-called). SKILL.md Step 3 makes that a STOP with the honest state as the reason. A qualified Codex
-route is readers' to add, by roster PR on Tony's word; this adapter then needs only its request
-mode to hand the block over. `reviewer.py --sidecar FILE --run-dir D` already maps a readers
-sidecar the same way as the Claude Code helper (`answer_identity`: `<transport>:<call_id>` and
-the sidecar's `effective_model`, which the core's floor check reads, F5).
+**Through readers, the portable row `claude-opus-cli`** (contract A3; E14 punch list). The reviewer
+is summoned through `readers` and nothing else (contract sections 3 and 10, the repository
+invariant); floor, isolation, no-web and retry policy are readers'. Its host rows (`claude-session`,
+`claude-fable`, `claude-opus`) run on the `claude-subagent` transport through Claude Code's Agent and
+Workflow tools, which a Codex session does not have, and its `codex-exec` rows are `eligibility: not
+classified`. `reviewer.py --run-dir D [--workspace WS] [--lens NAME]...` checks that `D/request.json`
+is the run's own, finds readers beside this plugin (route 3a, then 3b), runs readers' own `suggest`
+at floor `opus` for the portable rows of provider anthropic that are eligible, available and offer a
+workspace profile, and writes one request per lens to `D/readers/calls/<call id>.json` for the row it
+names (`claude-opus-cli` today, profile `repo`: the row offers no `repo-with-tools`), printing
+`status: ready` with the dispatch argv; exit 0. It launches nothing: the one child is `suggest`,
+which dispatches nothing (`tests/test_full_fix_f6.py` and `tests/test_a3_readers_route.py` put
+recording `codex` and `claude` stand-ins on PATH and find them never called). The executor hands
+the request to readers. `lane-unavailable` (exit 3, the missing capability named, nothing written)
+when readers is not found or no row is eligible at the floor; SKILL.md Step 3 makes that a STOP.
+
+`reviewer.py --sidecar FILE --run-dir D` maps readers' sidecar the same way as the Claude Code
+helper (`answer_identity`: `<transport>:<call_id>` as the answer's `session_id`, and the sidecar's
+`effective_model` as its `model`). What the core does with that answer: the reader's model is the
+row's harness name `opus`, which the core's floor classes Opus-class; the `claude-cli` transport in
+the answer's `session_id` tells the core the reader is the portable row, which names its own model,
+so it is judged by its class and not against this Codex session's model (a `claude-session` reader
+keeps that rule). The row's `repo` profile gives the reader read-only tools and no command: a clean
+review from this route lists no executed check and stops `answer_invalid` (the core's rule that a
+clean review lists its checks) until a later step gives the row a tool-running profile (the
+owner's ruling on A11); a review with findings is recorded as any other. `setups/codex/install.sh`
+brings `signoff-v2` and `records` only, so an installed Codex signoff finds no readers beside it and
+stops `lane-unavailable`; from a checkout readers is found by route 3a.
 
 The slice 3 helper launched one private `codex exec -s danger-full-access` per call, the pilot's
 Codex `verifier.py` shape, which the slice 3 brief asked for in error; that transport, its canned
@@ -133,7 +146,7 @@ half behind `--live` and not run; `setups/codex/RESULTS.md` section "Negative te
 | Identify the reviewing session | `helper-derived` | E9-40, E9-36, E9-37/SB-8 locator; `session_meta.id` |
 | Name the building session | `helper-derived` from the selected build run's result, bound; a selected result with no `invocation.session_id` is exit 3 (N1); no `--build-result`, `unavailable` | section 5 |
 | Assert the model floor | `helper-derived`, map provisional | section 2 |
-| One fresh reviewer per call | NOT AVAILABLE: no qualified readers route for this harness (`lane-unavailable`) | section 7 |
-| Name the reviewer the answer carries | `helper-derived` from readers' sidecar, when a route exists | section 7 |
+| One fresh reviewer per call | `helper-derived` request through readers (`claude-opus-cli`, profile `repo`); `lane-unavailable` when readers is not found or no row is eligible | section 7 |
+| Name the reviewer the answer carries | `helper-derived` from readers' sidecar (`<transport>:<call_id>`, `effective_model`) | section 7 |
 | Keep one launch's session records from another's | layout by the launcher; `harness-enforced` only behind the bench's wall | section 5; `setups/codex/RESULTS.md` |
 | Keep a model from auto-selecting the station | `harness-enforced` catalog filtering, `instruction-bound` beyond it | section 9 |

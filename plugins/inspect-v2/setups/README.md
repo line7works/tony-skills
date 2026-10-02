@@ -13,8 +13,12 @@ guard, before the first write, holds every other path a caller names here: both 
 and home (Claude Code's installed home, Codex's condition home and each `--writable` root),
 `negative-cases.py`'s `--out` (both `negative-tests.sh`), and, beside the setups, the seeded cases'
 `--out` (`evals/seeded-cases/observe.py` and every family's `build.py`) and inspect-v2's
-`evals/replay/replay.py --keep`. `manual-only.sh` writes nothing before its `install.sh`, whose
-guard stops it.
+`evals/replay/replay.py --keep`, each of them TMPDIR, TEMP and TMP too. `manual-only.sh` writes nothing before
+its `install.sh`, whose guard stops it. Every guarded Python file is started through `safe-python.sh`
+(both `negative-tests.sh` do; `RUNNING.md` and the replay's README say so): the `/usr/bin/python3` shim
+writes into the temp folder as it starts (inside a Codex sandbox, `xcrun_db`), before any guard runs, so
+the wrapper starts the interpreter with TMPDIR, TEMP and TMP cleared and hands their values to the
+script's guard. The shell GUARD starts, and `manual-only.sh`'s own, clear the three the same way inline.
 
 Every script is build-v2's own (E13 slice 3), copied with the core as the variable, and is
 byte-identical in the four front cores; each reads the core it serves from its own location. Two
@@ -22,10 +26,10 @@ changes from build-v2's copies are parameterisations: the plugin list the instal
 is a `case` on the core (inspect-v2 brings `records`, `readers` and `blueprint-v2`, its code book;
 precon-v2 and architect-v2 bring `readers`; blueprint-v2 brings nothing), and the core's driver
 script is derived from its name (`<station>.py`) in `verify-package.py` and `negative-cases.py`.
-The third is the home guard above (E14 slice 3c, fixes 3 and 3-2) in the installers, the launchers
-and `negative-cases.py`, which build-v2's and signoff-v2's frozen copies (E14-8) do not carry: their
-installers still create the home before their check and name only their own harness's live home, and
-their launchers and `negative-cases.py` have no guard.
+The third is the home guard above (E14 slice 3c, fixes 3 and 3-2; TMPDIR since the E14 punch list),
+which build-v2's and signoff-v2's copies carry too since the E14 punch list: the launchers are
+byte-identical in the six cores, and the installers, `negative-cases.py` and `three-stations.sh` carry
+the same guard block.
 
 | File | Does |
 |---|---|
@@ -37,6 +41,7 @@ their launchers and `negative-cases.py` have no guard.
 | `codex/verify-install.sh`, `codex/negative-tests.sh`, `codex/launch.sh` | as for Claude Code |
 | `verify-package.py` | the six installed-package checks both harnesses run |
 | `negative-cases.py` | the nine negative cases for either harness |
+| `safe-python.sh <script> [args]` | starts `/usr/bin/python3` on a guarded script with TMPDIR, TEMP and TMP cleared and their values handed to the script; byte-identical in the six cores |
 | `*/prompts/` | the delivery probe (names the core) and, for Codex, the lock probe |
 
 `plugins/inspect-v2/setups/seven-stations.sh` is built (E14 slice 3c): on either harness it installs

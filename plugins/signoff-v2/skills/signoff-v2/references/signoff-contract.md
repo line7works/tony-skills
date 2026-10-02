@@ -43,7 +43,13 @@ refuse never reaches the log, the document or the card.
 assumed and never silently upgraded. A floor this run cannot establish is a stop, not a default.
 On Codex the adapter's helper looks the reviewer's row up through readers' own `suggest` at this
 floor among the portable rows a shell can dispatch (`claude-opus-cli` today) and writes the request
-for that row, reporting `lane-unavailable` only when readers holds no row eligible at the floor.
+for that row, reporting `lane-unavailable` only when readers is not found beside this plugin or holds
+no row eligible at the floor.
+That reader names its own model (readers' harness name `opus`), which the core classes at the floor
+and judges by its class alone (section 5). The row offers the `repo` profile, not `repo-with-tools`,
+so its reader runs no command: a clean review from this route lists no executed check and stops
+`answer_invalid` until a later step gives the row a tool-running profile (the owner's ruling on
+A11, E14 punch list); a review with findings is recorded as any other.
 
 ## 2. Inputs: one validated structure
 
@@ -142,17 +148,29 @@ read intent into what is on disk.
   model is the adapter's observed `invocation.model.id`; the core computes its class with the
   adapters' own map (`claude-opus-*`, `claude-fable-*`, `claude-mythos-*`, and the provisional
   Codex ids `gpt-6-astra`, `gpt-5.6-sol`, are Opus-class; `claude-sonnet-*` and `claude-haiku-*`
-  are below; anything else is unknown) and checks the input's `floor_class` and `floor_met`
+  are below; anything else is unknown), widened in the core by readers' harness names `opus` and
+  `fable` (the models of the roster rows eligible at the floor, which a pinned reader reports as
+  its effective model; E14 punch list), and checks the input's `floor_class` and `floor_met`
   against it, never in its place. `request` emits no reviewer request, `record-answer` accepts no
   answer and `record` records nothing unless the floor is met: a false, null, missing or
   unestablished floor, or typed floor facts that disagree with the id, is a `stopped` result with
   `stop_reason_code: floor_refused` and no project-record write. The reviewer's model is the
   readers result (the answer's `model`, readers' effective model through the adapter's sidecar map):
-  it must be established, at the floor, and the session's recorded model, since a `claude-session`
-  reader inherits it; otherwise the answer is refused (`refusal_reason: floor`). Nothing upgrades a
-  model and nothing changes who is eligible. The result's `floor` block says which facts were used
-  and where they came from. **Synthetic replay facts** (a seeded case replays a recorded answer and
-  no harness observed a model) enter through one explicit test interface only:
+  it must be established and at the floor. A `claude-session` reader inherits the session's model,
+  so its answer must also carry the session's recorded model; a portable row a Codex session
+  dispatches names its own model and is judged by its class alone. Which row answered is read from
+  the answer's `session_id`, the adapter's `answer_identity.session_id`, `<transport>:<call id>`
+  from readers' sidecar: the transport `claude-cli` is the portable `claude-opus-cli` row, and it
+  opens the exception only when the session's recorded model is one of the Codex ids above (the
+  transport is typed in the answer, so a Claude session keeps the same-model rule whatever
+  transport its answer types); any other answer keeps the same-model rule, one with no
+  `session_id` at all included (it names no row, so the rule fails closed). `record` re-checks
+  the model and `session_id` `record-answer` recorded under the same rule, and holds the model
+  equal to the one it established. Otherwise the answer is refused (`refusal_reason: floor`).
+  Nothing upgrades a model and nothing changes who is eligible. The result's `floor` block says
+  which facts were used and where they came from. **Synthetic replay facts** (a seeded case
+  replays a recorded answer and no harness observed a model) enter through one explicit test
+  interface only:
   `SIGNOFF_TEST_REPLAY_MODEL=<id>` under `SIGNOFF_TEST=1`, used where the input or the answer
   carries no model, and named as synthetic in `floor.source`; outside test mode it is ignored.
 
@@ -462,7 +480,7 @@ redone, the append is never made twice, and a committed receipt reports the same
 | The proposed completion fails the result's semantic checks | `stopped` | `answer_invalid` |
 | A record line fits no Appendix A shape | `missing_input` | `legacy_ambiguous` |
 | The model floor is not met, not established, or its typed facts disagree with the observed id (at `request` or `record`) | `stopped` | `floor_refused` |
-| The answer's reviewer model is below the floor, missing, or not the session's recorded model | `stopped` (`refusal_reason: floor`) | `floor_refused` |
+| The answer's reviewer model is below the floor, missing, or (any reader but the portable `claude-cli` row, and that row only when the session's recorded model is one of the Codex ids) not the session's recorded model | `stopped` (`refusal_reason: floor`) | `floor_refused` |
 | The source moved after the packet was built | `stale_source` | `source_moved` |
 | The source outside the run's own targets moved during the transaction, the final append included, or a packet entry's bytes moved | `stale_source` | `source_moved` |
 | The component refused `identity` | per the refusal map | `identity_refused` |
