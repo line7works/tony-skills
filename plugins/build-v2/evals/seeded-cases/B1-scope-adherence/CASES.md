@@ -5,7 +5,7 @@ Four cases, catalog order, ids exact. Facts only: what each repository holds at 
 what the code does, what the build doc and the slice say, what the input carries, and what the
 recorded answer carries. Nothing here states an outcome.
 
-Build: `/usr/bin/python3 build.py --out <dir>`. `build.py --list` prints the ids.
+Build: `sh ../../../setups/safe-python.sh build.py --out <dir>`. `build.py --list` prints the ids.
 
 ## Shared shape (applies to every case unless the case says otherwise)
 

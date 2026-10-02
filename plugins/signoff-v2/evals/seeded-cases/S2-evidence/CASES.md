@@ -3,7 +3,7 @@
 Family S2 of the E13 seeded cases (lane contract section 12, row "evidence"; signoff core).
 Four cases, catalog order, ids exact. Facts only. Nothing here states an outcome.
 
-Build: `/usr/bin/python3 build.py --out <dir>`. `build.py --list` prints the ids.
+Build: `sh ../../../setups/safe-python.sh build.py --out <dir>`. `build.py --list` prints the ids.
 
 ## Shared shape (applies to every case unless the case says otherwise)
 

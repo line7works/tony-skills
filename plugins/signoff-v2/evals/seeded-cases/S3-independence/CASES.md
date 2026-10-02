@@ -3,7 +3,7 @@
 Family S3 of the E13 seeded cases (lane contract section 12, row "independence"; signoff core).
 Four cases, catalog order, ids exact. Facts only. Nothing here states an outcome.
 
-Build: `/usr/bin/python3 build.py --out <dir>`. `build.py --list` prints the ids.
+Build: `sh ../../../setups/safe-python.sh build.py --out <dir>`. `build.py --list` prints the ids.
 
 The four cases hold the same workspace code. They differ in what the input says about the
 sessions and in what builder-written text sits in the material a review packet is built from.
