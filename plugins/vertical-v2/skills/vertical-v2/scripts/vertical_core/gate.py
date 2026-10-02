@@ -3,15 +3,17 @@
 
 The gate passes only when every slice stands `signed off`. Each slice's card comes from the records
 component's `state` (`card_observed`, the last card set or observed in the log), compared with the build
-doc's `Status:` line; the component's own derived card is compared too (`card_derived`), so a log that
-still holds an open finding cannot pass behind a signed card. A slice the log names nothing about falls
-back to its `Status:` line, and the result says so. A disagreement is a stop naming both. Zero slices,
+doc's `Status:` line; a disagreement is a stop naming both. The component's derived card
+(`card_derived`) is recorded beside it and never stops the gate (the owner's ruling, E15 lane contract
+A3, C1A-2): a slice whose derived card differs is named, with both cards, in the verdict's Method line.
+A slice the log names nothing about falls back to its `Status:` line, and the result says so. Zero slices,
 or a slice with no `Status:` line, is malformed input and never passes, collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.
 
 The preconditions run here, before the ask: the workspace is a git work tree root; the base is found
 (a `Base:` header line the build doc records, then `git merge-base` with the default branch, then the
-owner's base from the input, else a stop that asks); the boundary is `git diff --name-status
+owner's base from the input, else a stop that asks; a recorded `Base:` that is not 7 to 40 lowercase hex,
+or that names HEAD itself, stops naming the line); the boundary is `git diff --name-status
 <base>..HEAD`; dirt (`git status --porcelain`) touching a boundary file or the build doc stops unless
 the owner's `committed_only` words are in the input; dirt elsewhere is listed and the review proceeds
 on HEAD. Nothing is read from a v1 file and nothing is written outside the run directory.
@@ -67,14 +69,15 @@ def slices_of(text):
 
 
 def recorded_base(text):
-    """The `Base:` line of the build doc's header (before the first `## ` heading), or None. The first
-    such line counts; its value is 7 to 40 lowercase hex characters."""
+    """The `Base:` line of the build doc's header (before the first `## ` heading), or None: {"line": the
+    line as written, "commit": its value when it is 7 to 40 lowercase hex characters, else None}. The first
+    such line counts."""
     for raw in text.splitlines():
         if raw.startswith("## "):
             return None
         if raw.startswith(BASE_LABEL):
             match = BASE_LINE.match(raw)
-            return match.group(1) if match else raw[len(BASE_LABEL):].strip() or "(empty)"
+            return {"line": raw.strip(), "commit": match.group(1) if match else None}
     return None
 
 
@@ -155,9 +158,6 @@ def handler(ctx, args):
             entry.update(card=card, card_source="records", card_derived=row.get("card_derived"))
             if card != item["status"]:
                 gate["disagree"].append({"name": item["name"], "card": card, "status_line": item["status"]})
-            elif row.get("card_derived") and row["card_derived"] != card:
-                gate["disagree"].append({"name": item["name"], "card": "%s (the component's derived card: %s)"
-                                         % (card, row["card_derived"]), "status_line": item["status"]})
         gate["slices"].append(entry)
         if entry["card"] != common.SIGNED_OFF:
             gate["short"].append({"name": item["name"], "state": entry["card"]})
@@ -207,13 +207,21 @@ def handler(ctx, args):
 def _base(run, ctx, ws, text, words, selection, gate):
     recorded = recorded_base(text)
     if recorded is not None:
-        commit = gitio.commit_of(ws, recorded)
-        if commit is None:
+        stop = None
+        commit = gitio.commit_of(ws, recorded["commit"]) if recorded["commit"] else None
+        if recorded["commit"] is None:
+            stop = ("the build doc's base line %r is not a commit written as 7 to 40 lowercase hex characters: ask the "
+                    "owner for the base and never guess" % recorded["line"])
+        elif commit is None:
+            stop = ("the build doc records the base %r on its Base: line, and it resolves to no commit here: ask the "
+                    "owner for the base and never guess" % recorded["line"])
+        elif commit == gitio.head(ws):
+            stop = ("the build doc's base line %r names HEAD itself, so the boundary is empty and there is nothing to "
+                    "review: ask the owner for the base and never guess" % recorded["line"])
+        if stop:
             common.write(run, "gate.json", gate)
-            report.finish(ctx, run, "stopped", "base-unresolved",
-                          "the build doc records the base %r on its Base: line, and it resolves to no commit here: ask "
-                          "the owner for the base and never guess" % recorded, selection=selection, gate=gate)
-        return {"commit": commit, "how": "doc", "field": "Base: %s" % recorded}
+            report.finish(ctx, run, "stopped", "base-unresolved", stop, selection=selection, gate=gate)
+        return {"commit": commit, "how": "doc", "field": recorded["line"]}
     branch = gitio.default_branch(ws)
     if branch is not None:
         base = gitio.merge_base(ws, branch)

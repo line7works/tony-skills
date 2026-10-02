@@ -1,21 +1,26 @@
 """`scope`: the archive copies, the spec, the cold packets and their lists (contract section 3.3;
 readings CR-3 and CR-4; ruling E15-8 with A2's Q1).
 
-Two copies of the reviewed head are cut by `git archive` under the run directory, each with no `.git`
-(no history, no commit message): `export/`, the outside reviewers' workspace, and `local/`, the local
-lenses' workspace (a lens that runs tests may write there; the export stays as it was cut). Both leave
-out `docs/reviews/`, `docs/records/` and `REVIEW.md`; both drop the builder's notes (a file whose
-name, lower-cased with its extension and its separators removed, holds `buildernotes` or `buildnotes`);
-and in both the build doc's copy is the spec (`spec.py`). Untracked and ignored files are physically
+Two copies of the reviewed head are cut under the run directory from the commit's tree, each file
+holding the bytes the commit stores (`gitio.archive_into`: `git ls-tree` and `git cat-file`, so the
+repo's `.gitattributes` export rules never apply), each with no `.git` (no history, no commit message):
+`export/`, the outside reviewers' workspace, and `local/`, the local lenses' workspace (a lens that
+runs tests may write there; the export stays as it was cut). Both leave out `docs/reviews/`,
+`docs/records/` and `REVIEW.md`; both drop the builder's notes (a file whose name, lower-cased with its
+extension and its separators removed, holds `buildernotes` or `buildnotes`); and in both the build
+doc's copy is the spec (`spec.py`). Untracked and ignored files are physically
 absent, since the archive holds only the commit's tracked files. vertical-v2 never runs `git worktree`.
 
 One packet per local lens and per outside row the owner's answer named, each a directory under
 `packets/` holding its mandate (and, for a packet-only row, the export's UTF-8 files staged with every
-`/` written `__`), with two lists written now, before any request: `files.json` (every file the reviewer
-receives, workspace and documents alike, each with its sha256 and size) and `withheld.json` (everything
-kept back, named: each prior verdict, each records log, the builder's notes, the removed ledger sections
-and `Status:` lines, every untracked and ignored path, every working-tree change; and on an outside
-packet, `REVIEW.md`, which reaches the local lenses only). `request` holds each packet to its list.
+`/` written `__`; two paths that stage to one name both reach the packet, the first in path order under
+the plain name and the next under that name with `.2`, `.3` and on before its extension, each staged
+file's own path recorded beside it, C1A-6), with two lists written now, before any request:
+`files.json` (every file the reviewer receives, workspace and documents alike, each with its sha256 and
+size) and `withheld.json` (everything kept back, named: each prior verdict, each records log, the
+builder's notes, the removed ledger and working-record sections and `Status:` lines, every untracked and
+ignored path, every working-tree change; and on an outside packet, `REVIEW.md`, which reaches the local
+lenses only). `request` holds each packet to its list.
 """
 import os
 import re
@@ -77,9 +82,34 @@ def workspace_files(root):
     return out
 
 
+def staged_names(rels):
+    """{export path: staged name} for a packet-only row, deterministic (C1A-6): every `/` is written `__`;
+    when two paths stage to one name, the first in path order keeps it and each later one takes the name
+    with `.2`, `.3` and on before its extension, skipping any name another path stages to. No name is
+    given twice."""
+    rels = sorted(rels)
+    natural = dict((rel, rel.replace(os.sep, "__")) for rel in rels)
+    reserved = set(natural.values())
+    used, out = set(), {}
+    for rel in rels:
+        name = natural[rel]
+        if name in used:
+            stem, ext = os.path.splitext(name)
+            number = 2
+            while True:
+                name = "%s.%d%s" % (stem, number, ext)
+                if name not in reserved and name not in used:
+                    break
+                number += 1
+        used.add(name)
+        out[rel] = name
+    return out
+
+
 def _stage(export, dest):
-    """The export's UTF-8 text files staged for a packet-only row; (staged paths, the files left out)."""
-    staged, left = [], []
+    """The export's UTF-8 text files staged for a packet-only row; (staged paths, the files left out,
+    {staged path: its export path})."""
+    texts, left = {}, []
     for base, dirs, files in os.walk(export):
         dirs.sort()
         for name in sorted(files):
@@ -92,10 +122,14 @@ def _stage(export, dest):
             except UnicodeDecodeError:
                 left.append(rel)
                 continue
-            target = os.path.join(dest, rel.replace(os.sep, "__"))
-            fsio.atomic_write(target, data)
-            staged.append(target)
-    return staged, left
+            texts[rel] = data
+    staged, sources = [], {}
+    for rel, name in sorted(staged_names(texts).items(), key=lambda pair: pair[1]):
+        target = os.path.join(dest, name)
+        fsio.atomic_write(target, texts[rel])
+        staged.append(target)
+        sources[target] = rel.replace(os.sep, "/")
+    return staged, sorted(left), sources
 
 
 def lens_brief(skill_root, lens):
@@ -111,22 +145,32 @@ def lens_brief(skill_root, lens):
     return (body if stop < 0 else body[:stop]).strip()
 
 
-def local_mandate(skill_root, lens, gate, sheet):
+def local_mandate(skill_root, lens, gate, sheet, profile="repo-with-tools"):
+    """One local lens's mandate. Its words follow the route (C1A-9): under `repo-with-tools` the lens may
+    run the project's tests in its copy; under `repo` it reads and runs nothing, and the mandate says so
+    and promises no test run."""
+    runs = profile == "repo-with-tools"
     lines = ["# Vertical review: one local lens", "",
              "lens: %s" % lens, "",
-             lens_brief(skill_root, lens), "",
-             "## The scope", "",
+             lens_brief(skill_root, lens), ""]
+    if not runs:
+        lines += ["On this route a lens runs nothing: where this brief says to run something, read the code "
+                  "instead and report that check as not executed.", ""]
+    lines += ["## The scope", "",
              "The whole vertical: every slice of the build doc, reviewed together against its base.",
              "Base commit: %s" % gate["base"]["commit"], "Head commit: %s" % gate["head"], "",
              "Files this build touched (git diff --name-status <base>..HEAD):", "",
              boundary_lines(gate["boundary"]), "",
              "## What you have", "",
-             "- The workspace: a copy of the reviewed head, its tracked files only, with no history. You may run "
-             "the project's tests there; write only to scratch and ignored caches, never a tracked file, and report "
-             "\"verification blocked\" for a check the sandbox stopped.",
+             ("- The workspace: a copy of the reviewed head, its tracked files only, with no history. You may run "
+              "the project's tests there; write only to scratch and ignored caches, never a tracked file, and report "
+              "\"verification blocked\" for a check the sandbox stopped." if runs else
+              "- The workspace: a copy of the reviewed head, its tracked files only, with no history. This route runs "
+              "no command: read the code, and report a check you would have run as not executed."),
              "- spec.md: the build doc as the spec. It is the only source of requirements; its ledger (the review "
-             "record, the handoff notes and the slices' status lines) is left out on purpose, so grade the code "
-             "against the spec and never against what an earlier review concluded."]
+             "record, the handoff notes and the slices' status lines) and the builder's working records (build "
+             "assumptions, deviations, discovered) are left out on purpose, so grade the code against the spec and "
+             "never against what an earlier review or the builder concluded."]
     if sheet["state"] == "read":
         lines.append("- REVIEW.md: the repo's inspection sheet. Its severity bar grades every defect you report, and "
                      "each repo-specific check below is an item you try to break and report as held or as a finding.")
@@ -139,9 +183,10 @@ def local_mandate(skill_root, lens, gate, sheet):
               "feature; MAJOR: a real defect with a concrete failure path, contained and fixable in place; MINOR: a "
               "rough edge, a missing guard, a thin test), and your confidence (high, medium or low). A concern you "
               "cannot pin to a file and a line goes under \"Concerns without location\".",
-              "", "End with what you tried to break and could not, each with how (executed, read or reasoned) and, "
-              "for an executed check, what it printed. A review with no findings is a claim that you tried; make it "
-              "only after trying."]
+              "", ("End with what you tried to break and could not, each with how (executed, read or reasoned) and, "
+                   "for an executed check, what it printed." if runs else
+                   "End with what you tried to break and could not, each with how (read or reasoned).")
+              + " A review with no findings is a claim that you tried; make it only after trying."]
     return "\n".join(lines) + "\n"
 
 
@@ -194,11 +239,13 @@ def handler(ctx, args):
     sheet_withheld = {"what": "REVIEW.md", "why": "the repo's inspection sheet: the local lenses only (its checks "
                       "are distilled from prior verdicts)"}
     packets = []
+    local_profile = [r for r in ask["rows"] if r["side"] == "local"][0]["profile"]
+    staged_from = {}
     for lens in lenses:
         name = "local-%s" % lens
         folder = common.path_of(run, os.path.join("packets", name))
         mandate = os.path.join(folder, "mandate.md")
-        fsio.atomic_write(mandate, local_mandate(ctx.skill_root, lens, gate, sheet).encode("utf-8"))
+        fsio.atomic_write(mandate, local_mandate(ctx.skill_root, lens, gate, sheet, local_profile).encode("utf-8"))
         documents = [spec_path] + ([sheet_path] if sheet_path else [])
         packets.append(_packet(name, "local", folder, local, documents, mandate, withheld, lens=lens))
     rows = dict((r["row"], r) for r in ask["rows"])
@@ -214,14 +261,16 @@ def handler(ctx, args):
             if rows[row]["profile"] == "repo":
                 packets.append(_packet(name, "outside", folder, export, [], mandate, withheld_here, row=row))
             else:
-                staged, left = _stage(export, os.path.join(folder, "files"))
+                staged, left, sources = _stage(export, os.path.join(folder, "files"))
+                staged_from.update((os.path.basename(path), rel) for path, rel in sources.items())
                 packets.append(_packet(name, "outside", folder, None, staged, mandate, withheld_here, row=row,
-                                       left_out=left))
+                                       left_out=left, sources=sources))
     scope = {"depth": depth, "lenses": lenses, "export": export, "local": local, "spec": spec_path,
              "removed": removed, "exported": exported,
              "review_sheet": {"state": sheet["state"], "skipped": sheet["skipped"], "checks": sheet["checks"],
                               "unknown": sheet["unknown"], "bar": sheet["bar"], "path": sheet_path},
-             "mandate": common.path_of(run, "mandate.md") if named else None, "packets": packets}
+             "mandate": common.path_of(run, "mandate.md") if named else None, "packets": packets,
+             "staged_names": staged_from}
     common.write(run, "scope.json", scope)
     common.advance(run, "scoped")
     return ctx.emit(ctx.envelope(next="request", run_id=run.checkpoint["run_id"], depth=depth, lenses=lenses,
@@ -229,10 +278,15 @@ def handler(ctx, args):
                                  depth_line="depth %s: %s" % (depth, ", ".join(lenses))))
 
 
-def _packet(name, side, folder, workspace, documents, mandate, withheld, lens=None, row=None, left_out=()):
+def _packet(name, side, folder, workspace, documents, mandate, withheld, lens=None, row=None, left_out=(),
+            sources=None):
     os.makedirs(folder, exist_ok=True)
     files = workspace_files(workspace) if workspace else []
-    files += [file_entry(d, os.path.basename(d), "document") for d in documents]
+    for d in documents:
+        entry = file_entry(d, os.path.basename(d), "document")
+        if sources and d in sources:
+            entry["source"] = sources[d]
+        files.append(entry)
     files.append(file_entry(mandate, "mandate.md", "mandate"))
     listing = {"packet": name, "side": side, "workspace": workspace, "files": files}
     fsio.write_json(os.path.join(folder, "files.json"), listing)

@@ -1,15 +1,17 @@
-"""The spec a reviewer receives (ruling E15-8; reading CR-4): the build doc with its ledger removed.
+"""The spec a reviewer receives (ruling E15-8 as A3 widened it; reading CR-4): the build doc with its
+ledger and the builder's working records removed.
 
 Removed through the build-doc form's own parse (`station_core/templates.py`, unchanged): the
-`## Punch list` section and every block in it, the `## Handoffs` section and every block in it, each
-from its heading to the line before the next `## ` heading (or the end), and every slice's `Status:`
-line. Everything else stays, byte for byte: the header, every slice's other labels, `## Build
-assumptions`, `## Deviations`, `## Discovered`. Each removal is reported, so a packet's withheld list
-can name it.
+`## Punch list` section and every block in it, the `## Handoffs` section and every block in it, the
+builder's working records `## Build assumptions`, `## Deviations` and `## Discovered` (the owner's
+ruling in the E15 lane contract's A3, C1A-3: the slice review withholds them too), each from its
+heading to the line before the next `## ` heading (or the end), and every slice's `Status:` line.
+Everything else stays, byte for byte: the header and every slice's other labels. Each removal is
+reported, so a packet's withheld list can name it.
 """
 from station_core import templates
 
-REMOVED_SECTIONS = ("## Punch list", "## Handoffs")
+REMOVED_SECTIONS = ("## Punch list", "## Handoffs", "## Build assumptions", "## Deviations", "## Discovered")
 
 
 def clean(text):

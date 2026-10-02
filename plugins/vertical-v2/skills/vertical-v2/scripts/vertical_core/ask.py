@@ -22,6 +22,7 @@ from . import common
 
 OUTSIDE_ROWS = ("gpt-astra", "gpt-sol", "gemini", "deepseek", "qwen")
 FLOOR = "opus"
+DROPPED_AT_SUGGEST = "dropped at suggest"
 QUESTION = ("Local-only review, or local + outside reviewers? (Recommended: local + GPT + Gemini. Outside reviewers "
             "see the full tracked code.)")
 
@@ -50,6 +51,15 @@ def profile_for(rost, row_id, local):
     if local:
         return "repo-with-tools" if "repo-with-tools" in supported else "repo"
     return "repo" if "repo" in supported else "packet-only"
+
+
+def dropped_named(ask):
+    """[{"row", "status", "reason"}] for each outside row the owner's recorded answer named that suggest
+    reported dropped: never sent, recorded with its reason, named in the verdict (C1A-1)."""
+    answer = ask.get("answer") or {}
+    named = set(answer.get("rows") or [])
+    return [{"row": r["row"], "status": DROPPED_AT_SUGGEST, "reason": r.get("drop_note") or "unavailable"}
+            for r in ask.get("rows") or [] if r.get("side") == "outside" and r["row"] in named and not r.get("available")]
 
 
 def commands(run):

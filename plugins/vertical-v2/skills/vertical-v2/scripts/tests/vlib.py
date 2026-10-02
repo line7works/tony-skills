@@ -59,6 +59,14 @@ def build_doc(slices=None, base_line=None, punch=True, handoffs=True, extra_head
     return "\n".join(lines) + "\n"
 
 
+def open_major_doc():
+    """The build doc with every slice `signed off` and its punch list holding slice A's MAJOR with no recheck
+    block: the records component derives `signed off with conditions` for slice A behind its signed card."""
+    text = build_doc()
+    head, tail = text.split("\n### 2026-09-25 %s recheck: Slice A" % D, 1)
+    return head + "\n"
+
+
 BASE_FILES = {
     "README.md": "# Turnstile\n\nA bench-rig turn counter.\n",
     "src/turnstile.py": "def spin(count):\n    return count\n",
@@ -263,7 +271,7 @@ def write(tmp, name, doc):
 
 
 def through_scope(tmp, rows=("gpt-astra", "deepseek"), harness="claude-code", repo=None, words="local plus GPT and DeepSeek",
-                  **station):
+                  dropped=(), **station):
     """A repo, a run, the gate, the ask with `rows`, and scope; returns (drive, run_dir, ws, info)."""
     options = dict(review_sheet="# Review sheet\n\n## Passes\n- correctness: on\n\n## Severity bar\n- as the kit's\n\n"
                                 "## Repo-specific checks\n- a reset never leaves a negative count\n", records=True)
@@ -271,7 +279,7 @@ def through_scope(tmp, rows=("gpt-astra", "deepseek"), harness="claude-code", re
     ws, info = make_repo(tmp, **options)
     drive, run_dir = start(tmp, ws, harness=harness, **station)
     local_row = "claude-opus-cli" if harness == "codex-cli" else "claude-session"
-    code, out, err = through_ask(drive, tmp, run_dir, rows=rows, words=words, local_row=local_row)
+    code, out, err = through_ask(drive, tmp, run_dir, rows=rows, words=words, local_row=local_row, dropped=dropped)
     if code != 0:
         raise AssertionError("the ask exited %d: %s %s" % (code, out, err))
     code, out, err = drive(["scope", "--run-dir", run_dir])

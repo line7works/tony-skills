@@ -2,7 +2,8 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a
 state. Written for E15 slice 1 of the skills v2 rebuild, against the E15 lane contract (sections 6 and
-8, amendments A1 and A2) and the control room's readings CR-1 to CR-10 in the slice 1a brief. Where this
+8, amendments A1 to A3) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
+slice 1a fix round applied A3 (C1A-1 to C1A-9). Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
 
@@ -31,7 +32,9 @@ Kept from v1 (ruling E15-1): the gate (every slice `signed off`, malformed input
 collapse only by the owner's words, recorded); the two preconditions (git, the tree clean where the
 review looks); the ask every run, in v1's suggest order, waiting for an answer that names its rows;
 the base precedence; the tracked-files-only export with the review records left out; the local review
-first and independent; every outside finding verified; `Refuted: N`; re-gradings recorded with a reason;
+first and independent; survivors continue (a named outside row that is dropped is recorded with its
+status and reason and the run goes on with the others); every outside finding verified; `Refuted: N`;
+re-gradings recorded with a reason;
 the repeats and misses against the record; the one write, appended on a rerun; the stop at the verdict;
 the `VERTICAL:` block. The reviewer eligibility, counts and test requirements are v1's (owner pick P6):
 the local fleet at the Opus floor, the lenses the depth and the inspection sheet select, the outside
@@ -39,10 +42,11 @@ rows the owner names.
 
 What moved: the deterministic half is a script; the review mechanics v1 held by deference are stated in
 section 6 in this core's own words (ruling E15-6), and the lens briefs in `references/lens-briefs.md`;
-the local lenses review a `git archive` copy with no history instead of a detached worktree (A2, Q1);
-every packet's spec has the ledger removed and every packet carries a hashed file list and a withheld
-list (ruling E15-8); the cards come from the records component as well as the `Status:` lines (ruling
-E15-9); every reader summons is a trace line (ruling E15-7).
+the local lenses review an archive copy with no history instead of a detached worktree (A2, Q1; section
+5 says how it is cut); every packet's spec has the ledger and the builder's working records removed and
+every packet carries a hashed file list and a withheld list (ruling E15-8, widened by A3); the cards come
+from the records component as well as the `Status:` lines (ruling E15-9); every reader summons is a
+trace line (ruling E15-7).
 
 ## 3. The phases
 
@@ -64,10 +68,12 @@ read through the build-doc form's parse (`station_core/templates.py`). Zero slic
 
 The cards (reading CR-1): the records component's `state` for the build doc. A slice's card is its
 `card_observed` (the last card set or observed in the log); it must equal the slice's `Status:` line
-text, and the component's `card_derived` must equal it too, so a log still holding an open finding does
-not pass behind a signed card. Either disagreement stops (`card-disagrees`), naming the records' card and
-the line. A slice the log names nothing about falls back to its `Status:` line, and `gate.json`'s notes
-say so. Every slice must stand `signed off`; a short slice stops (`gate-short`), naming each slice and its
+text, and a disagreement stops (`card-disagrees`), naming the records' card and the line. The
+component's `card_derived` is recorded beside it in `gate.json` and never stops the gate (the owner's
+ruling, E15 lane contract A3, C1A-2: v1's gate reads the card, not a derivation): a slice whose derived
+card differs from its observed card (an open finding in the log behind a signed card) is named in the
+verdict's Method line with both cards. A slice the log names nothing about falls back to its `Status:`
+line, and `gate.json`'s notes say so. Every slice must stand `signed off`; a short slice stops (`gate-short`), naming each slice and its
 state (a `built` card's remedy is a fresh slice signoff, never a recheck), unless the input carries the
 owner's `collapse_gate` words, which are recorded with the short slices and printed in the Method line.
 
@@ -100,9 +106,16 @@ the reviewer receives, the workspace's and the documents', each with its sha256 
 `withheld.json`, written before any request. A local packet's documents are the spec and, when it is the
 kit sheet, `REVIEW.md`; an outside repo row's workspace is the export; a packet-only row's documents are
 the export's UTF-8 files staged with every `/` written `__` (a file that is not UTF-8 is left out and named
-in the Method line). The outside mandate is `assets/vertical-mandate.md`, v1's byte for byte, its three
+in the Method line). Two paths that stage to one name both reach the packet (C1A-6): the first in path
+order keeps the name and each later one takes it with `.2`, `.3` and on before its extension (never a
+name another path stages to); each staged file's `files.json` entry carries its `source` path, and
+`scope.json`'s `staged_names` maps every staged name back to its path, so a finding at a staged name
+reads back to the right file. The outside mandate is `assets/vertical-mandate.md`, v1's byte for byte, its three
 slots filled: the spec, the base commit, the boundary lines. Each local mandate is the lens's brief, the
-scope, the base and boundary, the ledger-versus-spec line, the repo's checks, and the reporting shape.
+scope, the base and boundary, the ledger-versus-spec line, the repo's checks, and the reporting shape;
+its words follow the local row's profile (C1A-9): under `repo-with-tools` the lens may run the project's
+tests in its copy; under `repo` it says the lens runs nothing, reads the code, and reports a check it would
+have run as not executed, and it promises no test run.
 Writes `scope.json`, `spec.md`, `REVIEW.md` (a copy, when it is the sheet), `mandate.md`, `export/`,
 `local/`, `packets/`.
 
@@ -128,13 +141,19 @@ refusal is exit 5 and nothing is written. Writes `local.json` and one trace line
 
 ### 3.6 `request --run-dir D --outside [--row ROW ...]`
 
-Only after `record-local` completed (reading CR-5): before it, exit 5, and no outside request file exists
-under the run directory. One request per row the answer named (or the `--row` subset): `authorized: true`,
-decided by `station_core/readers_request.py` from the answer's rows and nothing else; refused (exit 5) for
-a row the answer did not name, a Claude row the answer named (a Claude row is never an outside reviewer
-and never carries `authorized`), a row the ask did not offer, or a row suggest reported dropped (reading
-CR-6). A packet-only request carries `output_budget: 32768`; a model id the owner typed rides as `model`.
-Writes `requests-outside.json`.
+Only after `record-local` completed (reading CR-5): the checkpoint at `recorded-local` and the run's
+`local.json` present and whole (every local call this run requested recorded and no other, each lens's
+last call `ok`, no stop recorded, a findings list and a verification method; C1A-4); otherwise exit 5, and
+no outside request file exists under the run directory. One request per row the answer named (or the
+`--row` subset): `authorized: true`, decided by `station_core/readers_request.py` from the answer's rows and
+nothing else; refused (exit 5) for a row the answer did not name, a Claude row the answer named (a Claude
+row is never an outside reviewer and never carries `authorized`), or a row the ask did not offer (reading
+CR-6). A named row suggest reported dropped is never sent (C1A-1, survivors continue): it is recorded in
+`requests-outside.json` under `dropped` with its status `dropped at suggest` and suggest's reason, and the
+survivors are requested; when every named row was dropped, nothing is summoned, an empty `outside.json` is
+written and the run moves to `recorded-outside`, so the verdict follows on the local review. Every dropped
+row is named in the Method line and the `VERTICAL:` block. A packet-only request carries `output_budget:
+32768`; a model id the owner typed rides as `model`. Writes `requests-outside.json`.
 
 ### 3.7 `record-outside --run-dir D --answer FILE`
 
@@ -178,26 +197,38 @@ first `## ` heading, reading `Base: <commit>` with the commit as 7 to 40 lowerca
 first such line counting; a recorded base that resolves to no commit stops (`base-unresolved`); (2) `git
 merge-base <default branch> HEAD`, the default branch being the remote's `HEAD` when one is named, else
 `main`, else `master`, and a merge base equal to HEAD itself counting as none (nothing to review); (3) the
-owner's base from `station.owner_words.base`; else a stop that asks (`base-unresolved`). The base and how
-it was found go in the Method line.
+owner's base from `station.owner_words.base`; else a stop that asks (`base-unresolved`). A `Base:` header
+line whose value is not 7 to 40 lowercase hex characters (a branch name, `HEAD`, upper-case hex) stops
+(`base-unresolved`) naming the line, and a recorded base that resolves to HEAD itself stops too, saying the
+boundary would be empty (C1A-7). The base and how it was found go in the Method line.
 
 **The boundary** is `git diff --name-status <base>..HEAD` (a rename keeps its old path too). The clean-tree
-rule reads `git status --porcelain` against the boundary's paths and the build doc.
+rule reads `git status --porcelain` against the boundary's paths and the build doc; a rename or copy in the
+tree names both its paths, so a boundary file moved away is dirt on the boundary (C1A-8).
 
-**The copies** (reading CR-3; A2, Q1): `export/` and `local/`, two `git archive` extractions of HEAD under
-the run directory, with `docs/reviews/`, `docs/records/` and `REVIEW.md` left out and no `.git`: no commit
-message, no history. In both, the builder's notes (a file whose name, lower-cased with its extension and
-separators removed, holds `buildernotes` or `buildnotes`) are dropped and the build doc's copy is the spec.
-A symbolic link in the commit is written as a plain file holding its target text. vertical-v2 never runs
-`git worktree`, never runs a git command that changes a branch, an index or a worktree, and removes both
-copies after the verdict.
+**The copies** (reading CR-3; A2, Q1): `export/` and `local/`, two archive copies of HEAD under the run
+directory, with `docs/reviews/`, `docs/records/` and `REVIEW.md` left out and no `.git`: no commit message,
+no history. Each is cut from the commit's tree, `git ls-tree -r` for the tracked files and `git cat-file
+--batch` for their stored bytes, rather than by `git archive`, because `git archive` applies the reviewed
+repo's committed `.gitattributes` export rules and cannot be told not to: `export-subst` writes commit
+messages into files and `export-ignore` drops tracked files from review without a word (C1A-5). So every
+tracked file outside the three exclusions is in both copies, with the bytes the commit stores (no
+attribute, filter or line-ending rule applied), and no file is dropped by an attribute. In both, the
+builder's notes (a file whose name, lower-cased with its extension and separators removed, holds
+`buildernotes` or `buildnotes`) are dropped and the build doc's copy is the spec. A symbolic link in the
+commit is written as a plain file holding its target text; a submodule is not a file and is not copied.
+vertical-v2 never runs `git worktree`, never runs a git command that changes a branch, an index or a
+worktree, and removes both copies after the verdict.
 
-**The spec** (reading CR-4) is the build doc with `## Punch list` and `## Handoffs` (each from its heading
-to the next `## ` heading, every block inside) and every slice's `Status:` line removed, through the
-build-doc form's parse; everything else stays byte for byte. **The withheld list** of every packet names,
+**The spec** (reading CR-4; ruling E15-8 as A3 widened it, C1A-3) is the build doc with `## Punch list`,
+`## Handoffs`, `## Build assumptions`, `## Deviations` and `## Discovered` (each from its heading to the
+next `## ` heading, every block inside) and every slice's `Status:` line removed, through the build-doc
+form's parse; everything else stays byte for byte. The first two and the `Status:` lines are the ledger;
+the other three are the builder's working records, which the slice review withholds too. **The withheld list** of every packet names,
 each with why: every tracked file under `docs/reviews/` (a prior verdict) and `docs/records/` (the
-records log), the builder's notes, the removed sections and lines with their line numbers, every
-untracked and ignored path, every working-tree change; an outside packet also names `REVIEW.md`.
+records log), the builder's notes, each removed section and line with its line numbers (so each of the
+five sections above is named as withheld wherever the doc holds it), every untracked and ignored path,
+every working-tree change; an outside packet also names `REVIEW.md`.
 
 ## 6. The review mechanics
 
@@ -263,10 +294,10 @@ The exit codes are `references/back-loop.md` section 2's. Every stop writes `res
 | `selection-several` | the hunt found several; listed for the owner, none picked |
 | `gate-malformed` | zero slices, or a slice with no `Status:` line |
 | `gate-short` | a slice stands short of `signed off` and the owner's words did not collapse the gate |
-| `card-disagrees` | a slice's card in the records disagrees with its `Status:` line or with the component's derived card |
+| `card-disagrees` | a slice's observed card in the records disagrees with its `Status:` line (a derived card that differs never stops; it is named in the Method line) |
 | `records-refused` | the records component refused a read; its own sentence is carried |
 | `not-git` | the workspace is not a git work tree root with a commit |
-| `base-unresolved` | no base: none recorded, no merge base, none from the owner; or a recorded base that resolves to nothing |
+| `base-unresolved` | no base: none recorded, no merge base, none from the owner; or a recorded `Base:` line that is not 7 to 40 lowercase hex, resolves to nothing, or names HEAD itself |
 | `dirty-boundary` | dirt touches the boundary or the build doc and the owner gave no committed-state-only order |
 | `station-refused` | readers' identity breaks the trace's refusal rule; a `refused` trace line is written |
 | `floor-refused` | a local lens came back below the floor; no verdict is emitted |
@@ -282,9 +313,11 @@ id and holding v1's three sections in v1's order: `### THE VERDICT` (the verdict
 verified findings in the punch-list line form, severity, `file:line`, claim, scenario, reviewers, stamp,
 and any re-grade; the repeats, the misses, the ledger notes, the `REVIEW.md` line and the sheet's skips and
 checks), `### Method line` (the base and how, the head and boundary, the run id, the gate and any collapse,
-the tree, the depth and lenses, each local lens's row, model and profile, the route, each outside
-reviewer's row, model, profile, parity, isolation, anomaly and files left out, each dropped reviewer with
-its status and reason, how the local review verified, and what every packet withheld), and `### Unverified
+each slice whose derived card differs from its observed card with both cards, the tree, the depth and
+lenses, each local lens's row, model and profile, the route, each outside reviewer's row, model, profile,
+parity, isolation, anomaly and files left out, each dropped reviewer with its status and reason (a named
+row suggest dropped reads `dropped at suggest`), how the local review verified, and what every packet
+withheld), and `### Unverified
 appendix` under v1's banner, each reviewer's raw text verbatim between two marker lines, the opening one
 carrying the text's length. The `VERTICAL:` block is v1's lines byte for byte.
 
@@ -323,9 +356,10 @@ Ruling E15-12 and reading CR-10. On Claude Code the local lenses are `claude-ses
 `repo-with-tools`, fresh subagents that may run the project's tests in their archive copy. On Codex they go
 through `claude-opus-cli`, the portable Claude row a shell can dispatch, with the profile that row offers:
 `repo-with-tools` once readers offers it on that row (the slice 1a brief's item 4(c)), `repo` until then.
-On `repo` each lens reads the code and runs no check; the ask says so, the request's route says so, and the
-Method line names the route and states "static analysis only". As built, the row offers `repo` only: item
-4(c) stopped on its question (the claude CLI offers no flag that confines what a test run writes).
+On `repo` each lens reads the code and runs no check; the ask says so, the request's route says so, each
+local mandate says so and promises no test run (C1A-9), and the Method line names the route and states
+"static analysis only". The row offers `repo` only: item 4(c) is carried to a later step by the owner's
+ruling (E15 lane contract A3; no claude CLI flag fences what an executed test writes).
 
 ## 13. The seeded families
 
@@ -355,7 +389,7 @@ a Claude row or on a row the owner's answer in this run did not name.
 | `request` | `scoped` | `requested-local` |
 | `request --resend` | `requested-local` | `requested-local` |
 | `record-local` | `requested-local` | `recorded-local` |
-| `request --outside` | `recorded-local` | `requested-outside` |
+| `request --outside` | `recorded-local`, with `local.json` on record | `requested-outside`; `recorded-outside` when every named row was dropped at suggest |
 | `record-outside` | `requested-outside` | `recorded-outside` |
 | `verdict` | `recorded-outside`, or `recorded-local` with no outside row named | `verdict-written` |
 | `report` | `verdict-written` | `done` |

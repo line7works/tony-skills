@@ -23,7 +23,7 @@ import shutil
 
 from station_core import driver, fsio, records_link
 
-from . import common, forms, report, sheet as sheetmod
+from . import ask as askmod, common, forms, report, sheet as sheetmod
 
 SEVERITY_ORDER = ("BLOCKER", "MAJOR", "MINOR")
 
@@ -120,6 +120,13 @@ def method_lines(run, gate, scope, ask, local, outside):
     else:
         out.append("Gate: every slice signed off (cards from %s)" % " and ".join(
             {"records": "the records component", "status-line": "the Status: lines, no log events"}[s] for s in sources))
+    for item in gate["slices"]:
+        # the owner's ruling (E15 lane contract A3, C1A-2): a derived card that differs never stops the gate;
+        # the slice is named here with both cards
+        if item.get("card_source") == "records" and item.get("card_derived") and item["card_derived"] != item["card"]:
+            out.append("Card: slice %s: the observed card %r (the card the gate compares with its Status: line) and "
+                       "the records component's derived card %r differ" % (item["name"], item["card"],
+                                                                          item["card_derived"]))
     dirt = gate.get("dirt") or {"inside": [], "outside": []}
     if gate.get("committed_only"):
         out.append("Tree: committed state only, by the owner's words: \"%s\" (dirt in the boundary: %s)"
@@ -138,7 +145,7 @@ def method_lines(run, gate, scope, ask, local, outside):
         out.append("Route: the local lenses ran through %s with profile repo: each read the code and ran no check "
                    "(static analysis only)" % local_row["row"])
     left = dict((p["row"], p["left_out"]) for p in scope["packets"] if p["side"] == "outside")
-    dropped = []
+    dropped = ["%s %s %s %s %s" % (d["row"], forms.M, d["status"], forms.M, d["reason"]) for d in askmod.dropped_named(ask)]
     for call in outside.get("calls") or []:
         if call["status"] != "ok":
             dropped.append("%s %s %s %s %s" % (call["row"], forms.M, call["status"], forms.M,
@@ -156,8 +163,9 @@ def method_lines(run, gate, scope, ask, local, outside):
     out += ["Dropped: %s" % d for d in dropped] or ["Dropped: none"]
     out.append("Verification: %s" % local["method"])
     out.append("Withheld from every packet: the prior verdicts, the records log, the builder's notes, the build doc's "
-               "ledger (punch list, handoffs, Status: lines) and every untracked, ignored or changed working-tree file; "
-               "REVIEW.md reached the local lenses only; no packet or workspace carried git history")
+               "ledger (punch list, handoffs, Status: lines) and the builder's working records (build assumptions, "
+               "deviations, discovered), and every untracked, ignored or changed working-tree file; REVIEW.md reached "
+               "the local lenses only; no packet or workspace carried git history")
     return [one.replace("\n", " ") for one in out]
 
 
@@ -254,10 +262,13 @@ def report_handler(ctx, args):
     verdict = common.read(run, "verdict.json")
     outside = common.read(run, "outside.json") if common.has(run, "outside.json") else {}
     calls = outside.get("calls") or []
+    dropped = [{"row": d["row"], "why": "%s (%s)" % (d["status"], d["reason"])}
+               for d in askmod.dropped_named(common.read(run, "ask.json"))]
+    dropped += [{"row": c["row"], "why": "%s (%s)" % (c["status"], c["reason"] or "no reason given")}
+                for c in calls if c["status"] != "ok"]
     fields = {"doc": gate["doc"], "base": gate["base"]["commit"], "head": gate["head"], "verdict": verdict["verdict"],
               "reviewers": [c["row"] for c in calls if c["status"] == "ok"],
-              "dropped": [{"row": c["row"], "why": "%s (%s)" % (c["status"], c["reason"] or "no reason given")}
-                          for c in calls if c["status"] != "ok"],
+              "dropped": dropped,
               "refuted": verdict["refuted"],
               "verdict_doc": verdict["doc"] or "none (report-only: nothing written)",
               "review_line": verdict["review_line"], "bottom_line": args.bottom_line,

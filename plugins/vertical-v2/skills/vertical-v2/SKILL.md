@@ -20,7 +20,7 @@ fixed here.
 **The split.** You talk to the owner, summon readers, verify findings and judge; `scripts/vertical.py`
 does everything deterministic and makes the one write (rule E15-4). It finds the build doc, reads every
 card from the records component and every `Status:` line, computes the base and the boundary, checks
-the tree, renders the ask, cuts the review copies with `git archive`, builds the cold packets and their
+the tree, renders the ask, cuts the review copies from the commit's tree, builds the cold packets and their
 lists, builds every readers request, holds your recorded answers to the run, merges, counts, writes the
 verdict doc and the trace, and renders the `VERTICAL:` block. `references/vertical-contract.md` states
 every phase, its exits and its stops; read it once per run, before step 1. `references/back-loop.md` is
@@ -94,7 +94,7 @@ uv run scripts/vertical.py ask --run-dir <run dir> --answer <answer.json>
 uv run scripts/vertical.py scope --run-dir <run dir>
 ```
 
-It cuts two copies of the reviewed head with `git archive` (no history, no untracked file, no review
+It cuts two copies of the reviewed head from the commit's tree (no history, no untracked file, no review
 record, the build doc reduced to its spec), builds one packet per local lens and per outside row named,
 and writes each packet's file list (with hashes) and its withheld list. State the depth line it prints
 before launching anything.
@@ -130,7 +130,9 @@ uv run scripts/vertical.py request --run-dir <run dir> --outside
 ```
 
 Summon `/readers` with those requests as one fleet; each carries `authorized` on his word in this run.
-A call that comes back anything but `ok` is a dropped reviewer, never retried in this run.
+A row he named that the ask showed as dropped is never sent: the command records it with its reason and
+requests the rest (when none is left, it says so and the next command is the verdict). A call that comes
+back anything but `ok` is a dropped reviewer, never retried in this run.
 
 ## Step 5: Merge and verify
 

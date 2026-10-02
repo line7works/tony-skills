@@ -222,6 +222,91 @@ class TheBase(_Gate):
         self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
 
 
+class TheDerivedCard(_Gate):
+    """C1A-2, the owner's ruling in A3: the gate compares the observed card with the `Status:` line only; a
+    derived card that differs (an open finding in the log behind a signed card) does not stop the run."""
+
+    def test_an_open_finding_behind_a_signed_card_does_not_stop_the_gate(self):
+        ws, info = vlib.make_repo(self.tmp, doc_text=vlib.open_major_doc(), records=True)
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        gate = vlib.load(self.run_dir, "gate.json")
+        self.assertEqual(gate["disagree"], [])
+        self.assertEqual(gate["short"], [])
+        slice_a = [s for s in gate["slices"] if s["name"] == "A"][0]
+        self.assertEqual((slice_a["card"], slice_a["card_source"], slice_a["card_derived"]),
+                         ("signed off", "records", "signed off with conditions"))
+
+    def test_the_observed_card_against_the_status_line_still_stops(self):
+        ws, info = vlib.make_repo(self.tmp, doc_text=vlib.open_major_doc(), records=True)
+        path = os.path.join(ws, vlib.DOC)
+        head, tail = testlib.read_text(path).split("## Slice B", 1)
+        testlib.write_text(path, head + "## Slice B" + tail.replace("Status: signed off", "Status: built", 1))
+        testlib.git(ws, ["commit", "-q", "-am", "flip B"])
+        result = self.stopped(*self.gate(ws)[:2], tag="card-disagrees")
+        self.assertEqual(result["station_result"]["gate"]["disagree"],
+                         [{"name": "B", "card": "signed off", "status_line": "built"}])
+
+
+class TheRecordedBaseLine(_Gate):
+    """C1A-7: a recorded `Base:` is 7 to 40 lowercase hex, else a stop naming the line; a recorded base equal
+    to HEAD (an empty boundary) is a stop that says so."""
+
+    def recorded(self, value, commit=True):
+        ws, info = vlib.make_repo(self.tmp, name="ws-%d" % (getattr(self, "n", 0)))
+        self.n = getattr(self, "n", 0) + 1
+        text = vlib.build_doc(base_line="Base: %s" % (value(ws) if callable(value) else value))
+        testlib.write_text(os.path.join(ws, vlib.DOC), text)
+        if commit:
+            testlib.git(ws, ["commit", "-q", "-am", "record the base"])
+        return ws
+
+    def test_a_branch_name_on_the_base_line_stops_naming_the_line(self):
+        ws = self.recorded("main")
+        result = self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
+        self.assertIn("Base: main", result["reason"])
+        self.assertIn("hex", result["reason"])
+
+    def test_head_on_the_base_line_stops_naming_the_line(self):
+        ws = self.recorded("HEAD")
+        result = self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
+        self.assertIn("Base: HEAD", result["reason"])
+
+    def test_upper_case_hex_stops(self):
+        ws = self.recorded(lambda w: testlib.git(w, ["rev-parse", "HEAD~1"]).strip().upper())
+        self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
+
+    def test_a_recorded_base_equal_to_head_is_a_stop_that_says_the_boundary_is_empty(self):
+        ws = self.recorded(lambda w: testlib.git(w, ["rev-parse", "HEAD"]).strip(), commit=False)
+        result = self.stopped(*self.gate(ws, owner_words={"committed_only": "review what is committed"})[:2],
+                              tag="base-unresolved")
+        self.assertIn("HEAD", result["reason"])
+        self.assertIn("empty", result["reason"])
+
+
+class TheRenameInTheTree(_Gate):
+    """C1A-8: the dirt check reads both paths of a rename or copy; a boundary file moved away stops the run."""
+
+    def test_a_staged_rename_of_a_boundary_file_stops_naming_its_old_path(self):
+        ws, info = vlib.make_repo(self.tmp)
+        testlib.git(ws, ["mv", "src/spinner.py", "src/moved.py"])
+        result = self.stopped(*self.gate(ws)[:2], tag="dirty-boundary")
+        self.assertIn("src/spinner.py", result["reason"])
+        dirt = result["station_result"]["gate"]["dirt"]
+        self.assertEqual(dirt["inside"], ["src/spinner.py"])
+        self.assertIn("src/moved.py", dirt["outside"])
+
+    def test_a_staged_rename_outside_the_boundary_proceeds_and_lists_both_paths(self):
+        ws, info = vlib.make_repo(self.tmp)
+        testlib.git(ws, ["mv", "src/legacy.py", "src/older.py"])
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        dirt = vlib.load(self.run_dir, "gate.json")["dirt"]
+        self.assertEqual(dirt["inside"], [])
+        self.assertIn("src/legacy.py", dirt["outside"])
+        self.assertIn("src/older.py", dirt["outside"])
+
+
 class NothingWritten(_Gate):
 
     def test_the_gate_writes_nothing_outside_its_run_directory(self):

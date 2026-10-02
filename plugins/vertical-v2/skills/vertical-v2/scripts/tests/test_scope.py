@@ -90,8 +90,20 @@ class TheCopies(_Scope):
         self.assertNotIn("## Handoffs", spec)
         self.assertNotIn("Status:", spec)
         self.assertIn("## Slice A %s the counter" % D, spec)
-        self.assertIn("## Build assumptions", spec)
+        for section in ("## Build assumptions", "## Deviations", "## Discovered"):
+            self.assertNotIn(section, spec)
         self.assertIn("Acceptance criteria:", spec)
+
+    def test_the_copies_ignore_the_repos_export_attributes(self):
+        """C1A-5: no `export-subst` expansion and no `export-ignore` drop: each copy holds the commit's bytes."""
+        self.scoped(extra_build_files={".gitattributes": "src/ver.txt export-subst\nsrc/hidden.py export-ignore\n",
+                                       "src/ver.txt": "$Format:%B$\n", "src/hidden.py": "HIDDEN = 1\n"})
+        for name in ("export", "local"):
+            root = os.path.join(self.run_dir, name)
+            self.assertEqual(testlib.read_text(os.path.join(root, "src", "ver.txt")), "$Format:%B$\n", name)
+            self.assertEqual(testlib.read_text(os.path.join(root, "src", "hidden.py")), "HIDDEN = 1\n", name)
+            for path in every_file(root):
+                self.assertNotIn("the build\n", testlib.read_text(path), path)
 
 
 class ThePackets(_Scope):
@@ -166,6 +178,108 @@ class ThePackets(_Scope):
         self.assertNotIn("Status:", mandate)
         asset = testlib.read_text(os.path.join(testlib.SKILL, "assets", "vertical-mandate.md"))
         self.assertTrue(mandate.startswith(asset.split("[BUILD_DOC]")[0]))
+
+
+class TheBuildersWorkingRecords(_Scope):
+    """C1A-3, the owner's ruling in A3: `## Build assumptions`, `## Deviations` and `## Discovered` are left
+    out of the spec every reviewer receives, each named as withheld in every packet."""
+
+    MARKED = ("BUILDER-ASSUMPTION-MARKER", "BUILDER-DEVIATION-MARKER", "BUILDER-DISCOVERED-MARKER")
+
+    def doc(self):
+        text = vlib.build_doc()
+        text = text.replace("- the bench clock is monotonic", "- the bench clock is monotonic BUILDER-ASSUMPTION-MARKER")
+        text = text.replace("## Deviations\n", "## Deviations\n- BUILDER-DEVIATION-MARKER: skipped the retry, plainly unneeded\n")
+        text = text.replace("## Discovered\n", "## Discovered\n- BUILDER-DISCOVERED-MARKER: the clock drifts\n")
+        return text
+
+    def test_no_working_record_reaches_any_packet_copy_or_mandate(self):
+        self.scoped(doc_text=self.doc())
+        for root in ("export", "local", "packets"):
+            for path in every_file(os.path.join(self.run_dir, root)):
+                if os.path.basename(path) in ("files.json", "withheld.json"):
+                    continue
+                text = testlib.read_text(path)
+                for marker in self.MARKED:
+                    self.assertNotIn(marker, text, (path, marker))
+        for name in ("spec.md", "mandate.md"):
+            text = testlib.read_text(os.path.join(self.run_dir, name))
+            for marker in self.MARKED:
+                self.assertNotIn(marker, text, (name, marker))
+
+    def test_each_packet_names_the_three_sections_as_withheld(self):
+        self.scoped(doc_text=self.doc())
+        for packet in vlib.load(self.run_dir, "scope.json")["packets"]:
+            withheld = [w["what"] for w in testlib.load_json(packet["withheld"])["withheld"]]
+            for section in ("## Build assumptions", "## Deviations", "## Discovered"):
+                self.assertIn("%s %s" % (vlib.DOC, section), withheld, (packet["name"], section))
+
+
+class TheStagedNames(_Scope):
+    """C1A-6: two export paths that stage to one name both reach the packet under distinct names, and the
+    file list never carries one name twice."""
+
+    def test_a_collision_stages_both_files_under_distinct_names(self):
+        self.scoped(rows=("deepseek",), extra_build_files={"docs/a__b.md": "COLLIDE-ONE\n", "docs/a/b.md": "COLLIDE-TWO\n"})
+        packet = [p for p in vlib.load(self.run_dir, "scope.json")["packets"] if p["name"] == "outside-deepseek"][0]
+        entries = testlib.load_json(packet["files"])["files"]
+        names = [os.path.basename(e["path"]) for e in entries]
+        self.assertEqual(len(names), len(set(names)), names)
+        texts = sorted(testlib.read_text(e["abs"]) for e in entries if e["role"] == "document"
+                       and testlib.read_text(e["abs"]).startswith("COLLIDE-"))
+        self.assertEqual(texts, ["COLLIDE-ONE\n", "COLLIDE-TWO\n"])
+        sources = sorted(e.get("source") for e in entries if e["role"] == "document"
+                         and testlib.read_text(e["abs"]).startswith("COLLIDE-"))
+        self.assertEqual(sources, ["docs/a/b.md", "docs/a__b.md"])
+        self.assertEqual(testlib.load_json(packet["withheld"])["left_out"], [])
+
+    def test_the_names_are_the_same_on_every_run(self):
+        files = {"docs/a__b.md": "COLLIDE-ONE\n", "docs/a/b.md": "COLLIDE-TWO\n"}
+        seen = []
+        for attempt in ("one", "two"):
+            sub = os.path.join(self.tmp, attempt)
+            os.makedirs(sub)
+            self.tmp, keep = sub, self.tmp
+            try:
+                self.scoped(rows=("deepseek",), extra_build_files=files)
+            finally:
+                self.tmp = keep
+            packet = [p for p in vlib.load(self.run_dir, "scope.json")["packets"] if p["name"] == "outside-deepseek"][0]
+            seen.append(sorted((os.path.basename(e["path"]), e.get("source"))
+                               for e in testlib.load_json(packet["files"])["files"] if e["role"] == "document"))
+        self.assertEqual(seen[0], seen[1])
+
+
+class TheLocalMandateFollowsTheRoute(_Scope):
+    """C1A-9: on the `repo` route the local mandate says the reader reads and runs nothing and never promises
+    tests; on `repo-with-tools` it keeps its words."""
+
+    def mandates(self):
+        return [testlib.read_text(os.path.join(self.run_dir, "packets", name, "mandate.md"))
+                for name in sorted(os.listdir(os.path.join(self.run_dir, "packets"))) if name.startswith("local-")]
+
+    def test_on_the_repo_route_the_mandate_runs_nothing(self):
+        ws, info = vlib.make_repo(self.tmp, review_sheet=SHEET, records=True)
+        drive, run_dir = vlib.start(self.tmp, ws, harness="codex-cli")
+        code, out, err = vlib.through_ask(drive, self.tmp, run_dir, rows=(), local_row="claude-opus-cli")
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(drive(["scope", "--run-dir", run_dir])[0], 0)
+        self.run_dir = run_dir
+        texts = self.mandates()
+        self.assertTrue(texts)
+        for text in texts:
+            self.assertNotIn("You may run the project's tests", text)
+            self.assertNotIn("verification blocked", text)
+            self.assertIn("This route runs no command", text)
+            self.assertNotIn("executed, read or reasoned", text)
+        correctness = [t for t in texts if "lens: correctness" in t][0]
+        self.assertIn("runs nothing", correctness.split("## The scope")[0])
+
+    def test_on_the_tools_route_the_mandate_keeps_its_words(self):
+        self.scoped(rows=())
+        for text in self.mandates():
+            self.assertIn("You may run the project's tests there", text)
+            self.assertNotIn("This route runs no command", text)
 
 
 class TheLensesAndTheSheet(_Scope):

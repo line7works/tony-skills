@@ -9,11 +9,15 @@ exactly those rows and never on a Claude row. Before any request is built, reade
 checked (`readers_link.py`), and every packet is held to the file list `scope` wrote (each file's sha256,
 no file added): a packet that moved is refused (exit 5) and nothing is built.
 
-`request --outside` runs only after `record-local` has completed (exit 5 before it), so no outside
-request file exists under the run directory before the local verdict is formed. It refuses (exit 5) a
-row the answer did not name, a Claude row the answer named (a Claude row is never an outside reviewer
-and never carries `authorized`), and a row suggest reported dropped. The script builds and records; the
-executor summons readers.
+`request --outside` runs only after `record-local` has completed: the checkpoint at `recorded-local` AND
+the run's `local.json` present and whole (every local call of this run recorded, each lens's last call
+`ok`, no stop), else exit 5 (C1A-4), so no outside request file exists under the run directory before the
+local verdict is formed. It refuses (exit 5) a row the answer did not name and a Claude row the answer
+named (a Claude row is never an outside reviewer and never carries `authorized`). A named row suggest
+reported dropped is never sent: it is recorded in `requests-outside.json` with its status (`dropped at
+suggest`) and suggest's reason, and the run continues with the survivors (C1A-1, v1's "survivors
+continue"); when every named row was dropped, nothing is summoned and the run moves straight to the
+verdict, which names each dropped row. The script builds and records; the executor summons readers.
 """
 import os
 
@@ -149,12 +153,47 @@ def _resend(ctx, args):
     return ctx.emit(ctx.envelope(next="record-local", run_id=run.checkpoint["run_id"], call=call))
 
 
+def local_record_problem(run):
+    """Why the run's local verdict is not on record, or None when `local.json` holds it: the file present
+    and an object, no stop recorded, every local call this run requested recorded and none other, each
+    lens's last call `ok`, and the verification method stated."""
+    if not common.has(run, "local.json"):
+        return "the run holds no local.json (record-local writes it)"
+    try:
+        local = fsio.read_json(common.path_of(run, "local.json"))
+    except (OSError, ValueError) as exc:
+        return "the run's local.json cannot be read (%s)" % exc
+    if not isinstance(local, dict):
+        return "the run's local.json is not an object"
+    if "stopped" in local:
+        return "the run's local.json records a stopped local review (%s)" % local.get("stopped")
+    requested = common.read(run, "requests-local.json").get("calls") if common.has(run, "requests-local.json") else None
+    calls = local.get("calls")
+    if not requested or not isinstance(calls, list) or not all(isinstance(c, dict) for c in calls):
+        return "the run's local.json names no local call this run requested"
+    if sorted(c.get("call_id") for c in calls) != sorted(c["call_id"] for c in requested):
+        return "the run's local.json does not record exactly the local calls this run requested"
+    last = {}
+    for call in calls:
+        last[call.get("lens")] = call
+    failed = sorted(lens for lens, call in last.items() if call.get("status") != "ok")
+    if failed:
+        return "the run's local.json records lenses whose last call is not ok (%s)" % ", ".join(failed)
+    if common.blank(local.get("method")) or not isinstance(local.get("findings"), list):
+        return "the run's local.json holds no findings list or no verification method"
+    return None
+
+
 def _outside(ctx, args):
     run = ctx.open_run(args.run_dir)
     phase = run.checkpoint.get("phase")
     if phase != "recorded-local":
         return _refuse(ctx, run, "no outside request before record-local has completed (this run is at %r): the local "
                        "review forms its findings first, independently; nothing was built" % phase)
+    problem = local_record_problem(run)
+    if problem:
+        return _refuse(ctx, run, "no outside request before the local verdict is on record: %s; run record-local; "
+                       "nothing was built" % problem)
     ask = common.read(run, "ask.json")
     scope = common.read(run, "scope.json")
     answer = ask["answer"]
@@ -162,10 +201,9 @@ def _outside(ctx, args):
     wanted = list(args.row or answer["rows"])
     if not wanted:
         return _refuse(ctx, run, "the owner's answer named no outside row: this is a local-only review; run verdict")
-    found, roster, ident = _identity(ctx, run, args)
     refusals = []
     for row in wanted:
-        provider = askmod.row_of(roster, row) and askmod.row_of(roster, row).get("provider")
+        provider = offered.get(row, {}).get("provider")
         if row not in answer["rows"]:
             refusals.append("%s: the owner's answer in this run did not name it (%s)" % (row, ", ".join(answer["rows"])
                                                                                        or "no row"))
@@ -174,12 +212,21 @@ def _outside(ctx, args):
                             "rows are the local fleet" % row)
         elif row not in offered:
             refusals.append("%s: not an outside row this run's ask offered (%s)" % (row, ", ".join(offered)))
-        elif not offered[row]["available"]:
-            refusals.append("%s: suggest reported it dropped (%s); a dropped row is never sent"
-                            % (row, offered[row]["drop_note"] or "unavailable"))
     if refusals:
         return _refuse(ctx, run, "refused before any outside request was built: %s" % "; ".join(refusals),
                        refusals=refusals)
+    dropped = [{"row": row, "status": askmod.DROPPED_AT_SUGGEST, "reason": offered[row]["drop_note"] or "unavailable"}
+               for row in wanted if not offered[row]["available"]]
+    wanted = [row for row in wanted if offered[row]["available"]]
+    if not wanted:
+        common.write(run, "requests-outside.json", {"readers": None, "run_dir": common.path_of(run, "readers"),
+                                                    "calls": [], "dropped": dropped})
+        common.write(run, "outside.json", {"calls": [], "findings": [], "ledger_notes": None})
+        common.advance(run, "recorded-outside")
+        return ctx.emit(ctx.envelope(next="verdict", run_id=run.checkpoint["run_id"], calls=[], dropped=dropped,
+                                     summon="nothing to summon: every outside row the owner named was dropped at "
+                                            "suggest, and each is recorded with its reason; run verdict"))
+    found, roster, ident = _identity(ctx, run, args)
     packets = dict((p["row"], p) for p in scope["packets"] if p["side"] == "outside")
     problems = [m for row in wanted for m in packet_problems(packets[row])]
     if problems:
@@ -203,9 +250,10 @@ def _outside(ctx, args):
                       "request_file": path, "packet": packet["name"], "authorized": True})
     common.write(run, "requests-outside.json", {"readers": {"root": found["root"], "route": found["route"],
                                                             "identity": ident},
-                                                "run_dir": common.path_of(run, "readers"), "calls": calls})
+                                                "run_dir": common.path_of(run, "readers"), "calls": calls,
+                                                "dropped": dropped})
     common.advance(run, "requested-outside")
-    return ctx.emit(ctx.envelope(next="record-outside", run_id=run.checkpoint["run_id"], calls=calls,
+    return ctx.emit(ctx.envelope(next="record-outside", run_id=run.checkpoint["run_id"], calls=calls, dropped=dropped,
                                  summon="summon /readers with these requests as one fleet under run id %s; each "
                                         "carries authorized on the owner's word in this run; then record-outside"
                                         % run.checkpoint["run_id"]))

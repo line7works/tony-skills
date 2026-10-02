@@ -15,7 +15,8 @@ reason, never retried, and no finding may be credited to it.
 The findings are the executor's merge (deduped on file:line and claim) and verification (the stamp:
 CONFIRMED, PLAUSIBLE or REFUTED); the script refuses, exit 5 and nothing written: a CONFIRMED or
 PLAUSIBLE finding whose file:line does not exist in the reviewed copy (the export; a packet-only staged
-name with `__` for `/` is read back to its path), a REFUTED one with no reason, a severity or confidence
+name is read back to the path `scope` staged it from, C1A-6, else with `__` read as `/`), a REFUTED one
+with no reason, a severity or confidence
 changed from what the reviewer stated with no reason, a finding credited to a call that is not this
 phase's or did not come back `ok`, a text holding the line form's separator, and (local) a lens credited
 with no finding that does not say what it tried to break.
@@ -65,12 +66,17 @@ def call_record(call, body):
             "raw_hash": body.get("raw_hash")}
 
 
-def resolve_location(export, location):
-    """(the location as it reads in the reviewed copy, or None when it names nothing there)."""
+def resolve_location(export, location, staged=None, packet_only=False):
+    """(the location as it reads in the reviewed copy, or None when it names nothing there). `staged` maps
+    each packet-only staged name to the path it was staged from (scope.json's `staged_names`); a finding
+    only packet-only reviewers made names a staged file, so its staged name is read back first and only."""
     path, _, lines = location.rpartition(":")
     first = int(lines.split("-")[0])
     last = int(lines.split("-")[-1])
-    for candidate in (path, path.replace("__", "/")):
+    candidates = [path, path.replace("__", "/")]
+    if (staged or {}).get(path):
+        candidates = [staged[path]] if packet_only else [path, staged[path], path.replace("__", "/")]
+    for candidate in candidates:
         full = os.path.normpath(os.path.join(export, candidate))
         if not full.startswith(export.rstrip(os.sep) + os.sep) or not os.path.isfile(full):
             continue
@@ -83,9 +89,11 @@ def resolve_location(export, location):
     return None
 
 
-def check_findings(run, findings, calls_ok, side):
-    """(the findings with their locations as they read in the copy, [refusal])."""
-    export = common.read(run, "scope.json")["export"]
+def check_findings(run, findings, calls_ok, side, packet_only=()):
+    """(the findings with their locations as they read in the copy, [refusal]). `packet_only`: the call ids
+    whose reviewer read staged files, not a workspace."""
+    scope = common.read(run, "scope.json")
+    export, staged = scope["export"], scope.get("staged_names") or {}
     out, refusals = [], []
     for index, f in enumerate(findings):
         where = "finding %d (%s)" % (index + 1, f["location"])
@@ -107,7 +115,8 @@ def check_findings(run, findings, calls_ok, side):
             if common.blank(f.get("refuted_because")):
                 refusals.append("%s: REFUTED with no reason" % where)
         else:
-            found = resolve_location(export, f["location"])
+            only_staged = bool(f["found_by"]) and all(c in packet_only for c in f["found_by"])
+            found = resolve_location(export, f["location"], staged, only_staged)
             if found is None:
                 refusals.append("%s: stamped %s at %s, which does not exist in the reviewed copy; a hallucinated "
                                 "location is a refutation unless the real site is located and named"
@@ -216,7 +225,8 @@ def record_outside(ctx, args):
     if refusals:
         return _refuse(ctx, run, refusals)
     ok_ids = dict((r["call_id"], r["row"]) for r in records if r["status"] == "ok")
-    findings, refusals = check_findings(run, doc["findings"], ok_ids, "outside")
+    packet_only = set(r["call_id"] for r in records if r["profile"] == "packet-only")
+    findings, refusals = check_findings(run, doc["findings"], ok_ids, "outside", packet_only)
     if refusals:
         return _refuse(ctx, run, refusals)
     _summons_lines(ctx, run, requests, records)

@@ -104,6 +104,80 @@ class LocalBeforeOutside(_Request):
         self.assertFalse(os.path.exists(os.path.join(run_dir, "requests-outside.json")))
 
 
+class LocalFirstRestsOnTheRecord(_Request):
+    """C1A-4: `request --outside` refuses unless the run's `local.json` exists and validates, whatever the
+    checkpoint's phase says."""
+
+    def force_phase(self, run_dir, phase):
+        path = os.path.join(run_dir, "checkpoint.json")
+        checkpoint = testlib.load_json(path)
+        checkpoint["phase"] = phase
+        testlib.write_json(path, checkpoint)
+
+    def test_a_hand_written_checkpoint_with_no_local_record_is_refused(self):
+        drive, run_dir, ws, info = vlib.through_local_requests(self.tmp)
+        self.force_phase(run_dir, "recorded-local")
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+        self.assertEqual(code, 5, (out, err))
+        self.assertIn("local.json", out["reason"])
+        self.assertEqual(vlib.outside_files(run_dir), [])
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "requests-outside.json")))
+
+    def test_a_local_record_that_stopped_or_names_other_calls_is_refused(self):
+        drive, run_dir, ws, info = vlib.through_local_requests(self.tmp)
+        self.force_phase(run_dir, "recorded-local")
+        calls = [{"call_id": c, "row": "claude-session", "lens": c.rsplit("-", 1)[-1], "status": "ok"}
+                 for c in vlib.local_ids(run_dir)]
+        for doc in ({"calls": calls, "findings": [], "tried": [], "method": None, "stopped": "local-incomplete"},
+                    {"calls": calls[:1], "findings": [], "tried": [], "method": "read"},
+                    {"calls": [dict(c, status="empty") for c in calls], "findings": [], "tried": [], "method": "read"},
+                    ["not", "an", "object"]):
+            testlib.write_json(os.path.join(run_dir, "local.json"), doc)
+            code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+            self.assertEqual(code, 5, (doc, out, err))
+            self.assertEqual(vlib.outside_files(run_dir), [])
+
+    def test_the_legal_path_still_releases_the_outside_requests(self):
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp)
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(len(vlib.outside_files(run_dir)), 2)
+
+
+class SurvivorsContinue(_Request):
+    """C1A-1: a row the ask showed as dropped and the owner named is recorded with its status and reason and
+    never sent; the run continues with the survivors."""
+
+    def test_the_only_named_row_dropped_is_recorded_and_the_run_reaches_the_verdict(self):
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp, rows=("gpt-astra",), dropped=("gpt-astra",))
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(out["next"], "verdict")
+        self.assertEqual(vlib.outside_files(run_dir), [])
+        recorded = vlib.load(run_dir, "requests-outside.json")
+        self.assertEqual(recorded["calls"], [])
+        self.assertEqual(recorded["dropped"], [{"row": "gpt-astra", "status": "dropped at suggest",
+                                                "reason": "dropped: gpt-astra is unavailable"}])
+        code, out, err = drive(["verdict", "--run-dir", run_dir])
+        self.assertEqual(code, 0, (out, err))
+
+    def test_a_dropped_row_beside_a_live_one_sends_the_live_one_only(self):
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp, rows=("gpt-astra", "gemini"),
+                                                             dropped=("gpt-astra",))
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(out["next"], "record-outside")
+        self.assertEqual([c["row"] for c in out["calls"]], ["gemini"])
+        self.assertEqual([os.path.basename(p) for p in vlib.outside_files(run_dir)], ["run-0001-gemini.json"])
+        self.assertEqual([d["row"] for d in vlib.load(run_dir, "requests-outside.json")["dropped"]], ["gpt-astra"])
+
+    def test_a_row_the_answer_did_not_name_is_still_refused(self):
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp, rows=("gpt-astra",), dropped=("gpt-astra",))
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside", "--row", "gemini"])
+        self.assertEqual(code, 5, (out, err))
+        self.assertEqual(vlib.outside_files(run_dir), [])
+
+
 class TheResend(_Request):
 
     def test_one_resend_per_lens_on_a_retryable_status_with_a_fresh_call_id(self):

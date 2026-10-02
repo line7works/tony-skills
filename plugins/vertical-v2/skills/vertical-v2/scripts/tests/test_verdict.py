@@ -149,6 +149,77 @@ class TheMerge(_Verdict):
         self.assertTrue(any(l.startswith("Local: ") for l in method), method)
 
 
+class TheFixRoundOne(_Verdict):
+    """C1A-1 (survivors continue), C1A-2 (a derived card that differs is named in the Method line), C1A-3
+    (the withheld sentence) and C1A-6 (a staged name read back to its path) at the verdict."""
+
+    def report(self, drive, run_dir):
+        code, out, err = drive(["report", "--run-dir", run_dir, "--bottom-line", "Signed off; nothing to fix."])
+        self.assertEqual(code, 10, (out, err))
+        return forms.parse_vertical(testlib.read_text(os.path.join(run_dir, "chat.md")))
+
+    def test_the_only_named_row_dropped_reaches_a_verdict_and_is_named(self):
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp, rows=("gpt-astra",), dropped=("gpt-astra",))
+        self.assertEqual(drive(["request", "--run-dir", run_dir, "--outside"])[0], 0)
+        self.verdict(drive, run_dir)
+        method = forms.parse_doc(self.doc(ws))["blocks"][0]["method"]
+        dropped = [l for l in method if l.startswith("Dropped: ")]
+        self.assertEqual(len(dropped), 1, method)
+        self.assertIn("gpt-astra", dropped[0])
+        self.assertIn("dropped at suggest", dropped[0])
+        self.assertIn("unavailable", dropped[0])
+        fields = self.report(drive, run_dir)
+        self.assertEqual(fields["reviewers"], [])
+        self.assertEqual([d["row"] for d in fields["dropped"]], ["gpt-astra"])
+        self.assertIn("dropped at suggest", fields["dropped"][0]["why"])
+
+    def test_a_dropped_row_beside_a_live_one_is_named_and_the_live_one_reviews(self):
+        drive, run_dir, ws, info = vlib.through_outside(self.tmp, rows=("gpt-astra", "gemini"), dropped=("gpt-astra",))
+        self.verdict(drive, run_dir)
+        method = forms.parse_doc(self.doc(ws))["blocks"][0]["method"]
+        self.assertTrue(any(l.startswith("Outside: gemini") for l in method), method)
+        self.assertTrue(any(l.startswith("Dropped: gpt-astra") and "dropped at suggest" in l for l in method), method)
+        self.assertFalse(any(l == "Dropped: none" for l in method), method)
+        fields = self.report(drive, run_dir)
+        self.assertEqual(fields["reviewers"], ["gemini"])
+        self.assertEqual([d["row"] for d in fields["dropped"]], ["gpt-astra"])
+
+    def test_a_derived_card_that_differs_is_named_in_the_method_line_with_both_cards(self):
+        drive, run_dir, ws, info = vlib.through_outside(self.tmp, rows=(), repo={"doc_text": vlib.open_major_doc()})
+        self.verdict(drive, run_dir)
+        method = forms.parse_doc(self.doc(ws))["blocks"][0]["method"]
+        cards = [l for l in method if l.startswith("Card: ")]
+        self.assertEqual(len(cards), 1, method)
+        self.assertIn("slice A", cards[0])
+        self.assertIn("signed off with conditions", cards[0])
+        self.assertIn("'signed off'", cards[0])
+
+    def test_no_card_line_when_every_derived_card_agrees(self):
+        drive, run_dir, ws, info = vlib.through_outside(self.tmp, rows=())
+        self.verdict(drive, run_dir)
+        method = forms.parse_doc(self.doc(ws))["blocks"][0]["method"]
+        self.assertFalse(any(l.startswith("Card: ") for l in method), method)
+        withheld = [l for l in method if l.startswith("Withheld from every packet")][0]
+        self.assertIn("build assumptions, deviations, discovered", withheld)
+
+    def test_a_finding_at_either_colliding_staged_name_reads_back_to_its_own_path(self):
+        files = {"docs/a__b.md": "COLLIDE-ONE\n", "docs/a/b.md": "COLLIDE-TWO\n"}
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp, rows=("deepseek",), repo={"extra_build_files": files})
+        self.assertEqual(drive(["request", "--run-dir", run_dir, "--outside"])[0], 0)
+        vlib.file_outside_sidecars(run_dir)
+        packet = [p for p in vlib.load(run_dir, "scope.json")["packets"] if p["name"] == "outside-deepseek"][0]
+        staged = dict((e.get("source"), os.path.basename(e["path"])) for e in testlib.load_json(packet["files"])["files"]
+                      if e.get("source") in files)
+        call = "run-0001-deepseek"
+        answer = vlib.write(self.tmp, "outside-answer.json", vlib.outside_answer(run_dir, findings=[
+            vlib.finding("%s:1" % staged["docs/a__b.md"], found_by=[call], claim="the first note is wrong"),
+            vlib.finding("%s:1" % staged["docs/a/b.md"], found_by=[call], claim="the second note is wrong")]))
+        code, out, err = drive(["record-outside", "--run-dir", run_dir, "--answer", answer])
+        self.assertEqual(code, 0, (out, err))
+        recorded = dict((f["claim"], f["location"]) for f in vlib.load(run_dir, "outside.json")["findings"])
+        self.assertEqual(recorded, {"the first note is wrong": "docs/a__b.md:1", "the second note is wrong": "docs/a/b.md:1"})
+
+
 class ThePhases(_Verdict):
 
     def test_the_verdict_waits_for_the_named_outside_fleet(self):
