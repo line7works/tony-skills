@@ -13,8 +13,9 @@ finding marked fixed that no verified finding re-found is a miss for the executo
 The one write is the verdict doc, `docs/reviews/<date>-vertical-<feature>.md`, found first by glob over
 `docs/reviews/*-vertical-<feature>.md`: none, and this run creates it with today's date; one, and this run
 appends one dated block at its end, every earlier byte untouched; several, and the run stops
-(`verdict-doc-ambiguous`) with nothing written. A report-only run writes nothing. After the verdict the
-archive copies and the staged packet files are removed from the run directory.
+(`verdict-doc-ambiguous`) with nothing written. A report-only run writes nothing. After the verdict every
+packet's workspace and documents (scope's previews and every summons copy) are removed from the run
+directory; the mandates and the two lists stay.
 """
 import glob
 import os
@@ -110,6 +111,8 @@ def method_lines(run, gate, scope, ask, local, outside):
     base = gate["base"]
     how = {"doc": "the build doc's %s" % base.get("field"), "merge-base": base.get("field"),
            "owner": "the owner's words: \"%s\"" % base.get("words")}[base["how"]]
+    if base["how"] == "owner" and base.get("field"):
+        how += ", %s" % base["field"]
     out = ["Base: %s (%s)" % (base["commit"], how),
            "Head: %s; boundary: %d files" % (gate["head"], len(gate["boundary"])),
            "Run: %s" % run.checkpoint["run_id"]]
@@ -235,12 +238,11 @@ def handler(ctx, args):
         writes.append({"path": target, "kind": "document",
                        "sha256_before": fsio.sha256_bytes(before_bytes) if before_bytes is not None else None,
                        "sha256_after": fsio.sha256_bytes(data)})
-    for name in ("export", "local"):
-        shutil.rmtree(common.path_of(run, name), ignore_errors=True)
-    for packet in scope["packets"]:
-        staged = os.path.join(packet["dir"], "files")
-        if os.path.isdir(staged):
-            shutil.rmtree(staged, ignore_errors=True)
+    for folder in ("packets", "summons"):
+        root = common.path_of(run, folder)
+        for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+            for part in ("workspace", "documents"):
+                shutil.rmtree(os.path.join(root, name, part), ignore_errors=True)
     common.write(run, "verdict.json", {"verdict": fields["verdict"], "findings_count": len(findings),
                                        "refuted": refuted, "findings": findings, "repeats": repeats, "misses": misses,
                                        "doc": None if common.report_only(run) else rel, "would_write": rel,

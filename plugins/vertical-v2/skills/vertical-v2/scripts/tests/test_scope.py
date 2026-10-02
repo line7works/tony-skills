@@ -1,12 +1,12 @@
-"""vertical-v2's scope (contract section 3.3; readings CR-3 and CR-4; ruling E15-8 with A2's Q1).
+"""vertical-v2's scope (contract section 3.3; readings CR-3 and CR-4; ruling E15-8 with A2's Q1 and A4).
 
-The local lenses review a `git archive` copy of HEAD with the outside export's exclusions and no `.git`,
-under the run directory; vertical-v2 never runs `git worktree`. The spec every reviewer receives is the
-build doc with `## Punch list`, `## Handoffs` and every slice's `Status:` line removed, through the
-build-doc form's parse. Never in any packet: `docs/reviews/`, `docs/records/`, the removed sections, the
-builder's notes, an untracked or ignored file; outside packets also never carry `REVIEW.md`, which
-reaches the local lenses only. Each packet's file list carries a sha256 per file and is written before
-any request, beside a withheld list naming what was kept back.
+Every packet is cut by the one packet builder from the reviewed commit (`test_packet.py` is the class's
+guard); `scope` cuts each planned packet once as a preview under `packets/<name>/`: its workspace a copy of
+HEAD's tracked files with no `.git`, the spec in the build doc's place. vertical-v2 never runs `git
+worktree`. Never in any packet: `docs/reviews/`, `docs/records/`, the removed sections, the builder's
+notes, an untracked or ignored file; outside packets also never carry `REVIEW.md`, which reaches the local
+lenses only. Each packet's file list carries a sha256 per file and is written before any request, beside a
+withheld list naming what was kept back.
 """
 import json
 import os
@@ -65,17 +65,20 @@ class _Scope(unittest.TestCase):
 
 class TheCopies(_Scope):
 
-    def test_the_export_and_the_local_copy_are_the_reviewed_head_with_no_history(self):
+    def workspaces(self):
+        return [p["workspace"] for p in vlib.load(self.run_dir, "scope.json")["packets"] if p["workspace"]]
+
+    def test_every_packet_workspace_is_the_reviewed_head_with_no_history(self):
         out = self.scoped()
-        for name in ("export", "local"):
-            root = os.path.join(self.run_dir, name)
-            self.assertTrue(os.path.isdir(root), name)
-            self.assertFalse(os.path.exists(os.path.join(root, ".git")), name)
+        roots = self.workspaces()
+        self.assertEqual(len(roots), 5, roots)
+        for root in roots:
+            self.assertTrue(os.path.isdir(root), root)
+            self.assertFalse(os.path.exists(os.path.join(root, ".git")), root)
             got = sorted(os.path.relpath(p, root) for p in every_file(root))
             self.assertEqual(got, ["README.md", "docs/plans/2026-09-20-turnstile.md", "src/legacy.py",
-                                   "src/spinner.py", "src/turnstile.py"], name)
-        self.assertEqual(testlib.tree_digest(os.path.join(self.run_dir, "export")),
-                         testlib.tree_digest(os.path.join(self.run_dir, "local")))
+                                   "src/spinner.py", "src/turnstile.py"], root)
+        self.assertEqual(len(set(testlib.tree_digest(root) for root in roots)), 1)
 
     def test_no_worktree_is_cut_and_the_workspace_is_unchanged(self):
         before = testlib.tree_digest(self.tmp)
@@ -85,7 +88,7 @@ class TheCopies(_Scope):
 
     def test_the_build_docs_copy_is_the_spec_alone(self):
         self.scoped()
-        spec = testlib.read_text(os.path.join(self.run_dir, "export", vlib.DOC))
+        spec = testlib.read_text(os.path.join(self.run_dir, "packets", "outside-gpt-astra", "workspace", vlib.DOC))
         self.assertNotIn("## Punch list", spec)
         self.assertNotIn("## Handoffs", spec)
         self.assertNotIn("Status:", spec)
@@ -98,8 +101,8 @@ class TheCopies(_Scope):
         """C1A-5: no `export-subst` expansion and no `export-ignore` drop: each copy holds the commit's bytes."""
         self.scoped(extra_build_files={".gitattributes": "src/ver.txt export-subst\nsrc/hidden.py export-ignore\n",
                                        "src/ver.txt": "$Format:%B$\n", "src/hidden.py": "HIDDEN = 1\n"})
-        for name in ("export", "local"):
-            root = os.path.join(self.run_dir, name)
+        for root in self.workspaces():
+            name = root
             self.assertEqual(testlib.read_text(os.path.join(root, "src", "ver.txt")), "$Format:%B$\n", name)
             self.assertEqual(testlib.read_text(os.path.join(root, "src", "hidden.py")), "HIDDEN = 1\n", name)
             for path in every_file(root):
@@ -110,7 +113,7 @@ class ThePackets(_Scope):
 
     def test_no_planted_record_reaches_any_packet_or_copy(self):
         self.scoped()
-        for root in ("export", "local", "packets"):
+        for root in ("packets",):
             for path in every_file(os.path.join(self.run_dir, root)):
                 if os.path.basename(path) in ("files.json", "withheld.json"):
                     continue
@@ -165,11 +168,11 @@ class ThePackets(_Scope):
     def test_a_repo_row_reads_the_export_as_its_workspace(self):
         self.scoped(rows=("gpt-astra",))
         packet = [p for p in vlib.load(self.run_dir, "scope.json")["packets"] if p["name"] == "outside-gpt-astra"][0]
-        self.assertEqual(packet["workspace"], os.path.join(self.run_dir, "export"))
+        self.assertEqual(packet["workspace"], os.path.join(self.run_dir, "packets", "outside-gpt-astra", "workspace"))
 
     def test_the_outside_mandate_is_v1s_with_its_three_slots_filled(self):
         self.scoped()
-        mandate = testlib.read_text(os.path.join(self.run_dir, "mandate.md"))
+        mandate = testlib.read_text(os.path.join(self.run_dir, "packets", "outside-gpt-astra", "mandate.md"))
         for slot in ("[BUILD_DOC]", "[BASE_COMMIT]", "[BOUNDARY_FILES]"):
             self.assertNotIn(slot, mandate)
         self.assertIn("Base commit: %s" % self.info["base"], mandate)
@@ -195,15 +198,15 @@ class TheBuildersWorkingRecords(_Scope):
 
     def test_no_working_record_reaches_any_packet_copy_or_mandate(self):
         self.scoped(doc_text=self.doc())
-        for root in ("export", "local", "packets"):
+        for root in ("packets",):
             for path in every_file(os.path.join(self.run_dir, root)):
                 if os.path.basename(path) in ("files.json", "withheld.json"):
                     continue
                 text = testlib.read_text(path)
                 for marker in self.MARKED:
                     self.assertNotIn(marker, text, (path, marker))
-        for name in ("spec.md", "mandate.md"):
-            text = testlib.read_text(os.path.join(self.run_dir, name))
+        for name in (os.path.join("local-spec", "documents", "spec.md"), os.path.join("outside-gpt-astra", "mandate.md")):
+            text = testlib.read_text(os.path.join(self.run_dir, "packets", name))
             for marker in self.MARKED:
                 self.assertNotIn(marker, text, (name, marker))
 

@@ -13,7 +13,8 @@ comes only from `station.owner_words.collapse_gate` and passes short slices only
 The preconditions run here, before the ask: the workspace is a git work tree root; the base is found
 (a `Base:` header line the build doc records, then `git merge-base` with the default branch, then the
 owner's base from the input, else a stop that asks; a recorded `Base:` that is not 7 to 40 lowercase hex,
-or that names HEAD itself, stops naming the line); the boundary is `git diff --name-status
+resolves to nothing or names HEAD itself stops naming the line, unless the owner's base in the input
+clears it (C1A2-3), and an owner's base that names HEAD itself stops, C1A2-4); the boundary is `git diff --name-status
 <base>..HEAD`; dirt (`git status --porcelain`) touching a boundary file or the build doc stops unless
 the owner's `committed_only` words are in the input; dirt elsewhere is listed and the review proceeds
 on HEAD. Nothing is read from a v1 file and nothing is written outside the run directory.
@@ -204,7 +205,27 @@ def handler(ctx, args):
                                  collapse=gate["collapse"], notes=gate["notes"]))
 
 
+HEAD_STOP = "names HEAD itself, so the boundary is empty and there is nothing to review"
+ANSWER_HOME = "run again with his answer in station.owner_words.base"
+
+
+def _owner(ws, given):
+    """(the owner's base commit, or None, and why it cannot be taken, or None)."""
+    if not isinstance(given, dict):
+        return None, None
+    commit = gitio.commit_of(ws, given.get("commit"))
+    if commit is None:
+        return None, "the owner's base %r resolves to no commit here: ask him for the base again" % given.get("commit")
+    if commit == gitio.head(ws):
+        return None, "the owner's base %s: ask him for the base again" % HEAD_STOP
+    return commit, None
+
+
 def _base(run, ctx, ws, text, words, selection, gate):
+    """v1's precedence: the doc's `Base:` line, then the merge base with the default branch, then the owner's
+    base. A `Base:` line that stops is cleared by the owner's base on a fresh run (C1A2-3), and an owner's
+    base that names HEAD itself stops wherever it is taken (C1A2-4)."""
+    given = words.get("base")
     recorded = recorded_base(text)
     if recorded is not None:
         stop = None
@@ -216,24 +237,28 @@ def _base(run, ctx, ws, text, words, selection, gate):
             stop = ("the build doc records the base %r on its Base: line, and it resolves to no commit here: ask the "
                     "owner for the base and never guess" % recorded["line"])
         elif commit == gitio.head(ws):
-            stop = ("the build doc's base line %r names HEAD itself, so the boundary is empty and there is nothing to "
-                    "review: ask the owner for the base and never guess" % recorded["line"])
-        if stop:
-            common.write(run, "gate.json", gate)
-            report.finish(ctx, run, "stopped", "base-unresolved", stop, selection=selection, gate=gate)
-        return {"commit": commit, "how": "doc", "field": recorded["line"]}
+            stop = ("the build doc's base line %r %s: ask the owner for the base and never guess"
+                    % (recorded["line"], HEAD_STOP))
+        if stop is None:
+            return {"commit": commit, "how": "doc", "field": recorded["line"]}
+        owner, why = _owner(ws, given)
+        if owner is not None:
+            return {"commit": owner, "how": "owner", "words": given.get("words"),
+                    "field": "over the build doc's %r" % recorded["line"]}
+        common.write(run, "gate.json", gate)
+        report.finish(ctx, run, "stopped", "base-unresolved",
+                      "%s; %s" % (stop, why or ANSWER_HOME), selection=selection, gate=gate)
     branch = gitio.default_branch(ws)
     if branch is not None:
         base = gitio.merge_base(ws, branch)
         if base and base != gitio.head(ws):
             return {"commit": base, "how": "merge-base", "field": "git merge-base %s HEAD" % branch}
-    given = words.get("base")
-    if isinstance(given, dict):
-        commit = gitio.commit_of(ws, given.get("commit"))
-        if commit is not None:
-            return {"commit": commit, "how": "owner", "words": given.get("words")}
+    owner, why = _owner(ws, given)
+    if owner is not None:
+        return {"commit": owner, "how": "owner", "words": given.get("words")}
     common.write(run, "gate.json", gate)
     report.finish(ctx, run, "stopped", "base-unresolved",
-                  "no base: the build doc records none (a Base: line) and the merge base with the default branch is "
-                  "%s; ask the owner for the base and run again with his answer in station.owner_words.base"
-                  % ("HEAD itself" if branch is not None else "not resolvable"), selection=selection, gate=gate)
+                  why or ("no base: the build doc records none (a Base: line) and the merge base with the default "
+                          "branch is %s; ask the owner for the base and %s"
+                          % ("HEAD itself" if branch is not None else "not resolvable", ANSWER_HOME)),
+                  selection=selection, gate=gate)

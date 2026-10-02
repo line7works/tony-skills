@@ -50,7 +50,7 @@ input carries none, today's UTC date from the run's clock (`helper-derived`).
 
 ## 7. The verifier capability
 
-The local lenses are `claude-session` calls (a host row: readers' `compose` and `record` around the Agent tool), one per lens, profile `repo-with-tools`, `floor: opus`, `session_model` the id this session reports for itself (`station.session_model`, `instruction-bound`), workspace the run's local archive copy: fresh subagents that may run the project's tests in that copy. `request` builds each request through `station_core/readers_request.py`; the script never summons readers (`helper-derived` for the request, `instruction-bound` for the summons). The outside rows the owner named are `repo` calls on the run's export or `packet-only` calls
+The local lenses are `claude-session` calls (a host row: readers' `compose` and `record` around the Agent tool), one per lens, profile `repo-with-tools`, `floor: opus`, `session_model` the id this session reports for itself (`station.session_model`, `instruction-bound`), workspace a fresh copy of the reviewed commit cut for that call alone (A4): fresh subagents that may run the project's tests in that copy. `request` builds each request through `station_core/readers_request.py`; the script never summons readers (`helper-derived` for the request, `instruction-bound` for the summons). The outside rows the owner named are `repo` calls on their own fresh copy of the reviewed commit or `packet-only` calls
 on its staged files, each with `authorized` from his answer in this run.
 
 ## 8. Delivery

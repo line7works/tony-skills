@@ -58,7 +58,7 @@ def _phases():
                        {"flags": ["--answer"], "metavar": "FILE", "default": None,
                         "help": "the owner's answer to the ask (references/answer.schema.json, kind ask)"}],
          "handler": ask.handler},
-        {"name": "scope", "help": "the archive copies, the cold packets, their file and withheld lists", "arguments": [],
+        {"name": "scope", "help": "the cold packets cut from the reviewed commit, their file and withheld lists", "arguments": [],
          "handler": scope.handler},
         {"name": "request", "help": "one readers request per local lens; --outside after record-local only",
          "arguments": [READERS_ROOT,

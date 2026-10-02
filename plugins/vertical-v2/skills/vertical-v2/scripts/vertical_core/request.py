@@ -1,29 +1,39 @@
 """`request`: one readers request per local lens, one per outside row the owner's answer named, and
 the one re-send a failed local lens may take (contract sections 3.4 and 3.6; readings CR-5, CR-6, CR-9
-and CR-10).
+and CR-10; the design round's A4).
 
 Every request is built by the copied `station_core/readers_request.py`, which decides `authorized` from
 the data it is handed and from nothing else: the local requests are handed no owner's word, so they
 never carry it; the outside requests are handed the rows the recorded answer named, so it lands on
-exactly those rows and never on a Claude row. Before any request is built, readers' identity is read and
-checked (`readers_link.py`), and every packet is held to the file list `scope` wrote (each file's sha256,
-no file added): a packet that moved is refused (exit 5) and nothing is built.
+exactly those rows and never on a Claude row. Before any request is built, readers' root is screened and
+its identity read and checked (`readers_link.py`).
 
-`request --outside` runs only after `record-local` has completed: the checkpoint at `recorded-local` AND
-the run's `local.json` present and whole (every local call of this run recorded, each lens's last call
-`ok`, no stop), else exit 5 (C1A-4), so no outside request file exists under the run directory before the
-local verdict is formed. It refuses (exit 5) a row the answer did not name and a Claude row the answer
-named (a Claude row is never an outside reviewer and never carries `authorized`). A named row suggest
-reported dropped is never sent: it is recorded in `requests-outside.json` with its status (`dropped at
-suggest`) and suggest's reason, and the run continues with the survivors (C1A-1, v1's "survivors
-continue"); when every named row was dropped, nothing is summoned and the run moves straight to the
-verdict, which names each dropped row. The script builds and records; the executor summons readers.
+Every summons gets a FRESH copy (A4, class (a)): the first send and every retry alike, `request` reads the
+reviewed commit through `packet.Snapshot`, has `packet.build` decide the packet, cuts it into
+`summons/<call id>/` (a directory that must not exist yet), and, immediately before the request files are
+written, holds every cut to that function's own output file by file (`packet.check`: path, size, sha256)
+and to the fingerprint `scope` recorded (`packet.digest`). Any difference is refused (exit 5): the copies
+this command cut are removed and no request file is written. A reader's scratch, or anything planted in
+an earlier copy or in `scope`'s preview, never reaches a later summons.
+
+`request --outside` releases nothing unless the local review is on record as `record-local` wrote it
+(A4, class (b)): the checkpoint at `recorded-local` AND the receipt (`record.local_receipt_problem`:
+present, valid, naming exactly this run's requested local calls, every hash in it matching the files on
+disk now, the record it covers still holding); otherwise exit 5 before any outside file is written. It
+refuses (exit 5) a row the answer did not name, a Claude row the answer named (a Claude row is never an
+outside reviewer and never carries `authorized`), a row named twice (C1A2-2), and a `--row` subset that
+leaves out a named row suggest reported available (C1A2-1: one command sends every named survivor). A
+named row suggest reported dropped is never sent: it is recorded in `requests-outside.json` with its
+status (`dropped at suggest`) and suggest's reason, and the run continues with the survivors (C1A-1, v1's
+"survivors continue"); when every named row was dropped, nothing is summoned and the run moves straight to
+the verdict, which names each dropped row. The script builds and records; the executor summons readers.
 """
 import os
+import shutil
 
 from station_core import fsio, readers_request
 
-from . import ask as askmod, common, readers_link, report
+from . import ask as askmod, common, packet, readers_link, record, report
 
 FLOOR = "opus"
 PACKET_ONLY_BUDGET = 32768
@@ -34,41 +44,44 @@ def _refuse(ctx, run, reason, **extra):
     return ctx.emit(ctx.envelope(accepted=False, run_id=run.checkpoint["run_id"], reason=reason, **extra), 5)
 
 
-def packet_problems(packet, workspace=True):
-    """[message] for every way a packet differs from the list `scope` wrote; [] when it holds. With
-    `workspace` false (a re-send, after the first fleet may have run tests in the shared local copy and
-    left scratch there), only the mandate and the documents are held to the list."""
-    listing = fsio.read_json(packet["files"])
-    out = []
-    listed = set()
-    for entry in listing["files"]:
-        listed.add(entry["abs"])
-        if not workspace and entry["role"] == "workspace":
-            continue
-        if not os.path.isfile(entry["abs"]):
-            out.append("%s: %s is gone" % (packet["name"], entry["path"]))
-        elif fsio.sha256_file(entry["abs"]) != entry["sha256"]:
-            out.append("%s: %s changed after scope" % (packet["name"], entry["path"]))
-    roots = [listing.get("workspace")] if workspace else []
-    for root in roots + [os.path.dirname(d) for d in packet.get("documents") or [] if packet["side"] == "outside"]:
-        if not root or not os.path.isdir(root):
-            continue
-        for base, dirs, files in os.walk(root):
-            for name in files:
-                full = os.path.join(base, name)
-                if full not in listed:
-                    out.append("%s: %s was added after scope" % (packet["name"], os.path.relpath(full, root)))
-    return sorted(set(out))
-
-
 def _identity(ctx, run, args):
-    found, roster, ident, refusals = readers_link.resolve(run, args.readers_root)
+    found, roster, ident, refusals = readers_link.resolve_or_stop(ctx, run, args.readers_root)
     if refusals:
         readers_link.refused_line(run, ctx, found, ident, refusals)
         report.finish(ctx, run, "stopped", "station-refused",
                       "readers at %s is not the readers this core summons through: %s; nothing was requested"
                       % (found["root"], "; ".join(r["message"] for r in refusals)))
     return found, roster, ident
+
+
+def fresh_copies(ctx, run, pairs):
+    """Cut one fresh packet per (scope's packet, call id) from the reviewed commit, each held to the
+    builder's own output and to scope's fingerprint. Returns ({call id: paths}, [problem]); on a problem
+    every copy cut here is removed."""
+    gate = common.read(run, "gate.json")
+    scope = common.read(run, "scope.json")
+    snap = packet.Snapshot(common.workspace(run), gate["head"], gate["doc"])
+    out, problems, cut, built_of = {}, [], [], {}
+    for planned, call_id in pairs:
+        spec = dict((k, planned.get(k)) for k in ("name", "side", "lens", "row", "profile"))
+        built = packet.build(snap, spec, gate, ctx.skill_root, scope["worktree"])
+        if packet.digest(built) != planned.get("digest"):
+            problems.append("%s: the packet the reviewed commit gives now is not the one scope recorded" % planned["name"])
+            continue
+        dest = common.path_of(run, os.path.join("summons", call_id))
+        if os.path.lexists(dest):
+            problems.append("%s: a copy for the call %s exists already; a call id is single-use and every summons "
+                            "gets a fresh copy" % (planned["name"], call_id))
+            continue
+        out[call_id] = packet.cut(built, dest)
+        cut.append(dest)
+        built_of[call_id] = built
+    for call_id, built in built_of.items():
+        problems += ["%s: %s" % (call_id, m) for m in packet.check(built, out[call_id]["dir"])]
+    if problems:
+        for dest in cut:
+            shutil.rmtree(dest, ignore_errors=True)
+    return out, problems
 
 
 def handler(ctx, args):
@@ -89,13 +102,13 @@ def _local(ctx, args, run):
         return _refuse(ctx, run, "the local lenses run on claude-session, which inherits this session's model: put the "
                        "model id this session's system prompt names in station.session_model; nothing was built")
     found, roster, ident = _identity(ctx, run, args)
-    packets = [p for p in scope["packets"] if p["side"] == "local"]
-    problems = [m for p in packets for m in packet_problems(p)]
+    planned = [p for p in scope["packets"] if p["side"] == "local"]
+    pairs = [(p, "%s-local-%s" % (run.checkpoint["run_id"], p["lens"])) for p in planned]
+    copies, problems = fresh_copies(ctx, run, pairs)
     if problems:
-        return _refuse(ctx, run, "a packet moved after scope; nothing was built: %s" % "; ".join(problems),
-                       problems=problems)
-    calls = [_local_call(run, roster, local, packet, packet["lens"], "%s-local-%s"
-                         % (run.checkpoint["run_id"], packet["lens"]), session_model) for packet in packets]
+        return _refuse(ctx, run, "a fresh copy does not hold what the packet builder decided; nothing was built: %s"
+                       % "; ".join(problems), problems=problems)
+    calls = [_local_call(run, roster, local, p, copies[call_id], call_id, session_model) for p, call_id in pairs]
     common.write(run, "requests-local.json", {"readers": {"root": found["root"], "route": found["route"],
                                                           "identity": ident},
                                               "run_dir": common.path_of(run, "readers"), "calls": calls,
@@ -111,16 +124,16 @@ def _local(ctx, args, run):
                                         "record-local" % run.checkpoint["run_id"]))
 
 
-def _local_call(run, roster, local, packet, lens, call_id, session_model):
-    req = readers_request.build(local["row"], {}, roster, mandate=packet["mandate"], profile=local["profile"],
-                                run_id=run.checkpoint["run_id"], call_id=call_id, documents=packet["documents"],
-                                workspace=packet["workspace"], session_model=session_model,
+def _local_call(run, roster, local, planned, copy, call_id, session_model):
+    req = readers_request.build(local["row"], {}, roster, mandate=copy["mandate"], profile=local["profile"],
+                                run_id=run.checkpoint["run_id"], call_id=call_id, documents=copy["documents"],
+                                workspace=copy["workspace"], session_model=session_model,
                                 run_dir=common.path_of(run, "readers"))
     req["floor"] = FLOOR
     path = common.path_of(run, os.path.join("requests", "%s.json" % call_id))
     fsio.write_json(path, req)
-    return {"lens": lens, "call_id": call_id, "row": local["row"], "profile": local["profile"], "request_file": path,
-            "packet": packet["name"]}
+    return {"lens": planned["lens"], "call_id": call_id, "row": local["row"], "profile": local["profile"],
+            "request_file": path, "packet": planned["name"], "copy": copy["dir"]}
 
 
 def _resend(ctx, args):
@@ -139,49 +152,19 @@ def _resend(ctx, args):
     scope = common.read(run, "scope.json")
     ask = common.read(run, "ask.json")
     local = [r for r in ask["rows"] if r["side"] == "local"][0]
-    packet = [p for p in scope["packets"] if p["name"] == first[0]["packet"]][0]
-    problems = packet_problems(packet, workspace=False)
-    if problems:
-        return _refuse(ctx, run, "the packet moved after scope; nothing was built: %s" % "; ".join(problems))
+    planned = [p for p in scope["packets"] if p["name"] == first[0]["packet"]][0]
     found, roster, ident = _identity(ctx, run, args)
-    call = _local_call(run, roster, local, packet, args.resend, "%s-2" % first[0]["call_id"],
-                       common.station(run).get("session_model"))
+    call_id = "%s-2" % first[0]["call_id"]
+    copies, problems = fresh_copies(ctx, run, [(planned, call_id)])
+    if problems:
+        return _refuse(ctx, run, "a fresh copy does not hold what the packet builder decided; nothing was built: %s"
+                       % "; ".join(problems), problems=problems)
+    call = _local_call(run, roster, local, planned, copies[call_id], call_id, common.station(run).get("session_model"))
     call["resend_of"] = {"call_id": first[0]["call_id"], "status": args.status}
     requests["calls"].append(call)
     requests["resent"].append(args.resend)
     common.write(run, "requests-local.json", requests)
     return ctx.emit(ctx.envelope(next="record-local", run_id=run.checkpoint["run_id"], call=call))
-
-
-def local_record_problem(run):
-    """Why the run's local verdict is not on record, or None when `local.json` holds it: the file present
-    and an object, no stop recorded, every local call this run requested recorded and none other, each
-    lens's last call `ok`, and the verification method stated."""
-    if not common.has(run, "local.json"):
-        return "the run holds no local.json (record-local writes it)"
-    try:
-        local = fsio.read_json(common.path_of(run, "local.json"))
-    except (OSError, ValueError) as exc:
-        return "the run's local.json cannot be read (%s)" % exc
-    if not isinstance(local, dict):
-        return "the run's local.json is not an object"
-    if "stopped" in local:
-        return "the run's local.json records a stopped local review (%s)" % local.get("stopped")
-    requested = common.read(run, "requests-local.json").get("calls") if common.has(run, "requests-local.json") else None
-    calls = local.get("calls")
-    if not requested or not isinstance(calls, list) or not all(isinstance(c, dict) for c in calls):
-        return "the run's local.json names no local call this run requested"
-    if sorted(c.get("call_id") for c in calls) != sorted(c["call_id"] for c in requested):
-        return "the run's local.json does not record exactly the local calls this run requested"
-    last = {}
-    for call in calls:
-        last[call.get("lens")] = call
-    failed = sorted(lens for lens, call in last.items() if call.get("status") != "ok")
-    if failed:
-        return "the run's local.json records lenses whose last call is not ok (%s)" % ", ".join(failed)
-    if common.blank(local.get("method")) or not isinstance(local.get("findings"), list):
-        return "the run's local.json holds no findings list or no verification method"
-    return None
 
 
 def _outside(ctx, args):
@@ -190,10 +173,10 @@ def _outside(ctx, args):
     if phase != "recorded-local":
         return _refuse(ctx, run, "no outside request before record-local has completed (this run is at %r): the local "
                        "review forms its findings first, independently; nothing was built" % phase)
-    problem = local_record_problem(run)
+    problem = record.local_receipt_problem(ctx, run)
     if problem:
-        return _refuse(ctx, run, "no outside request before the local verdict is on record: %s; run record-local; "
-                       "nothing was built" % problem)
+        return _refuse(ctx, run, "no outside request before the local verdict is on record as record-local wrote it: "
+                       "%s; nothing was built" % problem)
     ask = common.read(run, "ask.json")
     scope = common.read(run, "scope.json")
     answer = ask["answer"]
@@ -201,6 +184,10 @@ def _outside(ctx, args):
     wanted = list(args.row or answer["rows"])
     if not wanted:
         return _refuse(ctx, run, "the owner's answer named no outside row: this is a local-only review; run verdict")
+    twice = sorted(set(row for row in wanted if wanted.count(row) > 1))
+    if twice:
+        return _refuse(ctx, run, "a row named twice (%s): one request per row, and a call id is single-use; nothing "
+                       "was built" % ", ".join(twice))
     refusals = []
     for row in wanted:
         provider = offered.get(row, {}).get("provider")
@@ -215,6 +202,10 @@ def _outside(ctx, args):
     if refusals:
         return _refuse(ctx, run, "refused before any outside request was built: %s" % "; ".join(refusals),
                        refusals=refusals)
+    left = [row for row in answer["rows"] if row not in wanted and offered.get(row, {}).get("available")]
+    if left:
+        return _refuse(ctx, run, "one request --outside sends every outside row the owner named that suggest reported "
+                       "available; --row leaves out %s; nothing was built" % ", ".join(left))
     dropped = [{"row": row, "status": askmod.DROPPED_AT_SUGGEST, "reason": offered[row]["drop_note"] or "unavailable"}
                for row in wanted if not offered[row]["available"]]
     wanted = [row for row in wanted if offered[row]["available"]]
@@ -227,18 +218,19 @@ def _outside(ctx, args):
                                      summon="nothing to summon: every outside row the owner named was dropped at "
                                             "suggest, and each is recorded with its reason; run verdict"))
     found, roster, ident = _identity(ctx, run, args)
-    packets = dict((p["row"], p) for p in scope["packets"] if p["side"] == "outside")
-    problems = [m for row in wanted for m in packet_problems(packets[row])]
+    planned = dict((p["row"], p) for p in scope["packets"] if p["side"] == "outside")
+    pairs = [(planned[row], "%s-%s" % (run.checkpoint["run_id"], row)) for row in wanted]
+    copies, problems = fresh_copies(ctx, run, pairs)
     if problems:
-        return _refuse(ctx, run, "a packet moved after scope; nothing was built: %s" % "; ".join(problems))
+        return _refuse(ctx, run, "a fresh copy does not hold what the packet builder decided; nothing was built: %s"
+                       % "; ".join(problems), problems=problems)
     word = {"owner_word": {"rows": list(answer["rows"]), "words": answer["words"]}}
     calls = []
-    for row in wanted:
-        packet = packets[row]
-        call_id = "%s-%s" % (run.checkpoint["run_id"], row)
-        req = readers_request.build(row, word, roster, mandate=packet["mandate"], profile=offered[row]["profile"],
+    for row, (p, call_id) in zip(wanted, pairs):
+        copy = copies[call_id]
+        req = readers_request.build(row, word, roster, mandate=copy["mandate"], profile=offered[row]["profile"],
                                     run_id=run.checkpoint["run_id"], call_id=call_id,
-                                    documents=packet["documents"] or None, workspace=packet["workspace"],
+                                    documents=copy["documents"] or None, workspace=copy["workspace"],
                                     model=(answer.get("models") or {}).get(row), run_dir=common.path_of(run, "readers"))
         if offered[row]["profile"] == "packet-only":
             req["output_budget"] = PACKET_ONLY_BUDGET
@@ -247,7 +239,7 @@ def _outside(ctx, args):
         path = common.path_of(run, os.path.join("requests", "%s.json" % call_id))
         fsio.write_json(path, req)
         calls.append({"lens": None, "call_id": call_id, "row": row, "profile": offered[row]["profile"],
-                      "request_file": path, "packet": packet["name"], "authorized": True})
+                      "request_file": path, "packet": p["name"], "copy": copy["dir"], "authorized": True})
     common.write(run, "requests-outside.json", {"readers": {"root": found["root"], "route": found["route"],
                                                             "identity": ident},
                                                 "run_dir": common.path_of(run, "readers"), "calls": calls,

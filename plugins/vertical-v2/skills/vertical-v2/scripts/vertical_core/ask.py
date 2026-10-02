@@ -10,15 +10,15 @@ Three modes, one phase:
 The local row first, alone, under the floor the local calls carry (`--floor opus`), so a remembered
 typed pick on it is dropped before the run freezes; then the outside rows with no floor. Both carry this
 run's id and its readers run directory, so they share one snapshot. The script prints the commands and
-never runs readers (ruling E15-4). The local row is `claude-session` on Claude Code and the portable
+never runs readers (ruling E15-4); the roster it reads is found through `readers_link.py`, whose
+preflight refuses a v1 readers root before any of its files is opened (B5). The local row is `claude-session` on Claude Code and the portable
 `claude-opus-cli` on Codex (ruling E15-12); its profile is `repo-with-tools` where the row offers it and
 `repo` otherwise, and the ask then says the local lenses run no check. The answer applies to this run
 only; nothing is remembered between runs, and nothing after the ask runs until it is recorded.
 """
-from station_core import driver, readers_roster, validate
-from station_core.records_client import ComponentUnavailable
+from station_core import driver, validate
 
-from . import common
+from . import common, readers_link
 
 OUTSIDE_ROWS = ("gpt-astra", "gpt-sol", "gemini", "deepseek", "qwen")
 FLOOR = "opus"
@@ -29,13 +29,6 @@ QUESTION = ("Local-only review, or local + outside reviewers? (Recommended: loca
 
 def local_row(run):
     return "claude-opus-cli" if common.harness(run) == "codex-cli" else "claude-session"
-
-
-def roster(args):
-    try:
-        return readers_roster.load(common.plugin_root(), getattr(args, "readers_root", None))
-    except readers_roster.RosterMissing as exc:
-        raise ComponentUnavailable(str(exc))
 
 
 def row_of(rost, row_id):
@@ -112,7 +105,7 @@ def handler(ctx, args):
                                      run_id=run.checkpoint["run_id"], suggest=commands(run),
                                      summon="run readers' suggest with each argv, in this order, under this run's id; "
                                             "save each output as a file and pass both back"))
-    found, rost = roster(args)
+    found, rost = readers_link.find_or_stop(ctx, run, args.readers_root)
     local_doc = common.load_json_file(args.local_suggest, "local suggest")
     outside_doc = common.load_json_file(args.outside_suggest, "outside suggest")
     run_id = run.checkpoint["run_id"]

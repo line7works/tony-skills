@@ -192,19 +192,17 @@ def observe_lane(step, case_dir, neutral, facts, via, scratch):
     if local_packet:
         fill("local_packet_documents", sorted(os.path.basename(d) for d in local_packet["documents"]))
     seen = []
-    for root in [scope["export"], scope["local"]] + [p["dir"] for p in packets.values()] + [os.path.dirname(scope["spec"])]:
+    for root in [p["dir"] for p in packets.values()]:
         for base, dirs, names in os.walk(root):
-            if root == os.path.dirname(scope["spec"]) and base != root:
-                continue
             for name in names:
-                if name in ("files.json", "withheld.json", "input.json", "checkpoint.json", "gate.json", "ask.json",
-                            "scope.json", "selection-build.json") or name.startswith("suggest"):
+                if name in ("files.json", "withheld.json"):
                     continue
                 with open(os.path.join(base, name), encoding="utf-8", errors="replace") as fh:
                     text = fh.read()
                 seen += [m for m in MARKERS if m in text]
     fill("markers_found", sorted(set(seen)))
-    fill("copies_have_git", any(os.path.exists(os.path.join(scope[k], ".git")) for k in ("export", "local")))
+    fill("copies_have_git", any(os.path.exists(os.path.join(p["workspace"], ".git")) for p in packets.values()
+                                if p.get("workspace")))
     if upto < 2:
         return _finish(found, facts, via)
     code, out, err = run(["request", "--run-dir", run_dir])

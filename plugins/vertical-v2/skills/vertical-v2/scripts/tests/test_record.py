@@ -134,7 +134,7 @@ class RecordOutside(_Record):
         self.assertTrue(all(r.get("authorized") is True for r in built))
         by_row = dict((r["row"], r) for r in built)
         self.assertEqual(by_row["gpt-astra"]["profile"], "repo")
-        self.assertEqual(by_row["gpt-astra"]["workspace"], os.path.join(run_dir, "export"))
+        self.assertEqual(by_row["gpt-astra"]["workspace"], os.path.join(run_dir, "summons", "run-0001-gpt-astra", "workspace"))
         self.assertEqual(by_row["deepseek"]["profile"], "packet-only")
         self.assertEqual(by_row["deepseek"]["output_budget"], 32768)
         self.assertTrue(by_row["deepseek"]["documents"])

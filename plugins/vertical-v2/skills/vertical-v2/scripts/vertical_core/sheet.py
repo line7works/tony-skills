@@ -1,14 +1,15 @@
 """The repo's inspection sheet, `REVIEW.md` (contract section 6; the sheet test signoff-v2's contract
 section 13 states, restated here in this core's words).
 
-A file named `REVIEW.md` at the workspace root is the sheet only when it carries the three headings
+The sheet is read from the reviewed commit only, never from the working tree (A4, B1): `packet.Snapshot`
+hands `parse` the bytes the commit stores for a regular file `REVIEW.md` at its root, or nothing, and an
+absent or non-regular one in that commit means no sheet. A file named `REVIEW.md` is the sheet only when it carries the three headings
 `## Passes`, `## Severity bar` and `## Repo-specific checks` AND every non-blank line under `## Passes`
 reads `- <name>: on` or `- <name>: off`, with an optional parenthetical. Anything else under that name is
 `present but not the kit sheet`, and the defaults apply. The four passes the sheet may name are
 `correctness`, `security`, `accessibility` and `data-safety`; another name is reported as unknown and
 ignored. `spec` and `seams` are the loop's own lenses and no sheet turns them off.
 """
-import os
 import re
 
 PASSES = ("correctness", "security", "accessibility", "data-safety")
@@ -29,15 +30,17 @@ def _sections(text):
     return out
 
 
-def read(workspace):
+def absent():
+    return {"state": "absent", "passes": [], "unknown": [], "skipped": [], "checks": [], "bar": [], "text": None}
+
+
+def parse(text):
     """{"state", "passes": [{"pass", "on", "reason"}], "unknown": [...], "skipped": [...], "checks": [...],
-    "bar": [...], "text"}; the state is `read`, `present but not the kit sheet` or `absent`."""
-    path = os.path.join(workspace, "REVIEW.md")
-    empty = {"state": "absent", "passes": [], "unknown": [], "skipped": [], "checks": [], "bar": [], "text": None}
-    if not os.path.isfile(path) or os.path.islink(path):
+    "bar": [...], "text"} for the commit's `REVIEW.md` text (None: no regular file there); the state is
+    `read`, `present but not the kit sheet` or `absent`."""
+    empty = absent()
+    if text is None:
         return empty
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        text = fh.read()
     sections = _sections(text)
     not_sheet = dict(empty, state="present but not the kit sheet", text=text)
     if any(h not in sections for h in HEADINGS):

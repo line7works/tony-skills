@@ -1,13 +1,10 @@
 """Read-only git, run inside the workspace with a fixed environment (contract section 5).
 
-Every call is an argv list; a caller value is one argv item, never shell text. The one function here
-that writes anything is `archive_into`, and it writes only under a directory the caller names inside
-the run directory: `git ls-tree` lists the reviewed commit's tracked files and `git cat-file --batch`
-streams their stored bytes, so the copy has no `.git`, no history and no commit message, and the
-reviewed repo's `.gitattributes` export rules never apply (no `export-subst` expansion writes a commit
-message into a file, no `export-ignore` drops a tracked file; C1A-5). It is the copy `git archive` would
-cut, less those two attribute rules and any checkout filter: each file holds the commit's bytes. No
-command here changes a branch, an index or a worktree; `git worktree` is never run (A2, Q1).
+Every call is an argv list; a caller value is one argv item, never shell text. Nothing here writes: the
+reviewed commit's tree is listed by `git ls-tree` and its stored bytes are read by `git cat-file --batch`
+(no attribute, filter or line-ending rule applies, so the repo's `.gitattributes` export rules never
+reach a review copy, C1A-5), and `packet.py`, the one packet builder, writes the copies from those bytes
+(A4). No command here changes a branch, an index or a worktree; `git worktree` is never run (A2, Q1).
 """
 import os
 import subprocess
@@ -125,15 +122,9 @@ def ignored(workspace):
                                               "--directory"]).split("\0") if p)
 
 
-def _excluded(path, exclusions):
-    """Whether a tracked path falls under one of `exclusions` (a path, or a folder and everything in it),
-    the way a plain pathspec matches: from the top of the tree, never by base name alone."""
-    return any(path == e or path.startswith(e.rstrip("/") + "/") for e in exclusions)
-
-
-def tree_files(workspace, commit):
-    """[(mode, object id, path)] for every blob the commit's tree holds, recursively (`git ls-tree -r -z
-    --full-tree`). A submodule (a commit entry) is not a blob and is not listed."""
+def tree_entries(workspace, commit):
+    """[(mode, kind, object id, path)] for every entry the commit's tree holds, recursively (`git ls-tree -r
+    -z --full-tree`): blobs (files and symbolic links) and commits (submodules) alike."""
     raw = run(workspace, ["ls-tree", "-r", "-z", "--full-tree", commit]).stdout
     out = []
     for record in raw.split(b"\0"):
@@ -141,8 +132,7 @@ def tree_files(workspace, commit):
             continue
         meta, _, path = record.partition(b"\t")
         mode, kind, oid = meta.decode("ascii").split(" ")
-        if kind == "blob":
-            out.append((mode, oid, path.decode("utf-8", "surrogateescape")))
+        out.append((mode, kind, oid, path.decode("utf-8", "surrogateescape")))
     return out
 
 
@@ -169,30 +159,3 @@ def blobs(workspace, oids):
         out[oid] = data[end + 1:end + 1 + size]
         at = end + 1 + size + 1
     return out
-
-
-def archive_into(workspace, commit, dest, exclusions):
-    """Write the tracked files of `commit` into `dest` (a fresh directory), each path in `exclusions` (a
-    path, or a folder and everything in it) left out. Returns the written relative paths. Each file holds
-    the bytes the commit stores for it; the repo's `.gitattributes` export rules are not applied (C1A-5). A
-    symbolic link is written as a plain file holding its target text, the bytes git records for it, so
-    nothing in the copy reaches outside it."""
-    if os.path.exists(dest):
-        raise GitFailed("the copy's directory already exists: %s" % dest)
-    entries = []
-    for mode, oid, path in tree_files(workspace, commit):
-        name = os.path.normpath(path)
-        if name.startswith("..") or os.path.isabs(name) or _excluded(path, exclusions):
-            continue
-        entries.append((mode, oid, name))
-    contents = blobs(workspace, [oid for mode, oid, name in entries])
-    os.makedirs(dest)
-    names = []
-    for mode, oid, name in entries:
-        target = os.path.join(dest, name)
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "wb") as out:
-            out.write(contents[oid])
-        os.chmod(target, 0o755 if mode == "100755" else 0o644)
-        names.append(name)
-    return sorted(names)

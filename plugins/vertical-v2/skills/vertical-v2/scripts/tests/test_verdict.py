@@ -57,10 +57,16 @@ class TheWrite(_Verdict):
         self.assertEqual(testlib.tree_digest(ws), before, "the verdict doc is the one write")
 
     def test_the_copies_are_removed_after_the_verdict(self):
-        drive, run_dir, ws, info = vlib.through_outside(self.tmp, rows=())
+        drive, run_dir, ws, info = vlib.through_outside(self.tmp, rows=("gpt-astra", "deepseek"))
         self.verdict(drive, run_dir)
-        for name in ("local", "export"):
-            self.assertFalse(os.path.exists(os.path.join(run_dir, name)), name)
+        seen = 0
+        for folder in ("packets", "summons"):
+            for name in os.listdir(os.path.join(run_dir, folder)):
+                seen += 1
+                for part in ("workspace", "documents"):
+                    self.assertFalse(os.path.exists(os.path.join(run_dir, folder, name, part)), (folder, name, part))
+                self.assertTrue(os.path.isfile(os.path.join(run_dir, folder, name, "mandate.md")), (folder, name))
+        self.assertGreaterEqual(seen, 6)
 
     def test_a_rerun_appends_a_dated_block_to_the_same_file(self):
         drive, run_dir, ws, info = vlib.through_outside(self.tmp, rows=())

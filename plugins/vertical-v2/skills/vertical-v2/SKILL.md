@@ -94,10 +94,11 @@ uv run scripts/vertical.py ask --run-dir <run dir> --answer <answer.json>
 uv run scripts/vertical.py scope --run-dir <run dir>
 ```
 
-It cuts two copies of the reviewed head from the commit's tree (no history, no untracked file, no review
-record, the build doc reduced to its spec), builds one packet per local lens and per outside row named,
-and writes each packet's file list (with hashes) and its withheld list. State the depth line it prints
-before launching anything.
+It reads the reviewed commit (never the working tree), takes the inspection sheet from it, and cuts one
+preview packet per local lens and per outside row named through the one packet builder (no history, no
+untracked file, no review record, the build doc reduced to its spec), each with its file list (with
+hashes) and its withheld list. State the depth line it prints before launching anything. The previews are
+for you to inspect; every request below gets its own fresh copy from the same builder.
 
 ## Step 4: The reviews, local first
 
@@ -123,7 +124,9 @@ uv run scripts/vertical.py record-local --run-dir <run dir> --answer <local.json
 
 A lens that failed after its re-send, or refused deterministically, stops the run (the local review
 always completes or the run does not); a floor refusal stops the run with no verdict. The local verdict
-is formed before any outside request exists. Then, only when the owner named outside rows:
+is formed before any outside request exists: `record-local` writes it with a receipt over every file it
+rests on, and the outside requests are released only while that receipt holds. Never edit the run
+directory by hand; an edit is detected and the run refuses. Then, only when the owner named outside rows:
 
 ```sh
 uv run scripts/vertical.py request --run-dir <run dir> --outside
@@ -168,7 +171,7 @@ request, no merge.
 
 1. The gate is real: every slice `signed off`, or report and stop; only the owner's words collapse it.
 2. The ask is real: every run, wait for the answer; nothing is remembered between runs.
-3. Secrets are physically absent: reviewers read archive copies of tracked files, never the live tree.
+3. Secrets are physically absent: reviewers read copies of the reviewed commit's tracked files, never the live tree.
 4. Cold means cold: no prior verdict, no ledger, no chat, no other reviewer's output in any packet.
 5. Nothing unverified lands in the verdict; `Refuted: N` is always reported.
 6. Survivors continue: a dropped outside reviewer is recorded with its status and reason.

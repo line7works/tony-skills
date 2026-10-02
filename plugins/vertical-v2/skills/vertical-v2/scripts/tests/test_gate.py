@@ -284,6 +284,49 @@ class TheRecordedBaseLine(_Gate):
         self.assertIn("empty", result["reason"])
 
 
+class TheOwnersBaseOverARecordedStop(_Gate):
+    """C1A2-3 and C1A2-4: a `Base:` line that stops is cleared by the owner's base on a fresh run, and an owner's
+    base equal to HEAD stops (an empty boundary) wherever it is taken."""
+
+    OWNER = "from the first commit, the owner said"
+    recorded = TheRecordedBaseLine.recorded
+
+    def test_the_owners_base_clears_a_non_hex_base_line_and_both_are_named(self):
+        ws = self.recorded("main")
+        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
+        code, out, err = self.gate(ws, owner_words={"base": {"commit": first, "words": self.OWNER}})
+        self.assertEqual(code, 0, (out, err))
+        base = vlib.load(self.run_dir, "gate.json")["base"]
+        self.assertEqual((base["commit"], base["how"], base["words"]), (first, "owner", self.OWNER))
+        self.assertIn("Base: main", base["field"])
+
+    def test_the_owners_base_clears_an_unresolvable_base_line(self):
+        ws = self.recorded("deadbeef")
+        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
+        code, out, err = self.gate(ws, owner_words={"base": {"commit": first, "words": self.OWNER}})
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(vlib.load(self.run_dir, "gate.json")["base"]["how"], "owner")
+
+    def test_a_base_line_stop_with_no_owners_base_names_where_his_answer_goes(self):
+        ws = self.recorded("main")
+        result = self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
+        self.assertIn("station.owner_words.base", result["reason"])
+
+    def test_an_owners_base_equal_to_head_over_a_base_line_stops(self):
+        ws = self.recorded("main")
+        head = testlib.git(ws, ["rev-parse", "HEAD"]).strip()
+        result = self.stopped(*self.gate(ws, owner_words={"base": {"commit": head, "words": self.OWNER}})[:2],
+                              tag="base-unresolved")
+        self.assertIn("empty", result["reason"])
+
+    def test_an_owners_base_equal_to_head_stops(self):
+        ws, info = vlib.make_repo(self.tmp, on_main=True)
+        result = self.stopped(*self.gate(ws, owner_words={"base": {"commit": info["head"], "words": self.OWNER}})[:2],
+                              tag="base-unresolved")
+        self.assertIn("HEAD", result["reason"])
+        self.assertIn("empty", result["reason"])
+
+
 class TheRenameInTheTree(_Gate):
     """C1A-8: the dirt check reads both paths of a rename or copy; a boundary file moved away stops the run."""
 

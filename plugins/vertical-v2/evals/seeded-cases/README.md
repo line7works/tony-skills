@@ -63,8 +63,8 @@ standing for the run id. Nothing in an answer or a `CASES.md` states an outcome.
 | `outside_packet_files` | the paths an outside repo row's packet lists (its workspace's files and its mandate) |
 | `outside_withheld` | what that packet's withheld list names |
 | `local_packet_documents` | the documents a local lens receives |
-| `markers_found` | the planted marker words found in any copy or packet file |
-| `copies_have_git` | either archive copy holds `.git` |
+| `markers_found` | the planted marker words found in any packet file (the material `scope` cuts) |
+| `copies_have_git` | any packet's workspace holds `.git` |
 | `outside_request_refused`, `outside_request_files` | `request --outside` was refused; how many outside request files exist |
 | `record_outside_refused` | an outside answer attempt was refused |
 | `authorized_rows`, `local_authorized_rows` | the rows whose built request carries `authorized: true`, outside and local |
