@@ -15,16 +15,19 @@ The one write is the verdict doc, `docs/reviews/<date>-vertical-<feature>.md`, f
 appends one dated block at its end, every earlier byte untouched; several, and the run stops
 (`verdict-doc-ambiguous`) with nothing written. A report-only run writes nothing. After the verdict every
 packet's workspace and documents (scope's previews and every summons copy) are removed from the run
-directory; the mandates and the two lists stay.
+directory; the mandates and the two lists stay (a run that stops removes them too, `report.finish`).
+
+Before anything is merged, `verdict` holds the run to the local receipt exactly as `request --outside` does
+(`record.local_receipt_problem`, C1A3-5): on a local-only run and after the outside fleet alike, a local
+record edited after `record-local` is refused (exit 5) and nothing is written.
 """
 import glob
 import os
 import re
-import shutil
 
 from station_core import driver, fsio, records_link
 
-from . import ask as askmod, common, forms, report, sheet as sheetmod
+from . import ask as askmod, common, forms, record, report, sheet as sheetmod
 
 SEVERITY_ORDER = ("BLOCKER", "MAJOR", "MINOR")
 
@@ -188,6 +191,11 @@ def _appendix(run, records):
 def handler(ctx, args):
     """`verdict --run-dir D [--records-root DIR]`."""
     run = common.open_run(ctx, args.run_dir, ("recorded-local", "recorded-outside"), "verdict")
+    problem = record.local_receipt_problem(ctx, run)
+    if problem:
+        return ctx.emit(ctx.envelope(accepted=False, run_id=run.checkpoint["run_id"],
+                                     reason="the local verdict is not on record as record-local wrote it: %s; "
+                                            "nothing was written" % problem), 5)
     ask = common.read(run, "ask.json")
     if run.checkpoint["phase"] == "recorded-local" and ask["answer"]["rows"]:
         raise driver.Usage("the owner named outside rows (%s): run `request --outside` and record-outside before the "
@@ -238,11 +246,7 @@ def handler(ctx, args):
         writes.append({"path": target, "kind": "document",
                        "sha256_before": fsio.sha256_bytes(before_bytes) if before_bytes is not None else None,
                        "sha256_after": fsio.sha256_bytes(data)})
-    for folder in ("packets", "summons"):
-        root = common.path_of(run, folder)
-        for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
-            for part in ("workspace", "documents"):
-                shutil.rmtree(os.path.join(root, name, part), ignore_errors=True)
+    report.drop_copies(run)
     common.write(run, "verdict.json", {"verdict": fields["verdict"], "findings_count": len(findings),
                                        "refuted": refuted, "findings": findings, "repeats": repeats, "misses": misses,
                                        "doc": None if common.report_only(run) else rel, "would_write": rel,

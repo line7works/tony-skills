@@ -20,7 +20,9 @@ leave it out:
 2. two consecutive components of it read `docs` then `reviews` (a prior verdict) or `docs` then
    `records` (the records log), compared without regard to case, wherever in the path they stand;
 3. any one of its components, lower-cased with `-`, `_`, `.` and spaces removed, holds `buildernotes` or
-   `buildnotes` (the builder's notes: a file or a folder of them, B4);
+   `buildnotes` (the builder's notes: a file or a folder of them, B4); or it is a `.md` regular file whose
+   first heading declares it the builder's notes (`notes.py`, C1A3-3, the slice review's rule; read from the
+   commit's bytes, since the declaration is in the file, not its path);
 4. it is `REVIEW.md` at the root (the inspection sheet: never in a workspace; a local lens receives the
    commit's bytes as a document when it is the kit sheet, and no outside packet ever carries it).
 
@@ -42,7 +44,7 @@ import re
 
 from station_core import driver, fsio, validate
 
-from . import gitio, sheet as sheetmod, spec as specmod
+from . import gitio, notes as notesmod, sheet as sheetmod, spec as specmod
 
 SHEET = "REVIEW.md"
 RECORD_FOLDERS = (("docs", "reviews", "a prior verdict (docs/reviews/)"),
@@ -135,6 +137,15 @@ class Snapshot(object):
         except UnicodeDecodeError:
             raise driver.Usage("the build doc %s in the reviewed commit is not UTF-8 text" % doc)
         self.spec, self.removed = specmod.clean(doc_text)
+        declared = []
+        for mode, oid, path in kept:
+            if path != doc and mode in REGULAR and path.lower().endswith(".md"):
+                heading = notesmod.declares(contents[oid].decode("utf-8", "replace"))
+                if heading is not None:
+                    declared.append(path)
+                    self.left.append({"what": path, "why": "%s (its first heading, %r, declares it)"
+                                                          % (NOTES_WHY, heading)})
+        kept = [entry for entry in kept if entry[2] not in declared]
         self.tree, self.modes = {}, {}
         for mode, oid, path in kept:
             self.tree[path] = self.spec.encode("utf-8") if path == doc else contents[oid]

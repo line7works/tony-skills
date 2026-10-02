@@ -2,9 +2,11 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a
 state. Written for E15 slice 1 of the skills v2 rebuild, against the E15 lane contract (sections 6 and
-8, amendments A1 to A4) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
-slice 1a fix round applied A3 (C1A-1 to C1A-9) and the design round applied A4 (the one packet builder,
-the local receipt, B5, C1A2-1 to C1A2-5). Where this
+8, amendments A1 to A7) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
+slice 1a fix round applied A3 (C1A-1 to C1A-9), the design round applied A4 (the one packet builder,
+the local receipt, B5, C1A2-1 to C1A2-5), and fix round 3 applied A5 (the readers root by allowlist
+identity, this core's own fence reader, C1A3-3 to C1A3-6) and A7 (the gate reads with that fence reader).
+Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
 
@@ -65,9 +67,14 @@ then `docs/<name>-build-plan.md`, then a phase or slice doc (`docs/*phase*.md`, 
 `plan/*.md`). `none` stops (`selection-none`, ask the owner); `several` stops (`selection-several`, the
 candidates listed, none picked).
 
-The slices: every `## Slice <name> <dash> <short>` heading and the `Status:` label inside its section,
-read through the build-doc form's parse (`station_core/templates.py`). Zero slices, or a slice with no
-`Status:` line, stops (`gate-malformed`); a collapse never passes it.
+The slices: every `## Slice <name> <dash> <short>` heading (the build-doc form's slice pattern) and the
+first `Status:` label inside its section, read outside fences with this core's own fence reader (A7; the
+reader section 5 states for the spec, `scripts/vertical_core/fences.py`), never the frame's parse: a heading
+or a label inside a fence is content, never a slice or a card. A build doc the reader cannot place (a fence
+never closed, a fence marker inside a container or raw HTML, a line that leaves a list item's fence) stops
+the gate (`doc-unreadable`, naming the line) before the ask; when the records component's importer reads a
+card from a fenced literal, the card-and-line comparison below stops the run (`card-disagrees`). Zero
+slices, or a slice with no `Status:` line, stops (`gate-malformed`); a collapse never passes either.
 
 The cards (reading CR-1): the records component's `state` for the build doc. A slice's card is its
 `card_observed` (the last card set or observed in the log); it must equal the slice's `Status:` line
@@ -97,8 +104,9 @@ profile it runs under, and any drop note) into `ask.json`. With `--answer FILE` 
 `references/answer.schema.json`): the rows the owner's words name and his words, verbatim, for this run
 only (exit 5 for another run's). Nothing after the ask runs until the answer is recorded.
 
-The roster is read through section 11's preflight, so a v1 readers root stops the run (`station-refused`)
-before any of its files is opened. The local row is `claude-session` (profile `repo-with-tools`) on Claude
+The roster is read through section 11's preflight, so a readers root that is not the expected readers
+plugin by identity, a v1 root among them, stops the run (`station-refused`) before any of its files is
+opened. The local row is `claude-session` (profile `repo-with-tools`) on Claude
 Code and `claude-opus-cli` on Codex, with the profile that row offers (section 12). The outside rows read the export as a workspace
 (`repo`) where the row offers it, and a packet otherwise (`packet-only`).
 
@@ -119,7 +127,9 @@ spec, the base commit, the boundary lines. Each local mandate is the lens's brie
 boundary, the ledger-versus-spec line, the repo's checks, and the reporting shape; its words follow the
 local row's profile (C1A-9): under `repo-with-tools` the lens may run the project's tests in its copy;
 under `repo` it says the lens runs nothing, reads the code, and reports a check it would have run as not
-executed, and it promises no test run. Writes `scope.json` and `packets/`.
+executed, and it promises no test run. A build doc this core's fence reader cannot place (section 5,
+"The spec") stops the run here (`doc-unreadable`, naming the line) before any packet is built. Writes
+`scope.json` and `packets/`.
 
 ### 3.4 `request --run-dir D [--readers-root DIR]` (the local fleet)
 
@@ -148,30 +158,35 @@ file are read from readers' sidecar (a call with none is refused, and so is an `
 is not `ok`: a retryable failure not yet re-sent is refused with the re-send command; otherwise the run
 stops (`local-incomplete`), or (`floor-refused`) on a floor refusal. The findings are held to section 6; a
 refusal is exit 5 and nothing is written. `record-local` is the only writer of the local verdict: when it
-completes it writes `local.json`, then `local-receipt.json` (`references/local-receipt.schema.json`,
-closed: the run id; each local call's id, row and lens with the sha256 of the sidecar and of the capture
-readers wrote for it, null where a call has no capture; the sha256 of `local.json`; the time), then the
+completes it writes `local.json` (its calls, findings, what each lens tried, the method, and the time it was
+recorded, `at`), then `local-receipt.json` (`references/local-receipt.schema.json`, closed: its version; the
+run id; each local call's id, row and lens with the sha256 of the sidecar and of the capture readers wrote
+for it, null where a call has no capture; the sha256 of `local.json`; the time, the same `at`), then the
 checkpoint, and one trace line per summons.
 
 ### 3.6 `request --run-dir D --outside [--row ROW ...]`
 
 Only after `record-local` completed (reading CR-5; A4): the checkpoint at `recorded-local` AND the receipt
-present, valid against its schema, for this run, naming exactly the local calls this run requested (id,
-row and lens, in request order), every hash in it matching the file on disk now (`local.json`, each
-sidecar, each capture, and no capture where it recorded none), and `local.json` still holding the way
+holding, every field of it checked (C1A3-4): present and valid against its closed schema (its version), for
+this run, naming exactly the local calls this run requested (id, row and lens, in request order), every
+hash in it matching the file on disk now (`local.json`, each sidecar, each capture, and no capture where it
+recorded none), its time the time `local.json` records, and `local.json` still holding the way
 `record-local` holds an answer (the answer schema, the calls read again from the sidecars, the findings,
 the credits and what each lens tried). Otherwise exit 5, and no outside file (request, copy or
 `requests-outside.json`) exists under the run directory. The checkpoint's phase alone never suffices.
+`verdict` holds the run to the same check (section 3.8).
 
 **The threat model.** The run directory is the station's, and nothing in it is secret: an executor, a
 reader or a person with the run directory open can edit any file there. A hand edit is not prevented; it
 is detected. The receipt fixes the bytes of every file the local verdict rests on at the moment
-`record-local` completes, so any later edit to `local.json`, a sidecar, a capture or the receipt itself,
-and any checkpoint set by hand with no receipt behind it, makes the hashes, the requested calls or the
-re-derived record disagree, and the run refuses before any outside request exists. Rewriting the record
-and its receipt together so both agree is the one edit the hashes cannot see; it still has to pass
-`record-local`'s own rules against readers' sidecars, so what reaches the outside fleet is never less than
-a local review `record-local` would have accepted.
+`record-local` completes, so any later edit to `local.json`, a sidecar, a capture or any field of the
+receipt itself (its version, run id, calls, hashes, or its time, which must equal the time `local.json`
+records), and any checkpoint set by hand with no receipt behind it, makes the hashes, the requested calls,
+the times or the re-derived record disagree, and the run refuses before any outside request exists and
+before the verdict is written. Rewriting the record and its receipt together so both agree is the one edit
+the hashes cannot see; it still has to pass `record-local`'s own rules against readers' sidecars, so what
+reaches the outside fleet and the verdict is never less than a local review `record-local` would have
+accepted.
 
 One request per row the answer named (or the `--row` subset): `authorized: true`, decided by
 `station_core/readers_request.py` from the answer's rows and nothing else; refused (exit 5) for a row the
@@ -195,14 +210,18 @@ is a dropped reviewer, recorded with its status and reason; no finding may be cr
 
 ### 3.8 `verdict --run-dir D [--records-root DIR]`
 
-At `recorded-outside`, or at `recorded-local` when the answer named no outside row. The merge, the count,
+At `recorded-outside`, or at `recorded-local` when the answer named no outside row. First the local receipt
+is checked exactly as `request --outside` checks it (section 3.6; C1A3-5): when it does not hold, on a
+local-only run or after the outside fleet, `verdict` refuses (exit 5) and writes nothing. The merge, the count,
 the ledger comparison and the one write (reading CR-8): see `scripts/vertical_core/verdict.py`'s rules,
 stated in section 6. The doc is found by glob over `docs/reviews/*-vertical-<feature>.md` (`<feature>` the
 doc's topic, v1's rule): none, created as `docs/reviews/<date>-vertical-<feature>.md`; one, a dated block
 appended at its end with every earlier byte untouched; several, a stop (`verdict-doc-ambiguous`) with
 nothing written. A target that is a link or lies outside the workspace's `docs/reviews/` is refused
 (`write-refused`). Report-only writes nothing. Every packet's workspace and documents, the previews and
-the summons copies, are removed afterwards; the mandates and the lists stay.
+the summons copies, are removed afterwards; the mandates and the lists stay. A run that stops anywhere
+removes them the same way when it writes its result (C1A3-6), so no copy of the reviewed tree outlives a
+run.
 Writes `verdict.json` and the doc.
 
 ### 3.9 `report --run-dir D --bottom-line TEXT [--skill-note TEXT]`
@@ -227,7 +246,8 @@ and `owner_words`, the owner's own words in this run, verbatim and the one sourc
 
 **The base** (reading CR-2), v1's precedence: (1) a base the build doc records: a header line, before the
 first `## ` heading, reading `Base: <commit>` with the commit as 7 to 40 lowercase hex characters, the
-first such line counting; (2) `git merge-base <default branch> HEAD`, the default branch being the remote's
+first such line counting, both read outside fences with this core's fence reader (A7: a fenced `Base:` or
+`## ` line is content); (2) `git merge-base <default branch> HEAD`, the default branch being the remote's
 `HEAD` when one is named, else `main`, else `master`, and a merge base equal to HEAD itself counting as
 none (nothing to review); (3) the owner's base from `station.owner_words.base`; else a stop that asks
 (`base-unresolved`). A `Base:` header line whose value is not 7 to 40 lowercase hex characters (a branch
@@ -258,8 +278,9 @@ file, an executable, or a symbolic link written as a plain file holding its targ
 holds: (1) it is not a plain relative path; (2) two consecutive components of it read `docs` then
 `reviews` (a prior verdict) or `docs` then `records` (the records log), without regard to case, wherever
 they stand; (3) any one of its components, a folder's name as well as the file's, lower-cased with `-`,
-`_`, `.` and spaces removed, holds `buildernotes` or `buildnotes` (the builder's notes, B4); (4) it is
-`REVIEW.md` at the root. The build doc's file in a workspace holds the spec. A submodule is not a file
+`_`, `.` and spaces removed, holds `buildernotes` or `buildnotes` (the builder's notes, B4), or it is a `.md`
+regular file whose first heading declares it the builder's notes (C1A3-3, the slice review's rule, restated
+below); (4) it is `REVIEW.md` at the root. The build doc's file in a workspace holds the spec. A submodule is not a file
 and is not copied. What each packet holds: a local lens, the workspace, `documents/spec.md`, the commit's
 `REVIEW.md` as `documents/REVIEW.md` when it is a regular file and the kit sheet, and its mandate; an
 outside row on `repo`, the workspace and the outside mandate; an outside row on `packet-only`, the
@@ -269,26 +290,46 @@ extension, never a name another path stages to, C1A-6) and the outside mandate. 
 read from the commit's `REVIEW.md` alone (B1): an untracked or changed working-tree `REVIEW.md` never picks
 a lens, never reaches a mandate, and never reaches a packet.
 
-**The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 amended it) is the commit's build doc
-with five sections and every `Status:` label removed, read through the build-doc form's parse so a fenced
-block is never mistaken for either: `## Punch list` and `## Handoffs` (the ledger) and `## Build
+**A notes file declared by its first heading** (C1A3-3; `scripts/vertical_core/notes.py`). The slice review
+withholds a Markdown file whose first heading says it is the builder's notes; so does this core, reading the
+commit's bytes of every `.md` regular file but the build doc. A heading declares when it holds "notes from
+the builder", "builder notes", "builder's notes", "builders notes" or "build notes", letter case aside.
+Which heading is first is read wide, so a declaration a Markdown reader would see first is never missed:
+every heading-shaped line (an ATX heading, or the text above an `===` or `---` underline), with block-quote
+and list markers stripped, whatever holds it (a fence, raw HTML, a container, front matter), counts until
+the first certain heading, an ATX heading at the left margin outside every fence, with no line opening with
+`<` before it and past any front matter; that heading counts too, and nothing after it. Reading wide only
+ever withholds more, and what it withholds is named with the heading that declared it.
+
+**The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 and A5 amended it) is the commit's build doc
+with five sections and every `Status:` label removed outside fences, what is fenced decided by this core's
+own fence reader (A5 (2); `scripts/vertical_core/fences.py`; the frame's `templates.py` stays frozen and is
+not used for it), CommonMark's fence rule at the document's margin: a fence opens on a line of up to three
+spaces then three or more backticks or tildes (a backtick line whose info string holds a backtick opens
+nothing), and closes only on a line of up to three spaces then the same character at least as many times,
+then nothing but spaces or tabs; every line between is content. A fence never closed, a fence marker inside
+a block quote, a list item or a raw HTML block, and a line that leaves a fence opened inside a list item
+(indented less than its opening line) are lines the reader cannot place: the run stops at `scope`
+(`doc-unreadable`, naming the line) before any packet is built. The sections removed: `## Punch list` and `## Handoffs` (the ledger) and `## Build
 assumptions`, `## Deviations` and `## Discovered` (the builder's working records, which the slice review
 withholds too), each found by heading level and name, whitespace-tolerant (a heading of level 1 or 2, up to
 three leading spaces, one or more spaces or tabs after the hashes, its name compared with its whitespace
 runs collapsed, any closing hashes dropped and without regard to case, C1A2-5) and running to the line
-before the next heading of level 1 or 2; and every parsed `Status:` label, in a slice's section or out of
-one, the header's included (M6). Everything else stays byte for byte.
+before the next heading of level 1 or 2 outside a fence; and every `Status:` label (a line outside fences
+that starts with `Status:`, the build-doc form's label test), in a slice's section or out of one, the
+header's included (M6). Everything else stays byte for byte.
 
 **The withheld list** of every packet names everything left out, each with why, and nothing the packet
 holds: every tracked path the allow rule left out (each prior verdict, each records log file, each
-builder's notes file, a folder's files one by one), each submodule, each removed section and `Status:`
+builder's notes file, a folder's files one by one, each file its first heading declares), each submodule,
+each removed section and `Status:`
 label with its line numbers, every untracked and ignored path and every changed working-tree path (the
 names `scope` read once, never their contents), the commit's `REVIEW.md` where the packet does not receive
 it (every outside packet; a local packet when it is not the kit sheet or not a regular file), and on a
 packet-only row each file that is not UTF-8 text.
 
 vertical-v2 never runs `git worktree`, never runs a git command that changes a branch, an index or a
-worktree, and removes every packet's workspace and documents after the verdict.
+worktree, and removes every packet's workspace and documents after the verdict or a stop (C1A3-6).
 
 ## 6. The review mechanics
 
@@ -359,7 +400,8 @@ The exit codes are `references/back-loop.md` section 2's. Every stop writes `res
 | `not-git` | the workspace is not a git work tree root with a commit |
 | `base-unresolved` | no base: none recorded, no merge base, none from the owner; a recorded `Base:` line that is not 7 to 40 lowercase hex, resolves to nothing, or names HEAD itself, with no owner's base to take over it; or an owner's base that resolves to nothing or names HEAD itself |
 | `dirty-boundary` | dirt touches the boundary or the build doc and the owner gave no committed-state-only order |
-| `station-refused` | a readers root under a v1 plugin folder (refused before any of its files is opened), or readers' identity breaks the trace's refusal rule; a `refused` trace line is written |
+| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence this core's fence reader cannot place (never closed, inside a container or raw HTML, or left by a dedented line inside a list item); the line is named |
+| `station-refused` | a readers root that is not the expected readers plugin by identity, or a file of it that resolves outside it, or one named for a v1 plugin folder (each refused before any of its files is opened or run), or readers' identity breaks the trace's refusal rule; a `refused` trace line is written |
 | `floor-refused` | a local lens came back below the floor; no verdict is emitted |
 | `local-incomplete` | a local lens failed after its re-send, or refused deterministically |
 | `verdict-doc-ambiguous` | several verdict docs exist for the build |
@@ -403,14 +445,30 @@ vertical-v2 writes no event and never opens the component for writing (owner pic
 ## 11. The trace
 
 `trace.jsonl` in the run directory, `references/trace.schema.json`, written by `scripts/back_core/trace.py`
-(reading CR-9). Before anything of a readers root is opened, every candidate the resolver could take
-(`--readers-root`, route 3a beside this core, route 3b's folder and each folder in it) is resolved to its
-real path, and one that sits under a v1 plugin folder, by its real path (a symbolic link's target
-included) or its own, is refused there (B5): no manifest, roster or executable of it is opened or run, a
-`refused` line with the rule `v1-root` and no identity is written, and the run stops `station-refused`.
-`ask` and `request` both screen. Then readers' identity is read: the root the shared resolver finds
-(`--readers-root`, then route 3a, then 3b), the name and version its manifest carries, and the protocol
-version its own CLI prints (`readers.py --version`, which summons no reader). An identity the refusal rule
+(reading CR-9). **The readers root, by allowlist identity** (A5 (1); B5, C1A3-2;
+`scripts/vertical_core/readers_link.py`). The allowlist is the expected readers plugin and nothing else:
+the checkout sibling `<plugin root>/../readers` (route 3a) and each installed `<plugin root>/../../readers/<version>`
+folder (route 3b, a canonical dotted version), found the records way from this core's own real plugin root,
+each taken only when its parent's listing holds it under that exact name as a real directory, never a
+symbolic link (so a link, or a name differing only in letter case, is never on it), and identified by the
+disk's own identity, its device and inode. Before anything of a readers root is opened, every candidate is
+held to it: `--readers-root` must have the identity of an allowlisted folder (so a link to the real readers
+is accepted: the folder it reaches is the expected plugin, and every file is then held to that folder); route
+3a's path, when anything is there, must be the allowlisted sibling; route 3b's folder must be a real
+`readers` directory and each canonical version entry in it allowlisted (an entry that is not a canonical
+version is never a candidate and never opened). Then every file this core opens or runs from the root it
+takes (the manifest, the roster, `readers.py`) must resolve by its real path inside that root, by identity
+(each parent of its real path is stat'ed until one is the root). The name-based v1 screen stays as a second
+line: a root or file whose real path or own path, letter case aside, sits under a v1 plugin folder, or
+holds a v1 station's name followed by a dotted version anywhere (an installed v1 version folder, however
+deep), is refused too. Every refusal comes before the refused root's manifest, roster or executable is
+opened or run: a `refused` line with no identity is written, with the rule `v1-root` when the name screen
+names a v1 station for it and `no-identity` otherwise (nothing of it was read; the trace's rules are a frozen
+back-frame file, so no rule is added), and the run stops `station-refused`. `ask` and `request` both hold
+every root to it. Then readers' identity is read from the root taken (`--readers-root` when allowlisted and
+usable, then route 3a, then the highest installed version whose manifest version is its folder name): the
+name and version its manifest carries, its real path, and the protocol version its own CLI prints
+(`readers.py --version`, which summons no reader). An identity the refusal rule
 refuses (a name other than `readers`, a root under a v1 plugin folder, a protocol this core does not know)
 stops the run (`station-refused`) with a `refused` line and no request. Every summons, whatever its status,
 is a `summons` line with that identity, the route, the readers run directory, its status, call id and row.
@@ -463,7 +521,7 @@ a Claude row or on a row the owner's answer in this run did not name.
 ### Run-directory artifacts
 
 `input.json`, `checkpoint.json`, `selection-build.json`, `gate.json`, `ask.json`, `scope.json`,
-`packets/<name>/` (the previews: the material until the verdict, then `mandate.md`, `files.json`,
+`packets/<name>/` (the previews: the material until the verdict or a stop, then `mandate.md`, `files.json`,
 `withheld.json`), `summons/<call id>/` (each call's fresh copy, the same shape), `requests/<call id>.json`,
 `requests-local.json`, `requests-outside.json`, `readers/` (readers' own), `local.json`,
 `local-receipt.json`, `outside.json`, `verdict.json`, `trace.jsonl`, `chat.md`, `result.json`.

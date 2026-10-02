@@ -60,13 +60,14 @@
         "not-git",
         "base-unresolved",
         "dirty-boundary",
+        "doc-unreadable",
         "floor-refused",
         "local-incomplete",
         "verdict-doc-ambiguous",
         "write-refused",
         null
       ],
-      "description": "the stop's tag; null on a completion. The tags this core emits: `selection-none`, `selection-several`, `records-refused`, `station-refused`, `gate-malformed`, `gate-short`, `card-disagrees`, `not-git`, `base-unresolved`, `dirty-boundary`, `floor-refused`, `local-incomplete`, `verdict-doc-ambiguous`, `write-refused`."
+      "description": "the stop's tag; null on a completion. The tags this core emits: `selection-none`, `selection-several`, `records-refused`, `station-refused`, `gate-malformed`, `gate-short`, `card-disagrees`, `not-git`, `base-unresolved`, `dirty-boundary`, `doc-unreadable`, `floor-refused`, `local-incomplete`, `verdict-doc-ambiguous`, `write-refused`."
     },
     "reason": {
       "type": "string",

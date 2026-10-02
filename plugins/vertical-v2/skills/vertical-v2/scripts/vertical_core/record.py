@@ -17,10 +17,12 @@ reason, never retried, and no finding may be credited to it.
 `record-local` is the only writer of the local verdict. When it completes it writes `local.json` and then
 `local-receipt.json` (`references/local-receipt.schema.json`, closed): the run id, each local call's id,
 row and lens with the sha256 of the sidecar and the capture readers wrote for it, the sha256 of
-`local.json`, and the time. `local_receipt_problem` is what `request --outside` holds the run to: the
-receipt present, valid, naming exactly the local calls this run requested, every hash in it matching the
-file on disk now, and the record it covers still holding the way `record-local` holds an answer. The run
-directory is the station's; a hand edit there is not prevented, it is detected, and the run refuses.
+`local.json`, and the time, which `local.json` records too. `local_receipt_problem` is what
+`request --outside` and `verdict` hold the run to: every field of the receipt checked, the receipt present,
+valid, naming exactly the local calls this run requested, every hash in it matching the file on disk now,
+its time the one `local.json` records, and the record it covers still holding the way `record-local` holds
+an answer. The run directory is the station's; a hand edit there is not prevented, it is detected, and the
+run refuses.
 
 The findings are the executor's merge (deduped on file:line and claim) and verification (the stamp:
 CONFIRMED, PLAUSIBLE or REFUTED); the script refuses, exit 5 and nothing written: a CONFIRMED or
@@ -234,9 +236,10 @@ def record_local(ctx, args):
                                          "stopped": stop[0]})
         report.finish(ctx, run, "stopped", stop[0], stop[1])
     _summons_lines(ctx, run, requests, records)
+    at = common.now()
     common.write(run, "local.json", {"calls": records, "findings": findings, "tried": doc["tried"],
-                                     "method": doc["method"]})
-    write_receipt(ctx, run, requests)
+                                     "method": doc["method"], "at": at})
+    write_receipt(ctx, run, requests, at)
     common.advance(run, "recorded-local")
     named = common.read(run, "ask.json")["answer"]["rows"]
     return ctx.emit(ctx.envelope(next="request --outside" if named else "verdict", run_id=run.checkpoint["run_id"],
@@ -257,10 +260,11 @@ def _receipt_calls(run, requests):
     return out
 
 
-def write_receipt(ctx, run, requests):
-    """The local review's receipt, written by record-local alone, after local.json."""
+def write_receipt(ctx, run, requests, at):
+    """The local review's receipt, written by record-local alone, after local.json; its `at` is the time
+    local.json records (C1A3-4), so the receipt's every field is checked against the run."""
     doc = {"receipt_version": 1, "run_id": run.checkpoint["run_id"], "calls": _receipt_calls(run, requests),
-           "local_sha256": fsio.sha256_file(common.path_of(run, "local.json")), "at": common.now()}
+           "local_sha256": fsio.sha256_file(common.path_of(run, "local.json")), "at": at}
     errors = validate.errors_for(doc, common.schema("local-receipt.schema.json", ctx), ctx.prefix)
     if errors:
         raise driver.Defect("the receipt record-local would write does not validate: %s" % errors[:3])
@@ -269,9 +273,11 @@ def write_receipt(ctx, run, requests):
 
 def local_receipt_problem(ctx, run):
     """Why the local verdict is not on record as record-local wrote it, or None when it is (A4, class (b)):
-    the receipt present and valid, for this run, naming exactly the local calls this run requested (id, row,
-    lens, in order), every sidecar, capture and local.json hash in it matching the file on disk now, and
-    local.json still holding the way record-local holds an answer."""
+    every field of the receipt checked (C1A3-4): present and valid against its closed schema (its version),
+    for this run, naming exactly the local calls this run requested (id, row, lens, in order), every sidecar,
+    capture and local.json hash in it matching the file on disk now, its time the time local.json records,
+    and local.json still holding the way record-local holds an answer. `request --outside` and `verdict`
+    both hold the run to it (C1A3-5)."""
     path = common.path_of(run, RECEIPT)
     if not os.path.isfile(path):
         return "the run holds no %s: record-local writes it when the local review completes" % RECEIPT
@@ -310,6 +316,8 @@ def local_receipt_problem(ctx, run):
         return "local.json cannot be read (%s)" % exc
     if not isinstance(local, dict) or "stopped" in local:
         return "local.json records no completed local review"
+    if local.get("at") != receipt["at"]:
+        return "the receipt's time %s is not the time local.json records (%s)" % (receipt["at"], local.get("at"))
     answer = {"answer_version": 1, "kind": "local", "run_id": run.checkpoint["run_id"], "method": local.get("method"),
               "findings": local.get("findings"), "tried": local.get("tried")}
     errors = validate.errors_for(answer, common.schema("answer.schema.json", ctx), ctx.prefix)

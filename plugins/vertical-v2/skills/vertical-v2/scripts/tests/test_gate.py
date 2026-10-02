@@ -8,7 +8,8 @@ field and is recorded verbatim. The two preconditions run with the gate: a git w
 clean where the review looks (dirt touching the boundary or the build doc stops; dirt elsewhere is
 listed and the review proceeds on HEAD). The base is v1's precedence: a `Base:` line the build doc
 records, then `git merge-base` with the default branch, then a stop that asks. Nothing is summoned and
-nothing is written outside the run directory by any of it.
+nothing is written outside the run directory by any of it. The slices and their `Status:` lines are read
+with vertical-v2's own fence reader (the E15 lane contract A7), never the frame's parse.
 """
 import os
 import unittest
@@ -112,6 +113,66 @@ class TheSlices(_Gate):
         ws, info = vlib.make_repo(self.tmp, doc_text=doc)
         code, out, err = self.gate(ws, owner_words={"collapse_gate": "run it anyway"})
         self.stopped(code, out, "gate-malformed")
+
+
+def fence_shape_doc():
+    """Slice B's real `Status:` line reads `built`, after a four-backtick fence holding a three-backtick line and a
+    fenced literal `Status: signed off`, closed by a backtick line whose info string holds a backtick (text to
+    CommonMark, a fence toggle to the frame's parse): the gate must never read B as signed off."""
+    base = vlib.build_doc()
+    old = "Depends on: nothing\nStatus: signed off\n\n## Build assumptions"
+    new = ("Depends on: nothing\n````text\n```\nStatus: signed off\n````\nStatus: built\n```x`y\n\n"
+           "## Build assumptions")
+    assert base.count(old) == 1
+    return base.replace(old, new)
+
+
+class TheFenceReading(_Gate):
+    """The E15 lane contract A7: the gate reads slice headings and `Status:` lines with vertical-v2's own fence
+    reader (`fences.py`, CommonMark's fence rule), never the frame's parse; a doc it cannot place stops the gate
+    (`doc-unreadable`, naming the line) before any ask."""
+
+    def test_a_fenced_status_literal_is_never_the_card_with_no_records_log(self):
+        ws, info = vlib.make_repo(self.tmp, doc_text=fence_shape_doc(), records=False)
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "gate-short")
+        self.assertIn("slice B (built)", result["reason"])
+        gate = vlib.load(self.run_dir, "gate.json")
+        self.assertEqual([(s["name"], s["status_line"]) for s in gate["slices"]], [("A", "signed off"), ("B", "built")])
+
+    def test_a_records_log_that_reads_the_fenced_literal_stops_card_and_line_naming_both(self):
+        ws, info = vlib.make_repo(self.tmp, doc_text=fence_shape_doc(), records=True)
+        self.assertEqual([(s["name"], s["card_observed"]) for s in vlib.state(ws)["slices"]],
+                         [("A", "signed off"), ("B", "signed off")])
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "card-disagrees")
+        self.assertIn("slice B: the records say 'signed off', its Status: line says 'built'", result["reason"])
+
+    def test_a_fenced_slice_heading_is_not_a_slice(self):
+        doc = vlib.build_doc().replace("\n## Build assumptions",
+                                       "\n````\n```\n## Slice C %s an example\nStatus: built\n````\n\n"
+                                       "## Build assumptions" % D, 1)
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=False)
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        gate = vlib.load(self.run_dir, "gate.json")
+        self.assertEqual([s["name"] for s in gate["slices"]], ["A", "B"])
+
+    def test_an_unclosed_fence_before_the_slices_stops_the_gate_before_the_ask(self):
+        doc = vlib.build_doc().replace("\n## Slice A", "\n~~~~\nan example\n\n## Slice A", 1)
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=False)
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index("~~~~") + 1), result["reason"])
+        self.assertEqual(vlib.load(self.run_dir, "checkpoint.json")["phase"], "done")
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "ask.json")))
+
+    def test_a_fence_inside_a_list_item_stops_the_gate_naming_the_line(self):
+        doc = vlib.build_doc().replace("- R1 ", "- ```\n- R1 ", 1)
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=False)
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index("- ```") + 1), result["reason"])
 
 
 class TheDocHunt(_Gate):
@@ -220,6 +281,48 @@ class TheBase(_Gate):
         testlib.write_text(os.path.join(ws, vlib.DOC), vlib.build_doc(base_line="Base: deadbeef"))
         testlib.git(ws, ["commit", "-q", "-am", "a bad base"])
         self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
+
+
+class TheFencedBaseLine(_Gate):
+    """The E15 lane contract A7 as the control room reads it (send-back 2): the recorded `Base:` line is read with
+    vertical-v2's own fence reader too: a `Base:` line, or a `## ` line, inside a fence is content."""
+
+    def commit_doc(self, ws, header):
+        testlib.write_text(os.path.join(ws, vlib.DOC), vlib.build_doc(extra_header=header))
+        testlib.git(ws, ["commit", "-q", "-am", "a header with a fenced example"])
+
+    def test_a_fenced_base_example_before_the_real_base_line_leaves_the_real_one_counting(self):
+        ws, info = vlib.make_repo(self.tmp)
+        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
+        self.commit_doc(ws, ["````", "```", "Base: deadbeef", "````", "Base: %s" % first])
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        base = vlib.load(self.run_dir, "gate.json")["base"]
+        self.assertEqual((base["commit"], base["how"], base["field"]), (first, "doc", "Base: %s" % first))
+
+    def test_a_fenced_base_example_alone_is_no_recorded_base(self):
+        ws, info = vlib.make_repo(self.tmp)
+        self.commit_doc(ws, ["~~~", "Base: deadbeef", "~~~"])
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        base = vlib.load(self.run_dir, "gate.json")["base"]
+        self.assertEqual((base["commit"], base["how"]), (info["base"], "merge-base"))
+
+    def test_a_fenced_heading_does_not_end_the_header(self):
+        ws, info = vlib.make_repo(self.tmp)
+        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
+        self.commit_doc(ws, ["```", "## an example heading", "```", "Base: %s" % first])
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        base = vlib.load(self.run_dir, "gate.json")["base"]
+        self.assertEqual((base["commit"], base["how"]), (first, "doc"))
+
+    def test_an_unclosed_fence_in_the_header_stops_doc_unreadable_naming_its_line(self):
+        ws, info = vlib.make_repo(self.tmp)
+        self.commit_doc(ws, ["````", "Base: deadbeef"])
+        doc = vlib.build_doc(extra_header=["````", "Base: deadbeef"])
+        result = self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index("````") + 1), result["reason"])
 
 
 class TheDerivedCard(_Gate):

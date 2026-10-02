@@ -15,6 +15,8 @@ These are previews. No request ever points at them: `request` cuts a FRESH copy 
 first send and every retry alike, under `summons/<call id>/`, from the same function, holds it to that
 function's output and to the fingerprint `scope` recorded immediately before the request file is written,
 and so a reader's scratch, or anything planted in an earlier copy, never reaches a later one.
+A build doc whose fences vertical-v2's own reader cannot place (an unclosed fence, a line it cannot place,
+`spec.py`) stops the run here (`doc-unreadable`, naming the line) before any packet is built.
 vertical-v2 never runs `git worktree`.
 """
 import os
@@ -22,7 +24,7 @@ import shutil
 
 from station_core import driver
 
-from . import ask as askmod, common, packet, sheet as sheetmod
+from . import ask as askmod, common, packet, report, sheet as sheetmod, spec as specmod
 
 
 def handler(ctx, args):
@@ -31,7 +33,10 @@ def handler(ctx, args):
     gate = common.read(run, "gate.json")
     ask = common.read(run, "ask.json")
     ws = common.workspace(run)
-    snap = packet.Snapshot(ws, gate["head"], gate["doc"])
+    try:
+        snap = packet.Snapshot(ws, gate["head"], gate["doc"])
+    except specmod.SpecUnreadable as exc:
+        report.finish(ctx, run, "stopped", specmod.STOP_TAG, str(exc))
     worktree = packet.worktree_names(ws)
     depth = common.station(run).get("depth") or "LEAN"
     lenses = sheetmod.lenses(depth, snap.sheet)

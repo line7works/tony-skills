@@ -2,11 +2,14 @@
 
 `finish` ends a run at a stop (or at its completion): it assembles `result.json` from the run's own
 artifacts, validates it against `references/result.schema.json` and the semantic checks S1 to S4,
-writes it, and raises the driver's Terminal (exit 10). A result that fails either check is a defect of
+writes it, and raises the driver's Terminal (exit 10); before that it removes every packet's workspace and
+documents (`drop_copies`: scope's previews and every summons copy; the mandates and the two lists stay), so a
+run that stops after `scope` leaves no copy of the reviewed tree behind (C1A3-6). A result that fails either check is a defect of
 this script (exit 1), never a softened result. `handler` is the `report` phase: the completion, the
 `VERTICAL:` block rendered from the result by `forms.py`, and `chat.md`.
 """
 import os
+import shutil
 
 from station_core import driver, validate
 from back_core import trace
@@ -86,8 +89,20 @@ def check(ctx, result):
                             % "; ".join("%s %s" % (e.get("path"), e.get("message")) for e in (errors or semantic)[:4]))
 
 
+def drop_copies(run):
+    """Remove every packet's workspace and documents, scope's previews and every summons copy alike; the
+    mandates and the two lists stay."""
+    for folder in ("packets", "summons"):
+        root = common.path_of(run, folder)
+        for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+            for part in ("workspace", "documents"):
+                shutil.rmtree(os.path.join(root, name, part), ignore_errors=True)
+
+
 def finish(ctx, run, status, tag, reason, selection=None, gate=None, extra=None):
-    """Write the run's result and end it (exit 10)."""
+    """Write the run's result and end it (exit 10). A run that ends, at a stop or at its completion,
+    removes every packet's copies first (C1A3-6): no step after it would."""
+    drop_copies(run)
     result = build_result(ctx, run, status, tag, reason, selection=selection, gate=gate, extra=extra)
     check(ctx, result)
     common.write(run, "result.json", result)

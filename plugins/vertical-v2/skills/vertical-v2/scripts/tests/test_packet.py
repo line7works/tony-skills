@@ -8,8 +8,10 @@ by heading level and name, whitespace-tolerant. Everything left out is named in 
 list with its reason, and nothing is named that was not left out.
 
 `TheClassGuard` is the class's guard: one fixture holding every member the class has had (B1, B2, B4,
-M6, C1A-3, C1A-5, C1A2-5), the function driven directly, the exact file list and withheld list of every
-packet asserted. `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
+M6, C1A-3, C1A-5, C1A2-5, and A5's C1A3-1 and C1A3-3: a four-backtick fence holding a three-backtick line,
+a tilde fence holding backticks, a fence with an info string, an indented fence, a builder's-notes file
+declared by its first heading), the function driven directly, the exact file list and withheld list of
+every packet asserted; an unclosed fence, after the slices or before them, stops before any packet. `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
 import os
@@ -19,7 +21,7 @@ import testlib
 import vlib
 
 testlib.add_scripts_to_path()
-from vertical_core import gitio, packet  # noqa: E402
+from vertical_core import gitio, packet, spec as specmod  # noqa: E402
 
 D = vlib.D
 M = vlib.M
@@ -31,7 +33,7 @@ UNCOMMITTED_SHEET = ("# Review sheet\n\n## Passes\n- correctness: off\n\n## Seve
 MARKERS = ("PRIOR-VERDICT-MARKER", "RECORDS-LOG-MARKER", "NOTES-FILE-MARKER", "NOTES-FOLDER-MARKER",
            "ASSUMPTION-MARKER", "DEVIATION-MARKER", "DISCOVERED-MARKER", "HANDOFF-MARKER", "PUNCH-MARKER",
            "HEADER-STATUS-MARKER", "SLICE-STATUS", "UNTRACKED-ADVOCACY", "TOKEN=not-a-real-value",
-           "IGNORED-MARKER", "PLANTED-IN-AN-EARLIER-COPY")
+           "IGNORED-MARKER", "PLANTED-IN-AN-EARLIER-COPY", "HEADING-NOTES-MARKER")
 
 
 def class_doc():
@@ -49,6 +51,17 @@ def class_doc():
         "Status: a fenced example stays",
         "## Deviations",
         "```",
+        "````markdown",
+        "```",
+        "Status: a four-backtick literal stays",
+        "````",
+        "~~~",
+        "```",
+        "## Handoffs",
+        "~~~",
+        "   ```text",
+        "   ## Discovered",
+        "   ```",
         "",
         "## Slice A %s the counter" % D, "Goal: count turns.", "Requirements:", "- R1 counts every turn",
         "Acceptance criteria:", "- AC1: a turn adds one", "Footprint: src/turnstile.py", "Not in this slice: none",
@@ -83,6 +96,8 @@ def class_repo(tmp):
              "docs/records/turnstile.jsonl": "{\"RECORDS-LOG-MARKER\": 1}\n",
              "docs/builder-notes.md": "NOTES-FILE-MARKER the counter is obviously right\n",
              "docs/builder-notes/session.md": "NOTES-FOLDER-MARKER skim slice B\n",
+             "notes/session-log.md": "<!-- kept for the owner -->\n\n# Builder's notes\n\nHEADING-NOTES-MARKER skim B\n",
+             "notes/plain.md": "# Bench notes\n\nNot the builder's notes.\n",
              ".gitattributes": "src/ver.txt export-subst\n",
              "src/ver.txt": "$Format:%B$\n"}
     for rel, text in sorted(files.items()):
@@ -99,16 +114,18 @@ def class_repo(tmp):
 
 
 WORKSPACE = ["workspace/.gitattributes", "workspace/.gitignore", "workspace/README.md", "workspace/" + DOC,
-             "workspace/src/blob.bin", "workspace/src/legacy.py", "workspace/src/spinner.py",
+             "workspace/notes/plain.md", "workspace/src/blob.bin", "workspace/src/legacy.py", "workspace/src/spinner.py",
              "workspace/src/turnstile.py", "workspace/src/ver.txt"]
 LOCAL = sorted(["documents/REVIEW.md", "documents/spec.md", "mandate.md"] + WORKSPACE)
 OUTSIDE_REPO = sorted(["mandate.md"] + WORKSPACE)
 OUTSIDE_PACKET_ONLY = sorted(["mandate.md", "documents/.gitattributes", "documents/.gitignore", "documents/README.md",
-                              "documents/docs__plans__2026-09-20-turnstile.md", "documents/src__legacy.py",
+                              "documents/docs__plans__2026-09-20-turnstile.md", "documents/notes__plain.md", "documents/src__legacy.py",
                               "documents/src__spinner.py", "documents/src__turnstile.py", "documents/src__ver.txt"])
+STATUS_LINES = [number for number, line in enumerate(class_doc().split("\n"), 1)
+                if line.startswith("Status:") and ("STATUS-" in line or "STATUS " in line)]
 COMMON_WITHHELD = sorted(["docs/builder-notes.md", "docs/builder-notes/session.md", "docs/records/turnstile.jsonl",
-                          "docs/reviews/2026-09-24-signoff-turnstile-A.md",
-                          "%s Status: line 6" % DOC, "%s Status: line 22" % DOC, "%s Status: line 33" % DOC,
+                          "docs/reviews/2026-09-24-signoff-turnstile-A.md", "notes/session-log.md"]
+                         + ["%s Status: line %d" % (DOC, n) for n in STATUS_LINES] + [
                           "%s ## Build assumptions" % DOC, "%s ## Deviations" % DOC, "%s ## Discovered" % DOC,
                           "%s ## Handoffs" % DOC, "%s ## Punch list" % DOC,
                           ".env", "build/", "REVIEW.md"])
@@ -197,9 +214,40 @@ class TheClassGuard(unittest.TestCase):
         lines = class_doc().split("\n")
         first_withheld = lines.index("##  Build assumptions") + 1
         kept = "".join(line + "\n" for number, line in enumerate(lines, 1)
-                       if number < first_withheld and number not in (6, 22, 33))
+                       if number < first_withheld and number not in STATUS_LINES)
+        self.assertEqual(STATUS_LINES, [6, 33, 44])
         self.assertEqual(spec, kept)
         self.assertIn("Status: a fenced example stays\n## Deviations\n", spec)
+        self.assertIn("````markdown\n```\nStatus: a four-backtick literal stays\n````\n", spec)
+        self.assertIn("~~~\n```\n## Handoffs\n~~~\n", spec)
+        self.assertIn("   ```text\n   ## Discovered\n   ```\n", spec)
+
+    def test_a_builders_notes_file_declared_by_its_first_heading_is_withheld_and_named(self):
+        built, dest = self.cut({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o")
+        whys = dict((w["what"], w["why"]) for w in testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"])
+        self.assertIn("first heading", whys["notes/session-log.md"])
+        self.assertTrue(os.path.isfile(os.path.join(dest, "workspace", "notes", "plain.md")))
+
+    def recommit_doc(self, text):
+        testlib.write_text(os.path.join(self.ws, DOC), text)
+        testlib.git(self.ws, ["add", DOC])
+        testlib.git(self.ws, ["commit", "-q", "-m", "the doc again"], when="2026-09-20T12:00:00-07:00")
+        return testlib.git(self.ws, ["rev-parse", "HEAD"]).strip()
+
+    def test_an_unclosed_fence_after_the_slices_stops_before_any_packet(self):
+        text = class_doc().replace("##  Build assumptions\n", "````\n```\n##  Build assumptions\n")
+        head = self.recommit_doc(text)
+        with self.assertRaises(specmod.SpecUnreadable) as caught:
+            packet.Snapshot(self.ws, head, DOC)
+        lines = text.split("\n")
+        self.assertEqual(caught.exception.line, lines.index("##  Build assumptions") - 1)
+
+    def test_an_unclosed_fence_before_the_slices_stops_before_any_packet(self):
+        text = class_doc().replace("## Slice A", "~~~~\n\n## Slice A", 1)
+        head = self.recommit_doc(text)
+        with self.assertRaises(specmod.SpecUnreadable) as caught:
+            packet.Snapshot(self.ws, head, DOC)
+        self.assertEqual(caught.exception.line, text.split("\n").index("~~~~") + 1)
 
     def test_the_copies_hold_the_commits_bytes_with_no_attribute_applied(self):
         built, dest = self.cut({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o")

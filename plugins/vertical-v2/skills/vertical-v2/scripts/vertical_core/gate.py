@@ -6,7 +6,10 @@ component's `state` (`card_observed`, the last card set or observed in the log),
 doc's `Status:` line; a disagreement is a stop naming both. The component's derived card
 (`card_derived`) is recorded beside it and never stops the gate (the owner's ruling, E15 lane contract
 A3, C1A-2): a slice whose derived card differs is named, with both cards, in the verdict's Method line.
-A slice the log names nothing about falls back to its `Status:` line, and the result says so. Zero slices,
+A slice the log names nothing about falls back to its `Status:` line, and the result says so. The slices
+and their `Status:` lines are read with vertical-v2's own fence reader (the E15 lane contract A7), so a
+heading or a label inside a fence is never a slice or a card, and a doc whose fences the reader cannot
+place stops the gate (`doc-unreadable`, naming the line) before the ask. Zero slices,
 or a slice with no `Status:` line, is malformed input and never passes, collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.
 
@@ -24,7 +27,7 @@ import re
 
 from station_core import driver, hunt as huntmod, records_link, templates
 
-from . import common, gitio, report
+from . import common, fences, gitio, report, spec as specmod
 
 D = templates.D
 HUNTS = {
@@ -50,35 +53,53 @@ def _named(run, path):
 
 
 def slices_of(text):
-    """[(name, short, status line or None, line number)] in document order, read through the build-doc
-    form's own parse (`station_core/templates.py`): a `## Slice <name> <dash> <short>` heading and the
-    `Status:` label inside its section, fences honored."""
-    parsed = templates.parse("build-doc", text)
+    """[(name, short, status line or None, line number)] in document order, read with vertical-v2's own fence
+    reader (`fences.py`, the E15 lane contract A7; never the frame's parse): outside fences, a
+    `## Slice <name> <dash> <short>` heading (the build-doc form's slice pattern, `templates.BUILD["slice"]`)
+    opens a slice, any other `## ` heading closes it, and the first `Status:` label inside it is its line. A
+    heading or a label inside a fence is content, never a slice or a card. A fence never closed, or a line the
+    reader cannot place, raises spec.SpecUnreadable naming the line."""
+    lines = fences.split_lines(text)
+    scan = fences.scan(lines)
+    if scan.problems:
+        raise specmod.SpecUnreadable(*scan.problems[0])
     out = []
     current = None
-    for row in parsed["outline"]:
-        line = parsed["lines"][row["line"] - 1].rstrip("\r\n")
-        if row["role"] == "heading":
+    for number, raw in enumerate(lines, 1):
+        if number in scan.fenced:
+            continue
+        line = fences.bare(raw, number)
+        if line.startswith("## "):
             match = templates.BUILD["slice"].match(line)
-            current = {"name": match.group(1), "short": match.group(2), "status": None, "line": row["line"]} if match else None
+            current = {"name": match.group(1), "short": match.group(2), "status": None, "line": number} if match else None
             if current is not None:
                 out.append(current)
-        elif row["role"] == "label" and row.get("key") == "Status:" and current is not None and current["status"] is None:
-            current["status"] = line[len("Status:"):].strip()
-            current["status_at"] = row["line"]
+        elif line.startswith(specmod.LABEL) and current is not None and current["status"] is None:
+            current["status"] = line[len(specmod.LABEL):].strip()
+            current["status_at"] = number
     return out
 
 
 def recorded_base(text):
-    """The `Base:` line of the build doc's header (before the first `## ` heading), or None: {"line": the
-    line as written, "commit": its value when it is 7 to 40 lowercase hex characters, else None}. The first
-    such line counts."""
-    for raw in text.splitlines():
-        if raw.startswith("## "):
+    """The `Base:` line of the build doc's header (before the first `## ` heading outside a fence), or None:
+    {"line": the line as written, "commit": its value when it is 7 to 40 lowercase hex characters, else None}.
+    The first such line outside a fence counts. Read with vertical-v2's own fence reader (the E15 lane contract
+    A7, send-back 2): a `Base:` or a `## ` line inside a fence is content. The handler reads the slices from the
+    same text first (`slices_of`), so a doc the reader cannot place has already stopped (`doc-unreadable`);
+    this function raises spec.SpecUnreadable too if it is ever reached with one."""
+    lines = fences.split_lines(text)
+    scan = fences.scan(lines)
+    if scan.problems:
+        raise specmod.SpecUnreadable(*scan.problems[0])
+    for number, raw in enumerate(lines, 1):
+        if number in scan.fenced:
+            continue
+        line = fences.bare(raw, number)
+        if line.startswith("## "):
             return None
-        if raw.startswith(BASE_LABEL):
-            match = BASE_LINE.match(raw)
-            return {"line": raw.strip(), "commit": match.group(1) if match else None}
+        if line.startswith(BASE_LABEL):
+            match = BASE_LINE.match(line)
+            return {"line": line.strip(), "commit": match.group(1) if match else None}
     return None
 
 
@@ -129,7 +150,14 @@ def handler(ctx, args):
             "dirt": None}
     with open(os.path.join(ws, doc), encoding="utf-8", newline="") as fh:
         text = fh.read()
-    slices = slices_of(text)
+    try:
+        slices = slices_of(text)
+    except specmod.SpecUnreadable as exc:
+        gate["malformed"].append(str(exc))
+        common.write(run, "gate.json", gate)
+        report.finish(ctx, run, "stopped", specmod.STOP_TAG,
+                      "the gate cannot read the build doc's slices and Status: lines cleanly, so it never passes: %s"
+                      % exc, selection=selection, gate=gate)
     if not slices:
         gate["malformed"].append("the build doc has no '## Slice <name> %s <short name>' heading" % D)
     for item in slices:

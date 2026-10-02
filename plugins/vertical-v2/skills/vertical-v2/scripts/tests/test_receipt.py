@@ -175,6 +175,39 @@ class EachPieceForged(_Receipt):
         self.rewrite_receipt(lambda d: d.update(run_id="another-run"))
         self.refused("another-run")
 
+    def test_the_receipt_time_edited(self):
+        """C1A3-4: the receipt's `at` is checked too: it must equal the time local.json records."""
+        self.recorded()
+        self.rewrite_receipt(lambda d: d.update(at="2026-01-01T00:00:00Z"))
+        self.refused("time")
+
+    def test_every_field_of_the_receipt_is_checked(self):
+        """C1A3-4: each field, and each field of each call, changed alone to another well-formed value, is
+        refused; the receipt is restored between the edits."""
+        self.recorded()
+        with open(self.path("local-receipt.json"), "rb") as fh:
+            original = fh.read()
+        edits = {"receipt_version": lambda d: d.update(receipt_version=2),
+                 "run_id": lambda d: d.update(run_id="run-9999"),
+                 "calls": lambda d: d.update(calls=d["calls"] + [dict(d["calls"][0], call_id="extra")]),
+                 "local_sha256": lambda d: d.update(local_sha256="a" * 64),
+                 "at": lambda d: d.update(at="2026-01-01T00:00:00Z")}
+        for key in ("call_id", "row", "lens", "sidecar_sha256", "capture_sha256"):
+            value = {"call_id": "another-call", "row": "claude-opus-cli", "lens": "security",
+                     "sidecar_sha256": "b" * 64, "capture_sha256": "c" * 64}[key]
+            edits["calls." + key] = (lambda k, v: lambda d: d["calls"][0].update({k: v}))(key, value)
+        self.assertEqual(sorted(k for k in edits if "." not in k), FIELDS)
+        self.assertEqual(sorted(k.split(".")[1] for k in edits if "." in k), CALL_FIELDS)
+        for name, edit in sorted(edits.items()):
+            self.rewrite_receipt(edit)
+            code, out, err = self.drive(["request", "--run-dir", self.run_dir, "--outside"])
+            self.assertEqual(code, 5, (name, out, err))
+            self.assertEqual(vlib.outside_files(self.run_dir), [], name)
+            with open(self.path("local-receipt.json"), "wb") as fh:
+                fh.write(original)
+        code, out, err = self.drive(["request", "--run-dir", self.run_dir, "--outside"])
+        self.assertEqual(code, 0, (out, err))
+
     def test_a_consistent_forgery_of_the_record_and_its_receipt_that_record_local_would_refuse(self):
         """local.json and the receipt rewritten together, every hash recomputed: the record still has to hold
         the way record-local holds it, and a finding at a location that does not exist does not."""

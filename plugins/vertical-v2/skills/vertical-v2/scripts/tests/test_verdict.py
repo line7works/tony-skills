@@ -257,5 +257,84 @@ class ThePhases(_Verdict):
         self.assertEqual(code, 2, (out, err))
 
 
+class TheReceiptAtTheVerdict(_Verdict):
+    """C1A3-5: `verdict` holds the run to the local receipt the way `request --outside` does, and refuses
+    (exit 5, nothing written) when it fails: on a local-only run and after the outside fleet."""
+
+    def local_with_a_finding(self, rows):
+        drive, run_dir, ws, info = vlib.through_local_requests(self.tmp, rows=rows)
+        vlib.file_local_sidecars(run_dir)
+        ids = vlib.local_ids(run_dir)
+        code, out, err = vlib.record_local(drive, self.tmp, run_dir,
+                                           findings=[vlib.finding("src/turnstile.py:2", found_by=[ids[0]])])
+        self.assertEqual(code, 0, (out, err))
+        return drive, run_dir, ws
+
+    def drop_the_finding(self, run_dir):
+        local = vlib.load(run_dir, "local.json")
+        self.assertEqual(len(local["findings"]), 1)
+        local["findings"] = []
+        testlib.write_json(os.path.join(run_dir, "local.json"), local)
+
+    def assert_refused(self, drive, run_dir, ws):
+        code, out, err = drive(["verdict", "--run-dir", run_dir])
+        self.assertEqual(code, 5, (out, err))
+        self.assertIn("record-local", out["reason"])
+        self.assertEqual(vlib.verdict_docs(ws), [])
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "verdict.json")))
+
+    def test_a_local_record_edited_on_a_local_only_run(self):
+        drive, run_dir, ws = self.local_with_a_finding(rows=())
+        self.drop_the_finding(run_dir)
+        self.assert_refused(drive, run_dir, ws)
+
+    def test_a_local_record_edited_after_the_outside_fleet(self):
+        drive, run_dir, ws = self.local_with_a_finding(rows=("gpt-astra",))
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+        self.assertEqual(code, 0, (out, err))
+        vlib.file_outside_sidecars(run_dir)
+        answer = vlib.write(self.tmp, "outside-answer.json", vlib.outside_answer(run_dir))
+        code, out, err = drive(["record-outside", "--run-dir", run_dir, "--answer", answer])
+        self.assertEqual(code, 0, (out, err))
+        self.drop_the_finding(run_dir)
+        self.assert_refused(drive, run_dir, ws)
+
+    def test_the_intact_record_reaches_the_verdict(self):
+        drive, run_dir, ws = self.local_with_a_finding(rows=())
+        out = self.verdict(drive, run_dir)
+        self.assertEqual(out["findings"], 1)
+
+
+class TheCopiesOnAStop(_Verdict):
+    """C1A3-6: a run that stops after `scope` removes every packet's workspace and documents, the previews
+    and the summons copies alike, when it stops (`report.finish`); the mandates and the two lists stay."""
+
+    def assert_no_copies(self, run_dir, folders):
+        seen = 0
+        for folder in folders:
+            for name in os.listdir(os.path.join(run_dir, folder)):
+                seen += 1
+                for part in ("workspace", "documents"):
+                    self.assertFalse(os.path.exists(os.path.join(run_dir, folder, name, part)), (folder, name, part))
+                for kept in ("mandate.md", "files.json", "withheld.json"):
+                    self.assertTrue(os.path.isfile(os.path.join(run_dir, folder, name, kept)), (folder, name, kept))
+        self.assertGreater(seen, 0)
+
+    def test_a_floor_refused_stop_at_record_local(self):
+        drive, run_dir, ws, info = vlib.through_local_requests(self.tmp)
+        vlib.file_local_sidecars(run_dir, status="floor-refused")
+        code, out, err = vlib.record_local(drive, self.tmp, run_dir)
+        self.assertEqual((code, out["stop_tag"]), (10, "floor-refused"), (out, err))
+        self.assert_no_copies(run_dir, ("packets", "summons"))
+
+    def test_a_station_refused_stop_at_request(self):
+        drive, run_dir, ws, info = vlib.through_scope(self.tmp)
+        elsewhere = os.path.join(self.tmp, "elsewhere-readers")
+        os.makedirs(elsewhere)
+        code, out, err = drive(["request", "--run-dir", run_dir, "--readers-root", elsewhere])
+        self.assertEqual((code, out["stop_tag"]), (10, "station-refused"), (out, err))
+        self.assert_no_copies(run_dir, ("packets",))
+
+
 if __name__ == "__main__":
     unittest.main()
