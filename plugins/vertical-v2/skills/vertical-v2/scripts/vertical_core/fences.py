@@ -11,6 +11,12 @@ contract section 5, "The fence rule", "No raw HTML lines", "Exact labels" and "P
         accept and every raw HTML line, in line order
     plain_problem(line) -> the words of the plain-structure problem a line outside an accepted fence holds, or
         None (below)
+    unformatted(text) -> the text with every format character (Unicode category Cf) removed and its whitespace runs
+        collapsed: the form a heading's name is tested in for the near misses (the E15 lane contract A14;
+        `spec.withheld_of`, `readings.py`)
+    label_form(text) -> the text with every format character (Unicode category Cf) removed and its leading whitespace
+        (any Unicode space) stripped: the form a line is tested in for a `Status:` or `Base:` label by the second
+        reading and by the spec (THE HIDDEN-LABEL RULE, below; the E15 lane contract A15)
     read(text) -> Doc: the build doc read whole: `lines`, `fenced`, `slices` ([{"name", "short", "status",
         "line", "status_at"}] in document order), `base` ({"line", "commit", "at"} or None), and `problems`: the
         scan's, the plain-structure rule's and the label rule's (below), in line order. Every reader of a build doc reads through `read`
@@ -85,6 +91,7 @@ author edits the doc. A doc these rules accept is then read a second time by a C
 readings' decisions compared (A13, `readings.py`, "THE TWO-READINGS RULE"; `spec.read`).
 """
 import re
+import unicodedata
 
 from station_core import templates
 
@@ -159,6 +166,24 @@ def plain_problem(line):
     if match.group(2) is not None:
         return None if match.start(2) == 0 else OFF_PLAIN_LABEL % match.group(2)
     return None if match.start(1) == 0 and PLAIN_HEADING.match(line) else OFF_PLAIN_HEADING
+
+
+def unformatted(text):
+    """The text with every format character (Unicode category Cf: a zero-width space or joiner, a soft hyphen, a byte
+    order mark) removed, then its whitespace runs collapsed to one space and trimmed (A14)."""
+    return " ".join("".join(c for c in text if unicodedata.category(c) != "Cf").split())
+
+
+def label_form(text):
+    """THE HIDDEN-LABEL RULE (A15; stated once here and once in the contract, section 5, "Two readings"): a line reads
+    as a `Status:` or `Base:` label when, after every format character (Unicode category Cf: a zero-width space, a soft
+    hyphen, a zero-width no-break space, a word joiner) is removed and its leading whitespace (any Unicode space, as
+    `str.isspace` reads it: a no-break space, an ideographic space) is stripped, it starts with that label. The second
+    reading tests every rendered paragraph line this way (`readings.py`), so a label hidden behind such characters is a
+    label candidate there, a second or a non-exact label the line rules never take, and the run stops `doc-unreadable`
+    naming its line; the spec removes every line outside fences that reads as a `Status:` label this way
+    (`spec.clean`), so a hidden one the cards do not see (in the header, between sections) reaches no packet."""
+    return "".join(c for c in text if unicodedata.category(c) != "Cf").lstrip()
 
 
 def scan(lines):

@@ -381,7 +381,7 @@ class TheLabelRule(unittest.TestCase):
             self.assertEqual([s["status"] for s in gatemod.slices_of(body)], ["built"])
 
     def test_an_exact_base_that_ends_its_paragraph_is_the_base(self):
-        for head in (["Base: 1111111"], ["Base: %s \t" % ("a" * 40)], ["Base: 1111111", "## Slice X"],
+        for head in (["Base: 1111111"], ["Base: %s \t" % ("a" * 40)], ["Base: 1111111", "## Notes"],
                      ["Base: 1111111", "```", "Base: 2222222", "```"]):
             text = two_slices(["Status: signed off"], header=head)
             with self.subTest(head=head):

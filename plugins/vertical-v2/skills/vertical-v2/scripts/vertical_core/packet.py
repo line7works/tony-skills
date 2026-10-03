@@ -23,7 +23,8 @@ leave it out:
    `buildnotes` (the builder's notes: a file or a folder of them, B4); or it is a `.md` regular file whose
    first heading declares it the builder's notes (`notes.py`, C1A3-3, the slice review's rule; read from the
    commit's bytes, since the declaration is in the file, not its path; read a second time by a CommonMark reader,
-   and a file the two readings decide differently stops the run, A13, `declared_notes`);
+   and a file the CommonMark reader declares and the line reading does not stops the run, while a file only the
+   wide line reading declares is withheld, A13, A14, `declared_notes`);
 4. it is `REVIEW.md` at the root (the inspection sheet: never in a workspace; a local lens receives the
    commit's bytes as a document when it is the kit sheet, and no outside packet ever carries it).
 
@@ -90,7 +91,8 @@ def notes_candidate(mode, path, doc):
 def declared_notes(files):
     """[(path, declaring heading)] for [(path, bytes)] in the order given: each file read twice for its
     builder's-notes declaration (`notes.declaration`, then a CommonMark reader, the E15 lane contract A13); the
-    first file the two readings decide differently raises spec.NotesUnreadable naming it and the line."""
+    first file the CommonMark reader declares and the line reading does not raises spec.NotesUnreadable naming it
+    and the line (A14, C1A8-4); a file the line reading declares is withheld."""
     out = []
     for path, data in files:
         text = data.decode("utf-8", "replace")

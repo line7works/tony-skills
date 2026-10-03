@@ -33,7 +33,13 @@ decisions the two readings take differently stops too, naming the first line whe
 heading or withheld heading, a character reference in a slice heading, a withheld heading, a `Status:` label or a
 `Base:` line, inline markup in a withheld heading, extra spaces in a slice heading, an escaped or bold `Base:` line;
 so does another Markdown file whose builder's-notes declaration the two readings decide differently (a
-character-coded first heading). A heading whose markup leaves every decision equal still builds every packet.
+character-coded first heading). A heading whose markup leaves every decision equal still builds every packet. Since
+A14 (C1A8-1 to C1A8-4) the guard also holds: two rendered labels, or a slice's one label, in a paragraph whose lines
+the reader cannot map (a multi-line code span or link title), in a slice and in the header; a level 1 or 2 heading
+that reads like a slice heading off the form (an en dash, a zero-width space); a heading named like a `Status:`
+label; each stops naming its line. A withheld near miss (`## Punch-list`, `## Punch list:`, `## Handoff`,
+`## Hand-offs`, a zero-width space) is withheld from every packet and named; a file only the wide line reading
+declares the builder's notes is withheld and named, never a stop.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -370,6 +376,128 @@ class TheClassGuard(unittest.TestCase):
         ("a bold label hides a base (A13, family 5)", ["**Base:** 1111111"], "**Base:** 1111111"),
         ("a character-coded colon hides a base (A13, families 2 and 5)", ["Base&#58; 1111111"], "Base&#58; 1111111"),
     )
+
+    # A14 (C1A8-1 to C1A8-3): (what, the text replaced in class_doc, its replacement, the line the stop names)
+    ROUND_9_STOPS = (
+        ("a bold Status: built above slice B's plain label, after a multi-line code span (C1A8-1)",
+         "Depends on: A\nStatus: signed off", "Depends on: A\n\nNote `a\nb` here.\n**Status:** built\nStatus: signed off",
+         "Note `a"),
+        ("a character-coded Status: built above the plain label, after a multi-line link title (C1A8-1)",
+         "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\nSee [the plan](/plan \"a\nb\").\n&#83;tatus: built\nStatus: signed off",
+         "See [the plan](/plan \"a"),
+        ("two rendered Base: lines in the header, after a multi-line code span (C1A8-1)",
+         HEADER_AT, HEADER_AT + "\nNote `a\nb` here.\n**Base:** 1234567\nBase: abcdef1\n", "Note `a"),
+        ("slice B's heading with an en dash (C1A8-2)", "## Slice B %s the spinner" % D, "## Slice B – the spinner",
+         "## Slice B – the spinner"),
+        ("slice B's heading with a zero-width space inside Slice (C1A8-2)", "## Slice B %s the spinner" % D,
+         "## Sl​ice B %s the spinner" % D, "## Sl​ice B %s the spinner" % D),
+        ("a ### Status: built heading above slice B's plain label (C1A8-3)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n### Status: built\n\nStatus: signed off", "### Status: built"),
+    )
+    # A14 (C1A8-3): (what, a withheld near miss's heading, its canonical name); each is withheld from every packet
+    ROUND_9_WITHHELD = (
+        ("Punch-list", "## Punch-list", "## Punch list"),
+        ("Punch list with a colon", "## Punch list:", "## Punch list"),
+        ("a singular Handoff", "## Handoff", "## Handoffs"),
+        ("Hand-offs", "## Hand-offs", "## Handoffs"),
+        ("a zero-width space in Punch list", "## Punch​ list", "## Punch list"),
+    )
+
+    # A15 (round 9, send-back 1): a label behind invisible characters (a zero-width space, a soft hyphen, a no-break
+    # space), in slice B above its plain label and in the header above a plain Base: line; each stops naming its line
+    A15_STOPS = (
+        ("a zero-width space before Status: built in slice B (A15)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n\u200bStatus: built\n\nStatus: signed off", "\u200bStatus: built"),
+        ("a soft hyphen before Status: built in slice B (A15)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n\u00adStatus: built\n\nStatus: signed off", "\u00adStatus: built"),
+        ("a no-break space before Status: built in slice B (A15)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n\u00a0Status: built\n\nStatus: signed off", "\u00a0Status: built"),
+        ("a zero-width space before a header Base: line (A15)", HEADER_AT,
+         HEADER_AT + "\n\u200bBase: 1234567\n\nBase: abcdef1\n", "\u200bBase: 1234567"),
+        ("a word joiner before a header Base: line (A15)", HEADER_AT,
+         HEADER_AT + "\n\u2060Base: 1234567\n\nBase: abcdef1\n", "\u2060Base: 1234567"),
+    )
+
+    def test_every_a15_shape_stops_before_any_packet_naming_its_line(self):
+        from vertical_core import fences  # noqa: E402
+        for what, old, new, first in self.A15_STOPS:
+            text = class_doc().replace(old, new, 1)
+            self.assertNotEqual(text, class_doc(), what)
+            self.assertEqual(fences.read(text).problems, [], what)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
+    def test_a_hidden_header_status_line_reaches_no_packet_and_is_named(self):
+        """A15: a `Status:` line behind a format character or a Unicode space in the header is no card to either
+        reading; the spec removes it, so no packet carries it, and every withheld list names it."""
+        for index, ch in enumerate(("​", "­", "﻿", " ", "　")):
+            line = "%sStatus: HIDDEN-HEADER-MARKER built" % ch
+            text = class_doc().replace(self.HEADER_AT, self.HEADER_AT + "\n" + line + "\n", 1)
+            at = text.split("\n").index(line) + 1
+            self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+            for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                               ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"},
+                                "o"),
+                               ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
+                                 "profile": "packet-only"}, "p")):
+                built, dest = self.cut(spec, "a15-%s-%d" % (name, index))
+                for path, body in texts_under(dest):
+                    if os.path.basename(path) in ("files.json", "withheld.json"):
+                        continue
+                    self.assertNotIn("HIDDEN-HEADER-MARKER", body, (repr(ch), path))
+                self.assertIn("%s Status: line %d" % (DOC, at), self.withheld(dest), repr(ch))
+
+    def test_every_round_9_shape_stops_before_any_packet_naming_its_line(self):
+        """A14: a rendered label in a paragraph whose lines cannot all be mapped, a level 1 or 2 heading that reads
+        like a slice heading off the form, and a heading named like a label each stop the snapshot naming the line."""
+        from vertical_core import fences  # noqa: E402
+        for what, old, new, first in self.ROUND_9_STOPS:
+            text = class_doc().replace(old, new, 1)
+            self.assertNotEqual(text, class_doc(), what)
+            self.assertEqual(fences.read(text).problems, [], what)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
+    def test_every_round_9_withheld_near_miss_reaches_no_packet_and_is_named(self):
+        """A14 (C1A8-3): a level 1 or 2 section whose name starts with a withheld name's stem is withheld by both
+        readings, absent from every packet and named with its lines."""
+        for index, (what, heading, canonical) in enumerate(self.ROUND_9_WITHHELD):
+            text = class_doc().replace("## Build   assumptions\n", heading + "\n- NEAR-MISS-MARKER skim slice B\n\n"
+                                                                    "## Build   assumptions\n")
+            first = text.split("\n").index(heading) + 1
+            self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+            for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                               ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"},
+                                "o"),
+                               ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
+                                 "profile": "packet-only"}, "p")):
+                built, dest = self.cut(spec, "%s-%d" % (name, index))
+                for path, body in texts_under(dest):
+                    if os.path.basename(path) in ("files.json", "withheld.json"):
+                        continue
+                    self.assertNotIn("NEAR-MISS-MARKER", body, (what, path))
+                withheld = testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"]
+                self.assertTrue(any(w["what"] == "%s %s" % (DOC, canonical) and
+                                    "lines %d to %d" % (first, first + 2) in w["why"] for w in withheld), (what, withheld))
+
+    def test_a_notes_file_only_the_wide_line_reading_declares_is_withheld_and_named(self):
+        """A14 (C1A8-4): a file opening with an HTML line and a later builder's-notes heading is declared by the line
+        reading's wide first heading and not by CommonMark's: no stop, and the file stays withheld."""
+        testlib.write_text(os.path.join(self.ws, "notes", "readme-like.md"),
+                           "<p align=\"center\">Turnstile</p>\n\n# Turnstile\n\n## Build notes\n\nWIDE-NOTES-MARKER\n")
+        testlib.git(self.ws, ["add", "notes/readme-like.md"])
+        testlib.git(self.ws, ["commit", "-q", "-m", "a readme-like file"], when="2026-09-20T12:00:00-07:00")
+        self.snap = packet.Snapshot(self.ws, testlib.git(self.ws, ["rev-parse", "HEAD"]).strip(), DOC)
+        built, dest = self.cut({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"},
+                               "o")
+        self.assertIn("notes/readme-like.md", self.withheld(dest))
+        for path, body in texts_under(dest):
+            self.assertNotIn("WIDE-NOTES-MARKER", body, path)
 
     def test_every_shape_the_two_readings_take_differently_stops_before_any_packet_naming_its_line(self):
         """A13: the line rules accept each shape; the second reading takes a decision differently, so the snapshot

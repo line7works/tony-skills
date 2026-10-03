@@ -64,9 +64,11 @@ only plain code blocks whose fences open and close at the left margin are read, 
 and a letter, `/`, `!` or `?`, headings and labels only in their plain form at column 0 (no indent, no list or
 quote marker, a heading's `#`s then exactly one space), and only an exact `Status:` label per slice and `Base:`
 line in the header, each the last line of its paragraph; then the doc is read a second time by a CommonMark
-reader, and any slice, card, base or withheld section the two readings take differently stops it too, as does
-another Markdown file of the commit whose builder's-notes heading the two readings decide differently; tell the
-owner the line to edit); zero slices or a slice with no `Status:` line; any slice short of `signed off`
+reader, and any slice, card, base or withheld section the two readings take differently stops it too, as does a
+rendered `Status:` or `Base:` line in a paragraph whose lines the reader cannot map to source lines, a level 1 or 2
+heading that starts with "slice" off the form's slice heading, a heading that starts with `Status:` or `Base:`, and
+another Markdown file of the commit that a CommonMark reader declares the builder's notes and the line reading does
+not; tell the owner the line to edit); zero slices or a slice with no `Status:` line; any slice short of `signed off`
 (name each slice and its state; a `built` card's remedy is a fresh slice signoff, never a recheck); a
 card in the records that disagrees with its `Status:` line (name both); no git; no base (ask the owner
 for the base and run again with his answer in `station.owner_words.base`); dirt touching the boundary or

@@ -5,7 +5,8 @@ lane contract A13; contract section 5, "Two readings", and section 15, "Runtime"
         line reader drops it)
     headings(stream) -> [(level, name, line)]: every heading in document order, ATX and Setext alike, wherever it
         stands (a list item and a block quote included); `name` is its rendered text, `line` its first line (1-based)
-    paragraph_lines(stream) -> [(line, text)]: every rendered line of every paragraph, wherever it stands
+    paragraph_lines(stream) -> [(line, text, exact)]: every rendered line of every paragraph, wherever it stands;
+        `exact` is False when the paragraph's rendered lines cannot all be mapped to source lines (below)
     identity() -> {"preset", "versions", "files", "python"}: what was loaded, for the vendored tree's test
 
 The reader is `markdown-it-py` 3.0.0 with `mdurl` 0.1.2, unpacked unmodified under `scripts/vendor/` and pinned by
@@ -22,9 +23,11 @@ emphasis, links and images are markup and only their text is kept; an inline HTM
 line break ends a rendered line. Each rendered line then has its runs of whitespace collapsed to one space and is
 trimmed (`str.split`, so a no-break space or any other Unicode space is a space too). A heading's lines are joined
 into one name. A paragraph's rendered line carries the source line it starts on when the reader's line endings can
-all be counted (the breaks and any line ending inside an inline HTML token); when one cannot (a code span or a link
-destination running over a line ending), every line of that paragraph carries the paragraph's first line. An inline
-token of a kind not named here is a defect of the package (exit 1), never skipped.
+all be counted (the breaks and any line ending inside an inline HTML token); when one cannot (a code span, a link
+destination or a link title running over a line ending), every line of that paragraph carries the paragraph's first
+line and is marked not exact, so a reader never takes such a line's number as its own (the E15 lane contract A14,
+C1A8-1: `readings.py` stops on a label line there). An inline token of a kind not named here is a defect of the
+package (exit 1), never skipped.
 """
 import os
 import sys
@@ -133,5 +136,5 @@ def paragraph_lines(stream):
         lines, starts, consumed = _render(stream[index + 1].children)
         exact = consumed == after - first - 1
         for text, start in zip(lines, starts):
-            out.append((first + start if exact else first, _collapse(text)))
+            out.append((first + start if exact else first, _collapse(text), exact))
     return out

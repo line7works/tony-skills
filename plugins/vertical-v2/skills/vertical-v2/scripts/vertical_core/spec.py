@@ -11,19 +11,32 @@ line the label rule does not take (A10, C1A6-1), and any heading or label line o
 indented, after a list-item or block-quote marker, or a heading whose `#`s are not followed by exactly one
 space; `fences.read`) raises SpecUnreadable naming the line, so the run stops (`doc-unreadable`) before any
 packet is built. A doc the line rules accept is then read a second time by a CommonMark reader, and any decision
-the two readings take differently (the slices, a card, the recorded base, the withheld sections) raises
-SpecUnreadable naming the first line where they differ (A13; `readings.py`, "THE TWO-READINGS RULE"; `read`).
+the two readings take differently (the slices, a card, the recorded base, the withheld sections), or any of the
+second reading's three refusals (A14: a rendered label line in a paragraph it cannot map to source lines, a level 1
+or 2 heading off the slice form that starts with "slice", a heading that starts with `Status:` or `Base:`), raises
+SpecUnreadable naming the first such line (A13, A14; `readings.py`, "THE TWO-READINGS RULE" and "THE SECOND
+READING'S THREE REFUSALS"; `read`).
 Outside fences, removed:
 
 - the five withheld sections, `## Punch list` and `## Handoffs` (the ledger) and `## Build assumptions`,
   `## Deviations` and `## Discovered` (the builder's working records), each found by its heading level and
-  name: a heading of level 1 or 2 whose name, with its runs of whitespace collapsed and any closing hashes
-  dropped, is one of the five, compared without regard to case; each runs from its heading to the line before the next heading of
-  level 1 or 2 outside a fence (or the end), every block inside it included (C1A2-5). The heading test below
-  still tolerates up to three leading spaces and spaces or tabs after the hashes, but since A12 every heading
-  off the plain form has already stopped the run in `fences.read`, so only plain headings reach it;
-- every `Status:` label (a line that starts with `Status:`, the build-doc form's label test), in a slice's
-  section or outside one, the header's included (M6).
+  name under THE WITHHELD-NAME RULE (stated once here, `withheld_of`, and once in the contract; the E15 lane
+  contract A14, C1A8-3): a heading of level 1 or 2 whose name, with any closing hashes dropped, its format
+  characters (Unicode category Cf) removed, its runs of whitespace collapsed and lower-cased, STARTS WITH one of
+  the stems `punch`, `handoff`, `hand-off`, `build assumption`, `deviation` or `discover` is the withheld section
+  the stem names (`## Punch list`, `## Handoffs`, `## Handoffs`, `## Build assumptions`, `## Deviations`,
+  `## Discovered`), so a near miss (`## Punch-list`, `## Punch list:`, `## Handoff`, `## Hand-offs`, a dated
+  `## Handoff, <date>`, a zero-width space) is withheld and named as the section it reads as; each runs from its
+  heading to the line before the next heading of level 1 or 2 outside a fence (or the end), every block inside it
+  included (C1A2-5). The CommonMark reading applies the same rule to the rendered name (`readings.py`), and the
+  two readings must agree on every withheld line, the section and the name it was read from. A wider match only
+  ever withholds more. The heading test below still tolerates up to three leading spaces and spaces or tabs
+  after the hashes, but since A12 every heading off the plain form has already stopped the run in
+  `fences.read`, so only plain headings reach it;
+- every `Status:` label (a line that starts with `Status:`, the build-doc form's label test, read after its
+  format characters are removed and its leading whitespace stripped: THE HIDDEN-LABEL RULE, `fences.label_form`,
+  the E15 lane contract A15, so a `Status:` line behind a zero-width space, a soft hyphen or a no-break space is
+  removed too), in a slice's section or outside one, the header's included (M6).
 
 Everything else stays, byte for byte. Each removal is reported with its line numbers, so every packet's
 withheld list can name it.
@@ -34,8 +47,9 @@ from station_core import driver
 
 from . import fences, readings
 
-WITHHELD = {"punch list": "## Punch list", "handoffs": "## Handoffs", "build assumptions": "## Build assumptions",
-            "deviations": "## Deviations", "discovered": "## Discovered"}
+STEMS = (("punch", "## Punch list"), ("handoff", "## Handoffs"), ("hand-off", "## Handoffs"),
+         ("build assumption", "## Build assumptions"), ("deviation", "## Deviations"),
+         ("discover", "## Discovered"))     # A14: THE WITHHELD-NAME RULE's stems and the section each names
 LEDGER = ("## Punch list", "## Handoffs")
 HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*$")
 CLOSING = re.compile(r"(?:^|[ \t]+)#+$")
@@ -61,8 +75,8 @@ class SpecUnreadable(driver.Usage):
 
 
 class NotesUnreadable(SpecUnreadable):
-    """Another Markdown file of the reviewed commit whose builder's-notes declaration the line reading and a
-    CommonMark reader decide differently (A13): the run stops before any ask, request or packet."""
+    """Another Markdown file of the reviewed commit that a CommonMark reader declares the builder's notes and the
+    line reading does not (A13, A14): the run stops before any ask, request or packet."""
 
     def __init__(self, path, line, what):
         driver.Usage.__init__(self, "the reviewed commit's file %s, line %d: %s; nothing was taken from it and no "
@@ -80,18 +94,36 @@ def heading_of(line):
     return len(match.group(1)), " ".join(name.split())
 
 
+def name_key(name):
+    """A heading's name as THE WITHHELD-NAME RULE tests it: format characters removed, whitespace runs collapsed,
+    lower-cased."""
+    return fences.unformatted(name).lower()
+
+
+def withheld_of(name):
+    """THE WITHHELD-NAME RULE (module docstring): the canonical heading of the withheld section a level 1 or 2
+    heading's name opens, else None. Both readings call it, the line reading with the source name and the
+    CommonMark reading with the rendered one."""
+    key = name_key(name)
+    for stem, canonical in STEMS:
+        if key.startswith(stem):
+            return canonical
+    return None
+
+
 def withheld_name(line):
     """The canonical heading of a withheld section the line opens, else None."""
     found = heading_of(line)
     if found is None or found[0] > 2:
         return None
-    return WITHHELD.get(found[1].lower())
+    return withheld_of(found[1])
 
 
 def sections(doc):
-    """[(canonical heading, first line, last line)] of the withheld sections in a doc `fences.read` accepted: each
-    from its heading (level 1 or 2, outside a fence, named as `withheld_name` reads it) to the line before the
-    next heading of level 1 or 2 outside a fence, or the end."""
+    """[(canonical heading, first line, last line, the name's key)] of the withheld sections in a doc `fences.read`
+    accepted: each from its heading (level 1 or 2, outside a fence, named as `withheld_name` reads it) to the line
+    before the next heading of level 1 or 2 outside a fence, or the end; the key is `name_key` of the heading's
+    name, which the two readings compare."""
     lines, fenced = doc.lines, doc.fenced
     top = []
     for number, raw in enumerate(lines, 1):
@@ -102,9 +134,10 @@ def sections(doc):
             top.append(number)
     out = []
     for index, number in enumerate(top):
-        name = withheld_name(fences.bare(lines[number - 1], number))
+        found = heading_of(fences.bare(lines[number - 1], number))
+        name = withheld_of(found[1])
         if name is not None:
-            out.append((name, number, top[index + 1] - 1 if index + 1 < len(top) else len(lines)))
+            out.append((name, number, top[index + 1] - 1 if index + 1 < len(top) else len(lines), name_key(found[1])))
     return out
 
 
@@ -130,13 +163,13 @@ def clean(text):
     lines, fenced = doc.lines, doc.fenced
     drop = set()
     removed = []
-    for name, number, end in sections(doc):
+    for name, number, end, key in sections(doc):
         drop.update(range(number, end + 1))
         removed.append({"what": name, "lines": [number, end]})
     for number, raw in enumerate(lines, 1):
         if number in fenced or number in drop:
             continue
-        if fences.bare(raw, number).startswith(LABEL):
+        if fences.label_form(fences.bare(raw, number)).startswith(LABEL):     # A15
             drop.add(number)
             removed.append({"what": "Status: line", "lines": [number, number]})
     kept = "".join(line for number, line in enumerate(lines, 1) if number not in drop)

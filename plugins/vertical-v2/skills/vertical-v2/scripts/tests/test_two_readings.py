@@ -225,11 +225,14 @@ class TheNotesDeclaration(unittest.TestCase):
         self.assertIsNone(mod.notes_difference("# Bench guide\n\n## Builder notes\n"))
         self.assertIsNone(mod.notes_difference("no heading at all\n"))
 
-    def test_a_declaration_only_the_wide_line_reading_finds_differs_too(self):
+    def test_a_declaration_only_the_wide_line_reading_finds_is_no_difference_and_the_file_stays_withheld(self):
         """The line reading's first heading is read wide (a fenced heading-shaped line before the first certain
-        heading is a candidate); CommonMark's first heading here is `# Intro`, which declares nothing."""
-        found = readings().notes_difference("```\n# Builder notes\n```\n\n# Intro\n")
-        self.assertEqual(found[0], 2)
+        heading is a candidate); CommonMark's first heading here is `# Intro`, which declares nothing. Since A14
+        (C1A8-4) only the leaking direction stops: the wide reading withholds the file, as before A13."""
+        from vertical_core import notes  # noqa: E402
+        text = "```\n# Builder notes\n```\n\n# Intro\n"
+        self.assertIsNone(readings().notes_difference(text))
+        self.assertEqual(notes.declaration(text), ("Builder notes", 2))
 
 
 @unittest.skipUnless(vlib.records_usable(), "the gate reads the records component (checkout and jsonschema)")

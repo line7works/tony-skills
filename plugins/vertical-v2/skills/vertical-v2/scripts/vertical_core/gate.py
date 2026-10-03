@@ -16,9 +16,11 @@ after a list-item or block-quote marker, or a heading whose `#`s are not followe
 is a second one), stops the gate (`doc-unreadable`, naming the
 line) before the ask. A doc the rule accepts is read a second time by a CommonMark reader (the E15 lane contract
 A13, `spec.read`, `readings.py`): a decision the two readings take differently (the slices, a card, the recorded
-base, the withheld sections) stops the gate `doc-unreadable` naming the first line where they differ, and so does,
-once the workspace is known to be a git work tree, another Markdown file of HEAD whose builder's-notes declaration
-the two readings decide differently (`packet.commit_notes`), before the ask. Zero slices, or a slice with no
+base, the withheld sections), or one of the CommonMark reading's three refusals (A14: a rendered label line in a
+paragraph it cannot map to source lines, a level 1 or 2 heading off the slice form that starts with "slice", a
+heading that starts with `Status:` or `Base:`), stops the gate `doc-unreadable` naming the first such line, and so
+does, once the workspace is known to be a git work tree, another Markdown file of HEAD that a CommonMark reader
+declares the builder's notes and the line reading does not (`packet.commit_notes`, A14), before the ask. Zero slices, or a slice with no
 `Status:` line, is malformed input and never passes,
 collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.

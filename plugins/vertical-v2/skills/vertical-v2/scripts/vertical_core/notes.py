@@ -6,8 +6,9 @@ section 5, the allow rule's (3)).
         heading's first text line
 
 Since the E15 lane contract A13 this is the line reading of a file's declaration; `readings.notes_difference`
-reads the file a second time with a CommonMark reader, and a file the two decide differently stops the run
-(`packet.declared_notes`).
+reads the file a second time with a CommonMark reader, and a file the CommonMark reader declares and this reading
+does not stops the run (`packet.declared_notes`); a file this wide reading declares and the CommonMark reader does
+not is withheld, as before A13 (A14, C1A8-4).
 
 The slice review withholds a Markdown file whose first heading says it is the builder's notes, and so does
 this core: a `.md` blob of the reviewed commit (a regular file, never a link) whose first heading holds
