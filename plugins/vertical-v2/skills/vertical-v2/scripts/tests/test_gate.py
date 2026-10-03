@@ -17,6 +17,9 @@ import unittest
 import testlib
 import vlib
 
+testlib.add_scripts_to_path()
+from vertical_core import gate as gatemod, spec as specmod  # noqa: E402
+
 D = vlib.D
 
 
@@ -115,16 +118,29 @@ class TheSlices(_Gate):
         self.stopped(code, out, "gate-malformed")
 
 
-def fence_shape_doc():
+def fence_shape_doc(closer=False):
     """Slice B's real `Status:` line reads `built`, after a four-backtick fence holding a three-backtick line and a
-    fenced literal `Status: signed off`, closed by a backtick line whose info string holds a backtick (text to
-    CommonMark, a fence toggle to the frame's parse): the gate must never read B as signed off."""
+    fenced literal `Status: signed off`, which the frame's parse (a toggle on every backtick line) reads as B's
+    label: the gate must never read B as signed off. With `closer`, the doc as check 3 wrote it: a backtick line
+    whose info string holds a backtick follows, which the strict rule (A8) stops on."""
     base = vlib.build_doc()
     old = "Depends on: nothing\nStatus: signed off\n\n## Build assumptions"
-    new = ("Depends on: nothing\n````text\n```\nStatus: signed off\n````\nStatus: built\n```x`y\n\n"
-           "## Build assumptions")
+    new = ("Depends on: nothing\n````text\n```\nStatus: signed off\n````\nStatus: built\n%s\n"
+           "## Build assumptions" % ("```x`y\n" if closer else ""))
     assert base.count(old) == 1
     return base.replace(old, new)
+
+
+def lazy_doc():
+    """C1A4-1, check 4's shape: in slice B, a list item whose paragraph continues lazily, then a fence indented to
+    the item's content. CommonMark ends that fence at the next margin line, so B's real label is `built`; a
+    reader that loses the item on the lazy line runs the fence on and reads `signed off`."""
+    text = vlib.build_doc(slices=[("A", "the counter", "signed off"), ("B", "the spinner", None)])
+    trick = ("- a note on the spinner\nthat continues lazily on this line\n  ```text\nStatus: built\n```\n"
+             "Status: signed off\n")
+    old = "Depends on: nothing\n\n## Build assumptions"
+    assert text.count(old) == 1
+    return text.replace(old, "Depends on: nothing\n" + trick + "\n## Build assumptions", 1)
 
 
 class TheFenceReading(_Gate):
@@ -173,6 +189,26 @@ class TheFenceReading(_Gate):
         code, out, err = self.gate(ws)
         result = self.stopped(code, out, "doc-unreadable")
         self.assertIn("line %d" % (doc.split("\n").index("- ```") + 1), result["reason"])
+
+    def assert_unreadable_before_the_ask(self, doc, first, records):
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=records, name="ws-%s" % records)
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index(first) + 1), result["reason"])
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "ask.json")))
+        return result
+
+    def test_check_4s_lazy_list_fence_stops_the_gate_with_no_records_log(self):
+        self.assert_unreadable_before_the_ask(lazy_doc(), "  ```text", records=False)
+
+    def test_check_4s_lazy_list_fence_stops_the_gate_with_a_records_log(self):
+        """The frozen importer reads B `signed off` from the same line; the gate never gets that far."""
+        self.assert_unreadable_before_the_ask(lazy_doc(), "  ```text", records=True)
+
+    def test_check_3s_fence_shape_with_its_backtick_info_closer_now_stops(self):
+        """A8: a margin backtick line whose info string holds a backtick is a fence line the rule cannot pair."""
+        for records in (False, True):
+            self.assert_unreadable_before_the_ask(fence_shape_doc(closer=True), "```x`y", records=records)
 
 
 class TheDocHunt(_Gate):
@@ -316,6 +352,20 @@ class TheFencedBaseLine(_Gate):
         self.assertEqual(code, 0, (out, err))
         base = vlib.load(self.run_dir, "gate.json")["base"]
         self.assertEqual((base["commit"], base["how"]), (first, "doc"))
+
+    def test_check_4s_lazy_list_shape_never_gives_a_fenced_base(self):
+        """C1A4-1: the lazy-list shape in the header stops the gate (`doc-unreadable`) at the indented fence line;
+        the fenced `Base:` is never the recorded base, and `recorded_base` alone refuses the text too."""
+        ws, info = vlib.make_repo(self.tmp)
+        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
+        header = ["- a note on the base", "that continues lazily", "  ```text", "Base: %s" % first, "```",
+                  "Base: deadbeef", "```"]
+        self.commit_doc(ws, header)
+        doc = vlib.build_doc(extra_header=header)
+        result = self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index("  ```text") + 1), result["reason"])
+        with self.assertRaises(specmod.SpecUnreadable):
+            gatemod.recorded_base(doc)
 
     def test_an_unclosed_fence_in_the_header_stops_doc_unreadable_naming_its_line(self):
         ws, info = vlib.make_repo(self.tmp)

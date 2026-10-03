@@ -15,8 +15,8 @@ These are previews. No request ever points at them: `request` cuts a FRESH copy 
 first send and every retry alike, under `summons/<call id>/`, from the same function, holds it to that
 function's output and to the fingerprint `scope` recorded immediately before the request file is written,
 and so a reader's scratch, or anything planted in an earlier copy, never reaches a later one.
-A build doc whose fences vertical-v2's own reader cannot place (an unclosed fence, a line it cannot place,
-`spec.py`) stops the run here (`doc-unreadable`, naming the line) before any packet is built.
+A build doc holding any fence line vertical-v2's one fence rule does not accept (`fences.py`, the E15 lane
+contract A8; `spec.py`) stops the run here (`doc-unreadable`, naming the line) before any packet is built.
 vertical-v2 never runs `git worktree`.
 """
 import os

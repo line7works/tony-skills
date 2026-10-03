@@ -2,10 +2,12 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a
 state. Written for E15 slice 1 of the skills v2 rebuild, against the E15 lane contract (sections 6 and
-8, amendments A1 to A7) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
+8, amendments A1 to A8) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
 slice 1a fix round applied A3 (C1A-1 to C1A-9), the design round applied A4 (the one packet builder,
 the local receipt, B5, C1A2-1 to C1A2-5), and fix round 3 applied A5 (the readers root by allowlist
-identity, this core's own fence reader, C1A3-3 to C1A3-6) and A7 (the gate reads with that fence reader).
+identity, this core's own fence reader, C1A3-3 to C1A3-6) and A7 (the gate reads with that fence reader),
+and fix round 4 applied A8 (strict plain code blocks, C1A4-1; `readers.py --version` isolated, C1A4-2; the
+removal of copies never follows a link, C1A4-3).
 Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
@@ -68,11 +70,10 @@ then `docs/<name>-build-plan.md`, then a phase or slice doc (`docs/*phase*.md`, 
 candidates listed, none picked).
 
 The slices: every `## Slice <name> <dash> <short>` heading (the build-doc form's slice pattern) and the
-first `Status:` label inside its section, read outside fences with this core's own fence reader (A7; the
-reader section 5 states for the spec, `scripts/vertical_core/fences.py`), never the frame's parse: a heading
-or a label inside a fence is content, never a slice or a card. A build doc the reader cannot place (a fence
-never closed, a fence marker inside a container or raw HTML, a line that leaves a list item's fence) stops
-the gate (`doc-unreadable`, naming the line) before the ask; when the records component's importer reads a
+first `Status:` label inside its section, read outside fences under this core's one fence rule (A7, A8;
+section 5, "The fence rule"), never the frame's parse: a heading or a label inside a fence is content, never
+a slice or a card. A build doc holding any fence line the rule does not accept stops the gate
+(`doc-unreadable`, naming the line) before the ask; when the records component's importer reads a
 card from a fenced literal, the card-and-line comparison below stops the run (`card-disagrees`). Zero
 slices, or a slice with no `Status:` line, stops (`gate-malformed`); a collapse never passes either.
 
@@ -127,8 +128,9 @@ spec, the base commit, the boundary lines. Each local mandate is the lens's brie
 boundary, the ledger-versus-spec line, the repo's checks, and the reporting shape; its words follow the
 local row's profile (C1A-9): under `repo-with-tools` the lens may run the project's tests in its copy;
 under `repo` it says the lens runs nothing, reads the code, and reports a check it would have run as not
-executed, and it promises no test run. A build doc this core's fence reader cannot place (section 5,
-"The spec") stops the run here (`doc-unreadable`, naming the line) before any packet is built. Writes
+executed, and it promises no test run. A reviewed commit's build doc holding any fence line the fence
+rule does not accept (section 5, "The fence rule") stops the run here (`doc-unreadable`, naming the line)
+before any packet is built. Writes
 `scope.json` and `packets/`.
 
 ### 3.4 `request --run-dir D [--readers-root DIR]` (the local fleet)
@@ -246,8 +248,8 @@ and `owner_words`, the owner's own words in this run, verbatim and the one sourc
 
 **The base** (reading CR-2), v1's precedence: (1) a base the build doc records: a header line, before the
 first `## ` heading, reading `Base: <commit>` with the commit as 7 to 40 lowercase hex characters, the
-first such line counting, both read outside fences with this core's fence reader (A7: a fenced `Base:` or
-`## ` line is content); (2) `git merge-base <default branch> HEAD`, the default branch being the remote's
+first such line counting, both read outside fences under the fence rule (A7, A8: a fenced `Base:` or `## `
+line is content); (2) `git merge-base <default branch> HEAD`, the default branch being the remote's
 `HEAD` when one is named, else `main`, else `master`, and a merge base equal to HEAD itself counting as
 none (nothing to review); (3) the owner's base from `station.owner_words.base`; else a stop that asks
 (`base-unresolved`). A `Base:` header line whose value is not 7 to 40 lowercase hex characters (a branch
@@ -297,19 +299,31 @@ the builder", "builder notes", "builder's notes", "builders notes" or "build not
 Which heading is first is read wide, so a declaration a Markdown reader would see first is never missed:
 every heading-shaped line (an ATX heading, or the text above an `===` or `---` underline), with block-quote
 and list markers stripped, whatever holds it (a fence, raw HTML, a container, front matter), counts until
-the first certain heading, an ATX heading at the left margin outside every fence, with no line opening with
-`<` before it and past any front matter; that heading counts too, and nothing after it. Reading wide only
-ever withholds more, and what it withholds is named with the heading that declared it.
+the first certain heading, an ATX heading at the left margin outside every fence the fence rule accepts and
+before the first fence line it does not accept (past such a line no heading is certain, C1A4-1), with no
+line opening with `<` before it and past any front matter; that heading counts too, and nothing after it.
+Reading wide only ever withholds more, and what it withholds is named with the heading that declared it. A
+notes file is not the build doc: a fence line the rule does not accept there never stops the run.
+
+**The fence rule: strict plain code blocks** (A8, C1A4-1; the code's statement is
+`scripts/vertical_core/fences.py`; the frame's `templates.py` stays frozen and is not used for it). A fence
+line is any line whose first characters, after any indent (spaces or tabs) and after any block-quote markers
+(`>`) or list-item markers (`-`, `+`, `*`, or one to nine digits then `.` or `)`, followed by a space or a
+tab), are three or more backticks or three or more tildes. A fence is accepted only when its opening line
+starts at column 0 (no indent, no list marker, no `>`) with three or more backticks or tildes (a backtick
+opening line's info string holding no backtick, CommonMark's rule); its closing line is the first later line
+that starts at column 0 with the same character, at least as many times, and nothing after it but spaces or
+tabs; and no line between them is a fence line off column 0. Every other line between is the fence's content,
+whatever it looks like. ANY other fence line anywhere in the build doc (one off column 0, a backtick line
+whose info string holds a backtick, an opening line never closed, a fence line inside a raw HTML block, where
+CommonMark reads no fence) stops the run `doc-unreadable` with its line number, before any ask, request or
+packet: the plan's author edits the doc. The reader follows no list, block-quote or lazy-continuation rule.
+Every reader of the build doc goes through this one rule: the gate's slices and `Status:` lines, the `Base:`
+line, and the spec.
 
 **The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 and A5 amended it) is the commit's build doc
-with five sections and every `Status:` label removed outside fences, what is fenced decided by this core's
-own fence reader (A5 (2); `scripts/vertical_core/fences.py`; the frame's `templates.py` stays frozen and is
-not used for it), CommonMark's fence rule at the document's margin: a fence opens on a line of up to three
-spaces then three or more backticks or tildes (a backtick line whose info string holds a backtick opens
-nothing), and closes only on a line of up to three spaces then the same character at least as many times,
-then nothing but spaces or tabs; every line between is content. A fence never closed, a fence marker inside
-a block quote, a list item or a raw HTML block, and a line that leaves a fence opened inside a list item
-(indented less than its opening line) are lines the reader cannot place: the run stops at `scope`
+with five sections and every `Status:` label removed outside fences, what is fenced decided by the fence rule
+above (A5 (2), A8); a build doc holding a fence line the rule does not accept stops the run at `scope`
 (`doc-unreadable`, naming the line) before any packet is built. The sections removed: `## Punch list` and `## Handoffs` (the ledger) and `## Build
 assumptions`, `## Deviations` and `## Discovered` (the builder's working records, which the slice review
 withholds too), each found by heading level and name, whitespace-tolerant (a heading of level 1 or 2, up to
@@ -329,7 +343,10 @@ it (every outside packet; a local packet when it is not the kit sheet or not a r
 packet-only row each file that is not UTF-8 text.
 
 vertical-v2 never runs `git worktree`, never runs a git command that changes a branch, an index or a
-worktree, and removes every packet's workspace and documents after the verdict or a stop (C1A3-6).
+worktree, and removes every packet's workspace and documents after the verdict or a stop (C1A3-6). The
+removal never follows a link (C1A4-3): a link at `packets` or `summons`, at an entry in either, or at an
+entry's `workspace` or `documents` is removed as a link, never its target, and a folder is removed only when
+its real path lies inside the run directory's; nothing outside the run directory is deleted.
 
 ## 6. The review mechanics
 
@@ -400,7 +417,7 @@ The exit codes are `references/back-loop.md` section 2's. Every stop writes `res
 | `not-git` | the workspace is not a git work tree root with a commit |
 | `base-unresolved` | no base: none recorded, no merge base, none from the owner; a recorded `Base:` line that is not 7 to 40 lowercase hex, resolves to nothing, or names HEAD itself, with no owner's base to take over it; or an owner's base that resolves to nothing or names HEAD itself |
 | `dirty-boundary` | dirt touches the boundary or the build doc and the owner gave no committed-state-only order |
-| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence this core's fence reader cannot place (never closed, inside a container or raw HTML, or left by a dedented line inside a list item); the line is named |
+| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence line the fence rule (section 5) does not accept (off column 0, in a list item or block quote, a backtick info string holding a backtick, never closed, or inside raw HTML); the line is named |
 | `station-refused` | a readers root that is not the expected readers plugin by identity, or a file of it that resolves outside it, or one named for a v1 plugin folder (each refused before any of its files is opened or run), or readers' identity breaks the trace's refusal rule; a `refused` trace line is written |
 | `floor-refused` | a local lens came back below the floor; no verdict is emitted |
 | `local-incomplete` | a local lens failed after its re-send, or refused deterministically |
@@ -468,7 +485,9 @@ back-frame file, so no rule is added), and the run stops `station-refused`. `ask
 every root to it. Then readers' identity is read from the root taken (`--readers-root` when allowlisted and
 usable, then route 3a, then the highest installed version whose manifest version is its folder name): the
 name and version its manifest carries, its real path, and the protocol version its own CLI prints
-(`readers.py --version`, which summons no reader). An identity the refusal rule
+(`readers.py --version`, which summons no reader, run isolated with `-I` and `-B`: neither its own folder nor
+the user site is on `sys.path` and no `PYTHON*` variable is read, so a module planted beside it never runs,
+C1A4-2). An identity the refusal rule
 refuses (a name other than `readers`, a root under a v1 plugin folder, a protocol this core does not know)
 stops the run (`station-refused`) with a `refused` line and no request. Every summons, whatever its status,
 is a `summons` line with that identity, the route, the readers run directory, its status, call id and row.

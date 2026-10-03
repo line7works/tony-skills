@@ -1,11 +1,12 @@
-"""The spec a reviewer receives (ruling E15-8 as A3 widened it and A4 amended it; the E15 lane contract A5 (2);
-contract section 5): the build doc of the reviewed commit with its ledger and the builder's working records
-removed.
+"""The spec a reviewer receives (ruling E15-8 as A3 widened it and A4 amended it; the E15 lane contract A5 (2)
+and A8; contract section 5): the build doc of the reviewed commit with its ledger and the builder's working
+records removed.
 
-What is fenced is decided by vertical-v2's own fence reader (`fences.py`, CommonMark's fence rule), never by
-the frame's `templates.parse` (frozen in E15, whose toggle a longer or an unclosed fence defeats, C1A3-1). An
-unclosed fence, or any line the reader cannot place, raises SpecUnreadable naming the line, so the run stops
-(`doc-unreadable`) before any packet is built. Outside fences, removed:
+What is fenced is decided by vertical-v2's one fence rule, strict plain code blocks (`fences.py`, A8: a fence
+opens and closes at column 0, outside any list item or block quote), never by the frame's `templates.parse`
+(frozen in E15, whose toggle a longer or an unclosed fence defeats, C1A3-1). Any fence line the rule does not
+accept raises SpecUnreadable naming the line, so the run stops (`doc-unreadable`) before any packet is built.
+Outside fences, removed:
 
 - the five withheld sections, `## Punch list` and `## Handoffs` (the ledger) and `## Build assumptions`,
   `## Deviations` and `## Discovered` (the builder's working records), each found by its heading level and
@@ -39,7 +40,9 @@ class SpecUnreadable(driver.Usage):
 
     def __init__(self, line, what):
         driver.Usage.__init__(self, "the build doc's line %d: %s; its ledger cannot be told from a code block there, "
-                                    "so no packet was built: close or move the fence and commit" % (line, what))
+                                    "so no packet was built: vertical-v2 reads only plain code blocks whose fences "
+                                    "open and close at the left margin, outside any list item or block quote; the "
+                                    "plan's author edits the doc and commits" % (line, what))
         self.line, self.what = line, what
 
 

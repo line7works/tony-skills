@@ -10,6 +10,7 @@ are removed after the verdict. A report-only run writes nothing. `report` ends t
 """
 import json
 import os
+import types
 import unittest
 
 import testlib
@@ -17,7 +18,7 @@ import vlib
 
 testlib.add_scripts_to_path()
 
-from vertical_core import forms  # noqa: E402
+from vertical_core import forms, report  # noqa: E402
 
 DOC_NAME = "2026-10-01-vertical-turnstile.md"
 OUT_A = "run-0001-gpt-astra"
@@ -334,6 +335,101 @@ class TheCopiesOnAStop(_Verdict):
         code, out, err = drive(["request", "--run-dir", run_dir, "--readers-root", elsewhere])
         self.assertEqual((code, out["stop_tag"]), (10, "station-refused"), (out, err))
         self.assert_no_copies(run_dir, ("packets",))
+
+
+def plant_outside(root):
+    """A folder outside the run directory holding what a followed link would delete; returns its listing."""
+    for part in ("workspace", "documents"):
+        testlib.write_text(os.path.join(root, part, "precious.txt"), "keep me\n")
+        testlib.write_text(os.path.join(root, "inner", part, "precious.txt"), "keep me\n")
+    return files_under(root)
+
+
+def files_under(root):
+    out = []
+    for base, dirs, files in os.walk(root):
+        out += [os.path.relpath(os.path.join(base, name), root) for name in files]
+    return sorted(out)
+
+
+def plant_packet(run_dir, folder, name):
+    for part in ("workspace", "documents"):
+        testlib.write_text(os.path.join(run_dir, folder, name, part, "copy.txt"), "a copy\n")
+    testlib.write_text(os.path.join(run_dir, folder, name, "mandate.md"), "the mandate\n")
+
+
+class TheRemovalNeverFollowsALink(unittest.TestCase):
+    """C1A4-3: removing the previews and the summons copies never follows a link. A link planted at
+    `summons/<name>`, `packets/<name>`, `<folder>/<name>/workspace` or at `summons` or `packets` itself is
+    removed as a link, never its target, and nothing outside the run directory is deleted; the real copies
+    beside it are removed and the mandates stay."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(testlib.make_scratch("vlinks-"))
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.run_dir = os.path.join(self.tmp, "run")
+        for folder in ("packets", "summons"):
+            plant_packet(self.run_dir, folder, "local-spec" if folder == "packets" else "run-0001-spec")
+        self.outside = os.path.join(self.tmp, "OUTSIDE")
+        self.before = plant_outside(self.outside)
+
+    def drop(self):
+        report.drop_copies(types.SimpleNamespace(run_dir=self.run_dir))
+        self.assertEqual(files_under(self.outside), self.before)
+        for folder, name in (("packets", "local-spec"), ("summons", "run-0001-spec")):
+            if os.path.isdir(os.path.join(self.run_dir, folder)) and not os.path.islink(os.path.join(self.run_dir, folder)):
+                for part in ("workspace", "documents"):
+                    self.assertFalse(os.path.lexists(os.path.join(self.run_dir, folder, name, part)), (folder, part))
+                self.assertTrue(os.path.isfile(os.path.join(self.run_dir, folder, name, "mandate.md")))
+
+    def test_a_link_at_a_summons_entry(self):
+        link = os.path.join(self.run_dir, "summons", "evil")
+        os.symlink(self.outside, link)
+        self.drop()
+        self.assertFalse(os.path.lexists(link))
+
+    def test_a_link_at_a_packets_entry(self):
+        link = os.path.join(self.run_dir, "packets", "evil")
+        os.symlink(self.outside, link)
+        self.drop()
+        self.assertFalse(os.path.lexists(link))
+
+    def test_a_link_at_a_copys_workspace(self):
+        link = os.path.join(self.run_dir, "packets", "evil", "workspace")
+        os.makedirs(os.path.dirname(link))
+        os.symlink(os.path.join(self.outside, "workspace"), link)
+        self.drop()
+        self.assertFalse(os.path.lexists(link))
+
+    def test_the_summons_folder_itself_a_link(self):
+        testlib.rmtree(os.path.join(self.run_dir, "summons"))
+        os.symlink(self.outside, os.path.join(self.run_dir, "summons"))
+        self.drop()
+        self.assertFalse(os.path.lexists(os.path.join(self.run_dir, "summons")))
+
+    def test_the_packets_folder_itself_a_link(self):
+        testlib.rmtree(os.path.join(self.run_dir, "packets"))
+        os.symlink(os.path.join(self.outside, "inner"), os.path.join(self.run_dir, "packets"))
+        self.drop()
+        self.assertFalse(os.path.lexists(os.path.join(self.run_dir, "packets")))
+
+
+class TheRemovalOnAStopThroughTheCli(_Verdict):
+    """C1A4-3 through the real CLI, check 4's probe: links planted after `scope`, then a `station-refused` stop
+    at `request`; the outside folders survive."""
+
+    def test_links_in_summons_and_packets_are_never_followed_on_a_stop(self):
+        drive, run_dir, ws, info = vlib.through_scope(self.tmp)
+        outside = os.path.join(self.tmp, "OUTSIDE")
+        before = plant_outside(outside)
+        os.makedirs(os.path.join(run_dir, "summons"), exist_ok=True)
+        os.symlink(outside, os.path.join(run_dir, "summons", "evil"))
+        os.symlink(outside, os.path.join(run_dir, "packets", "evil"))
+        elsewhere = os.path.join(self.tmp, "elsewhere-readers")
+        os.makedirs(elsewhere)
+        code, out, err = drive(["request", "--run-dir", run_dir, "--readers-root", elsewhere])
+        self.assertEqual((code, out["stop_tag"]), (10, "station-refused"), (out, err))
+        self.assertEqual(files_under(outside), before)
 
 
 if __name__ == "__main__":

@@ -89,14 +89,36 @@ def check(ctx, result):
                             % "; ".join("%s %s" % (e.get("path"), e.get("message")) for e in (errors or semantic)[:4]))
 
 
+def _inside(path, top):
+    return os.path.realpath(path).startswith(top.rstrip(os.sep) + os.sep)
+
+
 def drop_copies(run):
     """Remove every packet's workspace and documents, scope's previews and every summons copy alike; the
-    mandates and the two lists stay."""
+    mandates and the two lists stay. The removal never follows a link (C1A4-3): a link at `packets` or
+    `summons`, at an entry in either, or at an entry's `workspace` or `documents` is removed as a link, never
+    its target, and a folder is removed only when its real path lies inside the run directory's."""
+    top = os.path.realpath(run.run_dir)
     for folder in ("packets", "summons"):
         root = common.path_of(run, folder)
-        for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        if os.path.islink(root):
+            os.unlink(root)
+            continue
+        if not os.path.isdir(root) or not _inside(root, top):
+            continue
+        for name in sorted(os.listdir(root)):
+            entry = os.path.join(root, name)
+            if os.path.islink(entry):
+                os.unlink(entry)
+                continue
+            if not os.path.isdir(entry) or not _inside(entry, top):
+                continue
             for part in ("workspace", "documents"):
-                shutil.rmtree(os.path.join(root, name, part), ignore_errors=True)
+                target = os.path.join(entry, part)
+                if os.path.islink(target):
+                    os.unlink(target)
+                elif os.path.isdir(target) and _inside(target, top):
+                    shutil.rmtree(target, ignore_errors=True)
 
 
 def finish(ctx, run, status, tag, reason, selection=None, gate=None, extra=None):

@@ -118,6 +118,13 @@ def plant_readers(root, version="1.0.1"):
     return root
 
 
+SHADOW = """import os
+with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "SHADOW_EXECUTED"), "w") as fh:
+    fh.write("ran")
+raise SystemExit(7)
+"""
+
+
 def plant_tripwire_at(root):
     """The tripwire's shape at any folder (named pipes for the manifest and the roster, a marker-writing
     readers.py)."""
@@ -224,6 +231,32 @@ except readers_link.RootRefused as exc:
         out = self.probe(argument=nested)
         self.assertFalse(marker(nested))
         self.assert_refused(out, "argument")
+
+    def plant_shadowed(self):
+        """The real readers, its readers.py importing `fnmatch` as the real one does; returns its assets folder."""
+        real = plant_readers(os.path.join(self.tmp, "plugins", "readers"))
+        assets = os.path.join(real, "skills", "readers", "assets")
+        testlib.write_text(os.path.join(assets, "readers.py"), "import fnmatch\n" + REAL_READERS)
+        return assets
+
+    def test_a_stdlib_named_module_planted_beside_readers_py_never_runs(self):
+        """C1A4-2: `readers.py --version` runs isolated (`-I`, `-B`): its own folder is not on `sys.path`."""
+        assets = self.plant_shadowed()
+        testlib.write_text(os.path.join(assets, "fnmatch.py"), SHADOW)
+        out = self.probe()
+        self.assertFalse(os.path.exists(os.path.join(assets, "SHADOW_EXECUTED")), "the planted fnmatch.py ran")
+        self.assertEqual((out["refused"], out["route"], out["interface_version"]), (False, "3a", 1), out)
+        self.assertFalse(os.path.exists(os.path.join(assets, "__pycache__")))
+
+    def test_a_stdlib_named_module_linked_into_a_v1_folder_never_runs(self):
+        """C1A4-2, check 4's probe: `fnmatch.py` beside readers.py is a link to a tripwire in a v1 folder."""
+        assets = self.plant_shadowed()
+        v1_module = os.path.join(self.v1, "x", "fnmatch.py")
+        testlib.write_text(v1_module, SHADOW)
+        os.symlink(v1_module, os.path.join(assets, "fnmatch.py"))
+        out = self.probe()
+        self.assertFalse(os.path.exists(os.path.join(self.v1, "x", "SHADOW_EXECUTED")), "the v1 folder's module ran")
+        self.assertEqual((out["refused"], out["interface_version"]), (False, 1), out)
 
     def test_a_readers_copy_that_is_not_the_expected_plugin_is_refused(self):
         plant_readers(os.path.join(self.tmp, "plugins", "readers"))

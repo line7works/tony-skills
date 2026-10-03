@@ -1,10 +1,14 @@
-"""vertical-v2's own fence reader for the spec (the E15 lane contract A5 (2); C1A3-1; contract section 5).
+"""vertical-v2's own fence reader for the spec (the E15 lane contract A5 (2) and A8; C1A3-1, C1A4-1; contract
+section 5).
 
 The spec a reviewer receives is the build doc with the five withheld sections and every `Status:` label
-removed outside fences. What is fenced is decided by vertical-v2's own reader, CommonMark's rule: an
-opening fence is three or more backticks or tildes (up to three spaces of indent); it closes only on a line
-of the SAME character at least as long with nothing after it but spaces or tabs. An unclosed fence, or a
-line the reader cannot place, stops the run with its line number before any packet is built.
+removed outside fences. What is fenced is decided by one strict rule, plain code blocks only (A8): a fence is
+accepted only when its opening line and its closing line both start at the left margin (no indent, no list
+marker, no `>`), the closing line is the same character, at least as long, with nothing after it but spaces
+or tabs, and no line between is another fence line off the margin. Any other fence line (three or more
+backticks or tildes after any indent, after a list-item or block-quote marker, a backtick line whose info
+string holds a backtick, a fence never closed, a fence line inside raw HTML) stops the run with its line
+number before any packet is built.
 """
 import os
 import unittest
@@ -80,13 +84,6 @@ class TheFenceShapes(unittest.TestCase):
         self.assert_clean(doc_with(after_slices=["```python title=x", "## Build assumptions", "```"]),
                           literal="```python title=x\n## Build assumptions\n```\n")
 
-    def test_an_indented_fence(self):
-        self.assert_clean(doc_with(after_slices=["   ```", "   ## Punch list", "   Status: indented", "  ```"]),
-                          literal="   ```\n   ## Punch list\n   Status: indented\n  ```\n")
-
-    def test_a_backtick_line_whose_info_holds_a_backtick_opens_nothing(self):
-        self.assert_clean(doc_with(after_slices=["``` a`b", "text"]))
-
     def test_an_unclosed_fence_after_the_slices_stops_with_its_line(self):
         text = doc_with(after_slices=["````", "```", "```"])
         with self.assertRaises(spec.SpecUnreadable) as caught:
@@ -108,10 +105,11 @@ class TheFenceShapes(unittest.TestCase):
             self.assertEqual(caught.exception.line, text.split("\n").index(opener) + 1, opener)
 
     def test_a_list_item_fence_left_by_a_dedented_line_stops(self):
+        """A8: the indented fence line itself stops (at check 4 the dedented line did)."""
         text = doc_with(after_slices=["- an item", "  ```", "## Punch list", "  ```"])
         with self.assertRaises(spec.SpecUnreadable) as caught:
             spec.clean(text)
-        self.assertEqual(caught.exception.line, text.split("\n").index("## Punch list") + 1)
+        self.assertEqual(caught.exception.line, text.split("\n").index("  ```") + 1)
 
     def test_a_fence_marker_inside_a_raw_html_block_stops(self):
         for block in (["<pre>", "```", "</pre>"], ["<!--", "```", "-->"], ["<div>", "```", ""]):
@@ -125,6 +123,77 @@ class TheFenceShapes(unittest.TestCase):
         kept, removed = kept_and_removed(text)
         self.assertEqual(removed, ALL_FIVE)
         self.assertNotIn("PUNCH-MARKER", kept)
+
+
+LAZY_BULLET = ["- a note on the counter", "that continues lazily on this line", "  ```text", "## Punch list",
+               "Status: LAZY-FENCED", "```"]
+LAZY_NUMBERED = ["1. a note on the counter", "continues lazily", "   ~~~", "## Handoffs", "~~~"]
+
+
+class TheStrictRule(unittest.TestCase):
+    """A8, C1A4-1: strict plain code blocks. Every fence line off the left margin, in a container, or that the
+    margin rule cannot pair stops the run naming its line; the reader follows no list or lazy-continuation
+    rule. `first` is the line text whose first occurrence the stop names."""
+
+    def assert_stops(self, text, first, what=None):
+        with self.assertRaises(spec.SpecUnreadable) as caught:
+            spec.clean(text)
+        self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, (first, str(caught.exception)))
+        self.assertIn("line %d" % caught.exception.line, str(caught.exception))
+        if what is not None:
+            self.assertIn(what, caught.exception.what)
+        scan = fences.scan(fences.split_lines(text))
+        self.assertEqual(scan.problems[0][0], caught.exception.line)
+
+    def test_check_4s_lazy_continuation_shape_stops_at_the_indented_fence(self):
+        self.assert_stops(doc_with(after_slices=LAZY_BULLET), "  ```text")
+
+    def test_the_numbered_lazy_continuation_shape_stops_at_the_indented_fence(self):
+        self.assert_stops(doc_with(after_slices=LAZY_NUMBERED), "   ~~~")
+
+    def test_an_indented_fence_in_a_list_item_stops(self):
+        self.assert_stops(doc_with(after_slices=["- an item", "", "  ```", "  ## Punch list", "  ```"]), "  ```")
+
+    def test_a_fence_in_a_block_quote_stops(self):
+        for opener in ("> ```", ">```", "> > ~~~", "   > ```"):
+            self.assert_stops(doc_with(after_slices=["> a quote", opener, "> ## Punch list", "> ```"]), opener)
+
+    def test_a_fence_after_a_list_marker_stops(self):
+        for opener in ("- ```", "* ~~~", "+ ```", "1. ```", "2) ~~~", "- - ```"):
+            self.assert_stops(doc_with(after_slices=[opener, "## Punch list", "```"]), opener)
+
+    def test_a_fence_with_one_to_three_spaces_of_indent_at_top_level_stops(self):
+        for indent in (" ", "  ", "   "):
+            self.assert_stops(doc_with(after_slices=[indent + "```", "## Punch list", indent + "```"]), indent + "```")
+
+    def test_a_fence_line_with_four_spaces_or_a_tab_before_it_stops(self):
+        for opener in ("    ```", "\t~~~"):
+            self.assert_stops(doc_with(after_slices=["", opener, "", "text"]), opener)
+
+    def test_an_unclosed_margin_fence_stops_at_its_opening_line(self):
+        self.assert_stops(doc_with(after_slices=["```text", "## Punch list"]), "```text", "never closes")
+
+    def test_a_margin_backtick_fence_whose_info_string_holds_a_backtick_stops(self):
+        for opener in ("``` a`b", "```x`y", "````js `x`"):
+            self.assert_stops(doc_with(after_slices=[opener, "text"]), opener)
+
+    def test_an_indented_line_inside_a_margin_fence_that_could_close_it_stops(self):
+        self.assert_stops(doc_with(after_slices=["```", "code", "  ```", "## Punch list", "```"]), "  ```")
+
+    def test_an_indented_fence_line_inside_a_margin_fence_stops(self):
+        self.assert_stops(doc_with(after_slices=["````", "- ```", "x", "````"]), "- ```")
+        self.assert_stops(doc_with(after_slices=["~~~", "   ```python", "x", "   ```", "~~~"]), "   ```python")
+
+    def test_a_tilde_fence_may_hold_backticks_in_its_info_string(self):
+        kept, removed = kept_and_removed(doc_with(after_slices=["~~~ a`b", "## Punch list", "~~~"]))
+        self.assertEqual(removed, ALL_FIVE)
+        self.assertIn("~~~ a`b\n## Punch list\n~~~\n", kept)
+
+    def test_the_rule_follows_no_list_context(self):
+        """A margin fence right after a list item is a top-level fence, as CommonMark reads it."""
+        kept, removed = kept_and_removed(doc_with(after_slices=["- an item", "```", "## Punch list", "```"]))
+        self.assertEqual(removed, ALL_FIVE)
+        self.assertIn("- an item\n```\n## Punch list\n```\n", kept)
 
 
 class TheCleanDoc(unittest.TestCase):
@@ -168,6 +237,22 @@ class TheStopAtScope(unittest.TestCase):
         self.assertEqual(code, 10, (out, err))
         self.assertEqual(out["stop_tag"], "doc-unreadable")
         self.assertIn("line %d" % (doc.split("\n").index("````") + 1), out["reason"])
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "packets")))
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "scope.json")))
+
+    def test_check_4s_lazy_continuation_shape_stops_scope_before_any_packet(self):
+        """C1A4-1 through the real CLI: the commit holds the lazy-list fence (the gate read the working tree's
+        clean doc under the owner's committed-state-only words); scope stops naming the indented fence line."""
+        trick = "\n".join(LAZY_BULLET) + "\n\n"
+        doc = vlib.build_doc().replace("## Build assumptions\n", trick + "## Build assumptions\n")
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=True)
+        testlib.write_text(os.path.join(ws, vlib.DOC), vlib.build_doc())
+        drive, run_dir = vlib.start(self.tmp, ws, owner_words={"committed_only": "review the committed state only"})
+        self.assertEqual(vlib.through_ask(drive, self.tmp, run_dir)[0], 0)
+        code, out, err = drive(["scope", "--run-dir", run_dir])
+        self.assertEqual(code, 10, (out, err))
+        self.assertEqual(out["stop_tag"], "doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index("  ```text") + 1), out["reason"])
         self.assertFalse(os.path.exists(os.path.join(run_dir, "packets")))
         self.assertFalse(os.path.exists(os.path.join(run_dir, "scope.json")))
 

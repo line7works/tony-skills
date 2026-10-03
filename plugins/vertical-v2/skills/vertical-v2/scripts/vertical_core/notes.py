@@ -16,12 +16,17 @@ a candidate until the first CERTAIN heading, which is a candidate too:
   Setext heading (the run of non-blank lines above an `===` or `---` underline, joined by spaces), read
   after any block-quote and list-item markers are stripped, whatever its indentation, and whether or not a
   fence, a raw HTML block, a block quote, a list or a front matter block holds it;
-- a CERTAIN heading is an ATX heading at the left margin, outside every fence (this core's fence reader:
-  `fences.py`; an unclosed fence runs to the end), with no line opening with `<` before it (a raw HTML block
-  may hold it) and, when the file opens with a `---` line, after that block's closing `---` or `...` line
-  (front matter, which the slice review also reads as a thematic break with a Setext heading above it:
-  both readings are candidates here). A heading at the left margin can be held by nothing else: a list
-  item's or a block quote's content is indented or marked, and an ATX heading is never a lazy line.
+- a CERTAIN heading is an ATX heading at the left margin, outside every fence the strict rule accepts
+  (`fences.py`, the E15 lane contract A8), BEFORE the first fence line that rule does not accept (past it,
+  where a fence ends is not known, so no heading is certain and every heading-shaped line stays a candidate,
+  C1A4-1), with no line opening with `<` before it (a raw HTML block may hold it) and, when the file opens
+  with a `---` line, after that block's closing `---` or `...` line (front matter, which the slice review
+  also reads as a thematic break with a Setext heading above it: both readings are candidates here). A
+  heading at the left margin before any such line can be held by nothing else: a list item's or a block
+  quote's content is indented or marked, and an ATX heading is never a lazy line.
+
+A notes file is not the build doc: a fence line the strict rule does not accept never stops the run here; it
+only widens the reading.
 
 CRLF and CR endings are line endings and a leading byte order mark is dropped.
 """
@@ -43,7 +48,9 @@ def declares(text):
         text = text[1:]
     raw = fences.split_lines(text)
     lines = [line.rstrip("\r\n") for line in raw]
-    fenced = fences.scan(raw).fenced
+    scan = fences.scan(raw)
+    fenced = scan.fenced
+    unplaced = scan.problems[0][0] if scan.problems else None
     first = next((i for i, line in enumerate(lines) if line.strip()), None)
     front = first is not None and bool(FRONT_OPEN.match(lines[first]))
     certain_allowed = not front
@@ -64,6 +71,9 @@ def declares(text):
             para.append(stripped.strip())
         else:
             para = []
+        if unplaced is not None and index + 1 >= unplaced:
+            certain_allowed = False
+            front = False
         if certain_allowed and not html_seen and index + 1 not in fenced and CERTAIN.match(line):
             break
         if front and not certain_allowed and index > first and FRONT_CLOSE.match(line):

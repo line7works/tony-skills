@@ -268,13 +268,15 @@ def find(argument=None):
 
 
 def identity(root, route="argument"):
-    """The identity readers' own manifest and CLI give for `root`; readers.py is held inside the root first."""
+    """The identity readers' own manifest and CLI give for `root`; readers.py is held inside the root first, then
+    run isolated (`-I`: neither its own folder nor the user site is on `sys.path` and no `PYTHON*` variable is
+    read, so a module planted beside it never runs, C1A4-2; `-B`: no bytecode written)."""
     body = manifest(root) or {}
     script = inside(root, SCRIPT, route)
     version = None
     if _regular(script):
         try:
-            proc = subprocess.run([sys.executable, script, "--version"], stdout=subprocess.PIPE,
+            proc = subprocess.run([sys.executable, "-I", "-B", script, "--version"], stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, cwd=root,
                                   env={"PATH": os.environ.get("PATH", ""), "PYTHONDONTWRITEBYTECODE": "1",
                                        "LANG": "C", "LC_ALL": "C"}, timeout=60)

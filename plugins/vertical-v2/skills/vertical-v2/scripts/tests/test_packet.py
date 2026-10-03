@@ -9,9 +9,14 @@ list with its reason, and nothing is named that was not left out.
 
 `TheClassGuard` is the class's guard: one fixture holding every member the class has had (B1, B2, B4,
 M6, C1A-3, C1A-5, C1A2-5, and A5's C1A3-1 and C1A3-3: a four-backtick fence holding a three-backtick line,
-a tilde fence holding backticks, a fence with an info string, an indented fence, a builder's-notes file
-declared by its first heading), the function driven directly, the exact file list and withheld list of
-every packet asserted; an unclosed fence, after the slices or before them, stops before any packet. `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
+a tilde fence holding backticks, a fence with an info string, a builder's-notes file declared by its first
+heading), the function driven directly, the exact file list and withheld list of every packet asserted. Every
+shape the strict rule stops (A8, C1A4-1: check 4's lazy-continuation fence, bullet and numbered; a fence
+indented in a list item; a fence in a block quote; a fence with one to three spaces of indent at top level,
+which check 3's fixture held as placed; an indented line inside a margin fence that could close it; an
+unclosed margin fence, after the slices or before them; a margin backtick fence whose info string holds a
+backtick) stops before any packet, naming its line; the same shapes in any other Markdown file of the
+commit never stop the run. `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
 import os
@@ -59,9 +64,6 @@ def class_doc():
         "```",
         "## Handoffs",
         "~~~",
-        "   ```text",
-        "   ## Discovered",
-        "   ```",
         "",
         "## Slice A %s the counter" % D, "Goal: count turns.", "Requirements:", "- R1 counts every turn",
         "Acceptance criteria:", "- AC1: a turn adds one", "Footprint: src/turnstile.py", "Not in this slice: none",
@@ -215,12 +217,11 @@ class TheClassGuard(unittest.TestCase):
         first_withheld = lines.index("##  Build assumptions") + 1
         kept = "".join(line + "\n" for number, line in enumerate(lines, 1)
                        if number < first_withheld and number not in STATUS_LINES)
-        self.assertEqual(STATUS_LINES, [6, 33, 44])
+        self.assertEqual(STATUS_LINES, [6, 30, 41])
         self.assertEqual(spec, kept)
         self.assertIn("Status: a fenced example stays\n## Deviations\n", spec)
         self.assertIn("````markdown\n```\nStatus: a four-backtick literal stays\n````\n", spec)
         self.assertIn("~~~\n```\n## Handoffs\n~~~\n", spec)
-        self.assertIn("   ```text\n   ## Discovered\n   ```\n", spec)
 
     def test_a_builders_notes_file_declared_by_its_first_heading_is_withheld_and_named(self):
         built, dest = self.cut({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o")
@@ -248,6 +249,39 @@ class TheClassGuard(unittest.TestCase):
         with self.assertRaises(specmod.SpecUnreadable) as caught:
             packet.Snapshot(self.ws, head, DOC)
         self.assertEqual(caught.exception.line, text.split("\n").index("~~~~") + 1)
+
+    STRICT_SHAPES = (
+        ("check 4's lazy continuation", ["- a note on the spinner", "that continues lazily", "  ```text",
+                                         "##  Build assumptions", "```"], "  ```text"),
+        ("the numbered lazy continuation", ["1. a note", "continues lazily", "   ~~~", "## Handoffs", "~~~"], "   ~~~"),
+        ("a fence indented in a list item", ["- an item", "", "  ```", "  ## Punch list", "  ```"], "  ```"),
+        ("a fence in a block quote", ["> a quote", "> ```", "> ## Punch list", "> ```"], "> ```"),
+        ("one space of indent at top level", [" ```", "## Deviations", " ```"], " ```"),
+        ("three spaces of indent at top level", ["   ```text", "   ## Discovered", "   ```"], "   ```text"),
+        ("an indented line inside a margin fence that could close it", ["```", "x", "  ```", "## Punch list", "```"],
+         "  ```"),
+        ("an unclosed margin fence", ["```text", "## Punch list"], "```text"),
+        ("a backtick info string holding a backtick", ["```x`y", "text"], "```x`y"),
+    )
+
+    def test_every_shape_the_strict_rule_stops_stops_before_any_packet_naming_its_line(self):
+        for what, shape, first in self.STRICT_SHAPES:
+            text = class_doc().replace("##  Build assumptions\n", "\n".join(shape) + "\n\n##  Build assumptions\n")
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
+    def test_the_strict_shapes_in_another_markdown_file_never_stop_the_run(self):
+        """The rule reads the build doc; another `.md` file of the commit is copied as it is (its first heading is
+        still read for the builder's-notes rule, never a stop)."""
+        body = "# Bench guide\n\n" + "\n\n".join("\n".join(shape) for what, shape, first in self.STRICT_SHAPES) + "\n"
+        testlib.write_text(os.path.join(self.ws, "notes", "bench-guide.md"), body)
+        testlib.git(self.ws, ["add", "notes/bench-guide.md"])
+        testlib.git(self.ws, ["commit", "-q", "-m", "a guide"], when="2026-09-20T12:00:00-07:00")
+        head = testlib.git(self.ws, ["rev-parse", "HEAD"]).strip()
+        snap = packet.Snapshot(self.ws, head, DOC)
+        self.assertEqual(snap.tree["notes/bench-guide.md"], body.encode("utf-8"))
 
     def test_the_copies_hold_the_commits_bytes_with_no_attribute_applied(self):
         built, dest = self.cut({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o")
